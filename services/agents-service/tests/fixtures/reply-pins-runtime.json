@@ -1,0 +1,535 @@
+{
+  "chat.agents": {
+    "body": {
+      "data": [
+        {
+          "defaultKbIds": [
+            "kb_people",
+            "kb_eng"
+          ],
+          "id": "ag_fraud",
+          "kbs": [
+            {
+              "id": "kb_people",
+              "name": "Fraud & payments"
+            },
+            {
+              "id": "kb_eng",
+              "name": "Compliance"
+            }
+          ],
+          "model": "default",
+          "name": "Wire Fraud Sentinel",
+          "role": "Scores outbound wires and places holds",
+          "suggestions": [
+            "What is the daily wire limit for a personal account?",
+            "What is our new-payee wire hold rule?",
+            "Place a 24-hour hold on wire W-88213, the payee was added this morning"
+          ],
+          "version": 7
+        },
+        {
+          "defaultKbIds": [
+            "kb_legal"
+          ],
+          "id": "ag_dispute",
+          "kbs": [
+            {
+              "id": "kb_legal",
+              "name": "Cards & disputes"
+            }
+          ],
+          "model": "default",
+          "name": "Card Dispute Resolver",
+          "role": "Investigates and drafts card dispute outcomes",
+          "suggestions": [
+            "When do we owe a provisional credit on a dispute?",
+            "Look up Priya Natarajan",
+            "Ask Priya Natarajan for the merchant receipt for her disputed charge"
+          ],
+          "version": 4
+        },
+        {
+          "defaultKbIds": [
+            "kb_support"
+          ],
+          "id": "ag_branch",
+          "kbs": [
+            {
+              "id": "kb_support",
+              "name": "Retail banking"
+            }
+          ],
+          "model": "default",
+          "name": "Branch Concierge",
+          "role": "Books appointments and answers product questions",
+          "suggestions": [
+            "What is the wire cut-off time at the Halifax branch?",
+            "What is the refund window for an annual card fee?",
+            "Ask Daniel Okoye to send a proof of address"
+          ],
+          "version": 3
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "chat.createRefused": {
+    "body": {
+      "error": {
+        "code": "unprocessable",
+        "message": "Knowledge base kb_x does not exist or you cannot read it.",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
+  "chat.createThread": {
+    "body": {
+      "data": {
+        "agentId": "ag_fraud",
+        "agentName": "Wire Fraud Sentinel",
+        "agentVersion": 7,
+        "archived": false,
+        "createdAt": "<timeZ>",
+        "id": "<th>",
+        "kbIds": [
+          "kb_people"
+        ],
+        "kbNames": [
+          "Fraud & payments"
+        ],
+        "lastMessageAt": "<timeZ>",
+        "messageCount": 0,
+        "messages": [],
+        "owner": "James Richardson",
+        "pinned": false,
+        "test": false,
+        "title": "New chat"
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "chat.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Conversation was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "chat.stream": {
+    "contentType": "text/event-stream",
+    "frames": [
+      {
+        "messageId": "<m>",
+        "type": "start",
+        "userMessage": {
+          "at": "<timeZ>",
+          "content": "What is the daily wire limit for a personal account?",
+          "id": "<m>",
+          "role": "user"
+        }
+      },
+      {
+        "phase": "thinking",
+        "type": "status"
+      },
+      {
+        "phase": "retrieving",
+        "type": "status"
+      },
+      {
+        "phase": "writing",
+        "type": "status"
+      },
+      {
+        "delta": "The daily ",
+        "type": "text"
+      },
+      {
+        "delta": "wire ",
+        "type": "text"
+      },
+      {
+        "delta": "limit ",
+        "type": "text"
+      },
+      {
+        "delta": "for a ",
+        "type": "text"
+      },
+      {
+        "delta": "personal account is $25,000 online [1].",
+        "type": "text"
+      },
+      {
+        "citations": [
+          {
+            "documentId": "doc_wire_limits",
+            "n": 1,
+            "section": "4.2 Daily limits",
+            "snippet": "The daily wire limit for a personal account is $25,000 when sent through online or mobile banking and $100,000 when sent in branch with two pieces of ID. Business accounts have a daily wire limit of $250,000. Limits reset at midnight Eastern time and apply across all of a custome",
+            "title": "Wire Transfer Policy",
+            "version": "v6"
+          }
+        ],
+        "type": "citations"
+      },
+      {
+        "message": {
+          "agentId": "ag_fraud",
+          "agentName": "Wire Fraud Sentinel",
+          "at": "<timeZ>",
+          "citations": [
+            {
+              "documentId": "doc_wire_limits",
+              "n": 1,
+              "section": "4.2 Daily limits",
+              "snippet": "The daily wire limit for a personal account is $25,000 when sent through online or mobile banking and $100,000 when sent in branch with two pieces of ID. Business accounts have a daily wire limit of $250,000. Limits reset at midnight Eastern time and apply across all of a custome",
+              "title": "Wire Transfer Policy",
+              "version": "v6"
+            }
+          ],
+          "content": "The daily wire limit for a personal account is $25,000 online [1].",
+          "id": "<m>",
+          "model": "function:scripted:scripted_stream",
+          "role": "assistant",
+          "settings": {
+            "addedInstructions": [],
+            "composeOff": false,
+            "knowledgeBaseIds": [
+              "kb_people"
+            ],
+            "model": "default",
+            "sources": {
+              "knowledgeBaseIds": "started",
+              "model": "agent"
+            },
+            "toolsOff": [],
+            "widgetsOff": []
+          }
+        },
+        "type": "done"
+      }
+    ],
+    "status": 200
+  },
+  "chat.thread": {
+    "body": {
+      "data": {
+        "agentId": "ag_fraud",
+        "agentName": "Wire Fraud Sentinel",
+        "agentVersion": 7,
+        "archived": false,
+        "createdAt": "<timeZ>",
+        "id": "<th>",
+        "kbIds": [
+          "kb_people"
+        ],
+        "kbNames": [
+          "Fraud & payments"
+        ],
+        "lastMessageAt": "<timeZ>",
+        "messageCount": 2,
+        "messages": [
+          {
+            "at": "<timeZ>",
+            "content": "What is the daily wire limit for a personal account?",
+            "id": "<m>",
+            "role": "user"
+          },
+          {
+            "agentId": "ag_fraud",
+            "agentName": "Wire Fraud Sentinel",
+            "at": "<timeZ>",
+            "citations": [
+              {
+                "documentId": "doc_wire_limits",
+                "n": 1,
+                "section": "4.2 Daily limits",
+                "snippet": "The daily wire limit for a personal account is $25,000 when sent through online or mobile banking and $100,000 when sent in branch with two pieces of ID. Business accounts have a daily wire limit of $250,000. Limits reset at midnight Eastern time and apply across all of a custome",
+                "title": "Wire Transfer Policy",
+                "version": "v6"
+              }
+            ],
+            "content": "The daily wire limit for a personal account is $25,000 online [1].",
+            "id": "<m>",
+            "model": "function:scripted:scripted_stream",
+            "role": "assistant",
+            "settings": {
+              "addedInstructions": [],
+              "composeOff": false,
+              "knowledgeBaseIds": [
+                "kb_people"
+              ],
+              "model": "default",
+              "sources": {
+                "knowledgeBaseIds": "started",
+                "model": "agent"
+              },
+              "toolsOff": [],
+              "widgetsOff": []
+            },
+            "usage": {
+              "calls": 1,
+              "cost": "0.00",
+              "inputTokens": 50,
+              "outputTokens": 20,
+              "seconds": "<seconds>"
+            }
+          }
+        ],
+        "owner": "James Richardson",
+        "pinned": false,
+        "test": false,
+        "title": "What is the daily wire limit for a personal acc\u2026"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "chat.threads": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "agentId": "ag_fraud",
+            "agentName": "Wire Fraud Sentinel",
+            "agentVersion": 7,
+            "archived": false,
+            "citations": 1,
+            "createdAt": "<timeZ>",
+            "id": "<th>",
+            "kbIds": [
+              "kb_people"
+            ],
+            "kbNames": [
+              "Fraud & payments"
+            ],
+            "lastMessageAt": "<timeZ>",
+            "messageCount": 2,
+            "owner": "James Richardson",
+            "pinned": false,
+            "preview": "The daily wire limit for a personal account is $25,000 online [1].",
+            "test": false,
+            "title": "What is the daily wire limit for a personal acc\u2026",
+            "widgets": 0
+          }
+        ],
+        "facets": {
+          "agentId": {
+            "ag_fraud": 1
+          },
+          "kbIds": {
+            "kb_people": 1
+          },
+          "state": {
+            "active": 1
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 5,
+          "total": 1,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "overview": {
+    "body": {
+      "data": {
+        "cases": {
+          "awaitingApproval": 0,
+          "breaching": 0,
+          "open": 0
+        },
+        "casesDue": [],
+        "counts": {
+          "casesDue": 0,
+          "runsInFlight": 0,
+          "waitingForMe": 0
+        },
+        "openReviews": 0,
+        "overdueReviews": 0,
+        "runsInFlight": [],
+        "urgentReviews": [],
+        "waitingForMe": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "reviews.list": {
+    "body": {
+      "data": {
+        "data": [],
+        "facets": {
+          "agentSlug": {},
+          "kind": {},
+          "risk": {},
+          "status": {},
+          "workflowId": {}
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 25,
+          "total": 0,
+          "totalPages": 1
+        },
+        "stats": {
+          "approvedAsProposedRate": 0,
+          "decidedToday": 0,
+          "medianDecisionMinutes": 0,
+          "medianDecisionTrendMinutes": 0,
+          "unassigned": 0
+        },
+        "viewCounts": {
+          "mine": 0,
+          "open": 0,
+          "overdue": 0,
+          "resolved": 0
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "reviews.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Review was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "runs.list": {
+    "body": {
+      "data": {
+        "data": [],
+        "facets": {
+          "status": {}
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 3,
+          "total": 0,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "runs.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Run was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "threads.create": {
+    "body": {
+      "data": {
+        "created": true,
+        "digest": "<hex>",
+        "graph": "dispute_email",
+        "threadId": "<gth>",
+        "version": 1
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "threads.list": {
+    "body": {
+      "data": [
+        {
+          "createdAt": "<timeZ>",
+          "graph": "dispute_email",
+          "metadata": {
+            "ownerEmail": "j.richardson@harborpine.example",
+            "startedBy": "j.richardson@harborpine.example"
+          },
+          "status": "idle",
+          "threadId": "<gth>",
+          "updatedAt": "<timeZ>",
+          "version": 1
+        },
+        {
+          "createdAt": "<timeZ>",
+          "graph": "agent_wrapper",
+          "metadata": {
+            "agentId": "ag_fraud",
+            "agentName": "Wire Fraud Sentinel",
+            "agentVersion": 7,
+            "archived": false,
+            "budgetAllotment": {
+              "maxCalls": 200,
+              "maxCost": "5.0"
+            },
+            "chat": true,
+            "hidden": false,
+            "kbIds": [
+              "kb_people"
+            ],
+            "kbNames": [
+              "Fraud & payments"
+            ],
+            "lastMessageAt": "<timeZ>",
+            "messageCount": 2,
+            "owner": "James Richardson",
+            "ownerEmail": "j.richardson@harborpine.example",
+            "pinned": false,
+            "preview": "The daily wire limit for a personal account is $25,000 online [1].",
+            "title": "What is the daily wire limit for a personal acc\u2026"
+          },
+          "status": "idle",
+          "threadId": "<th>",
+          "updatedAt": "<timeZ>",
+          "version": null
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "threads.missingState": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Thread was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  }
+}
