@@ -15,13 +15,13 @@ from typing import Any, Literal
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_contracts.field_values import DEFAULT_DATE_ORDER
 from ops_documents.store.metadata import RECOVER_PENDING, ROLE, SYSTEM_ROLE, metadata
 from ops_store import isolation
 from ops_store.dialect import locked
 from ops_store.schema import TENANT_SCOPED, team_owned
+from ops_store.store import Store
 from ops_store.team_scope import any_team, team_visible
 
 TestStatus = Literal["queued", "running", "done", "failed"]
@@ -171,23 +171,23 @@ def _type_team(type_id: str) -> Any:
     return sa.select(t.c.team).where(t.c.id == type_id, team_visible(t)).scalar_subquery()
 
 
-class DocumentTypesStore:
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+class DocumentTypesStore(Store):
+    role = ROLE
 
     async def create(self, values: Mapping[str, Any], version: Mapping[str, Any]) -> None:
         """The type and its version 1, in one transaction."""
-        try:
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                await c.execute(sa.insert(document_types).values(**values, latest_version=1))
-                await c.execute(sa.insert(document_type_versions).values(**self._version(values, version, 1)))
-        except IntegrityError as e:
-            raise NameTakenError(str(values["name"])) from e
+        async with self.tx() as c:
+            try:
+                async with self.attempt(c):
+                    await c.execute(sa.insert(document_types).values(**values, latest_version=1))
+                    await c.execute(sa.insert(document_type_versions).values(**self._version(values, version, 1)))
+            except IntegrityError as e:
+                raise NameTakenError(str(values["name"])) from e
 
     async def add_version(self, type_id: str, version: Mapping[str, Any]) -> int:
         """Inserts version latest+1 and moves the type to it; a concurrent save fails on the version key."""
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             head = sa.select(document_types.c.latest_version).where(
                 document_types.c.tenant_id == tenant, document_types.c.id == type_id, team_visible(document_types)
             )
@@ -224,7 +224,7 @@ class DocumentTypesStore:
 
     async def get(self, type_id: str) -> dict[str, Any] | None:
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             m = (
                 (
                     await c.execute(
@@ -242,7 +242,7 @@ class DocumentTypesStore:
 
     async def list(self, team: str) -> list[dict[str, Any]]:
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             rows = (
                 (
                     await c.execute(
@@ -262,7 +262,7 @@ class DocumentTypesStore:
 
     async def version(self, type_id: str, n: int) -> dict[str, Any] | None:
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             m = (
                 (
                     await c.execute(
@@ -283,7 +283,7 @@ class DocumentTypesStore:
 
     async def versions(self, type_id: str) -> list[dict[str, Any]]:
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             rows = (
                 (
                     await c.execute(
@@ -302,7 +302,7 @@ class DocumentTypesStore:
         return [_parsed(m) for m in rows]
 
     async def add_sample(self, values: Mapping[str, Any]) -> None:
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.insert(document_type_samples).values(
                     **{**values, "expected": json.dumps(values["expected"]), "team": _type_team(str(values["type_id"]))}
@@ -311,7 +311,7 @@ class DocumentTypesStore:
 
     async def samples(self, type_id: str) -> list[dict[str, Any]]:
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             rows = (
                 (
                     await c.execute(
@@ -331,7 +331,7 @@ class DocumentTypesStore:
 
     async def remove_sample(self, type_id: str, sample_id: str) -> dict[str, Any] | None:
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             m = (
                 (
                     await c.execute(
@@ -358,7 +358,7 @@ class DocumentTypesStore:
             .where(e.tenant_id == tenant, e.team == team, e.type_id == type_id, team_visible(document_type_examples))
             .order_by(e.created_at.desc(), e.id.desc())
         )
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             return [example_view(m) for m in (await c.execute(q)).mappings()]
 
     async def recent_examples(
@@ -381,7 +381,7 @@ class DocumentTypesStore:
         )
         kept: list[dict[str, Any]] = []
         counts: dict[str, int] = {}
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             for m in (await c.execute(q)).mappings():
                 if counts.get(m["field"], 0) >= per_field:
                     continue
@@ -394,7 +394,7 @@ class DocumentTypesStore:
     async def remove_example(self, team: str, type_id: str, example_id: str) -> bool:
         tenant = isolation.tenant()
         e = document_type_examples.c
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             gone = await c.execute(
                 sa.delete(document_type_examples).where(
                     e.tenant_id == tenant, e.team == team, e.type_id == type_id, e.id == example_id
@@ -407,7 +407,7 @@ class DocumentTypesStore:
         fields. False when the team holds no such type."""
         tenant = isolation.tenant()
         t = document_types.c
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             gone = await c.execute(
                 sa.delete(document_types).where(
                     t.tenant_id == tenant, t.team == team, t.id == type_id, team_visible(document_types)
@@ -420,7 +420,7 @@ class DocumentTypesStore:
         return True
 
     async def insert_test(self, values: Mapping[str, Any]) -> None:
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(sa.insert(document_type_tests).values(**values))
 
     async def set_test(self, test_id: str, values: Mapping[str, Any]) -> None:
@@ -428,7 +428,7 @@ class DocumentTypesStore:
         row = dict(values)
         if "result" in row and row["result"] is not None:
             row["result"] = json.dumps(row["result"])
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(document_type_tests)
                 .where(document_type_tests.c.tenant_id == tenant, document_type_tests.c.id == test_id)
@@ -437,7 +437,7 @@ class DocumentTypesStore:
 
     async def test(self, test_id: str) -> dict[str, Any] | None:
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             m = (
                 (
                     await c.execute(
@@ -477,7 +477,7 @@ class DocumentTypesStore:
         teams_types = sa.select(document_types.c.id).where(
             document_types.c.tenant_id == tenant, document_types.c.team == team, team_visible(document_types)
         )
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             gone = await c.execute(
                 sa.delete(document_type_samples).where(
                     document_type_samples.c.tenant_id == tenant,

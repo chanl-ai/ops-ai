@@ -20,13 +20,14 @@ from typing import Any, Literal
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_documents.store.extractions import service_outbox
 from ops_documents.store.metadata import RECOVER_PENDING, ROLE, SYSTEM_ROLE, metadata
 from ops_store import isolation
 from ops_store.outbox import add
 from ops_store.schema import TENANT_SCOPED, team_owned
+from ops_store.store import Store
 from ops_store.team_scope import any_team, team_visible
 
 ReadingStatus = Literal["queued", "reading", "done", "failed"]
@@ -142,12 +143,11 @@ def _unpack(body: bytes) -> dict[str, Any]:
     return out
 
 
-class ReadingsStore:
+class ReadingsStore(Store):
     """Every read and write names the reading's team, and every read also carries `team_visible`, so a store call made
     as one team never reads another team's rows even where the database has no row policy."""
 
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+    role = ROLE
 
     @staticmethod
     def _where(t: sa.Table, team: str, digest: str, version: str, key: str) -> sa.ColumnElement[bool]:
@@ -161,7 +161,7 @@ class ReadingsStore:
 
     async def get(self, team: str, digest: str, version: str, key: str) -> ReadingRow | None:
         t = documents_readings
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             query = sa.select(t).where(self._where(t, team, digest, version, key), team_visible(t))
             m = (await c.execute(query)).mappings().first()
         return _row(m) if m is not None else None
@@ -171,19 +171,21 @@ class ReadingsStore:
         t = documents_reading_files
         tenant = isolation.tenant()
         mine = sa.and_(t.c.tenant_id == tenant, t.c.file_id == file_id, t.c.team == team, team_visible(t))
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             now = (await c.execute(sa.select(t.c.file_digest).where(mine))).scalar_one_or_none()
             if now is not None:
                 if now != digest:
                     await c.execute(sa.update(t).where(mine).values(file_digest=digest, created_at=at))
                 return
-        try:
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                await c.execute(
-                    sa.insert(t).values(tenant_id=tenant, file_id=file_id, team=team, file_digest=digest, created_at=at)
-                )
-        except IntegrityError:
-            return  # linked by a request racing this one
+            try:
+                async with self.attempt(c):
+                    await c.execute(
+                        sa.insert(t).values(
+                            tenant_id=tenant, file_id=file_id, team=team, file_digest=digest, created_at=at
+                        )
+                    )
+            except IntegrityError:
+                return  # linked by a request racing this one
 
     async def queue(
         self, digest: str, version: str, key: str, *, file_id: str, team: str, actor: str, at: datetime
@@ -203,16 +205,16 @@ class ReadingsStore:
             "actor": actor,
             "created_at": at,
         }
-        try:
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                await c.execute(sa.insert(t).values(**values))
-        except IntegrityError:
-            found = await self.get(team, digest, version, key)
-            assert found is not None
-            if found.status != "failed":
-                return found
-            p = documents_reading_pages
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
+            try:
+                async with self.attempt(c):
+                    await c.execute(sa.insert(t).values(**values))
+            except IntegrityError:
+                found = await self.get(team, digest, version, key)
+                assert found is not None
+                if found.status != "failed":
+                    return found
+                p = documents_reading_pages
                 await c.execute(sa.delete(p).where(self._where(p, team, digest, version, key)))
                 await c.execute(
                     sa.update(t)
@@ -230,7 +232,7 @@ class ReadingsStore:
         """Marks the reading begun once more; the number of tries, this one included."""
         t = documents_readings
         tries = row.attempts + 1
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(t)
                 .where(self._where(t, row.team, row.digest, row.version, row.key))
@@ -240,7 +242,7 @@ class ReadingsStore:
 
     async def opened(self, row: ReadingRow, *, pages_total: int, facts: dict[str, Any]) -> None:
         t = documents_readings
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(t)
                 .where(self._where(t, row.team, row.digest, row.version, row.key))
@@ -250,7 +252,7 @@ class ReadingsStore:
     async def save_page(self, row: ReadingRow, number: int, page: dict[str, Any]) -> None:
         """One finished page, and the count of pages done; saving a page again (after a restart) replaces it."""
         t = documents_readings
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await self._put_page(c, row.team, row.digest, row.version, row.key, number=number, page=page)
             await c.execute(
                 sa.update(t).where(self._where(t, row.team, row.digest, row.version, row.key)).values(pages_done=number)
@@ -289,25 +291,26 @@ class ReadingsStore:
     ) -> None:
         """A reading made at once, kept whole in one transaction; two readers of the same bytes racing keep one."""
         t, p = documents_readings, documents_reading_pages
-        try:
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                await c.execute(sa.delete(t).where(self._where(t, team, digest, version, key)))
-                await c.execute(sa.delete(p).where(self._where(p, team, digest, version, key)))
-                await c.execute(
-                    sa.insert(t).values(
-                        tenant_id=isolation.tenant(), team=team, file_digest=digest, reader_version=version,
-                        settings_key=key, status="done", pages_total=len(pages), pages_done=len(pages),
-                        facts=json.dumps(facts), attempts=1, file_id=file_id, actor=actor, duration_ms=duration_ms,
-                        created_at=at, started_at=at, finished_at=at,
+        async with self.tx() as c:
+            try:
+                async with self.attempt(c):
+                    await c.execute(sa.delete(t).where(self._where(t, team, digest, version, key)))
+                    await c.execute(sa.delete(p).where(self._where(p, team, digest, version, key)))
+                    await c.execute(
+                        sa.insert(t).values(
+                            tenant_id=isolation.tenant(), team=team, file_digest=digest, reader_version=version,
+                            settings_key=key, status="done", pages_total=len(pages), pages_done=len(pages),
+                            facts=json.dumps(facts), attempts=1, file_id=file_id, actor=actor,
+                            duration_ms=duration_ms, created_at=at, started_at=at, finished_at=at,
+                        )
+                    )  # fmt: skip
+                    for page in pages:
+                        await self._put_page(c, team, digest, version, key, number=int(page["number"]), page=page)
+                    await self._events(
+                        c, team, digest, version, key, name=FINISHED_EVENT, said={"status": "done", "pages": len(pages)}
                     )
-                )  # fmt: skip
-                for page in pages:
-                    await self._put_page(c, team, digest, version, key, number=int(page["number"]), page=page)
-                await self._events(
-                    c, team, digest, version, key, name=FINISHED_EVENT, said={"status": "done", "pages": len(pages)}
-                )
-        except IntegrityError:
-            return
+            except IntegrityError:
+                return
 
     async def finish(
         self,
@@ -321,7 +324,7 @@ class ReadingsStore:
     ) -> None:
         """The reading ended, and the event each of the team's files with these bytes is sent, in one transaction."""
         t = documents_readings
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(t)
                 .where(self._where(t, row.team, row.digest, row.version, row.key))
@@ -361,7 +364,7 @@ class ReadingsStore:
         )
         if page is not None:
             query = query.where(p.c.page == page)
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             bodies = (await c.execute(query)).scalars().all()
         return [_unpack(b) for b in bodies]
 
@@ -383,7 +386,7 @@ class ReadingsStore:
         other file of the team holds them; the number of readings removed."""
         f, t, p = documents_reading_files, documents_readings, documents_reading_pages
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             ours = sa.and_(f.c.tenant_id == tenant, f.c.team == team, team_visible(f))
             digest = (
                 await c.execute(sa.select(f.c.file_digest).where(ours, f.c.file_id == file_id))

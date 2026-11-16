@@ -5,6 +5,7 @@ files-service at settings.files_url as the caller's team, and calls models-servi
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
@@ -19,13 +20,13 @@ from ops_documents.document_types import default_document_types
 from ops_documents.extraction import default_extractor
 from ops_documents.files import Files
 from ops_documents.readings import Readings
-from ops_documents.store import ReadingsStore, engine_for
-from ops_documents.store.event_relay import keep_relaying
+from ops_documents.store import ReadingsStore, documents_relay, engine_for
 from ops_documents.tools_client import plugin_templates
 from ops_files_client import FilesClient
 from ops_identity import Auth, ServiceClient
 from ops_service_kit.logging import configure_logging
 from ops_service_kit.settings import Settings
+from ops_store.outbox import run_relay
 from ops_store.schema_version import require_current_schema
 
 # This service's own migration chain: it starts only on a database that records the chain's head.
@@ -56,8 +57,10 @@ def build(settings: Settings) -> FastAPI:
             audience="kb",
             scopes=["events:emit"],
         )
-    if agents is not None or kb is not None:
-        background.append(lambda: keep_relaying(engine, agents, kb))
+    targets = {name: client for name, client in (("agents", agents), ("kb", kb)) if client is not None}
+    if targets:
+        outbox = documents_relay(engine, targets)
+        background.append(lambda: run_relay(outbox, key="documents_relay", stop=asyncio.Event()))
     return create_documents_app(
         engine=engine,
         extractor=extractor,

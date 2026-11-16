@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Coroutine, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
@@ -148,6 +148,8 @@ def make(engine: AsyncEngine, tenant: str) -> Make:
         prices: Prices | None = None,
         role: str = "builder",
         type_uses: Any = None,
+        *,
+        background: Sequence[Callable[[], Coroutine[Any, Any, None]]] = (),
     ) -> Service:
         fake = FakeFilesService()
         files = Files(fake.client(service="documents", scopes=["files:view", "files:edit"]))
@@ -157,7 +159,13 @@ def make(engine: AsyncEngine, tenant: str) -> Make:
         extractor.types = types
         auth = Auth.for_dev(Settings(), audience="documents", name="james", email="j@x", tenant_id=tenant)
         app = create_documents_app(
-            engine=engine, extractor=extractor, document_types=types, auth=auth, readings=readings, type_uses=type_uses
+            engine=engine,
+            extractor=extractor,
+            document_types=types,
+            auth=auth,
+            readings=readings,
+            type_uses=type_uses,
+            background=background,
         )
         sign_in(app, tenant, role)
         hooks: dict[str, Any] = {"response": [response_checker(app)]}

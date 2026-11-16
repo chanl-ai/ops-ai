@@ -21,8 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 import ops_documents.app as documents_app
 from ops_documents import readings as readings_module
 from ops_documents.readings import Readings, next_reading, settings_of
-from ops_documents.store import ReadingsStore
-from ops_documents.store.event_relay import sender
+from ops_documents.store import ReadingsStore, documents_relay
 from ops_documents.store.extractions import service_outbox
 from ops_documents.store.readings import ReadingRow
 from ops_files_client.testing import FakeFilesService
@@ -249,7 +248,7 @@ async def test_a_file_with_no_reader_fails_with_its_reason(make: Make) -> None:
     assert body["status"] == "failed" and body["error"]["code"] == "unsupported_format", body
 
 
-async def test_reading_events_go_to_kb_and_extraction_events_to_agents() -> None:
+async def test_reading_events_go_to_kb_and_extraction_events_to_agents(engine: AsyncEngine) -> None:
     sent: dict[str, list[str]] = {"agents": [], "kb": []}
 
     class Client:
@@ -259,7 +258,7 @@ async def test_reading_events_go_to_kb_and_extraction_events_to_agents() -> None
         async def post(self, path: str, body: dict[str, Any], **_: Any) -> None:
             sent[self.name].append(str(body["name"]))
 
-    send = sender(Client("agents"), Client("kb"))  # pyright: ignore[reportArgumentType]
+    send = documents_relay(engine, {"agents": Client("agents"), "kb": Client("kb")}).send
     for name in ("reading.finished", "extraction.finished", "reading.failed"):
         await send({"tenantId": "t", "body": {"name": name, "teamId": "team_ops"}})
     assert sent == {"agents": ["extraction.finished"], "kb": ["reading.finished", "reading.failed"]}, sent
