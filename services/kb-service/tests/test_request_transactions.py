@@ -21,10 +21,10 @@ class _NotingAgents(StaticAgents):
         super().__init__()
         self.open_at_call: list[int] = []
 
-    async def usage(self, tenant_id: str, team_id: str | None) -> dict[str, Usage] | None:
+    async def usage(self, tenant_id: str, team_id: str | None, kb_ids: list[str]) -> dict[str, Usage] | None:
         timing = current()
         self.open_at_call.append(timing.db_tx_open if timing is not None else -1)
-        return await super().usage(tenant_id, team_id)
+        return await super().usage(tenant_id, team_id, kb_ids)
 
 
 async def test_agents_service_is_asked_with_no_transaction_open(database_url: str, tenant: str) -> None:

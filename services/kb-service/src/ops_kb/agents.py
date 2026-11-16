@@ -1,8 +1,9 @@
 """Which agents cite each knowledge base: agents-service owns agents and their grants, so kb-service asks it.
 
 `AgentDirectory` is the port; `AgentsUsage` asks agents-service's `/v1/knowledge-usage` with a service token holding
-`agents:view` for the caller's tenant and team. Agents of the caller's team are named; others are counted, so a base
-another team relies on still reads as in use. When agents-service cannot answer, usage is None ("unknown"): the list
+`agents:view` for the caller's tenant and team, naming the bases it shows (`ids`), so a page of the list asks about its
+own bases only. Agents of the caller's team are named; others are counted, so a base another team relies on still
+reads as in use. When agents-service cannot answer, usage is None ("unknown"): the list
 still loads, and the console keeps the delete confirmation that a base in use asks for.
 """
 
@@ -24,8 +25,8 @@ class Usage:
 
 
 class AgentDirectory(Protocol):
-    async def usage(self, tenant_id: str, team_id: str | None) -> dict[str, Usage] | None:
-        """Usage by knowledge base id, or None when it cannot be known."""
+    async def usage(self, tenant_id: str, team_id: str | None, kb_ids: list[str]) -> dict[str, Usage] | None:
+        """Usage of each of `kb_ids` by knowledge base id, or None when it cannot be known."""
         ...
 
 
@@ -35,10 +36,13 @@ class AgentsUsage:
         team, whose agents are named."""
         self.agents = agents
 
-    async def usage(self, tenant_id: str, team_id: str | None) -> dict[str, Usage] | None:
+    async def usage(self, tenant_id: str, team_id: str | None, kb_ids: list[str]) -> dict[str, Usage] | None:
+        if not kb_ids:
+            return {}
         try:
             rows = cast(
-                list[dict[str, Any]], await self.agents.get("/v1/knowledge-usage", tenant=tenant_id, team=team_id)
+                list[dict[str, Any]],
+                await self.agents.get("/v1/knowledge-usage", params={"ids": kb_ids}, tenant=tenant_id, team=team_id),
             )
         except (ServiceCallError, ServiceUnreachable) as e:
             log.warning("agents_usage_unavailable", error=type(e).__name__)
@@ -55,5 +59,5 @@ class StaticAgents:
     def __init__(self, usage: dict[str, list[str]] | None = None) -> None:
         self._usage = {k: Usage(v) for k, v in (usage or {}).items()}
 
-    async def usage(self, tenant_id: str, team_id: str | None) -> dict[str, Usage] | None:
-        return self._usage
+    async def usage(self, tenant_id: str, team_id: str | None, kb_ids: list[str]) -> dict[str, Usage] | None:
+        return {k: v for k, v in self._usage.items() if k in kb_ids}

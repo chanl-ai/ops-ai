@@ -9,29 +9,45 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import event
 from sqlalchemy.pool import Pool
 
 from ops_agents.api.agent_registry import SEED_TEAM
+from ops_agents.api.deps import Runtime
 from ops_identity import dev_service_signer, mint_service_token
+from ops_identity.testing import TEST_TOKEN_TTL_S
 
+from .test_hitl_facade import paused_dispute, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from .test_reply_pins import FIXTURES, answer, compare
 
+# A service caller as (service, scopes, team); None is the dev person.
+Caller = tuple[str, tuple[str, ...], str] | None
+KB: Caller = ("kb", ("agents:view",), SEED_TEAM)
+PLATFORM: Caller = ("platform", ("workflows:view",), SEED_TEAM)
+PERSON: Caller = None
 
-def service(name: str, scopes: list[str], team: str | None = SEED_TEAM) -> dict[str, str]:
+
+def headers(caller: Caller) -> dict[str, str]:
+    """Minted when the request is sent, so a long parallel run never sends an expired token."""
+    if caller is None:
+        return {}
+    name, scopes, team = caller
     token = mint_service_token(
-        dev_service_signer(), service=name, audience="agents", tenant_id="local", scopes=scopes, team_id=team
+        dev_service_signer(),
+        service=name,
+        audience="agents",
+        tenant_id="local",
+        scopes=list(scopes),
+        team_id=team,
+        ttl_s=TEST_TOKEN_TTL_S,
     )
     return {"Authorization": f"Bearer {token}"}
 
 
-KB = service("kb", ["agents:view"])
-PLATFORM = service("platform", ["workflows:view"])
-PERSON: dict[str, str] = {}
-
 # (name, path, caller): each answered value by value.
-PINNED: list[tuple[str, str, dict[str, str]]] = [
+PINNED: list[tuple[str, str, Caller]] = [
     ("overview", "/v1/overview", PERSON),
     ("activity", "/v1/activity", PERSON),
     ("activity.pastEnd", "/v1/activity?page=999&pageSize=10", PERSON),
@@ -39,13 +55,14 @@ PINNED: list[tuple[str, str, dict[str, str]]] = [
     ("activity.badSource", "/v1/activity?source=nowhere", PERSON),
     ("activity.otherTeam", "/v1/activity?team=team_nobody", PERSON),
     ("teamUsage", "/v1/teams/usage", PLATFORM),
-    ("teamUsage.noScope", "/v1/teams/usage", service("platform", [])),
+    ("teamUsage.noScope", "/v1/teams/usage", ("platform", (), SEED_TEAM)),
     ("promptVariables", "/v1/prompts/variables", PERSON),
     ("modelAliases", "/v1/model-aliases", PERSON),
     ("knowledgeUsage", "/v1/knowledge-usage", KB),
+    ("knowledgeUsage.ids", "/v1/knowledge-usage?ids=kb_legal&ids=kb_nowhere", KB),
     ("knowledgeUsage.person", "/v1/knowledge-usage", PERSON),
-    ("knowledgeUsage.otherTeam", "/v1/knowledge-usage", service("kb", ["agents:view"], "team_nobody")),
-    ("knowledgeUsage.noScope", "/v1/knowledge-usage", service("kb", [])),
+    ("knowledgeUsage.otherTeam", "/v1/knowledge-usage", ("kb", ("agents:view",), "team_nobody")),
+    ("knowledgeUsage.noScope", "/v1/knowledge-usage", ("kb", (), SEED_TEAM)),
     ("health", "/health", PERSON),
     ("reviews", "/reviews?view=all", PERSON),
     ("reviews.pastEnd", "/reviews?view=all&page=999", PERSON),
@@ -56,17 +73,17 @@ PINNED: list[tuple[str, str, dict[str, str]]] = [
 
 async def test_the_summary_reads_keep_every_key_value_and_error_object(client: AsyncClient) -> None:
     seen: dict[str, Any] = {}
-    for name, path, headers in PINNED:
-        seen[name] = answer(await client.get(path, headers=headers))
+    for name, path, caller in PINNED:
+        seen[name] = answer(await client.get(path, headers=headers(caller)))
     compare(seen, FIXTURES / "reply-pins-summary-reads.json")
 
 
 # (path, caller, connections the request checks out). One: the route answers in the request transaction. Zero: it
 # reads nothing from the database. More: it calls another service, so each read takes and returns its own connection
 # and none is held while the other service answers.
-CHECKOUTS: list[tuple[str, dict[str, str], int]] = [
-    ("/v1/teams/usage", PLATFORM, 5),
-    ("/v1/knowledge-usage", KB, 4),
+CHECKOUTS: list[tuple[str, Caller, int]] = [
+    ("/v1/teams/usage", PLATFORM, 1),
+    ("/v1/knowledge-usage", KB, 1),
     ("/v1/prompts/variables", PERSON, 0),
     ("/health", PERSON, 1),
 ]
@@ -84,10 +101,24 @@ async def test_each_summary_read_checks_out_the_connections_it_should(client: As
     event.listen(Pool, "checkout", checked_out)
     seen: list[tuple[str, int, int]] = []
     try:
-        for path, headers, _ in CHECKOUTS:
+        for path, caller, _ in CHECKOUTS:
             counted.append(0)
-            r = await client.get(path, headers=headers)
+            r = await client.get(path, headers=headers(caller))
             seen.append((path, r.status_code, counted[-1]))
     finally:
         event.remove(Pool, "checkout", checked_out)
     assert seen == [(p, 200, n) for p, _, n in CHECKOUTS], seen
+
+
+async def test_the_reviews_list_reads_at_most_its_cap_from_a_source(
+    stack: tuple[AsyncClient, Runtime],  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The list merges its sources before paging, so an unbounded source would read every review a team ever had."""
+    client, rt = stack
+    for _ in range(3):
+        await paused_dispute(client)
+    monkeypatch.setattr(rt, "settings", rt.settings.model_copy(update={"review_list_rows_per_source": 2}))
+    r = await client.get("/reviews?view=all")
+    assert r.status_code == 200, r.text
+    assert r.json()["data"]["pagination"]["total"] == 2, r.text

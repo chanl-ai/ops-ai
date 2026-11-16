@@ -602,11 +602,15 @@ def _risk(policies: list[WritePolicy]) -> str:
 
 
 async def team_runs(rt: Runtime) -> list[dict[str, Any]]:
-    """The team's runs a task list reads, newest first: the newest 200, for the decided tasks they hold, and every run
-    waiting for a person however old, so a busy team never loses an open task from the list or its count."""
+    """The team's runs a task list reads, newest first: the newest 200, for the decided tasks they hold, and the
+    newest `review_list_rows_per_source` runs waiting for a person, so an open task leaves the list only past that
+    many waiting runs (logged as `review_source_capped`)."""
     store = _runs(rt)
+    cap = rt.settings.review_list_rows_per_source
     recent = await store.list(team_id=current_team())
-    waiting = await store.list(team_id=current_team(), status="waiting", limit=None)
+    waiting = await store.list(team_id=current_team(), status="waiting", limit=cap)
+    if len(waiting) >= cap:
+        log.warning("review_source_capped", source="waiting_runs", cap=cap)
     seen = {str(r["id"]) for r in recent}
     rows = recent + [r for r in waiting if str(r["id"]) not in seen]
     return sorted(rows, key=lambda r: str(r["created_at"]), reverse=True)

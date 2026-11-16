@@ -140,6 +140,13 @@ class ReviewsQuery(BaseModel):
 
 @console_router.get("", response_model=Envelope[ReviewList])
 async def list_reviews(rt: Rt, me: Me, q: Annotated[ReviewsQuery, Query()]) -> JSONResponse:
+    """Human Tasks: one page of every review the team may see, with counts per view, facets and stats. The page is cut
+    after merging three sources in Python (hitl_facade.list_reviews): graph threads waiting on a person, agent and
+    workflow publish requests, and workflow runs waiting on a review step. They live in different tables (a thread's
+    pending step is in its checkpoint, not a column), so no one query can sort and count them together, and the counts
+    and facets cover every row, not the page. Each source therefore reads at most `review_list_rows_per_source` rows
+    (Settings), newest first, logging `review_source_capped` at the cap; the decisions and policies read are those of
+    the rows kept. The route stays off `Tx`: building a review asks tools-service for its write policy."""
     filters = {"risk": q.risk, "workflowId": q.workflowId, "kind": q.kind, "agentSlug": q.agentSlug, "status": q.status}
     with one_read_per_tool():
         rows = await hitl_facade.list_reviews(

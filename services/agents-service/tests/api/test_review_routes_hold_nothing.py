@@ -1,6 +1,6 @@
-"""The review routes ask tools-service for each held write's policy (`tool_access.policy_of`), and a decision resumes
-the run. By failure mode: a route that took the request transaction would hold a database connection while
-tools-service answers, so a slow tools-service would drain the pool for every other request."""
+"""The review routes and the Overview ask tools-service for each held write's policy (`tool_access.policy_of`), and
+a decision resumes the run. By failure mode: a route that took the request transaction would hold a database
+connection while tools-service answers, so a slow tools-service would drain the pool for every other request."""
 
 from __future__ import annotations
 
@@ -38,7 +38,8 @@ async def test_no_connection_is_held_while_tools_service_answers_a_review_route(
     seen = [
         (await client.get(f"/reviews/{tid}")).status_code,
         (await client.get("/reviews?view=open&page=1&pageSize=25")).status_code,
+        (await client.get("/v1/overview")).status_code,
         (await client.post(f"/reviews/{tid}/decision", json={"decision": "approved"})).status_code,
     ]
-    assert seen == [200, 200, 200]
+    assert seen == [200, 200, 200, 200]
     assert held and set(held) == {0}, held

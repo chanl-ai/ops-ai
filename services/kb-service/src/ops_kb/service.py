@@ -614,7 +614,7 @@ class KnowledgeService:
         found = await self.store.base_page(who.tenant_id, q)
         if not found.bases:
             return found.page
-        using = await self.agents.usage(who.tenant_id, who.team_id)
+        using = await self.agents.usage(who.tenant_id, who.team_id, [b.id for b in found.bases])
         counts = {
             s.id: {**s.item_counts, "synced": s.last_sync_at, "freshness": self.freshness_of(s)} for s in found.sources
         }
@@ -636,7 +636,7 @@ class KnowledgeService:
         by_kb, by_source = await self._joined(who.tenant_id)
         attached = await self.store.sources(who.tenant_id, by_kb.get(kb_id, []))
         running = await self.store.running_sources(who.tenant_id)
-        using = await self.agents.usage(who.tenant_id, who.team_id)
+        using = await self.agents.usage(who.tenant_id, who.team_id, [kb_id])
         return {
             **self._base(
                 b,

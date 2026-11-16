@@ -27,6 +27,7 @@ from ..store.cases import CaseStore
 from ..store.events import EventLog
 from ..store.leases import LeaseHeldError
 from ..store.review_assignments import ReviewAssignments
+from ..store.review_sources import ReviewSources
 from ..store.reviews import DecisionOut, ReviewStore
 from ..store.timers import TimerStore
 from . import engine_reviews, publish_reviews
@@ -587,10 +588,13 @@ async def _places(rt: Runtime) -> list[dict[str, Any]]:
 async def _thread_reviews(
     rt: Runtime,
 ) -> list[tuple[dict[str, Any], dict[str, Any] | None, DecisionOut | None]]:
-    """Each graph thread that holds a review, with the interrupt it waits on (None once decided) and its decision."""
+    """Each graph thread that holds a review, with the interrupt it waits on (None once decided) and its decision, of
+    the newest `review_list_rows_per_source` threads; their decisions only are read."""
     out: list[tuple[dict[str, Any], dict[str, Any] | None, DecisionOut | None]] = []
-    decisions = await _decisions(rt)
-    for row in await graph_store(rt).threads(None):
+    capped = await ReviewSources(graph_store(rt).engine).threads(rt.settings.review_list_rows_per_source)
+    threads = [t.model_dump() for t in capped]
+    decisions = await _decisions(rt, [t.id for t in capped])
+    for row in threads:
         # A chat's write approval is listed, so a second approver need not be sent a chat link; other agent graph
         # threads take no review here yet.
         if is_chat_graph(row["graph"]) and not _is_chat(row):

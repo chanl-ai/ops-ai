@@ -52,11 +52,11 @@ class HeldAgents(StaticAgents):
         super().__init__()
         self.held: list[int] = []
 
-    async def usage(self, tenant_id: str, team_id: str | None) -> dict[str, Usage] | None:
+    async def usage(self, tenant_id: str, team_id: str | None, kb_ids: list[str]) -> dict[str, Usage] | None:
         timing = current()
         if timing is not None:
             self.held.append(timing.db_tx_open)
-        return await super().usage(tenant_id, team_id)
+        return await super().usage(tenant_id, team_id, kb_ids)
 
 
 @pytest.fixture

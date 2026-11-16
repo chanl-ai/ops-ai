@@ -60,10 +60,12 @@ async def test_agents_of_other_teams_are_counted_not_named(engine: AsyncEngine, 
     async with kb_client(engine, tenant) as setup:
         kb = data(await setup.post("/v1/knowledge-bases", json=POLICIES), 201)
     seen: list[str | None] = []
+    asked: list[list[str]] = []
 
     def answer(request: httpx.Request) -> httpx.Response:
         token = request.headers["Authorization"].removeprefix("Bearer ")
         seen.append(json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "=="))["team_id"])
+        asked.append(request.url.params.get_list("ids"))
         row = {"kbId": kb["id"], "agents": [{"id": "ag_1", "name": "Branch Policy"}], "elsewhere": 2}
         return httpx.Response(200, json={"success": True, "data": [row]})
 
@@ -73,6 +75,8 @@ async def test_agents_of_other_teams_are_counted_not_named(engine: AsyncEngine, 
         detail = data(await c.get(f"/v1/knowledge-bases/{kb['id']}"))
     assert (detail["agentNames"], detail["agentsElsewhere"], detail["agentsKnown"]) == (["Branch Policy"], 2, True)
     assert seen and seen[0], "kb-service names the caller's team in its token"
+    # Only the bases kb-service shows are asked about, so agents-service reads no other base's agents.
+    assert asked == [[kb["id"]]], asked
 
 
 async def test_a_slow_agents_service_is_asked_once_within_its_short_wait(

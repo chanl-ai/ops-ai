@@ -145,6 +145,24 @@
     },
     "status": 200
   },
+  "knowledgeUsage.ids": {
+    "body": {
+      "data": [
+        {
+          "agents": [
+            {
+              "id": "ag_dispute",
+              "name": "Card Dispute Resolver"
+            }
+          ],
+          "elsewhere": 0,
+          "kbId": "kb_legal"
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
   "knowledgeUsage.noScope": {
     "body": {
       "error": {

@@ -9,6 +9,7 @@ from typing import Any
 
 from ops_agents.graphs.definition import WorkflowDefinition
 from ops_agents.store.agent_registry import registry_agents
+from ops_agents.store.review_sources import ReviewSources
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_store import isolation
 
@@ -146,7 +147,8 @@ async def all_views(rt: Runtime) -> list[dict[str, Any]]:
     access request still pending is not one: it runs as its system workflow now, and listing both would show it
     twice."""
     out: list[dict[str, Any]] = []
-    requests = await registry(rt).all_requests()
+    capped = await ReviewSources(rt.db).publish_requests(rt.settings.review_list_rows_per_source)
+    requests = [r.model_dump() for r in capped]
     pinned = {(str(r["subject_id"]), int(r["version"])) for r in requests if r["kind"] == engine_lifecycle.KIND}
     versions = await engine_lifecycle.definitions(rt).pinned(pinned)
     acting = isolation.team()

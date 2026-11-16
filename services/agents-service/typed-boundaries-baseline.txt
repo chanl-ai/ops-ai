@@ -214,7 +214,6 @@
 2 dict-any services/agents-service/src/ops_agents/api/routers/graph_list.py
 25 dict-any services/agents-service/src/ops_agents/api/routers/graphs.py
 2 dict-any services/agents-service/src/ops_agents/api/routers/guardrails.py
-2 dict-any services/agents-service/src/ops_agents/api/routers/knowledge_usage.py
 5 dict-any services/agents-service/src/ops_agents/api/routers/mailboxes.py
 2 dict-any services/agents-service/src/ops_agents/api/routers/memories.py
 1 dict-any services/agents-service/src/ops_agents/api/routers/overview.py

@@ -1,6 +1,9 @@
 """GET /v1/activity: everything that happened in the caller's teams on one list, filtered by kind, team,
 status and source, with counts per kind and status for the "View activity" buttons on the channel, agent and workflow
-pages. The rows are joined by the store (store/activity.py); this router decides which teams each kind is read in."""
+pages. The rows are joined by the store (store/activity.py); this router decides which teams each kind is read in.
+The list takes no request transaction (`Tx`): naming the people and keys on a page asks platform-service and wording
+its tool calls asks tools-service, so each store read opens and closes its own transaction and no connection is held
+while they answer."""
 
 from __future__ import annotations
 

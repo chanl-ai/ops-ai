@@ -1,7 +1,9 @@
 """`/v1/overview`: what waits on a person, counted on the server. Reviews come from the same list Human Tasks
 reads (hitl_facade.all_reviews), so the two never disagree; cases from the cases store, in the team the request acts
 in. The Overview page, the sidebar's count and Chat's hints read the lists here already joined, so the console
-fetches nothing beside this one request."""
+fetches nothing beside this one request. The route takes no request transaction (`Tx`): building the reviews asks
+tools-service for each held write's policy, so each store read opens and closes its own transaction and no connection
+is held while tools-service answers (`tests/api/test_review_routes_hold_nothing.py`)."""
 
 from __future__ import annotations
 
