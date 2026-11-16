@@ -557,7 +557,13 @@ class Extractor:
             return (200 if held.status not in ("queued", "running") else 202), answer_of(held)
         pages = None
         if inline or row.size <= SYNC_BYTES:
-            pages = await self._pages(who, row, request)
+            try:
+                pages = await self._pages(who, row, request)
+            except Exception as e:
+                # Settled as failed, not left queued: a retry with the same key then runs again now, where a queued
+                # row would answer 202 until a restart resumed it.
+                await self.store.finish(held.id, status="failed", at=self.clock(), error_code="failed", error=str(e))
+                raise
         if not inline and (pages is None or pages.count > SYNC_PAGES):
             await self._later(held)
             return 202, answer_of(held)

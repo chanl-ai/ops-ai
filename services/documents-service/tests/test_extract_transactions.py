@@ -147,8 +147,8 @@ async def test_a_failed_extraction_leaves_the_row_it_left_before(
     expected = {
         (False, "model_error"): (200, "failed", "model_unavailable"),
         (False, "model_timeout"): (200, "failed", "model_unavailable"),
-        # The reading's bytes could not be read after the row was saved: it stays queued for a restart to pick up.
-        (False, "files_unreachable"): (500, "queued", None),
+        # The reading's bytes could not be read after the row was saved: it is settled failed, so a retry runs again.
+        (False, "files_unreachable"): (500, "failed", "failed"),
         (True, "model_error"): (202, "failed", "model_unavailable"),
         (True, "model_timeout"): (202, "failed", "model_unavailable"),
         (True, "files_unreachable"): (202, "failed", "failed"),

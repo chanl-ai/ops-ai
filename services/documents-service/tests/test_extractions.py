@@ -21,6 +21,7 @@ from ops_documents import extraction
 from ops_documents.extraction import ModelsService
 from ops_documents.store.extractions import service_outbox
 from ops_extract.floor import FloorUnreadError
+from ops_files_client import FilesRefused
 from ops_identity import dev_service_signer, mint_service_token
 
 from .conftest import OPS, Make
@@ -148,6 +149,25 @@ async def test_a_retry_with_the_same_key_is_the_same_extraction_and_a_failed_one
         same = (await extract(c, fid, headers=key)).json()["data"]
     assert failed["status"] == "failed" and (again["id"], again["status"]) == (failed["id"], "done"), again
     assert same["id"] == failed["id"] and len(models.calls) == 2, models.calls
+
+
+async def test_a_retry_after_files_service_failed_mid_request_runs_again_at_once(make: Make, monkeypatch: Any) -> None:
+    """The row is saved before the bytes are read; files-service failing then leaves the row failed, so a retry with
+    the same key reads the file now rather than answering queued until the process restarts."""
+    s = make(Models(), Floor())
+    async with s.client as c:
+        fid = await s.stored(NOTICE)
+        key = {**OPS, "Idempotency-Key": "run_1:read:files-down"}
+
+        async def down(*args: Any) -> bytes:
+            raise FilesRefused(503, "unavailable", "files-service is down")
+
+        monkeypatch.setattr(s.extractor.files, "read", down)
+        first = await extract(c, fid, headers=key)
+        monkeypatch.undo()
+        again = await extract(c, fid, headers=key)
+    assert first.status_code >= 500, first.text
+    assert again.status_code == 200 and again.json()["data"]["status"] == "done", again.text
 
 
 async def test_only_a_service_purges_and_only_a_deleted_files_reads_of_its_team(
