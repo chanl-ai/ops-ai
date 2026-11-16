@@ -122,11 +122,13 @@ def _first_table(query: Rows) -> Any:
 
 
 def _id_column(query: Rows) -> sa.ColumnElement[Any]:
-    """The one column `ids` names a row by: the first table's primary key, since some tables are keyed by a name."""
+    """The one column `ids` names a row by: the first table's primary key, since some tables are keyed by a name. A
+    key's `tenant_id` is left out: every statement runs inside one tenant, so (tenant_id, id) names a row by id."""
     table = _first_table(query)
-    key = list(table.primary_key.columns)
+    key = [c for c in table.primary_key.columns if c.name != "tenant_id"]
     if len(key) != 1:
-        raise ValueError(f"list_page ids: {table.name} has a primary key of {len(key)} columns; ids needs one")
+        names = ", ".join(c.name for c in key)
+        raise ValueError(f"list_page ids: {table.name} is keyed by ({names}); ids needs a key of one column")
     return key[0]
 
 
@@ -135,9 +137,8 @@ def _key_order(query: Rows, order: list[sa.ColumnElement[Any]], descending: bool
     table = _first_table(query)
     named = {_column(term) for term in order}
     key = list(table.primary_key.columns)
-    if not key or all(c in named for c in key):
-        return []
-    return [c.desc() if descending else c.asc() for c in key]
+    # A key column the order already names is left out: SQL Server refuses an ORDER BY that names a column twice.
+    return [c.desc() if descending else c.asc() for c in key if c not in named]
 
 
 def _column(term: sa.ColumnElement[Any]) -> Any:

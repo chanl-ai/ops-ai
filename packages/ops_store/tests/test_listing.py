@@ -50,7 +50,14 @@ aliases = sa.Table(
     sa.Column("name", sa.String(32), primary_key=True),
     sa.Column("target", sa.String(32), nullable=False),
 )
-# Keyed by two columns: `ids` cannot name one row.
+# Keyed by tenant and id, as most tenant tables are: the tenant is the caller's, so `id` names the row.
+types = sa.Table(
+    "store_test_list_types",
+    meta,
+    sa.Column("tenant_id", sa.String(32), primary_key=True),
+    sa.Column("id", sa.String(32), primary_key=True),
+)
+# Keyed by two columns besides the tenant: `ids` cannot name one row.
 pairs = sa.Table(
     "store_test_list_pairs",
     meta,
@@ -107,6 +114,7 @@ async def engine(request: pytest.FixtureRequest) -> AsyncIterator[AsyncEngine]:
                 agents.insert(), [{"id": "a_claims", "name": "Claims intake"}, {"id": "a_loans", "name": "Loan desk"}]
             )
             await c.execute(aliases.insert(), [{"name": f"alias-{i}", "target": f"model-{i}"} for i in range(1, 6)])
+            await c.execute(types.insert(), [{"tenant_id": "t1", "id": i} for i in ("invoice", "receipt", "claim")])
         yield e
         async with e.begin() as c:
             await c.run_sync(meta.drop_all)
@@ -211,6 +219,9 @@ async def test_ids_pick_rows_by_the_primary_key_and_refuse_a_key_of_two_columns(
             c, sa.select(aliases.c.target), ListParams(ids=["alias-2", "alias-4", "gone"]), default_sort=aliases.c.name
         )
         assert [r["target"] for r in page["data"]] == ["model-2", "model-4"] and page["pagination"]["total"] == 2
+        picked = sa.select(types.c.id).where(types.c.tenant_id == "t1")
+        page = await list_page(c, picked, ListParams(ids=["claim", "invoice"]), default_sort=types.c.id)
+        assert [r["id"] for r in page["data"]] == ["claim", "invoice"]
         with pytest.raises(ValueError, match="store_test_list_pairs"):
             await list_page(c, sa.select(pairs.c.name), ListParams(ids=["x"]), default_sort=pairs.c.name)
 
