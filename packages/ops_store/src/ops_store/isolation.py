@@ -396,16 +396,26 @@ async def isolated_tx(engine: AsyncEngine, *, role: str | None = None) -> AsyncG
             # The block around this one reads on with the settings it entered with. A restore that fails has failed
             # the request (`_on_error`), so nothing reads on with the wrong scope.
             state.carried = None
-            # A cancelled statement leaves the transaction unusable, and the restore's PendingRollbackError would
-            # replace the cancellation; the request rolls back either way, since carried stays None.
-            with suppress(DBAPIError, InvalidRequestError):
-                tenant_id, team_id, scope_, role_, tables_ = before
-                back = Isolation(tenant_id, team_id, scope_, ctx.kind, tables=tables_)  # pyright: ignore[reportArgumentType]
-                if now is not None and now[:4] == before[:4]:
-                    _mark(conn, back)
-                else:
-                    await enter_transaction(conn, back, role=role_, reset_role=role is not None)
+            tenant_id, team_id, scope_, role_, tables_ = before
+            back = Isolation(tenant_id, team_id, scope_, ctx.kind, tables=tables_)  # pyright: ignore[reportArgumentType]
+            if now is not None and now[:4] == before[:4]:
+                _mark(conn, back)
                 state.carried = before
+            elif await _restored(conn, back, role=role_, reset_role=role is not None):
+                state.carried = before
+            # Not restored: carried stays None, so the request rolls back and nothing reads on with this scope.
+
+
+async def _restored(
+    conn: AsyncConnection, ctx: Isolation, *, role: str | None = None, reset_role: bool = False
+) -> bool:
+    """Writes `ctx` back into the transaction; False when it could not. A statement cancelled mid-flight leaves the
+    transaction unusable, and the restore's PendingRollbackError would replace the cancellation; the caller's
+    transaction rolls back either way."""
+    with suppress(DBAPIError, InvalidRequestError):
+        await enter_transaction(conn, ctx, role=role, reset_role=reset_role)
+        return True
+    return False
 
 
 @asynccontextmanager
@@ -425,11 +435,44 @@ async def attempt(conn: AsyncConnection) -> AsyncGenerator[None]:
 
 
 @asynccontextmanager
+async def tenant_wide_on(conn: AsyncConnection, reason: str) -> AsyncGenerator[AsyncConnection]:
+    """`tenant_wide(reason)` for one block on `conn`, a transaction the caller already holds, never a second
+    connection: the request's connection is re-entered as `isolated_tx` re-enters it, which restores what it carried;
+    one `isolated_tx` opened outside a request has its context statement re-run, and the scope it opened with written
+    back when the block ends, however it ends. The PostgreSQL role stays as it is. Listed by reason in
+    test_isolation_sites.py like `tenant_wide`."""
+    state = _request_here(conn.engine)
+    if state is not None and state.conn is conn:
+        carried = state.carried
+        with tenant_wide(reason, tenant_id=carried[0] if carried else None):
+            async with isolated_tx(conn.engine, role=carried[3] if carried else None) as wide:
+                yield wide
+        return
+    opened: object = conn.info.get(_OPENED)
+    if not isinstance(opened, Isolation):
+        raise ValueError("tenant_wide_on needs a connection isolated_tx opened")
+    with tenant_wide(reason, tenant_id=opened.tenant_id) as wide:
+        await enter_transaction(conn, wide)
+        try:
+            yield conn
+        except BaseException:
+            # Not restored only when the transaction is unusable; it rolls back as the error leaves isolated_tx.
+            await _restored(conn, opened)
+            raise
+        await enter_transaction(conn, opened)
+
+
+# The context an `isolated_tx` outside a request opened its connection with, for `tenant_wide_on` to restore.
+_OPENED = "ops_isolation_opened"
+
+
+@asynccontextmanager
 async def _own_tx(engine: AsyncEngine, ctx: Isolation, role: str | None) -> AsyncGenerator[AsyncConnection]:
     async with engine.connect() as conn:
         tx = await conn.begin()
         try:
             await enter_transaction(conn, ctx, role=role)
+            conn.info[_OPENED] = ctx
             yield conn
             # Cleared before the commit, so a transaction commits once: a second commit after it cost a round trip on
             # every SQL Server save (slow-tests RCA A3).
@@ -438,6 +481,10 @@ async def _own_tx(engine: AsyncEngine, ctx: Isolation, role: str | None) -> Asyn
         except BaseException:
             await _roll_back(conn, tx)
             raise
+        finally:
+            # The pooled connection keeps its info: the next checkout must not find this transaction's context.
+            if not conn.invalidated:
+                conn.info.pop(_OPENED, None)
 
 
 @asynccontextmanager
@@ -711,4 +758,5 @@ __all__ = [
     "team",
     "tenant",
     "tenant_wide",
+    "tenant_wide_on",
 ]

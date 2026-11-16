@@ -65,19 +65,26 @@ class Store:
         """A savepoint around a statement that may fail and be caught, so the request's connection stays usable."""
         return isolation.attempt(conn)
 
-    async def owner_teams(self, conn: AsyncConnection, table: sa.Table, ids: set[str], reason: str) -> dict[str, str]:
+    async def owner_teams(
+        self, conn: AsyncConnection | None, table: sa.Table, ids: set[str], reason: str
+    ) -> dict[str, str]:
         """The owning team of each id in one query, for deciding a refusal; never for showing the rows. A row with no
         team is left out. The read is tenant-wide for `reason`, since a team's transaction cannot see another team's
-        rows: inside a request that is `conn` with its scope widened for this one statement, then restored."""
+        rows: on `conn` with its scope widened for this one statement, then restored; with no `conn`, in `tx()`."""
         if not ids:
             return {}
         column = table.info.get(TEAM_KEY)
         if column is None:
             raise ValueError(f"{table.name} is not marked TEAM_OWNED")
         q = sa.select(table.c.id, table.c[str(column)]).where(table.c.id.in_(sorted(ids)), any_team(table, reason))
-        with isolation.tenant_wide(reason):
-            async with self.tx() as wide:
-                return {str(i): str(team) for i, team in (await wide.execute(q)).all() if team}
+        if conn is None:
+            with isolation.tenant_wide(reason):
+                async with self.tx() as own:
+                    found = (await own.execute(q)).all()
+        else:
+            async with isolation.tenant_wide_on(conn, reason) as wide:
+                found = (await wide.execute(q)).all()
+        return {str(i): str(team) for i, team in found if team}
 
 
 __all__ = ["Store"]
