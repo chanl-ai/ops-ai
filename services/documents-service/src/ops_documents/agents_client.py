@@ -8,8 +8,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, cast
 
-import httpx
-
 from ops_documents.files import Who
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import ServiceUnavailable
@@ -37,13 +35,9 @@ class TypeUses:
 
 def type_uses(settings: Settings) -> TypeUses | None:
     """On the agents endpoint; None when there is no service signing key."""
-    base = settings.endpoint("agents").base
-    http = httpx.AsyncClient(base_url=base, timeout=5)
     try:
         return TypeUses(
-            ServiceClient.for_settings(
-                settings, http, service="documents", audience="agents", scopes=["workflows:view"]
-            )
+            ServiceClient.for_settings(settings, service="documents", audience="agents", scopes=["workflows:view"])
         )
     except ValueError:  # no service signing key outside dev
         return None

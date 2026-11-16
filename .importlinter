@@ -247,11 +247,8 @@ ignore_imports =
     ops_platform.signin_options -> httpx
     ops_platform.sso -> httpx
     # ops_documents: emptied by the pilot.
-    ops_documents.__main__ -> httpx
-    ops_documents.agents_client -> httpx
     ops_documents.document_types -> httpx
     ops_documents.extraction -> httpx
-    ops_documents.tools_client -> httpx
     # ops_identity: emptied by the components (request transaction and typed boundaries).
     ops_identity.fastapi -> httpx
     ops_identity.http -> httpx

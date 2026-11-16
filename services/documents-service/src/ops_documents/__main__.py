@@ -10,7 +10,6 @@ from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
 
-import httpx
 import uvicorn
 from fastapi import FastAPI
 
@@ -40,23 +39,13 @@ def build(settings: Settings) -> FastAPI:
     extractor = default_extractor(files, engine, settings, readings=Readings(files, ReadingsStore(engine)))
     types = default_document_types(files, engine, settings, extractor)
     background: list[Callable[[], Coroutine[Any, Any, None]]] = []
-    agents: ServiceClient | None = None
+    # A correction's extraction.corrected reaches agents-service (required at start), which saves the corrected read on
+    # the file. Each client takes its endpoint's timeout and retries.
+    agents = ServiceClient.for_settings(settings, service="documents", audience="agents", scopes=["events:emit"])
     kb: ServiceClient | None = None
-    if settings.agents_url:
-        # A correction's extraction.corrected reaches agents-service, which saves the corrected read on the file.
-        http = httpx.AsyncClient(base_url=settings.agents_url, timeout=5)
-        agents = ServiceClient.for_settings(
-            settings, http, service="documents", audience="agents", scopes=["events:emit"]
-        )
-    if settings.kb_url:
+    if settings.kb is not None:
         # A finished reading reaches kb-service, which indexes the knowledge items waiting on it.
-        kb = ServiceClient.for_settings(
-            settings,
-            httpx.AsyncClient(base_url=settings.kb_url, timeout=5),
-            service="documents",
-            audience="kb",
-            scopes=["events:emit"],
-        )
+        kb = ServiceClient.for_settings(settings, service="documents", audience="kb", scopes=["events:emit"])
     targets = {name: client for name, client in (("agents", agents), ("kb", kb)) if client is not None}
     if targets:
         outbox = documents_relay(engine, targets)

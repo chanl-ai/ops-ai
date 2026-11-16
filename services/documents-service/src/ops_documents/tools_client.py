@@ -9,8 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, cast
 
-import httpx
-
 from ops_documents.files import Who
 from ops_identity import ServiceClient
 from ops_service_kit.logging import get_logger
@@ -32,15 +30,12 @@ class PluginTemplates:
 
 
 def plugin_templates(settings: Settings) -> PluginTemplates | None:
-    """On settings.tools_url; None when it is not set, or there is no service signing key, and the template routes
-    answer 503."""
-    if not settings.tools_url:
+    """On the tools endpoint, with its timeout; None when it is not set, or there is no service signing key, and the
+    template routes answer 503."""
+    if settings.tools is None:
         return None
-    http = httpx.AsyncClient(base_url=settings.tools_url, timeout=10)
     try:
-        client = ServiceClient.for_settings(
-            settings, http, service="documents", audience="tools", scopes=["tools:view"]
-        )
+        client = ServiceClient.for_settings(settings, service="documents", audience="tools", scopes=["tools:view"])
     except ValueError as e:  # no service signing key outside dev
         log.warning("no service signing key; plugin templates are not offered", extra={"error": str(e)})
         return None
