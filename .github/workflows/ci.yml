@@ -237,10 +237,14 @@ jobs:
           docker run -d --name ops-mssql -e ACCEPT_EULA=Y -e MSSQL_PID=Developer -e MSSQL_SA_PASSWORD="$pw" \
             -p 127.0.0.1:1433:1433 mcr.microsoft.com/mssql/server:2025-latest@sha256:21cba63f9e5f93ae72d211e50bceca8f047a6233da18ed5ecb497152f97eca7b
           # The ODBC driver the store opens its connections with (ODBC Driver 18 for SQL Server), from Microsoft's
-          # repository; the runner image does not carry it.
-          curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor --yes -o /usr/share/keyrings/microsoft.gpg
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/ubuntu/24.04/prod noble main" \
-            | sudo tee /etc/apt/sources.list.d/mssql-release.list >/dev/null
+          # repository. The runner image already lists that repository (microsoft-prod.gpg); a second entry for the
+          # same source with another key file makes apt refuse to read its sources (exit 100), so ours is added only
+          # when the image lacks one.
+          if ! grep -rqs "packages.microsoft.com/ubuntu/24.04/prod" /etc/apt/sources.list /etc/apt/sources.list.d; then
+            curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor --yes -o /usr/share/keyrings/microsoft.gpg
+            echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/ubuntu/24.04/prod noble main" \
+              | sudo tee /etc/apt/sources.list.d/mssql-release.list >/dev/null
+          fi
           sudo apt-get update -q
           sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc
           odbcinst -q -d | grep -q "ODBC Driver 18 for SQL Server" || { odbcinst -q -d; echo "::error::ODBC Driver 18 is not registered"; exit 1; }
