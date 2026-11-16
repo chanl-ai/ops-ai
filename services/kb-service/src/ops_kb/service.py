@@ -2243,11 +2243,7 @@ class KnowledgeService:
         s = await self._source_row(who, source_id)
         settings = split_settings(self.settings_of(s))
         steps = [step for step in settings.strategies if step in AI_STEPS]
-        indexed = [
-            i
-            for i in [r.model_dump() for r in await self.store.items(who.tenant_id, source_ids=[source_id])]
-            if i["status"] == "indexed"
-        ]
+        indexed = [i for i in await self.store.items(who.tenant_id, source_ids=[source_id]) if i.status == "indexed"]
         sample = indexed[:ESTIMATE_SAMPLE]
         counter = CountingModel()
         read = 0
@@ -2276,20 +2272,20 @@ class KnowledgeService:
             ),
         }
 
-    async def _stored_document(self, who: Who, s: dict[str, Any], item: dict[str, Any]) -> ParsedDocument | None:
+    async def _stored_document(self, who: Who, s: dict[str, Any], item: ItemRow) -> ParsedDocument | None:
         """The item's document as its last split read it, from documents-service's kept reading; None when there is
         no reading to read now."""
-        if self.readings is None or not item.get("file_id"):
+        if self.readings is None or not item.file_id:
             return None
         try:
             ocr = self.settings_of(s).parsing.ocr
-            answer = await self.readings.reading(who.tenant_id, source_team(s), str(item["file_id"]), ocr=ocr)
+            answer = await self.readings.reading(who.tenant_id, source_team(s), item.file_id, ocr=ocr)
         except (DocumentsRefused, ServiceUnreachable):
             return None
         if answer.get("status") != "done":
             return None
         cleaning = self.settings_of(s).cleaning
-        fields = cast(dict[str, str] | None, item.get("fields"))
+        fields = {k: str(v) for k, v in item.fields.items()} if item.fields else None
         doc = parsed_of(answer, fields=fields, furniture=cleaning.furniture, main_content=cleaning.main_content)
         return without(doc, set(repeats_of(s))) if cleaning.site_repeats else doc
 
@@ -2352,13 +2348,13 @@ class KnowledgeService:
 
     # ── Item review and lookups ──────────────────────────────────────────
 
-    async def _changeable_item(self, who: Who, item_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
-        found = [r.model_dump() for r in await self.store.items(who.tenant_id, item_id=item_id)]
+    async def _changeable_item(self, who: Who, item_id: str) -> tuple[ItemRow, dict[str, Any]]:
+        found = await self.store.items(who.tenant_id, item_id=item_id)
         if not found:
             raise NotFound("No item with that id.")
         i = found[0]
-        s = await self._source_row(who, i["source_id"])
-        self._may_change(who, s["team_id"], i["title"])
+        s = await self._source_row(who, i.source_id)
+        self._may_change(who, s["team_id"], i.title)
         return i, s
 
     async def verify_item(self, who: Who, item_id: str, *, verified: bool) -> dict[str, Any]:
@@ -2369,14 +2365,14 @@ class KnowledgeService:
             "verified_at": datetime.now(UTC) if verified else None,
         }
         await self.store.update_item(who.tenant_id, item_id, values)
-        return self._item({**i, **values}, s)
+        return self._item(i.model_copy(update=values), s)
 
     async def set_item_owner(self, who: Who, item_id: str, owner: str) -> dict[str, Any]:
         if not owner.strip():
             raise ValidationFailed("A document always has an owner.")
         i, s = await self._changeable_item(who, item_id)
         await self.store.update_item(who.tenant_id, item_id, {"owner": owner.strip()})
-        return self._item({**i, "owner": owner.strip()}, s)
+        return self._item(i.model_copy(update={"owner": owner.strip()}), s)
 
     async def lookups(self, who: Who) -> dict[str, list[str]]:
         bases = await self.store.bases(who.tenant_id)
@@ -2502,40 +2498,40 @@ class KnowledgeService:
 
     # ── Items and documents ──────────────────────────────────────────────
 
-    def _item(self, i: dict[str, Any], s: dict[str, Any]) -> dict[str, Any]:
+    def _item(self, i: ItemRow, s: dict[str, Any]) -> dict[str, Any]:
         return {
-            "id": i["id"],
-            "sourceId": i["source_id"],
-            "externalId": i["file_id"],
-            "title": i["title"],
-            "mimeType": i["mime"],
-            "path": i["path"],
-            **({"url": i["url"]} if i.get("url") else {}),
-            "modifiedAt": _iso(i["processed_at"] or i["created_at"]),
-            **({"processedAt": _iso(i["processed_at"])} if i["processed_at"] else {}),
-            "sizeBytes": i["size"],
+            "id": i.id,
+            "sourceId": i.source_id,
+            "externalId": i.file_id,
+            "title": i.title,
+            "mimeType": i.mime,
+            "path": i.path,
+            **({"url": i.url} if i.url else {}),
+            "modifiedAt": _iso(i.processed_at or i.created_at),
+            **({"processedAt": _iso(i.processed_at)} if i.processed_at else {}),
+            "sizeBytes": i.size,
             # The console's word for a document being read is processing.
-            "status": SHOWN_STATUS.get(i["status"], i["status"]),
-            **({"errorClass": i["error_class"], "error": i["error"]} if i["error_class"] else {}),
-            **({"warning": i["warning"]} if i.get("warning") else {}),
-            **({"duplicateOf": i["duplicate_of"]} if i.get("duplicate_of") else {}),
-            **({"folder": i["folder"]} if i.get("folder") else {}),
-            "chunkCount": i["chunk_count"],
+            "status": SHOWN_STATUS.get(i.status, i.status),
+            **({"errorClass": i.error_class, "error": i.error} if i.error_class else {}),
+            **({"warning": i.warning} if i.warning else {}),
+            **({"duplicateOf": i.duplicate_of} if i.duplicate_of else {}),
+            **({"folder": i.folder} if i.folder else {}),
+            "chunkCount": i.chunk_count,
             "tags": s["tags"],
             "metadata": {},
             "acl": [],
-            "owner": i["owner"],
-            "version": f"v{i['version']}",
-            "effectiveDate": (i["processed_at"] or i["created_at"]).date().isoformat(),
+            "owner": i.owner,
+            "version": f"v{i.version}",
+            "effectiveDate": (i.processed_at or i.created_at).date().isoformat(),
             **self.review_state(s),
             "sensitivity": s["sensitivity"],
             "collection": s["collection"],
-            "verified": bool(i.get("verified")),
+            "verified": i.verified,
             "queries30d": 0,
-            **({"pageCount": i["page_count"]} if i["page_count"] else {}),
-            "fileId": i["file_id"],
-            "digest": i["digest"],
-            "family": i["id"],
+            **({"pageCount": i.page_count} if i.page_count else {}),
+            "fileId": i.file_id,
+            "digest": i.digest,
+            "family": i.id,
             "versionStatus": "current",
         }
 
@@ -2545,8 +2541,8 @@ class KnowledgeService:
         s = await self._source_row(who, source_id)
         rows = [
             self._item(i, s)
-            for i in [r.model_dump() for r in await self.store.items(who.tenant_id, source_ids=[source_id])]
-            if _matches(search, i["title"], i["path"])
+            for i in await self.store.items(who.tenant_id, source_ids=[source_id])
+            if _matches(search, i.title, i.path)
         ]
         return page_of(rows, page=page, page_size=page_size, facets={"status": _facet(rows, "status")})
 
@@ -2597,29 +2593,17 @@ class KnowledgeService:
             # The reader takes a written item's type from its name, as it does an upload's.
             name = f"{name}{WRITTEN_TEXT_MIMES[mime]}"
         before = next(
-            (
-                x
-                for x in [r.model_dump() for r in await self.store.items(who.tenant_id, source_ids=[source_id])]
-                if x["path"] == name
-            ),
-            None,
+            (x for x in await self.store.items(who.tenant_id, source_ids=[source_id]) if x.path == name), None
         )
         stored_file = await self.upload(who, source_id, data, name=name, mime=mime)
-        same = before is not None and before["digest"] == stored_file["digest"] and before["status"] == "indexed"
+        same = before is not None and before.digest == stored_file["digest"] and before.status == "indexed"
         log: list[str] = []
         if not same:
             # The same run as a sync, reading only this item: the source's other items are as they were.
             run = await self._held_sync(who, await self._source_row(who, source_id), full=False, retry=False, only=name)
             log = [str(x) for x in cast(list[object], run.get("log") or [])]
         found = (await self.store.sources(who.tenant_id, [source_id]))[0]
-        item = next(
-            (
-                x
-                for x in [r.model_dump() for r in await self.store.items(who.tenant_id, source_ids=[source_id])]
-                if x["path"] == name
-            ),
-            None,
-        )
+        item = next((x for x in await self.store.items(who.tenant_id, source_ids=[source_id]) if x.path == name), None)
         if item is None:
             # Stored, but the run made no item: files-service holds a new file unreadable until its scan says clean
             # (production scans every file), or a rule or the same content under another name left it out.
@@ -2636,9 +2620,9 @@ class KnowledgeService:
                 code="item_not_indexed",
             )
         url = str(i.get("url") or "").strip() or None
-        if url and item.get("url") != url:
-            await self.store.update_item(who.tenant_id, str(item["id"]), {"url": url})
-            item = {**item, "url": url}
+        if url and item.url != url:
+            await self.store.update_item(who.tenant_id, item.id, {"url": url})
+            item = item.model_copy(update={"url": url})
         outcome = "unchanged" if same else "created" if before is None else "updated"
         return {"outcome": outcome, "item": self._item(item, found)}
 
@@ -2692,12 +2676,12 @@ class KnowledgeService:
         sources = {s["id"]: s for s in await self.store.sources(who.tenant_id, by_kb.get(kb_id, []))}
         rows = [
             {
-                **self._item(i, sources[i["source_id"]]),
-                "sourceName": sources[i["source_id"]]["name"],
-                "docType": doc_type(i["mime"], sources[i["source_id"]]["type"], bool(i.get("url"))),
+                **self._item(i, sources[i.source_id]),
+                "sourceName": sources[i.source_id]["name"],
+                "docType": doc_type(i.mime, sources[i.source_id]["type"], bool(i.url)),
             }
-            for i in [r.model_dump() for r in await self.store.items(who.tenant_id, source_ids=list(sources))]
-            if _matches(search, i["title"], i["path"])
+            for i in await self.store.items(who.tenant_id, source_ids=list(sources))
+            if _matches(search, i.title, i.path)
         ]
         chosen = filters or {}
 
@@ -2722,15 +2706,15 @@ class KnowledgeService:
             facets[key] = counted
         return page_of([r for r in rows if keeps(r)], page=page, page_size=page_size, facets=facets)
 
-    async def _reading_summary(self, who: Who, s: dict[str, Any], i: dict[str, Any]) -> dict[str, Any] | None:
+    async def _reading_summary(self, who: Who, s: dict[str, Any], i: ItemRow) -> dict[str, Any] | None:
         """How the item's file was read and what cleaning removed, page by page, from its stored reading; None for an
         item with no file or while documents-service has no finished reading for it."""
-        if self.readings is None or not i.get("file_id"):
+        if self.readings is None or not i.file_id:
             return None
         settings = self.settings_of(s)
         ocr = settings.parsing.ocr
         try:
-            answer = await self.readings.reading(who.tenant_id, source_team(s), str(i["file_id"]), ocr=ocr)
+            answer = await self.readings.reading(who.tenant_id, source_team(s), i.file_id, ocr=ocr)
         except (DocumentsRefused, ServiceUnreachable):
             return None
         if answer.get("status") != "done":
@@ -2767,9 +2751,8 @@ class KnowledgeService:
         found = await self.store.items(who.tenant_id, item_id=item_id)
         if not found:
             raise NotFound("No item with that id.")
-        row = found[0]
-        i = row.model_dump()
-        s = await self._source_row(who, row.source_id)
+        i = found[0]
+        s = await self._source_row(who, i.source_id)
         chunks = await self.store.chunks(who.tenant_id, item_id)
         searched: dict[str, list[dict[str, str]]] = {}
         for u in await self.store.units(who.tenant_id, item_id):
@@ -2782,8 +2765,8 @@ class KnowledgeService:
             "settingsUsed": {
                 "preset": settings.ingest.preset,
                 "strategies": settings.ingest.strategies,
-                "indexedWith": row.indexed_with,
-                "current": not self.built_under_other_settings(s, row),
+                "indexedWith": i.indexed_with,
+                "current": not self.built_under_other_settings(s, i),
             },
             "sourceName": s["name"],
             "sourceType": s["type"],
@@ -2807,7 +2790,7 @@ class KnowledgeService:
                 "versions": [
                     {
                         "itemId": item_id,
-                        "title": i["title"],
+                        "title": i.title,
                         "version": f"v{v.version}",
                         "effectiveDate": v.created_at.date().isoformat(),
                         "status": v.status,
