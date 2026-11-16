@@ -136,26 +136,21 @@ run_relay(relay(engine, outbox, routes={"*": ("agents",), "file.read_requested":
 
 ## Results
 
-Filled in when the pilot closes. The four lanes read these before they size their own work.
+Status: current, measured at the branch head on 2026-11-15, before the staging deploy and the by-hand screen walk of
+step 7, which have not run. Every figure comes from a git command, a committed test or a committed budget file; a cell
+reading "not measured" says what would measure it. The four lanes read this section before they size their own work.
 
-| Measure | Value |
-|---|---|
-| Routes, store functions; of which reached by a use case or test (`coverage-before`) | |
-| Characterisation tests added before the rewrite | |
-| Defects found on staging or by hand that no test or use case caught | |
-| Hours per 1,000 store lines; hours per 10 routes; hours for the budgets file | |
-| Statements and transactions per route at 5 and 50 rows, PostgreSQL and SQL Server | |
-| Pool wait under 50 concurrent GETs; longest `db.tx_open_ms` | |
+### Counts before and after
 
-## Measured results
-
-Status: current, measured at the branch head on 2026-11-15. Every figure comes from a git command: "before" is the
-first committed version of each baseline file, found with `git log --diff-filter=A -- <file>`, and "after" is the file
-at the branch head. Typed-boundaries totals are the sum of the count column over all rows of the baseline file, which
-equals the figure in each file's header line. A cell reading "none" means the file does not exist for that service.
+"Before" is the first committed version of each baseline file, found with `git log --diff-filter=A -- <file>`, and
+"after" is the file at the branch head. Typed-boundaries totals are the sum of the count column over all rows of the
+baseline file, which equals the figure in each file's header line. A cell reading "none" means the file does not exist
+for that service.
 
 | Measure | documents | files | models | runner |
 |---|---|---|---|---|
+| Routes in the service at the branch head | 33 | 27 | 21 | 2 |
+| Characterisation tests added in "pin" commits | 5 | 1 | 3 | 5 |
 | Isolation sites: raw | 1 -> 0 | 1 -> 0 | 25 -> 0 | none |
 | Isolation sites: caught | 5 -> 0 | 4 -> 0 | 0 -> 0 | none |
 | Isolation sites: broad | not counted -> 0 | not counted -> 0 | not counted -> 0 | none |
@@ -165,42 +160,168 @@ equals the figure in each file's header line. A cell reading "none" means the fi
 | Config literals: clients | 7 -> 3 | 1 -> 0 | 2 -> 2 | 1 -> 0 |
 | Relay sites | 1 -> 0 | 1 -> 0 | none | none |
 | Loop-health rows | 2 -> 0 | 2 -> 0 | none | none |
-| Routes on the request transaction (`Tx` parameters) | 16 of 33 | 16 of 27 | 16 of 19 | 0 of 2 |
-| Statement budget file (`budgets.toml`) | present | present | present | none |
+| Routes on the request transaction (`Tx` parameter) | 16 of 33 | 16 of 27 | 16 of 21 | 0 of 2 |
+| Statement budget file (`budgets.toml`), GET rows | 16 | 10 | 8 | none |
 | Tests passing, as stated in the last commit body that gives a count | 163 | 129 | 130 (PostgreSQL) | not recorded |
 
-Reading the table:
-
 - The broad and install columns were added to the isolation check after the baselines were first committed, so "not
-  counted" means no figure existed before. Models' 23 install sites are the model aliases and call log, which hold
-  no tenant and are marked install-wide; they replaced the 25 raw transactions.
+  counted" means no figure existed before.
+- Models' 23 install-scope sites touch five tables and none of them is the call log: `model_aliases` (5 sites),
+  `model_keys` (9), `provider_connections` (7) and `model_key_spend` (2, one of which also inserts into
+  `model_call_refusals`, the calls that name no tenant). Each table is marked install-wide in `store/tables.py`. The
+  call log (`model_call_log`) holds tenants' runs and costs; since `f24a1143` it is read and written on tenant
+  transactions, and a key's caps read `model_key_spend` instead. The 23 sites match
+  `packages/ops_store/tests/isolation_sites/models-service.txt` (aliases 5, calls 2, keys 9, providers 7).
 - Runner's timeouts rise from 1 to 2 while its clients fall from 1 to 0: the check was widened to count a timeout
   given by position, so the second timeout existed before and was not counted. The two literal timeouts remain in
   `fetch.py` and `wasm.py`.
 - Typed boundaries for runner stay at 25 in total: one `dict-any` row became a `reply` row (the run route), so the
   total did not change.
-- Runner has no store and no database, so it has no isolation, relay or loop-health baseline and no budget file. Its
-  health route and its one run route are not on `Tx`.
-- Route counts are decorated routes in each service's source; `Tx` parameters are counted in the same files. The
-  routes that are not on `Tx` are health, streaming and fan-out routes that open their own transactions.
+- Runner has no store and no database, so it has no isolation, relay or loop-health baseline and no budget file.
+- Route counts are the decorated routes in each service's `app.py` (and documents' `templates.py`), plus models'
+  chat completions and embeddings, which are registered by a call (`app.post(...)(completions)`) and carry no
+  decorator. Fourteen "pin" tests were added across the four services: they assert today's replies and body names, and
+  some landed after that service's store move rather than before it.
+- The three budget files hold 34 GET rows. The plan counted 35 GET routes; the 35th is runner's health route, which
+  has no budget file.
 
-## Measured rates
+### Hours per store line and per route
 
-Observed on this branch, with the caveat that several builders worked at once, so the spans are not hours of one
-person's work and cannot be divided by lines to give a rate per builder. All four services were first touched by the
-same shared commit (the endpoint settings and owned client), which is why the first column is the same for each. The
-second column starts at the first commit whose subject names the service.
+The spans are wall-clock time between commits. Several builders worked at once, and a span includes waiting for other
+builders' shared commits, CI and review, so none of these is the hours of one person's work. A span starts at the
+first commit whose subject names the service, so it leaves out the work inside that first commit. Times are local
+commit times on 2026-11-15. Store lines are `git diff --numstat <first naming commit>^..HEAD` over each service's
+`store` directory, added plus removed. The branch also carries the shared components and their checks, which are in no
+service's span; its first commit is at 17:50.
 
-| Service | First commit touching the service | First commit naming the service | Last commit | Span from first touch | Span from first naming | Store lines changed |
-|---|---|---|---|---|---|---|
-| models | 17:59 | 19:46 | 22:00 | 4 h 1 min | 2 h 14 min | 418 added, 149 removed (6 files) |
-| documents | 17:59 | 21:01 | 22:44 | 4 h 45 min | 1 h 43 min | 465 added, 487 removed (9 files) |
-| files | 17:59 | 21:10 | 22:04 | 4 h 5 min | 0 h 54 min | 331 added, 298 removed (5 files) |
-| runner | 17:59 | 22:13 | 22:30 | 4 h 31 min | 0 h 17 min | no store |
+| Service | First naming commit | Last commit | Span | Store lines changed (added, removed, files) | Hours per 1,000 store lines | Routes | Hours per 10 routes |
+|---|---|---|---|---|---|---|---|
+| models | 19:46 | 22:00 | 2 h 14 min | 551 (409, 142, 5) | 4.1 | 21 | 1.1 |
+| documents | 21:01 | 23:13 | 2 h 12 min | 952 (465, 487, 9) | 2.3 | 33 | 0.7 |
+| files | 21:10 | 22:04 | 0 h 54 min | 629 (331, 298, 5) | 1.4 | 27 | 0.3 |
+| runner | 22:13 | 22:30 | 0 h 17 min | no store | not applicable | 2 | 1.4 |
 
-Times are local commit times on 2026-11-15. Store lines are `git diff --stat` from the parent of the first commit to
-the branch head over each service's `store` directory. The branch also carries the shared components, the checks and
-their tests, which are not part of any service's span.
+Reading the rates:
+
+- Models went first and built the install-wide scope, the table guard and the typed bodies for the OpenAI-shaped
+  replies inside its span, so its rate carries work the other three reused. Read the files and documents rows as the
+  rate for a service that copies the pattern, and the models row as the rate for the first one.
+- Runner's rate per 10 routes divides 17 minutes by two routes and is not a basis for sizing a service with a store.
+- Hours for the budgets file are not measured separately. The commits that added each file landed at 21:16 (models),
+  22:01 (files) and 22:44 (documents), and no start time was recorded.
+
+### Transactions per route
+
+"Before" figures come from a count a commit body states as seen on the old code, in a test that failed there. Where no
+before figure is stated, the cell says so rather than estimating. "After" figures are held by a committed test or by a
+`budgets.toml` row.
+
+| Service | Route | Before | After | Held by |
+|---|---|---|---|---|
+| models | chat completion, stream, embedding | 4 transactions for the gate alone | 2: one gate, one settle; none open at the provider call or at a stream frame | `test_request_transactions.py`, `budgets.toml` |
+| models | each GET | not stated | 1 transaction on 1 connection, 0 to 3 statements at 5 and 50 rows | `test_statement_budget.py` |
+| documents | type reads (list, get, versions) | 1 to 6 | 1 | `test_request_transactions.py` |
+| documents | create a type | 4 | 1 | `test_request_transactions.py` |
+| documents | add a sample | 3 | 2 | `test_request_transactions.py` |
+| documents | list examples; template offers | 2; 4 | 1; 1 | `test_request_transactions.py` |
+| documents | typed extraction | 10 | 7 | `test_extract_transactions.py` |
+| documents | template suggestion over two reads | 8 | 5 | `test_request_transactions.py` |
+| documents | delete a type; reading or layout read now | not stated | 2; 2 (a stored one is 1) | `test_request_transactions.py` |
+| files | each route on `Tx` | one per store call, count not stated | 1 | `budgets.toml` |
+| files | read-request GET | 2 transactions and 2 connection checkouts with the route off `Tx` | 1 and 1 | `test_statement_budget.py` |
+| files | download content | not stated | rows in 1 transaction, closed before the first byte; 0 open at every chunk read | `test_request_transactions.py` |
+| runner | both routes | no database | no database | not applicable |
+
+Statements per GET at 5 and 50 rows, from the budget files: documents 0 to 12 (template offers is the 12, over 2
+transactions), files 0 to 13 (the file list is the 13), models 0 to 3. All three files were measured on PostgreSQL.
+
+### Defects no test caught
+
+Seventeen defects on this branch were not caught by a test that existed when they were written. The basis is each
+fix's commit body: the new test was red on the old code, which means the suite that ran before it was green. Fixes to
+the standards checks and hooks themselves, flaky tests and CI environment setup are not counted. The commit bodies do
+not always say who found the defect, so the "found by" column says "not stated" where they do not.
+
+| Commit | Cause in one line | Found by |
+|---|---|---|
+| `5898f44e` | The install-scope guard judged `count(*)` as a column and refused it, so every models completion failed | not stated |
+| `2491d7ef` | The use-case stack started files-service with no agents address, which it now requires | use case (uc-672 failed) |
+| `fb22c97a` | A worker a use case started took the shared stack's platform address, so acting-for calls failed | use case (passed before the components, failed after) |
+| `6fdbf335` | A worker started outside the harness helper ran with sign-in on beside an API with dev auth | not stated |
+| `e72a5ce1` | `make run` started services without the addresses they now require, so they exited at boot | not stated |
+| `efc2d5d2` | A request answered after a swallowed database error, keeping lost or half-kept writes | not stated |
+| `fa547000` | An install-scope block read every tenant's rows of a table with no row policy | not stated |
+| `f24a1143` | The model call log was marked install-wide though it holds tenants' runs and costs | not stated |
+| `ff8f54be` | A statement cancelled mid-flight made the rollback raise a second error in its place | not stated |
+| `c3e6a401` | A failed `BEGIN` on a request left its connection checked out | not stated |
+| `7a69c38c` | A late older event rewrote a deleted copy row, and a resync held a transaction across the owner call | not stated |
+| `727d2c13` | A delete in a second table left a live row beside its tombstone, and an equal-revision edit was never repaired | not stated |
+| `a53b62af` | A row raced by an event kept the older revision until the next resync pass | not stated |
+| `548603f0` | A type error in a new documents test failed `make typecheck` | type check |
+| `a6fa1e31` | A partly unknown type in the isolation-scan test failed `pyright packages` | type check |
+| `165c66e5` | Partly unknown names in the openapi gate test's helper failed `pyright packages` | type check |
+| `dc281681` | The store tests could not import the baseline history helper, so CI's type check failed | type check |
+
+By finder: 2 by a use case, 4 by the type check, 11 not stated. By place: 4 in the use-case stack and `make run`, 6 in
+the store scope and request transaction, 3 in the local-copy resync, 4 type errors in new tests.
+
+Defects found on staging or by hand are not measured: the staging deploy and the screen walk have not run.
+
+### Routes not on the request transaction
+
+A route takes `Tx` when it reads or writes only rows, or asks another service before its first row. Every other route
+falls into one of four groups, and a later service copies the group rather than the count:
+
+| Group | Rule |
+|---|---|
+| Read, call, then settle | A route that reads a row and then asks another service, a model or a provider opens a gate transaction, closes it, makes the call with none open, then opens a settle transaction. Holding one transaction across the call holds a pooled connection for as long as the other party takes. |
+| Moves bytes or streams | A route that reads or writes object bytes closes its rows' transaction before the first byte moves. |
+| Row committed before a task | A route that saves a row a background task then reads commits the row before the task starts, so the task finds it. |
+| No database | Health routes with no request transaction, and a service with no database. |
+
+Documents, 17 of 33 routes not on `Tx` (the reasoning is in the comment above `docs` in `app.py`):
+
+| Group | Routes | Reason |
+|---|---|---|
+| No database transaction | `GET /health`, `GET /health/background` | The probe is owned by `ops_store`; background state is read from process heartbeats |
+| Read, call, settle | `POST /extractions`, `/classifications`, `/readings`, `/layout` | Each reads the file from files-service or asks the model between rows |
+| Read, call, settle | `POST /document-types`, `DELETE /document-types/{id}`, `POST .../samples`, `DELETE .../samples/{id}` | The type commits before a sample asks files-service; agents-service is asked which workflows read a type before the delete; files-service keeps or releases the sample's file |
+| Read, call, settle | `POST .../templates/suggest`, `GET .../template-offers`, `GET .../examples`, `GET .../test-estimate` | Layouts are read from files-service, platform-service says whether the team masks examples, models-service prices the estimate |
+| Read, call, settle | `GET /v1/templates` | The team's copies are read, then tools-service is asked for the team's templates |
+| Moves bytes | `GET .../readings/{id}/pages/{n}/image` | Reads the file's bytes from files-service and draws a page; reads no row |
+| Row committed before a task | `POST .../test-runs` | The run's row commits before the task that runs it starts |
+
+Files, 11 of 27 routes not on `Tx`:
+
+| Group | Routes | Reason |
+|---|---|---|
+| No database transaction | `GET /health`, `GET /health/background` | As in documents |
+| Moves bytes | `PUT /uploads/{id}/content`, `POST /uploads/{id}/complete`, `POST /v1/files` | The body streams into storage; completing reads the stored bytes to check size, signature and hash |
+| Moves bytes, streams | `GET /{id}/content` | The rows are read in one transaction closed before the first byte leaves storage; the test reads 0 open at every chunk |
+| Read, call, settle | `DELETE /{id}`, `POST /bulk-delete`, `POST /legal-hold` | Each changes the stored object or its storage-level hold between row changes |
+| Read, call, settle | `PUT /settings/storage`, `POST /settings/storage/test` | Each writes, reads and deletes a small object on the target before anything is saved |
+
+Models, 5 of 21 routes not on `Tx`:
+
+| Group | Routes | Reason |
+|---|---|---|
+| No database transaction | `GET /health` | As in documents |
+| Read, call, settle; streams | `POST /v1/models/chat/completions`, `POST /v1/models/embeddings` | One gate, the provider call with none open, one settle; stream frames go out with none open. They are registered by a call, so they carry no `Tx` parameter |
+| Read, call, settle | `POST /v1/provider-keys/{name}/check`, `GET /v1/provider-keys/{name}/models` | The saved key is read in a transaction closed before the provider is asked what it reaches |
+
+Runner, 2 of 2 routes not on `Tx`: `GET /health` and `POST /v1/runs` have no database. The run route runs the guest and
+calls tools-service.
+
+### Not measured
+
+| Measure | Status | What would measure it |
+|---|---|---|
+| Routes and store functions reached by a use case or test (`coverage-before`) | not measured on `develop` before the rewrite | `make usecase-coverage SERVICE=<service>` and `uv run python scripts/store_inventory.py --check` on `origin/develop` |
+| Statements and transactions per route on SQL Server | not measured: every budget row was measured on PostgreSQL, and the `store-mssql` job runs the store, kit and identity suites, not the services' budget tests | Run each service's `tests/test_statement_budget.py` with `OPS_MSSQL_SERVER` and `MSSQL_SA_PASSWORD` set; the service conftest then installs the golden schema |
+| Pool wait under 50 concurrent GETs | not measured: no load run exists; the request line carries `db.pool.wait_ms`, `db.pool.in_use` and `db.pool.limit` | 50 concurrent GETs against one running service, reading `db.pool.wait_ms` from its `http.request` lines |
+| Longest `db.tx_open_ms` | not measured: committed tests assert that it is positive and that no transaction is open at an outside call, and record no maximum | The same load run, taking the maximum of `db.tx_open_ms` |
+| Hours for the budgets file | not measured separately | A recorded start time for the budgets commit |
+| Defects found on staging or by hand | not measured: step 7 has not run | `make stg-deploy REF=<merge commit>`, `make stg-health`, then open each screen the four services feed |
 
 ## What the pilot found
 
