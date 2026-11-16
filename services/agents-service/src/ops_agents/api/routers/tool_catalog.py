@@ -1,6 +1,10 @@
 """GET /v1/tools: the tools an agent can be granted, from tools-service's registry (activities/tool_directory.py), so
 the console's agent page grants real, published operations. `known_tools` is the one lookup behind it and behind the
-agents routes' grant check."""
+agents routes' grant check.
+
+No route here takes the request transaction (`Tx`): each reads tools-service's operations or app cards between its
+reads of this service's rows, so each store call takes and returns its own connection and none is held while
+tools-service answers."""
 
 from __future__ import annotations
 
@@ -205,7 +209,8 @@ async def list_tools(
     for c in FACETS:
         if wanted := request.query_params.getlist(c):
             rows = [r for r in rows if _facet(r, c) in wanted]
-    rows.sort(key=lambda r: (_app(r).get("name") or "~", str(r["title"]).lower()))
+    # The id last, so two tools of one app with one title keep their order from page to page.
+    rows.sort(key=lambda r: (_app(r).get("name") or "~", str(r["title"]).lower(), str(r["id"])))
     page_no, start = page_window(len(rows), page_no, page_size)
     # By name, the order the App filter lists them in.
     names = dict(sorted(names.items(), key=lambda kv: kv[1].lower()))
