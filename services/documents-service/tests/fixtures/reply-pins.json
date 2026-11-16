@@ -1,0 +1,712 @@
+{
+  "addSample": {
+    "addedAt": "<time+00:00>",
+    "addedBy": "j.richardson@harborpine.example",
+    "expected": {
+      "amount": "1,250.00",
+      "invoice": "INV-2207"
+    },
+    "fileId": "fil_0001",
+    "id": "<smp>",
+    "name": "notice.txt"
+  },
+  "addVersion": {
+    "checks": [],
+    "createdAt": "<time+00:00>",
+    "createdBy": "j.richardson@harborpine.example",
+    "dateOrder": "MDY",
+    "fields": [
+      {
+        "key": "invoice",
+        "required": true,
+        "type": "text"
+      },
+      {
+        "key": "amount",
+        "required": true,
+        "type": "money"
+      },
+      {
+        "key": "customer",
+        "type": "text"
+      }
+    ],
+    "many": false,
+    "note": "adds the customer",
+    "offerAt": 5,
+    "pageImages": false,
+    "reviewBelow": null,
+    "templates": [],
+    "version": 2
+  },
+  "askReading": {
+    "digest": "a3dedc2b30264d92f482189fd65998ca46a3db72ac059ec596b8e50e2e485a06",
+    "durationMs": "<ms>",
+    "facts": {
+      "author": null,
+      "created": null,
+      "filename": "notice.txt",
+      "mimeType": "text/plain",
+      "modified": null,
+      "pageCount": 1,
+      "paged": false,
+      "removedChars": 0,
+      "sizeBytes": 64,
+      "title": null,
+      "warnings": []
+    },
+    "fileId": "fil_0001",
+    "pages": [
+      {
+        "blocks": [
+          {
+            "box": null,
+            "caption": null,
+            "cells": [],
+            "furniture": false,
+            "id": "p1.b0",
+            "kind": "paragraph",
+            "level": null,
+            "lines": [],
+            "main": false,
+            "order": 0,
+            "readBy": "text",
+            "sheet": null,
+            "text": "Invoice INV-2207 Amount due: 1,250.00 CAD Customer: Marcus Bell"
+          }
+        ],
+        "durationMs": "<ms>",
+        "formFields": [],
+        "height": null,
+        "imageShare": 0.0,
+        "number": 1,
+        "ocr": null,
+        "source": "text",
+        "text": "Invoice INV-2207 Amount due: 1,250.00 CAD Customer: Marcus Bell",
+        "unreadReason": null,
+        "warnings": [],
+        "width": null,
+        "words": []
+      }
+    ],
+    "pagesDone": 1,
+    "pagesTotal": 1,
+    "readerVersion": "reading-4",
+    "settings": {
+      "language": "eng",
+      "ocr": "auto"
+    },
+    "status": "done"
+  },
+  "correct": {
+    "corrections": [
+      {
+        "corrected": "2207",
+        "correctedAt": "<time+00:00>",
+        "correctedBy": "j.richardson@harborpine.example",
+        "field": "invoice",
+        "original": "INV-2207",
+        "originalConfidence": 1.0,
+        "record": null
+      }
+    ],
+    "documentType": {
+      "id": "invoice_notice",
+      "name": "Invoice notice",
+      "version": 2
+    },
+    "fields": {
+      "amount": {
+        "citation": {
+          "fileId": "fil_0001",
+          "page": 1,
+          "quote": "Amount due: 1,250.00 CAD"
+        },
+        "confidence": 0.9,
+        "extractedValue": "1,250.00 CAD",
+        "needsReview": false,
+        "value": 1250.0
+      },
+      "customer": {
+        "citation": {
+          "fileId": "fil_0001",
+          "page": 1,
+          "quote": "Customer: Marcus Bell"
+        },
+        "confidence": 1.0,
+        "extractedValue": "Marcus Bell",
+        "needsReview": false,
+        "value": "Marcus Bell"
+      },
+      "invoice": {
+        "citation": {
+          "fileId": "fil_0001",
+          "page": 1,
+          "quote": "Invoice INV-2207"
+        },
+        "confidence": 1.0,
+        "corrected": true,
+        "extractedValue": "INV-2207",
+        "needsReview": false,
+        "value": "2207"
+      }
+    },
+    "fileId": "fil_0001",
+    "floor": 0.5,
+    "id": "<ext>",
+    "needsReview": [],
+    "outcome": "ok",
+    "path": "model",
+    "schema": [
+      {
+        "key": "invoice",
+        "label": "invoice",
+        "required": true,
+        "type": "text"
+      },
+      {
+        "key": "amount",
+        "label": "amount",
+        "required": true,
+        "type": "money"
+      },
+      {
+        "key": "customer",
+        "label": "customer",
+        "required": false,
+        "type": "text"
+      }
+    ],
+    "status": "done"
+  },
+  "create": {
+    "canEdit": true,
+    "createdAt": "<time+00:00>",
+    "createdBy": "j.richardson@harborpine.example",
+    "description": null,
+    "id": "invoice_notice",
+    "latestVersion": 1,
+    "name": "Invoice notice",
+    "samples": [],
+    "team": "team_ops",
+    "versions": [
+      {
+        "checks": [],
+        "createdAt": "<time+00:00>",
+        "createdBy": "j.richardson@harborpine.example",
+        "dateOrder": "MDY",
+        "fields": [
+          {
+            "key": "invoice",
+            "required": true,
+            "type": "text"
+          },
+          {
+            "key": "amount",
+            "required": true,
+            "type": "money"
+          }
+        ],
+        "many": false,
+        "note": null,
+        "offerAt": 5,
+        "pageImages": false,
+        "reviewBelow": null,
+        "templates": [],
+        "version": 1
+      }
+    ]
+  },
+  "estimate": {
+    "alias": "extract",
+    "basis": "default",
+    "calls": 1,
+    "capped": 20,
+    "estimatedCost": "0.0022",
+    "maxCalls": 2,
+    "maxCost": "0.0044",
+    "samples": 1
+  },
+  "examples": [
+    {
+      "correctedBy": "j.richardson@harborpine.example",
+      "createdAt": "<time+00:00>",
+      "extractionId": "<ext>",
+      "field": "invoice",
+      "id": "<ex>",
+      "line": "Invoice INV-2207",
+      "record": null,
+      "value": "2207"
+    }
+  ],
+  "fileExtractions": {
+    "data": [
+      {
+        "documentType": {
+          "id": "invoice_notice",
+          "name": "Invoice notice",
+          "version": 2
+        },
+        "fields": {
+          "amount": {
+            "citation": {
+              "fileId": "fil_0001",
+              "page": 1,
+              "quote": "Amount due: 1,250.00 CAD"
+            },
+            "confidence": 0.9,
+            "extractedValue": "1,250.00 CAD",
+            "needsReview": false,
+            "value": 1250.0
+          },
+          "customer": {
+            "citation": {
+              "fileId": "fil_0001",
+              "page": 1,
+              "quote": "Customer: Marcus Bell"
+            },
+            "confidence": 1.0,
+            "extractedValue": "Marcus Bell",
+            "needsReview": false,
+            "value": "Marcus Bell"
+          },
+          "invoice": {
+            "citation": {
+              "fileId": "fil_0001",
+              "page": 1,
+              "quote": "Invoice INV-2207"
+            },
+            "confidence": 1.0,
+            "corrected": true,
+            "extractedValue": "INV-2207",
+            "needsReview": false,
+            "value": "2207"
+          }
+        },
+        "fileId": "fil_0001",
+        "floor": 0.5,
+        "id": "<ext>",
+        "needsReview": [],
+        "outcome": "ok",
+        "path": "model",
+        "schema": [
+          {
+            "key": "invoice",
+            "label": "invoice",
+            "required": true,
+            "type": "text"
+          },
+          {
+            "key": "amount",
+            "label": "amount",
+            "required": true,
+            "type": "money"
+          },
+          {
+            "key": "customer",
+            "label": "customer",
+            "required": false,
+            "type": "text"
+          }
+        ],
+        "status": "done"
+      },
+      {
+        "documentType": {
+          "id": "invoice_notice",
+          "name": "Invoice notice",
+          "version": 2
+        },
+        "fields": {
+          "amount": {
+            "citation": {
+              "fileId": "fil_0001",
+              "page": 1,
+              "quote": "Amount due: 1,250.00 CAD"
+            },
+            "confidence": 0.9,
+            "extractedValue": "1,250.00 CAD",
+            "needsReview": false,
+            "value": 1250.0
+          },
+          "customer": {
+            "citation": {
+              "fileId": "fil_0001",
+              "page": 1,
+              "quote": "Customer: Marcus Bell"
+            },
+            "confidence": 1.0,
+            "extractedValue": "Marcus Bell",
+            "needsReview": false,
+            "value": "Marcus Bell"
+          },
+          "invoice": {
+            "citation": {
+              "fileId": "fil_0001",
+              "page": 1,
+              "quote": "Invoice INV-2207"
+            },
+            "confidence": 1.0,
+            "extractedValue": "INV-2207",
+            "needsReview": false,
+            "value": "INV-2207"
+          }
+        },
+        "fileId": "fil_0001",
+        "floor": 0.5,
+        "id": "<ext>",
+        "needsReview": [],
+        "outcome": "ok",
+        "path": "model",
+        "schema": [
+          {
+            "key": "invoice",
+            "label": "invoice",
+            "required": true,
+            "type": "text"
+          },
+          {
+            "key": "amount",
+            "label": "amount",
+            "required": true,
+            "type": "money"
+          },
+          {
+            "key": "customer",
+            "label": "customer",
+            "required": false,
+            "type": "text"
+          }
+        ],
+        "status": "done"
+      }
+    ],
+    "facets": {},
+    "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 2,
+      "totalPages": 1
+    }
+  },
+  "get": {
+    "canEdit": true,
+    "createdAt": "<time+00:00>",
+    "createdBy": "j.richardson@harborpine.example",
+    "description": null,
+    "id": "invoice_notice",
+    "latestVersion": 2,
+    "name": "Invoice notice",
+    "samples": [
+      {
+        "addedAt": "<time+00:00>",
+        "addedBy": "j.richardson@harborpine.example",
+        "expected": {
+          "amount": "1,250.00",
+          "invoice": "INV-2207"
+        },
+        "fileId": "fil_0001",
+        "id": "<smp>",
+        "name": "notice.txt"
+      }
+    ],
+    "team": "team_ops",
+    "versions": [
+      {
+        "checks": [],
+        "createdAt": "<time+00:00>",
+        "createdBy": "j.richardson@harborpine.example",
+        "dateOrder": "MDY",
+        "fields": [
+          {
+            "key": "invoice",
+            "required": true,
+            "type": "text"
+          },
+          {
+            "key": "amount",
+            "required": true,
+            "type": "money"
+          },
+          {
+            "key": "customer",
+            "type": "text"
+          }
+        ],
+        "many": false,
+        "note": "adds the customer",
+        "offerAt": 5,
+        "pageImages": false,
+        "reviewBelow": null,
+        "templates": [],
+        "version": 2
+      },
+      {
+        "checks": [],
+        "createdAt": "<time+00:00>",
+        "createdBy": "j.richardson@harborpine.example",
+        "dateOrder": "MDY",
+        "fields": [
+          {
+            "key": "invoice",
+            "required": true,
+            "type": "text"
+          },
+          {
+            "key": "amount",
+            "required": true,
+            "type": "money"
+          }
+        ],
+        "many": false,
+        "note": null,
+        "offerAt": 5,
+        "pageImages": false,
+        "reviewBelow": null,
+        "templates": [],
+        "version": 1
+      }
+    ]
+  },
+  "getExtraction": {
+    "corrections": [
+      {
+        "corrected": "2207",
+        "correctedAt": "<time+00:00>",
+        "correctedBy": "j.richardson@harborpine.example",
+        "field": "invoice",
+        "original": "INV-2207",
+        "originalConfidence": 1.0,
+        "record": null
+      }
+    ],
+    "documentType": {
+      "id": "invoice_notice",
+      "name": "Invoice notice",
+      "version": 2
+    },
+    "fields": {
+      "amount": {
+        "citation": {
+          "fileId": "fil_0001",
+          "page": 1,
+          "quote": "Amount due: 1,250.00 CAD"
+        },
+        "confidence": 0.9,
+        "extractedValue": "1,250.00 CAD",
+        "needsReview": false,
+        "value": 1250.0
+      },
+      "customer": {
+        "citation": {
+          "fileId": "fil_0001",
+          "page": 1,
+          "quote": "Customer: Marcus Bell"
+        },
+        "confidence": 1.0,
+        "extractedValue": "Marcus Bell",
+        "needsReview": false,
+        "value": "Marcus Bell"
+      },
+      "invoice": {
+        "citation": {
+          "fileId": "fil_0001",
+          "page": 1,
+          "quote": "Invoice INV-2207"
+        },
+        "confidence": 1.0,
+        "corrected": true,
+        "extractedValue": "INV-2207",
+        "needsReview": false,
+        "value": "2207"
+      }
+    },
+    "fileId": "fil_0001",
+    "floor": 0.5,
+    "id": "<ext>",
+    "needsReview": [],
+    "outcome": "ok",
+    "path": "model",
+    "schema": [
+      {
+        "key": "invoice",
+        "label": "invoice",
+        "required": true,
+        "type": "text"
+      },
+      {
+        "key": "amount",
+        "label": "amount",
+        "required": true,
+        "type": "money"
+      },
+      {
+        "key": "customer",
+        "label": "customer",
+        "required": false,
+        "type": "text"
+      }
+    ],
+    "status": "done"
+  },
+  "getTest": {
+    "askedAt": "<time+00:00>",
+    "askedBy": "j.richardson@harborpine.example",
+    "id": "<dtt>",
+    "result": {
+      "accuracy": 1.0,
+      "fields": {
+        "amount": {
+          "accuracy": 1.0,
+          "matches": 1,
+          "misses": 0
+        },
+        "customer": {
+          "accuracy": null,
+          "matches": 0,
+          "misses": 0
+        },
+        "invoice": {
+          "accuracy": 1.0,
+          "matches": 1,
+          "misses": 0
+        }
+      },
+      "samples": [
+        {
+          "extractionId": "<ext>",
+          "fields": {
+            "amount": [
+              {
+                "expected": "1,250.00",
+                "got": 1250.0,
+                "match": true
+              }
+            ],
+            "invoice": [
+              {
+                "expected": "INV-2207",
+                "got": "INV-2207",
+                "match": true
+              }
+            ]
+          },
+          "name": "notice.txt",
+          "path": "model",
+          "sampleId": "<smp>",
+          "status": "done"
+        }
+      ]
+    },
+    "samples": 1,
+    "status": "done",
+    "typeId": "invoice_notice",
+    "version": 2
+  },
+  "getVersion": {
+    "checks": [],
+    "createdAt": "<time+00:00>",
+    "createdBy": "j.richardson@harborpine.example",
+    "dateOrder": "MDY",
+    "fields": [
+      {
+        "key": "invoice",
+        "required": true,
+        "type": "text"
+      },
+      {
+        "key": "amount",
+        "required": true,
+        "type": "money"
+      }
+    ],
+    "many": false,
+    "note": null,
+    "offerAt": 5,
+    "pageImages": false,
+    "reviewBelow": null,
+    "templates": [],
+    "version": 1
+  },
+  "list": {
+    "canCreate": true,
+    "items": [
+      {
+        "description": null,
+        "id": "invoice_notice",
+        "latestVersion": 2,
+        "name": "Invoice notice"
+      }
+    ]
+  },
+  "reading": {
+    "digest": "a3dedc2b30264d92f482189fd65998ca46a3db72ac059ec596b8e50e2e485a06",
+    "durationMs": "<ms>",
+    "facts": {
+      "author": null,
+      "created": null,
+      "filename": "notice.txt",
+      "mimeType": "text/plain",
+      "modified": null,
+      "pageCount": 1,
+      "paged": false,
+      "removedChars": 0,
+      "sizeBytes": 64,
+      "title": null,
+      "warnings": []
+    },
+    "fileId": "fil_0001",
+    "pages": [
+      {
+        "blocks": [
+          {
+            "box": null,
+            "caption": null,
+            "cells": [],
+            "furniture": false,
+            "id": "p1.b0",
+            "kind": "paragraph",
+            "level": null,
+            "lines": [],
+            "main": false,
+            "order": 0,
+            "readBy": "text",
+            "sheet": null,
+            "text": "Invoice INV-2207 Amount due: 1,250.00 CAD Customer: Marcus Bell"
+          }
+        ],
+        "durationMs": "<ms>",
+        "formFields": [],
+        "height": null,
+        "imageShare": 0.0,
+        "number": 1,
+        "ocr": null,
+        "source": "text",
+        "text": "Invoice INV-2207 Amount due: 1,250.00 CAD Customer: Marcus Bell",
+        "unreadReason": null,
+        "warnings": [],
+        "width": null,
+        "words": []
+      }
+    ],
+    "pagesDone": 1,
+    "pagesTotal": 1,
+    "readerVersion": "reading-4",
+    "settings": {
+      "language": "eng",
+      "ocr": "auto"
+    },
+    "status": "done"
+  },
+  "startTest": {
+    "askedAt": "<time+00:00>",
+    "askedBy": "j.richardson@harborpine.example",
+    "id": "<dtt>",
+    "samples": 1,
+    "status": "queued",
+    "typeId": "invoice_notice",
+    "version": 2
+  }
+}
