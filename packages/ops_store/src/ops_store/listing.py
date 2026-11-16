@@ -16,6 +16,7 @@ and `deploy/database/tests/test_indexes.py` fails when a declared column has no 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from contextlib import suppress
 from types import MappingProxyType
 from typing import Any, NotRequired, TypedDict, cast
 
@@ -26,6 +27,7 @@ from sqlalchemy.sql import operators
 from ops_service_kit.http import PageJSON, page_window, paged
 from ops_service_kit.listing import ListParams
 
+from . import isolation
 from .search import contains
 
 # On a column: a list filters or sorts on it, so it needs an index that leads with it.
@@ -67,7 +69,8 @@ async def list_page(
 
     `search` columns are matched for `params.search`; `sortable` and `filters` name the columns `sortBy` and the other
     query keys may use, and a key they do not name is ignored; `params.ids` answers exactly those rows by the
-    primary key of `query`'s first table, whatever the search says (a key of more than one column raises ValueError).
+    primary key of `query`'s first table, whatever the search says, with the context's tenant for a (tenant_id, id) key
+    (a key of more than one other column raises ValueError).
     A `labels` entry is a select of (value, label), read for the values its facet counted."""
     _declared({**sortable, **filters})
     chosen, wanted = _narrowing(query, params, search, filters)
@@ -130,7 +133,7 @@ def _narrowing(
     own filter out."""
     chosen: list[sa.ColumnElement[bool]]
     if params.ids is not None:
-        chosen = [_id_column(query).in_(params.ids)]
+        chosen = _picked(query, params.ids)
     else:
         words = (params.search or "").strip()
         chosen = [sa.or_(*(contains(c, words) for c in search))] if words and search else []
@@ -154,15 +157,21 @@ def _first_table(query: Rows) -> Any:
     return table
 
 
-def _id_column(query: Rows) -> sa.ColumnElement[Any]:
-    """The one column `ids` names a row by: the first table's primary key, since some tables are keyed by a name. A
-    key's `tenant_id` is left out: every statement runs inside one tenant, so (tenant_id, id) names a row by id."""
+def _picked(query: Rows, ids: list[str]) -> list[sa.ColumnElement[bool]]:
+    """The rows `ids` names by the first table's primary key, since some tables are keyed by a name. For a key of
+    (tenant_id, id) the caller passes the id part and the tenant is the isolation context's, so the statement names
+    whole keys and the key's index serves it. With no tenant in force (an install-wide block, a system read before its
+    tenant is known) the id part alone is matched."""
     table = _first_table(query)
     key = [c for c in table.primary_key.columns if c.name != "tenant_id"]
     if len(key) != 1:
         names = ", ".join(c.name for c in key)
         raise ValueError(f"list_page ids: {table.name} is keyed by ({names}); ids needs a key of one column")
-    return key[0]
+    picked = [key[0].in_(ids)]
+    if "tenant_id" in table.primary_key.columns:
+        with suppress(isolation.NoTenantError):
+            picked.append(table.c.tenant_id == isolation.tenant())
+    return picked
 
 
 def _key_order(query: Rows, order: list[sa.ColumnElement[Any]], descending: bool) -> list[sa.ColumnElement[Any]]:

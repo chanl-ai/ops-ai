@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_service_kit.http import LabelledListResult
 from ops_service_kit.listing import IDS_MAX, ListParams
 from ops_service_kit.settings import Settings
+from ops_store import isolation
 from ops_store.backends import backends
 from ops_store.conformance import engine_for, sql_server_database
 from ops_store.database import open_database
@@ -116,6 +117,8 @@ async def engine(request: pytest.FixtureRequest) -> AsyncIterator[AsyncEngine]:
             )
             await c.execute(aliases.insert(), [{"name": f"alias-{i}", "target": f"model-{i}"} for i in range(1, 6)])
             await c.execute(types.insert(), [{"tenant_id": "t1", "id": i} for i in ("invoice", "receipt", "claim")])
+            # Another tenant's row under an id t1 uses too: the test table has no row policy to hide it.
+            await c.execute(types.insert(), [{"tenant_id": "t2", "id": "claim"}])
         yield e
         async with e.begin() as c:
             await c.run_sync(meta.drop_all)
@@ -226,14 +229,18 @@ async def test_a_list_with_no_filter_counts_every_row_whether_or_not_it_joins(en
 
 
 async def test_ids_pick_rows_by_the_primary_key_and_refuse_a_key_of_two_columns(engine: AsyncEngine) -> None:
+    """A (tenant_id, id) key is picked by its id and the context's tenant, so another tenant's row of that id stays out
+    even where no row policy hides it."""
     async with engine.connect() as c:
         page = await list_page(
             c, sa.select(aliases.c.target), ListParams(ids=["alias-2", "alias-4", "gone"]), default_sort=aliases.c.name
         )
         assert [r["target"] for r in page["data"]] == ["model-2", "model-4"] and page["pagination"]["total"] == 2
-        picked = sa.select(types.c.id).where(types.c.tenant_id == "t1")
-        page = await list_page(c, picked, ListParams(ids=["claim", "invoice"]), default_sort=types.c.id)
-        assert [r["id"] for r in page["data"]] == ["claim", "invoice"]
+        with isolation.scope("t1", None):
+            page = await list_page(
+                c, sa.select(types.c.id), ListParams(ids=["claim", "invoice"]), default_sort=types.c.id
+            )
+        assert [r["id"] for r in page["data"]] == ["claim", "invoice"] and page["pagination"]["total"] == 2
         with pytest.raises(ValueError, match="store_test_list_pairs"):
             await list_page(c, sa.select(pairs.c.name), ListParams(ids=["x"]), default_sort=pairs.c.name)
 
