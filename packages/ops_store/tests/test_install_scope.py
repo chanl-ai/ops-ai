@@ -18,6 +18,7 @@ from sqlalchemy.dialects import mssql
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.pool import QueuePool
+from sqlalchemy.sql.elements import quoted_name
 
 from ops_service_kit.settings import Settings
 from ops_store import isolation
@@ -323,3 +324,42 @@ async def test_an_install_block_judges_a_statement_by_its_tables_not_its_columns
         except InstallScopeError:
             ran.append("refused")
     assert ran == ["ran"] * len(allowed) + ["refused"] * len(refused), ran
+
+
+async def _outcomes(st: Store, statements: list[sa.Executable]) -> list[str]:
+    out: list[str] = []
+    for statement in statements:
+        try:
+            async with st.install_tx(SETTINGS) as c:
+                await c.execute(statement)
+            out.append("ran")
+        except InstallScopeError:
+            out.append("refused")
+        except Exception as e:  # what the database or the compiler made of a statement that reached it
+            out.append(f"reached the database: {type(e).__name__}")
+    return out
+
+
+async def test_an_install_block_refuses_a_column_of_another_table_and_sql_text_outside_the_tree(
+    engine: AsyncEngine,
+) -> None:
+    """A column whose table is not marked system, wherever it sits (an UPDATE's value, which renders UPDATE ... FROM;
+    a DELETE's RETURNING, which renders DELETE ... USING), and SQL text the statement carries beside its tree (a custom
+    operator, a prefix, a suffix, a collation, an EXTRACT field, an unquoted name), are refused before they are sent."""
+    st = Install(engine)
+    raw = "IN (SELECT id FROM store_test_install_loose) --"
+    statements: list[sa.Executable] = [
+        settings.update().values(value=loose.c.id),
+        settings.delete().where(settings.c.name == loose.c.id).returning(loose.c.id),
+        sa.select(settings.c.value).where(settings.c.name.op(raw)(1)),
+        sa.select(settings.c.value).where(settings.c.name.bool_op(raw)(1)),
+        sa.select(settings.c.value).prefix_with("/* raw */"),
+        sa.select(settings.c.value).suffix_with("/* raw */"),
+        sa.select(settings.c.value).with_statement_hint("/* raw */"),
+        sa.select(settings.c.value.collate("Latin1_General_CI_AS (SELECT 1)")),
+        sa.select(sa.extract("year FROM now()) --", sa.func.count())).select_from(settings),
+        sa.select(sa.column(quoted_name("(SELECT count(*) FROM store_test_install_loose)", quote=False), sa.Integer)),
+    ]
+    assert await _outcomes(st, statements) == ["refused"] * len(statements)
+    async with st.install_tx(SETTINGS) as c:
+        assert await c.scalar(sa.select(settings.c.value)) == "eu", "a system table is still read"

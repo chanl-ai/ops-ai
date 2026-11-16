@@ -28,18 +28,19 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Generator, Iterator
 from contextlib import asynccontextmanager, contextmanager, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, cast
 
 import sqlalchemy as sa
 from sqlalchemy import event
 from sqlalchemy.engine import ExceptionContext
 from sqlalchemy.exc import DBAPIError, InvalidRequestError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncTransaction
-from sqlalchemy.sql import visitors
+from sqlalchemy.sql import operators, visitors
+from sqlalchemy.sql.elements import CollationClause, Extract, quoted_name
 
 from ops_service_kit.logging import add_context, get_logger
 from ops_service_kit.request_timing import note_caller
@@ -178,7 +179,7 @@ def install_wide(reason: str) -> Generator[Isolation]:
     """No tenant for a block, logged with `reason`: statements on the install's own tables (marked `system(...)`) from
     a path that may have no caller (a route that authenticates by a model key, a seed, a loop). Inside a request it
     runs on the request's connection. Every statement on a connection in this scope is checked before it is sent
-    (`_refuse_outside_install`): one that names a table not marked `system(...)`, or SQL with no table metadata, raises
+    (`_refuse_outside_install`): one with a table or column of a table not marked `system(...)`, or SQL text, raises
     `InstallScopeError`, whatever the login and whether or not the table has a row policy. `tenant()` and
     `team_visible` raise inside."""
     _need(reason, "install_wide")
@@ -480,6 +481,11 @@ def _forget_install(_dbapi_conn: object, record: Any) -> None:
 # A literal column that cannot name a table: count(*)'s star, a number, a quoted string or a bare name. Anything else
 # (a parenthesised subquery) is raw SQL.
 _BARE = re.compile(r"\*|-?\d+(\.\d+)?|'[^']*'|[A-Za-z_][A-Za-z0-9_]*")
+_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+# The statements an install-wide block runs: a DDL element or anything else is refused.
+_STATEMENTS = (sa.Select, sa.CompoundSelect, sa.Insert, sa.Update, sa.Delete)
+# Text a statement carries beside its tree, which the walk below does not reach: rendered as written.
+_TEXT_PARTS = ("_prefixes", "_suffixes", "_statement_hints")
 
 
 def _refuse_driver_sql(conn: sa.Connection, _cursor: Any, _sql: str, _params: Any, context: Any, _many: bool) -> None:
@@ -488,24 +494,71 @@ def _refuse_driver_sql(conn: sa.Connection, _cursor: Any, _sql: str, _params: An
 
 
 def _refuse_outside_install(conn: sa.Connection, statement: Any, *_: Any) -> None:
-    """Raises before a statement on a connection in install scope is sent unless every table it names is marked
-    `system(...)`. Raw SQL (a text clause, a literal column, a string for the driver) names no table the check can
-    read, so it is refused rather than parsed; the mechanism's own context statement is the one exception. Column
-    expressions are not judged: count(*), a literal or a function call over system tables runs, as does a statement
-    with no table (a built-in function reads none; a database function that did would be one a migration created). Each
-    statement is checked as written, so a cached compile does not skip it."""
+    """Raises before a statement on a connection in install scope is sent unless every table it reaches is marked
+    `system(...)`. Every column is judged by its table, so a value, a RETURNING or a join condition naming another
+    table is refused even where the statement's tree does not hold that table. Raw SQL (a text clause, a literal
+    column, a custom operator, a prefix, suffix or hint other than the dialect's lock hints, a collation or EXTRACT
+    field, an unquoted name, a string for the driver) names no table the check can read, so it is refused rather than
+    parsed; the mechanism's own context statement is the one exception. Functions are not judged here. Each statement
+    is checked as written, so a cached compile does not skip it."""
     if not conn.info.get(_INSTALL) or statement is _MS_SET:
         return
-    for element in visitors.iterate(statement):
-        if isinstance(element, sa.TextClause) or (
-            isinstance(element, sa.ColumnClause) and element.is_literal and not _BARE.fullmatch(str(element.name))
-        ):
-            raise InstallScopeError("refused: raw SQL (text or a literal column) inside an install-wide block")
-        if isinstance(element, sa.TableClause) and not (isinstance(element, sa.Table) and element.info.get(SYSTEM_KEY)):
-            raise InstallScopeError(
-                f"refused: {element.name} is not marked system(...); an install-wide block reaches only the install's"
-                " own tables"
-            )
+    kind: type[object] = type(cast(object, statement))
+    if not issubclass(kind, _STATEMENTS):
+        raise InstallScopeError(f"refused: a {kind.__name__} inside an install-wide block")
+    problem = next(_install_problems(statement), None)
+    if problem is not None:
+        raise InstallScopeError(f"refused: {problem} inside an install-wide block")
+
+
+def _install_problems(statement: sa.ClauseElement) -> Iterator[str]:
+    """Each part of `statement` an install-wide block may not send. A column's table is walked too, since a column
+    can stand in a statement whose tree never holds its table (an UPDATE's value, a RETURNING)."""
+    seen: set[int] = set()
+    todo: list[sa.ClauseElement] = [statement]
+    while todo:
+        for found in visitors.iterate(todo.pop()):
+            e: object = found
+            if id(e) in seen:
+                continue
+            seen.add(id(e))
+            table: object = getattr(e, "table", None)
+            if (
+                issubclass(type(e), sa.ColumnClause)
+                and issubclass(type(table), sa.FromClause)
+                and id(table) not in seen
+            ):
+                todo.append(cast(sa.ClauseElement, table))
+            yield from _part_problems(e)
+
+
+def _part_problems(e: object) -> Iterator[str]:
+    """What is wrong with one element of an install-wide statement, read by attribute: the element classes differ.
+    Judged by its class (`issubclass`), so the attributes read first stay one type each."""
+    kind = type(e)
+    name: object = getattr(e, "name", None)
+    marked = issubclass(kind, sa.Table) and bool(cast(sa.Table, e).info.get(SYSTEM_KEY))
+    text: object = getattr(e, "field", None) if issubclass(kind, Extract) else getattr(e, "collation", None)
+    hints: dict[object, str] = getattr(e, "_hints", None) or {}
+    ops: list[object] = [getattr(e, "operator", None), getattr(e, "modifier", None)]
+    beside: list[object] = [getattr(e, part, ()) for part in _TEXT_PARTS]
+    literal: object = getattr(e, "is_literal", False)
+    if issubclass(kind, sa.TextClause) or (
+        issubclass(kind, sa.ColumnClause) and literal and not _BARE.fullmatch(str(name))
+    ):
+        yield "raw SQL (a text clause or a literal column)"
+    if issubclass(kind, sa.TableClause) and not marked:
+        yield f"{name} is not marked system(...); an install-wide block reaches only the install's own tables"
+    if isinstance(name, quoted_name) and name.quote is False and not _BARE.fullmatch(str(name)):
+        yield f"an unquoted name {str(name)!r}"
+    if any(isinstance(op, operators.custom_op) for op in ops):
+        yield "raw SQL (a custom operator)"
+    if issubclass(kind, Extract | CollationClause) and not _NAME.fullmatch(str(text)):
+        yield f"raw SQL (an EXTRACT field or collation {text!r})"
+    if any(beside):
+        yield "raw SQL (a prefix, suffix or statement hint)"
+    if any(hint not in dialect.LOCK_HINTS for hint in hints.values()):
+        yield "raw SQL (a table hint other than the dialect's lock hints)"
 
 
 # The three keys in one batch, one round trip to set them and one to clear them (slow-tests RCA A3).

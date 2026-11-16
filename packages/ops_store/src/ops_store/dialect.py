@@ -43,6 +43,9 @@ def dialect_of(bind: Bind) -> str:
 
 _ROW_LOCK = "WITH (UPDLOCK, ROWLOCK)"
 _CLAIM_LOCK = "WITH (UPDLOCK, ROWLOCK, READPAST)"
+_KEY_RANGE_LOCK = "WITH (UPDLOCK, HOLDLOCK)"
+# The table hints this module attaches; an install-wide block refuses any other hint text (`isolation`).
+LOCK_HINTS = frozenset({_ROW_LOCK, _CLAIM_LOCK, _KEY_RANGE_LOCK})
 
 
 def locked[S: sa.Select[Any]](query: S, table: sa.FromClause) -> S:
@@ -123,7 +126,7 @@ def insert_ignore(bind: Bind, table: sa.Table, values: Mapping[str, Any], *, key
         sa.select(sa.literal(1))
         .select_from(table)
         .where(*[table.c[k] == value(k) for k in keys])
-        .with_hint(table, "WITH (UPDLOCK, HOLDLOCK)", "mssql")
+        .with_hint(table, _KEY_RANGE_LOCK, "mssql")
     )
     return table.insert().from_select(cols, row.where(~sa.exists(taken)))
 
