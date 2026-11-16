@@ -447,7 +447,7 @@ class RoleStore(TenantDb):
                 role_assignments.c.subject_kind == "person",
                 role_assignments.c.subject_id == user_id,
                 role_assignments.c.source == "grant",
-                roles.c.builtin.is_(False),
+                roles.c.builtin == sa.false(),
             )
         )
         async with self.tenant_tx(tenant_id) as c:
