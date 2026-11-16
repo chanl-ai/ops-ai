@@ -142,30 +142,21 @@ def test_a_baseline_row_raised_without_the_trailer_fails_and_with_it_passes(
     assert c.commit_problems() == []  # pyright: ignore[reportUnknownMemberType]
 
 
-def test_a_page_cut_in_python_is_found_and_other_slices_are_not() -> None:
-    code = """
+PLAIN_CUTS = """
 page = rows[start : start + size]
 more = hits[offset : offset + limit + 1]
 head = rows[:limit]
 tail = rows[start:]
 span = text[a : b + 1]
 """
-    assert c.slice_findings(code) == [2, 3]  # pyright: ignore[reportUnknownMemberType]
-
-
-def test_a_page_cut_with_multiplied_bounds_or_in_two_cuts_is_found() -> None:
-    code = """
+MULTIPLIED_OR_CHAINED_CUTS = """
 by_page = out[(page - 1) * size : page * size]
 by_index = out[index * limit : (index + 1) * limit]
 chained = rows[offset:][:limit]
 fixed = rows[1:][:3]
 scaled = rows[a * 2 : b * 3]
 """
-    assert c.slice_findings(code) == [2, 3, 4]  # pyright: ignore[reportUnknownMemberType]
-
-
-def test_a_page_cut_through_a_name_an_islice_or_two_statements_is_found() -> None:
-    code = """
+NAMED_CUTS = """
 from itertools import islice
 import itertools as it
 
@@ -185,7 +176,15 @@ def elsewhere(rows, o):
     end = 5
     return rows[o:end]
 """
-    assert c.slice_findings(code) == [7, 8, 9, 11]  # pyright: ignore[reportUnknownMemberType]
+
+
+@pytest.mark.parametrize(
+    ("code", "lines"),
+    [(PLAIN_CUTS, [2, 3]), (MULTIPLIED_OR_CHAINED_CUTS, [2, 3, 4]), (NAMED_CUTS, [7, 8, 9, 11])],
+    ids=["plain", "multiplied-or-chained", "name-islice-two-statements"],
+)
+def test_a_page_cut_in_python_is_found_in_every_form_and_other_slices_are_not(code: str, lines: list[int]) -> None:
+    assert c.slice_findings(code) == lines  # pyright: ignore[reportUnknownMemberType]
 
 
 def test_the_list_slice_baseline_is_held_to_its_trailer_like_the_portable_one(

@@ -43,19 +43,6 @@ def run(root: Path, monkeypatch: pytest.MonkeyPatch, *flags: str) -> int:
     return c.main(root)
 
 
-def test_each_kind_is_found_and_text_that_only_mentions_one_is_not() -> None:
-    assert sorted(c.findings(CODE, STORE)) == [
-        ("dict-any", 6),
-        ("extra-allow", 9),
-        ("gather", 7),
-        ("logging", 10),
-        ("print", 11),
-        ("store-dict", 6),
-        ("task", 8),
-    ]
-    assert ("store-dict", 6) not in c.findings(CODE, "services/kb-service/src/ops_kb/app.py")
-
-
 def test_a_new_site_fails_and_one_on_the_baseline_does_not(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -197,27 +184,46 @@ class M(BaseModel):
 """
 
 
-def test_a_call_through_an_alias_a_loop_or_a_plain_dict_config_is_found_and_a_task_group_child_is_not() -> None:
-    assert sorted(c.findings(FORMS, "services/kb-service/src/ops_kb/app.py")) == [
-        ("extra-allow", 21),
-        ("gather", 9),
-        ("logging", 16),
-        ("logging", 17),
-        ("task", 10),
-        ("task", 11),
-        ("task", 12),
-        ("task", 13),
-    ]
+MAPPINGS = (
+    "from typing import Any, Mapping\n"
+    "from collections.abc import Mapping as M\n"
+    "a: dict[str, object]\n"
+    "b: Mapping[str, Any]\n"
+    "c: M[str, object]\n"
+    "d: dict[str, int]\n"
+    "e: Mapping[str, str]\n"
+)
+APP = "services/kb-service/src/ops_kb/app.py"
+KINDS = [("dict-any", 6), ("extra-allow", 9), ("gather", 7), ("logging", 10), ("print", 11), ("task", 8)]
 
 
-def test_an_object_or_mapping_valued_dict_is_a_dict_any_and_a_typed_one_is_not() -> None:
-    src = (
-        "from typing import Any, Mapping\n"
-        "from collections.abc import Mapping as M\n"
-        "a: dict[str, object]\n"
-        "b: Mapping[str, Any]\n"
-        "c: M[str, object]\n"
-        "d: dict[str, int]\n"
-        "e: Mapping[str, str]\n"
-    )
-    assert sorted(c.findings(src, "x/app.py")) == [("dict-any", 3), ("dict-any", 4), ("dict-any", 5)]
+@pytest.mark.parametrize(
+    ("source", "path", "found"),
+    [
+        # Each kind once; a docstring that only mentions one is not a finding. A store file also answers for its rows.
+        (CODE, STORE, sorted([*KINDS, ("store-dict", 6)])),
+        (CODE, APP, KINDS),
+        # A call through an alias or a loop and a plain-dict config are found; a task group's child is not.
+        (
+            FORMS,
+            APP,
+            [
+                ("extra-allow", 21),
+                ("gather", 9),
+                ("logging", 16),
+                ("logging", 17),
+                ("task", 10),
+                ("task", 11),
+                ("task", 12),
+                ("task", 13),
+            ],
+        ),
+        # An object- or mapping-valued dict is a dict-any; a typed one is not.
+        (MAPPINGS, "x/app.py", [("dict-any", 3), ("dict-any", 4), ("dict-any", 5)]),
+    ],
+    ids=["store", "app", "forms", "mappings"],
+)
+def test_each_kind_is_found_in_every_form_and_look_alikes_are_not(
+    source: str, path: str, found: list[tuple[str, int]]
+) -> None:
+    assert sorted(c.findings(source, path)) == found

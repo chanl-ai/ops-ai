@@ -38,16 +38,6 @@ def run(root: Path, monkeypatch: pytest.MonkeyPatch, *flags: str) -> int:
     return c.main(root)
 
 
-def test_each_literal_is_found_and_text_that_only_mentions_one_is_not() -> None:
-    assert sorted(c.findings(CODE)) == [
-        ("client", 7),
-        ("loopback", 5),
-        ("loopback", 6),
-        ("timeout", 7),
-        ("timeout", 8),
-    ]
-
-
 def test_a_new_site_fails_and_one_on_the_baseline_does_not(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -110,16 +100,6 @@ fine = httpx.Timeout(settings.agents.timeout_s)
 await http.get("/d", timeout=timeout)
 await http.get("/e", timeout=settings.agents.timeout_s)
 """
-
-
-def test_a_timeout_held_in_a_constant_or_built_by_httpx_and_a_sync_client_are_found() -> None:
-    assert sorted(c.findings(NAMED)) == [
-        ("client", 9),
-        ("timeout", 5),
-        ("timeout", 6),
-        ("timeout", 7),
-        ("timeout", 8),
-    ]
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -185,28 +165,12 @@ limits = Limit(5)
 """
 
 
-def test_a_fallback_in_a_constant_or_a_ternary_a_wait_for_a_named_number_and_an_aliased_client_are_found() -> None:
-    assert sorted(c.findings(FORMS)) == [
-        ("client", 18),
-        ("client", 19),
-        ("loopback", 10),
-        ("loopback", 11),
-        ("timeout", 13),
-        ("timeout", 14),
-        ("timeout", 16),
-        ("timeout", 20),
-    ]
-
-
-def test_a_number_in_another_function_or_a_parameter_of_the_same_name_is_not_a_timeout() -> None:
-    src = (
-        "def a():\n    t = 30\n    return http.get('/x', timeout=t)\n"
-        "def b(t):\n    return http.get('/x', timeout=t)\n"
-        "def c():\n    t = 30\n"
-        "def d(t=5):\n    return http.get('/x', timeout=t)\n"
-    )
-    assert c.findings(src) == [("timeout", 3)]
-
+SCOPES = (
+    "def a():\n    t = 30\n    return http.get('/x', timeout=t)\n"
+    "def b(t):\n    return http.get('/x', timeout=t)\n"
+    "def c():\n    t = 30\n"
+    "def d(t=5):\n    return http.get('/x', timeout=t)\n"
+)
 
 WAITS = """
 import os, select
@@ -229,13 +193,34 @@ await c.execute(sa.select(1))
 """
 
 
-def test_a_wait_given_its_limit_by_position_is_found_and_a_string_or_path_join_is_not() -> None:
-    # A thread join, an event wait or a select names its limit first (select.select fourth); a positional number there
-    # is the same literal timeout as `timeout=` and is counted the same.
-    assert sorted(c.findings(WAITS)) == [
-        ("timeout", 7),
-        ("timeout", 8),
-        ("timeout", 9),
-        ("timeout", 10),
-        ("timeout", 11),
-    ]
+@pytest.mark.parametrize(
+    ("source", "found"),
+    [
+        # Each literal once; a docstring that only mentions one, a setting and a mail domain are not findings.
+        (CODE, [("client", 7), ("loopback", 5), ("loopback", 6), ("timeout", 7), ("timeout", 8)]),
+        # A timeout held in a constant, computed, or built by httpx, and a sync client.
+        (NAMED, [("client", 9), ("timeout", 5), ("timeout", 6), ("timeout", 7), ("timeout", 8)]),
+        # A fallback in a constant or a ternary, a wait_for, a named number and an aliased client.
+        (
+            FORMS,
+            [
+                ("client", 18),
+                ("client", 19),
+                ("loopback", 10),
+                ("loopback", 11),
+                ("timeout", 13),
+                ("timeout", 14),
+                ("timeout", 16),
+                ("timeout", 20),
+            ],
+        ),
+        # A number in another function, or a parameter of the same name, is not a timeout.
+        (SCOPES, [("timeout", 3)]),
+        # A thread join, an event wait or a select names its limit first (select.select fourth); a positional number
+        # there is the same literal timeout as `timeout=`. A string or path join is not one.
+        (WAITS, [("timeout", 7), ("timeout", 8), ("timeout", 9), ("timeout", 10), ("timeout", 11)]),
+    ],
+    ids=["plain", "named", "forms", "scopes", "waits"],
+)
+def test_each_literal_is_found_in_every_form_and_look_alikes_are_not(source: str, found: list[tuple[str, int]]) -> None:
+    assert sorted(c.findings(source)) == found
