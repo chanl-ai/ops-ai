@@ -8,6 +8,9 @@ nobody started in a chat (a schedule, a mailbox) never reads a thread's override
 The answer is joined here, so the picker makes one call: the agent's switchable tools grouped by the app their module
 belongs to (tools-service's cards, read for the person), each app's state for the person, and whether the thread has
 it off. An installed app the team has off is listed so the picker can offer its one action, and it never adds tools.
+
+No route here takes the request transaction (`Tx`): each reads the app cards and accounts from tools-service, so each
+store call takes and returns its own connection and none is held while tools-service answers.
 """
 
 from __future__ import annotations
@@ -19,9 +22,8 @@ from fastapi.responses import JSONResponse
 from pydantic import Field
 
 from ops_agents.activities.overrides import limits_for, parse, resolve
-from ops_contracts.chat import WireModel
 from ops_service_kit.errors import Unprocessable
-from ops_service_kit.http import Out
+from ops_service_kit.http import In, Out
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 
@@ -79,7 +81,7 @@ class ChatConnectors(Out):
     connectors: list[ChatConnector]
 
 
-class ConnectorsIn(WireModel):
+class ConnectorsIn(In):
     # The apps this chat leaves out, by id; every other app the agent holds is on.
     off: list[Annotated[str, Field(min_length=1, max_length=120)]] = Field(max_length=100)
     # The account each app's calls use in this chat, app id to account name, as the whole set; left out keeps the
