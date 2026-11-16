@@ -88,6 +88,13 @@ def team_visible(table: sa.Table) -> sa.ColumnElement[bool]:
         parent_name, column = via
         parent = table.metadata.tables[str(parent_name)]
         child: sa.ColumnElement[str] = table.c[str(column)]
+        key = list(parent.primary_key.columns)
+        if key and key[0].name == "tenant_id" and "tenant_id" in table.c:
+            # Two tenants may hold one parent id, so the id alone could match a visible parent of another tenant.
+            # A correlated EXISTS, since SQL Server has no tuple IN.
+            return sa.exists().where(
+                parent.c.tenant_id == table.c.tenant_id, parent.c.id == child, team_visible(parent)
+            )
         return child.in_(sa.select(parent.c.id).where(team_visible(parent)))
     column_name = table.info.get(TEAM_KEY)
     if column_name is None:

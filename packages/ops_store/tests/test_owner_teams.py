@@ -1,7 +1,10 @@
 """`Store.owner_teams` and `isolation.tenant_wide_on` on a caller's own connection, outside a request, on each database,
 by failure mode: an owner read that misses another team's row, one that checks out a second connection beside the
-caller's, and one that leaves the caller's connection reading every team afterwards, also when the block raises.
-Inside a request the same call is covered by ops_identity's tests/test_request_transaction.py."""
+caller's, one that leaves the caller's connection reading every team afterwards, also when the block raises, and one
+that answers another tenant's owner where only the code's predicate can stop it (a table with no policy yet). Also
+`team_visible` on a child of a parent keyed (tenant_id, id): a parent id two tenants hold must not let one tenant's
+visible parent show the other tenant's child. Inside a request the same call is covered by ops_identity's
+tests/test_request_transaction.py."""
 
 from __future__ import annotations
 
@@ -28,8 +31,10 @@ from ops_store.schema import (
     isolation_drop_ddl,
     role_ddl,
     security_ddl,
+    team_owned_via,
 )
 from ops_store.store import Store
+from ops_store.team_scope import acting_as, team_visible
 
 SQL_SERVER = (os.environ.get("OPS_MSSQL_SERVER"), os.environ.get("MSSQL_SA_PASSWORD"))
 ROLE = "ops_owner_teams_test"
@@ -44,6 +49,22 @@ items = sa.Table(
     sa.Column("tenant_id", sa.String(64), nullable=False),
     sa.Column("team_id", sa.String(64), nullable=False),
     info={**TENANT_SCOPED, **TEAM_OWNED},
+)
+# No policy on either, as on a table whose policy has not landed: only the statement's own predicates filter.
+parents = sa.Table(
+    "store_test_owner_parents",
+    meta,
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("id", sa.String(64), primary_key=True),
+    sa.Column("team_id", sa.String(64), nullable=False),
+    info=TEAM_OWNED,
+)
+children = sa.Table(
+    "store_test_owner_children",
+    meta,
+    sa.Column("tenant_id", sa.String(64), primary_key=True),
+    sa.Column("parent_id", sa.String(64), primary_key=True),
+    info=team_owned_via("store_test_owner_parents", "parent_id"),
 )
 
 
@@ -89,9 +110,19 @@ async def engine(request: pytest.FixtureRequest) -> AsyncIterator[AsyncEngine]:
                     {"id": "elsewhere", "tenant_id": "t2", "team_id": "a"},
                 ],
             )
+            await c.execute(
+                parents.insert(),
+                [
+                    {"tenant_id": "t1", "id": "shared", "team_id": "a"},
+                    {"tenant_id": "t2", "id": "shared", "team_id": "b"},
+                    {"tenant_id": "t2", "id": "only_t2", "team_id": "b"},
+                ],
+            )
+            await c.execute(children.insert(), [{"tenant_id": "t2", "parent_id": "shared"}])
             if request.param == "postgresql":
                 await c.execute(sa.text(role_ddl(ROLE)))
-                await c.execute(sa.text(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {items.name} TO {ROLE}"))
+                for t in (items, parents, children):
+                    await c.execute(sa.text(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {t.name} TO {ROLE}"))
                 for statement in isolation_ddl(items, "postgresql"):
                     await c.execute(sa.text(statement))
             else:
@@ -149,3 +180,18 @@ async def test_a_block_that_raises_still_gives_the_connection_its_team_back(engi
                     assert await _ids(wide) == ["mine", "theirs"]
                     raise LookupError("refused after the wide read")
             assert await _ids(conn) == ["mine"]
+
+
+async def test_an_owner_read_names_the_callers_tenant_where_no_policy_does(engine: AsyncEngine) -> None:
+    st = Items(engine)
+    with isolation.scope("t1", "a"):
+        async with st.tx() as conn:
+            owners = await st.owner_teams(conn, parents, {"shared", "only_t2"}, OWNER)
+    assert owners == {"shared": "a"}
+
+
+async def test_a_child_follows_its_own_tenants_parent_not_one_holding_the_same_id(engine: AsyncEngine) -> None:
+    with isolation.scope("t2", "a"), acting_as("a"):
+        async with Items(engine).tx() as conn:
+            q = sa.select(children.c.parent_id).where(children.c.tenant_id == "t2", team_visible(children))
+            assert (await conn.execute(q)).all() == []

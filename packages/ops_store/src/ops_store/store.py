@@ -70,13 +70,17 @@ class Store:
     ) -> dict[str, str]:
         """The owning team of each id in one query, for deciding a refusal; never for showing the rows. A row with no
         team is left out. The read is tenant-wide for `reason`, since a team's transaction cannot see another team's
-        rows: on `conn` with its scope widened for this one statement, then restored; with no `conn`, in `tx()`."""
+        rows: on `conn` with its scope widened for this one statement, then restored; with no `conn`, in `tx()`. A
+        table with a tenant column is read in the caller's tenant only, so a table whose policy has not landed, or an
+        id two tenants hold, never answers with another tenant's team."""
         if not ids:
             return {}
         column = table.info.get(TEAM_KEY)
         if column is None:
             raise ValueError(f"{table.name} is not marked TEAM_OWNED")
         q = sa.select(table.c.id, table.c[str(column)]).where(table.c.id.in_(sorted(ids)), any_team(table, reason))
+        if "tenant_id" in table.c:
+            q = q.where(table.c.tenant_id == isolation.tenant())
         if conn is None:
             with isolation.tenant_wide(reason):
                 async with self.tx() as own:
