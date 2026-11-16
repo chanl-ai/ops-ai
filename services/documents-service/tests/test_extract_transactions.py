@@ -156,7 +156,8 @@ async def test_a_failed_extraction_leaves_the_row_it_left_before(
     assert left == expected, (left, r.text, row)
 
 
-async def test_a_caller_who_leaves_while_the_model_reads_leaves_the_row_running(make: Make) -> None:
+async def test_a_caller_who_leaves_while_the_model_reads_settles_the_row_failed(make: Make) -> None:
+    """The read was this request's own, so a cancel settles it failed and a same-key retry runs again now."""
     model = Parked()
     s = make(model, Floor(0.5), Prices())
     async with s.client as c:
@@ -168,5 +169,4 @@ async def test_a_caller_who_leaves_while_the_model_reads_leaves_the_row_running(
         with suppress(asyncio.CancelledError):
             await asked
         [row] = await _rows(c, fid)
-    # Started and committed before the model was asked, so the row says it was running, not that it never began.
-    assert row["status"] == "running", row
+    assert row["status"] == "failed" and row["error"]["code"] == "failed", row
