@@ -27,6 +27,7 @@ scope acts as its team, and a wider scope as none (every team of the tenant).
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager, suppress
 from contextvars import ContextVar
@@ -476,6 +477,11 @@ def _forget_install(_dbapi_conn: object, record: Any) -> None:
     record.info.pop(_INSTALL, None)
 
 
+# A literal column that cannot name a table: count(*)'s star, a number, a quoted string or a bare name. Anything else
+# (a parenthesised subquery) is raw SQL.
+_BARE = re.compile(r"\*|-?\d+(\.\d+)?|'[^']*'|[A-Za-z_][A-Za-z0-9_]*")
+
+
 def _refuse_driver_sql(conn: sa.Connection, _cursor: Any, _sql: str, _params: Any, context: Any, _many: bool) -> None:
     if conn.info.get(_INSTALL) and context.compiled is None:
         raise InstallScopeError("refused: SQL for the driver inside an install-wide block names no table to check")
@@ -484,12 +490,16 @@ def _refuse_driver_sql(conn: sa.Connection, _cursor: Any, _sql: str, _params: An
 def _refuse_outside_install(conn: sa.Connection, statement: Any, *_: Any) -> None:
     """Raises before a statement on a connection in install scope is sent unless every table it names is marked
     `system(...)`. Raw SQL (a text clause, a literal column, a string for the driver) names no table the check can
-    read, so it is refused rather than parsed; the mechanism's own context statement is the one exception. Each
+    read, so it is refused rather than parsed; the mechanism's own context statement is the one exception. Column
+    expressions are not judged: count(*), a literal or a function call over system tables runs, as does a statement
+    with no table (a built-in function reads none; a database function that did would be one a migration created). Each
     statement is checked as written, so a cached compile does not skip it."""
     if not conn.info.get(_INSTALL) or statement is _MS_SET:
         return
     for element in visitors.iterate(statement):
-        if isinstance(element, sa.TextClause) or (isinstance(element, sa.ColumnClause) and element.is_literal):
+        if isinstance(element, sa.TextClause) or (
+            isinstance(element, sa.ColumnClause) and element.is_literal and not _BARE.fullmatch(str(element.name))
+        ):
             raise InstallScopeError("refused: raw SQL (text or a literal column) inside an install-wide block")
         if isinstance(element, sa.TableClause) and not (isinstance(element, sa.Table) and element.info.get(SYSTEM_KEY)):
             raise InstallScopeError(

@@ -263,3 +263,33 @@ async def test_a_statement_cancelled_mid_flight_raises_the_cancellation_and_retu
     pool = engine.sync_engine.pool
     assert isinstance(pool, QueuePool)
     assert pool.checkedout() == 0, "the cancelled request's connection went back to the pool"
+
+
+async def test_an_install_block_judges_a_statement_by_its_tables_not_its_columns(engine: AsyncEngine) -> None:
+    """count(*), a literal, a function or select(1) over a system table runs; so does a statement with no table. A
+    table not marked system anywhere (a CTE, a join, a DML target's subquery) is refused."""
+    st = Install(engine)
+    over_loose = sa.select(loose.c.id).cte("ids")
+    allowed: list[sa.Executable] = [
+        sa.select(sa.func.count()).select_from(settings),
+        sa.select(sa.literal(1)).select_from(settings),
+        sa.select(sa.func.coalesce(sa.func.max(settings.c.value), "none")),
+        sa.select(sa.literal_column("1", sa.Integer)).select_from(settings),
+        sa.select(sa.literal(1)),
+        sa.select(sa.func.count()).select_from(sa.select(settings.c.name).cte("names")),
+    ]
+    refused: list[sa.Executable] = [
+        sa.select(sa.func.count()).select_from(over_loose),
+        sa.select(settings.c.value).join_from(settings, loose, loose.c.id == settings.c.name),
+        settings.update().where(settings.c.name.in_(sa.select(loose.c.id))).values(value="x"),
+        sa.select(sa.literal_column("1 + (SELECT count(*) FROM store_test_install_loose)", sa.Integer)),
+    ]
+    ran: list[str] = []
+    for statement in [*allowed, *refused]:
+        try:
+            async with st.install_tx(SETTINGS) as c:
+                await c.execute(statement)
+            ran.append("ran")
+        except InstallScopeError:
+            ran.append("refused")
+    assert ran == ["ran"] * len(allowed) + ["refused"] * len(refused), ran
