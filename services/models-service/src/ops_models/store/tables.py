@@ -165,8 +165,8 @@ model_call_refusals = sa.Table(
 )
 
 # What a key's caps read, summed across every tenant it spends for: per `period`, `sec:<epoch second>` (the rate
-# limit, kept two minutes), `day:<UTC date>` (the daily cap) and `run:<run id>` (a caller's run cap). Written in the
-# transaction of the call's row, whichever table that is in.
+# limit, kept two minutes), `day:<UTC date>` (the daily cap) and `run:<run id>` (a caller's run cap). Written in one
+# transaction with the call's row, whichever table that is in (`CallLog.record`).
 model_key_spend = sa.Table(
     "model_key_spend",
     metadata,

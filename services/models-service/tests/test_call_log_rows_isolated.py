@@ -11,6 +11,7 @@ from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
+from sqlalchemy import event
 
 from ops_models.store import CallLog
 from ops_models.store.tables import model_call_log, model_call_refusals
@@ -71,3 +72,23 @@ async def test_a_call_that_names_no_tenant_is_kept_apart_from_every_tenants_log(
         logged = (await c.execute(q)).scalar_one()
     assert (kept, logged) == (1, 0)
     assert (await log.totals(key_id, datetime.now(UTC))).recent == 1, "the refusal still counts toward the rate"
+
+
+async def test_a_call_row_and_its_keys_spend_commit_together_outside_a_request(models: Models) -> None:
+    """From a task or a test, with no request transaction open: a spend write that fails leaves no row behind."""
+    key_id = f"workflow:one-{uuid4().hex[:8]}"
+    tenant, log = f"t_{uuid4().hex[:8]}", CallLog(models.engine)
+
+    def refuse_spend(_c: object, _cur: object, statement: str, *_: object) -> None:
+        if "model_key_spend" in statement and not statement.lstrip().upper().startswith("SELECT"):
+            raise RuntimeError("the spend write failed")
+
+    event.listen(models.engine.sync_engine, "before_cursor_execute", refuse_spend)
+    try:
+        with isolation.scope(tenant, None), pytest.raises(RuntimeError):
+            await log.record(_row(key_id, tenant))
+    finally:
+        event.remove(models.engine.sync_engine, "before_cursor_execute", refuse_spend)
+    with isolation.scope(tenant, None):
+        rows, _ = await log.page(key_id=key_id)
+    assert rows == [], "a call row was kept with no spend counted for its key"

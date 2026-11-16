@@ -1,7 +1,7 @@
 """The model call log: one row per authenticated completion, a denial included, holding metadata and never a prompt
 or a completion. A call that names a tenant is that tenant's row; one that names none is a row of
-model_call_refusals. Either way the key's spend per period moves in the same transaction, which is what its caps
-read."""
+model_call_refusals. Either way the key's spend per period moves in the same transaction (`CallLog.record` opens
+one when no request has), which is what its caps read."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.http import Out
-from ops_store import Guarantee
+from ops_store import Guarantee, isolation
 from ops_store.dialect import insert_ignore
 from ops_store.rows import rows
 from ops_store.store import Store
@@ -162,16 +162,19 @@ class CallLog(Store):
         self.spend = KeySpend(engine)
 
     async def record(self, row: Mapping[str, Any]) -> None:
-        """Writes the call's row, in the current tenant's log when it names a tenant, and its key's spend."""
+        """Writes the call's row, in the current tenant's log when it names a tenant, and its key's spend, in one
+        transaction: the request's when one is open, else one of its own, so a row never commits without its spend."""
         now = datetime.now(UTC)
         untenanted = None
-        if row.get("tenant_id"):
-            async with self.tx() as c:
-                await c.execute(t.insert().values(**row))
-        else:
-            untenanted = refusals.insert().values(**{k: v for k, v in row.items() if k != "tenant_id"})
         cost, run_id = Decimal(str(row.get("cost") or 0)), row.get("run_id")
-        await self.spend.record(str(row["key_id"]), cost, str(run_id) if run_id else None, now, untenanted=untenanted)
+        async with isolation.request_transaction():
+            if row.get("tenant_id"):
+                async with self.tx() as c:
+                    await c.execute(t.insert().values(**row))
+            else:
+                untenanted = refusals.insert().values(**{k: v for k, v in row.items() if k != "tenant_id"})
+            run = str(run_id) if run_id else None
+            await self.spend.record(str(row["key_id"]), cost, run, now, untenanted=untenanted)
 
     async def totals(self, key_id: str, now: datetime, *, run_id: str | None = None) -> CapTotals:
         return await self.spend.totals(key_id, now, run_id=run_id)
