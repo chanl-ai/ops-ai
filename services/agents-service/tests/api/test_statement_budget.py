@@ -30,6 +30,7 @@ BASIC = Path(__file__).parents[1] / "fixtures" / "engine" / "basic.yaml"
 DEV = {"X-Team-Id": SEED_TEAM}
 # `{workflow_id}` names a registry workflow and, under `definitions/`, an engine definition: one seeded id each.
 REGISTRY_WORKFLOW, DEFINITION = "wire_hold_review", "refund_check"
+HOLDS = {"toolIds": ["lookup_account"], "accounts": {"salesforce": "Main"}}
 PATH_IDS = (
     "agent_id",
     "batch_id",
@@ -102,8 +103,9 @@ def _id(answer: Any) -> str:
 
 @pytest.fixture
 def seed_team(served: tuple[FastAPI, AsyncClient]) -> SeedTeam:
-    """`n` more agents, skills, guardrails, widgets and cases on the dev caller's team, beside the seed folder's
-    records; the path ids name the first of each, and the seeded fraud agent and its records otherwise."""
+    """`n` more agents (each holding a tool and an account), skills, guardrails, widgets and cases on the dev caller's
+    team, beside the seed folder's records; the path ids name the first of each, and the seeded fraud agent and its
+    records otherwise."""
     client = served[1]
     ids: dict[str, str] = dict.fromkeys(PATH_IDS, "missing")
     ids.update(
@@ -129,6 +131,9 @@ def seed_team(served: tuple[FastAPI, AsyncClient]) -> SeedTeam:
         for i in range(n):
             tag = f"{n}-{i:02d}"
             agent = _id(await client.post("/v1/agents", json={"name": f"Agent {tag}", "role": "Answers"}, headers=DEV))
+            # A tool and an account on each agent, so the lists of who uses one grow with the agents.
+            held = await client.patch(f"/v1/agents/{agent}", json=HOLDS, headers=DEV)
+            assert held.status_code == 200, held.text
             skill = _id(await client.post("/v1/skills", json={**SKILL, "name": f"Skill {tag}"}, headers=DEV))
             rule = _id(await client.post("/v1/guardrails", json={**RULE, "name": f"Rule {tag}"}, headers=DEV))
             widget = _id(await client.post("/v1/widgets", json={**LIMIT_CARD, "name": f"Card {tag}"}, headers=DEV))

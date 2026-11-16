@@ -1,8 +1,9 @@
 # The statement budget of each agents-service GET at 5 and 50 rows (ops_service_kit.testing.budget_check, data-access
 # standard DA1 and DA6), measured on PostgreSQL by tests/api/test_statement_budget.py. Each row is today's count at 50
-# rows. The seed adds rows to agents, skills, guardrails, widgets and cases only; a row for any other list proves its
-# count, not that it stays flat as rows grow. Rows listing more than one transaction or connection open one per store
-# read and are budgeted as they run until their route is converted. A `not_budgeted` row that grows names its counts.
+# rows. The seed adds rows to agents (each holding a tool and an account), skills, guardrails, widgets and cases only;
+# a row for any other list proves its count, not that it stays flat as rows grow. Rows listing more than one
+# transaction or connection open one per store read and are budgeted as they run until their route is converted. A
+# `not_budgeted` row that grows names its counts.
 
 ["GET /health"]
 queries = 1
@@ -37,7 +38,8 @@ transactions = 6
 connections = 6
 
 ["GET /v1/account-uses"]
-not_budgeted = "grows with rows: 10 statements at 5, 60 at 50; reads one row per agent or record (N+1); to be fixed"
+queries = 2
+query = { app = "salesforce", name = "Main" }
 
 ["GET /v1/activity"]
 queries = 5
@@ -236,7 +238,8 @@ transactions = 5
 connections = 5
 
 ["GET /v1/tool-uses"]
-not_budgeted = "grows with rows: 22 statements at 5, 72 at 50; reads one row per agent or record (N+1); to be fixed"
+queries = 14
+query = { tools = "lookup_account" }
 
 ["GET /v1/tools"]
 not_budgeted = "grows with rows: 26 statements at 5, 76 at 50; reads one row per agent or record (N+1); to be fixed"
@@ -268,7 +271,8 @@ queries = 16
 queries = 2
 
 ["GET /v1/workflows/definitions/account-uses"]
-not_budgeted = "grows with rows: 10 statements at 5, 60 at 50; reads one row per agent or record (N+1); to be fixed"
+queries = 2
+query = { app = "salesforce", name = "Main" }
 
 ["GET /v1/workflows/definitions/{workflow_id}"]
 queries = 4

@@ -20,8 +20,8 @@ from ops_identity import CurrentTenantCaller
 from ops_identity.fastapi import Tx
 from ops_service_kit.http import Envelope, Out
 
+from ...store.pin_users import PinUsers
 from ..account_names import account_uses_in
-from ..agent_registry import registry as agent_registry
 from ..child_runs import team_workflows
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -53,21 +53,18 @@ async def tool_uses(rt: Runtime, team_id: str | None, tools: list[str]) -> dict[
             out[tool].append(use)
 
     wanted = set(tools)
-    reg = agent_registry(rt)
     holders: dict[str, set[str]] = {}
-    for row in await reg.rows():
-        if row["team_id"] != team_id:
-            continue
-        name, held = str(row["slug"]), set[str]()
-        for n in sorted({row["version"], row["published_version"]} - {None}):
-            spec: dict[str, Any] = (await reg.version(row["id"], int(n)))["spec"]
-            granted = cast(list[Any], spec.get("toolIds") or [])
-            held |= {str(t) for t in granted} & wanted
-            name = str(spec.get("name") or name)
-        for t in sorted(held):
-            add(t, {"kind": "agent", "id": str(row["id"]), "name": name})
+    names: dict[str, str] = {}
+    # The team's agents' newest and published versions in one query, by agent then version: the newest name wins.
+    for v in await PinUsers(rt.db).held_versions(team_id):
+        granted = v.spec.get("toolIds")
+        held = {str(t) for t in granted} & wanted if isinstance(granted, list) else set[str]()
+        names[v.agent_id] = str(v.spec.get("name") or names.get(v.agent_id) or v.slug)
         if held:
-            holders[str(row["id"])] = held
+            holders.setdefault(v.agent_id, set()).update(held)
+    for agent_id, held in sorted(holders.items()):
+        for t in sorted(held):
+            add(t, {"kind": "agent", "id": agent_id, "name": names[agent_id]})
     if holders:
         runs = await used_in_all(rt)
         for agent_id, held in holders.items():

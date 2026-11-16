@@ -15,7 +15,7 @@ from ops_service_kit.errors import Unprocessable
 
 from ..activities.tool_directory import ToolsUnavailable
 from ..store.engine import EngineTransactions
-from .agent_registry import registry as agent_registry
+from ..store.pin_users import PinUsers
 from .deps import Runtime
 
 # The engine's tool step, whose `accounts` parameter names an account per app.
@@ -91,18 +91,15 @@ async def account_uses_in(rt: Runtime, team: str, app: str, name: str) -> dict[s
         if latest or named_live:
             workflows.append(wid)
     agents: list[str] = []
-    reg = agent_registry(rt)
     key = name.strip().casefold()
-    for a in await reg.rows():
-        if a.get("team_id") != team:
+    # Every version of the team's agents that names an account, in one query.
+    for v in await PinUsers(rt.db).account_versions(team):
+        named = v.spec.get("accounts")
+        if not isinstance(named, dict) or str(named.get(app) or "").strip().casefold() != key:
             continue
-        for v in await reg.versions(str(a["id"])):
-            named = cast(dict[str, str], cast(dict[str, Any], v.get("spec") or {}).get("accounts") or {})
-            if str(named.get(app) or "").strip().casefold() != key:
-                continue
-            is_live = a.get("published_version") is not None and int(v["version"]) <= int(a["published_version"])
-            published += int(is_live)
-            drafts += int(not is_live)
-            if str(a["id"]) not in agents:
-                agents.append(str(a["id"]))
+        is_live = v.published_version is not None and v.version <= v.published_version
+        published += int(is_live)
+        drafts += int(not is_live)
+        if v.agent_id not in agents:
+            agents.append(v.agent_id)
     return {"drafts": drafts, "published": published, "workflows": workflows, "agents": agents}
