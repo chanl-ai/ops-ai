@@ -311,7 +311,7 @@ def site_findings(source: str) -> list[tuple[int, str]]:
                 # A handler whose last statement raises does not carry on; one that retries or answers does.
                 if isinstance(h.body[-1], ast.Raise):
                     continue
-                caught = _names(h.type) if h.type is not None else set()
+                caught: set[str] = _names(h.type) if h.type is not None else set()
                 if caught & DB_ERRORS:
                     out.add((h.lineno, "caught"))
                 elif (h.type is None or caught & BROAD) and _sends_statement(node.body):
