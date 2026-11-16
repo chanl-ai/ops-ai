@@ -1016,7 +1016,9 @@ class ConnectionStore(Store):
         if person == SHARED:
             return []
         t = connection_tokens.c
-        q = connection_tokens.delete().where(t.tenant_id == tenant_id, t.team_id == team_id, t.person_id == person)
+        q = connection_tokens.delete().where(
+            t.tenant_id == tenant_id, t.team_id == team_id, t.person_id == person, team_visible(connection_tokens)
+        )
         async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q.returning(*_HELD_TOKEN))).mappings()]
 
