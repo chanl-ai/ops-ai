@@ -9,15 +9,29 @@ lookups run as. Then the lookups' values read the same on both databases."""
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.exc import DBAPIError
 
 from ops_platform.store.identity import IdentityStore
+from ops_platform.store.lifecycle import LifecycleStore
 from ops_platform.store.lookups import KEY, PASSWORD_RESET, SESSION, Lookup, lookup
+from ops_platform.store.members import TeamStore
 from ops_platform.store.signin import SignInStore
-from ops_platform.store.tables import api_keys, password_resets, sessions, signin_providers, teams, tenants, users
+from ops_platform.store.tables import (
+    api_keys,
+    members,
+    password_credentials,
+    password_resets,
+    sessions,
+    signin_flows,
+    signin_providers,
+    teams,
+    tenants,
+    users,
+)
 from ops_platform.store.tenancy import TenantDb
 from ops_service_kit.ids import new_id, now_iso
 from ops_store.dialect import dialect_of
@@ -127,7 +141,9 @@ async def test_the_tenant_role_cannot_become_the_lookups_principal(db: TenantDb)
 
 async def test_the_stores_read_the_same_through_the_lookups_on_each_database(db: TenantDb) -> None:
     """Through the stores' own calls: a JSON list comes back as a list and a condition as a flag; a provider's tiles
-    are on unless set false; the session, the person by email, the team and the watched providers are found."""
+    are on unless set false; the session, the person by email, the team and the watched providers are found; an
+    invitation reads with its team and domains, a sign-in flow by its state and by its handoff, a reset is spent once
+    and sets the password, and a workspace closed past the window is due for the purge."""
     ids, now = await _tenant_with_rows(db), now_iso()
     tenant = ids["tenant"]
     sp = {flag: new_id("sp") for flag in ("absent", "on", "off")}
@@ -157,3 +173,44 @@ async def test_the_stores_read_the_same_through_the_lookups_on_each_database(db:
     assert await identity.team_tenant(ids["team"]) == (tenant, "active")
     watched = {p for t, p in await signin.watched() if t == tenant}
     assert watched == set(providers.values())
+    invite, state, handoff = new_id("hash"), new_id("hash"), new_id("hash")
+    async with db.tenant_tx(tenant) as c:
+        await c.execute(
+            members.insert().values(
+                id=new_id("mem"), tenant_id=tenant, team_id=ids["team"], email="new@bank.test", role="builder",
+                status="invited", created_at=now, updated_at=now, invite_token_hash=invite,
+                invite_expires_at="2999-01-01T00:00:00.000Z",
+            )
+        )  # fmt: skip
+        await c.execute(tenants.update().where(tenants.c.id == tenant).values(allowed_domains=["bank.test"]))
+        # With SAML on, a reset is spent only while passwords are on too.
+        await c.execute(
+            signin_providers.insert().values(
+                id=new_id("prv"), tenant_id=tenant, kind="password", label="Password", enabled=True, config={},
+                created_at=now, updated_at=now,
+            )
+        )  # fmt: skip
+        await c.execute(
+            signin_flows.insert().values(
+                id=new_id("flw"), tenant_id=tenant, provider_id=providers["on"], purpose="sign_in", state_hash=state,
+                browser_hash=new_id("b"), created_at=now, expires_at="2999-01-01T00:00:00.000Z", handoff_hash=handoff,
+            )
+        )  # fmt: skip
+    found = await TeamStore(db).invite_by_hash(invite)
+    assert found is not None
+    assert (found.tenant_id, found.team, found.status, found.allowed_domains) == (
+        tenant, "Ops", "invited", ["bank.test"],
+    )  # fmt: skip
+    by_state, by_handoff = await signin.flow_by_state(state), await signin.flow_by_handoff(handoff)
+    assert by_state is not None and by_handoff is not None
+    assert (by_state.tenant_id, by_state.provider_id, by_handoff.id) == (tenant, providers["on"], by_state.id)
+    assert await signin.flow_by_state(state + "x") is None
+    spent = [await signin.use_reset(ids["reset"], "pbkdf2$x", at=now, request_id=new_id("req")) for _ in range(2)]
+    assert spent == [(tenant, ids["user"]), None]
+    async with db.tenant_tx(tenant) as c:
+        held = (await c.execute(sa.select(password_credentials.c.hash))).scalars().all()
+        await c.execute(tenants.update().where(tenants.c.id == tenant).values(status="closed", closed_at=now))
+    assert held == ["pbkdf2$x"]
+    lifecycle = LifecycleStore(db)
+    assert tenant not in await lifecycle.purge_due(restore_days=30)
+    assert tenant in await lifecycle.purge_due(restore_days=30, now=datetime.now(UTC) + timedelta(days=31))
