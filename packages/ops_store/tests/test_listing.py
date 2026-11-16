@@ -215,6 +215,15 @@ async def test_ids_pick_rows_by_the_primary_key_and_refuse_a_key_of_two_columns(
             await list_page(c, sa.select(pairs.c.name), ListParams(ids=["x"]), default_sort=pairs.c.name)
 
 
+async def test_sorting_by_the_default_sort_column_names_it_once(engine: AsyncEngine) -> None:
+    """SQL Server refuses an ORDER BY that names a column twice."""
+    await seed(engine, 4)
+    asked = ListParams(sort_by="minutes", sort_order="asc")
+    async with engine.connect() as c:
+        page = await list_page(c, LIST, asked, sortable={"minutes": runs.c.minutes}, default_sort=runs.c.minutes.desc())
+    assert [r["id"] for r in page["data"]] == ["r04", "r03", "r02", "r01"]
+
+
 async def test_rows_sharing_a_sort_value_appear_once_across_pages_ordered_by_primary_key(engine: AsyncEngine) -> None:
     await seed(engine, 60, shuffled=True)
     ids = sorted(r["id"] for r in rows(60))

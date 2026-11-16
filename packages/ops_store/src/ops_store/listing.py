@@ -85,7 +85,9 @@ async def list_page(
     by = sortable.get(params.sort_by or "")
     if by is not None:
         descending = params.sort_order != "asc"
-        order = [by.desc() if descending else by.asc(), default_sort]
+        # SQL Server refuses an ORDER BY that names a column twice, so the default sort is left out when it is sortBy's.
+        order = [by.desc() if descending else by.asc()]
+        order += [default_sort] if _column(default_sort) is not _column(by) else []
     else:
         descending = isinstance(default_sort, sa.UnaryExpression) and default_sort.modifier is operators.desc_op
         order = [default_sort]
