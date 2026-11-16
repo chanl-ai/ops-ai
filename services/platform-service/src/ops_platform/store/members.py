@@ -29,6 +29,7 @@ from ops_store.outbox import add as add_event
 from ops_store.rows import one, rows
 
 from .audit import record, record_grants_ending
+from .lookups import INVITE, lookup
 from .roles import mirror_membership, team_admins
 from .tables import api_keys, audit_entries, members, platform_outbox, sessions, teams, users
 from .tenancy import INVITE_LOOKUP, TenantDb
@@ -383,14 +384,11 @@ class TeamStore(TenantDb):
         return bulk
 
     async def invite_by_hash(self, token_hash: str) -> Invite | None:
-        q = sa.text(
-            "SELECT member_id, tenant_id, team_id, team, email, role, status, invited_at, expires_at, allowed_domains"
-            " FROM platform_invite(:h)"
-        )
         async with self.system_tx(INVITE_LOOKUP) as c:
-            r = (await c.execute(q, {"h": token_hash})).first()
-        if r is None:
+            found = await lookup(c, INVITE, token_hash)
+        if not found:
             return None
+        r = found[0]
         return Invite(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8] or "", list(r[9]))
 
     async def account_of(self, invite: Invite) -> str | None:

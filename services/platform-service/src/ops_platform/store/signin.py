@@ -6,7 +6,7 @@ people only once verified (0017). Another workspace's pending claim blocks nobod
 verified domains decides between two workspaces verifying the same one.
 
 The lookups that come before the tenant is known (an email domain, a flow by its state or handoff hash, a reset by
-its token hash) call the SECURITY DEFINER functions of 0010 in `system_tx`; everything after runs in `tenant_tx`. Each
+its token hash) call the lookup functions (`lookups.py`) in `system_tx`; everything after runs in `tenant_tx`. Each
 single-use thing (a flow's answer, its handoff, a reset token) is spent by a conditional update, so two requests racing
 on one cannot both win. A first SSO sign-in finds or makes the person inside one transaction, and the unique index on
 (provider, subject) decides a race between two first sign-ins.
@@ -33,6 +33,16 @@ from ops_store.dialect import insert_ignore
 from ops_store.rows import one, rows
 
 from .audit import record, record_grants_ending
+from .lookups import (
+    PASSWORD_RESET,
+    SIGNIN_DOMAIN,
+    SIGNIN_FLOW,
+    SIGNIN_HANDOFF,
+    SIGNIN_SP,
+    WATCHED_PROVIDERS,
+    Lookup,
+    lookup,
+)
 from .members import Actor, end_membership
 from .roles import live_in, mirror_membership
 from .tables import (
@@ -60,9 +70,6 @@ PASSWORD = "password"
 # The membership roles a provider may give, lowest first: the catalogue's rank without its top, admin, which a provider
 # never gives (decision D5). When two group rules give one team, the higher role wins.
 SIGNIN_ROLES = MEMBER_ROLES_BY_RANK[:-1]
-# A sign-in flow by its state hash or its handoff hash, through migration 0010's SECURITY DEFINER functions.
-_FLOW_BY_STATE = sa.text("SELECT id, tenant_id FROM platform_signin_flow(:v)")
-_FLOW_BY_HANDOFF = sa.text("SELECT id, tenant_id FROM platform_signin_handoff(:v)")
 
 
 @dataclass(frozen=True)
@@ -231,21 +238,21 @@ class SignInStore(TenantDb):
     # ── Providers and domains ──
 
     async def domain(self, domain: str) -> DomainHit | None:
-        q = sa.text(
-            "SELECT tenant_id, provider_id, kind, label, enabled, password_enabled FROM platform_signin_domain(:d)"
-        )
         async with self.system_tx(SIGNIN_LOOKUP) as c:
-            row = (await c.execute(q, {"d": domain.strip().lower()})).first()
-        return (
-            DomainHit(str(row[0]), str(row[1]), str(row[2]), str(row[3]), bool(row[4]), bool(row[5])) if row else None
-        )
+            found = await lookup(c, SIGNIN_DOMAIN, domain.strip().lower())
+        if not found:
+            return None
+        row = found[0]
+        return DomainHit(str(row[0]), str(row[1]), str(row[2]), str(row[3]), bool(row[4]), bool(row[5]))
 
     async def sp(self, sp_id: str) -> SpHit | None:
         """The provider whose own SAML addresses carry `sp_id`, through the pre-tenant lookup."""
-        q = sa.text("SELECT tenant_id, provider_id, kind, enabled, tiles FROM platform_signin_sp(:s)")
         async with self.system_tx(SIGNIN_LOOKUP) as c:
-            row = (await c.execute(q, {"s": sp_id})).first()
-        return SpHit(str(row[0]), str(row[1]), str(row[2]), bool(row[3]), bool(row[4])) if row else None
+            found = await lookup(c, SIGNIN_SP, sp_id)
+        if not found:
+            return None
+        row = found[0]
+        return SpHit(str(row[0]), str(row[1]), str(row[2]), bool(row[3]), bool(row[4]))
 
     async def providers(self, tenant_id: str) -> list[Provider]:
         async with self.tenant_tx(tenant_id) as c:
@@ -345,7 +352,7 @@ class SignInStore(TenantDb):
     async def watched(self) -> list[tuple[str, str]]:
         """(tenant, provider) of every SAML provider of an open workspace, for the daily certificate watch."""
         async with self.system_tx(SIGNIN_WATCH) as c:
-            rows = (await c.execute(sa.text("SELECT tenant_id, provider_id FROM platform_signin_watch()"))).all()
+            rows = await lookup(c, WATCHED_PROVIDERS)
         return [(str(r[0]), str(r[1])) for r in rows]
 
     async def verified_elsewhere(self, tenant_id: str, domains: Sequence[str]) -> bool:
@@ -588,12 +595,10 @@ class SignInStore(TenantDb):
         """Spends the reset token, sets the new password and ends every session of the person, in one transaction.
         Returns (tenant, user), or None when the token is unknown, used or expired."""
         async with self.system_tx(RESET_LOOKUP) as c:
-            row = (
-                await c.execute(sa.text("SELECT id, tenant_id FROM platform_password_reset(:h)"), {"h": token_hash})
-            ).first()
-        if row is None:
+            found = await lookup(c, PASSWORD_RESET, token_hash)
+        if not found:
             return None
-        reset_id, tenant_id = str(row[0]), str(row[1])
+        reset_id, tenant_id = str(found[0][0]), str(found[0][1])
         async with self.tenant_tx(tenant_id) as c:
             # The workspace may have turned passwords off since the link was sent.
             kinds = (await c.execute(sa.select(signin_providers.c.kind, signin_providers.c.enabled))).all()
@@ -681,16 +686,17 @@ class SignInStore(TenantDb):
         return flow_id
 
     async def flow_by_state(self, state_hash: str) -> Flow | None:
-        return await self._flow(_FLOW_BY_STATE, state_hash)
+        return await self._flow(SIGNIN_FLOW, state_hash)
 
     async def flow_by_handoff(self, handoff_hash: str) -> Flow | None:
-        return await self._flow(_FLOW_BY_HANDOFF, handoff_hash)
+        return await self._flow(SIGNIN_HANDOFF, handoff_hash)
 
-    async def _flow(self, lookup: sa.TextClause, value: str) -> Flow | None:
+    async def _flow(self, by: Lookup, value: str) -> Flow | None:
         async with self.system_tx(SIGNIN_LOOKUP) as c:
-            row = (await c.execute(lookup, {"v": value})).first()
-        if row is None:
+            found = await lookup(c, by, value)
+        if not found:
             return None
+        row = found[0]
         cols = signin_flows.c
         q = sa.select(
             cols.id,

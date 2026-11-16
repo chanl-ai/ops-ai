@@ -117,7 +117,7 @@ SIGNIN_SP = Lookup(
     "SELECT p.tenant_id, p.id, p.kind, p.enabled, CAST(CASE WHEN COALESCE(JSON_VALUE(p.config, '$.tiles'), 'true')"
     " <> 'false' THEN 1 ELSE 0 END AS BIT) FROM dbo.signin_providers p WHERE p.sp_id = @sp_id",
 )
-SIGNIN_WATCH = Lookup(
+WATCHED_PROVIDERS = Lookup(
     "platform_signin_watch",
     (),
     _cols("tenant_id", "provider_id"),
@@ -157,7 +157,7 @@ PURGE_DUE = Lookup(
     "SELECT t.id FROM dbo.tenants t WHERE t.status = 'closed' AND t.closed_at <= @cutoff",
 )
 LOOKUPS = (
-    USERS_BY_EMAIL, SESSION, KEY, TEAM, SIGNIN_FLOW, SIGNIN_HANDOFF, SIGNIN_DOMAIN, SIGNIN_SP, SIGNIN_WATCH,
+    USERS_BY_EMAIL, SESSION, KEY, TEAM, SIGNIN_FLOW, SIGNIN_HANDOFF, SIGNIN_DOMAIN, SIGNIN_SP, WATCHED_PROVIDERS,
     PASSWORD_RESET, INVITE, PURGE_DUE,
 )  # fmt: skip
 

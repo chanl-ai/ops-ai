@@ -16,7 +16,9 @@ import sqlalchemy as sa
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from ops_platform.store.lookups import KEY, PASSWORD_RESET, SESSION, SIGNIN_SP, Lookup, lookup
+from ops_platform.store.identity import IdentityStore
+from ops_platform.store.lookups import KEY, PASSWORD_RESET, SESSION, Lookup, lookup
+from ops_platform.store.signin import SignInStore
 from ops_platform.store.tables import api_keys, password_resets, sessions, signin_providers, teams, tenants, users
 from ops_platform.store.tenancy import SESSION_LOOKUP, TenantDb
 from ops_service_kit.ids import new_id, now_iso
@@ -137,23 +139,35 @@ async def test_the_tenant_role_cannot_become_the_lookups_principal(db: TenantDb)
                 await c.execute(sa.text("EXECUTE AS USER = N'ops_platform_system'"))
 
 
-async def test_the_lookups_return_the_same_values_on_each_database(db: TenantDb) -> None:
-    """A JSON list comes back as a list and a condition as a flag; a provider's tiles are on unless set false."""
+async def test_the_stores_read_the_same_through_the_lookups_on_each_database(db: TenantDb) -> None:
+    """Through the stores' own calls: a JSON list comes back as a list and a condition as a flag; a provider's tiles
+    are on unless set false; the session, the person by email, the team and the watched providers are found."""
     ids, now = await _tenant_with_rows(db), now_iso()
     tenant = ids["tenant"]
     sp = {flag: new_id("sp") for flag in ("absent", "on", "off")}
     configs = {"absent": {}, "on": {"tiles": True}, "off": {"tiles": False}}
+    providers: dict[str, str] = {}
     async with db.tenant_tx(tenant) as c:
         for flag, sp_id in sp.items():
+            providers[flag] = new_id("prv")
             await c.execute(
                 signin_providers.insert().values(
-                    id=new_id("prv"), tenant_id=tenant, kind="saml", label=flag, enabled=True, config=configs[flag],
+                    id=providers[flag], tenant_id=tenant, kind="saml", label=flag, enabled=True, config=configs[flag],
                     created_at=now, updated_at=now, sp_id=sp_id,
                 )
             )  # fmt: skip
         await c.execute(api_keys.update().where(api_keys.c.prefix == ids["key"]).values(revoked_at=now))
-    async with as_tenant_role(db, None) as c:
-        (key,) = await lookup(c, KEY, ids["key"], "2000-01-01T00:00:00.000Z")
-        tiles = {flag: (await lookup(c, SIGNIN_SP, sp_id))[0].tiles for flag, sp_id in sp.items()}
-    assert (key.scopes, key.usable) == (["read", "write"], False)
-    assert tiles == {"absent": True, "on": True, "off": False}
+    identity, signin = IdentityStore(db), SignInStore(db)
+    key = await identity.key(ids["key"])
+    assert key is not None
+    assert (key.tenant_id, key.scopes, key.usable) == (tenant, ["read", "write"], False)
+    assert {flag: getattr(await signin.sp(sp_id), "tiles", None) for flag, sp_id in sp.items()} == {
+        "absent": True, "on": True, "off": False,
+    }  # fmt: skip
+    session = await identity.session(ids["session"])
+    assert session is not None
+    assert (session.tenant_id, session.user_id) == (tenant, ids["user"])
+    assert [u.id for u in await identity.users_by_email(f"{ids['user'].upper()}@BANK.TEST")] == [ids["user"]]
+    assert await identity.team_tenant(ids["team"]) == (tenant, "active")
+    watched = {p for t, p in await signin.watched() if t == tenant}
+    assert watched == set(providers.values())

@@ -31,6 +31,7 @@ from ops_store.dialect import locked
 from ops_store.rows import one
 
 from .audit import record, record_grants_ending
+from .lookups import PURGE_DUE, lookup
 from .roles import bump_version, mirror_membership, team_admins
 from .tables import (
     api_keys,
@@ -260,8 +261,7 @@ class LifecycleStore(TenantDb):
         cutoff = (now or datetime.now(UTC)) - timedelta(days=restore_days)
         stamp = cutoff.isoformat(timespec="milliseconds").replace("+00:00", "Z")
         async with self.system_tx(PURGE_LOOKUP) as c:
-            rows = await c.execute(sa.text("SELECT tenant_id FROM platform_purge_due(:c)"), {"c": stamp})
-            return [str(r[0]) for r in rows]
+            return [str(r[0]) for r in await lookup(c, PURGE_DUE, stamp)]
 
     async def purge(self, tenant_id: str, *, at: str, request_id: str) -> bool:
         """Marks the workspace `purging` in its own transaction, so a restore that comes after is refused, then

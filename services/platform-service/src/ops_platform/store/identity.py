@@ -22,6 +22,7 @@ from ops_store.dialect import insert_ignore
 from ops_store.rows import one, rows
 
 from .audit import record
+from .lookups import KEY, SESSION, TEAM, USERS_BY_EMAIL, lookup
 from .roles import RoleStore, version_in
 from .tables import (
     api_keys,
@@ -165,9 +166,8 @@ class IdentityStore(TenantDb):
         await self.engine.dispose()
 
     async def users_by_email(self, email: str) -> list[User]:
-        q = sa.text("SELECT tenant_id, id, email, name FROM platform_users_by_email(:e)")
         async with self.system_tx(SIGNIN_LOOKUP) as c:
-            return [User(*row) for row in (await c.execute(q, {"e": email})).all()]
+            return [User(*row) for row in await lookup(c, USERS_BY_EMAIL, email)]
 
     async def user(self, tenant_id: str, user_id: str) -> User | None:
         q = sa.select(users.c.tenant_id, users.c.id, users.c.email, users.c.name).where(
@@ -285,10 +285,9 @@ class IdentityStore(TenantDb):
             )
 
     async def session(self, session_id: str) -> SessionRef | None:
-        q = sa.text("SELECT tenant_id, user_id, id FROM platform_session(:s)")
         async with self.system_tx(SESSION_LOOKUP) as c:
-            row = (await c.execute(q, {"s": session_id})).first()
-        return SessionRef(*row) if row else None
+            found = await lookup(c, SESSION, session_id)
+        return SessionRef(*found[0]) if found else None
 
     async def method(self, ref: SessionRef) -> SessionMethod | None:
         q = sa.select(sessions.c.auth_method, sessions.c.provider_id).where(sessions.c.id == ref.id)
@@ -387,12 +386,12 @@ class IdentityStore(TenantDb):
             )
 
     async def key(self, key_id: str) -> Key | None:
-        q = sa.text(
-            "SELECT id, tenant_id, team_id, secret_hash, scopes, created_by, usable FROM platform_key(:k, :now)"
-        )
         async with self.system_tx(KEY_LOOKUP) as c:
-            row = (await c.execute(q, {"k": key_id, "now": now_iso()})).first()
-        return Key(row[0], row[1], row[2], row[3], list(row[4]), row[5], bool(row[6])) if row else None
+            found = await lookup(c, KEY, key_id, now_iso())
+        if not found:
+            return None
+        row = found[0]
+        return Key(row[0], row[1], row[2], row[3], list(row[4]), row[5], bool(row[6]))
 
     async def key_used(self, key: Key, *, at: str) -> KeyTarget | None:
         """Moves the key's last use and returns what it may start, None for a key with no target. Read here,
@@ -411,10 +410,9 @@ class IdentityStore(TenantDb):
     async def team_tenant(self, team_id: str) -> tuple[str, str] | None:
         """The tenant of an active team, found before anyone is signed in so the address of an authorize request can
         be checked; None for a team that does not exist or is archived."""
-        q = sa.text("SELECT tenant_id, status FROM platform_team(:t)")
         async with self.system_tx(SIGNIN_LOOKUP) as c:
-            row = (await c.execute(q, {"t": team_id})).first()
-        return (str(row[0]), str(row[1])) if row and row[1] == "active" else None
+            found = await lookup(c, TEAM, team_id)
+        return (str(found[0].tenant_id), str(found[0].status)) if found and found[0].status == "active" else None
 
     async def team_name(self, tenant_id: str, team_id: str) -> str | None:
         async with self.tenant_tx(tenant_id) as c:
