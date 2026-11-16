@@ -90,22 +90,22 @@ class ModelKeys(Store):
         self.shares = KeyShares(engine)
 
     async def all(self) -> list[KeyRow]:
-        async with self.install_tx(MODEL_KEYS) as c:
+        async with self.install_tx(MODEL_KEYS, tables=(t,)) as c:
             return await rows(c, t.select().order_by(t.c.id), KeyRow)
 
     async def get(self, key_id: str) -> KeyRow | None:
-        async with self.install_tx(MODEL_KEYS) as c:
+        async with self.install_tx(MODEL_KEYS, tables=(t,)) as c:
             return await one(c, t.select().where(t.c.id == key_id), KeyRow)
 
     async def by_secret(self, digest: str, now: datetime) -> KeyRow | None:
         """The key whose secret hashes to `digest`, or whose previous secret does and is still inside its overlap."""
         previous = sa.and_(t.c.previous_secret_hash == digest, t.c.previous_valid_until > now)
-        async with self.install_tx(MODEL_KEYS) as c:
+        async with self.install_tx(MODEL_KEYS, tables=(t,)) as c:
             return await one(c, t.select().where(sa.or_(t.c.secret_hash == digest, previous)), KeyRow)
 
     async def issue(self, row: Mapping[str, Any]) -> bool:
         """Adds a key; False, and nothing written, when the identity has one."""
-        async with self.install_tx(MODEL_KEYS) as c:
+        async with self.install_tx(MODEL_KEYS, tables=(t,)) as c:
             if (await c.execute(sa.select(t.c.id).where(t.c.id == row["id"]))).first():
                 return False
             await c.execute(t.insert().values(**row))
@@ -114,7 +114,7 @@ class ModelKeys(Store):
     async def rotate(self, key_id: str, secret_hash: str, previous_valid_until: datetime, now: datetime) -> bool:
         """Gives the key a new secret hash and keeps the old one valid until `previous_valid_until`; False when there
         is no such key."""
-        async with self.install_tx(MODEL_KEYS) as c:
+        async with self.install_tx(MODEL_KEYS, tables=(t,)) as c:
             held = (await c.execute(locked(sa.select(t.c.secret_hash).where(t.c.id == key_id), t))).first()
             if held is None:
                 return False
@@ -140,22 +140,22 @@ class ModelKeys(Store):
         if tenant_id is not None:
             await self.shares.spend(key_id, tenant_id, amount)
             return
-        async with self.install_tx(MODEL_KEYS) as c:
+        async with self.install_tx(MODEL_KEYS, tables=(t,)) as c:
             await c.execute(t.update().where(t.c.id == key_id).values(spent=t.c.spent + amount))
 
     async def ensure(self, row: Mapping[str, Any]) -> None:
         """Adds the key unless the identity has one, which keeps its secret and its spend."""
-        async with self.install_tx(MODEL_KEYS) as c:
+        async with self.install_tx(MODEL_KEYS, tables=(t,)) as c:
             await c.execute(insert_ignore(c, t, row, keys=["id"]))
 
     async def set_daily_cap(self, key_id: str, cap: Decimal | None) -> None:
         """What the key may spend in one UTC day; None removes the cap."""
-        async with self.install_tx(MODEL_KEYS) as c:
+        async with self.install_tx(MODEL_KEYS, tables=(t,)) as c:
             await c.execute(t.update().where(t.c.id == key_id).values(daily_cap=cap))
 
     async def set_tenant_budget(self, key_id: str, budget: Decimal) -> None:
         """Makes the key spend per tenant at `budget` each, unless it already has a tenant budget."""
-        async with self.install_tx(MODEL_KEYS) as c:
+        async with self.install_tx(MODEL_KEYS, tables=(t,)) as c:
             await c.execute(
                 t.update().where(t.c.id == key_id, t.c.tenant_budget.is_(None)).values(tenant_budget=budget)
             )

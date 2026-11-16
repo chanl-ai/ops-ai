@@ -13,6 +13,8 @@ Two more lists, one file per service under `isolation_sites/`, each row `<count>
   install a block with no tenant (`Store.install_tx`, `isolation.install_wide`): counted per file, so a second one in a
           file already listed by reason above fails here too
 
+`isolation_sites/install/` lists install blocks by reason and declared tables, and those that declare none.
+
 A row may only fall: a new site fails here naming its line, and a site that is gone fails until its row is lowered."""
 
 from __future__ import annotations
@@ -523,3 +525,99 @@ def test_a_baseline_only_falls_in_the_history() -> None:
         )
         == []
     )
+
+
+# Install-wide blocks by the tables they declare, one file per service under `isolation_sites/install/`, each row
+# `<count> <reason> <table>,<table>` for the sites declaring that set, or `<count> undeclared <file>` for a site that
+# declares none (`Store.install_tx(REASON, tables=(...))`). A block is held to its declared tables when it runs
+# (`isolation._refuse_outside_install`); a row may only fall, so a new set, or a site declaring none, fails here.
+INSTALL_TABLES = BASELINES / "install"
+
+
+def install_findings(source: str, rel: str) -> list[tuple[int, str]]:
+    """(line, row key) for each install-wide block in one file, and an `alias` row for each use of `install_tx` or
+    `install_wide` other than a call, which no count could follow."""
+    tree = ast.parse(source)
+    # `from .tables import model_aliases as t`: a declared name is listed by the table's own name.
+    imported = {
+        alias.asname or alias.name: alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+    }
+    called = {id(node.func) for node in ast.walk(tree) if isinstance(node, ast.Call)}
+    out: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Attribute | ast.Name) or _handle(node) not in INSTALL_CALLS:
+            continue
+        if not isinstance(node.ctx, ast.Store) and id(node) not in called:
+            out.append((node.lineno, f"alias {rel}"))
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and _handle(node.func) in INSTALL_CALLS):
+            continue
+        declared = next((kw.value for kw in node.keywords if kw.arg == "tables"), None)
+        if declared is None or (isinstance(declared, ast.Constant) and declared.value is None):
+            out.append((node.lineno, f"undeclared {rel}"))
+        elif isinstance(declared, ast.Tuple | ast.List) and all(isinstance(e, ast.Name) for e in declared.elts):
+            tables = sorted({imported.get(e.id, e.id) for e in declared.elts if isinstance(e, ast.Name)})
+            out.append((node.lineno, f"{_reason(node)} {','.join(tables)}"))
+        else:
+            out.append((node.lineno, f"unreadable {rel}"))
+    return sorted(out)
+
+
+def _install_found() -> tuple[dict[str, Counter[str]], dict[str, list[str]]]:
+    counts: dict[str, Counter[str]] = defaultdict(Counter)
+    lines: dict[str, list[str]] = defaultdict(list)
+    for src in SOURCES:
+        if src.parent.name == "ops_store":
+            continue  # the door itself: store.py passes its caller's tables on
+        for path in sorted(src.rglob("*.py")):
+            rel = path.relative_to(ROOT).as_posix()
+            for line, key in install_findings(path.read_text(), rel):
+                counts[src.parent.name][key] += 1
+                lines[key].append(f"{rel}:{line}")
+    return counts, lines
+
+
+def _install_listed(service: str) -> Counter[str]:
+    path = INSTALL_TABLES / f"{service}.txt"
+    if not path.exists():
+        return Counter()
+    rows = [r.split(" ", 1) for r in path.read_text().splitlines() if r and not r.startswith("#")]
+    return Counter({key: int(n) for n, key in rows})
+
+
+def test_install_blocks_declare_only_the_listed_tables() -> None:
+    counts, lines = _install_found()
+    problems: list[str] = []
+    for service in sorted({*counts, *(p.stem for p in INSTALL_TABLES.glob("*.txt"))}):
+        listed, now = _install_listed(service), counts.get(service, Counter())
+        for key in sorted({*listed, *now}):
+            where = ", ".join(lines.get(key, []))
+            if key.startswith(("alias ", "unreadable ")):
+                problems.append(f"{service}: {key} at {where}; call install_tx(REASON, tables=(t, ...)) directly")
+            elif now[key] > listed[key]:
+                problems.append(f"{service}: {key} {now[key]} > {listed[key]} at {where}; declare the tables")
+            elif now[key] < listed[key]:
+                problems.append(f"{service}: {key} fell to {now[key]}; lower its row in isolation_sites/install/")
+    assert problems == [], "\n".join(problems)
+
+
+def test_the_install_scan_reads_declared_tables_aliases_and_undeclared_blocks() -> None:
+    planted = """
+from .tables import model_aliases as t
+from .tables import provider_connections
+
+async def blocks(self):
+    async with self.install_tx(ALIASES, tables=(t, provider_connections)) as c: ...
+    async with self.install_tx(ALIASES) as c: ...
+    run = self.install_tx
+    async with self.install_tx(ALIASES, tables=TABLES) as c: ...
+"""
+    assert install_findings(planted, "x.py") == [
+        (6, "ALIASES model_aliases,provider_connections"),
+        (7, "undeclared x.py"),
+        (8, "alias x.py"),
+        (9, "unreadable x.py"),
+    ]

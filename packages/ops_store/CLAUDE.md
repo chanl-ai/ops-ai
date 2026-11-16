@@ -38,13 +38,14 @@ commands shared by every package: [../CLAUDE.md](../CLAUDE.md); repo-wide rules:
 - Widening past one team needs a reason that is a named constant of the calling service: `tenant_wide` for every team
   of one tenant, `system_tx` past the tenant. `tests/test_isolation_sites.py` lists every call site by reason, so a new
   one fails that test until it is listed.
-- A table marked `system(...)` (no tenant column) is read and written through `Store.install_tx(REASON)`, which needs
-  no caller: the context is `isolation.install_wide`, no tenant. Every statement on a connection in that scope is
-  checked before it is sent: one with a table or a column of a table not marked `system(...)` (a value or RETURNING
-  too), raw SQL (text, a literal column, a custom operator, a prefix, suffix or hint, SQL for the driver), or a
-  function outside `isolation.INSTALL_FUNCTIONS`, raises `InstallScopeError` naming it, whatever the login and whether
-  the table has a row policy, and `team_visible` raises there too. Inside a request it is the request's connection, its scope restored after. Its
-  reason is listed in `tests/test_isolation_sites.py` like a widening's (`tests/test_install_scope.py`).
+- A table marked `system(...)` (no tenant column) is read and written through `Store.install_tx(REASON, tables=(t,))`,
+  which declares the system tables the block touches (any other is refused when it runs) and needs no caller: the
+  context is `isolation.install_wide`, no tenant. Every statement on a connection in that scope is checked before it is
+  sent: one with a table or a column of a table not marked `system(...)` (a value or RETURNING too), raw SQL (text, a
+  literal column, a custom operator, a prefix, suffix or hint, SQL for the driver), or a function outside
+  `isolation.INSTALL_FUNCTIONS`, raises `InstallScopeError` naming it, whatever the login and whether the table has a
+  row policy, and `team_visible` raises there too. Inside a request it is the request's connection, its scope restored
+  after. Its reason is listed in `tests/test_isolation_sites.py` like a widening's (`tests/test_install_scope.py`).
 - Inside a request that took `ops_identity.fastapi.Tx`, every `isolated_tx` of the request's task joins one
   transaction; another task (a gather branch, a created task, a stream's generator) opens its own. A database error
   that is caught runs inside `Store.attempt(conn)`; one that leaves an `isolated_tx` block otherwise fails the request

@@ -21,7 +21,7 @@ database's owner, with no caller on it (`tests/test_isolation_sites.py` lists th
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import ClassVar
 
@@ -45,12 +45,15 @@ class Store:
         return isolation.isolated_tx(self.engine, role=self.role)
 
     @asynccontextmanager
-    async def install_tx(self, reason: str) -> AsyncGenerator[AsyncConnection]:
+    async def install_tx(
+        self, reason: str, *, tables: Iterable[sa.Table] | None = None
+    ) -> AsyncGenerator[AsyncConnection]:
         """`tx()` with no tenant, for the install's own tables (marked `system(...)`), from a path that may carry no
         caller: a route that authenticates by a model key, a seed, a loop. Inside a request it is the request's
         connection with its scope set for the block and restored after; a tenant table shows it no row and refuses
-        its writes (`isolation.install_wide`). `reason` is a named constant, listed in test_isolation_sites.py."""
-        with isolation.install_wide(reason):
+        its writes (`isolation.install_wide`). `reason` is a named constant, listed in test_isolation_sites.py; `tables`
+        are the system tables the block touches, and nothing else runs in it."""
+        with isolation.install_wide(reason, tables=tables):
             async with self.tx() as conn:
                 yield conn
 

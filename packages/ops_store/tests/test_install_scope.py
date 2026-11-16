@@ -56,6 +56,13 @@ settings = sa.Table(
     sa.Column("value", sa.String(64), nullable=False),
     info=system("the install's own settings: no tenant"),
 )
+# A second install table, so a block can declare one and be refused the other.
+limits = sa.Table(
+    "store_test_install_limits",
+    meta,
+    sa.Column("name", sa.String(64), primary_key=True),
+    info=system("the install's own limits: no tenant"),
+)
 notes = sa.Table(
     "store_test_install_notes",
     meta,
@@ -130,7 +137,7 @@ async def engine(request: pytest.FixtureRequest) -> AsyncIterator[AsyncEngine]:
             if request.param == "postgresql":
                 await c.execute(sa.text(role_ddl(ROLE)))
                 await c.execute(sa.text(role_ddl(SYSTEM, bypass=True)))
-                for t in (settings, notes, loose):
+                for t in (settings, limits, notes, loose):
                     await c.execute(sa.text(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {t.name} TO {ROLE}"))
                 await c.execute(sa.text(f"GRANT SELECT ON {notes.name} TO {SYSTEM}"))
                 for statement in isolation_ddl(notes, "postgresql"):
@@ -383,3 +390,37 @@ async def test_an_install_block_calls_only_the_listed_functions(engine: AsyncEng
     ]
     out = await _outcomes(st, [*allowed, *refused])
     assert out == ["ran"] * len(allowed) + ["refused"] * len(refused), out
+
+
+async def test_an_install_block_touches_only_the_tables_it_declared(engine: AsyncEngine) -> None:
+    """A block names the system tables it touches; another system table, in its own statement or in one a caller
+    passed in, is refused at execute time. Inside one request, a second block with other tables is held to its own,
+    and the block around it to the ones it declared. A table not marked system cannot be declared."""
+    st = Install(engine)
+    passed_in = limits.insert().values(name="cap")
+    outcomes: list[str] = []
+    for declared, statement in [
+        ((settings,), sa.select(settings.c.value)),
+        ((limits,), sa.select(settings.c.value)),
+        ((settings,), passed_in),
+        ((settings, limits), sa.select(settings.c.value).join_from(settings, limits, limits.c.name == settings.c.name)),
+    ]:
+        try:
+            async with st.install_tx(SETTINGS, tables=declared) as c:
+                await c.execute(statement)
+            outcomes.append("ran")
+        except InstallScopeError:
+            outcomes.append("refused")
+    assert outcomes == ["ran", "refused", "refused", "ran"]
+    with isolation.scope("t1", None):
+        async with isolation.request_transaction(), st.install_tx(SETTINGS, tables=(settings,)) as outer:
+            async with st.install_tx(SETTINGS, tables=(limits,)) as inner:
+                with pytest.raises(InstallScopeError):
+                    await inner.execute(sa.select(settings.c.value))
+                assert await inner.scalar(sa.select(sa.func.count()).select_from(limits)) == 0
+            assert await outer.scalar(sa.select(settings.c.value)) == "eu"
+            with pytest.raises(InstallScopeError):
+                await outer.execute(sa.select(limits.c.name))
+    with pytest.raises(InstallScopeError, match="cannot be declared"):
+        async with st.install_tx(SETTINGS, tables=(notes,)):
+            pass

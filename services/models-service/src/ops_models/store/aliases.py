@@ -76,21 +76,21 @@ class Aliases(Store):
 
     async def current(self, name: str) -> ServingAlias | None:
         """The version serving `name`, with its connection's type, base URL, key name, api-version and regions."""
-        async with self.install_tx(ALIASES) as c:
+        async with self.install_tx(ALIASES, tables=(t, p)) as c:
             q = SERVING.where(t.c.name == name).order_by(t.c.version.desc()).limit(1)
             return await one(c, q, ServingAlias)
 
     async def all_current(self) -> list[ServingAlias]:
-        async with self.install_tx(ALIASES) as c:
+        async with self.install_tx(ALIASES, tables=(t, p)) as c:
             return await rows(c, SERVING.order_by(t.c.name), ServingAlias)
 
     async def versions(self, name: str) -> list[AliasRow]:
-        async with self.install_tx(ALIASES) as c:
+        async with self.install_tx(ALIASES, tables=(t,)) as c:
             return await rows(c, t.select().where(t.c.name == name).order_by(t.c.version), AliasRow)
 
     async def create(self, name: str, kind: str, fields: Mapping[str, Any]) -> bool:
         """Version 1 of a new alias; False, and nothing written, when the alias exists."""
-        async with self.install_tx(ALIASES) as c:
+        async with self.install_tx(ALIASES, tables=(t,)) as c:
             if (await c.execute(sa.select(t.c.name).where(t.c.name == name))).first():
                 return False
             await c.execute(t.insert().values(**_row(name, 1, kind, fields)))
@@ -98,7 +98,7 @@ class Aliases(Store):
 
     async def add_version(self, name: str, fields: Mapping[str, Any]) -> int | None:
         """The next version of `name`, which replaces the one serving; None when there is no such alias."""
-        async with self.install_tx(ALIASES) as c:
+        async with self.install_tx(ALIASES, tables=(t,)) as c:
             newest = t.select().where(t.c.name == name).order_by(t.c.version.desc()).limit(1)
             last = await one(c, locked(newest, t), AliasRow)
             if last is None:

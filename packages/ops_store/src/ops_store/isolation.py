@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import AsyncGenerator, Generator, Iterator
+from collections.abc import AsyncGenerator, Generator, Iterable, Iterator
 from contextlib import asynccontextmanager, contextmanager, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -85,6 +85,8 @@ class Isolation:
     kind: str
     # Why a wider scope than `team` is in force; None for a team scope.
     reason: str | None = None
+    # The tables an install-wide block declared it touches; None for one that declared none yet.
+    tables: frozenset[str] | None = None
 
 
 class Caller(Protocol):
@@ -177,22 +179,36 @@ def scope(tenant_id: str, team_id: str | None) -> Generator[Isolation]:
 
 
 @contextmanager
-def install_wide(reason: str) -> Generator[Isolation]:
+def install_wide(reason: str, *, tables: Iterable[sa.Table] | None = None) -> Generator[Isolation]:
     """No tenant for a block, logged with `reason`: statements on the install's own tables (marked `system(...)`) from
     a path that may have no caller (a route that authenticates by a model key, a seed, a loop). Inside a request it
     runs on the request's connection. Every statement on a connection in this scope is checked before it is sent
     (`_refuse_outside_install`): one with a table or column of a table not marked `system(...)`, SQL text, or a
     function not listed in `INSTALL_FUNCTIONS` raises `InstallScopeError`, whatever the login and whether or not the
-    table has a row policy. `tenant()` and `team_visible` raise inside."""
+    table has a row policy. `tenant()` and `team_visible` raise inside. `tables` are the only ones the block may touch,
+    each marked `system(...)`; a statement reaching any other, a caller's statement passed in included, is refused.
+    A block that declares none is counted in `tests/isolation_sites/install/`, a list that only shrinks."""
     _need(reason, "install_wide")
+    declared = None if tables is None else _declared(tables)
     base = _ctx.get()
     _log_widen(base.kind if base else TASK, reason=reason, scope="install", tenant="-")
-    token = _ctx.set(Isolation("", None, "install", base.kind if base else TASK, reason))
+    token = _ctx.set(Isolation("", None, "install", base.kind if base else TASK, reason, declared))
     try:
         with acting_as(None, install=True):
             yield _ctx.get()  # pyright: ignore[reportReturnType]
     finally:
         _ctx.reset(token)
+
+
+def _declared(tables: Iterable[sa.Table]) -> frozenset[str]:
+    names: set[str] = set()
+    for table in tables:
+        if not table.info.get(SYSTEM_KEY):
+            raise InstallScopeError(f"refused: {table.name} is not marked system(...) and cannot be declared")
+        names.add(table.name)
+    if not names:
+        raise ValueError("an install-wide block declares at least one table")
+    return frozenset(names)
 
 
 def _in_force() -> Isolation:
@@ -226,8 +242,9 @@ def tenant_wide(reason: str, *, tenant_id: str | None = None) -> Generator[Isola
 # wherever it is caught: an engine listener sees every one (`_on_error`), so a route that catches it, or turns it into
 # a Conflict, cannot answer as if its writes held.
 
-# What a connection's settings say: the context's tenant, team and scope, and the PostgreSQL role.
-_Carried = tuple[str, str | None, str, str | None]
+# What a connection's settings say: the context's tenant, team and scope, the PostgreSQL role, and the tables an
+# install-wide block declared (checked here, not by the database, so a change of them alone costs no statement).
+_Carried = tuple[str, str | None, str, str | None, frozenset[str] | None]
 
 
 @dataclass
@@ -360,26 +377,33 @@ async def isolated_tx(engine: AsyncEngine, *, role: str | None = None) -> AsyncG
         state.conn.sync_connection.info[_STATE] = state  # pyright: ignore[reportOptionalMemberAccess]
         state.tx = await state.conn.begin()
     conn = state.conn
-    want: _Carried = (ctx.tenant_id, ctx.team_id, ctx.scope, role)
+    want: _Carried = (ctx.tenant_id, ctx.team_id, ctx.scope, role, ctx.tables)
     before = state.carried
-    if before != want:
+    if before is None or before[:4] != want[:4]:
         await enter_transaction(conn, ctx, role=role, reset_role=before is not None and before[3] is not None)
-        state.carried = want
+    elif before != want:
+        _mark(conn, ctx)
+    state.carried = want
     state.depth += 1
     try:
         yield conn
     finally:
         state.depth -= 1
-        if state.depth and before is not None and state.carried != before:
+        # None when a block inside this one failed its own restore.
+        now = cast(_Carried | None, state.carried)
+        if state.depth and before is not None and now != before:
             # The block around this one reads on with the settings it entered with. A restore that fails has failed
             # the request (`_on_error`), so nothing reads on with the wrong scope.
             state.carried = None
             # A cancelled statement leaves the transaction unusable, and the restore's PendingRollbackError would
             # replace the cancellation; the request rolls back either way, since carried stays None.
             with suppress(DBAPIError, InvalidRequestError):
-                tenant_id, team_id, scope_, role_ = before
-                back = Isolation(tenant_id, team_id, scope_, ctx.kind)  # pyright: ignore[reportArgumentType]
-                await enter_transaction(conn, back, role=role_, reset_role=role is not None)
+                tenant_id, team_id, scope_, role_, tables_ = before
+                back = Isolation(tenant_id, team_id, scope_, ctx.kind, tables=tables_)  # pyright: ignore[reportArgumentType]
+                if now is not None and now[:4] == before[:4]:
+                    _mark(conn, back)
+                else:
+                    await enter_transaction(conn, back, role=role_, reset_role=role is not None)
                 state.carried = before
 
 
@@ -449,8 +473,14 @@ async def enter_transaction(
         case _:
             pass
     # Marked after the statement that set it: the connection now carries the scope its statements are checked by.
-    if install:
-        conn.info[_INSTALL] = True
+    _mark(conn, ctx)
+
+
+def _mark(conn: AsyncConnection, ctx: Isolation) -> None:
+    """What the guard checks this connection's statements by: an install scope's declared tables, or every system
+    table for a block that declared none; nothing outside install scope."""
+    if ctx.scope == "install":
+        conn.info[_INSTALL] = ctx.tables if ctx.tables is not None else _UNDECLARED
     else:
         conn.info.pop(_INSTALL, None)
 
@@ -466,6 +496,8 @@ async def leave_transaction(conn: AsyncConnection) -> None:
 # A connection's info key while it carries install scope. It lives on the pooled connection, so it is also cleared
 # when the connection goes back to the pool, however its block ended.
 _INSTALL = "ops_install_scope"
+# Its value for a block that declared no tables: every table marked system(...) is reachable.
+_UNDECLARED = True
 
 
 def _guard(engine: AsyncEngine) -> None:
@@ -518,12 +550,14 @@ def _refuse_outside_install(conn: sa.Connection, statement: Any, *_: Any) -> Non
     kind: type[object] = type(cast(object, statement))
     if not issubclass(kind, _STATEMENTS):
         raise InstallScopeError(f"refused: a {kind.__name__} inside an install-wide block")
-    problem = next(_install_problems(statement), None)
+    found: object = conn.info[_INSTALL]
+    declared = cast(frozenset[str], found) if isinstance(found, frozenset) else None
+    problem = next(_install_problems(statement, declared), None)
     if problem is not None:
         raise InstallScopeError(f"refused: {problem} inside an install-wide block")
 
 
-def _install_problems(statement: sa.ClauseElement) -> Iterator[str]:
+def _install_problems(statement: sa.ClauseElement, declared: frozenset[str] | None) -> Iterator[str]:
     """Each part of `statement` an install-wide block may not send. A column's table is walked too, since a column
     can stand in a statement whose tree never holds its table (an UPDATE's value, a RETURNING)."""
     seen: set[int] = set()
@@ -541,10 +575,10 @@ def _install_problems(statement: sa.ClauseElement) -> Iterator[str]:
                 and id(table) not in seen
             ):
                 todo.append(cast(sa.ClauseElement, table))
-            yield from _part_problems(e)
+            yield from _part_problems(e, declared)
 
 
-def _part_problems(e: object) -> Iterator[str]:
+def _part_problems(e: object, declared: frozenset[str] | None) -> Iterator[str]:
     """What is wrong with one element of an install-wide statement, read by attribute: the element classes differ.
     Judged by its class (`issubclass`), so the attributes read first stay one type each."""
     kind = type(e)
@@ -562,6 +596,8 @@ def _part_problems(e: object) -> Iterator[str]:
         yield "raw SQL (a text clause or a literal column)"
     if issubclass(kind, sa.TableClause) and not marked:
         yield f"{name} is not marked system(...); an install-wide block reaches only the install's own tables"
+    elif marked and declared is not None and str(name) not in declared:
+        yield f"{name} is not among the tables this block declared ({', '.join(sorted(declared))})"
     if isinstance(name, quoted_name) and name.quote is False and not _BARE.fullmatch(str(name)):
         yield f"an unquoted name {str(name)!r}"
     if any(isinstance(op, operators.custom_op) for op in ops):
