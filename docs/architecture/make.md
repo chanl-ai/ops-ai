@@ -46,6 +46,7 @@ into it before reviewing it.
 | `make/db-scripts.mk` | `db-ddl`, `db-upgrade-sql`, `db-drift`, `db-release`, `db-scripts-proof` | The schema as scripts a DBA applies (`deploy/database/schema.py`, `docs/deploy/database.md`) |
 | `make/services.mk` | `<verb>-<svc>`, generated | `SERVICES`, each service's folder, `SERVICE_VERBS`; one rule template expanded per pair |
 | `make/console.mk` | `console-install`, `dev`, `dev-runtime`, `console-verify` | The console in the foreground |
+| `make/checks.mk` | `checks`, `checks-list` | The one list of standards checks (`CHECKS`): what `python-verify`, the CI `checks` job, `verify-changed.sh` and pre-commit (`STAGED=1`, with `STAGED_FILES=`) run; `PY`, `PYTEST` and `LINT_IMPORTS` name the tools |
 | `make/python.mk` | `python-install`, `python-verify`, `test` | The uv workspace: ruff and pyright on `packages/`, then each service's verify with model keys unset |
 | `make/docs.mk` | `docs-verify`, `docs-guides-check` | `scripts/check-docs.mjs`, `scripts/check-guides.mjs` |
 | `make/sdk.mk` | `sdk`, `sdk-verify`, `sdk-check` | The SDKs in `sdk/`: regenerate, the drift check and both test suites (in `verify`), and the install smoke plus the examples on `make up` |

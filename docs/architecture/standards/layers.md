@@ -71,8 +71,7 @@ Today: no breach; the contract holds across every service.
 
 Pattern (`.importlinter:34`): the contract `drivers-only-in-stores` names the allowed importers.
 
-Check: `uv run lint-imports --no-logo` in the CI `checks` job (`.github/workflows/ci.yml:86`) and in
-`scripts/verify-changed.sh:93`.
+Check: `uv run lint-imports --no-logo`, the `lint-imports` entry of `make checks` (`make/checks.mk`).
 
 ## LY4 Services never import each other
 

@@ -156,8 +156,9 @@ const mayConnect = useCan(connect?.area ?? 'deployments', connect?.action ?? 'cr
 Check: `scripts/check_access_exceptions.py` (role-name compares, refusals, locks and policy defaults outside `can()`;
 an `is_admin` flag or a role tested against a list of names is never allowed; owner compares and role-name compares
 are counted per lane in `scripts/access-baselines/`, which may only fall; a register row with no decision exits 1;
-`--self-test` plants one of each shape). It runs in pre-commit, on a full plan and nightly, and the PR `checks` job
-does not run it. Needed: run it in `checks` on every pull request.
+`--self-test` plants one of each shape; `--commits` needs a `Standards-exception: approved by <login>: <reason>` trailer
+naming a maintainer listed in `.github/standards-maintainers.txt`). It is on the `make checks` list, so it runs in
+pre-commit, in the pull-request `checks` job and in `make verify`.
 
 ### AC2 An exception is written down before it exists
 

@@ -217,28 +217,26 @@ an outbox becomes a model.
 ### C6: one list of checks
 
 ```makefile
-# make/checks.mk: ci.yml's checks job and make verify both run `make checks`; pre-commit runs `make checks STAGED=1`
+# make/checks.mk: ci.yml's checks job and make verify both run `make checks`; pre-commit runs `make checks STAGED=1`.
+# A check is a name in CHECKS with its command (check-run.<name>) and the staged paths that can change it
+# (check-paths.<name>); `make checks-list` prints each name with its command.
 CHECKS = \
-  scripts/check_access_exceptions.py --strict \
-  scripts/check_portable_store.py --strict \
-  scripts/check_config_literals.py --strict \
-  scripts/check_typed_boundaries.py --strict \
-  deploy/database/tests/test_isolation_markings.py deploy/database/tests/test_indexes.py \
-  packages/ops_store/tests/test_isolation_sites.py packages/ops_store/tests/test_relay_sites.py \
-  sdk/generate.py --check \
-  lint-imports  roles_matrix.py --check  changelog-check.mjs --entries  check-standards.mjs
+  access-exceptions access-exceptions-commits access-exceptions-self-test \
+  portable-store portable-store-commits config-literals config-literals-commits typed-boundaries \
+  isolation-markings isolation-sites store-inventory roles-matrix sbom k8s-base \
+  lint-imports sdk-drift changelog-entries console-standards
 ```
 
 ```yaml
 # .github/workflows/ci.yml
 staging:        if: ${{ !cancelled() && github.ref == 'refs/heads/develop' && needs.ci-ok.result == 'success' }}
-store-mssql:    # pull requests into main, and nightly: the store suites, the isolation tests and the budget fixture on SQL Server
-release-proof:  # pull requests into main: make db-scripts-proof FROM=<last tag> against a seeded database; make install-proof
-deploy-prod:    # on: push tags v20*; deploys the tagged commit staging ran, after approval on the production environment
+store-mssql:    # every pull request: the store, kit and identity suites against a SQL Server container, required by ci-ok
+release-proof:  # pull requests into main: make db-scripts-proof FROM=<last tag>; make install-proof
+deploy-prod:    # its own workflow, on: push tags v20*; deploys the tagged commit staging ran, after approval on the production environment
 ```
 
 Also in C6: the api-layer use-case harness takes a base URL (`OPS_USECASE_BASE_URL`) so the same scripts can run
-against a deployed stack instead of starting one; today they start their own services on free ports. This is what lets
+against a deployed stack instead of starting one; unset, they start their own services on free ports. This is what lets
 "green on staging" be the use cases rather than the console walk alone.
 
 ### C7: every decision through `can()`
@@ -294,7 +292,7 @@ check green; open the pull request.
 |---|---|
 | Package tests on a throwaway database | `make -s test PKG=packages/ops_store`, `make -s test PKG=packages/ops_service_kit`, `make -s test PKG=packages/ops_identity`, `make -s test PKG=packages/ops_access` |
 | The isolation markings and the new index test | `uv run pytest -q deploy/database/tests` |
-| The ratchets, before and after | `uv run python scripts/check_portable_store.py --strict`; `uv run python scripts/check_access_exceptions.py`; `uv run lint-imports --no-logo`; the new `check_config_literals.py --strict` and `check_typed_boundaries.py --strict` once C3 and C5 add them |
+| The ratchets, before and after | `make checks` (the list in `make/checks.mk`; `make checks-list` prints each command) |
 | The gate | `make verify` |
 | C6's own proof | A script test that the plan for a one-file service change runs every line of `CHECKS`; `make stg-deploy` from a develop merge once the staging job is fixed |
 | Both SDKs still match the documents | `make sdk-verify` |

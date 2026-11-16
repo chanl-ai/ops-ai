@@ -65,8 +65,10 @@ Why: the same answer every run, at no cost, on both supported databases.
 
 Pattern (`make/python.mk`): `make verify` unsets the model keys; `make test` makes the database.
 
-Check: `make/python.mk`; `scripts/test_db.py`; `make uc-sql-server` for the SQL Server run. Needed: a SQL Server run of
-every store suite in CI.
+Check: `make/python.mk`; `scripts/test_db.py`; `.github/workflows/ci.yml` job `store-mssql` (the store, kit and identity
+suites against a SQL Server container, failing on a skipped SQL Server test, required through `ci-ok`);
+`make uc-sql-server` for the use cases on SQL Server. Needed: the service suites' both-database tests as each lane adds
+them.
 
 ## TS7 Tests and code by different hands
 

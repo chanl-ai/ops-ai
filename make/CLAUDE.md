@@ -74,6 +74,7 @@ run records and knowledge pages have no delete route, so they stay. Code: `sdk/p
 | Fragment | Targets |
 |---|---|
 | `dev.mk` | `up`, `down`, `restart`, `health`, `logs`, `ports`, `sample-team`, `sample-teams` (the first teams: Wealth, Lending, Risk), `demo`, `demo-walk`, `demo-model`, `demo-salesforce*`, `runner-wasm`, `reset-db` |
+| `checks.mk` | `checks` (the one list of checks; `STAGED=1` for those a staged path can change), `checks-list`; a check is a name in `CHECKS` with its `check-run.<name>` command and `check-paths.<name>` pattern |
 | `python.mk` | `test` (T= honoured by every service), `test-impacted` (BASE=, PLAN=1), `agent-guard`, `python-install`, `python-verify`, `sbom` |
 | `git.mk` | `commit`, `commit-hunks`, `my-hunks`, `whats-mine`, `unstage`, `git-rules`, `review` ([Commits](../CLAUDE.md#commits)) |
 | `usecase.mk` | `usecase-test`, `usecase-report`, `usecase-list`, `usecase-show`, `usecase-coverage`, `usecase-new`, `usecase-reset`, `usecase-runner-test` |

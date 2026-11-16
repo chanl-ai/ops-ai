@@ -81,16 +81,16 @@ retyped. In the small services it is `app.py` and the client modules.
 | The lane's use cases, in parallel | `make usecase-batch UCS="uc-013:api uc-607"` with the service's ids from `make usecase-coverage SERVICE=<x>-service` | Before the pull request opens and after each rebase |
 | The use cases a change touches, plus the core console ones | `make uc-impacted BASE=origin/develop` | Before the pull request opens |
 | Everything a commit must pass | `make verify` | Before the pull request opens |
-| The ratchet checks | `uv run python scripts/check_portable_store.py --strict`, `uv run python scripts/check_access_exceptions.py`, `uv run lint-imports --no-logo`, `uv run pytest -q deploy/database/tests/test_isolation_markings.py`; the components add the raw-site, config-literal and typed-boundary checks beside them | Every commit; a lane leaves each at zero for its service |
+| The ratchet checks | `make checks` runs the one list in `make/checks.mk` (`make checks-list` prints it): the access, portable-store, config-literal and typed-boundary checks and their history, the isolation markings and indexes, the isolation, relay and loop-health sites, import contracts and the SDK drift check | Every commit (pre-commit runs `make checks STAGED=1`); a lane leaves each at zero for its service |
 | Staging | `make stg-deploy REF=<merge commit>` runs every step including the console walk; `make stg-health` shows every process up | After the merge, before the lane is called done |
 | Guides and standards references | `make docs-guides-check` | When a guide or this folder changes |
 
 A lane is done when its service's baseline files are at zero, `make -s test PKG=services/<x>` is green on PostgreSQL
 and SQL Server, its use cases are green on the merge commit, a reviewer who did not write it has approved (`DL3`), the
 merge has deployed to staging with every process up and the console walk green, and the service's screens have been
-opened by hand on staging. The use-case harness starts its own stack on free ports and cannot point at the staging
-host today; a `base URL` option for the api layer is listed in the components page under C6 so the staging run can
-be the same scripts.
+opened by hand on staging. The use-case harness starts its own stack on free ports; with
+`OPS_USECASE_BASE_URL=https://<staging host>` the api scripts call that host instead, so the staging run is the same
+scripts.
 
 ## Standards cited here
 

@@ -7,8 +7,9 @@ The grid below is generated from `packages/ops_access` and checked by `make pyth
 `scripts/check_access_exceptions.py` on every commit: every 403 (typed errors included) and every 409 code against a
 line of `access-exceptions-allowlist.txt`, every line's row against this register (a resolved row holds no lines; a
 line added on a row with no decision fails, and the lines already on one are printed for review), and every
-exception line added since the list began against a `Standards-exception:` trailer on its commit that says
-`approved by a maintainer`.
+exception line added since the list began against a `Standards-exception:` trailer on its commit: up to commit
+`dc281681` it says `approved by a maintainer`; after it, `approved by <login>: <reason>` naming a maintainer whose hash
+`.github/standards-maintainers.txt` lists in the commit's parent.
 
 ## How access is decided
 
