@@ -14,10 +14,13 @@ import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
 from ops_access.platform_events import TEAM_CREATED
-from ops_service_kit.http import Out, page_window
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
+from ops_store.listing import ListPage, Rows, list_page
 from ops_store.outbox import add as add_event
+from ops_store.rows import rows
 
 from .audit import record
 from .roles import mirror_membership
@@ -46,78 +49,59 @@ class TeamRow(Out):
     security: bool
 
 
+def _listing(statuses: list[str], security: str | None) -> Rows:
+    """The workspace's teams with each one's active member and admin counts; teams first, so a list pages by its id.
+    A deleted team keeps its row for its audit entries and is out of every list."""
+    counts = (
+        sa.select(
+            members.c.team_id,
+            sa.func.count().label("n"),
+            sa.func.sum(sa.case((members.c.role == "admin", 1), else_=0)).label("admins"),
+        )
+        .where(members.c.status == "active")
+        .group_by(members.c.team_id)
+        .subquery()
+    )
+    q = (
+        sa.select(
+            teams.c.id,
+            teams.c.name,
+            teams.c.status,
+            teams.c.scope,
+            teams.c.created_at,
+            teams.c.archived_at,
+            sa.func.coalesce(counts.c.n, 0).label("member_count"),
+            sa.func.coalesce(counts.c.admins, 0).label("admin_count"),
+            sa.case((teams.c.id == security, True), else_=False).label("security"),
+        )
+        .select_from(teams.outerjoin(counts, counts.c.team_id == teams.c.id))
+        .where(teams.c.status != "deleted")
+    )
+    return q.where(teams.c.status.in_(statuses)) if statuses else q
+
+
 class TeamAdminStore(TenantDb):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS})
 
-    async def every(
-        self,
-        tenant_id: str,
-        *,
-        statuses: list[str],
-        search: str = "",
-        page: int = 1,
-        page_size: int = 50,
-        team_id: str | None = None,
-    ) -> tuple[list[TeamRow], int, int]:
-        """One page of the workspace's teams, active first then by name, with each one's active member and admin
-        counts; returns the rows, the total and the page answered."""
-        active = members.c.status == "active"
-        counts = (
-            sa.select(
-                members.c.team_id,
-                sa.func.count().label("n"),
-                sa.func.sum(sa.case((members.c.role == "admin", 1), else_=0)).label("admins"),
-            )
-            .where(active)
-            .group_by(members.c.team_id)
-            .subquery()
-        )
-        q = (
-            sa.select(
-                teams.c.id,
-                teams.c.name,
-                teams.c.status,
-                teams.c.scope,
-                teams.c.created_at,
-                teams.c.archived_at,
-                sa.func.coalesce(counts.c.n, 0),
-                sa.func.coalesce(counts.c.admins, 0),
-            )
-            .outerjoin(counts, counts.c.team_id == teams.c.id)
-            .order_by(teams.c.status, teams.c.name_key, teams.c.id)
-        )
-        # A deleted team keeps its row for its audit entries and is out of every list.
-        where: list[sa.ColumnElement[bool]] = [teams.c.status != "deleted"]
-        if statuses:
-            where.append(teams.c.status.in_(statuses))
-        if team_id is not None:
-            where.append(teams.c.id == team_id)
-        if search:
-            escaped = search.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            where.append(teams.c.name_key.like(f"%{escaped}%", escape="\\"))
+    async def page(self, tenant_id: str, params: ListParams, *, statuses: list[str]) -> ListPage:
+        """The workspace's teams on the shared list contract, by name then id, searched on name, each with its active
+        member and admin counts and whether it is the Security team, all in SQL on one transaction."""
         async with self.tenant_tx(tenant_id) as c:
-            security = await security_team_in(c, tenant_id)
-            total = int((await c.execute(sa.select(sa.func.count()).select_from(teams).where(*where))).scalar_one())
-            page, offset = page_window(total, page, page_size)
-            rows = (await c.execute(q.where(*where).limit(page_size).offset(offset))).all()
-        out = [
-            TeamRow(
-                id=r[0],
-                name=r[1],
-                status=r[2],
-                scope=r[3],
-                created_at=r[4],
-                archived_at=r[5],
-                member_count=int(r[6]),
-                admin_count=int(r[7]),
-                security=r[0] == security,
-            )
-            for r in rows
-        ]
-        return out, total, page
+            q = _listing(statuses, await security_team_in(c, tenant_id))
+            page = await list_page(c, q, params, search=[teams.c.name_key], default_sort=teams.c.name_key.asc())
+        page["data"] = [TeamRow.model_validate(r).model_dump(by_alias=True) for r in page["data"]]
+        return page
+
+    async def every(self, tenant_id: str, *, statuses: list[str], team_id: str | None = None) -> list[TeamRow]:
+        """Every team of the workspace with its counts, by name, or the one team `team_id` names."""
+        async with self.tenant_tx(tenant_id) as c:
+            q = _listing(statuses, await security_team_in(c, tenant_id))
+            if team_id is not None:
+                q = q.where(teams.c.id == team_id)
+            return await rows(c, q.order_by(teams.c.name_key, teams.c.id), TeamRow)
 
     async def one(self, tenant_id: str, team_id: str) -> TeamRow | None:
-        rows, _, _ = await self.every(tenant_id, statuses=[], team_id=team_id)
+        rows = await self.every(tenant_id, statuses=[], team_id=team_id)
         return rows[0] if rows else None
 
     async def create(

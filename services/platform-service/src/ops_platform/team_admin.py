@@ -13,7 +13,8 @@ from typing import Any
 
 from ops_access import ANY_TEAM
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
-from ops_service_kit.http import paged
+from ops_service_kit.listing import ListParams
+from ops_store.listing import ListPage
 
 from .store.members import Actor
 from .store.teams import ACTIVE, ARCHIVED, TeamAdminStore, TeamNameTakenError
@@ -68,14 +69,9 @@ class TeamAdmin:
             raise ValidationFailed("Pick active teams of this workspace.", code="team_not_usable") from e
         return {"securityTeam": saved.security_team, "defaultTeam": saved.default_team}
 
-    async def every(
-        self, actor: Actor, *, statuses: list[str], search: str, page: int, page_size: int
-    ) -> dict[str, Any]:
+    async def every(self, actor: Actor, params: ListParams, *, statuses: list[str]) -> ListPage:
         await self.members.require_admin(workspace(actor), "access", "view")
-        rows, total, answered = await self.store.every(
-            actor.tenant_id, statuses=statuses, search=search, page=page, page_size=page_size
-        )
-        return paged([r.model_dump(by_alias=True) for r in rows], total, answered, page_size)
+        return await self.store.page(actor.tenant_id, params, statuses=statuses)
 
     async def create(self, actor: Actor, name: str, admin_email: str) -> dict[str, Any]:
         await self.members.require_admin(workspace(actor), "access", "manage")

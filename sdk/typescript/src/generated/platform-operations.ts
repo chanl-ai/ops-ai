@@ -809,9 +809,12 @@ export const platformOperations = {
     "pathParams": [],
     "query": [
       "status",
-      "search",
       "page",
-      "pageSize"
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },

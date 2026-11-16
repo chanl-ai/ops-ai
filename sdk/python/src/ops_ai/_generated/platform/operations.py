@@ -709,7 +709,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/settings/teams",
         "pathParams": [],
-        "query": ["status", "search", "page", "pageSize"],
+        "query": ["status", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "teams_read_workspace_teams": {
@@ -1233,16 +1233,27 @@ class Operations:
         self,
         *,
         status: list[str] | None = None,
-        search: str | None = None,
         page: int | None = None,
         page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultWorkspaceTeamOut:
         "List Workspace Teams"
         return self._t.call(
             SERVICE,
             OPERATIONS["teams_list_workspace_teams"],
             {},
-            {"status": status, "search": search, "page": page, "pageSize": page_size},
+            {
+                "status": status,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -1741,16 +1752,27 @@ class AsyncOperations:
         self,
         *,
         status: list[str] | None = None,
-        search: str | None = None,
         page: int | None = None,
         page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultWorkspaceTeamOut:
         "List Workspace Teams"
         return await self._t.call(
             SERVICE,
             OPERATIONS["teams_list_workspace_teams"],
             {},
-            {"status": status, "search": search, "page": page, "pageSize": page_size},
+            {
+                "status": status,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]

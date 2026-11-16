@@ -1269,17 +1269,13 @@ def create_public_app(
     )
     async def list_workspace_teams(  # pyright: ignore[reportUnusedFunction]
         _: Tx,
+        q: ListQuery,
         actor: Annotated[Actor, Depends(on_workspace)],
         status: Annotated[list[Literal["active", "archived"]] | None, Query()] = None,
-        search: Annotated[str, Query(max_length=80)] = "",
-        page: Annotated[int, Query(ge=1)] = 1,
-        page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 50,
     ) -> Any:
-        """Every team of the workspace with its member and admin counts; workspace admins (`access.view` in every
-        team) only."""
-        return ok(
-            await team_admin.every(actor, statuses=list(status or []), search=search, page=page, page_size=page_size)
-        )
+        """Every team of the workspace with its member and admin counts on the shared list contract, by name, searched
+        on name; `status` keeps active or archived teams. Workspace admins (`access.view` in every team) only."""
+        return ok(await team_admin.every(actor, q, statuses=list(status or [])))
 
     @app.post(
         "/v1/settings/teams",

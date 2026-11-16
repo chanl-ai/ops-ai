@@ -1288,8 +1288,8 @@ export interface paths {
         };
         /**
          * List Workspace Teams
-         * @description Every team of the workspace with its member and admin counts; workspace admins (`access.view` in every
-         *     team) only.
+         * @description Every team of the workspace with its member and admin counts on the shared list contract, by name, searched
+         *     on name; `status` keeps active or archived teams. Workspace admins (`access.view` in every team) only.
          */
         get: operations["teams_list_workspace_teams"];
         put?: never;
@@ -10877,9 +10877,12 @@ export interface operations {
         parameters: {
             query?: {
                 status?: ("active" | "archived")[] | null;
-                search?: string;
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
