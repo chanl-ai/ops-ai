@@ -119,8 +119,8 @@ One Alembic chain (`CHAIN="agents"`).
   `local` server default A gave each `tenant_id` column, once the stores write the caller's tenant, so a write that
   names no tenant is refused instead of landing in `local`. Each down path drops the column with
   `mssql_drop_default=True`, since SQL Server refuses to drop a column that still has a default.
-- `owner_team()` stays on the four registry stores until the shared `Store.owner_teams` uses the connection it is
-  given; then the copies are deleted.
+- Each registry store's `owner_team()` is one call to the shared `Store.owner_teams` with the reason `OWNER`, on the
+  connection it is given.
 - Down: A refuses with a count while two tenants hold one agent slug, graph version or digest, and otherwise restores
   the install-wide keys, recreates `channel_files` empty and drops the columns. C's down drops policies and grants and
   deletes per-tenant seed copies whose `(name, digest)` matches the `local` row.
