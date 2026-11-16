@@ -55,7 +55,8 @@ case "${1:-}" in
     db=ops_test_mssql_$(od -An -N3 -tx1 /dev/urandom | tr -d ' \n')
     docker run --rm -v "$ROOT":/src:ro -v ops-mssql-venv:/venv -v ops-mssql-uvcache:/root/.cache/uv \
       -e MSSQL_SA_PASSWORD="$pw" -e OPS_MSSQL_SERVER="host.docker.internal,$PORT" \
-      -e OPS_DATABASE_URL="postgresql+asyncpg://ops:ops@host.docker.internal:$PG_PORT/$db" -w "/src/$member" "$CLIENT" \
+      -e OPS_DATABASE_URL="postgresql+asyncpg://ops:ops@host.docker.internal:$PG_PORT/$db" \
+      -e OPS_TEST_DATABASE_URL="postgresql+asyncpg://ops:ops@host.docker.internal:$PG_PORT/$db" -w "/src/$member" "$CLIENT" \
       sh -c 'uv sync -q --frozen --all-packages && /venv/bin/python /src/scripts/test_db.py "$OPS_DATABASE_URL" \
         && /venv/bin/python -m pytest -p no:cacheprovider "$@"' sh "$@" 2>&1 | sed "s/$pw/***/g"
     ;;
