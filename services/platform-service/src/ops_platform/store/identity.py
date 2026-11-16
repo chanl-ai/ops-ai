@@ -17,6 +17,7 @@ from ops_access import ANY_TEAM, OWNER, active, encode_grid
 from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
+from ops_store.database import open_database
 from ops_store.dialect import insert_ignore
 from ops_store.rows import one, rows
 
@@ -148,42 +149,44 @@ class _ClientName(Out):
     name: str
 
 
-class IdentityStore:
+class IdentityStore(TenantDb):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION, Guarantee.RLS})
-
-    def __init__(self, db: TenantDb) -> None:
-        self.db = db
 
     @classmethod
     def open(cls, url: str) -> IdentityStore:
-        return cls(TenantDb.open(url))
+        return cls(open_database(url))
+
+    @property
+    def db(self) -> TenantDb:
+        """The store itself as the engine the other stores are built beside (`SignInStore(store.db)`)."""
+        return self
 
     async def close(self) -> None:
-        await self.db.engine.dispose()
+        await self.engine.dispose()
 
     async def users_by_email(self, email: str) -> list[User]:
         q = sa.text("SELECT tenant_id, id, email, name FROM platform_users_by_email(:e)")
-        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+        async with self.system_tx(SIGNIN_LOOKUP) as c:
             return [User(*row) for row in (await c.execute(q, {"e": email})).all()]
 
     async def user(self, tenant_id: str, user_id: str) -> User | None:
         q = sa.select(users.c.tenant_id, users.c.id, users.c.email, users.c.name).where(
             users.c.id == user_id, users.c.status == "active"
         )
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             row = (await c.execute(q)).first()
         return User(*row) if row else None
 
     async def tenant_name(self, tenant_id: str) -> str | None:
         """The workspace's own name, which the console shows in its header."""
         q = sa.select(tenants.c.name).where(tenants.c.id == tenant_id)
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return (await c.execute(q)).scalar()
 
     async def workspace_open_to(self, tenant_id: str, user_id: str) -> str:
         """`open` in an active workspace; in a closed one, `open` for its owner and `closed` for everyone else; `gone`
         once its purge has started."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             status = (await c.execute(sa.select(tenants.c.status).where(tenants.c.id == tenant_id))).scalar()
             if status in {"active", "suspended"}:
                 return "open"
@@ -207,7 +210,7 @@ class IdentityStore:
             .where(members.c.user_id == user_id, members.c.status == "active", teams.c.status == "active")
             .order_by(members.c.created_at, members.c.id)
         )
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             rows = (await c.execute(q)).all()
         return {str(row[0]): str(row[1]) for row in rows}
 
@@ -215,20 +218,20 @@ class IdentityStore:
         """The teams the person may act in: their memberships, then, for a workspace admin, every other active team. The
         token's `team_ids`, which every service picks `X-Team-Id` from."""
         mine = list(await self.roles(tenant_id, user_id))
-        store = RoleStore(self.db)
+        store = RoleStore(self)
         if not await store.workspace_admin(tenant_id, user_id, now=now):
             return mine
         return [*mine, *(t for t in await store.active_teams(tenant_id) if t not in mine)]
 
     async def permission_version(self, tenant_id: str) -> int:
         """The tenant's permission version, which every role, assignment or membership change raises."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return await version_in(c, tenant_id)
 
     async def access(self, tenant_id: str, user_id: str, *, now: str) -> dict[str, list[str]]:
         """Team id (or `*`) to the role ids of every assignment that applies to the person and has not expired: the
         token's `access` claim, which ops_access reads on every check."""
-        held = await RoleStore(self.db).holdings(tenant_id, user_id)
+        held = await RoleStore(self).holdings(tenant_id, user_id)
         out: dict[str, list[str]] = {}
         for a in active(held.assignments, now):
             if a.role_id not in out.setdefault(a.team_id, []):
@@ -240,7 +243,7 @@ class IdentityStore:
     ) -> dict[str, dict[str, str]]:
         """Each role's cells as stored now, encoded for the token's `grids` claim, which every service decides from. A
         role with no stored row holds no cell, or with `stored_only` is left out so a reader falls back to its seed."""
-        found = await RoleStore(self.db).grids(tenant_id, role_ids) if role_ids else {}
+        found = await RoleStore(self).grids(tenant_id, role_ids) if role_ids else {}
         return {r: encode_grid(found.get(r, [])) for r in role_ids if r in found or not stored_only}
 
     async def open_session(
@@ -255,7 +258,7 @@ class IdentityStore:
         request_id: str,
         provider_id: str | None = None,
     ) -> None:
-        async with self.db.tenant_tx(user.tenant_id) as c:
+        async with self.tenant_tx(user.tenant_id) as c:
             await c.execute(
                 sessions.insert().values(
                     id=session_id,
@@ -283,13 +286,13 @@ class IdentityStore:
 
     async def session(self, session_id: str) -> SessionRef | None:
         q = sa.text("SELECT tenant_id, user_id, id FROM platform_session(:s)")
-        async with self.db.system_tx(SESSION_LOOKUP) as c:
+        async with self.system_tx(SESSION_LOOKUP) as c:
             row = (await c.execute(q, {"s": session_id})).first()
         return SessionRef(*row) if row else None
 
     async def method(self, ref: SessionRef) -> SessionMethod | None:
         q = sa.select(sessions.c.auth_method, sessions.c.provider_id).where(sessions.c.id == ref.id)
-        async with self.db.tenant_tx(ref.tenant_id) as c:
+        async with self.tenant_tx(ref.tenant_id) as c:
             row = (await c.execute(q)).first()
         return SessionMethod(str(row[0]), row[1]) if row else None
 
@@ -313,7 +316,7 @@ class IdentityStore:
             sessions.c.revoked_at.is_(None),
             sessions.c.expires_at > at,
         )
-        async with self.db.tenant_tx(ref.tenant_id) as c:
+        async with self.tenant_tx(ref.tenant_id) as c:
             swapped = await c.execute(
                 sessions.update()
                 .where(*live, sessions.c.refresh_hash == presented)
@@ -321,7 +324,7 @@ class IdentityStore:
             )
             if swapped.rowcount == 1:
                 return True
-        async with self.db.tenant_tx(ref.tenant_id) as c:
+        async with self.tenant_tx(ref.tenant_id) as c:
             revoked = await c.execute(sessions.update().where(*live).values(revoked_at=at))
             if revoked.rowcount == 1:
                 await record(
@@ -344,11 +347,11 @@ class IdentityStore:
             .where(sessions.c.id == ref.id, sessions.c.revoked_at.is_(None), sessions.c.expires_at > at)
             .values(last_seen_at=at)
         )
-        async with self.db.tenant_tx(ref.tenant_id) as c:
+        async with self.tenant_tx(ref.tenant_id) as c:
             return (await c.execute(q)).rowcount == 1
 
     async def sign_out(self, ref: SessionRef, *, at: str, request_id: str) -> None:
-        async with self.db.tenant_tx(ref.tenant_id) as c:
+        async with self.tenant_tx(ref.tenant_id) as c:
             ended = await c.execute(
                 sessions.update().where(sessions.c.id == ref.id, sessions.c.revoked_at.is_(None)).values(revoked_at=at)
             )
@@ -367,7 +370,7 @@ class IdentityStore:
 
     async def step_up(self, ref: SessionRef, *, at: str, request_id: str, method: str) -> None:
         """Audits a re-authentication on a live session; the token itself is never stored."""
-        async with self.db.tenant_tx(ref.tenant_id) as c:
+        async with self.tenant_tx(ref.tenant_id) as c:
             await record(
                 c,
                 tenant_id=ref.tenant_id,
@@ -384,7 +387,7 @@ class IdentityStore:
         q = sa.text(
             "SELECT id, tenant_id, team_id, secret_hash, scopes, created_by, usable FROM platform_key(:k, :now)"
         )
-        async with self.db.system_tx(KEY_LOOKUP) as c:
+        async with self.system_tx(KEY_LOOKUP) as c:
             row = (await c.execute(q, {"k": key_id, "now": now_iso()})).first()
         return Key(row[0], row[1], row[2], row[3], list(row[4]), row[5], bool(row[6])) if row else None
 
@@ -393,7 +396,7 @@ class IdentityStore:
         under the tenant, so the pre-tenant lookup function keeps returning only what verifying needs."""
         k = api_keys
         q = sa.select(k.c.target_kind, k.c.target_id, k.c.target_version).where(k.c.id == key.id)
-        async with self.db.tenant_tx(key.tenant_id) as c:
+        async with self.tenant_tx(key.tenant_id) as c:
             await c.execute(k.update().where(k.c.id == key.id).values(last_used_at=at))
             row = await one(c, q, _KeyTargetRow)
         if row is None or not row.target_kind:
@@ -406,18 +409,18 @@ class IdentityStore:
         """The tenant of an active team, found before anyone is signed in so the address of an authorize request can
         be checked; None for a team that does not exist or is archived."""
         q = sa.text("SELECT tenant_id, status FROM platform_team(:t)")
-        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+        async with self.system_tx(SIGNIN_LOOKUP) as c:
             row = (await c.execute(q, {"t": team_id})).first()
         return (str(row[0]), str(row[1])) if row and row[1] == "active" else None
 
     async def team_name(self, tenant_id: str, team_id: str) -> str | None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return (await c.execute(sa.select(teams.c.name).where(teams.c.id == team_id))).scalar()
 
     async def register_client(self, client: Client, *, at: str, stale_before: str) -> None:
         """Adds a client after deleting the ones never consented to that were registered before `stale_before`."""
         t = oauth_clients
-        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+        async with self.system_tx(SIGNIN_LOOKUP) as c:
             await c.execute(t.delete().where(t.c.consented_at.is_(None), t.c.created_at < stale_before))
             await c.execute(
                 t.insert().values(id=client.id, name=client.name, redirect_uris=client.redirect_uris, created_at=at)
@@ -425,7 +428,7 @@ class IdentityStore:
 
     async def client(self, client_id: str) -> Client | None:
         t = oauth_clients
-        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+        async with self.system_tx(SIGNIN_LOOKUP) as c:
             row = (await c.execute(sa.select(t).where(t.c.id == client_id))).mappings().first()
         if row is None:
             return None
@@ -433,7 +436,7 @@ class IdentityStore:
 
     async def clients_of_tenant(self, tenant_id: str) -> int:
         t = oauth_clients
-        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+        async with self.system_tx(SIGNIN_LOOKUP) as c:
             return int((await c.execute(sa.select(sa.func.count()).where(t.c.tenant_id == tenant_id))).scalar_one())
 
     async def count_address(self, kind: str, address: str, *, at: str, window_start: str) -> tuple[int, str]:
@@ -443,7 +446,7 @@ class IdentityStore:
         The increment is one UPDATE, so concurrent requests from one address each count."""
         t = oauth_address_counts
         key = (t.c.kind == kind) & (t.c.address == address[:64])
-        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+        async with self.system_tx(SIGNIN_LOOKUP) as c:
             await c.execute(t.delete().where(t.c.window_start < window_start))
             row = {"kind": kind, "address": address[:64], "hits": 0, "window_start": at}
             await c.execute(insert_ignore(c, t, row, keys=["kind", "address"]))
@@ -470,7 +473,7 @@ class IdentityStore:
     ) -> None:
         """The grant a person gave by pressing Allow: a session of kind `mcp`, waiting for its code to be exchanged.
         The first Allow of a client adds its tenant and writes the registration to this tenant's audit log."""
-        async with self.db.tenant_tx(user.tenant_id) as c:
+        async with self.tenant_tx(user.tenant_id) as c:
             await c.execute(
                 sessions.insert().values(
                     id=session_id,
@@ -516,7 +519,7 @@ class IdentityStore:
                 detail={"clientId": client.id, "resource": resource},
             )
         t = oauth_clients
-        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+        async with self.system_tx(SIGNIN_LOOKUP) as c:
             await c.execute(
                 t.update()
                 .where(t.c.id == client.id, t.c.consented_at.is_(None))
@@ -527,7 +530,7 @@ class IdentityStore:
         """The MCP grant behind a session id; None for a console session."""
         s = sessions
         q = sa.select(s).where(s.c.id == ref.id, s.c.kind == "mcp")
-        async with self.db.tenant_tx(ref.tenant_id) as c:
+        async with self.tenant_tx(ref.tenant_id) as c:
             row = (await c.execute(q)).mappings().first()
         if row is None:
             return None
@@ -542,7 +545,7 @@ class IdentityStore:
         ends the grant it opened (someone holds a copy)."""
         s = sessions
         live = (s.c.id == grant.id, s.c.kind == "mcp", s.c.code_hash == code_hash, s.c.revoked_at.is_(None))
-        async with self.db.tenant_tx(grant.tenant_id) as c:
+        async with self.tenant_tx(grant.tenant_id) as c:
             won = await c.execute(
                 s.update()
                 .where(*live, s.c.code_used_at.is_(None), s.c.code_expires_at > at, s.c.expires_at > at)
@@ -558,7 +561,7 @@ class IdentityStore:
         """Ends the connection once and audits it with who ended it: `person`, `admin` (the person left the team or lost
         the right to run tools), or `replay` (a code used twice)."""
         s = sessions
-        async with self.db.tenant_tx(grant.tenant_id) as c:
+        async with self.tenant_tx(grant.tenant_id) as c:
             ended = await c.execute(
                 s.update().where(s.c.id == grant.id, s.c.kind == "mcp", s.c.revoked_at.is_(None)).values(revoked_at=at)
             )
@@ -602,9 +605,9 @@ class IdentityStore:
             )
             .order_by(s.c.created_at.desc())
         )
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             live = await rows(c, q, _GrantSession)
-        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+        async with self.system_tx(SIGNIN_LOOKUP) as c:
             clients = await rows(
                 c, sa.select(k.c.id, k.c.name).where(k.c.id.in_({g.client_id for g in live})), _ClientName
             )
