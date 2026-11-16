@@ -44,6 +44,8 @@ BOTH_DATABASES = frozenset(
         "test_background_tenants.py",
         "test_system_user_predicates.py",
         "test_lookup_indexes.py",
+        "test_list_routes.py",
+        "test_statement_budget.py",
     }
 )
 
