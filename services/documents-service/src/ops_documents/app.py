@@ -83,9 +83,12 @@ from ops_service_kit.http import (
     operation_id,
     paged,
 )
+from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
+
+log = get_logger(__name__)
 
 # The longest side of a page image asked for at low detail.
 LOW_DETAIL_SIDE = 512
@@ -189,20 +192,29 @@ def create_documents_app(
     config = Settings()
     readings = readings or extractor.readings or Readings(extractor.files, ReadingsStore(engine))
 
+    async def kept(start: Callable[[], Coroutine[Any, Any, None]]) -> None:
+        # Each process reports its own failures on /health/background; one that still escapes is logged here, so it
+        # never cancels the group, which would stop the server and the other processes with it.
+        try:
+            await start()
+        except Exception as e:
+            log.warning("documents_background_stopped", error=f"{type(e).__name__}: {e}"[:500])
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
         # Readings, extractions and test runs queued or running when the process stopped run again.
         await readings.resume()
         await extractor.resume()
         await document_types.resume()
-        # Work that runs beside the server, such as the service event relay, stopped with it.
-        tasks = [asyncio.create_task(start()) for start in background]
-        try:
-            yield
-        finally:
-            for task in tasks:
-                task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
+        # Work that runs beside the server, such as the service event relay, on one TaskGroup: leaving it cancels each
+        # process and waits for it, so none outlives the server.
+        async with asyncio.TaskGroup() as group:
+            tasks = [group.create_task(kept(start)) for start in background]
+            try:
+                yield
+            finally:
+                for task in tasks:
+                    task.cancel()
 
     app = FastAPI(
         title="documents-service", version="0.1.0", lifespan=lifespan, generate_unique_id_function=operation_id
