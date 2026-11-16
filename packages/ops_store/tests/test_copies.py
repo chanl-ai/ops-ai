@@ -2,7 +2,8 @@
 delivers at least once), an older event arriving after a newer one, a delete, an older event arriving after a delete, a
 copy row lost or left stale that only the resync repairs, a resync deleting a row an event wrote while the owner
 answered, a resync holding a transaction across its call to the owner, tombstones that never go, a copy that lets one
-tenant see or change another's rows, and a resync whose failing pass never shows on /health/background."""
+tenant see or change another's rows, a resync whose failing pass never shows on /health/background, and a resync
+that rewrites unchanged rows on every pass."""
 
 from __future__ import annotations
 
@@ -13,10 +14,13 @@ import time
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, cast
 
 import pytest
 import sqlalchemy as sa
+from pydantic import BaseModel
+from sqlalchemy.event import listen, remove
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.settings import Settings
@@ -398,3 +402,53 @@ async def test_events_deletes_recreates_and_passes_in_any_order_converge_on_one_
     await one_pass(engine, Owner(list(owner.values())))
     want = {k: (e.revision, e.payload.model_dump()["name"]) for k, e in owner.items()}
     assert await copied(engine, "t1") == want
+
+
+# A copy whose columns are typed: a payload's float for a decimal column, a datetime with no zone for a column with
+# one, and a column with a default the payload never carries.
+priced = copy_table(
+    meta,
+    "store_test_copy_priced",
+    sa.Column("price", sa.Numeric(10, 2), nullable=True),
+    sa.Column("due", sa.DateTime(timezone=True), nullable=True),
+    sa.Column("pinned", sa.Boolean, nullable=False, server_default=sa.false()),
+)
+
+
+class Priced(BaseModel):
+    kind: str = "test.priced"
+    id: str
+    price: float | None = None
+    due: datetime | None = None
+    deleted: bool = False
+
+
+def priced_event(record: str, **values: Any) -> Event:
+    # A payload kind no service sends yet, built past the event's closed list of kinds.
+    payload = Priced(id=record, **values)
+    return Event.model_construct(name="test.priced", tenant_id="t1", team_id="team_a", revision=1, payload=payload)
+
+
+async def test_a_quiet_resync_over_unchanged_rows_writes_nothing(engine: AsyncEngine) -> None:
+    """A decimal, a datetime and a column the payload leaves out each read back unlike the payload's own value: a
+    pass over rows the owner did not change rewrites none of them."""
+    records = [
+        priced_event("decimal", price=0.1),
+        priced_event("datetime", due=datetime(2026, 11, 16, 9, 30, 15, 250000)),
+        priced_event("absent"),
+    ]
+    async with as_system(engine) as c:
+        assert await reconcile(c, priced, records) == 3
+    updates: list[str] = []
+
+    def sent(_conn: object, _cursor: object, statement: str, *_: object) -> None:
+        if statement.lstrip().upper().startswith("UPDATE"):
+            updates.append(statement)
+
+    listen(engine.sync_engine, "before_cursor_execute", sent)
+    try:
+        async with as_system(engine) as c:
+            changed = await reconcile(c, priced, records)
+    finally:
+        remove(engine.sync_engine, "before_cursor_execute", sent)
+    assert (changed, updates) == (0, [])

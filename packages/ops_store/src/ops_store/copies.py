@@ -28,6 +28,8 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 import sqlalchemy as sa
@@ -187,9 +189,7 @@ async def reconcile(
     differs = [
         (key, seen[key], row)
         for key, row in _ordered(wanted)
-        if key in seen
-        and (seen[key].revision, seen[key].deleted, seen[key].values)
-        != (row["revision"], False, tuple(row.get(c) for c in copied))
+        if key in seen and not _same(table, seen[key], row["revision"], [(c, row[c]) for c in copied if c in row])
     ]
     unlisted = [(key, h) for key, h in _ordered(seen) if key not in wanted]
     buried = [(key, h) for key, h in unlisted if not h.deleted]
@@ -227,6 +227,31 @@ async def reconcile(
         unchanged = [_was(key_cols, k, h) for k, h in pruned]
         await conn.execute(table.delete().where(*_unchanged(table, key_cols)), unchanged)
     return len(missing) + len(differs) + len(buried)
+
+
+def _same(table: sa.Table, held: Held, revision: object, carried: Sequence[tuple[str, object]]) -> bool:
+    """Whether a copy row already holds the owner's record: its revision, not deleted, and each column the payload
+    carries (`carried`) equal once both sides are read as the column's type. A column the payload leaves out is not
+    compared, since the resync never writes it."""
+    if (held.revision, held.deleted) != (revision, False):
+        return False
+    stored = dict(zip(_copied(table), held.values, strict=True))
+    return all(_as_stored(table.c[c], v) == _as_stored(table.c[c], stored[c]) for c, v in carried)
+
+
+def _as_stored(column: sa.Column[Any], value: object) -> object:
+    """`value` as the column hands it back: a number at the column's scale, a time in UTC (one with no zone read as
+    the host's local time), anything else as it is."""
+    kind = column.type
+    if value is None:
+        return None
+    if isinstance(kind, sa.Numeric) and not isinstance(kind, sa.Float) and isinstance(value, int | float | Decimal):
+        number = Decimal(str(value))
+        return number if kind.scale is None else number.quantize(Decimal(1).scaleb(-kind.scale))
+    if isinstance(kind, sa.DateTime) and isinstance(value, datetime):
+        utc = value.astimezone(UTC)  # a time with no zone is the host's local time, as asyncpg writes it
+        return utc if kind.timezone else utc.replace(tzinfo=None)
+    return value
 
 
 def _ordered[V](rows: Mapping[Key, V]) -> Iterable[tuple[Key, V]]:
