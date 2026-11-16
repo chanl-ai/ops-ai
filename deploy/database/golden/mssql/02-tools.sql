@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0084_app_cards
+-- tools-service, stamped at tools_0085_module_list_indexes
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -86,7 +86,15 @@ CREATE TABLE tool_modules (
 	CONSTRAINT tool_modules_pkey PRIMARY KEY (tenant_id, id)
 );
 GO
+CREATE INDEX ix_tool_modules_display_name ON tool_modules (display_name);
+GO
+CREATE INDEX ix_tool_modules_list_name ON tool_modules (name);
+GO
+CREATE INDEX ix_tool_modules_owner_team ON tool_modules (owner_team);
+GO
 CREATE INDEX ix_tool_modules_template_id ON tool_modules (template_id);
+GO
+CREATE INDEX ix_tool_modules_updated_at ON tool_modules (updated_at);
 GO
 CREATE UNIQUE INDEX ux_tool_modules_name ON tool_modules (tenant_id, team_id, name) WHERE team_id IS NOT NULL AND team_id IS NOT NULL;
 GO
@@ -705,5 +713,5 @@ CREATE TABLE alembic_version_tools (
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0084_app_cards');
+INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0085_module_list_indexes');
 GO

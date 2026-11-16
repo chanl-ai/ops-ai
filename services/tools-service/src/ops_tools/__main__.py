@@ -174,6 +174,7 @@ def main() -> None:
     # A plugin tool's page names the team's own account of the app.
     modules.team_connections = plugins.team_connection if plugins else None
     modules.awaits_sign_in = plugins.awaits_sign_in if plugins else None
+    modules.installed_plugins = (lambda: sorted(plugins.plugins)) if plugins else None
     # send_reply naming a mailbox: the mailbox is read from agents-service as the call's team, its secret is
     # looked up for that team, and its host is dialled at the allow-listed address.
     # Microsoft 365 mailboxes: Graph and its token endpoint, dialled through each tenant's allow-list.

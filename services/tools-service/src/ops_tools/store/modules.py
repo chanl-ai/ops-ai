@@ -23,7 +23,7 @@ from sqlalchemy.sql.schema import SchemaItem
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListParams
 from ops_store import Guarantee, isolation
-from ops_store.listing import ListPage, list_page
+from ops_store.listing import LISTED, ListPage, list_page
 from ops_store.outbox import add as add_event
 from ops_store.outbox import outbox_table
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
@@ -44,12 +44,12 @@ tool_modules = sa.Table(
     sa.Column("id", sa.String(64), primary_key=True),
     # Null for a workspace-level module every team reads and calls (the platform tools).
     sa.Column("team_id", sa.String(64)),
-    sa.Column("name", sa.String(120), nullable=False),
-    sa.Column("display_name", sa.String(200), nullable=False),
+    sa.Column("name", sa.String(120), nullable=False, info=LISTED),
+    sa.Column("display_name", sa.String(200), nullable=False, info=LISTED),
     sa.Column("system", sa.String(200), nullable=False),
     sa.Column("description", sa.Text, nullable=False),
     sa.Column("status", sa.String(16), nullable=False),
-    sa.Column("owner_team", sa.String(120), nullable=False),
+    sa.Column("owner_team", sa.String(120), nullable=False, info=LISTED),
     sa.Column("owner_contacts", sa.JSON, nullable=False),
     sa.Column("auth", sa.JSON, nullable=False),
     sa.Column("timeout_ms", sa.Integer, nullable=False),
@@ -61,7 +61,7 @@ tool_modules = sa.Table(
     sa.Column("sign_in", sa.String(16), nullable=False, server_default="person_or_team"),
     # The template slot a provisioned record fills, found again by it on the next run, and what a person may change:
     # `system` nothing, `managed` anything. Null on a record no template made.
-    sa.Column("template_id", sa.String(120), index=True),
+    sa.Column("template_id", sa.String(120), index=True, info=LISTED),
     sa.Column("protection", sa.String(16)),
     sa.Column("reachable", sa.Boolean, nullable=False),
     sa.Column("drift", sa.Boolean, nullable=False),
@@ -73,7 +73,7 @@ tool_modules = sa.Table(
     # as the dev seed wrote it and nobody has changed since, which the seed may refresh.
     sa.Column("revision", sa.Integer, nullable=False),
     sa.Column("created_at", _TS, nullable=False),
-    sa.Column("updated_at", _TS, nullable=False),
+    sa.Column("updated_at", _TS, nullable=False, info=LISTED),
     # Workflows pin a module by name, so a name is unique within a team. A workspace-level
     # module (null team) is unique on (tenant, name) so two shared copies cannot land.
     info=TEAM_OWNED,
@@ -81,6 +81,12 @@ tool_modules = sa.Table(
 
 _OWNED = tool_modules.c.team_id.isnot(None)
 _SHARED = tool_modules.c.team_id.is_(None)
+# The Tools list sorts by these (store/module_list.py) across the tenant's teams. Each leads its index: the table is
+# not tenant-scoped yet, so an index after tenant_id would not count as leading with it (test_indexes.py).
+sa.Index("ix_tool_modules_display_name", tool_modules.c.display_name)
+sa.Index("ix_tool_modules_owner_team", tool_modules.c.owner_team)
+sa.Index("ix_tool_modules_updated_at", tool_modules.c.updated_at)
+sa.Index("ix_tool_modules_list_name", tool_modules.c.name)
 sa.Index(
     "ux_tool_modules_name",
     tool_modules.c.tenant_id,
@@ -426,15 +432,26 @@ def _as_team(team_id: str | None) -> Generator[None]:
             yield
 
 
-def _granted(tenant_id: str) -> sa.ColumnElement[bool]:
-    """Modules approved for one of the acting team's workflows: the explicit grant across teams."""
-    team = acting_team()
+def _granted(tenant_id: str, team: str | None = None) -> sa.ColumnElement[bool]:
+    """Modules approved for one of the acting team's (or `team`'s) workflows: the explicit grant across teams."""
+    team = team or acting_team()
     if team is None:
         return sa.false()
     a = module_approvals.c
     return tool_modules.c.id.in_(
         sa.select(a.module_id).where(a.tenant_id == tenant_id, a.workflow_team_id == team, a.status == "approved")
     )
+
+
+def seen_modules(tenant_id: str, team: str | None = None) -> sa.ColumnElement[bool]:
+    """The modules the acting team reads: its own, workspace-level ones (no team) and those approved for one of its
+    workflows. `team` names the caller's team as well, for a caller whose request reads tenant-wide (the dev header
+    caller): the same three, for that team."""
+    seen = sa.and_(tool_modules.c.tenant_id == tenant_id, sa.or_(team_visible(tool_modules), _granted(tenant_id)))
+    if team is None:
+        return seen
+    t = tool_modules.c
+    return sa.and_(seen, sa.or_(t.team_id == team, t.team_id.is_(None), _granted(tenant_id, team)))
 
 
 def grant_views(now: datetime, expiring: timedelta) -> dict[str, sa.ColumnElement[bool]]:
@@ -535,6 +552,16 @@ class ModuleStore(Store):
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
             kids = await self._children(c, tenant_id, [r["id"] for r in rows])
         return [{**r, **kids[r["id"]]} for r in rows]
+
+    async def chosen(self, tenant_id: str, ids: Sequence[str]) -> list[Aggregate]:
+        """The modules named by `ids` that the acting team reads (as `all`), in `ids`' order: a list's page."""
+        if not ids:
+            return []
+        async with self.tx() as c:
+            q = tool_modules.select().where(seen_modules(tenant_id), tool_modules.c.id.in_(list(ids)))
+            rows = {r["id"]: dict(r) for r in (await c.execute(q)).mappings()}
+            kids = await self._children(c, tenant_id, list(rows))
+        return [{**rows[i], **kids[i]} for i in ids if i in rows]
 
     async def grants(
         self,

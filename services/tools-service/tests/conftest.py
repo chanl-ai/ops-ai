@@ -412,6 +412,7 @@ def build_app(
     # As the service wires them (__main__): a plugin tool's title, its team's account and whether its address waits.
     service.titles = plugins.title_of if plugins else None
     service.team_connections = plugins.team_connection if plugins else None
+    service.installed_plugins = (lambda: sorted(plugins.plugins)) if plugins else None
     service.awaits_sign_in = plugins.awaits_sign_in if plugins else None
     apps = Apps(accounts, store, plugins, service, users)
     plugin_routes = (

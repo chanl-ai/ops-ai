@@ -82,8 +82,10 @@ queries = 5
 ["GET /v1/send-policy"]
 queries = 1
 
+# Chosen, counted and paged in SQL (store/module_list.py: count, page, two facets, totals), then only the page's
+# modules read in full with their traffic, secret names and connections; the count no longer grows with the modules.
 ["GET /v1/tool-modules"]
-queries = 10
+queries = 14
 
 ["GET /v1/tool-modules/grants"]
 queries = 3

@@ -54,6 +54,7 @@ from ..secrets import SecretResolver, scrub
 from ..store.calls import CallLog, CallStats, DayStats
 from ..store.connections import ConnectionStore
 from ..store.mocks import MockStore
+from ..store.module_list import ModuleList, Window
 from ..store.modules import (
     CALL_SHAPE,
     REVIEWED,
@@ -353,6 +354,8 @@ class ModuleService:
     # Whether a plugin tool's address waits for its account's sign-in (`PluginHost.awaits_sign_in`), set once the
     # plugin host is up: the account then holds the sign-in host, which is not the tool's address.
     awaits_sign_in: Callable[[Aggregate, dict[str, Any]], bool] | None = None
+    # The installed plugins' ids, whose team bindings sign a plugin's module in for the list's reachable column.
+    installed_plugins: Callable[[], list[str]] | None = None
     # A tool page's Real run (`GatewayCalls.console_run`), set by create_gateway_app: Real goes through the gateway's
     # checks, never a path of its own.
     real_runs: Callable[..., Awaitable[dict[str, Any]]] | None = None
@@ -397,6 +400,8 @@ class ModuleService:
         self.requester_policy = requester_policy
         # The tenant's connections, in this service's own database.
         self.connections = ConnectionStore(store.engine)
+        # The Tools list, chosen and paged in SQL.
+        self.listing = ModuleList(store.engine)
         # The operations' mock answers, which Try it's test answer reads as a test run does.
         self.mocks = MockAnswers(MockStore(store.engine))
         # Signs the test console's real reads in through the module's connection, in the test environment; without it
@@ -537,21 +542,6 @@ class ModuleService:
             needed = {n for o in ops for n in secret_names(o)}
             row["unsetSecrets"] = len(needed - have.get(m["team_id"], set()))
         return row
-
-    def _in_view(self, r: dict[str, Any], view: str) -> bool:
-        now = self.clock()
-        if view == "all":
-            return True
-        if view == "needs_approval":
-            return r["approvalState"] in ("needs_approval", "draft")
-        if view == "expired":
-            return r["approvalState"] == "expired"
-        if view == "security_review":
-            return r.get("pendingReview") is not None
-        if view == "expiring":
-            nxt = r.get("nextExpiry")
-            return r["approvalState"] != "expired" and nxt is not None and datetime.fromisoformat(nxt) - now < EXPIRING
-        return r["errorRate"] >= FAILING_RATE or not r["reachable"]
 
     def _run_contexts(self) -> list[dict[str, Any]]:
         """The module owner only, who needs no workflow approval. The test panel's Run as lists it alone: a
@@ -839,89 +829,44 @@ class ModuleService:
 
     async def list(self, who: Caller, q: ListParams) -> dict[str, Any]:
         """One page of the modules the caller's team sees, in the view `q` names (`all` when none), with each view's
-        count, the facets and the totals of every module seen. The page is chosen here, over every module seen: the
-        failing view and the reachable column follow each connection's status and a plugin module's team binding, which
-        no column of this database holds, and the counts and totals span every module, so each is read once."""
+        count, the facets and the totals of every module seen: chosen, counted and paged in SQL
+        (store/module_list.py), then the page's modules read in full."""
         view = (q.filters.get("view") or ["all"])[-1]
         if view not in MODULE_VIEWS:
             raise ValidationFailed(f"There is no view {view!r}: ask for one of {', '.join(MODULE_VIEWS)}.")
-        page, page_size, search, sort_by = q.page, q.page_size, q.search, q.sort_by
-        filters = {k: q.filters.get(k, []) for k in ("type", "access", "approvalState", "templateId")}
-        now = self.clock()
-        mods = [m for m in await self.store.all(who.tenant_id) if self._sees(who, m)]
-        mods = await self._as_team_sees(who.tenant_id, who.team.id, mods)
-        traffic = await self._traffic(who.tenant_id, self._call_teams(who), mods)
+        teams = self._call_teams(who)
+        window = Window(
+            now=self.clock(),
+            expiring=EXPIRING,
+            failing_rate=FAILING_RATE,
+            since=self._since(timedelta(days=1)),
+            call_teams=teams,
+            plugins=self.installed_plugins() if self.installed_plugins is not None else [],
+        )
+        every = not who.verified and who.team.scope == "all"  # as `_sees`: the dev caller in an all-scope team
+        page, totals = await self.listing.page(
+            who.tenant_id, who.team.id, q, view=view, w=window, seen_by=None if every else who.team.id
+        )
+        # A plugin's module shows the team's own account (`_as_team_sees`), read with the page.
+        signs_in = {str(r["id"]): r["connection_id"] for r in page["data"]}
+        chosen = await self.store.chosen(who.tenant_id, list(signs_in))
+        mods: list[Aggregate] = [{**m, "connection_id": signs_in[m["id"]]} for m in chosen]
+        traffic = await self._traffic(who.tenant_id, teams, mods)
         have = await self._secret_names(who.tenant_id, mods)
         conns = await self._connections_of(who.tenant_id, mods)
-        rows = [self._row(m, traffic, have, conns) for m in mods]
-        counts = {"all": len(rows)} | {
-            v: sum(1 for r in rows if self._in_view(r, v))
-            for v in ("needs_approval", "expiring", "expired", "failing", "security_review")
-        }
-
-        def values(r: dict[str, Any], key: str) -> list[str]:
-            return list(r["accessClasses"]) if key == "access" else [str(r.get(key))]
-
-        words = (search or "").lower()
-        wanted = set(q.ids) if q.ids is not None else None
-        searched = [
-            r
-            for r in rows
-            if self._in_view(r, view)
-            and (r["id"] in wanted if wanted is not None else True)
-            and (
-                wanted is not None
-                or not words
-                or words in f"{r['displayName']} {r['name']} {r['system']} {r['description']} {r['ownerTeam']}".lower()
-            )
-        ]
-        active = {k: v for k, v in filters.items() if v}
-
-        def match(r: dict[str, Any], skip: str | None = None) -> bool:
-            return all(k == skip or any(x in v for x in values(r, k)) for k, v in active.items())
-
-        filtered = [r for r in searched if match(r)]
-        # Each facet counts rows under every other active filter, so its options show what selecting them would yield.
-        facets: dict[str, dict[str, int]] = {}
-        for key in ("type", "access", "approvalState"):
-            facet: dict[str, int] = {}
-            for r in (x for x in searched if match(x, key)):
-                for val in values(r, key):
-                    facet[val] = facet.get(val, 0) + 1
-            facets[key] = facet
-        if sort_by in ("displayName", "name", "calls24h", "errorRate", "updatedAt", "operationCount", "ownerTeam"):
-            filtered.sort(key=lambda r: r[sort_by], reverse=q.sort_order == "desc")
-        total = len(filtered)
-        total_pages = max(1, -(-total // page_size))
-        page = min(page, total_pages)
-        calls = sum(r["calls24h"] for r in rows)
-        errors = sum(r["calls24h"] * r["errorRate"] for r in rows)
-        expiring_approvals = sum(
-            1
-            for m in mods
-            for a in self._approvals(m)
-            if a["status"] == "approved" and a["expires_at"] is not None and a["expires_at"] - now < EXPIRING
-        )
+        calls, errors = totals["calls"], totals["errors"]
         return {
-            "data": filtered[(page - 1) * page_size : page * page_size],
-            "pagination": {
-                "page": page,
-                "pageSize": page_size,
-                "total": total,
-                "totalPages": total_pages,
-                "hasNext": page < total_pages,
-                "hasPrev": page > 1,
-            },
-            "facets": facets,
+            **page,
+            "data": [self._row(m, traffic, have, conns) for m in mods],
             "stats": {
-                "modules": len(rows),
-                "operations": sum(r["operationCount"] for r in rows),
+                "modules": totals["all"],
+                "operations": totals["operations"],
                 "calls24h": calls,
                 "errorRate": errors / calls if calls else 0,
-                "expiringApprovals": expiring_approvals,
-                "expiringModules": counts["expiring"],
+                "expiringApprovals": totals["expiring_approvals"],
+                "expiringModules": totals["expiring"],
             },
-            "viewCounts": counts,
+            "viewCounts": {v: totals[v] for v in MODULE_VIEWS},
         }
 
     async def get(self, who: Caller, module_id: str) -> dict[str, Any]:
