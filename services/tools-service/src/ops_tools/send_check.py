@@ -49,12 +49,12 @@ class SendCheck:
         policy = await self.store.current(tenant_id, team_id)
         if policy is None:
             return None
-        version = int(policy["version"])
+        version = policy.version
         if (kept := await self.store.judged(tenant_id, team_id, input_hash, version)) is not None:
-            return None if kept["ok"] else str(kept["reason"])
+            return None if kept.ok else kept.reason
         if self.judge is None:
             return NO_JUDGE
-        message = f"Sending policy:\n{policy['text']}\n\nOutgoing {tool}:\n{json.dumps(arguments, sort_keys=True)}"
+        message = f"Sending policy:\n{policy.text}\n\nOutgoing {tool}:\n{json.dumps(arguments, sort_keys=True)}"
         try:
             answer = await self.judge.structured(
                 INSTRUCTIONS, message, SCHEMA, tenant=tenant_id, step=f"send:{input_hash}"

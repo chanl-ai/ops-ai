@@ -12,8 +12,8 @@ import httpx
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_tools.store.event_relay import sender
 from ops_tools.store.modules import module_operations, service_outbox, tool_modules
+from ops_tools.store.relay import tools_relay
 
 from .service_clients import claims, fake_service
 from .test_module_roles import ACCESS, MODULES
@@ -64,7 +64,7 @@ async def test_a_refused_request_leaves_no_event(
     assert len(await _events(engine, tenant)) == 1
 
 
-async def test_the_relay_posts_each_event_to_agents_service_for_its_tenant_and_team() -> None:
+async def test_the_relay_posts_each_event_to_agents_service_for_its_tenant_and_team(engine: AsyncEngine) -> None:
     got: list[dict[str, Any]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -76,7 +76,9 @@ async def test_the_relay_posts_each_event_to_agents_service_for_its_tenant_and_t
         return httpx.Response(202, json={"success": True, "data": {"status": "started"}})
 
     body = {"name": "tool_access.requested", "key": "apr_1", "teamId": "team_ops", "payload": {"approvalId": "apr_1"}}
-    await sender(fake_service(handler, "agents", ["events:emit"]))({"tenantId": "local", "body": body})
+    await tools_relay(engine, fake_service(handler, "agents", ["events:emit"])).send(
+        {"tenantId": "local", "body": body}
+    )
     assert got == [
         {"path": "/v1/events", "tenant": "local", "team": "team_ops", "scopes": ["events:emit"], "body": body}
     ], got

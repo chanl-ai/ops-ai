@@ -19,8 +19,8 @@ from ops_store import Guarantee, isolation
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
-from .connections import ROLE
 from .modules import metadata
+from .tenancy import ROLE
 
 mcp_links = sa.Table(
     "mcp_links",

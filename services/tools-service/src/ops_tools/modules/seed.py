@@ -765,26 +765,28 @@ async def load(
             )  # fmt: skip
             await connections.create(made, actor="dev seed", at=now)
             agg["connection_id"] = made["id"]
-    # A module may only name listed hosts, so the seed lists the hosts its modules call first.
-    egress = EgressStore(store.engine)
-    # The allow-list's Added by and Note columns are read by people, so the seed's rows say what they are in words
-    # a person uses; a database seeded with the older wording is reworded in place.
-    for host in dict.fromkeys(h for m in mods for h in m["egress_hosts"]):
-        await egress.add(tenant_id, "host", host, actor=SAMPLE_ACTOR, note=SAMPLE_NOTE, at=now)
-    await egress.reword(tenant_id, was=("dev seed", "called by a seeded module"), now=(SAMPLE_ACTOR, SAMPLE_NOTE))
-    for agg in mods:
-        # Each module is written in its own team so a leftover acting team cannot hide it or raise NoTenantError.
-        with acting_as(agg["team_id"]):
-            stored = await store.get(tenant_id, agg["id"])
-            if stored is None:
-                await store.put(agg, expected_revision=None, seeded=True)
-                added += 1
-            elif stored["revision"] == 0:
-                await store.put(agg, expected_revision=0, seeded=True)
-    # A seed without the agents catalogue holds no Runtime module; one an earlier seed wrote and nobody edited goes.
-    if RUNTIME_MODULE not in {m["id"] for m in mods}:
-        with acting_as(None):
-            stale = await store.get(tenant_id, RUNTIME_MODULE)
-            if stale is not None and stale["revision"] == 0:
-                await store.delete(tenant_id, RUNTIME_MODULE)
+    # Every statement from here names the seeded tenant, whichever tenant the caller acts for.
+    with isolation.tenant_wide(SEED, tenant_id=tenant_id):
+        # A module may only name listed hosts, so the seed lists the hosts its modules call first.
+        egress = EgressStore(store.engine)
+        # The allow-list's Added by and Note columns are read by people, so the seed's rows say what they are in words
+        # a person uses; a database seeded with the older wording is reworded in place.
+        for host in dict.fromkeys(h for m in mods for h in m["egress_hosts"]):
+            await egress.add(tenant_id, "host", host, actor=SAMPLE_ACTOR, note=SAMPLE_NOTE, at=now)
+        await egress.reword(tenant_id, was=("dev seed", "called by a seeded module"), now=(SAMPLE_ACTOR, SAMPLE_NOTE))
+        for agg in mods:
+            # Each module is written in its own team so a leftover acting team cannot hide it or raise NoTenantError.
+            with acting_as(agg["team_id"]):
+                stored = await store.get(tenant_id, agg["id"])
+                if stored is None:
+                    await store.put(agg, expected_revision=None, seeded=True)
+                    added += 1
+                elif stored["revision"] == 0:
+                    await store.put(agg, expected_revision=0, seeded=True)
+        # A seed without the agents catalogue holds no Runtime module; one an earlier seed wrote and nobody edited goes.
+        if RUNTIME_MODULE not in {m["id"] for m in mods}:
+            with acting_as(None):
+                stale = await store.get(tenant_id, RUNTIME_MODULE)
+                if stale is not None and stale["revision"] == 0:
+                    await store.delete(tenant_id, RUNTIME_MODULE)
     return added

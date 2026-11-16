@@ -84,6 +84,15 @@ WIDENINGS: dict[str, set[str]] = {
     "RETENTION_TENANTS": {"services/agents-service/src/ops_agents/store/memories.py"},
     "ASSISTANT_TEAMS": {"services/agents-service/src/ops_agents/store/team_defaults.py"},
     "ASSISTANT_CATCH_UP": {"services/agents-service/src/ops_agents/api/ops_tools.py"},
+    "EVERY_TEAM": {"services/tools-service/src/ops_tools/store/team_defaults.py"},
+    "CATCH_UP": {"services/tools-service/src/ops_tools/store/team_defaults.py"},
+    "HANDOFF_LIST": {"services/tools-service/src/ops_tools/store/review_handoffs.py"},
+    "HANDOFF_SETTLE": {"services/tools-service/src/ops_tools/store/review_handoffs.py"},
+    "BINDING_BY_CONNECTION": {"services/tools-service/src/ops_tools/store/plugin_bindings.py"},
+    "STAMP_VERSIONS": {"services/tools-service/src/ops_tools/store/plugin_bindings.py"},
+    "ALLOW_LIST": {"services/tools-service/src/ops_tools/store/egress.py"},
+    "HEADER_KEYS": {"services/tools-service/src/ops_tools/store/modules.py"},
+    "AUDIT_RETENTION": {"services/tools-service/src/ops_tools/__main__.py"},
     "CLAIM_WORK": {"packages/ops_engine/src/ops_engine/store/work.py"},
     "LIVE_WORKFLOWS": {"packages/ops_engine/src/ops_engine/store/definitions.py"},
     # The run reconciler reads every tenant's unfinished runs, then marks each in its own tenant.
@@ -171,6 +180,15 @@ ENTRIES: dict[str, set[str]] = {
         "services/tools-service/src/ops_tools/store/mcp_links.py",
         # The sign-in keep-alive refreshes each team's sign-ins in that team's own scope.
         "services/tools-service/src/ops_tools/connections/keepalive.py",
+        # The start-up catch-up brings each team's defaults up to date in that team's own scope.
+        "services/tools-service/src/ops_tools/defaults.py",
+        # A plugin binding is read and written in the team its caller names, which a service caller acting for the
+        # whole tenant names on each call.
+        "services/tools-service/src/ops_tools/store/plugin_bindings.py",
+        # A team's defaults version is read and recorded in the team being provisioned.
+        "services/tools-service/src/ops_tools/store/team_defaults.py",
+        # A team's sending policy and judgements are read and kept in the team the gateway call names.
+        "services/tools-service/src/ops_tools/store/send_policies.py",
         # A model call reads its tenant's provider key, or the deployment's when it names none.
         "services/models-service/src/ops_models/provider_keys.py",
         # A per-tenant model key's call spends from the share of the tenant it names (X-Tenant-Id).

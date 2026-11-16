@@ -1,4 +1,4 @@
-# 55 findings: code and metadata outside ops_store that would not run on SQL Server (scripts/check_portable_store.py). A row may only fall; raising one needs a maintainer's review on the pull request.
+# 53 findings: code and metadata outside ops_store that would not run on SQL Server (scripts/check_portable_store.py). A row may only fall; raising one needs a maintainer's review on the pull request.
 # Burned down by ops_store.dialect: row lock and SKIP LOCKED -> locked/claim, database clock -> db_now and db_after, dialect insert and ON CONFLICT -> upsert/insert_ignore, advisory lock -> lock_key.
 # packages/ops_engine: 12
 2 sql packages/ops_engine/src/ops_engine/store/clock.py database clock
@@ -24,7 +24,7 @@
 2 sql services/kb-service/migrations/versions/0002_items_versions_and_chunks.py postgresql_using option
 # services/models-service: 1
 1 sql services/models-service/migrations/versions/0005_one_current_alias_version.py postgresql_where option
-# services/tools-service: 15
+# services/tools-service: 13
 1 sql services/tools-service/migrations/versions/0001_gateway_calls_and_fences.py postgresql_where option
 1 sql services/tools-service/migrations/versions/0016_threadless_write_once.py postgresql_where option
 2 sql services/tools-service/migrations/versions/0017_effect_scope.py postgresql_where option
@@ -34,5 +34,3 @@
 1 sql services/tools-service/src/ops_tools/store/rate_windows.py ON CONFLICT
 2 sql services/tools-service/src/ops_tools/store/rate_windows.py database clock
 1 sql services/tools-service/src/ops_tools/store/rate_windows.py dialect insert
-1 sql services/tools-service/src/ops_tools/store/send_policies.py ON CONFLICT
-1 sql services/tools-service/src/ops_tools/store/send_policies.py dialect insert

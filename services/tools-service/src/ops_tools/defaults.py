@@ -12,6 +12,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 
 from ops_service_kit.logging import get_logger
+from ops_store import isolation
 from ops_store.team_scope import acting_as
 
 from .modules.seed import BUILT_IN, built_in_module
@@ -71,8 +72,9 @@ async def catch_up(
     """Every team behind this release's defaults version, brought up to date at start; returns the teams written."""
     written: list[tuple[str, str]] = []
     for tenant_id, team_id in await defaults.behind(DEFAULTS_VERSION):
-        if await ensure_defaults(store, defaults, tenant_id=tenant_id, team_id=team_id, at=clock()):
-            written.append((tenant_id, team_id))
+        with isolation.scope(tenant_id, team_id):
+            if await ensure_defaults(store, defaults, tenant_id=tenant_id, team_id=team_id, at=clock()):
+                written.append((tenant_id, team_id))
     if written:
         log.info("team_defaults_caught_up", teams=len(written), version=DEFAULTS_VERSION)
     return written

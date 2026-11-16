@@ -20,6 +20,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_service_kit.settings import Settings
+from ops_store import isolation
 from ops_store.team_scope import acting_as
 from ops_tools.modules.seed import aggregates, blank, load
 from ops_tools.store.modules import ModuleStore, RetiredAccessError, StaleModuleError
@@ -186,7 +187,8 @@ async def test_a_retired_access_class_is_refused_when_read_and_its_database_rebu
         _alembic(target, "upgrade", "head")
         engine = create_async_engine(target)
         agg: dict[str, Any] = {**aggregates(seed, tenant_id="t", now=datetime.now(UTC))[0], "egress_hosts": []}
-        await ModuleStore(engine).put(agg, expected_revision=None)
+        with isolation.tenant_wide("TESTS", tenant_id="t"):
+            await ModuleStore(engine).put(agg, expected_revision=None)
         async with engine.begin() as c:
             await c.execute(sa.text("ALTER TABLE module_operations DROP CONSTRAINT ck_module_operations_access"))
             await c.execute(
@@ -195,7 +197,7 @@ async def test_a_retired_access_class_is_refused_when_read_and_its_database_rebu
             )
             await c.execute(sa.text("UPDATE alembic_version_tools SET version_num = 'tools_0011_approval_policy'"))
         # Read, the row is refused, never treated as a read.
-        with pytest.raises(RetiredAccessError, match="money_movement"):
+        with isolation.tenant_wide("TESTS", tenant_id="t"), pytest.raises(RetiredAccessError, match="money_movement"):
             await ModuleStore(engine).get("t", agg["id"])
         await engine.dispose()
 

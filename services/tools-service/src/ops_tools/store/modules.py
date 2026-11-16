@@ -16,7 +16,7 @@ from typing import Any, ClassVar, cast
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection
 from sqlalchemy.sql.schema import SchemaItem
 
 from ops_service_kit.ids import new_id
@@ -24,7 +24,10 @@ from ops_store import Guarantee
 from ops_store.outbox import add as add_event
 from ops_store.outbox import outbox_table
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
+from ops_store.store import Store
 from ops_store.team_scope import acting_as, acting_team, any_team, team_visible
+
+from .tenancy import ROLE, SYSTEM_ROLE
 
 metadata = sa.MetaData()
 
@@ -431,12 +434,11 @@ def _granted(tenant_id: str) -> sa.ColumnElement[bool]:
     )
 
 
-class ModuleStore:
+class ModuleStore(Store):
     # A module and its children land together (TRANSACTION); a write lands only against the revision read (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.CAS})
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+    role = ROLE
+    system_role = SYSTEM_ROLE
 
     async def _children(self, c: AsyncConnection, tenant_id: str, ids: list[str]) -> dict[str, dict[str, Any]]:
         out: dict[str, dict[str, list[dict[str, Any]]]] = {i: {k: [] for k in CHILDREN} for i in ids}
@@ -504,7 +506,7 @@ class ModuleStore:
     async def all(self, tenant_id: str) -> list[Aggregate]:
         """The modules the acting team reads: its own, workspace-level ones (no team) and those approved for one
         of its workflows, which is the explicit grant across teams. Every module with no acting team."""
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             q = (
                 tool_modules.select()
                 .where(tool_modules.c.tenant_id == tenant_id, sa.or_(team_visible(tool_modules), _granted(tenant_id)))
@@ -518,7 +520,7 @@ class ModuleStore:
         """Every team's modules: for what another service asks on a run's behalf (the operations an agent or workflow
         may be granted, a call's resolution), which the run's grants and its approval token decide, not the caller's
         team."""
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             q = (
                 tool_modules.select()
                 .where(tool_modules.c.tenant_id == tenant_id, any_team(tool_modules, RUN_PATHS))
@@ -540,7 +542,7 @@ class ModuleStore:
         )
         if tenant_id is not None:
             q = q.where(tool_modules.c.tenant_id == tenant_id)
-        async with self.engine.connect() as c:
+        async with self.system_tx(HEADER_KEYS) as c:
             return [dict(r) for r in (await c.execute(q)).mappings() if r["headers"]]
 
     async def names(self, tenant_id: str, team_id: str | None = None) -> set[str]:
@@ -548,14 +550,14 @@ class ModuleStore:
         check before a create does not see another team's."""
         with _as_team(team_id):
             q = sa.select(tool_modules.c.name).where(tool_modules.c.tenant_id == tenant_id, team_visible(tool_modules))
-            async with self.engine.connect() as c:
+            async with self.tx() as c:
                 return {str(r[0]) for r in await c.execute(q)}
 
     async def secret_readers(self, tenant_id: str) -> list[Aggregate]:
         """Each module's id, display name and baseline with its operations' id, name, path and headers: what the
         Secrets page needs to say which operations read a secret, in two reads instead of every child table."""
         ops = module_operations.c
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             q = sa.select(tool_modules.c.id, tool_modules.c.display_name, tool_modules.c.baseline).where(
                 tool_modules.c.tenant_id == tenant_id, sa.or_(team_visible(tool_modules), _granted(tenant_id))
             )
@@ -575,7 +577,7 @@ class ModuleStore:
 
     async def get(self, tenant_id: str, module_id: str) -> Aggregate | None:
         """The module when the acting team reads it (as `all`); None otherwise, so its routes answer 404."""
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             q = tool_modules.select().where(
                 tool_modules.c.tenant_id == tenant_id,
                 tool_modules.c.id == module_id,
@@ -589,7 +591,7 @@ class ModuleStore:
     async def get_any(self, tenant_id: str, module_id: str) -> Aggregate | None:
         """The module in any team: for a call's resolution and for a decision agents-service already held to the review
         rules, both authorized by what they carry rather than by the caller's team."""
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             q = tool_modules.select().where(
                 tool_modules.c.tenant_id == tenant_id, tool_modules.c.id == module_id, any_team(tool_modules, RUN_PATHS)
             )
@@ -604,7 +606,7 @@ class ModuleStore:
         """The module holding operation `name` in the acting team (or `team_id`), and the operation. Another team's
         module of the same name is not seen. A workspace-level module is used when the team has no copy of its own."""
         with _as_team(team_id):
-            async with self.engine.connect() as c:
+            async with self.tx() as c:
                 q = (
                     sa.select(tool_modules.c.id, tool_modules.c.team_id)
                     .select_from(
@@ -659,7 +661,7 @@ class ModuleStore:
                     team_visible(tool_modules),
                 )
             )
-            async with self.engine.connect() as c:
+            async with self.tx() as c:
                 return {r[0] for r in await c.execute(q)}
 
     async def put(
@@ -669,87 +671,94 @@ class ModuleStore:
         expected_revision: int | None,
         seeded: bool = False,
         events: Sequence[dict[str, Any]] = (),
+        conn: AsyncConnection | None = None,
     ) -> Aggregate:
         """Writes the whole aggregate. `expected_revision` None inserts a new module; otherwise the update lands only
         when the stored revision still equals it, else StaleModuleError. Returns the aggregate at its new revision.
         `seeded` writes revision 0, the dev seed's mark for a module nobody has edited. HostNotAllowedError when the
         module names a host the tenant's egress allow-list does not hold; nothing is written then. `events` are
-        service events (`outbox.add` keywords) written with the change, so neither commits without the other."""
+        service events (`outbox.add` keywords) written with the change, so neither commits without the other. `conn`
+        is a transaction the caller holds open (a savepoint around an insert that may lose a race)."""
+        if conn is None:
+            async with self.tx() as c:
+                return await self.put(agg, expected_revision=expected_revision, seeded=seeded, events=events, conn=c)
+        c = conn
         # Only the table's columns: a module as a call reaches it carries its connection's address, never stored.
         row = {k: v for k, v in agg.items() if k in tool_modules.c}
         hosts: list[str] = list(dict.fromkeys(agg.get("egress_hosts") or []))
-        async with self.engine.begin() as c:
-            if hosts:
-                listed_q = sa.select(_listed_hosts.c.host).where(
-                    _listed_hosts.c.tenant_id == row["tenant_id"], _listed_hosts.c.host.in_(hosts)
+        if hosts:
+            listed_q = sa.select(_listed_hosts.c.host).where(
+                _listed_hosts.c.tenant_id == row["tenant_id"], _listed_hosts.c.host.in_(hosts)
+            )
+            listed = {r[0] for r in await c.execute(listed_q)}
+            missing = [h for h in hosts if h not in listed]
+            if missing:
+                raise HostNotAllowedError(missing[0])
+        if expected_revision is None:
+            row["revision"] = 0 if seeded else 1
+            await c.execute(tool_modules.insert().values(**row))
+        else:
+            row["revision"] = 0 if seeded else expected_revision + 1
+            done = await c.execute(
+                tool_modules.update()
+                .where(
+                    tool_modules.c.tenant_id == row["tenant_id"],
+                    tool_modules.c.id == row["id"],
+                    tool_modules.c.revision == expected_revision,
                 )
-                listed = {r[0] for r in await c.execute(listed_q)}
-                missing = [h for h in hosts if h not in listed]
-                if missing:
-                    raise HostNotAllowedError(missing[0])
-            if expected_revision is None:
-                row["revision"] = 0 if seeded else 1
-                await c.execute(tool_modules.insert().values(**row))
-            else:
-                row["revision"] = 0 if seeded else expected_revision + 1
-                done = await c.execute(
-                    tool_modules.update()
-                    .where(
-                        tool_modules.c.tenant_id == row["tenant_id"],
-                        tool_modules.c.id == row["id"],
-                        tool_modules.c.revision == expected_revision,
-                    )
-                    .values(**row)
+                .values(**row)
+            )
+            if done.rowcount == 0:
+                raise StaleModuleError(row["id"])
+            for table in (*CHILDREN.values(), module_egress_hosts):
+                await c.execute(
+                    table.delete().where(table.c.tenant_id == row["tenant_id"], table.c.module_id == row["id"])
                 )
-                if done.rowcount == 0:
-                    raise StaleModuleError(row["id"])
-                for table in (*CHILDREN.values(), module_egress_hosts):
-                    await c.execute(
-                        table.delete().where(table.c.tenant_id == row["tenant_id"], table.c.module_id == row["id"])
-                    )
-            for key, table in CHILDREN.items():
-                # Every row names the same columns (an insert of many rows takes its columns from the first); a
-                # seeded or older operation may predate response_transform and timeout_ms, an approval its team.
-                # Only the table's own columns: a baseline or staged copy written before a column was dropped
-                # (self_approval) still carries it, and a discard writes those copies back.
-                rows = [
-                    {
-                        k: v
-                        for k, v in {
-                            **CHILD_DEFAULTS.get(key, {}),
-                            **r,
-                            "tenant_id": row["tenant_id"],
-                            "module_id": row["id"],
-                            "position": i,
-                        }.items()
-                        if k in table.c
-                    }
-                    for i, r in enumerate(agg[key])
-                ]
-                if rows:
-                    await c.execute(table.insert(), rows)
-            await self._write_examples(c, agg, row.get("updated_at") or row.get("created_at"))
-            if hosts:
-                links = [
-                    {"tenant_id": row["tenant_id"], "module_id": row["id"], "host": h, "position": i}
-                    for i, h in enumerate(hosts)
-                ]
-                await c.execute(module_egress_hosts.insert(), links)
-            for event in events:
-                await add_event(c, service_outbox, **event)
+        for key, table in CHILDREN.items():
+            # Every row names the same columns (an insert of many rows takes its columns from the first); a
+            # seeded or older operation may predate response_transform and timeout_ms, an approval its team.
+            # Only the table's own columns: a baseline or staged copy written before a column was dropped
+            # (self_approval) still carries it, and a discard writes those copies back.
+            rows = [
+                {
+                    k: v
+                    for k, v in {
+                        **CHILD_DEFAULTS.get(key, {}),
+                        **r,
+                        "tenant_id": row["tenant_id"],
+                        "module_id": row["id"],
+                        "position": i,
+                    }.items()
+                    if k in table.c
+                }
+                for i, r in enumerate(agg[key])
+            ]
+            if rows:
+                await c.execute(table.insert(), rows)
+        await self._write_examples(c, agg, row.get("updated_at") or row.get("created_at"))
+        if hosts:
+            links = [
+                {"tenant_id": row["tenant_id"], "module_id": row["id"], "host": h, "position": i}
+                for i, h in enumerate(hosts)
+            ]
+            await c.execute(module_egress_hosts.insert(), links)
+        for event in events:
+            await add_event(c, service_outbox, **event)
         return {**agg, "revision": row["revision"]}
 
     async def insert_if_missing(self, agg: Aggregate) -> bool:
         """Inserts `agg` as a module nobody has edited (revision 0) unless one with its id is already there, as when two
         first calls race to write it. True when this call wrote it."""
-        try:
-            await self.put(agg, expected_revision=None, seeded=True)
-        except IntegrityError:
-            return False
+        async with self.tx() as c:
+            try:
+                async with self.attempt(c):
+                    await self.put(agg, expected_revision=None, seeded=True, conn=c)
+            except IntegrityError:
+                return False
         return True
 
     async def delete(self, tenant_id: str, module_id: str) -> bool:
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             done = await c.execute(
                 tool_modules.delete().where(tool_modules.c.tenant_id == tenant_id, tool_modules.c.id == module_id)
             )
@@ -761,5 +770,5 @@ class ModuleStore:
             .select_from(tool_modules)
             .where(tool_modules.c.tenant_id == tenant_id, sa.or_(team_visible(tool_modules), _granted(tenant_id)))
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return int((await c.execute(q)).scalar_one())

@@ -27,6 +27,7 @@ from ops_service_kit.settings import Settings
 from ops_store import isolation
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
+from ops_store.database import reachable
 
 from .auth import Authenticator
 from .code_runs import CodeExecutor, resolve_handles, run_acting_for, run_caller, run_claims
@@ -365,6 +366,8 @@ def create_gateway_app(
 
     @app.get("/health", response_model=None, tags=["gateway"])
     async def health() -> dict[str, str] | JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        if not await reachable(log.engine):
+            return JSONResponse({"status": "degraded", "reason": "database"}, status_code=503)
         # Another process writing a different policy into a shared OPA would change every decision; say so.
         if await opa.loaded_policy_hash() != expected:
             return JSONResponse({"status": "policy_drift"}, status_code=503)

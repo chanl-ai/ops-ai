@@ -11,6 +11,7 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from ops_store import isolation
 from ops_tools.mocks import MockAnswers
 from ops_tools.modules.seed import blank
 from ops_tools.store.mocks import MockStore
@@ -90,7 +91,8 @@ async def test_the_downgrade_puts_each_example_back_on_its_operation() -> None:
                 at=datetime.now(UTC), input={"displayName": "Example", "name": "example", "type": "http"},
             )  # fmt: skip
             m["operations"] = [{**OPERATION, "stub": {"balance": 3}}]
-            await ModuleStore(engine).put(m, expected_revision=None)
+            with isolation.tenant_wide("TESTS", tenant_id="t_ex"):
+                await ModuleStore(engine).put(m, expected_revision=None)
             _alembic(target, "downgrade", "tools_0052_reconnect_notice")
             async with engine.connect() as c:
                 stub = (
@@ -101,9 +103,9 @@ async def test_the_downgrade_puts_each_example_back_on_its_operation() -> None:
                 ).scalar()
             assert (stub, left) == ({"balance": 3}, 0)
             _alembic(target, "upgrade", "head")
-            assert (await ModuleStore(engine).get("t_ex", "mod_example") or {})["operations"][0]["stub"] == {
-                "balance": 3
-            }
+            with isolation.tenant_wide("TESTS", tenant_id="t_ex"):
+                held = await ModuleStore(engine).get("t_ex", "mod_example") or {}
+            assert held["operations"][0]["stub"] == {"balance": 3}
         finally:
             await engine.dispose()
 

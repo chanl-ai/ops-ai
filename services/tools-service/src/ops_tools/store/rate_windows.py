@@ -14,12 +14,13 @@ from typing import ClassVar
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import Guarantee
 from ops_store.schema import TENANT_SCOPED
+from ops_store.store import Store
 
 from .modules import metadata
+from .tenancy import ROLE
 
 operation_rate_windows = sa.Table(
     "operation_rate_windows",
@@ -40,12 +41,10 @@ class Spent:
     reset_at: str
 
 
-class RateWindows:
+class RateWindows(Store):
     # The count rises by one atomic statement, so concurrent calls never share a slot (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS})
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+    role = ROLE
 
     async def spend(self, tenant_id: str, operation: str, limit: int) -> Spent:
         """Counts one call in the current minute; allowed while the count is within `limit`."""
@@ -59,7 +58,7 @@ class RateWindows:
             )
             .returning(t.c.calls, t.c.window_start)
         )
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             calls, start = (await c.execute(stmt)).one()
             await c.execute(
                 t.delete().where(

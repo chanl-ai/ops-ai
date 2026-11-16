@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping, Sequence
-from contextlib import AbstractAsyncContextManager
 from datetime import datetime
 from typing import Any, ClassVar, cast
 
@@ -27,22 +26,21 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from ops_policy import context_of
 from ops_service_kit.errors import Conflict
 from ops_service_kit.settings import PluginClient
-from ops_store import Guarantee, isolation
+from ops_store import Guarantee
 from ops_store.outbox import add as add_event
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.search import contains
+from ops_store.store import Store
 from ops_store.team_scope import any_team, team_visible
 
 from .modules import metadata, module_operations, service_outbox, tool_modules
+from .tenancy import ROLE
 
 _TS = sa.DateTime(timezone=True)
 SHARED = ""
 # An account a person added for a second login of their own (add_own_account): listed to them, not to the rest of the
 # team, signing only that person's calls, and removed when its sign-in turns out to be an identity they already linked.
 PERSON_ORIGIN = "person"
-# The role every transaction of this store runs as: row-level security applies to it, not to the owner the
-# service connects as, so the database holds a person's sign-ins to their connection's team.
-ROLE = "ops_tools_tenant"
 
 connections = sa.Table(
     "connections",
@@ -374,21 +372,19 @@ _CREDENTIAL_OF = sa.and_(
 )
 
 
-class ConnectionStore:
+class ConnectionStore(Store):
     # A change and its audit row land together (TRANSACTION) against the revision read (CAS); a
     # token is stored against the rotation it replaced (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.CAS})
+    # Every transaction runs as ROLE carrying the caller's tenant and team; NoTenantError before any connection when
+    # the caller set none.
+    role = ROLE
 
     def __init__(self, engine: AsyncEngine, install_clients: Mapping[str, PluginClient] | None = None) -> None:
         """`install_clients` is the install config's OAuth client per plugin (plugin_clients): Ops AI's app, whose
         client id an account on it reads."""
-        self.engine = engine
+        super().__init__(engine)
         self.install_clients = dict(install_clients or {})
-
-    def _tx(self) -> AbstractAsyncContextManager[AsyncConnection]:
-        """One transaction as ROLE carrying the caller's tenant and team; NoTenantError before any connection when the
-        caller set none."""
-        return isolation.isolated_tx(self.engine, role=ROLE)
 
     @staticmethod
     def _team(tenant_id: str, connection_id: str) -> sa.ScalarSelect[str]:
@@ -408,7 +404,7 @@ class ConnectionStore:
 
     async def credential(self, tenant_id: str, credential_id: str) -> Row | None:
         """The team's app credential; None when it is not the team's."""
-        async with self._tx() as c:
+        async with self.tx() as c:
             return (await self._credentials(c, tenant_id, [credential_id])).get(credential_id)
 
     async def team_credentials(self, tenant_id: str, team_id: str, app_id: str | None = None) -> list[Row]:
@@ -418,12 +414,12 @@ class ConnectionStore:
         if app_id is not None:
             where.append(t.app_id == app_id)
         q = app_credentials.select().where(*where).order_by(t.created_at, t.id)
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def add_credential(self, row: Row) -> None:
         """A new app credential: tenant, id, team, app, name, client id, scopes, secret name, who and when."""
-        async with self._tx() as c:
+        async with self.tx() as c:
             await c.execute(app_credentials.insert().values(**row))
 
     async def change_credential(
@@ -431,7 +427,7 @@ class ConnectionStore:
     ) -> None:
         """Writes the credential's name, client id, permissions or settings, with who changed it and when."""
         t = app_credentials.c
-        async with self._tx() as c:
+        async with self.tx() as c:
             await c.execute(
                 app_credentials.update()
                 .where(t.tenant_id == tenant_id, t.id == credential_id, team_visible(app_credentials))
@@ -441,7 +437,7 @@ class ConnectionStore:
     async def delete_credential(self, tenant_id: str, credential_id: str) -> bool:
         """Deletes the team's app credential; False when there is none. Accounts are moved off it first."""
         t = app_credentials.c
-        async with self._tx() as c:
+        async with self.tx() as c:
             gone = await c.execute(
                 app_credentials.delete().where(
                     t.tenant_id == tenant_id, t.id == credential_id, team_visible(app_credentials)
@@ -458,7 +454,7 @@ class ConnectionStore:
         values: Row = {"updated_by": actor, "updated_at": at}
         if secret_name is not None:
             values["secret_name"] = secret_name
-        async with self._tx() as c:
+        async with self.tx() as c:
             await c.execute(
                 app_credentials.update()
                 .where(t.tenant_id == tenant_id, t.id == credential_id, team_visible(app_credentials))
@@ -475,7 +471,7 @@ class ConnectionStore:
             .where(k.tenant_id == tenant_id, k.credential_id.in_(credential_ids), team_visible(connections))
             .order_by(k.created_at, k.id)
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
             return await self._read(c, tenant_id, rows, used=False)
 
@@ -577,7 +573,7 @@ class ConnectionStore:
     async def get(self, tenant_id: str, connection_id: str) -> Row | None:
         k = connections.c
         q = connections.select().where(k.tenant_id == tenant_id, k.id == connection_id, team_visible(connections))
-        async with self._tx() as c:
+        async with self.tx() as c:
             row = (await c.execute(q)).mappings().first()
             return (await self._read(c, tenant_id, [dict(row)]))[0] if row else None
 
@@ -589,7 +585,7 @@ class ConnectionStore:
             .where(k.tenant_id == tenant_id, k.team_id == team_id, k.app_id == app_id, team_visible(connections))
             .order_by(k.created_at, k.id)
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
             return await self._read(c, tenant_id, rows)
 
@@ -600,7 +596,7 @@ class ConnectionStore:
             return {}
         k = connections.c
         q = connections.select().where(k.tenant_id == tenant_id, k.id.in_(ids), team_visible(connections))
-        async with self._tx() as c:
+        async with self.tx() as c:
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
             return {str(r["id"]): r for r in await self._read(c, tenant_id, rows, used=False)}
 
@@ -616,7 +612,7 @@ class ConnectionStore:
             .select_from(connections)
             .where(self._visible(tenant_id, teams, search), team_visible(connections))
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             return int((await c.execute(q)).scalar_one())
 
     async def page(self, tenant_id: str, teams: list[str], search: str, offset: int, limit: int) -> list[Row]:
@@ -627,7 +623,7 @@ class ConnectionStore:
             .offset(offset)
             .limit(limit)
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
             return await self._read(c, tenant_id, rows)
 
@@ -636,9 +632,9 @@ class ConnectionStore:
         OAuth client in them goes to the account's app credential."""
         fields: Row = {"settings": row.get("settings") or {}, "secrets": row.get("secrets") or {}}
         row = {**row, "account_key": name_key(row.get("account_name")), "owner_key": owner_key(row)}
-        async with self._tx() as c:
+        async with self.tx() as c:
             try:
-                async with c.begin_nested():
+                async with self.attempt(c):
                     await c.execute(connections.insert().values(**{**row, "settings": {}, "secrets": {}}))
             except IntegrityError as e:
                 k = connections.c
@@ -678,7 +674,7 @@ class ConnectionStore:
         to the account's app credential."""
         if "account_name" in values:
             values = {**values, "account_key": name_key(values["account_name"])}
-        async with self._tx() as c:
+        async with self.tx() as c:
             if "settings" in values or "secrets" in values or "platform_app" in values:
                 values = await self._put_client(c, tenant_id, connection_id, values, actor=actor, at=at)
             q = (
@@ -691,7 +687,7 @@ class ConnectionStore:
                 .values(**values, revision=expected_revision + 1, updated_by=actor, updated_at=at)
             )
             try:
-                async with c.begin_nested():
+                async with self.attempt(c):
                     changed = (await c.execute(q)).rowcount
             except IntegrityError as e:
                 raise AccountNameTaken(str(values.get("account_name"))) from e
@@ -722,7 +718,7 @@ class ConnectionStore:
         """Sets the app's address on the account, keeping its other settings."""
         k = connections.c
         mine = (k.tenant_id == tenant_id, k.id == connection_id, team_visible(connections))
-        async with self._tx() as c:
+        async with self.tx() as c:
             held = (await c.execute(sa.select(k.settings).where(*mine))).scalar()
             if held is None:
                 raise StaleConnection(connection_id)
@@ -737,7 +733,7 @@ class ConnectionStore:
     async def delete(self, tenant_id: str, connection_id: str, *, actor: str, at: datetime) -> list[Row] | None:
         """None when there is no such connection; ConnectionInUse naming the modules that use it, checked in the
         delete's own transaction. Else the token and sign-in state rows the delete took with it (`held_of`)."""
-        async with self._tx() as c:
+        async with self.tx() as c:
             used = (await self._used_by(c, tenant_id, [connection_id])).get(connection_id, [])
             if used:
                 raise ConnectionInUse([str(u["name"]) for u in used])
@@ -794,13 +790,13 @@ class ConnectionStore:
             .order_by(connection_audit.c.id.desc())
             .limit(limit)
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def note(self, tenant_id: str, connection_id: str, event: Row, *, report: Row | None = None) -> None:
         """An audit row on its own (a sign-in, a sign-out, a failed refresh): action, actor, at, detail. `report`: a
         service event (connections.account_events) written in the same transaction."""
-        async with self._tx() as c:
+        async with self.tx() as c:
             await self._audit(c, tenant_id, connection_id, event)
             if report is not None:
                 await add_event(c, service_outbox, **report)
@@ -812,7 +808,7 @@ class ConnectionStore:
             .where(connections.c.tenant_id == tenant_id, connections.c.id == connection_id)
             .values(status=status, status_detail=detail)
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             await c.execute(q)
 
     async def needs_reconnect(self, tenant_id: str, connection_id: str, detail: str | None, event: Row) -> None:
@@ -824,7 +820,7 @@ class ConnectionStore:
         seen = sa.select(o.id).where(
             o.tenant_id == event["tenant_id"], o.name == event["name"], o.event_key == event["key"]
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             if detail is not None:
                 await c.execute(
                     connections.update()
@@ -842,7 +838,7 @@ class ConnectionStore:
         values: Row = {"health": health}
         if status is not None:
             values |= {"status": status[0], "status_detail": status[1]}
-        async with self._tx() as c:
+        async with self.tx() as c:
             await c.execute(
                 connections.update()
                 .where(connections.c.tenant_id == tenant_id, connections.c.id == connection_id)
@@ -854,7 +850,7 @@ class ConnectionStore:
         account. A finding of the sign-in, not a person's edit, so the revision stays."""
         k = connections.c
         key = (k.tenant_id == tenant_id, k.id == connection_id, team_visible(connections))
-        async with self._tx() as c:
+        async with self.tx() as c:
             held = (await c.execute(sa.select(k.plugin_settings).where(*key))).first()
             if held is None:
                 return False
@@ -873,7 +869,7 @@ class ConnectionStore:
         q = connection_tokens.select().where(
             *self._token_key(tenant_id, connection_id, person), team_visible(connection_tokens)
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             row = (await c.execute(q)).mappings().first()
             return dict(row) if row else None
 
@@ -888,7 +884,7 @@ class ConnectionStore:
             connection_tokens.c.person_id == SHARED,
             team_visible(connection_tokens),
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             return {str(r["connection_id"]): dict(r) for r in (await c.execute(q)).mappings()}
 
     async def tokens(self, tenant_id: str, connection_id: str) -> list[Row]:
@@ -897,7 +893,7 @@ class ConnectionStore:
             connection_tokens.c.connection_id == connection_id,
             team_visible(connection_tokens),
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def put_token(
@@ -913,12 +909,12 @@ class ConnectionStore:
         insert, which fails if another caller inserted first), else the rotation read (CAS). False when another caller
         stored first; nothing is written then. No lock is held while the token is fetched."""
         key = self._token_key(tenant_id, connection_id, person)
-        async with self._tx() as c:
+        async with self.tx() as c:
             if expected_rotations is not None:
                 q = connection_tokens.update().where(*key, connection_tokens.c.rotations == expected_rotations)
                 return (await c.execute(q.values(**values))).rowcount == 1
             try:
-                async with c.begin_nested():
+                async with self.attempt(c):
                     await c.execute(
                         connection_tokens.insert().values(
                             tenant_id=tenant_id,
@@ -937,7 +933,7 @@ class ConnectionStore:
         key = self._token_key(tenant_id, connection_id, person)
         # A new sign-in starts untested: the test that follows it writes its own outcome.
         values = {"refused_at": None, "refused_reason": None, "test": None, **values}
-        async with self._tx() as c:
+        async with self.tx() as c:
             if (await c.execute(connection_tokens.update().where(*key).values(**values))).rowcount == 0:
                 await c.execute(
                     connection_tokens.insert().values(
@@ -952,7 +948,7 @@ class ConnectionStore:
     async def mark_refused(self, tenant_id: str, connection_id: str, person: str, *, reason: str, at: datetime) -> bool:
         """Marks a person's own row refused by the system; False when they hold none."""
         q = connection_tokens.update().where(*self._token_key(tenant_id, connection_id, person))
-        async with self._tx() as c:
+        async with self.tx() as c:
             return (await c.execute(q.values(refused_at=at, refused_reason=reason[:300]))).rowcount > 0
 
     async def name_token(self, tenant_id: str, connection_id: str, person: str, account: str) -> bool:
@@ -961,19 +957,19 @@ class ConnectionStore:
         q = connection_tokens.update().where(
             *self._token_key(tenant_id, connection_id, person), connection_tokens.c.account.is_(None)
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             return (await c.execute(q.values(account=account))).rowcount > 0
 
     async def name_person(self, tenant_id: str, connection_id: str, person: str, name: str) -> bool:
         """The name of the person whose own sign-in the row is, kept each time they sign in; False when no row."""
         q = connection_tokens.update().where(*self._token_key(tenant_id, connection_id, person))
-        async with self._tx() as c:
+        async with self.tx() as c:
             return (await c.execute(q.values(person_name=name[:200]))).rowcount > 0
 
     async def set_token_test(self, tenant_id: str, connection_id: str, person: str, test: Row) -> bool:
         """The account's last test on its own row, the team's (SHARED) or a person's; False when it holds none."""
         q = connection_tokens.update().where(*self._token_key(tenant_id, connection_id, person))
-        async with self._tx() as c:
+        async with self.tx() as c:
             return (await c.execute(q.values(test=test))).rowcount > 0
 
     async def forget_person(self, tenant_id: str, team_id: str, person: str) -> list[Row]:
@@ -984,13 +980,13 @@ class ConnectionStore:
             return []
         t = connection_tokens.c
         q = connection_tokens.delete().where(t.tenant_id == tenant_id, t.team_id == team_id, t.person_id == person)
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q.returning(*_HELD_TOKEN))).mappings()]
 
     async def forget_token(self, tenant_id: str, connection_id: str, person: str = SHARED) -> list[Row]:
         """The token row deleted, empty when there was none (`held_of`)."""
         q = connection_tokens.delete().where(*self._token_key(tenant_id, connection_id, person))
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q.returning(*_HELD_TOKEN))).mappings()]
 
     async def idle_sign_ins(self, tenant_id: str, refreshed_before: datetime, *, limit: int = 500) -> list[Row]:
@@ -1014,7 +1010,7 @@ class ConnectionStore:
             .order_by(t.refreshed_at, t.connection_id, t.person_id)
             .limit(limit)
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def own_sign_ins(self, tenant_id: str, person: str, connection_ids: list[str]) -> list[Row]:
@@ -1033,7 +1029,7 @@ class ConnectionStore:
             )
             .order_by(t.refreshed_at.desc(), t.connection_id)
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def pin(self, tenant_id: str, person: str, connection_id: str, connection_ids: list[str]) -> bool:
@@ -1042,7 +1038,7 @@ class ConnectionStore:
         sign-in there."""
         t = connection_tokens.c
         mine = (t.tenant_id == tenant_id, t.person_id == person)
-        async with self._tx() as c:
+        async with self.tx() as c:
             held = await c.execute(
                 sa.select(sa.func.count())
                 .select_from(connection_tokens)
@@ -1071,7 +1067,7 @@ class ConnectionStore:
             )
             .order_by(t.refreshed_at, t.person_id)
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def sign_ins(self, tenant_id: str, connection_ids: list[str]) -> list[Row]:
@@ -1102,7 +1098,7 @@ class ConnectionStore:
             )
             .order_by(t.refreshed_at.desc(), t.person_id)
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def operation_scopes(self, tenant_id: str, connection_id: str) -> list[str]:
@@ -1115,7 +1111,7 @@ class ConnectionStore:
             .where(o.tenant_id == tenant_id, m.connection_id == connection_id, team_visible(tool_modules))
             .order_by(o.module_id, o.position)
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             rows = (await c.execute(q)).scalars().all()
         return list(dict.fromkeys(str(x) for r in rows if isinstance(r, list) for x in cast(list[Any], r)))
 
@@ -1151,7 +1147,7 @@ class ConnectionStore:
             )
             .order_by(k.name, t.connection_id)
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def connectable(self, tenant_id: str, team_id: str, person: str, kinds: list[str]) -> list[Row]:
@@ -1192,14 +1188,14 @@ class ConnectionStore:
             )
             .order_by(k.name, k.id)
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     # ── Connect links ─────────────────────────────────────────────────────
 
     async def add_link(self, row: Row, *, now: datetime) -> None:
         """A link asking one person to sign in; the tenant's expired links go in the same transaction."""
-        async with self._tx() as c:
+        async with self.tx() as c:
             await c.execute(
                 connect_links.delete().where(
                     connect_links.c.tenant_id == row["tenant_id"], connect_links.c.expires_at < now
@@ -1218,7 +1214,7 @@ class ConnectionStore:
             k.expires_at >= now,
             team_visible(connect_links),
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             row = (await c.execute(connect_links.select().where(*where))).mappings().first()
             if row is None:
                 return None
@@ -1229,7 +1225,7 @@ class ConnectionStore:
     async def link(self, tenant_id: str, token_hash: str) -> Row | None:
         """The link under this hash, used or not, for telling its owner apart from anyone else."""
         k = connect_links.c
-        async with self._tx() as c:
+        async with self.tx() as c:
             found = await c.execute(
                 connect_links.select().where(
                     k.tenant_id == tenant_id, k.token_hash == token_hash, team_visible(connect_links)
@@ -1243,7 +1239,7 @@ class ConnectionStore:
     async def add_state(self, row: Row, *, now: datetime) -> list[Row]:
         """Stores a sign-in in progress; expired ones of the tenant go in the same transaction, so the table holds only
         sign-ins under ten minutes old and the used ones not yet pruned. Returns the expired states (`held_of`)."""
-        async with self._tx() as c:
+        async with self.tx() as c:
             expired = oauth_states.delete().where(
                 oauth_states.c.tenant_id == row["tenant_id"], oauth_states.c.expires_at < now
             )
@@ -1259,7 +1255,7 @@ class ConnectionStore:
         q = sa.select(s.connection_id, s.token_for).where(
             s.tenant_id == tenant_id, s.state_hash == state_hash, team_visible(oauth_states)
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             row = (await c.execute(q)).mappings().first()
             return dict(row) if row else None
 
@@ -1278,7 +1274,7 @@ class ConnectionStore:
             s.expires_at >= now,
             team_visible(oauth_states),
         )
-        async with self._tx() as c:
+        async with self.tx() as c:
             row = (await c.execute(oauth_states.select().where(*where))).mappings().first()
             if row is None:
                 return None

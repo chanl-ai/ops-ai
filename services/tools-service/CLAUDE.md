@@ -26,7 +26,7 @@ rules: [root guide](../../CLAUDE.md#folder-guides).
 | `src/ops_tools/plugins/` | Loads every plugin in `OPS_PLUGINS_DIR` (the repo's `plugins/` locally) and runs its tools; apps, templates and knowledge sources from plugins |
 | `src/ops_tools/egress.py`, `egress_routes.py`, `held_hosts.py` | The allow-list; https on 443 to a listed host, address checked at connect |
 | `src/ops_tools/executor.py`, `code_runs.py`, `mcp.py` | HTTP operations, code tools on runner-service, MCP upstreams |
-| `src/ops_tools/store/` | All database code; `store/connections.py:41` names the tenant role `ops_tools_tenant` |
+| `src/ops_tools/store/` | All database code; every class extends `ops_store.Store`, and `store/tenancy.py` names the tenant role `ops_tools_tenant` and the system role `ops_tools_system` (cross-tenant listings, the relay, the audit sweep) |
 | `policy/` | `gateway.rego` and `data.json`, loaded into OPA at start |
 | `seed/tool_modules.json` | The dev registry, loaded in dev |
 | `scripts/fake_bank/` | The fake bank (`api.bank.test`) that `make up` runs as `fakebank` |

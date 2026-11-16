@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import isolation
 from ops_store.schema import isolation_kind
-from ops_tools.store.mcp_links import ROLE, McpLinks, mcp_links
+from ops_tools.store.mcp_links import McpLinks, mcp_links
+from ops_tools.store.tenancy import ROLE
 
 TEAM_A, TEAM_B = "team_cards", "team_ops"
 

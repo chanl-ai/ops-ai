@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_store import isolation
 from ops_store.schema import isolation_kind
 from ops_tools.store.calls import gateway_calls
-from ops_tools.store.connections import ROLE
 from ops_tools.store.egress import egress_audit, egress_hosts, egress_ranges
 from ops_tools.store.modules import (
     module_approvals,
@@ -31,6 +30,7 @@ from ops_tools.store.plugin_bindings import plugin_bindings
 from ops_tools.store.rate_windows import operation_rate_windows
 from ops_tools.store.send_policies import send_checks, send_policies
 from ops_tools.store.team_defaults import team_defaults
+from ops_tools.store.tenancy import ROLE
 
 POLICED = [
     egress_audit,

@@ -23,7 +23,9 @@ from ops_service_kit.credentials import credential_store
 from ops_service_kit.logging import configure_logging, get_logger
 from ops_service_kit.model_calls import ModelCalls
 from ops_service_kit.settings import Settings, require_keys
+from ops_store.background import run_sweep
 from ops_store.database import open_database
+from ops_store.outbox import run_relay
 from ops_store.schema_version import require_current_schema
 
 from .app import create_gateway_app
@@ -68,13 +70,14 @@ from .send_policy_routes import send_policy_router
 from .store import CallLog
 from .store.connections import ConnectionStore
 from .store.egress import EgressStore
-from .store.event_relay import keep_relaying
 from .store.mcp_links import McpLinks
 from .store.mocks import MockStore
 from .store.modules import ModuleStore
 from .store.plugin_bindings import PluginBindings
+from .store.relay import KEY as RELAY_KEY
+from .store.relay import tools_relay
 from .store.review_handoffs import ReviewHandoffs
-from .store.secrets import SecretStore
+from .store.secrets import AUDIT_RETENTION, AUDIT_SWEEP, SecretStore
 from .store.send_policies import SendPolicies
 from .store.team_defaults import TeamDefaults
 from .tools import LocalToolRunner
@@ -282,7 +285,15 @@ def main() -> None:
         background=(
             lambda: keep_handing_over(ReviewHandoffs(engine), client("agents", agents_url, ["tools:publish"])),
             # Tool access requests and module reviews start their system workflows through these events.
-            lambda: keep_relaying(engine, client("agents", agents_url, ["events:emit", "agents:create"])),
+            lambda: run_relay(
+                tools_relay(engine, client("agents", agents_url, ["events:emit", "agents:create"])),
+                key=RELAY_KEY,
+                stop=asyncio.Event(),
+            ),
+            # Every hour: secret use and change rows past their age are deleted.
+            lambda: run_sweep(
+                AUDIT_SWEEP, lambda: SecretStore(engine).system_tx(AUDIT_RETENTION), stop=asyncio.Event()
+            ),
             # Once at start: every team behind this release's defaults version is brought up to date.
             lambda: catch_up_at_start(store, TeamDefaults(engine)),
             # Once at start: a tool's sign-in header saved before they were refused moves to its connection.

@@ -10,21 +10,20 @@ from datetime import datetime
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import Guarantee
+from ops_store.store import Store
 
 from .modules import operation_mocks
+from .tenancy import ROLE
 
 Row = dict[str, Any]
 
 
-class MockStore:
+class MockStore(Store):
     # Clearing the old default and setting a new one land together.
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION})
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+    role = ROLE
 
     @staticmethod
     def _of(tenant_id: str, module_id: str, operation: str, environment: str) -> tuple[Any, ...]:
@@ -45,18 +44,18 @@ class MockStore:
             .where(*self._of(tenant_id, module_id, operation, environment))
             .order_by(operation_mocks.c.position, operation_mocks.c.id)
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def get(self, tenant_id: str, mock_id: str) -> Row | None:
         q = operation_mocks.select().where(operation_mocks.c.tenant_id == tenant_id, operation_mocks.c.id == mock_id)
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             row = (await c.execute(q)).mappings().first()
             return dict(row) if row else None
 
     async def add(self, row: Row) -> None:
         """Appends the mock after the operation's others; a new default clears the old one in the same transaction."""
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             where = self._of(row["tenant_id"], row["module_id"], row["operation"], row["environment"])
             last = (await c.execute(sa.select(sa.func.max(operation_mocks.c.position)).where(*where))).scalar()
             if row["is_default"]:
@@ -64,7 +63,7 @@ class MockStore:
             await c.execute(operation_mocks.insert().values(**row, position=int(last or 0) + 1))
 
     async def change(self, tenant_id: str, mock_id: str, values: Row, *, at: datetime) -> Row | None:
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             key = (operation_mocks.c.tenant_id == tenant_id, operation_mocks.c.id == mock_id)
             row = (await c.execute(operation_mocks.select().where(*key))).mappings().first()
             if row is None:
@@ -77,5 +76,5 @@ class MockStore:
 
     async def delete(self, tenant_id: str, mock_id: str) -> bool:
         q = operation_mocks.delete().where(operation_mocks.c.tenant_id == tenant_id, operation_mocks.c.id == mock_id)
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             return (await c.execute(q)).rowcount > 0

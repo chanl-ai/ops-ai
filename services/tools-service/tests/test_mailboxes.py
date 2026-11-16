@@ -138,7 +138,8 @@ async def test_a_mailbox_is_read_with_its_secret_and_the_password_never_comes_ba
     assert b"notice-1-" in base64.b64decode(item["rfc822"])
     assert "app-password" not in page.text and "app-password" not in first.text
     used = await SecretStore(env.engine).audit(env.tenant, TEAM)
-    assert [u for u in used if u["name"] == SECRET and u["action"] == "used"], used
+    # The mail listener reads every few seconds: its reads keep the secret's time of use and write no audit row each.
+    assert not [u for u in used if u["name"] == SECRET and u["action"] == "used"], used
 
 
 async def test_a_caller_of_another_team_cannot_use_this_teams_secret(env: Env) -> None:
@@ -188,6 +189,9 @@ async def test_test_connection_reports_the_newest_message_or_the_step_that_faile
     assert r.status_code == 200, r.text
     d = r.json()["data"]
     assert d["ok"] is True and d["newest"]["subject"] == "Notice 3" and {s["state"] for s in d["steps"]} == {"done"}
+    # A person's Test connection is a use of the secret, audited as one (the listener's polls are not).
+    used = await SecretStore(env.engine).audit(env.tenant, TEAM)
+    assert [u for u in used if u["name"] == SECRET and u["action"] == "used"], used
     env.connection["host"] = "mail.elsewhere.test"
     d = (await env.post("test")).json()["data"]
     assert d["ok"] is False and [s["state"] for s in d["steps"]] == ["failed", "skipped", "skipped"]

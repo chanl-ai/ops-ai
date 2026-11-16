@@ -8,11 +8,14 @@ from typing import Any, ClassVar
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
 from ops_store.schema import TENANT_SCOPED, system
+from ops_store.store import Store
+
+from .tenancy import ROLE
 
 metadata = sa.MetaData()
 
@@ -127,13 +130,11 @@ gateway_fences = sa.Table(
 )
 
 
-class CallLog:
+class CallLog(Store):
     # A call is claimed once per key and a thread's fence only rises (CAS); the fence and the write it guards share
     # one transaction (TRANSACTION).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION})
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+    role = ROLE
 
     async def _fence(self, c: AsyncConnection, thread_id: str, generation: int | None) -> bool:
         """Applies the thread's fence, the highest lease generation a write call has carried, inside the caller's
@@ -143,7 +144,7 @@ class CallLog:
         if generation is None:
             q = sa.select(gateway_fences.c.generation).where(gateway_fences.c.thread_id == thread_id)
             return (await c.execute(q)).first() is None
-        insert = (postgresql.insert if self.engine.dialect.name == "postgresql" else sqlite.insert)(gateway_fences)
+        insert = (postgresql.insert if c.dialect.name == "postgresql" else sqlite.insert)(gateway_fences)
         stmt = (
             insert.values(thread_id=thread_id, generation=generation)
             .on_conflict_do_update(
@@ -157,8 +158,8 @@ class CallLog:
     async def raise_fence(self, thread_id: str, generation: int) -> int:
         """Raises the thread's fence to `generation` unless it is already higher, and returns the fence. A lower
         generation leaves it as it is; the caller compares the result with what it sent."""
-        async with self.engine.begin() as c:
-            insert = (postgresql.insert if self.engine.dialect.name == "postgresql" else sqlite.insert)(gateway_fences)
+        async with self.tx() as c:
+            insert = (postgresql.insert if c.dialect.name == "postgresql" else sqlite.insert)(gateway_fences)
             stmt = (
                 insert.values(thread_id=thread_id, generation=generation)
                 .on_conflict_do_update(
@@ -170,7 +171,7 @@ class CallLog:
             return int((await c.execute(stmt)).scalar_one())
 
     async def record(self, **row: Any) -> None:
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await c.execute(gateway_calls.insert().values(effect=False, effect_scope=_own(row["id"]), **row))
 
     async def claim(self, *, generation: int | None, **row: Any) -> dict[str, Any] | None:
@@ -178,7 +179,7 @@ class CallLog:
         (ADR-0016): a superseded caller raises LeaseSupersededError before the dedup lookup, so it is refused, never
         answered with the new owner's result. Returns None when this call won the claim, or the first call's row when
         the same write already has one."""
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             if row["thread_id"] and not await self._fence(c, row["thread_id"], generation):
                 raise LeaseSupersededError("lease superseded")
             await _key_lock(c, row["idempotency_key"])
@@ -190,7 +191,7 @@ class CallLog:
             if (await c.execute(abandoned)).first() is not None:
                 raise CallAbandonedError(row["idempotency_key"])
             try:
-                async with c.begin_nested():
+                async with self.attempt(c):
                     scope = _effect_scope(row["thread_id"])
                     await c.execute(
                         gateway_calls.insert().values(effect=True, effect_scope=scope, outcome="running", **row)
@@ -211,7 +212,7 @@ class CallLog:
     async def refuse_claimed(self, call_id: str, *, reasons: list[str], error: dict[str, Any], latency_ms: int) -> None:
         """Turns a claimed write that was refused before it ran (its rate limit) into a refused row and gives up the
         claim, so a retry after the window can claim and run it instead of replaying the refusal."""
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await c.execute(
                 gateway_calls.update()
                 .where(gateway_calls.c.id == call_id)
@@ -233,7 +234,7 @@ class CallLog:
         """Completes a claimed write's row; `extra` carries the latency and any error. `unsent`: the write failed before
         anything was sent, so the claim is given back and the same write sent again runs instead of replaying this."""
         released = {"effect": False, "effect_scope": _own(call_id)} if unsent else {}
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await c.execute(
                 gateway_calls.update()
                 .where(gateway_calls.c.id == call_id)
@@ -246,7 +247,7 @@ class CallLog:
         """The call sent under `key` when the gateway has one; otherwise the key is marked abandoned, in the same
         transaction under the key's lock, so a claim of it arriving later is refused (CallAbandonedError)."""
         mine = (gateway_calls.c.tenant_id == tenant_id, gateway_calls.c.idempotency_key == key)
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await _key_lock(c, key)
             q = (
                 gateway_calls.select()
@@ -292,7 +293,7 @@ class CallLog:
         if key is not None:
             where.append(gateway_calls.c.idempotency_key == key)
         error = {"code": "CALL_LOST", "message": "the gateway stopped before the call finished; it may have run"}
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await c.execute(gateway_calls.update().where(*where).values(outcome="lost", error=error))
 
     async def get(self, call_id: str, *, tenant_id: str, team_ids: list[str]) -> dict[str, Any] | None:
@@ -300,7 +301,7 @@ class CallLog:
         q = gateway_calls.select().where(
             gateway_calls.c.id == call_id, gateway_calls.c.tenant_id == tenant_id, gateway_calls.c.team_id.in_(team_ids)
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             row = (await c.execute(q)).mappings().first()
         return dict(row) if row else None
 
@@ -310,7 +311,7 @@ class CallLog:
             .where(gateway_calls.c.thread_id == thread_id, gateway_calls.c.tenant_id == tenant_id)
             .order_by(gateway_calls.c.created_at)
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def search(
@@ -360,7 +361,7 @@ class CallLog:
             where.append(gateway_calls.c.created_at < until)
         q = gateway_calls.select().where(*where).order_by(gateway_calls.c.created_at.desc()).offset(offset).limit(limit)
         total = sa.select(sa.func.count()).select_from(gateway_calls).where(*where)
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
             return rows, int((await c.execute(total)).scalar_one())
 
@@ -378,7 +379,7 @@ class CallLog:
         q = sa.select(t.c.link_id, t.c.created_at, t.c.outcome, t.c.client_name, t.c.client_id, t.c.sub).join(
             newest, sa.and_(t.c.link_id == newest.c.link_id, t.c.created_at == newest.c.at)
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return {str(r["link_id"]): dict(r) for r in (await c.execute(q)).mappings()}
 
     async def made_for(
@@ -400,18 +401,20 @@ class CallLog:
             )
             .group_by(gateway_calls.c.module_id)
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return {str(m): int(n) for m, n in (await c.execute(q)).all()}
 
     async def traffic(
         self, module_ids: list[str], since: str, *, tenant_id: str, team_ids: list[str]
     ) -> dict[tuple[str, str | None], dict[str, Any]]:
-        return await traffic(self.engine, module_ids, since, tenant_id=tenant_id, team_ids=team_ids)
+        async with self.tx() as c:
+            return await traffic(c, module_ids, since, tenant_id=tenant_id, team_ids=team_ids)
 
     async def daily(
         self, module_id: str, since: str, *, tenant_id: str, team_ids: list[str]
     ) -> dict[str, dict[str, Any]]:
-        return await daily(self.engine, module_id, since, tenant_id=tenant_id, team_ids=team_ids)
+        async with self.tx() as c:
+            return await daily(c, module_id, since, tenant_id=tenant_id, team_ids=team_ids)
 
 
 # Calls that reached the system behind the operation. A refusal never left the gateway and a replay returned the first
@@ -430,7 +433,7 @@ def _ran_since(module_ids: list[str], since: str, tenant_id: str, team_ids: list
 
 
 async def traffic(
-    engine: AsyncEngine, module_ids: list[str], since: str, *, tenant_id: str, team_ids: list[str]
+    conn: AsyncConnection, module_ids: list[str], since: str, *, tenant_id: str, team_ids: list[str]
 ) -> dict[tuple[str, str | None], dict[str, Any]]:
     """Calls, errors and p95 latency since `since`, per (module, operation) and per module (operation None), in one
     aggregate: GROUPING SETS gives the module's p95 over all its calls, which the operations' p95s cannot."""
@@ -449,8 +452,7 @@ async def traffic(
         .where(*_ran_since(module_ids, since, tenant_id, team_ids))
         .group_by(sa.func.grouping_sets(sa.tuple_(c.module_id, c.tool), sa.tuple_(c.module_id)))
     )
-    async with engine.connect() as conn:
-        rows = (await conn.execute(q)).mappings().all()
+    rows = (await conn.execute(q)).mappings().all()
     return {
         (r["module_id"], None if r["whole"] else r["tool"]): {
             "calls": int(r["calls"]),
@@ -462,7 +464,7 @@ async def traffic(
 
 
 async def daily(
-    engine: AsyncEngine, module_id: str, since: str, *, tenant_id: str, team_ids: list[str]
+    conn: AsyncConnection, module_id: str, since: str, *, tenant_id: str, team_ids: list[str]
 ) -> dict[str, dict[str, Any]]:
     """Per UTC day since `since`: calls, errors and p95 latency. created_at is ISO text, so its first ten characters
     are the day."""
@@ -478,8 +480,7 @@ async def daily(
         .where(*_ran_since([module_id], since, tenant_id, team_ids))
         .group_by(day)
     )
-    async with engine.connect() as conn:
-        rows = (await conn.execute(q)).mappings().all()
+    rows = (await conn.execute(q)).mappings().all()
     return {
         r["day"]: {"count": int(r["calls"]), "errors": int(r["errors"]), "p95Ms": round(r["p95"] or 0)} for r in rows
     }

@@ -248,7 +248,7 @@ def mailboxes_router(
     tokens = GraphTokens(settings.graph_login_url, settings.graph_url)
     cursors = cursor_key(settings.secrets_key.get_secret_value())
 
-    async def graph_source(caller: Any, conn: Connection, folder: str) -> GraphReader:
+    async def graph_source(caller: Any, conn: Connection, folder: str, *, audit: bool) -> GraphReader:
         assert resolver is not None and egress is not None
         if graph is None:
             raise Unprocessable("This tools-service reads no Microsoft 365 mailbox.", code="graph_unavailable")
@@ -261,7 +261,7 @@ def mailboxes_router(
             for host in hosts(settings.graph_login_url, settings.graph_url):
                 await egress.dial_address(tenant, host, 443)
             values = await resolver.lookup(
-                tenant, str(caller.team_id), [secret], tool=f"mailbox:{conn.address}", actor=caller.sub
+                tenant, str(caller.team_id), [secret], tool=f"mailbox:{conn.address}", actor=caller.sub, audit=audit
             )
         except EgressDenied as e:
             raise Forbidden(str(e), code="egress_denied") from e
@@ -271,12 +271,14 @@ def mailboxes_router(
         token = tokens.token(http, tenant, conn.graph_tenant_id, conn.graph_client_id, values[secret])
         return GraphReader(http, token, conn.address, folder, seal=CursorSeal(cursors, tenant, conn.address, folder))
 
-    async def source(caller: Any, conn: Connection, folder: str) -> ImapMailSource | GraphReader:
+    async def source(caller: Any, conn: Connection, folder: str, *, audit: bool) -> ImapMailSource | GraphReader:
+        """The mailbox's reader. `audit` False for the mail listener's polls, which would otherwise write a secret use
+        row every few seconds; a person's Test connection is audited."""
         if resolver is None or egress is None:
             raise Unprocessable("This tools-service has no secrets or egress policy, so it reads no mailbox.")
         can(caller, "deployments", "run", team=caller.team_id, what=f"the mailbox {conn.address}")
         if conn.provider == "graph":
-            return await graph_source(caller, conn, folder)
+            return await graph_source(caller, conn, folder, audit=audit)
         team = str(caller.team_id)
         host = gmail_host if conn.provider == "gmail" else conn.host
         if not host or not conn.password_secret:
@@ -291,7 +293,9 @@ def mailboxes_router(
         tenant, secret = caller.tenant_id, conn.password_secret
         try:
             address = await egress.dial_address(tenant, host, port)
-            values = await resolver.lookup(tenant, team, [secret], tool=f"mailbox:{conn.address}", actor=caller.sub)
+            values = await resolver.lookup(
+                tenant, team, [secret], tool=f"mailbox:{conn.address}", actor=caller.sub, audit=audit
+            )
         except EgressDenied as e:
             raise Forbidden(str(e), code="egress_denied") from e
         except SecretMissing as e:
@@ -313,7 +317,7 @@ def mailboxes_router(
     @r.post("/read", response_model=Envelope[PageOut])
     async def read(body: Annotated[ReadIn, Body()], caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """One page of the folder after `cursor`, or with `now` and no cursor, the cursor at its end and no mail."""
-        src = await source(caller, body.connection, body.folder)
+        src = await source(caller, body.connection, body.folder, audit=False)
         try:
             if body.cursor is None and body.now:
                 return ok(
@@ -329,7 +333,7 @@ def mailboxes_router(
     @r.post("/wait", response_model=Envelope[WaitOut])
     async def wait(body: Annotated[WaitIn, Body()], caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """True as soon as the folder has mail after `cursor` (IDLE); false after `seconds` with none."""
-        src = await source(caller, body.connection, body.folder)
+        src = await source(caller, body.connection, body.folder, audit=False)
         try:
             changed = await src.wait(body.cursor, body.seconds)
         except (imaplib.IMAP4.error, OSError, httpx.HTTPError) as e:
@@ -364,7 +368,7 @@ def mailboxes_router(
             return ok(TestOut(ok=False, steps=marked, error=error).model_dump(by_alias=True))
 
         try:
-            src = await source(caller, body.connection, body.folder)
+            src = await source(caller, body.connection, body.folder, audit=True)
         except (Forbidden, Unprocessable) as e:
             return result(0, e.message)
         if isinstance(src, GraphReader):

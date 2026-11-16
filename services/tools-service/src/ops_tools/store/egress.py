@@ -9,19 +9,27 @@ transaction.
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection
 
-from ops_store import Guarantee
+from ops_store import Guarantee, isolation
 from ops_store.schema import TENANT_SCOPED
 from ops_store.search import contains
+from ops_store.store import Store
 from ops_store.team_scope import team_visible
 
 from .modules import metadata, module_egress_hosts, tool_modules
+from .tenancy import ROLE
+
+# Why the allow-list is read and written across the tenant's teams: it is the tenant's one list, never a team's, and
+# its callers include start-up and the gateway's connect check, which name the tenant and no team.
+ALLOW_LIST = "the egress allow-list is the tenant's, not a team's"
 
 _TS = sa.DateTime(timezone=True)
 
@@ -93,19 +101,24 @@ class HostInUseError(RuntimeError):
         self.modules = modules
 
 
-class EgressStore:
+class EgressStore(Store):
     # A change and its audit row land together (TRANSACTION).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION})
+    role = ROLE
 
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+    @asynccontextmanager
+    async def _list_tx(self, tenant_id: str) -> AsyncGenerator[AsyncConnection]:
+        """The request's transaction, or one of its own, in the tenant whose list it is."""
+        with isolation.tenant_wide(ALLOW_LIST, tenant_id=tenant_id):
+            async with self.tx() as c:
+                yield c
 
     async def allow_list(self, tenant_id: str) -> dict[str, list[dict[str, Any]]]:
         """Hosts, each with the modules that use it, and ranges."""
         hosts_q = egress_hosts.select().where(egress_hosts.c.tenant_id == tenant_id).order_by(egress_hosts.c.host)
         ranges_q = egress_ranges.select().where(egress_ranges.c.tenant_id == tenant_id).order_by(egress_ranges.c.cidr)
         users_q = _users(tenant_id)
-        async with self.engine.connect() as c:
+        async with self._list_tx(tenant_id) as c:
             hosts = [dict(r) for r in (await c.execute(hosts_q)).mappings()]
             ranges = [dict(r) for r in (await c.execute(ranges_q)).mappings()]
             used: dict[str, list[dict[str, str]]] = {}
@@ -123,7 +136,7 @@ class EgressStore:
             .where(self._hosts_matching(tenant_id, search, template_id))
             .order_by(sa.func.lower(egress_hosts.c.host))
         )
-        async with self.engine.connect() as c:
+        async with self._list_tx(tenant_id) as c:
             hosts = [dict(r) for r in (await c.execute(q.offset(offset).limit(limit))).mappings()]
             return await self._with_modules(c, tenant_id, hosts)
 
@@ -132,7 +145,7 @@ class EgressStore:
         when it is not listed. An add returns it, so a screen can show the new row wherever its list is paged."""
         table, col = TABLES[kind]
         q = table.select().where(table.c.tenant_id == tenant_id, col == value)
-        async with self.engine.connect() as c:
+        async with self._list_tx(tenant_id) as c:
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
             if kind == "host":
                 rows = await self._with_modules(c, tenant_id, rows)
@@ -153,7 +166,7 @@ class EgressStore:
             .select_from(egress_hosts)
             .where(self._hosts_matching(tenant_id, search, template_id))
         )
-        async with self.engine.connect() as c:
+        async with self._list_tx(tenant_id) as c:
             return int((await c.execute(q)).scalar_one())
 
     @staticmethod
@@ -166,17 +179,17 @@ class EgressStore:
         """A listed entry's protection; None when it is unprotected or not listed."""
         table, col = TABLES[kind]
         q = sa.select(table.c.protection).where(table.c.tenant_id == tenant_id, col == value)
-        async with self.engine.connect() as c:
+        async with self._list_tx(tenant_id) as c:
             return (await c.execute(q)).scalar_one_or_none()
 
     async def host_allowed(self, tenant_id: str, host: str) -> bool:
         q = sa.select(sa.literal(1)).where(egress_hosts.c.tenant_id == tenant_id, egress_hosts.c.host == host)
-        async with self.engine.connect() as c:
+        async with self._list_tx(tenant_id) as c:
             return (await c.execute(q)).first() is not None
 
     async def ranges(self, tenant_id: str) -> list[str]:
         q = sa.select(egress_ranges.c.cidr).where(egress_ranges.c.tenant_id == tenant_id)
-        async with self.engine.connect() as c:
+        async with self._list_tx(tenant_id) as c:
             return [r[0] for r in await c.execute(q)]
 
     async def _audit(
@@ -200,9 +213,9 @@ class EgressStore:
         """Adds a host or a range, with the provisioner's `template_id` and `protection` when `template` names them;
         False when it was already listed (nothing written)."""
         table, col = TABLES[kind]
-        async with self.engine.begin() as c:
+        async with self._list_tx(tenant_id) as c:
             try:
-                async with c.begin_nested():
+                async with self.attempt(c):
                     row = {"tenant_id": tenant_id, col.name: value, "note": note, "added_by": actor, "added_at": at}
                     row |= template or {}
                     await c.execute(table.insert().values(**row))
@@ -222,13 +235,13 @@ class EgressStore:
             )
             .values(added_by=now[0], note=now[1])
         )
-        async with self.engine.begin() as c:
+        async with self._list_tx(tenant_id) as c:
             return (await c.execute(q)).rowcount
 
     async def remove(self, tenant_id: str, kind: str, value: str, *, actor: str, at: datetime) -> bool:
         """Removes a host or a range; False when it was not listed. HostInUseError while a module uses the host."""
         table, col = TABLES[kind]
-        async with self.engine.begin() as c:
+        async with self._list_tx(tenant_id) as c:
             if kind == "host":
                 used = sa.select(module_egress_hosts.c.module_id).where(
                     module_egress_hosts.c.tenant_id == tenant_id, module_egress_hosts.c.host == value
@@ -244,5 +257,5 @@ class EgressStore:
 
     async def audit(self, tenant_id: str) -> list[dict[str, Any]]:
         q = egress_audit.select().where(egress_audit.c.tenant_id == tenant_id).order_by(egress_audit.c.id)
-        async with self.engine.connect() as c:
+        async with self._list_tx(tenant_id) as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]

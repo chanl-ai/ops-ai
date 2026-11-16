@@ -980,8 +980,8 @@
      "stats": {
       "calls24h": 0,
       "errorRate": 0,
-      "expiringApprovals": 2,
-      "expiringModules": 2,
+      "expiringApprovals": "<timing>",
+      "expiringModules": "<timing>",
       "modules": 15,
       "operations": 31
      },

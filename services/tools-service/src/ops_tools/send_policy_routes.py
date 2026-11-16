@@ -19,7 +19,7 @@ from .callers import caller_in
 from .modules.directory import Directory
 from .modules.routes import ERRORS
 from .modules.service import Caller
-from .store.send_policies import SendPolicies
+from .store.send_policies import SendPolicies, SendPolicy
 
 
 class _Wire(BaseModel):
@@ -37,10 +37,10 @@ class SendPolicyView(_Wire):
     saved_at: str
 
 
-def _view(row: dict[str, Any] | None) -> dict[str, Any] | None:
+def _view(row: SendPolicy | None) -> dict[str, Any] | None:
     if row is None:
         return None
-    return SendPolicyView(**{k: row[k] for k in ("version", "text", "saved_by", "saved_at")}).model_dump(by_alias=True)
+    return SendPolicyView(**row.model_dump()).model_dump(by_alias=True)
 
 
 def send_policy_router(store: SendPolicies, directory: Directory) -> APIRouter:
