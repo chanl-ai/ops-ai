@@ -1,0 +1,322 @@
+{
+  "correctRecord": {
+    "corrections": [
+      {
+        "corrected": "2208",
+        "correctedAt": "<time+00:00>",
+        "correctedBy": "j.richardson@harborpine.example",
+        "field": "invoice",
+        "original": "INV-2207",
+        "originalConfidence": 1.0,
+        "record": 1
+      }
+    ],
+    "count": 2,
+    "documentType": {
+      "id": "notice_lines",
+      "name": "Notice lines",
+      "version": 1
+    },
+    "fileId": "fil_0001",
+    "floor": 0.5,
+    "id": "<ext>",
+    "needsReview": [],
+    "outcome": "ok",
+    "path": "model",
+    "records": [
+      {
+        "fields": {
+          "amount": {
+            "citation": {
+              "fileId": "fil_0001",
+              "page": 1,
+              "quote": "Amount due: 1,250.00 CAD"
+            },
+            "confidence": 0.9,
+            "extractedValue": "1,250.00 CAD",
+            "needsReview": false,
+            "value": 1250.0
+          },
+          "invoice": {
+            "citation": {
+              "fileId": "fil_0001",
+              "page": 1,
+              "quote": "Invoice INV-2207"
+            },
+            "confidence": 1.0,
+            "extractedValue": "INV-2207",
+            "needsReview": false,
+            "value": "INV-2207"
+          }
+        },
+        "needsReview": [],
+        "values": {
+          "amount": 1250.0,
+          "invoice": "INV-2207"
+        }
+      },
+      {
+        "fields": {
+          "amount": {
+            "citation": {
+              "fileId": "fil_0001",
+              "page": 1,
+              "quote": "Amount due: 1,250.00 CAD"
+            },
+            "confidence": 0.9,
+            "extractedValue": "1,250.00 CAD",
+            "needsReview": false,
+            "value": 1250.0
+          },
+          "invoice": {
+            "citation": {
+              "fileId": "fil_0001",
+              "page": 1,
+              "quote": "Invoice INV-2207"
+            },
+            "confidence": 1.0,
+            "corrected": true,
+            "extractedValue": "INV-2207",
+            "needsReview": false,
+            "value": "2208"
+          }
+        },
+        "needsReview": [],
+        "values": {
+          "amount": 1250.0,
+          "invoice": "2208"
+        }
+      }
+    ],
+    "schema": [
+      {
+        "key": "invoice",
+        "label": "invoice",
+        "required": true,
+        "type": "text"
+      },
+      {
+        "key": "amount",
+        "label": "amount",
+        "required": true,
+        "type": "money"
+      }
+    ],
+    "status": "done"
+  },
+  "failedExtraction": {
+    "error": {
+      "code": "model_unavailable",
+      "message": "models-service answered 500: {\"error\":{\"code\":\"internal\",\"message\":\"down\"}}"
+    },
+    "fileId": "fil_0001",
+    "id": "<ext>",
+    "status": "failed"
+  },
+  "failedReading": {
+    "digest": "a4a87904e361d0d7a0d1cb9d4dba15d9af9c89bd76bba73915e516b70c93383e",
+    "error": {
+      "code": "unreadable_file",
+      "message": "broken.pdf is not a readable PDF: No /Root object! - Is this really a PDF?"
+    },
+    "fileId": "fil_0001",
+    "pagesDone": 0,
+    "pagesTotal": null,
+    "readerVersion": "reading-4",
+    "settings": {
+      "language": "eng",
+      "ocr": "auto"
+    },
+    "status": "failed"
+  },
+  "failedTest": {
+    "askedAt": "<time+00:00>",
+    "askedBy": "j.richardson@harborpine.example",
+    "error": "fil_0001",
+    "id": "<dtt>",
+    "samples": 1,
+    "status": "failed",
+    "typeId": "notice_lines",
+    "version": 1
+  },
+  "offers": [
+    {
+      "count": 5,
+      "extractionIds": [
+        "<ext>",
+        "<ext>",
+        "<ext>",
+        "<ext>",
+        "<ext>"
+      ],
+      "fingerprint": "79925ee64584b01b"
+    }
+  ],
+  "queuedReading": {
+    "digest": "cb3c0814cdad6961a523bceda04b6f6b83928103971197a323ad85be58867187",
+    "fileId": "fil_0002",
+    "pagesDone": 0,
+    "pagesTotal": null,
+    "readerVersion": "reading-4",
+    "settings": {
+      "language": "eng",
+      "ocr": "auto"
+    },
+    "status": "queued"
+  },
+  "sampleList": {
+    "addedAt": "<time+00:00>",
+    "addedBy": "j.richardson@harborpine.example",
+    "expected": [
+      {
+        "invoice": "INV-2207"
+      },
+      {
+        "amount": "1,250.00 CAD"
+      }
+    ],
+    "fileId": "fil_0001",
+    "id": "<smp>",
+    "name": "gone.txt"
+  },
+  "suggest": {
+    "checks": [
+      {
+        "extractionId": "<ext>",
+        "fields": {
+          "due": {
+            "expected": "2026-12-10",
+            "got": "2026-12-10",
+            "match": true
+          },
+          "invoice_no": {
+            "expected": "INV-30021",
+            "got": "INV-30021",
+            "match": true
+          },
+          "total": {
+            "expected": 1250.0,
+            "got": 1250.0,
+            "match": true
+          },
+          "vendor": {
+            "expected": "Harbour Supplies Ltd",
+            "got": "Harbour Supplies Ltd",
+            "match": true
+          }
+        },
+        "matched": true
+      },
+      {
+        "extractionId": "<ext>",
+        "fields": {
+          "due": {
+            "expected": "2026-12-11",
+            "got": "2026-12-11",
+            "match": true
+          },
+          "invoice_no": {
+            "expected": "INV-31021",
+            "got": "INV-31021",
+            "match": true
+          },
+          "total": {
+            "expected": 318.4,
+            "got": 318.4,
+            "match": true
+          },
+          "vendor": {
+            "expected": "Northern Paper Co",
+            "got": "Northern Paper Co",
+            "match": true
+          }
+        },
+        "matched": true
+      }
+    ],
+    "template": {
+      "id": "<tpl>",
+      "pages": [
+        {
+          "anchors": [
+            {
+              "box": [
+                0.1176,
+                0.1521,
+                0.2517,
+                0.1673
+              ],
+              "text": "Invoice number"
+            },
+            {
+              "box": [
+                0.1176,
+                0.1925,
+                0.1809,
+                0.2077
+              ],
+              "text": "Vendor"
+            },
+            {
+              "box": [
+                0.1176,
+                0.2329,
+                0.1994,
+                0.2481
+              ],
+              "text": "Total due"
+            },
+            {
+              "box": [
+                0.1176,
+                0.2733,
+                0.1972,
+                0.2885
+              ],
+              "text": "Due date"
+            }
+          ],
+          "page": 1,
+          "zones": [
+            {
+              "box": [
+                0.3822,
+                0.1461,
+                0.5859,
+                0.1733
+              ],
+              "field": "invoice_no"
+            },
+            {
+              "box": [
+                0.3822,
+                0.1865,
+                0.7604,
+                0.2137
+              ],
+              "field": "vendor"
+            },
+            {
+              "box": [
+                0.3822,
+                0.2269,
+                0.5794,
+                0.2541
+              ],
+              "field": "total"
+            },
+            {
+              "box": [
+                0.3822,
+                0.2673,
+                0.5903,
+                0.2945
+              ],
+              "field": "due"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
