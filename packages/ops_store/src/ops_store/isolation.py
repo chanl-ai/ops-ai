@@ -33,6 +33,8 @@ from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
 import sqlalchemy as sa
+from sqlalchemy import event
+from sqlalchemy.engine import ExceptionContext
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncTransaction
 
@@ -185,7 +187,9 @@ def tenant_wide(reason: str, *, tenant_id: str | None = None) -> Generator[Isola
 # the role or the scope differs from what the connection carries. Another asyncio task (a gather branch, a created
 # task, a stream's generator after the route returned, a loop, a seed) is not the request and opens its own.
 # PostgreSQL refuses every statement after a failed one, so a database error that is caught runs inside `attempt`, a
-# savepoint; one that leaves an `isolated_tx` block any other way fails the request's transaction, on both databases.
+# savepoint; any other database error on the request's connection fails the request's transaction, on both databases,
+# wherever it is caught: an engine listener sees every one (`_on_error`), so a route that catches it, or turns it into
+# a Conflict, cannot answer as if its writes held.
 
 # What a connection's settings say: the context's tenant, team and scope, and the PostgreSQL role.
 _Carried = tuple[str, str | None, str, str | None]
@@ -203,8 +207,6 @@ class _Request:
     # isolated_tx blocks open now; a block that changed the settings restores them only for a block around it.
     depth: int = 0
     failed: BaseException | None = None
-    # The error the innermost `attempt` rolled back to its savepoint: the transaction is still good after it.
-    contained: BaseException | None = None
     closed: bool = False
 
 
@@ -247,25 +249,50 @@ async def request_transaction() -> AsyncGenerator[None]:
         _request.set(outer)
 
 
+_STATE = "ops_request_transaction"
+
+
+def _on_error(context: ExceptionContext) -> None:
+    """Marks the open request whose connection raised a database error as failed, the first such error only. `attempt`
+    clears it when it rolls back to its savepoint."""
+    conn = context.connection
+    state = conn.info.get(_STATE) if conn is not None else None
+    if isinstance(state, _Request) and not state.closed and state.failed is None:
+        state.failed = context.sqlalchemy_exception
+
+
 async def _end(state: _Request, *, commit: bool) -> None:
     conn, tx = state.conn, state.tx
     state.closed = True
     if conn is None or tx is None:
         return
+    conn.sync_connection.info.pop(_STATE, None)  # pyright: ignore[reportOptionalMemberAccess]
     try:
         if commit:
             # Cleared before the commit, so a transaction commits once.
             await leave_transaction(conn)
             await tx.commit()
             return
-        if tx.is_active:
-            await tx.rollback()
-        # A rollback leaves SQL Server's session context set, and the pooled connection must not carry it on.
+        await _roll_back(conn, tx)
+    finally:
+        await conn.close()
+
+
+async def _roll_back(conn: AsyncConnection, tx: AsyncTransaction) -> None:
+    """Rolls back with SQL Server's session context cleared, since the pooled connection must not carry it on. The
+    clear runs first, inside the transaction it rolls back: session context is not transactional, so it holds after
+    the rollback and the request still counts one transaction. A doomed transaction refuses the clear; then it runs
+    after the rollback, in a transaction of its own."""
+    cleared = False
+    if tx.is_active:
+        with suppress(DBAPIError):
+            await leave_transaction(conn)
+            cleared = True
+        await tx.rollback()
+    if not cleared:
         await leave_transaction(conn)
         if conn.in_transaction():
             await conn.commit()
-    finally:
-        await conn.close()
 
 
 @asynccontextmanager
@@ -284,7 +311,10 @@ async def isolated_tx(engine: AsyncEngine, *, role: str | None = None) -> AsyncG
         raise RequestTransactionFailed("the request's transaction already failed") from state.failed
     if state.conn is None:
         state.engine = engine
+        if not event.contains(engine.sync_engine, "handle_error", _on_error):
+            event.listen(engine.sync_engine, "handle_error", _on_error)
         state.conn = await engine.connect()
+        state.conn.sync_connection.info[_STATE] = state  # pyright: ignore[reportOptionalMemberAccess]
         state.tx = await state.conn.begin()
     conn = state.conn
     want: _Carried = (ctx.tenant_id, ctx.team_id, ctx.scope, role)
@@ -295,15 +325,11 @@ async def isolated_tx(engine: AsyncEngine, *, role: str | None = None) -> AsyncG
     state.depth += 1
     try:
         yield conn
-    except BaseException as e:
-        if isinstance(e, DBAPIError) and e is not state.contained:
-            state.failed = e
-        raise
     finally:
         state.depth -= 1
         if state.depth and before is not None and state.carried != before:
-            # The block around this one reads on with the settings it entered with. After a failed statement
-            # PostgreSQL refuses this too; the next entry then sets them again.
+            # The block around this one reads on with the settings it entered with. A restore that fails has failed
+            # the request (`_on_error`), so nothing reads on with the wrong scope.
             state.carried = None
             with suppress(DBAPIError):
                 tenant_id, team_id, scope_, role_ = before
@@ -321,8 +347,10 @@ async def attempt(conn: AsyncConnection) -> AsyncGenerator[None]:
             yield
     except DBAPIError as e:
         state = _request.get()
-        if state is not None and state.conn is conn:
-            state.contained = e
+        if state is not None and state.conn is conn and state.failed is e:
+            # Rolled back to the savepoint, the transaction is good again, even when the statement ran in a store
+            # method's own tx() block inside this one.
+            state.failed = None
         raise
 
 
@@ -338,12 +366,7 @@ async def _own_tx(engine: AsyncEngine, ctx: Isolation, role: str | None) -> Asyn
             await leave_transaction(conn)
             await tx.commit()
         except BaseException:
-            if tx.is_active:
-                await tx.rollback()
-            # A rollback leaves SQL Server's session context set, and the pooled connection must not carry it on.
-            await leave_transaction(conn)
-            if conn.in_transaction():
-                await conn.commit()
+            await _roll_back(conn, tx)
             raise
 
 

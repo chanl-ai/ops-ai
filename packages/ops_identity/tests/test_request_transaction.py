@@ -192,16 +192,30 @@ def build(engine: AsyncEngine) -> tuple[FastAPI, Notes]:
         return seen
 
     @app.post("/claim")
-    async def claim(p: CurrentPrincipal, _: Tx, savepoint: bool = True) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+    async def claim(p: CurrentPrincipal, _: Tx, how: str = "savepoint") -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
         await st.add("first")
         taken = False
-        if savepoint:
+        again = notes.insert().values(id="first", tenant_id=p.tenant_id, team_id="team_a")
+        if how == "savepoint":
             async with st.tx() as conn:
                 try:
                     async with st.attempt(conn):
-                        await conn.execute(notes.insert().values(id="first", tenant_id=p.tenant_id, team_id="team_a"))
+                        await conn.execute(again)
                 except IntegrityError:
                     taken = True
+        elif how == "store":  # a savepoint around another store method, which opens its own tx() block
+            async with st.tx() as conn:
+                try:
+                    async with st.attempt(conn):
+                        await st.add("first")
+                except IntegrityError:
+                    taken = True
+        elif how == "inside":  # caught inside the block, so no error leaves it, and nothing runs after it
+            async with st.tx() as conn:
+                try:
+                    await conn.execute(again)
+                except IntegrityError:
+                    return {"taken": True}
         else:
             try:
                 await st.add("first")
@@ -258,11 +272,16 @@ async def test_store_calls_of_one_request_share_one_transaction_and_a_refusal_un
     async with client(app) as c:
         r = await c.post("/notes?fail=true", headers=refused)
         assert r.status_code == 409, r.text
+        if dialect_of(engine) == "mssql":
+            async with engine.connect() as conn:  # the pool's one connection, back from the refused request
+                left = {k: v for k, v in (await carried(conn)).items() if k != "user"}
+            assert left == {"tenant": "", "team": "", "scope": ""}, "a rollback left the caller on the connection"
         r = await c.post("/notes", headers=saved)
         assert (r.status_code, r.json()) == (200, ["n1", "n2"]), r.text
     assert len({id(conn) for conn in st.connections[-3:]}) == 1
-    # The refused request's line is not counted: clearing SQL Server's session context after a rollback begins again.
-    (_, committed) = request_lines(out, "/notes")
+    # The refused one too: SQL Server's session context is cleared inside the transaction it rolls back.
+    (rolled_back, committed) = request_lines(out, "/notes")
+    assert rolled_back["db.tx_count"] == 1, rolled_back
     assert committed["db.tx_count"] == 1, committed
     assert committed["db.pool.in_use"] == 1 and committed["db.pool.limit"] == POOL and committed["db.tx_open_ms"] > 0
     with isolation.tenant_wide("test", tenant_id="-"):
@@ -301,10 +320,27 @@ async def test_a_caught_database_error_keeps_the_transaction_only_inside_a_savep
         assert (r.status_code, r.json()) == (200, {"taken": True, "ids": ["first", "second"]}), r.text
         # Caught with no savepoint: the request fails whole on both databases, rather than answering 200 with its
         # writes rolled back (PostgreSQL) or half kept (SQL Server).
-        r = await c.post("/claim?savepoint=false", headers=lost)
+        r = await c.post("/claim?how=outside", headers=lost)
         assert r.status_code == 500, r.text
         r = await c.post("/notes", headers=lost)
         assert r.json() == ["n1", "n2"], "nothing of the failed request was committed"
+
+
+async def test_a_database_error_caught_inside_a_block_fails_the_request(engine: AsyncEngine) -> None:
+    app, _ = build(engine)
+    lost = headers(f"ten_{uuid4().hex[:8]}")
+    async with client(app) as c:
+        r = await c.post("/claim?how=inside", headers=lost)
+        assert r.status_code == 500, r.text
+        r = await c.post("/notes", headers=lost)
+        assert r.json() == ["n1", "n2"], "nothing of the failed request was committed"
+
+
+async def test_a_savepoint_around_another_store_method_keeps_the_request(engine: AsyncEngine) -> None:
+    app, _ = build(engine)
+    async with client(app) as c:
+        r = await c.post("/claim?how=store", headers=headers(f"ten_{uuid4().hex[:8]}"))
+    assert (r.status_code, r.json()) == (200, {"taken": True, "ids": ["first", "second"]}), r.text
 
 
 async def test_a_stream_sends_its_first_frame_after_the_request_transaction_closed(
