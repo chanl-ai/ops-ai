@@ -8,6 +8,7 @@ its own. A run holds a worker thread for its length; `runner_concurrency` bounds
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Annotated, Any, cast
 
 import anyio
@@ -85,22 +86,29 @@ def capped(asked: LimitsIn, settings: Settings) -> Limits:
     )
 
 
-def calls_to_tools(tools: ServiceClient | None, caller: Principal, token: str | None, limits: Limits) -> CallAnswer:
+def calls_to_tools(tools: ServiceClient | None, caller: Principal, token: str | None, deadline: float) -> CallAnswer:
     """The answer to each `ops.call`: a call to tools-service for the run's tenant and team. It runs on the guest's
-    worker thread and hands the request to the event loop, which owns the client. A call waits no longer than the
-    run's own time limit: the guest's clock runs on while it waits, so a later answer ends the run at its limit."""
+    worker thread and hands the request to the event loop, which owns the client. A call waits only for the time left
+    before the run's deadline (`time.monotonic()`), so calls together never hold a run past its limit; one that
+    answers later fails `call_failed`."""
 
     async def call(tool: str, args: dict[str, Any]) -> dict[str, Any]:
         assert tools is not None and token is not None
+        late = {"ok": False, "error": failure("call_failed", "The tool did not answer within the run's time limit.")}
+        if (left := deadline - time.monotonic()) <= 0:
+            return late
         try:
-            data = await tools.post(
-                "/v1/code-runs/calls",
-                json={"tool": tool, "input": args},
-                headers={"X-Code-Run": token},
-                tenant=caller.tenant_id,
-                team=caller.team_id,
-                timeout=limits.time_s,
-            )
+            async with asyncio.timeout(left):
+                data = await tools.post(
+                    "/v1/code-runs/calls",
+                    json={"tool": tool, "input": args},
+                    headers={"X-Code-Run": token},
+                    tenant=caller.tenant_id,
+                    team=caller.team_id,
+                    timeout=left,
+                )
+        except TimeoutError:
+            return late
         except ServiceCallError as e:
             return {"ok": False, "error": failure(e.code, e.message)}
         except ServiceUnreachable:
@@ -141,12 +149,18 @@ def create_runner_app(
         stopped it (`time_limit`, `memory_limit`, `function_error`, or a refused call's code), its log and timings."""
         nonlocal running
         limits = capped(body.limits, settings)
-        answer = calls_to_tools(tools, caller, body.call_token, limits)
         async with slots:
             running += 1
             try:
+                # The deadline is read on the worker thread as the run starts, not before its wait for a slot.
                 result: RunResult = await anyio.to_thread.run_sync(
-                    lambda: runtime.run(body.source, body.entry, body.input, limits, answer)
+                    lambda: runtime.run(
+                        body.source,
+                        body.entry,
+                        body.input,
+                        limits,
+                        calls_to_tools(tools, caller, body.call_token, time.monotonic() + limits.time_s),
+                    )
                 )
             finally:
                 running -= 1

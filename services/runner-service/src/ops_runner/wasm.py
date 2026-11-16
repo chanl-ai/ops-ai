@@ -134,9 +134,9 @@ class _Run:
         # A fifo's open blocks until the other end opens. Non-blocking opens keep a guest that dies during set-up from
         # hanging the host.
         out_fd = os.open(self.stdout, os.O_RDONLY | os.O_NONBLOCK)
-        in_fd = _open_writer(self.stdin, thread, self.runtime.waits.open_poll_s)
-        result = RunResult(ok=False, create_ms=self._ms())
         deadline = self.started + self.limits.time_s + self.runtime.waits.grace_s
+        in_fd = _open_writer(self.stdin, thread, self.runtime.waits.open_poll_s, deadline)
+        result = RunResult(ok=False, create_ms=self._ms())
         try:
             if in_fd is not None:
                 _write(in_fd, {"source": source, "entry": entry, "input": input})
@@ -221,12 +221,14 @@ class _Run:
         return int((time.monotonic() - self.started) * 1000)
 
 
-def _open_writer(path: str, thread: threading.Thread, poll_s: float) -> int | None:
+def _open_writer(path: str, thread: threading.Thread, poll_s: float, deadline: float) -> int | None:
+    """The host's end of the guest's stdin, once the guest opens its own; None when the guest ends first or the run's
+    deadline passes, so a guest stuck in set-up cannot hold the host."""
     while True:
         try:
             return os.open(path, os.O_WRONLY | os.O_NONBLOCK)
         except OSError:  # ENXIO: the guest has not opened its stdin yet
-            if not thread.is_alive():
+            if not thread.is_alive() or time.monotonic() >= deadline:
                 return None
             thread.join(timeout=poll_s)
 

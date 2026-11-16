@@ -3,6 +3,9 @@ no call token cannot call tools."""
 
 from __future__ import annotations
 
+import asyncio
+import time
+
 import httpx
 from fastapi.testclient import TestClient
 
@@ -49,16 +52,16 @@ def test_the_deployment_caps_hold_over_what_is_asked() -> None:
     assert (limits.memory_mb, limits.time_s, limits.calls) == (512, 30, 50)
 
 
-def test_a_call_waits_no_longer_than_the_runs_time_limit(runtime: WasmPython) -> None:
-    waited: list[object] = []
-
+def test_a_tool_that_answers_after_the_limit_fails_the_call_and_the_run_ends_at_it(runtime: WasmPython) -> None:
     async def tools_service(request: httpx.Request) -> httpx.Response:
-        waited.append(request.extensions["timeout"]["read"])
+        await asyncio.sleep(4)
         return httpx.Response(200, json={"success": True, "data": {"ok": True, "output": 1}})
 
     http = httpx.AsyncClient(transport=httpx.MockTransport(tools_service), base_url="http://tools.test")
     tools = ServiceClient(http, dev_service_signer(), "runner", "tools", ["tools:run"])
     app = create_runner_app(runtime, settings=Settings(environment="dev"), tools=tools)
-    body = {"source": "def main(i):\n    return ops.call('x')", "callToken": "ct", "limits": {"timeS": 3}}
+    body = {"source": "def main(i):\n    return ops.call('x')", "callToken": "ct", "limits": {"timeS": 1}}
+    started = time.monotonic()
     r = TestClient(app).post("/v1/runs", json=body, headers=service())
-    assert r.json()["data"]["output"] == 1 and waited == [3.0]
+    assert r.json()["data"]["trace"] == [{"tool": "x", "ok": False, "code": "call_failed"}]
+    assert time.monotonic() - started < 2  # the 1 s limit plus a margin for the request itself
