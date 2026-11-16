@@ -142,8 +142,9 @@ class Auth:
             raise _refused()
         return await self._issue(user, ref.id, f"{ref.id}.{fresh}", method.auth_method, now)
 
-    async def session_of(self, token: str) -> tuple[SessionRef, dict[str, Any]]:
-        """The live session behind a token this service issued; a signed-out session is refused at once."""
+    async def session_of(self, token: str, *, seen: bool = True) -> tuple[SessionRef, dict[str, Any]]:
+        """The live session behind a token this service issued; a signed-out session is refused at once. `seen`
+        records the moment as the session's last seen; a read request passes False and writes nothing."""
         try:
             claims = verify(token, self.signer.verifier(AUDIENCE))
         except TokenError as e:
@@ -152,7 +153,8 @@ class Auth:
         if claims.get("kind", "person") != "person":
             raise _refused()
         ref = SessionRef(str(claims.get("tenant_id")), str(claims.get("sub")), str(claims.get("sid")))
-        if not await self.store.touch(ref, at=_iso(datetime.now(UTC))):
+        at = _iso(datetime.now(UTC))
+        if not await (self.store.touch(ref, at=at) if seen else self.store.live(ref, at=at)):
             raise _refused()
         return ref, claims
 

@@ -346,7 +346,7 @@ def create_public_app(
 
     @app.get("/v1/auth/session", tags=["auth"], response_model=Envelope[Principal], responses=ERRORS)
     async def session(token: Annotated[str, Depends(_bearer)]) -> Any:  # pyright: ignore[reportUnusedFunction]
-        _, claims = await auth.session_of(token)
+        _, claims = await auth.session_of(token, seen=False)
         return ok(principal_from_claims(claims))
 
     @app.post("/v1/auth/refresh", tags=["auth"], response_model=Envelope[SessionOut], responses=ERRORS)
@@ -491,14 +491,14 @@ def create_public_app(
         usage = AgentsUsage(agents)
     app.state.team_usage = usage
 
-    async def claims_open(token: Annotated[str, Depends(_bearer)]) -> dict[str, Any]:
+    async def claims_open(request: Request, token: Annotated[str, Depends(_bearer)]) -> dict[str, Any]:
         """A live session's claims whatever the workspace's status: `/v1/me` and restore, which a closed workspace's
-        owner still reaches."""
-        return (await auth.session_of(token))[1]
+        owner still reaches. A GET writes no row, so it checks the session without recording it as seen."""
+        return (await auth.session_of(token, seen=request.method != "GET"))[1]
 
-    async def claims_of(token: Annotated[str, Depends(_bearer)]) -> dict[str, Any]:
+    async def claims_of(request: Request, token: Annotated[str, Depends(_bearer)]) -> dict[str, Any]:
         """A live session's claims in an active workspace; a closed one answers 403 `workspace_closed`."""
-        claims = await claims_open(token)
+        claims = await claims_open(request, token)
         await lifecycle.open_or_refuse(str(claims["tenant_id"]))
         return claims
 
@@ -977,6 +977,7 @@ def create_public_app(
     @app.get("/v1/policies/{key}", tags=["policies"], response_model=Envelope[PolicyOut], responses=ERRORS)
     async def get_policy(  # pyright: ignore[reportUnusedFunction]
         _: Tx,
+        request: Request,
         key: Annotated[str, Path(max_length=64)],
         token: Annotated[str, Depends(_bearer)],
         x_team_id: Annotated[str | None, Header()] = None,
@@ -990,7 +991,7 @@ def create_public_app(
                 raise Forbidden("This service token does not hold the settings:view scope.", code="scope_required")
             rows = await policies.for_tenant(svc.tenant_id)
         else:
-            rows = await policies.list(await acting(await claims_of(token), x_team_id))
+            rows = await policies.list(await acting(await claims_of(request, token), x_team_id))
         row = next((r for r in rows if r["key"] == key), None)
         if row is None:
             raise ValidationFailed(f"{key} is not a policy", code="policy_value")
@@ -999,6 +1000,7 @@ def create_public_app(
     @app.get("/v1/team-names", tags=["teams"], response_model=Envelope[list[TeamName]], responses=ERRORS)
     async def team_names(  # pyright: ignore[reportUnusedFunction]
         _: Tx,
+        request: Request,
         token: Annotated[str, Depends(_bearer)],
     ) -> Any:
         """Every team's display name in the workspace, so a page showing another team's record names its team.
@@ -1009,12 +1011,13 @@ def create_public_app(
                 raise Forbidden("This service token does not hold the settings:view scope.", code="scope_required")
             tenant = svc.tenant_id
         else:
-            tenant = str((await claims_of(token))["tenant_id"])
+            tenant = str((await claims_of(request, token))["tenant_id"])
         return ok([t.model_dump(by_alias=True) for t in await team_store.names(tenant)])
 
     @app.get("/v1/people-names", tags=["people"], response_model=Envelope[list[PersonName]], responses=ERRORS)
     async def people_names(  # pyright: ignore[reportUnusedFunction]
         _: Tx,
+        request: Request,
         token: Annotated[str, Depends(_bearer)],
     ) -> Any:
         """Every person's display name in the workspace by email, so a list naming who did something shows a
@@ -1025,7 +1028,7 @@ def create_public_app(
                 raise Forbidden("This service token does not hold the settings:view scope.", code="scope_required")
             tenant = svc.tenant_id
         else:
-            tenant = str((await claims_of(token))["tenant_id"])
+            tenant = str((await claims_of(request, token))["tenant_id"])
         return ok([p.model_dump(by_alias=True) for p in await team_store.people_names(tenant)])
 
     @app.put("/v1/policies/{key}", tags=["policies"], response_model=Envelope[PolicyOut], responses=ERRORS)
@@ -1301,7 +1304,7 @@ def create_public_app(
         response_model=Envelope[WorkspaceTeamsOut],
         responses=ERRORS,
     )
-    async def read_workspace_teams(_: Tx, token: Annotated[str, Depends(_bearer)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def read_workspace_teams(_: Tx, request: Request, token: Annotated[str, Depends(_bearer)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The workspace's security team and the team new people join when nothing else names one. A workspace
         admin reads them; a service token needs the `settings:view` scope and reads its own tenant's."""
         if readers.signs(token):
@@ -1309,7 +1312,7 @@ def create_public_app(
             if "settings:view" not in svc.scopes:
                 raise Forbidden("This service token does not hold the settings:view scope.", code="scope_required")
             return ok(await team_admin.workspace_teams_of(svc.tenant_id))
-        return ok(await team_admin.workspace_teams(await on_workspace(await claims_of(token))))
+        return ok(await team_admin.workspace_teams(await on_workspace(await claims_of(request, token))))
 
     @app.put(
         "/v1/settings/workspace-teams",
@@ -1466,13 +1469,14 @@ def create_public_app(
     @app.get("/v1/api-key-summaries", tags=["api-keys"], response_model=Envelope[list[ApiKeySummary]], responses=ERRORS)
     async def api_key_summaries(  # pyright: ignore[reportUnusedFunction]
         _: Tx,
+        request: Request,
         token: Annotated[str, Depends(_bearer)],
     ) -> Any:
         """Every team's keys in the workspace with what each serves: for agents-service's list of API channels
         (a service token with the `settings:view` scope), or for a person who manages access across the workspace
         (`can('access', 'manage')` in every team), as an admin may do everything."""
         if not readers.signs(token):
-            claims = await claims_of(token)
+            claims = await claims_of(request, token)
             actor = Actor(str(claims["tenant_id"]), ANY_TEAM, str(claims["sub"]), new_id("req"))
             await people.require_admin(actor, "access", "manage")
             return ok(await keys.summaries(actor.tenant_id))

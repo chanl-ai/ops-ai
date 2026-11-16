@@ -342,13 +342,16 @@ class IdentityStore(TenantDb):
 
     async def touch(self, ref: SessionRef, *, at: str) -> bool:
         """Whether the session lives; a live one records `at` as last seen."""
-        q = (
-            sessions.update()
-            .where(sessions.c.id == ref.id, sessions.c.revoked_at.is_(None), sessions.c.expires_at > at)
-            .values(last_seen_at=at)
-        )
+        q = sessions.update().where(*_live(ref, at)).values(last_seen_at=at)
         async with self.tenant_tx(ref.tenant_id) as c:
             return (await c.execute(q)).rowcount == 1
+
+    async def live(self, ref: SessionRef, *, at: str) -> bool:
+        """Whether the session lives, read only: a read request records nothing (last seen moves on a write or a
+        refresh)."""
+        q = sa.select(sessions.c.id).where(*_live(ref, at))
+        async with self.tenant_tx(ref.tenant_id) as c:
+            return (await c.execute(q)).first() is not None
 
     async def sign_out(self, ref: SessionRef, *, at: str, request_id: str) -> None:
         async with self.tenant_tx(ref.tenant_id) as c:
@@ -625,3 +628,8 @@ class IdentityStore(TenantDb):
 
 def new_request() -> str:
     return new_id("req")
+
+
+def _live(ref: SessionRef, at: str) -> tuple[sa.ColumnElement[bool], ...]:
+    """A session that is neither signed out nor expired at `at`: the one test of a live session."""
+    return (sessions.c.id == ref.id, sessions.c.revoked_at.is_(None), sessions.c.expires_at > at)
