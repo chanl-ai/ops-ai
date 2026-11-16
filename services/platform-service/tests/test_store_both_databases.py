@@ -9,12 +9,22 @@ import asyncio
 from collections.abc import AsyncIterator
 
 import pytest
+import sqlalchemy as sa
 
 from ops_access import ANY_TEAM
 from ops_platform.store.me import MeStore, MyTeam
 from ops_platform.store.roles import ensure_builtin_roles
 from ops_platform.store.signin import SignInStore
-from ops_platform.store.tables import members, role_assignments, teams, tenants, users
+from ops_platform.store.tables import (
+    members,
+    role_assignments,
+    signin_grants,
+    signin_group_rules,
+    signin_providers,
+    teams,
+    tenants,
+    users,
+)
 from ops_platform.store.tenancy import TenantDb
 from ops_service_kit.ids import new_id, now_iso
 
@@ -114,3 +124,54 @@ async def test_me_reads_the_same_on_each_database(store_url: str) -> None:
         assert await db.read(tenant, new_id("usr")) is None
     finally:
         await db.engine.dispose()
+
+
+async def test_a_provider_delete_takes_its_group_rules_and_grants(store: SignInStore) -> None:
+    """A grant that names a group rule goes with its provider. SQL Server holds the rule key as NO ACTION (two cascade
+    paths reach signin_grants), so this is the delete that would be refused there if the order were wrong."""
+    tenant, user, team, member, provider, rule, now = (
+        new_id("ten"), new_id("usr"), new_id("team"), new_id("mem"), new_id("sp"), new_id("sgr"), now_iso(),
+    )  # fmt: skip
+    async with store.tenant_tx(tenant) as c:
+        await c.execute(
+            tenants.insert().values(id=tenant, name=tenant, status="active", allowed_domains=[], created_at=now)
+        )
+        await c.execute(
+            users.insert().values(
+                id=user, tenant_id=tenant, email=f"{user}@bank.test", name="Ana", status="active", created_at=now
+            )
+        )
+        await c.execute(
+            teams.insert().values(id=team, tenant_id=tenant, name=team, owner_groups=[], scope="owned", created_at=now)
+        )
+        await c.execute(
+            members.insert().values(
+                id=member, tenant_id=tenant, team_id=team, user_id=user, email=f"{user}@bank.test", role="builder",
+                status="active", created_at=now, updated_at=now,
+            )
+        )  # fmt: skip
+        await c.execute(
+            signin_providers.insert().values(
+                id=provider, tenant_id=tenant, kind="saml", label="Okta", enabled=True, config={}, created_at=now,
+                updated_at=now,
+            )
+        )  # fmt: skip
+        await c.execute(
+            signin_group_rules.insert().values(
+                id=rule, tenant_id=tenant, provider_id=provider, group_value="ops", team_id=team, role="builder",
+                created_at=now, created_by=user,
+            )
+        )  # fmt: skip
+        await c.execute(
+            signin_grants.insert().values(
+                id=new_id("sgt"), tenant_id=tenant, member_id=member, provider_id=provider, rule_id=rule, why="group",
+                granted_at=now,
+            )
+        )  # fmt: skip
+    deleted = await store.delete_provider(tenant, provider, actor=user, at=now, request_id=new_id("req"))
+    async with store.tenant_tx(tenant) as c:
+        left = [
+            (await c.execute(sa.select(sa.func.count()).select_from(t))).scalar_one()
+            for t in (signin_providers, signin_group_rules, signin_grants)
+        ]
+    assert (deleted, left) == (True, [0, 0, 0])

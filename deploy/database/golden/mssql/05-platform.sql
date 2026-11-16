@@ -448,7 +448,7 @@ CREATE TABLE signin_grants (
 	CONSTRAINT signin_grants_pkey PRIMARY KEY (id), 
 	CONSTRAINT fk_signin_grants_provider FOREIGN KEY(provider_id, tenant_id) REFERENCES signin_providers (id, tenant_id) ON DELETE CASCADE, 
 	CONSTRAINT signin_grants_member_id_fkey FOREIGN KEY(member_id) REFERENCES members (id) ON DELETE CASCADE, 
-	CONSTRAINT signin_grants_rule_id_fkey FOREIGN KEY(rule_id) REFERENCES signin_group_rules (id) ON DELETE SET NULL
+	CONSTRAINT signin_grants_rule_id_fkey FOREIGN KEY(rule_id) REFERENCES signin_group_rules (id) ON DELETE NO ACTION
 );
 GO
 CREATE INDEX ix_signin_grants_member_id ON signin_grants (member_id);

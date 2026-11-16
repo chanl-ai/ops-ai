@@ -150,6 +150,11 @@ BASELINE = {
     "files": "files_0009",
     "documents": "documents_0009",
 }
+# Foreign keys whose ON DELETE is NO ACTION on SQL Server, which refuses a table reached by two cascade paths from one
+# delete (error 1785). A sign-in provider's delete reaches signin_grants by its own key and through
+# signin_group_rules, so the rule key's SET NULL cannot stand there. The store clears a grant's rule before it deletes
+# the rule (ops_platform.store.signin._keep_rules), and a provider's delete takes its grants with its rules.
+NO_SECOND_CASCADE = {("signin_grants", "signin_grants_rule_id_fkey")}
 # Offline SQL holding one of these was written for PostgreSQL (op.execute text passes through unchanged).
 POSTGRES_ONLY = re.compile(
     r"DO \$\$|CREATE POLICY|ROW LEVEL SECURITY|current_setting|::\w|jsonb|SET LOCAL|\bRAISE\b", re.I
@@ -292,6 +297,8 @@ def chain_tables(chain: str, metadatas: Iterable[sa.MetaData]) -> Chain:
                 for action in ("ondelete", "onupdate"):
                     if str(getattr(con, action) or "").upper() == "RESTRICT":
                         setattr(con, action, "NO ACTION")
+                if (t.name, con.name) in NO_SECOND_CASCADE:
+                    con.ondelete = "NO ACTION"
                 _in_key_order(t, con)
             elif isinstance(con, sa.CheckConstraint) and con.name is None:
                 refused.append(f"{chain} {t.name}: a CHECK constraint without a name")
