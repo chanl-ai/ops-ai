@@ -75,6 +75,13 @@ class Endpoint(BaseModel):
         return str(self.url).rstrip("/")
 
 
+class ModelsEndpoint(Endpoint):
+    """models-service: one call waits for a model's whole answer (an extraction reads a document), so its default
+    timeout is a model's, not a quick read's."""
+
+    timeout_s: float = Field(default=120.0, gt=0)
+
+
 class PoolSettings(BaseModel):
     """The database connection pool of one process: connections kept, connections opened beyond those under load, and
     how long a request waits for one."""
@@ -86,7 +93,7 @@ class PoolSettings(BaseModel):
 
 # The services a process reaches through an Endpoint. Each is set whole as OPS_<NAME>__URL (with __TIMEOUT_S and
 # __RETRIES beside it), or by its address alone as OPS_<NAME>_URL.
-ENDPOINTS = ("agents", "tools", "kb", "files", "documents", "platform_internal")
+ENDPOINTS = ("agents", "tools", "kb", "files", "documents", "models", "platform", "platform_internal")
 
 
 class Settings(BaseSettings):
@@ -112,6 +119,9 @@ class Settings(BaseSettings):
     kb: Endpoint | None = None
     files: Endpoint | None = None
     documents: Endpoint | None = None
+    # models-service (OPS_MODELS_URL), and platform-service's public port (OPS_PLATFORM_URL: floors, policies).
+    models: ModelsEndpoint | None = None
+    platform: Endpoint | None = None
     # platform-service's internal port, which introspects API keys, mints acting-for tokens and keeps the audit log.
     platform_internal: Endpoint | None = None
     page_size_default: int = Field(default=20, ge=1)

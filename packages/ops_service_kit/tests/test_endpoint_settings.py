@@ -56,3 +56,23 @@ def test_a_service_with_no_sign_in_setting_signs_its_callers_in(monkeypatch: pyt
     monkeypatch.setenv("OPS_AUTH_MODE", "dev")
     with pytest.raises(ValueError, match="auth_mode 'dev' is refused"):
         Settings()
+
+
+def test_models_and_platform_are_endpoints_from_the_addresses_every_deploy_already_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A caller of models-service or platform-service's public port reads its timeout from settings, not a literal;
+    # a model call waits on a model, so its endpoint's default is longer than the other services'.
+    monkeypatch.setenv("OPS_MODELS_URL", "http://models:8730")
+    monkeypatch.setenv("OPS_PLATFORM_URL", "http://platform:8710")
+    monkeypatch.setenv("OPS_PLATFORM__TIMEOUT_S", "4")
+    settings = Settings()
+    models, platform = settings.endpoint("models"), settings.endpoint("platform")
+    assert (models.base, models.timeout_s, models.retries) == ("http://models:8730", 120.0, 2)
+    assert (platform.base, platform.timeout_s) == ("http://platform:8710", 4.0)
+    monkeypatch.setenv("OPS_MODELS__TIMEOUT_S", "30")
+    assert Settings().endpoint("models").timeout_s == 30.0
+    monkeypatch.delenv("OPS_PLATFORM_URL")
+    monkeypatch.delenv("OPS_PLATFORM__TIMEOUT_S")
+    with pytest.raises(ValueError, match="OPS_PLATFORM_URL is not set"):
+        Settings().endpoint("platform")

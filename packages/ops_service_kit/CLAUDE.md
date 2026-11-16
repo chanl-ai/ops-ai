@@ -38,8 +38,8 @@ commands: [../CLAUDE.md](../CLAUDE.md); repo-wide rules: [../../CLAUDE.md](../..
   credential store outside dev and test (`_refuse_dev_auth_outside_dev` in `src/ops_service_kit/settings.py`).
 - `auth_mode` defaults to `platform`. The fixed dev user is asked for by name: `scripts/stack.sh` and the use-case
   harnesses set `OPS_AUTH_MODE=dev`, and a test run gets it from `isolate_from_stack()` in its conftest.
-- Another service is an `Endpoint` on `Settings` (`agents`, `tools`, `kb`, `files`, `documents`,
-  `platform_internal`), set by its address alone (`OPS_AGENTS_URL`) or whole (`OPS_AGENTS__URL`,
+- Another service is an `Endpoint` on `Settings` (`agents`, `tools`, `kb`, `files`, `documents`, `models` (default
+  timeout 120 s, a model's answer), `platform` (the public port), `platform_internal`), set by its address alone (`OPS_AGENTS_URL`) or whole (`OPS_AGENTS__URL`,
   `OPS_AGENTS__TIMEOUT_S`, `OPS_AGENTS__RETRIES`). A process names the ones it cannot run without in
   `settings.require(...)`, first in its `__main__`, and exits naming each unset one; `settings.endpoint(name)` raises
   the same name later. No address falls back to this machine (`scripts/check_config_literals.py`).
