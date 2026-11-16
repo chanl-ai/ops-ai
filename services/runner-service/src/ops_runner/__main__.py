@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import httpx
 import uvicorn
 
 from ops_identity import ServiceClient
@@ -16,18 +15,12 @@ from .wasm import WasmPython
 
 def main() -> None:
     settings = Settings()
-    settings.require(*settings.identity_endpoints)
+    # Every `ops.call` goes back to tools-service, so a runner without its address cannot answer one.
+    settings.require(*settings.identity_endpoints, "tools")
     configure_logging(service="runner-service")
     runtime = WasmPython(wasm_path(settings), sha256=settings.runner_wasm_sha256, compiled_dir=compiled_dir(settings))
-    url = settings.tools_url or settings.gateway_url
     # Each call names the run's tenant and team itself; tools-service decides it as the caller its call token names.
-    tools = (
-        ServiceClient.for_settings(
-            settings, httpx.AsyncClient(base_url=url), service="runner", audience="tools", scopes=["tools:run"]
-        )
-        if url
-        else None
-    )
+    tools = ServiceClient.for_settings(settings, service="runner", audience="tools", scopes=["tools:run"])
     app = create_runner_app(runtime, settings=settings, tools=tools)
     uvicorn.run(app, host=settings.bind_host, port=settings.runner_port, log_config=None, access_log=False)
 

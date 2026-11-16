@@ -30,7 +30,6 @@ from ops_service_kit.settings import Settings
 from .domain import DEFAULT_CALLS, DEFAULT_MEMORY_MB, DEFAULT_TIME_S, CallAnswer, Limits, RunResult, failure
 from .wasm import WasmPython
 
-CALL_TIMEOUT_S = 70.0
 SOURCE_CAP = 100_000
 
 
@@ -86,9 +85,10 @@ def capped(asked: LimitsIn, settings: Settings) -> Limits:
     )
 
 
-def calls_to_tools(tools: ServiceClient | None, caller: Principal, token: str | None) -> CallAnswer:
+def calls_to_tools(tools: ServiceClient | None, caller: Principal, token: str | None, limits: Limits) -> CallAnswer:
     """The answer to each `ops.call`: a call to tools-service for the run's tenant and team. It runs on the guest's
-    worker thread and hands the request to the event loop, which owns the client."""
+    worker thread and hands the request to the event loop, which owns the client. A call waits no longer than the
+    run's own time limit: the guest's clock runs on while it waits, so a later answer ends the run at its limit."""
 
     async def call(tool: str, args: dict[str, Any]) -> dict[str, Any]:
         assert tools is not None and token is not None
@@ -99,7 +99,7 @@ def calls_to_tools(tools: ServiceClient | None, caller: Principal, token: str | 
                 headers={"X-Code-Run": token},
                 tenant=caller.tenant_id,
                 team=caller.team_id,
-                timeout=CALL_TIMEOUT_S,
+                timeout=limits.time_s,
             )
         except ServiceCallError as e:
             return {"ok": False, "error": failure(e.code, e.message)}
@@ -140,8 +140,8 @@ def create_runner_app(
         """Runs `entry(input)` from `source` in a fresh sandbox and answers when it ends: its output or the error that
         stopped it (`time_limit`, `memory_limit`, `function_error`, or a refused call's code), its log and timings."""
         nonlocal running
-        answer = calls_to_tools(tools, caller, body.call_token)
         limits = capped(body.limits, settings)
+        answer = calls_to_tools(tools, caller, body.call_token, limits)
         async with slots:
             running += 1
             try:
