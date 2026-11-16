@@ -12,8 +12,11 @@ here: a module with no team is read and called by every team, which the generate
 No backfill: every row already carries its tenant and team, but for the call log's rows written before tools_0015,
 which name no tenant. A module id does not say whose call it was (seeded ids repeat across tenants), so those rows stay
 unread, as they are today, since every read names a tenant. Indexes: the hosts a module uses by host (a removal looks
-them up), a connection's links by connection, and the secret audit by time for its retention sweep. Plain SQL, so it
-renders offline; each step is safe to re-run. Downgrade removes the policies, grants and indexes.
+them up), a connection's links by connection, and the secret audit by time for its retention sweep. Each is created
+only when missing, on both databases: upgrade.sql runs every step in a transaction, where CREATE INDEX CONCURRENTLY
+cannot run, so on a large secret_audit (it was written on every poll) build ix_secret_audit_at by hand first,
+CONCURRENTLY, as docs/deploy/database.md says, and this step finds it. Plain SQL, so it renders offline; each step
+is safe to re-run. Downgrade removes the policies, grants and indexes.
 
 Revision ID: tools_0080_police_tables
 Revises: tools_0079_mcp_link_isolation
