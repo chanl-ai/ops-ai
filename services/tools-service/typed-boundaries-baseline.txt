@@ -1,4 +1,4 @@
-# 1179 boundaries crossed without a model in services/tools-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 1178 boundaries crossed without a model in services/tools-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body apps_add_account
 1 reply apps_add_account
 1 body apps_add_app
@@ -54,7 +54,6 @@
 1 reply gateway_health
 1 body gateway_platform_event
 1 body gateway_raise_fence
-1 reply gateway_raise_fence
 1 reply gateway_tool_access
 1 body mailboxes_read
 1 reply mailboxes_read

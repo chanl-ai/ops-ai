@@ -397,6 +397,11 @@ class FenceIn(TypedDict, closed=True):
     thread: str
 
 
+class FenceResult(TypedDict, closed=True):
+    generation: int
+    thread: str
+
+
 class GrantableOperation(TypedDict, closed=True):
     access: str
     added: NotRequired[bool]
@@ -1461,6 +1466,11 @@ class EnvelopeDiscoveryResult(TypedDict, closed=True):
 
 class EnvelopeEvaluateOut(TypedDict, closed=True):
     data: EvaluateOut
+    success: Literal[True]
+
+
+class EnvelopeFenceResult(TypedDict, closed=True):
+    data: FenceResult
     success: Literal[True]
 
 

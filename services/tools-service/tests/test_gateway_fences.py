@@ -12,6 +12,7 @@ import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_service_kit.contract import response_checker
 from ops_service_kit.ids import new_id
 from ops_store import isolation
 from ops_tools.store import CallLog
@@ -73,10 +74,13 @@ async def test_a_tenant_neither_reads_nor_raises_another_tenants_fence(both_engi
 async def test_the_fence_route_raises_the_callers_tenants_fence_and_refuses_a_lower_one(
     engine: AsyncEngine, seed: dict[str, Any], tenant: str
 ) -> None:
-    # Without the openapi response checker: openapi.json does not list the 409 this route answers.
+    # Every reply, the 409 included, is checked against openapi.json's schemas.
     app = build_app(engine, seed, tenant, dev=True)
     fence = {"thread": f"thr_{uuid4().hex[:10]}", "generation": 4}
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tools") as c:
+    hooks = {"response": [response_checker(app)]}
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://tools", event_hooks=hooks
+    ) as c:
         raised = await c.post("/v1/fences", json=fence, headers=service_headers(tenant))
         assert raised.status_code == 200 and raised.json()["data"] == fence, raised.text
         lower = await c.post("/v1/fences", json={**fence, "generation": 2}, headers=service_headers(tenant))

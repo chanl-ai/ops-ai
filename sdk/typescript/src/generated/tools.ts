@@ -2990,6 +2990,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[FenceResult] */
+        Envelope_FenceResult_: {
+            data: components["schemas"]["FenceResult"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[HeldHost] */
         Envelope_HeldHost_: {
             data: components["schemas"]["HeldHost"];
@@ -3399,6 +3408,13 @@ export interface components {
         };
         /** FenceIn */
         FenceIn: {
+            /** Generation */
+            generation: number;
+            /** Thread */
+            thread: string;
+        };
+        /** FenceResult */
+        FenceResult: {
             /** Generation */
             generation: number;
             /** Thread */

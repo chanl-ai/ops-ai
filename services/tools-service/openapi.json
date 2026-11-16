@@ -4539,6 +4539,25 @@
         "title": "Envelope[ExecutionList]",
         "type": "object"
       },
+      "Envelope_FenceResult_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/FenceResult"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[FenceResult]",
+        "type": "object"
+      },
       "Envelope_HeldHost_": {
         "additionalProperties": false,
         "properties": {
@@ -5467,6 +5486,25 @@
           "generation"
         ],
         "title": "FenceIn",
+        "type": "object"
+      },
+      "FenceResult": {
+        "additionalProperties": false,
+        "properties": {
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "thread": {
+            "title": "Thread",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread",
+          "generation"
+        ],
+        "title": "FenceResult",
         "type": "object"
       },
       "GrantableOperation": {
@@ -22624,7 +22662,7 @@
     },
     "/v1/fences": {
       "post": {
-        "description": "Internal (service token): agents-service calls it when it takes a thread over, so the new generation is\nthe fence before any write of the new owner, and a stalled old owner cannot write in between. Idempotent;\na lower generation than the fence is refused.",
+        "description": "Internal (service token): agents-service calls it when it takes a thread over, so the new generation is\nthe fence before any write of the new owner, and a stalled old owner cannot write in between. Idempotent;\na lower generation than the fence is refused with 409 `lease_superseded`, the fence's generation in the\nmessage.",
         "operationId": "gateway_raise_fence",
         "parameters": [
           {
@@ -22658,20 +22696,102 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_FenceResult_"
+                }
               }
             },
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
           },
           "422": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
           }
         },
         "summary": "Raise Fence",

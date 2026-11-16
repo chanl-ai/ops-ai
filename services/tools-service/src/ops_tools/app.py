@@ -22,7 +22,7 @@ from ops_policy import input_hash
 from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.errors import Unprocessable
 from ops_service_kit.flags import Flags
-from ops_service_kit.http import Envelope, Out, error_body, error_responses, install_error_handlers, operation_id
+from ops_service_kit.http import Envelope, Out, error_body, error_responses, install_error_handlers, ok, operation_id
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 from ops_store.background import LOCAL as LOCAL_BEATS
@@ -80,6 +80,12 @@ class RunContext(_Wire):
 class FenceIn(_Wire):
     thread: str
     generation: int = Field(ge=1)
+
+
+class FenceResult(Out):
+    thread: str
+    # The thread's fence after the raise: the generation sent.
+    generation: int
 
 
 class AbandonIn(_Wire):
@@ -479,15 +485,16 @@ def create_gateway_app(
         }
         return JSONResponse({"success": True, "data": data})
 
-    @app.post("/v1/fences", tags=["gateway"])
+    @app.post("/v1/fences", tags=["gateway"], response_model=Envelope[FenceResult], responses=error_responses())
     async def raise_fence(body: FenceIn, caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Internal (service token): agents-service calls it when it takes a thread over, so the new generation is
         the fence before any write of the new owner, and a stalled old owner cannot write in between. Idempotent;
-        a lower generation than the fence is refused."""
+        a lower generation than the fence is refused with 409 `lease_superseded`, the fence's generation in the
+        message."""
         current = await log.raise_fence(caller.tenant_id, body.thread, body.generation)
         if current > body.generation:
             return as_response(Refused("", 409, "lease_superseded", [f"fence is at generation {current}"]))
-        return JSONResponse({"success": True, "data": {"thread": body.thread, "generation": current}})
+        return ok(FenceResult(thread=body.thread, generation=current).model_dump(by_alias=True))
 
     @app.post(
         "/v1/calls/abandon", tags=["gateway"], response_model=Envelope[AbandonResult], responses=error_responses()
