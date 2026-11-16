@@ -26,7 +26,7 @@ from ops_models.seed import seed
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
-from ops_service_kit.testdb import isolate_from_stack, refusal
+from ops_service_kit.testdb import isolate_from_stack, refusal, use_worker_database
 from ops_store.database import open_database
 from ops_store.testing import DATABASES, NO_SQL_SERVER, postgresql_only, sql_server_schema
 
@@ -48,6 +48,7 @@ def _service(tenant: str) -> dict[str, str]:
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    use_worker_database()
     isolate_from_stack()
     # Before any fixture or migration: the test database only, never the live one (ops_service_kit.testdb).
     if (why := refusal(Settings().database_url, os.environ.get("OPS_TEST_DATABASE_URL"))) is not None:

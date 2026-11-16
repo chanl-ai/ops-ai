@@ -33,7 +33,7 @@ from ops_files.models import RetentionClass
 from ops_files.repository import InMemoryFileRepository
 from ops_files.scanning import EicarScanner
 from ops_files.service import FilesConfig, FileService
-from ops_service_kit.testdb import isolate_from_stack
+from ops_service_kit.testdb import isolate_from_stack, use_worker_database
 from ops_storage.azure_blob import AzureBlobConfig, AzureBlobObjectStore
 from ops_storage.base import ObjectStore, UploadRejectedError
 from ops_storage.local import LocalObjectStore
@@ -97,6 +97,7 @@ def _query(url: str) -> dict[str, str]:
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    use_worker_database()
     isolate_from_stack()
     config.addinivalue_line("markers", "postgresql_only(why): runs on PostgreSQL only, for the reason given")
 

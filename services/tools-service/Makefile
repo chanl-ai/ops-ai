@@ -25,7 +25,7 @@ typecheck: ## Strict pyright
 
 test: ## Registry and API tests on the test database (starts compose); T= runs only those files
 	$(MAKE) -C ../agents-service db-up
-	$(TEST_DB) uv run pytest $(T)
+	$(TEST_DB) uv run pytest $(PYTEST_PAR) $(T)
 
 test-gateway: ## Gateway tests, still in agents-service/tests/gateway, which agents-service verify also runs
 	$(MAKE) -C ../agents-service db-up

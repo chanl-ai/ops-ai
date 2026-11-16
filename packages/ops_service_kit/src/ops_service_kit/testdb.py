@@ -4,17 +4,36 @@ A suite that fell back to Settings' default URL migrated the live `ops_runtime` 
 make test targets create the test database (scripts/test_db.py) and export it as OPS_TEST_DATABASE_URL with
 OPS_DATABASE_URL set to the same; any other PostgreSQL database is refused before a test, fixture or migration runs.
 SQLite URLs are in-process and always allowed.
+
+A parallel run (`make test PAR=n`, pytest-xdist) gives each worker its own copy of the test database, `<name>_gw<k>`,
+made by scripts/test_db.py from the migrated one; `use_worker_database` points a worker's process at its copy before
+anything reads the URL, since the suites empty tables and seed fixed tenants between tests.
 """
 
 from __future__ import annotations
 
 from urllib.parse import urlsplit
 
-from .settings import STACK_SERVICE_ENV, isolate_from_stack, unanswered_endpoints
+from .settings import (
+    LIVE_DATABASE,
+    STACK_SERVICE_ENV,
+    isolate_from_stack,
+    unanswered_endpoints,
+    use_worker_database,
+    worker_url,
+)
 
-__all__ = ["LIVE", "STACK_SERVICE_ENV", "isolate_from_stack", "refusal", "unanswered_endpoints"]
+__all__ = [
+    "LIVE",
+    "STACK_SERVICE_ENV",
+    "isolate_from_stack",
+    "refusal",
+    "unanswered_endpoints",
+    "use_worker_database",
+    "worker_url",
+]
 
-LIVE = "ops_runtime"
+LIVE = LIVE_DATABASE
 
 
 def _target(url: str) -> tuple[str, str]:

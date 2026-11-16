@@ -30,7 +30,7 @@ from ops_service_kit.flags import Flags
 from ops_service_kit.logging import quiet_request_logs
 from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
-from ops_service_kit.testdb import isolate_from_stack, refusal
+from ops_service_kit.testdb import isolate_from_stack, refusal, use_worker_database
 from ops_store import isolation
 from ops_store.database import open_database
 from ops_store.testing import DATABASES, NO_SQL_SERVER, postgresql_only, sql_server_schema
@@ -101,6 +101,7 @@ quiet_request_logs()
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    use_worker_database()
     _hang_out.append(os.fdopen(os.dup(2), "w"))
     isolate_from_stack()
     # Before any fixture or migration: the test database only, never the live one (ops_service_kit.testdb).

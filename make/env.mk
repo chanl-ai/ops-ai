@@ -122,7 +122,15 @@ else
   export OPS_MAILPIT_HOST ?= 127.0.0.1
 endif
 # Prefix for a test recipe: creates and migrates the test database, then runs the command against it.
-TEST_DB = uv run --project $(ROOT) python $(ROOT)/scripts/test_db.py $(OPS_TEST_DATABASE_URL) && OPS_DATABASE_URL=$(OPS_TEST_DATABASE_URL)
+# PAR=<n> runs the suite on n pytest-xdist workers, each on its own copy of the test database (scripts/test_db.py
+# --workers), a whole test file to one worker. Only for the suites below, each of which passed three runs in a row in
+# parallel; any other refuses, since a suite that shares state between files fails at random instead.
+PAR_SUITES := agents-service
+PAR_RUN = $(if $(PAR),$(if $(filter $(notdir $(CURDIR)),$(PAR_SUITES)),--workers $(PAR),$(error PAR=: $(notdir $(CURDIR)) has not been proven safe in parallel; run it without PAR)))
+# The pytest arguments, which a suite's test recipe puts after `pytest` (not PYTEST_ADDOPTS: a test that starts pytest
+# itself would inherit them).
+PYTEST_PAR = $(if $(PAR),-n $(PAR) --dist loadfile)
+TEST_DB = uv run --project $(ROOT) python $(ROOT)/scripts/test_db.py $(OPS_TEST_DATABASE_URL) $(PAR_RUN) && OPS_DATABASE_URL=$(OPS_TEST_DATABASE_URL)
 export OPS_INFRA
 # AUTH=platform (the default): agents and tools verify platform-service tokens and the console signs people in through
 # it (James, Maya, Nadia from platform's dev seed); AUTH=dev runs dev auth and the mock sign-in. A stack already running

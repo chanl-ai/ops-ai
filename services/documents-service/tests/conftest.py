@@ -27,7 +27,7 @@ from ops_identity.fastapi import current_caller, current_principal
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
-from ops_service_kit.testdb import isolate_from_stack
+from ops_service_kit.testdb import isolate_from_stack, use_worker_database
 from ops_store import background, isolation
 from ops_store.testing import DATABASES, NO_SQL_SERVER, postgresql_only, sql_server_schema
 
@@ -35,6 +35,7 @@ OPS = {"X-Team-Id": "team_ops"}
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    use_worker_database()
     isolate_from_stack()
     config.addinivalue_line("markers", "postgresql_only(why): runs on PostgreSQL only, for the reason given")
     config.addinivalue_line("markers", "lifespan_supervisor: the test's own app lifespan must hold the supervisor")

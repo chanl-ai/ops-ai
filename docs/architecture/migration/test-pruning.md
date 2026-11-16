@@ -18,7 +18,20 @@ Real sleeps (timer, lease and mail tests) add about 60 to 70 s in total; they ar
 are lease and timer conformance tests that builders are editing.
 
 The cost is per test and CPU-bound, so it divides across processes: the fix is a parallel run with one database per
-worker.
+worker, below.
+
+## Parallel runs
+
+`make -s test PKG=services/<svc> PAR=<n>` runs the suite on n pytest-xdist workers. `scripts/test_db.py --workers n`
+migrates the run's test database once and copies it per worker (`<name>_gw0` …), and each worker's conftest points
+itself at its copy (`ops_service_kit.testdb.use_worker_database`), which leaves the live-database guard's pair untouched.
+A whole test file runs on one worker. A suite runs in parallel only once it is listed in `PAR_SUITES` (make/env.mk),
+after three parallel runs in a row with no failure that a serial run does not also have; any other suite refuses `PAR=`.
+CI shards are unchanged: a shard runs serially.
+
+| Service | Serial | PAR=5 (three runs) | Failures in every run, serial and parallel alike |
+|---|---|---|---|
+| agents-service | 724 s | 178, 180, 173 s | `test_tools_ownership.py::test_tools_chain_adopts_tables_the_agents_chain_created` (also red in the serial baseline); three in `test_workflow_tools.py` and `test_child_runs.py` from source edits in progress on the branch |
 
 ## Deleted tests
 

@@ -29,8 +29,8 @@ lint: ## ruff format check and lint
 typecheck: ## Strict pyright
 	uv run pyright $(TYPED_DIRS)
 
-test: ## pytest on the test database (needs db-up)
-	$(TEST_DB) uv run pytest $(or $(T),tests)
+test: ## pytest on the test database (needs db-up); T= runs only those files, PAR=<n> on n workers
+	$(TEST_DB) uv run pytest $(PYTEST_PAR) $(or $(T),tests)
 
 loader-test: ## The embedded chat loader's rules in a real browser
 	node --test tests/loader/loader.browser.mjs

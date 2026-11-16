@@ -25,7 +25,7 @@ typecheck: ## Strict pyright
 	uv run pyright $(PY_DIRS)
 
 test: ## pytest on the test database (make db-up); T= runs only those files
-	$(TEST_DB) uv run pytest $(T)
+	$(TEST_DB) uv run pytest $(PYTEST_PAR) $(T)
 
 verify: lint typecheck test openapi-check ## lint, typecheck, test and the OpenAPI gate
 

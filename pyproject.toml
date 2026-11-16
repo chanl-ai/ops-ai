@@ -27,6 +27,7 @@ dev = [
     "jsonschema>=4.23",
     "openapi-spec-validator>=0.7",
     "types-lxml>=2026.2",
+    "pytest-xdist>=3.6",
 ]
 
 [tool.uv]

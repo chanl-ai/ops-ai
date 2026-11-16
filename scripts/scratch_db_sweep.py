@@ -2,8 +2,8 @@
 start). A scratch database is attributed by its name:
 
     ops_usecase_r<pid>_<hex>   a use-case run (packages/usecase-runner)
-    ops_test[_isolated]_r<pid>_<hex>[_<suffix>]   a make test run (make/env.mk), and the databases its suites make
-                               beside it (`_conformance`)
+    ops_test[_isolated]_r<pid>_<hex>[_<suffix>]   a make test run (make/env.mk), its workers' copies (`_gw<k>`), and
+                               the databases its suites make beside it (`_conformance`)
     ops_tools_p<pid>_<hex>     the gateway ownership test (services/agents-service/tests/gateway)
 
 One is dropped only when process <pid> is gone, no session is connected to it, and none of its files has changed for
@@ -29,7 +29,7 @@ from typing import Any
 
 import asyncpg  # pyright: ignore[reportMissingTypeStubs]
 
-WITH_PID = re.compile(r"^ops_(?:usecase_r|tools_p|test_r|test_isolated_r)(?P<pid>\d+)_[0-9a-f]+(?:_[a-z_]+)?$")
+WITH_PID = re.compile(r"^ops_(?:usecase_r|tools_p|test_r|test_isolated_r)(?P<pid>\d+)_[0-9a-f]+(?:_[a-z0-9_]+)?$")
 LEGACY = re.compile(r"^ops_tools_[0-9a-f]{8}$")
 # The QA runner's export database and the ones its suites make beside it; never this sweep's to drop.
 RUNNER_OWNED = "ops_test_head_"

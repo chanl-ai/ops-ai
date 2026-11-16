@@ -40,7 +40,7 @@ from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
 from ops_engine.store import metadata as engine_metadata
 from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
-from ops_service_kit.testdb import isolate_from_stack, refusal
+from ops_service_kit.testdb import isolate_from_stack, refusal, use_worker_database
 from tests.knowledge_fixture import FixtureKnowledge
 
 from .contract import response_checker
@@ -108,6 +108,7 @@ _IMAGE = re.compile(r"\bshow image (\S+)")
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    use_worker_database()
     isolate_from_stack()
     for name in STACK_ENV:
         os.environ.pop(name, None)
@@ -336,7 +337,8 @@ def graph_models() -> FakeGraphModels:
 async def emptied(engine: AsyncEngine) -> None:
     """Every table the app's metadata names, emptied in one statement. The app starts and seeds on the dev caller's
     fixed tenant and team, so a test that counts what it made needs the rows of the tests before it gone. Safe because
-    the database is this make run's alone (make/env.mk) and the suite runs one test at a time; the migrations seed no
+    the database is this make run's alone (make/env.mk), or this worker's copy of it in a parallel run, and each process
+    runs one test at a time; the migrations seed no
     rows but their version tables, which are not in the metadata. A connection an earlier test left open in a
     transaction would hold the truncate forever, so it waits 5 s and fails naming the lock."""
     names = ", ".join(f'"{t.name}"' for t in [*metadata.sorted_tables, *engine_metadata.sorted_tables])

@@ -13,6 +13,7 @@ from functools import cache
 from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Annotated, Any, Literal, cast
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import AliasChoices, BaseModel, Field, HttpUrl, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -770,6 +771,41 @@ def unanswered_endpoints(*names: str) -> None:
     reaching a service that happens to run on this machine."""
     for name in names:
         os.environ[endpoint_env(name)] = "http://127.0.0.1:1"
+
+
+# The live stack's database name; tests refuse it (testdb.refusal).
+LIVE_DATABASE = "ops_runtime"
+
+
+def worker_url(test_url: str | None, database_url: str | None, worker: str | None) -> str | None:
+    """The pytest-xdist worker's copy of the test database, `<name>_<worker>` (scripts/test_db.py --workers), or None to
+    change nothing: outside a worker, on SQLite, on the live database, or when the two URLs name different databases,
+    so testdb.refusal still sees the pair it was given (a test that starts pytest inherits the worker's name)."""
+    if not worker or not test_url or not test_url.startswith("postgresql"):
+        return None
+    test, given = urlsplit(test_url), urlsplit(database_url or "")
+    name = test.path.lstrip("/")
+    same = (test.hostname, test.port, name) == (given.hostname, given.port, given.path.lstrip("/"))
+    if not same or name == LIVE_DATABASE:
+        return None
+    if not name.endswith(f"_{worker}"):
+        name = f"{name}_{worker}"
+    return urlunsplit(test._replace(path=f"/{name}"))
+
+
+def use_worker_database() -> str | None:
+    """Points OPS_DATABASE_URL and OPS_TEST_DATABASE_URL at this pytest-xdist worker's copy and returns it, or changes
+    nothing (worker_url). Called first in a conftest's pytest_configure. Here because this module is the one place the
+    environment is read or written (check_standards rule 4)."""
+    url = worker_url(
+        os.environ.get("OPS_TEST_DATABASE_URL"),
+        os.environ.get("OPS_DATABASE_URL"),
+        os.environ.get("PYTEST_XDIST_WORKER"),
+    )
+    if url is not None:
+        os.environ["OPS_TEST_DATABASE_URL"] = url
+        os.environ["OPS_DATABASE_URL"] = url
+    return url
 
 
 def isolate_from_stack() -> None:

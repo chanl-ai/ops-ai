@@ -29,7 +29,7 @@ from ops_kb.readings import Readings
 from ops_kb.service import Who
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
-from ops_service_kit.testdb import isolate_from_stack, refusal, unanswered_endpoints
+from ops_service_kit.testdb import isolate_from_stack, refusal, unanswered_endpoints, use_worker_database
 from ops_store.testing import DATABASES, NO_SQL_SERVER, postgresql_only, sql_server_schema
 
 from .readings_fake import LocalReadings
@@ -49,6 +49,7 @@ BOTH_DATABASES = frozenset(
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    use_worker_database()
     isolate_from_stack()
     # The app asks agents-service who uses a knowledge base and sends it events; a test that needs an answer passes
     # its own `agents` or `events_to`, and the rest get an address nothing answers on.

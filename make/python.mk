@@ -18,11 +18,11 @@ endif
 
 # Tests never run on the stack's database: each make run makes its own throwaway one (OPS_TEST_DATABASE_URL, make/env.mk)
 # on the stack's PostgreSQL, so no second stack is needed beside `make up`.
-test: db-up ## Tests on a throwaway database: PKG=packages/<x>|services/<x> runs that member's (T= some files); no PKG runs what changed since origin/main
+test: db-up ## Tests on a throwaway database: PKG=packages/<x>|services/<x> runs that member's (T= some files, PAR=<n> on n workers where proven); no PKG runs what changed since origin/main
 ifdef PKG
 	@[ -d "$(PKG)" ] || { echo "make test: no folder $(PKG)"; exit 2; }
 ifneq ($(wildcard $(PKG)/Makefile),)
-	@$(MAKE) -s -C "$(PKG)" test $(if $(T),T="$(T)")
+	@$(MAKE) -s -C "$(PKG)" test $(if $(T),T="$(T)") $(if $(PAR),PAR=$(PAR))
 else
 	@$(TEST_DB) uv run --directory "$(PKG)" pytest -q $(or $(T),tests)
 endif

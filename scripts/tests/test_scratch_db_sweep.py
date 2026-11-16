@@ -75,8 +75,10 @@ def test_a_run_still_writing_keeps_its_database_when_the_pid_in_its_name_is_gone
 
 def test_a_finished_runs_database_is_dropped_once_it_has_been_quiet(made: list[str]) -> None:
     name = make(made, f"ops_test_r{DEAD}_{os.getpid():x}b")
+    worker = make(made, f"{name}_gw3")  # a parallel run's worker copy (scripts/test_db.py --workers)
     asyncio.run(sweep.sweep(ADMIN, dry_run=False, now=time.time() + 2 * sweep.QUIET_S))
     assert not asyncio.run(exists(name))
+    assert not asyncio.run(exists(worker)), "a finished parallel run's worker copy was left behind"
 
 
 def test_the_qa_runners_database_is_never_touched(made: list[str]) -> None:

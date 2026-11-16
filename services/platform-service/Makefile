@@ -27,7 +27,7 @@ typecheck: ## Strict pyright
 	uv run pyright $(PY_DIRS)
 
 test: ## pytest on the test database (make db-up); T= runs only those files
-	$(TEST_DB) uv run pytest $(T)
+	$(TEST_DB) uv run pytest $(PYTEST_PAR) $(T)
 
 openapi-check: ## openapi.json matches the apps and every operation is typed
 	uv run python scripts/check_openapi.py
