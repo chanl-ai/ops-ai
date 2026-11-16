@@ -10,6 +10,7 @@ other builders' suites.
 
 | Service | Tests | Wall clock | Main cost |
 |---|---|---|---|
+| tools-service | 975 | 869 s | Spread thinly over 943 tests (the slowest 8.6 s, a timeout mock); not profiled further |
 | agents-service | 1,871 | 724 s | CPU in the test process: each test starts its own app, and FastAPI builds a route's dependants and pydantic fields on the first request to it (about 0.2 to 0.5 s per app). Profiled on four API files, 26 of 35 s went to `fastapi.utils.create_model_field`. |
 
 What it is not, for agents-service: emptying the 58 tables before a test takes 25 to 65 ms; starting the app's
@@ -32,6 +33,7 @@ CI shards are unchanged: a shard runs serially.
 | Service | Serial | PAR=5 (three runs) | Failures in every run, serial and parallel alike |
 |---|---|---|---|
 | agents-service | 724 s | 178, 180, 173 s | `test_tools_ownership.py::test_tools_chain_adopts_tables_the_agents_chain_created` (also red in the serial baseline); three in `test_workflow_tools.py` and `test_child_runs.py` from source edits in progress on the branch |
+| tools-service | 869 s | 205, 203, 201 s | none (skips are the SQL Server tests, which need OPS_MSSQL_SERVER, as serially) |
 
 ## Deleted tests
 
