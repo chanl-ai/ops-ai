@@ -10,12 +10,24 @@ import uuid
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, FastAPI
+import pytest
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from ops_service_kit import contract
 from ops_service_kit.contract import boundaries
-from ops_service_kit.http import Envelope, In, ListResult, Out, install_error_handlers, ok, operation_id, paged
+from ops_service_kit.http import (
+    Envelope,
+    In,
+    ListResult,
+    Out,
+    Passthrough,
+    install_error_handlers,
+    ok,
+    operation_id,
+    paged,
+)
 
 
 class Colour(enum.StrEnum):
@@ -77,3 +89,79 @@ def test_the_walk_names_each_body_and_reply_without_a_model() -> None:
         ("reply", "bases_read"),
         ("reply", "bases_replace"),
     ]
+
+
+class Dict(Out):
+    meta: dict[str, Any]
+
+
+class Anything(Out):
+    value: Any
+
+
+class Nested(Out):
+    inner: list[Loose]
+
+
+class Fine(Out):
+    id: str
+    at: datetime.datetime
+    colour: Colour
+    ref: uuid.UUID
+    tags: dict[str, str]
+    parts: list[Fine]
+
+
+class Forwarded(Passthrough):
+    payload: str
+
+
+def planted() -> FastAPI:
+    api = FastAPI(generate_unique_id_function=operation_id)
+    install_error_handlers(api)
+
+    @api.get("/dict", response_model=Envelope[Dict])
+    async def a_dict() -> JSONResponse:
+        return ok({})
+
+    @api.get("/any", response_model=Envelope[Anything])
+    async def an_any() -> JSONResponse:
+        return ok({})
+
+    @api.get("/nested", response_model=Envelope[Nested])
+    async def a_nested() -> JSONResponse:
+        return ok({})
+
+    @api.get("/fine", response_model=Envelope[Fine])
+    async def a_fine() -> JSONResponse:
+        return ok({})
+
+    @api.post("/raw", response_model=Envelope[Fine])
+    async def raw(request: Request) -> JSONResponse:
+        return JSONResponse(await request.json())
+
+    @api.post("/fwd", response_model=Envelope[Fine])
+    async def forwarded(body: Forwarded) -> JSONResponse:
+        return ok({})
+
+    @api.post("/headers", response_model=Envelope[Fine])
+    async def headers(request: Request) -> JSONResponse:
+        return ok({"agent": request.headers.get("user-agent")})
+
+    return api
+
+
+def test_the_walk_follows_fields_raw_bodies_raw_replies_and_unlisted_passthroughs() -> None:
+    assert sorted(boundaries(planted())) == [
+        ("body", "forwarded"),
+        ("body", "raw"),
+        ("reply", "a_dict"),
+        ("reply", "a_nested"),
+        ("reply", "an_any"),
+        ("reply", "raw"),
+    ]
+
+
+def test_a_passthrough_on_the_named_list_is_let_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(contract, "PASSTHROUGH", frozenset({f"{Forwarded.__module__}.{Forwarded.__qualname__}"}))
+    assert ("body", "forwarded") not in boundaries(planted())

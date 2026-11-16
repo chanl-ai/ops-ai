@@ -1,4 +1,4 @@
-# 64 boundaries crossed without a model in services/files-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 68 boundaries crossed without a model in services/files-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body files_attach
 1 reply files_attach
 1 body files_bulk_delete
@@ -11,6 +11,8 @@
 1 reply files_download_url
 1 reply files_get_file
 1 reply files_get_read_request
+1 reply files_list_files
+1 body files_put_content
 1 body files_request_read
 1 reply files_request_read
 1 body files_scan_result
@@ -20,7 +22,9 @@
 1 body files_set_legal_hold
 1 reply files_set_legal_hold
 1 reply files_upload_limits
+1 body files_write_file
 1 reply files_write_file
+1 reply health_health
 5 dict-any services/files-service/src/ops_files/app.py
 1 gather services/files-service/src/ops_files/app.py
 1 task services/files-service/src/ops_files/app.py

@@ -14,8 +14,15 @@ against that service's shrink-only list.
 
 from __future__ import annotations
 
+import ast
+import datetime
+import decimal
+import enum
+import inspect
 import re
+import textwrap
 import types
+import uuid
 from collections.abc import Iterator
 from typing import Any, Literal, Union, get_args, get_origin
 
@@ -28,7 +35,11 @@ from fastapi.routing import APIRoute, iter_route_contexts
 from jsonschema import Draft202012Validator
 from pydantic import BaseModel
 
-from .http import In, Out
+from .http import In, Out, Passthrough
+
+# The body models that forward their JSON whole to an outside system, named `module.Class`. A `Passthrough` subclass
+# anywhere else is a body finding; a name is added here only in a reviewed change.
+PASSTHROUGH: frozenset[str] = frozenset()
 
 
 class Contract:
@@ -118,22 +129,44 @@ def response_checker(app: FastAPI) -> Any:
 
 
 # A reply part that is typed without being a model.
-_SCALARS: tuple[type, ...] = (str, int, float, bool, type(None))
+_SCALARS: tuple[type, ...] = (
+    str,
+    int,
+    float,
+    bool,
+    type(None),
+    datetime.datetime,
+    datetime.date,
+    datetime.time,
+    decimal.Decimal,
+    uuid.UUID,
+    enum.Enum,
+)
 
 
-def _out(t: Any) -> bool:
+def _out(t: Any, seen: frozenset[type] = frozenset()) -> bool:
     """Whether a reply type is an `Out` all the way down: an Out whose generic arguments (Envelope[T], ListResult[T])
-    are Outs or scalars, or a list, tuple, union or Literal of those."""
-    if t in _SCALARS or get_origin(t) is Literal:
+    and whose field types are Outs or scalars, or a list, tuple, set, union, Literal or `dict[str, X]` of those. `Any`,
+    `object` and a bare or `Any`-valued dict are not typed."""
+    if get_origin(t) is Literal:
+        return True
+    if isinstance(t, type) and issubclass(t, _SCALARS):
         return True
     if isinstance(t, type) and issubclass(t, BaseModel):
         if not issubclass(t, Out):
             return False
+        if t in seen:
+            return True
         meta: dict[str, Any] = getattr(t, "__pydantic_generic_metadata__", {}) or {}
-        return all(_out(a) for a in meta.get("args", ()))
+        if not all(_out(a, seen) for a in meta.get("args", ())):
+            return False
+        return all(_out(f.annotation, seen | {t}) for f in t.model_fields.values())
     origin = get_origin(t)
     if origin in (list, tuple, set, frozenset, Union, types.UnionType):
-        return all(_out(a) for a in get_args(t) if a is not Ellipsis)
+        return all(_out(a, seen) for a in get_args(t) if a is not Ellipsis)
+    if origin is dict:
+        args = get_args(t)
+        return len(args) == 2 and _out(args[0], seen) and _out(args[1], seen)
     return False
 
 
@@ -144,6 +177,42 @@ def _bodies(dependant: Dependant) -> Iterator[Any]:
             yield field.field_info.annotation
     for sub in dependant.dependencies:
         yield from _bodies(sub)
+
+
+def _passthrough(body: Any) -> bool:
+    """Whether a body is a `Passthrough` that is not on the named list."""
+    return (
+        isinstance(body, type)
+        and issubclass(body, Passthrough)
+        and f"{body.__module__}.{body.__qualname__}" not in PASSTHROUGH
+    )
+
+
+def _reads(fn: Any) -> tuple[bool, bool]:
+    """(reads the request body, builds a `JSONResponse` itself) from a function's source: a call to `.json()`,
+    `.body()`, `.form()` or `.stream()`, and a direct `JSONResponse(...)` call, which skips the envelope `ok()`."""
+    try:
+        tree = ast.parse(textwrap.dedent(inspect.getsource(fn)))
+    except (OSError, TypeError, SyntaxError):
+        return False, False
+    reads = raw = False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Attribute) and node.func.attr in ("json", "body", "form", "stream"):
+                reads = True
+            if (isinstance(node.func, ast.Name) and node.func.id == "JSONResponse") or (
+                isinstance(node.func, ast.Attribute) and node.func.attr == "JSONResponse"
+            ):
+                raw = True
+    return reads, raw
+
+
+def _calls(dependant: Dependant) -> Iterator[Any]:
+    """The route's endpoint and the dependencies it takes."""
+    if dependant.call is not None:
+        yield dependant.call
+    for sub in dependant.dependencies:
+        yield from _calls(sub)
 
 
 def _json_reply(route: APIRoute) -> bool:
@@ -165,9 +234,16 @@ def boundaries(app: FastAPI) -> list[tuple[str, str]]:
             continue
         ops = paths.get(ctx.path_format or "", {})
         for op in {str(ops[m.lower()]["operationId"]) for m in ctx.methods or () if m.lower() in ops}:
-            for body in _bodies(ctx.dependant):
-                if not (isinstance(body, type) and issubclass(body, In)):
+            bodies = list(_bodies(ctx.dependant))
+            for body in bodies:
+                if not (isinstance(body, type) and issubclass(body, In)) or _passthrough(body):
                     found.add(("body", op))
-            if _json_reply(route) and (route.response_model is None or not _out(route.response_model)):
+            reads, raw = _reads(route.endpoint)
+            for call in _calls(ctx.dependant):
+                if call is not route.endpoint:
+                    reads = reads or _reads(call)[0]
+            if reads and not bodies:
+                found.add(("body", op))  # the body is read off `Request`, so no model checks it
+            if _json_reply(route) and (raw or route.response_model is None or not _out(route.response_model)):
                 found.add(("reply", op))
     return sorted(found)
