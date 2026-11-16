@@ -31,7 +31,7 @@ from ops_agents.activities.tools import LocalReplySender, LocalToolExecutor
 from ops_agents.api.app import create_app
 from ops_agents.graphs.common import GraphDeps
 from ops_agents.graphs.definition import WorkflowDefinition, compile_definition
-from ops_agents.store.graphs import metadata
+from ops_agents.store.base import metadata
 from ops_service_kit.settings import Settings
 from tests.knowledge_fixture import KeywordPassageStore
 
