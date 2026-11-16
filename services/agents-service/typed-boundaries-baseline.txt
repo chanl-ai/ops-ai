@@ -234,7 +234,7 @@
 68 dict-any services/agents-service/src/ops_agents/api/routers/templates.py
 11 dict-any services/agents-service/src/ops_agents/api/routers/tool_catalog.py
 4 dict-any services/agents-service/src/ops_agents/api/routers/tool_uses.py
-21 dict-any services/agents-service/src/ops_agents/api/routers/widget.py
+18 dict-any services/agents-service/src/ops_agents/api/routers/widget.py
 9 dict-any services/agents-service/src/ops_agents/api/routers/widgets.py
 17 dict-any services/agents-service/src/ops_agents/api/routers/workflows.py
 6 dict-any services/agents-service/src/ops_agents/api/routing.py
