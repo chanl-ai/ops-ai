@@ -23,8 +23,10 @@ from .tenancy import LOCAL_TENANT, current_tenant, tenant_tx
 registry_agents = sa.Table(
     "registry_agents",
     metadata,
+    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
+    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
     sa.Column("id", sa.String(64), primary_key=True),
-    sa.Column("slug", sa.String(120), nullable=False, unique=True),
+    sa.Column("slug", sa.String(120), nullable=False),
     sa.Column("team_id", sa.String(64), nullable=False),
     # Newest saved version, draft or published.
     sa.Column("version", sa.Integer, nullable=False),
@@ -37,12 +39,16 @@ registry_agents = sa.Table(
     # changed by a person, `managed` can, and the template's fields come back on the next provisioning run.
     sa.Column("template_id", sa.String(120), index=True),
     sa.Column("protection", sa.String(16)),
+    # A slug is unique within its tenant only.
+    sa.UniqueConstraint("tenant_id", "slug", name="uq_registry_agents_tenant_slug"),
     info=TEAM_OWNED,
 )
 
 registry_agent_versions = sa.Table(
     "registry_agent_versions",
     metadata,
+    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
+    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
     sa.Column("agent_id", sa.String(64), sa.ForeignKey("registry_agents.id", ondelete="CASCADE"), primary_key=True),
     sa.Column("version", sa.Integer, primary_key=True),
     sa.Column("spec", sa.JSON, nullable=False),
@@ -75,6 +81,9 @@ publish_requests = sa.Table(
     sa.Column("decided_by", sa.String(200)),
     sa.Column("decision_reason", sa.Text),
     sa.Column("body", sa.JSON, nullable=False),
+    # The team of the agent or workflow the request publishes (agents 0106); empty until the stores write it.
+    sa.Column("team_id", sa.String(64), nullable=False, server_default=""),
+    sa.Index("ix_registry_publish_requests_team", "tenant_id", "team_id"),
     # The primary key leads with tenant_id, so this adds nothing; it stays until a migration drops it.
     sa.Index("ix_registry_publish_requests_tenant_id", "tenant_id"),
     info=TENANT_SCOPED,

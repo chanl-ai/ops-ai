@@ -20,7 +20,6 @@ from ops_store.schema import isolation_ddl, isolation_kind
 WAITING: dict[str, set[str]] = {
     "agents runtime": {
         "channel_cursors",
-        "channel_files",
         "channel_messages",
         "deployments",
         "graph_versions",

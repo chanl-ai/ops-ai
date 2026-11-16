@@ -25,11 +25,14 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import isolation
 from ops_store.schema import backfill_ddl
+from ops_store.team_scope import any_team
 
 CHAIN = "agents"
 LOCAL = "local"
 # The preflight reads every tenant's references and teams; it writes nothing.
 REGISTRY_TENANT_PREFLIGHT = "registry tenant preflight: every tenant's references and teams, read only"
+# A registry row's tenant is decided from every team's references to it, before any caller exists.
+EVERY_TEAMS_REFERENCES = "a registry row's tenant comes from every team's references to it"
 
 # The tables that hold both a team and a tenant, each team-isolated.
 TEAM_TENANT_SOURCES = (
@@ -59,15 +62,9 @@ TABLES: dict[Placed, str] = {
 }
 
 
-def table(name: str, *columns: str) -> sa.TableClause:
-    return sa.table(name, *(sa.column(c, sa.String) for c in columns))
-
-
-graph_threads = table("graph_threads", "tenant_id", "team_id", "graph", "deployment_id")
-template_copies = table("template_copies", "tenant_id", "kind", "record_id")
-team_default_agents = table("team_default_agents", "tenant_id", "agent_id")
-widget_deployments = table("widget_deployments", "tenant_id", "agent_id")
-publish_requests = table("registry_publish_requests", "tenant_id", "kind", "subject_id")
+def table(name: str, *columns: str) -> sa.Table:
+    """`name` with only `columns`, on metadata of its own, as of revision 0105."""
+    return sa.Table(name, sa.MetaData(), *(sa.Column(c, sa.String) for c in columns))
 
 
 def team_tenants() -> sa.Subquery:
@@ -82,8 +79,13 @@ def team_tenants() -> sa.Subquery:
 def references(kind: Placed) -> sa.Subquery | None:
     """(key, tenant_id) for each reference to a `kind` row from a table with a tenant; None when nothing names that
     kind. A thread names an agent as `agent:<id>`, a workflow by its id, and the deployment it came through."""
+    graph_threads = table("graph_threads", "tenant_id", "team_id", "graph", "deployment_id")
+    template_copies = table("template_copies", "tenant_id", "kind", "record_id")
+    team_default_agents = table("team_default_agents", "tenant_id", "agent_id")
+    widget_deployments = table("widget_deployments", "tenant_id", "agent_id")
+    publish_requests = table("registry_publish_requests", "tenant_id", "kind", "subject_id")
     copies = sa.select(template_copies.c.record_id.label("key"), template_copies.c.tenant_id).where(
-        template_copies.c.kind == kind
+        template_copies.c.kind == kind, any_team(template_copies, EVERY_TEAMS_REFERENCES)
     )
     requests = sa.select(publish_requests.c.subject_id.label("key"), publish_requests.c.tenant_id).where(
         publish_requests.c.kind == kind
@@ -95,20 +97,27 @@ def references(kind: Placed) -> sa.Subquery | None:
             union = sa.union(
                 copies,
                 requests,
-                sa.select(team_default_agents.c.agent_id, team_default_agents.c.tenant_id),
-                sa.select(widget_deployments.c.agent_id, widget_deployments.c.tenant_id),
-                sa.select(agents.c.id, graph_threads.c.tenant_id).join_from(
-                    agents, graph_threads, graph_threads.c.graph == sa.literal("agent:") + agents.c.id
+                sa.select(team_default_agents.c.agent_id, team_default_agents.c.tenant_id).where(
+                    any_team(team_default_agents, EVERY_TEAMS_REFERENCES)
                 ),
+                sa.select(widget_deployments.c.agent_id, widget_deployments.c.tenant_id).where(
+                    any_team(widget_deployments, EVERY_TEAMS_REFERENCES)
+                ),
+                sa.select(agents.c.id, graph_threads.c.tenant_id)
+                .join_from(agents, graph_threads, graph_threads.c.graph == sa.literal("agent:") + agents.c.id)
+                .where(any_team(graph_threads, EVERY_TEAMS_REFERENCES)),
             )
         case "workflow":
-            union = sa.union(copies, requests, sa.select(graph_threads.c.graph, graph_threads.c.tenant_id))
+            threads = sa.select(graph_threads.c.graph, graph_threads.c.tenant_id).where(
+                any_team(graph_threads, EVERY_TEAMS_REFERENCES)
+            )
+            union = sa.union(copies, requests, threads)
         case "guardrail" | "skill":
             union = sa.union(copies)
         case "deployment":
             union = sa.union(
                 sa.select(graph_threads.c.deployment_id.label("key"), graph_threads.c.tenant_id).where(
-                    graph_threads.c.deployment_id.is_not(None)
+                    graph_threads.c.deployment_id.is_not(None), any_team(graph_threads, EVERY_TEAMS_REFERENCES)
                 )
             )
         case "widget":
@@ -248,8 +257,9 @@ class PreflightRefused(RuntimeError):
 MSSQL_REFUSAL = (
     "SQL Server: every login but the agents system user is held to one tenant by the security policies, and that user "
     "may not read the registry tables, so this check cannot read every tenant without changing a policy. Run the "
-    "upgrade instead (make migrate, or the DBA upgrade script): migration 0106 makes the same check before it changes "
-    "any row and stops with this list."
+    "upgrade online instead (make migrate): migration 0106 makes the same check before it changes any row and stops "
+    "with this list. Its offline script cannot list: a team or record in two tenants fails it with a NOT NULL error, "
+    "and a team in no tenant takes 'local' unchecked."
 )
 
 

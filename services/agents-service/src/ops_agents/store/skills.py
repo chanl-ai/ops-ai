@@ -29,6 +29,8 @@ from .base import metadata
 registry_skills = sa.Table(
     "registry_skills",
     metadata,
+    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
+    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("slug", sa.String(64), nullable=False),
     sa.Column("owner_team", sa.String(200), nullable=False),
@@ -49,12 +51,15 @@ registry_skills = sa.Table(
     sa.Column("published_loading", sa.String(16)),
     # A skill's name is unique within its team only, so many teams can hold a copy of the same template.
     sa.UniqueConstraint("team_id", "slug", name="uq_registry_skills_team_slug"),
+    sa.Index("ix_registry_skills_tenant_team", "tenant_id", "team_id"),
     info=TEAM_OWNED,
 )
 
 registry_skill_versions = sa.Table(
     "registry_skill_versions",
     metadata,
+    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
+    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
     sa.Column("skill_id", sa.String(64), sa.ForeignKey("registry_skills.id", ondelete="CASCADE"), primary_key=True),
     sa.Column("version", sa.Integer, primary_key=True),
     sa.Column("content", sa.JSON, nullable=False),

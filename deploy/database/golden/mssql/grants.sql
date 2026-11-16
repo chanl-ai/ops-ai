@@ -38,7 +38,6 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.deployments TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.channel_messages TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.channel_cursors TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.thread_inbox TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.channel_files TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.chat_search TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.eval_cases TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.eval_runs TO ops_agents_runtime;

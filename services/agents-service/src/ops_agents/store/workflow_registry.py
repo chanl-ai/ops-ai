@@ -19,6 +19,8 @@ from .base import metadata
 registry_workflows = sa.Table(
     "registry_workflows",
     metadata,
+    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
+    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("name", sa.String(200), nullable=False),
@@ -40,6 +42,8 @@ registry_workflows = sa.Table(
 registry_workflow_versions = sa.Table(
     "registry_workflow_versions",
     metadata,
+    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
+    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
     sa.Column(
         "workflow_id", sa.String(64), sa.ForeignKey("registry_workflows.id", ondelete="CASCADE"), primary_key=True
     ),
@@ -57,6 +61,8 @@ registry_workflow_versions = sa.Table(
 registry_validations = sa.Table(
     "registry_validations",
     metadata,
+    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
+    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("workflow_id", sa.String(64), nullable=False, index=True),
     sa.Column("ran_at", sa.String(32), nullable=False),

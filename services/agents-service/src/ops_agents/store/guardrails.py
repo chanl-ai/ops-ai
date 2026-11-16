@@ -27,6 +27,8 @@ from .base import metadata
 registry_guardrails = sa.Table(
     "registry_guardrails",
     metadata,
+    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
+    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("slug", sa.String(120), nullable=False),
     sa.Column("name", sa.String(200), nullable=False),
@@ -43,12 +45,15 @@ registry_guardrails = sa.Table(
     sa.Column("updated_at", sa.String(32), nullable=False),
     # A guardrail's name is unique within its team only, so many teams can hold a copy of the same template.
     sa.UniqueConstraint("team_id", "slug", name="uq_registry_guardrails_team_slug"),
+    sa.Index("ix_registry_guardrails_tenant_team", "tenant_id", "team_id"),
     info=TEAM_OWNED,
 )
 
 registry_guardrail_versions = sa.Table(
     "registry_guardrail_versions",
     metadata,
+    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
+    sa.Column("tenant_id", sa.String(64), nullable=False, server_default="local"),
     sa.Column(
         "guardrail_id", sa.String(64), sa.ForeignKey("registry_guardrails.id", ondelete="CASCADE"), primary_key=True
     ),

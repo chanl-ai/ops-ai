@@ -33,7 +33,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.case_types` | `CaseTypeStore` | CAS, TRANSACTION | `case_type_versions`, `case_types` |
 | agents-service | `ops_agents.store.cases` | `CaseStore` | TRANSACTION | `case_events`, `cases` |
 | agents-service | `ops_agents.store.channel_list` | `ChannelList` | none | none |
-| agents-service | `ops_agents.store.channels` | `ChannelStore` | CAS, TRANSACTION | `channel_cursors`, `channel_files`, `channel_messages`, `deployments`, `thread_inbox` |
+| agents-service | `ops_agents.store.channels` | `ChannelStore` | CAS, TRANSACTION | `channel_cursors`, `channel_messages`, `deployments`, `thread_inbox` |
 | agents-service | `ops_agents.store.chat_search` | none: no repository class | | `chat_search` |
 | agents-service | `ops_agents.store.evals` | `EvalStore` | TRANSACTION | `eval_cases`, `eval_runs` |
 | agents-service | `ops_agents.store.events` | `EventLog` | CAS | `thread_events` |
@@ -141,7 +141,6 @@ The columns those chains added that change a guarantee:
 | `channel_messages` | agents-service | Ledger of handled channel messages per deployment and message key | 0010 |
 | `channel_cursors` | agents-service | Mailbox delta link per deployment, saved after the last page | 0010 |
 | `thread_inbox` | agents-service | Input queued for a busy thread, unique per message key, with `seq` and delivery time | 0010 |
-| `channel_files` | agents-service | Attachment bytes from the mailbox, by file id and SHA-256; stands in for files-service | 0010 |
 | `review_approvals` | agents-service today; the `ops_hitl` package by design | One approval per person per step, with the input hash it approved | 0006 |
 | `review_decisions` | agents-service today; the `ops_hitl` package by design | One decision per paused interrupt, recorded before the resume: decision, reason, who, the review as shown, attempts, resume run id, `resumed_at`, `step_up_ref` (a fingerprint of the verified step-up a money decision was made under, never the token; 0022) | 0012 |
 | `usage_records` | agents-service; models-service by design | One row per model call: thread, run, node, kind, model alias, calls, input and output tokens, `cost_micros`. Written as each call returns, outside the checkpoint and unfenced | 0013 |

@@ -314,7 +314,7 @@ erDiagram
 | `case_type_versions` | Each saved version of a case type: its fields, each with a key, label and type (the extraction field types, file or link). A case pins the published version it opened with (migration 0069) | built |
 | `task_assists` | What task assist wrote for a typed task when its step paused, one row per review step (`step_id` = run:node:iteration). A second write for the same step is refused, so a task costs one model call (migration 0064) | built |
 | `registry_workflows, registry_workflow_versions, registry_validations` | The first workflow registry, replaced by engine_definitions | retiring |
-| `deployments, channel_messages, channel_cursors, channel_files` | The first mailbox channel, replaced by trigger bindings. A deployment records the team that owns it, so only a builder or administrator of that team can create, pause or poll it; deployments made before this existed have no owner team, and no permission cell covers them | retiring |
+| `deployments, channel_messages, channel_cursors` | The first mailbox channel, replaced by trigger bindings. A deployment records the team that owns it, so only a builder or administrator of that team can create, pause or poll it; deployments made before this existed have no owner team, and no permission cell covers them | retiring |
 
 Today these tables are migrated with agents-service; they move to the workflows engine's own migration chain.
 

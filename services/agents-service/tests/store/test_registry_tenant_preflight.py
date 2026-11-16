@@ -1,7 +1,7 @@
-"""`make registry-tenant-preflight`, run as the operator runs it, on a scratch database of its own, by failure mode: it
-passes a database where every row has one tenant to take; it names a team no tenant holds, a team two tenants hold
-and a record two tenants reference; `local` beside one other tenant, a row with a direct reference and a deployment
-with no team are not counted against it."""
+"""The registry tenant preflight script (`make registry-tenant-preflight`), on a scratch database of its own, by failure
+mode: it passes a database where every row has one tenant to take; it names a team no tenant holds, a team two
+tenants hold and a record two tenants reference; `local` beside one other tenant, a row with a direct reference and a
+deployment with no team are not counted against it."""
 
 from __future__ import annotations
 
@@ -20,16 +20,23 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from ops_service_kit.ids import new_id, now_iso
 
 ROOT = Path(__file__).resolve().parents[2]
-# The revision before the one that gives the registry tables a tenant.
-BEFORE = "0105_thread_owner_column"
+# A revision before the one that gives the registry tables a tenant; the preflight reads nothing added since.
+BEFORE = "0104_runtime_tables_isolated"
 
 
-async def sql(url: str | URL, *statements: tuple[str, dict[str, Any]], admin: bool = False) -> list[Any]:
+Statement = tuple[str, dict[str, Any]] | sa.Executable
+
+
+async def sql(url: str | URL, *statements: Statement, admin: bool = False) -> list[Any]:
     engine = create_async_engine(url, isolation_level="AUTOCOMMIT") if admin else create_async_engine(url)
     out: list[Any] = []
     async with engine.begin() as c:
-        for text, params in statements:
-            r = await c.execute(sa.text(text), params)
+        for statement in statements:
+            match statement:
+                case (str() as text, dict() as params):
+                    r = await c.execute(sa.text(text), params)
+                case _:
+                    r = await c.execute(statement)
             out.append(r.all() if r.returns_rows else None)
     await engine.dispose()
     return out
@@ -81,7 +88,7 @@ def scratch() -> Iterator[URL]:
 
 def _preflight(url: URL) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["make", "-s", "registry-tenant-preflight"],
+        ["uv", "run", "python", "scripts/registry_tenant_preflight.py"],
         cwd=ROOT,
         env=env_for(url),
         capture_output=True,
