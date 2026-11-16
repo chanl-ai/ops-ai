@@ -76,7 +76,7 @@ class Auth:
             raise ValueError("auth_mode 'platform' needs OPS_PLATFORM_URL")
         http = client or httpx.AsyncClient(timeout=10)
         signer = service_signer(settings)
-        internal = settings.platform_internal_url or f"http://127.0.0.1:{settings.platform_internal_port}"
+        internal = settings.endpoint("platform_internal").base
         services = ServiceAuth(
             audience=audience, verifiers=service_verifiers(settings, audience), scopes=settings.service_scopes
         )

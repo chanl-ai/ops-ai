@@ -3,8 +3,8 @@ configuration.md, CF2 and CF3), in every package's and service's `src`:
 
   loopback  a URL that falls back to this machine when its setting is unset (`settings.x_url or
             "http://127.0.0.1:..."`). None is allowed: a missing address must stop the process at start
-            (`Settings.require`), not send its first call to the wrong place. LOOPBACK_WAITING names the one still
-            there; a baseline file cannot allow another, and the entry fails once its fallback is gone.
+            (`Settings.require`), not send its first call to the wrong place. LOOPBACK_WAITING names any still
+            there (none now); a baseline file cannot allow one, and an entry fails once its fallback is gone.
   timeout   a `timeout=` given as a number, an upper-case constant or arithmetic on them at a call, and an
             `httpx.Timeout(` holding one. The value belongs on the setting (`Endpoint.timeout_s`).
   client    an `httpx.AsyncClient(` or `httpx.Client(` built outside `ops_identity.client`, which owns the one a
@@ -39,11 +39,7 @@ LOOPBACK_HOSTS = ("127.0.0.1", "localhost")
 CLIENT_OWNER = "packages/ops_identity/src/ops_identity/client.py"
 # The loopback fallbacks still in code. The list only shrinks: an entry whose fallback is gone fails the check until it
 # is deleted here, and scripts/tests/test_check_config_literals.py fails when a file joins it.
-LOOPBACK_WAITING = {
-    # The request-transaction change owns this file and is rewriting it now; the line reads
-    # Settings.endpoint("platform_internal") when that lands. Every process already requires the endpoint at start.
-    "packages/ops_identity/src/ops_identity/fastapi.py": 1,
-}
+LOOPBACK_WAITING: dict[str, int] = {}
 # The commit that created the first member baseline; a commit after it that raises a row or adds a file needs a trailer.
 BASELINES_BEGAN = "d737b71434be868ceadc2b84fb28bcbb206a7ea1"
 

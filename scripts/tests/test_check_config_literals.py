@@ -84,16 +84,16 @@ def test_update_lowers_a_row_and_never_raises_or_adds_one(tmp_path: Path, monkey
     assert run(root, monkeypatch, "--strict") == 1
 
 
-def test_the_loopback_waiting_list_holds_one_file_and_fails_once_its_fallback_is_gone(
+def test_the_loopback_waiting_list_is_empty_and_its_last_file_is_refused_a_fallback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert c.LOOPBACK_WAITING == {"packages/ops_identity/src/ops_identity/fastapi.py": 1}
-    # A tree where that file has no fallback left: the entry itself is the finding.
-    waiting = tmp_path / next(iter(c.LOOPBACK_WAITING))
-    waiting.parent.mkdir(parents=True)
-    waiting.write_text("internal = settings.endpoint('platform_internal').base\n")
+    assert c.LOOPBACK_WAITING == {}
+    # The file that waited longest: a fallback written back into it is a finding like any other.
+    fastapi = tmp_path / "packages/ops_identity/src/ops_identity/fastapi.py"
+    fastapi.parent.mkdir(parents=True)
+    fastapi.write_text('internal = settings.platform_internal_url or "http://127.0.0.1:8711"\n')
     assert run(tmp_path, monkeypatch, "--strict") == 1
-    assert "fastapi.py: its loopback fallback is gone" in capsys.readouterr().err
+    assert "fastapi.py: 1 loopback (allowed 0)" in capsys.readouterr().err
 
 
 NAMED = """
