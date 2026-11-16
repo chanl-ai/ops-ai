@@ -251,9 +251,7 @@ class CallLog(Store):
             .where(*where)
             .group_by(t.c.key_id)
         )
-        # The FROM is named: list_page counts with with_only_columns, which drops a FROM only the columns gave, so a
-        # list with no filter would count one row.
-        query = sa.select(*LISTED).select_from(t).where(*where)
+        query = sa.select(*LISTED).where(*where)
         async with self.tx() as c:
             page = await list_page(
                 c, query, params, sortable={"createdAt": t.c.created_at}, default_sort=t.c.created_at.desc()
