@@ -16,7 +16,6 @@ from typing import Any, ClassVar, NamedTuple, cast
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import TSVECTOR
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
@@ -27,7 +26,7 @@ from ops_store import Guarantee
 from ops_store.audit import AUDIT_EVENT, AUDIT_ROUTE
 from ops_store.audit import record as record_audit
 from ops_store.database import open_database, reachable
-from ops_store.dialect import Vector, db_after, db_now
+from ops_store.dialect import Vector, db_after, db_now, insert_ignore, locked
 from ops_store.outbox import Event, KbChanged, Poster, Relay, outbox_table, relay
 from ops_store.outbox import add as add_event
 from ops_store.rows import one
@@ -646,10 +645,10 @@ class KnowledgeStore(Store):
         if not source_ids:
             return
         team = await self._team_of(c, kb_bases, tenant, kb_id)
-        stmt = pg_insert(kb_base_sources).values(
-            [{"tenant_id": tenant, "team_id": team, "kb_id": kb_id, "source_id": s} for s in source_ids]
-        )
-        await c.execute(stmt.on_conflict_do_nothing())
+        # One statement per source picked in a request (a handful); a link already there is left as it is.
+        for s in dict.fromkeys(source_ids):
+            link = {"tenant_id": tenant, "team_id": team, "kb_id": kb_id, "source_id": s}
+            await c.execute(insert_ignore(c, kb_base_sources, link, keys=("tenant_id", "kb_id", "source_id")))
 
     async def create_source(self, row: dict[str, Any], kb_ids: list[str]) -> None:
         async with self.tx() as c:
@@ -674,7 +673,7 @@ class KnowledgeStore(Store):
                     id=kb_id,
                     name=row.name,
                     retired_by=by,
-                    retired_at=sa.func.now(),
+                    retired_at=db_now(),
                 )
             )
             return True
@@ -852,16 +851,18 @@ class KnowledgeStore(Store):
             team = await self._team_of(c, kb_sources, tenant, source_id)
             await add_event(c, kb_outbox, tenant_id=tenant, team_id=team, name=name, key=new_id("evt"), payload=payload)
 
+    @staticmethod
+    async def _files_of(c: AsyncConnection, key: tuple[sa.ColumnElement[bool], ...]) -> sa.Row[Any, Any]:
+        """A source's files and their names, its row locked until the transaction ends so two changes to its files
+        never both read the old list."""
+        await c.execute(locked(sa.select(kb_sources.c.id).where(*key, team_visible(kb_sources)), kb_sources))
+        q = sa.select(kb_sources.c.file_ids, kb_sources.c.file_names).where(*key, team_visible(kb_sources))
+        return (await c.execute(q)).one()
+
     async def add_file(self, tenant: str, source_id: str, file_id: str, name: str) -> None:
         async with self.tx() as c:
             key = (kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
-            row = (
-                await c.execute(
-                    sa.select(kb_sources.c.file_ids, kb_sources.c.file_names)
-                    .where(*key, team_visible(kb_sources))
-                    .with_for_update()
-                )
-            ).one()
+            row = await self._files_of(c, key)
             # A file uploaded under a name the source already holds is that document's next version: it takes the
             # earlier file's place, so a sync reads one file per document.
             known: dict[str, str] = dict(row.file_names or {})
@@ -878,13 +879,7 @@ class KnowledgeStore(Store):
         """Points a source at files copied to another store, keeping each file's place and uploaded name."""
         async with self.tx() as c:
             key = (kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
-            row = (
-                await c.execute(
-                    sa.select(kb_sources.c.file_ids, kb_sources.c.file_names)
-                    .where(*key, team_visible(kb_sources))
-                    .with_for_update()
-                )
-            ).one()
+            row = await self._files_of(c, key)
             held: list[str] = list(row.file_ids)
             given: dict[str, str] = dict(row.file_names or {})
             ids = [moved.get(f, f) for f in held]
@@ -897,13 +892,7 @@ class KnowledgeStore(Store):
             return
         async with self.tx() as c:
             key = (kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
-            row = (
-                await c.execute(
-                    sa.select(kb_sources.c.file_ids, kb_sources.c.file_names)
-                    .where(*key, team_visible(kb_sources))
-                    .with_for_update()
-                )
-            ).one()
+            row = await self._files_of(c, key)
             kept: list[str] = [f for f in row.file_ids if f not in file_ids]
             names: dict[str, str] = row.file_names or {}
             await c.execute(
@@ -919,7 +908,7 @@ class KnowledgeStore(Store):
             await c.execute(
                 sa.update(kb_bases)
                 .where(kb_bases.c.tenant_id == tenant, kb_bases.c.id.in_(kb_ids))
-                .values(last_refreshed_at=sa.func.now())
+                .values(last_refreshed_at=db_now())
             )
 
     async def reindex(self, tenant: str, item_id: str, values: dict[str, Any], chunks: list[dict[str, Any]]) -> None:
