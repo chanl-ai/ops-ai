@@ -2,6 +2,10 @@
 team: the preview of what a set of resources brings, the copy that makes the team's own record, and an update taken
 from a newer template.
 
+Only the detach answers in one request transaction (`Tx`): it reads and writes this service's rows alone. Every other
+route asks tools-service for the team's templates, and a copy also asks documents-service for its document types, so
+those take none and no connection is held while another service answers.
+
 tools-service is the one service that loads plugins; it answers the templates of the plugins on for the acting team,
 with each body (`GET /v1/plugin-templates`). A copy is made through the checks its create route makes, called here
 rather than copied, so a copy can never be something a person's create would refuse. Where a copy came from is a
@@ -26,10 +30,9 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import Field, ValidationError
 
-from ops_contracts.chat import WireModel
 from ops_documents_client import DocumentsClient, DocumentsRefused
 from ops_identity import ServiceCallError, ServiceUnreachable
-from ops_identity.fastapi import ActingPerson
+from ops_identity.fastapi import ActingPerson, Tx
 from ops_service_kit.errors import (
     ApiError,
     Conflict,
@@ -39,7 +42,7 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, In, Out
 from ops_service_kit.ids import new_id
 from ops_service_kit.template_merge import FieldOutcome, Strictness, apply, merge
 
@@ -137,20 +140,20 @@ State = Literal["available", "added", "update_available", "removed_upstream"]
 MAX_PLAN = 50
 
 
-class TemplatePlugin(WireModel):
+class TemplatePlugin(Out):
     id: str
     title: str
     version: str
 
 
-class TemplateRequires(WireModel):
+class TemplateRequires(Out):
     tools: list[str]
     bind: list[dict[str, str]]
     # The plugin's other resources a copy cannot run without, each `<source>:<template id>`.
     resources: list[str] = Field(default_factory=list[str])
 
 
-class Installed(WireModel):
+class Installed(Out):
     # Live copies the team holds of this template, the newest version among them, and whether the source ships a
     # newer one. A copy never changes by itself.
     copies: int
@@ -160,7 +163,7 @@ class Installed(WireModel):
     changed: bool = False
 
 
-class CopyRef(WireModel):
+class CopyRef(Out):
     id: str
     kind: Kind
     record_id: str
@@ -171,13 +174,13 @@ class CopyRef(WireModel):
     detached_at: str | None = None
 
 
-class AddCell(WireModel):
+class AddCell(Out):
     # The roles grid cell a person needs to add this resource, so another service listing it says the same.
     area: str
     action: str
 
 
-class RemoveCell(WireModel):
+class RemoveCell(Out):
     # The grid cell the copy's own delete checks, and the record's creator where that cell may be held on one's own
     # records only (a skill), so another service listing it answers whether the caller may remove it.
     area: str
@@ -185,7 +188,7 @@ class RemoveCell(WireModel):
     owner: str | None = None
 
 
-class TemplateView(WireModel):
+class TemplateView(Out):
     source: str
     plugin: TemplatePlugin
     kind: Kind
@@ -208,7 +211,7 @@ class TemplateView(WireModel):
     copy_: CopyRef | None = Field(default=None, alias="copy")
 
 
-class InstallInput(WireModel):
+class InstallInput(In):
     # The version listed now when left out; another one is 404 template_version_not_found.
     version: int | None = Field(default=None, ge=1)
     # The copy's name; the template's when left out. A name the team already uses for the kind is 409 name_taken.
@@ -222,26 +225,26 @@ class InstallInput(WireModel):
     copies: dict[str, str] = Field(default_factory=dict[str, str], max_length=50)
 
 
-class Installation(WireModel):
+class Installation(Out):
     copy_: CopyRef = Field(alias="copy")
     created: bool
     # A binding the install left for the person: `{"knowledgeBase": "<what it is>"}` or `{"modelAlias": "<what>"}`.
     needs: list[dict[str, str]]
 
 
-class PlanInput(WireModel):
+class PlanInput(In):
     # The resources the person ticked, each `<source>:<template id>`.
     resources: list[str] = Field(min_length=1, max_length=MAX_PLAN)
 
 
-class PlanRefusal(WireModel):
+class PlanRefusal(Out):
     code: str
     message: str
     # For name_taken: a name the copy could take instead.
     suggestion: str | None = None
 
 
-class PlanItem(WireModel):
+class PlanItem(Out):
     resource: str
     kind: AnyKind
     title: str
@@ -258,7 +261,7 @@ class PlanItem(WireModel):
     refusal: PlanRefusal | None = None
 
 
-class Plan(WireModel):
+class Plan(Out):
     # Every resource to make or use, in the order the adds run.
     items: list[PlanItem]
     # Whether every item that is not held can be made by the caller now.
@@ -903,13 +906,13 @@ def copy_base(kind: str, body: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in body.items() if k not in held}
 
 
-class UpdateExpect(WireModel):
+class UpdateExpect(In):
     # The template digest and the copy's record digest the person reviewed; a take whose either moved is 409.
     digest: str | None = None
     record_digest: str | None = None
 
 
-class UpdateInput(WireModel):
+class UpdateInput(In):
     # merge (the default) keeps the team's edits field by field; reset makes a new draft from the template and drops
     # them. Left out with `confirm`, the call is a reset: an older console's "take the template as it is".
     mode: Literal["merge", "reset"] | None = None
@@ -920,7 +923,7 @@ class UpdateInput(WireModel):
     confirm: bool = False
 
 
-class FieldReview(WireModel):
+class FieldReview(Out):
     field: str
     label: str
     # kept: only the team changed it; taken: only the template did; conflict: both did, the team's unless chosen.
@@ -929,7 +932,7 @@ class FieldReview(WireModel):
     template: Any = None
 
 
-class UpdateReview(WireModel):
+class UpdateReview(Out):
     copy_: CopyRef = Field(alias="copy")
     # The version the copy was made from, and the one the app ships now.
     from_version: int
@@ -1174,7 +1177,7 @@ async def take_update(rt: Rt, me: Me, resource: str, copy: str, body: UpdateInpu
 
 
 @resources.post("/{resource}/copies/{copy}/detach", response_model=Envelope[CopyRef])
-async def detach_copy(rt: Rt, me: Me, resource: str, copy: str) -> JSONResponse:
+async def detach_copy(rt: Rt, me: Me, _: Tx, resource: str, copy: str) -> JSONResponse:
     """Detach: the team's copy becomes its own record, offered no update or reset again, and the template is offered
     for a fresh copy. Its versions are unchanged. A second call answers the same copy. 404 when `copy` is not the
     team's copy of `resource`."""

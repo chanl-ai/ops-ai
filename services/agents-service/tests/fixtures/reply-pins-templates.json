@@ -1,0 +1,310 @@
+{
+  "copy": {
+    "body": {
+      "data": {
+        "copy": {
+          "detachedAt": null,
+          "id": "<tcp>",
+          "kind": "skill",
+          "recordId": "<sk>",
+          "source": "plugin:test.templates",
+          "templateId": "cite-policy",
+          "version": 1
+        },
+        "created": true,
+        "needs": []
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "copy.again": {
+    "body": {
+      "data": {
+        "copy": {
+          "detachedAt": null,
+          "id": "<tcp>",
+          "kind": "skill",
+          "recordId": "<sk>",
+          "source": "plugin:test.templates",
+          "templateId": "cite-policy",
+          "version": 1
+        },
+        "created": false,
+        "needs": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "copy.missing": {
+    "body": {
+      "error": {
+        "code": "template_not_found",
+        "message": "No template nowhere from plugin:test.templates for this team.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "copy.unknownField": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "colour"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "colour: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "detach": {
+    "body": {
+      "data": {
+        "detachedAt": "<timeZ>",
+        "id": "<tcp>",
+        "kind": "skill",
+        "recordId": "<sk>",
+        "source": "plugin:test.templates",
+        "templateId": "cite-policy",
+        "version": 2
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "detach.again": {
+    "body": {
+      "data": {
+        "detachedAt": "<timeZ>",
+        "id": "<tcp>",
+        "kind": "skill",
+        "recordId": "<sk>",
+        "source": "plugin:test.templates",
+        "templateId": "cite-policy",
+        "version": 2
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "detach.notTheCopy": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "sk_missing1 is not the team's copy of plugin:test.templates:cite-policy.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "list": {
+    "body": {
+      "data": [
+        {
+          "addCell": {
+            "action": "create",
+            "area": "skills"
+          },
+          "canAdd": true,
+          "copy": null,
+          "id": "cite-policy",
+          "installed": {
+            "changed": false,
+            "copies": 0,
+            "newerAvailable": false,
+            "version": null
+          },
+          "kind": "skill",
+          "off": null,
+          "plugin": {
+            "id": "test.templates",
+            "title": "Case desk",
+            "version": "0.2.0"
+          },
+          "removeCell": null,
+          "requires": {
+            "bind": [],
+            "resources": [],
+            "tools": [
+              "templates_get_case"
+            ]
+          },
+          "source": "plugin:test.templates",
+          "state": "available",
+          "title": "Cite the policy",
+          "version": 1
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "plan": {
+    "body": {
+      "data": {
+        "items": [
+          {
+            "bindings": [],
+            "broughtBy": [],
+            "held": {
+              "detachedAt": null,
+              "id": "<tcp>",
+              "kind": "skill",
+              "recordId": "<sk>",
+              "source": "plugin:test.templates",
+              "templateId": "cite-policy",
+              "version": 1
+            },
+            "heldRecordId": "<sk>",
+            "kind": "skill",
+            "refusal": null,
+            "resource": "plugin:test.templates:cite-policy",
+            "service": "agents",
+            "title": "Cite the policy",
+            "tools": [
+              "templates_get_case"
+            ]
+          }
+        ],
+        "ready": true
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "plan.empty": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "resources"
+            ],
+            "msg": "List should have at least 1 item after validation, not 0"
+          }
+        ],
+        "message": "resources: List should have at least 1 item after validation, not 0",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "review": {
+    "body": {
+      "data": {
+        "changes": [
+          "useWhen"
+        ],
+        "copy": {
+          "detachedAt": null,
+          "id": "<tcp>",
+          "kind": "skill",
+          "recordId": "<sk>",
+          "source": "plugin:test.templates",
+          "templateId": "cite-policy",
+          "version": 1
+        },
+        "draftOpen": true,
+        "edits": [],
+        "expect": {
+          "digest": "<hex>",
+          "recordDigest": "<hex>"
+        },
+        "fields": [
+          {
+            "field": "useWhen",
+            "label": "use-when line",
+            "outcome": "taken",
+            "template": "A customer disputes a fee",
+            "yours": "A customer asks why a fee was charged"
+          }
+        ],
+        "fromVersion": 1,
+        "taken": false,
+        "toVersion": 2,
+        "version": null
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "take": {
+    "body": {
+      "data": {
+        "changes": [
+          "useWhen"
+        ],
+        "copy": {
+          "detachedAt": null,
+          "id": "<tcp>",
+          "kind": "skill",
+          "recordId": "<sk>",
+          "source": "plugin:test.templates",
+          "templateId": "cite-policy",
+          "version": 2
+        },
+        "draftOpen": true,
+        "edits": [],
+        "expect": {
+          "digest": "<hex>",
+          "recordDigest": "<hex>"
+        },
+        "fields": [
+          {
+            "field": "useWhen",
+            "label": "use-when line",
+            "outcome": "taken",
+            "template": "A customer disputes a fee",
+            "yours": "A customer asks why a fee was charged"
+          }
+        ],
+        "fromVersion": 1,
+        "taken": true,
+        "toVersion": 2,
+        "version": 1
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "take.unknownField": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "how"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "how: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  }
+}
