@@ -6,7 +6,8 @@ A row's tenant is, in order: a direct reference from a table that has a tenant; 
 across the tables that hold both a team and a tenant; `local`. A reference or team that names more than one tenant is
 resolved by environment:
 - outside dev, `local` holds only rows nothing could place, so it does not count beside one other tenant: that other
-  tenant wins. Two or more tenants other than `local`, or a team seen in no tenant, stop the migration.
+  tenant wins, and a record referenced only from `local` takes its team's tenant. Two or more tenants other than
+  `local`, or a team seen in no tenant, stop the migration.
 - in dev, anything but exactly one tenant falls back to `local`, where the dev seed and the dev caller live.
 
 Tables and columns are named here as of agents revision 0105, not taken from the models, so a later model change does
@@ -148,7 +149,11 @@ def tenant_of(kind: Placed, row: sa.TableClause, *, dev: bool) -> sa.ColumnEleme
     if refs is not None:
         direct = resolved(refs, dev=dev)
         found = sa.select(direct.c.tenant_id).where(direct.c.key == row.c.id)
-        cases.append((sa.exists(sa.select(direct.c.key).where(direct.c.key == row.c.id)), found.scalar_subquery()))
+        placed = direct.c.key == row.c.id
+        if not dev:
+            # Outside dev a reference from `local` alone places nothing: the row's team decides, as for a team.
+            placed = sa.and_(placed, sa.or_(direct.c.tenant_id.is_(None), direct.c.tenant_id != LOCAL))
+        cases.append((sa.exists(sa.select(direct.c.key).where(placed)), found.scalar_subquery()))
     team = resolved(team_tenants(), dev=dev)
     cases.append(
         (
@@ -160,15 +165,15 @@ def tenant_of(kind: Placed, row: sa.TableClause, *, dev: bool) -> sa.ColumnEleme
 
 
 def team_placed() -> sa.Subquery:
-    """(source, team_id) for each registry or deployment row whose tenant only its team can give: no direct reference
-    and a team that is not empty."""
+    """(source, team_id) for each registry or deployment row whose tenant only its team can give, by the outside-dev
+    rules: no direct reference from a tenant other than `local`, and a team that is not empty."""
     selects: list[sa.Select[str, Any]] = []
     for kind, name in TABLES.items():
         t = table(name, "id", "team_id")
         q = sa.select(sa.literal(name, sa.String).label("source"), t.c.team_id).where(t.c.team_id != "")
         refs = references(kind)
         if refs is not None:
-            q = q.where(t.c.id.not_in(sa.select(refs.c.key).where(refs.c.key.is_not(None))))
+            q = q.where(t.c.id.not_in(sa.select(refs.c.key).where(refs.c.key.is_not(None), refs.c.tenant_id != LOCAL)))
         selects.append(q)
     return sa.union_all(*selects).subquery("team_placed")
 

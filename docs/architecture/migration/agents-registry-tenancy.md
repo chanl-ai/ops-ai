@@ -39,6 +39,7 @@ When a reference or a team names more than one tenant:
 |---|---|---|
 | A team seen in no tenant | The migration stops with the list | The rows take `local` |
 | `local` and exactly one other tenant | The other tenant: outside dev `local` holds only rows nothing could place | `local` |
+| A record referenced only from `local` | Its team's tenant by the rows above (a team in one real tenant gives that tenant) | `local` |
 | Two or more tenants other than `local`, for a team or for a record's references (any kind) | The migration stops with the list | `local` |
 
 Offline SQL cannot check first: a team or record with two tenants writes NULL into the NOT NULL column, so the

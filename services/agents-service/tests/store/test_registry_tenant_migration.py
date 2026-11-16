@@ -239,6 +239,21 @@ def test_outside_dev_local_beside_one_other_tenant_gives_way_to_it(scratch: URL)
     assert tenants(scratch, "registry_agents", "id") == {"ag_cards": "t-pine"}
 
 
+def test_outside_dev_a_record_referenced_only_from_local_takes_its_teams_one_tenant(scratch: URL) -> None:
+    asyncio.run(
+        sql(
+            scratch,
+            thread("t-pine", "team_cards"),
+            agent("ag_cards", "team_cards"),
+            thread("local", "team_other", "agent:ag_cards"),
+            agent("ag_dev", "team_dev"),
+            thread("local", "team_dev", "agent:ag_dev"),
+        )
+    )
+    migrate(scratch, "upgrade", HEAD, environment="test")
+    assert tenants(scratch, "registry_agents", "id") == {"ag_cards": "t-pine", "ag_dev": "local"}
+
+
 def test_the_down_path_refuses_with_a_count_while_two_tenants_hold_one_slug(scratch: URL) -> None:
     migrate(scratch, "upgrade", HEAD)
     asyncio.run(
