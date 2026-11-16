@@ -24,7 +24,7 @@ from .test_team_isolation import outsider
 AT = datetime(2026, 11, 2, 9, 0, tzinfo=UTC)
 
 
-def _source(tenant: str, team: str, name: str) -> dict[str, Any]:
+def source_row(tenant: str, team: str, name: str) -> dict[str, Any]:
     return {
         "tenant_id": tenant,
         "id": f"src_{uuid4().hex[:12]}",
@@ -45,14 +45,14 @@ def _source(tenant: str, team: str, name: str) -> dict[str, Any]:
 
 async def _seed_sources(engine: AsyncEngine, tenant: str, team: str, *names: str) -> list[str]:
     store = KnowledgeStore(engine)
-    made = [_source(tenant, team, n) for n in names]
+    made = [source_row(tenant, team, n) for n in names]
     with isolation.scope(tenant, team):
         for row in made:
             await store.create_source(row, [])
     return [r["id"] for r in made]
 
 
-async def _insert(engine: AsyncEngine, tenant: str, team: str, table: sa.Table, *rows: dict[str, Any]) -> list[str]:
+async def insert_rows(engine: AsyncEngine, tenant: str, team: str, table: sa.Table, *rows: dict[str, Any]) -> list[str]:
     """Rows written as `team` in `tenant`, with no check that their source is that team's: a stray row the list's own
     predicates must leave out."""
     with isolation.scope(tenant, team):
@@ -62,7 +62,7 @@ async def _insert(engine: AsyncEngine, tenant: str, team: str, table: sa.Table, 
     return [r["id"] for r in rows]
 
 
-def _run(source_id: str) -> dict[str, Any]:
+def run_row(source_id: str) -> dict[str, Any]:
     return {
         "id": f"run_{uuid4().hex[:12]}",
         "source_id": source_id,
@@ -77,7 +77,7 @@ def _run(source_id: str) -> dict[str, Any]:
     }
 
 
-def _item(source_id: str, title: str, status: str = "indexed") -> dict[str, Any]:
+def item_row(source_id: str, title: str, status: str = "indexed") -> dict[str, Any]:
     return {
         "id": f"item_{uuid4().hex[:12]}",
         "source_id": source_id,
@@ -139,12 +139,12 @@ async def _per_source_list(
     tenant (where a source of that id is that tenant's own); the route must answer the three alone."""
     [sid] = await _seed_sources(engine, tenant, "team_ops", "Rates")
     elsewhere = f"t_{uuid4().hex[:10]}"
-    other = _source(elsewhere, "team_ops", "Rates")
+    other = source_row(elsewhere, "team_ops", "Rates")
     with isolation.scope(elsewhere, "team_ops"):
         await KnowledgeStore(engine).create_source({**other, "id": sid}, [])
-    mine = await _insert(engine, tenant, "team_ops", table, make(sid, "a"), make(sid, "b"), make(sid, "c"))
-    await _insert(engine, tenant, "team_lending", table, make(sid, "d"))
-    await _insert(engine, elsewhere, "team_ops", table, make(sid, "e"))
+    mine = await insert_rows(engine, tenant, "team_ops", table, make(sid, "a"), make(sid, "b"), make(sid, "c"))
+    await insert_rows(engine, tenant, "team_lending", table, make(sid, "d"))
+    await insert_rows(engine, elsewhere, "team_ops", table, make(sid, "e"))
 
     path = f"/v1/sources/{sid}/{child}"
     first = await _page(kb, path, pageSize=2)
@@ -162,7 +162,7 @@ async def test_runs_list_only_the_sources_team_rows_newest_first_with_ties_by_id
     tenant: str,
 ) -> None:
     def make(sid: str, _n: str) -> dict[str, Any]:
-        return _run(sid)
+        return run_row(sid)
 
     shown, seen = await _per_source_list(kb, engine, tenant, child="runs", table=kb_runs, make=make)
     assert shown == sorted(seen["mine"], reverse=True)
@@ -175,7 +175,7 @@ async def test_items_list_only_the_sources_team_rows_oldest_first_with_ties_by_i
     tenant: str,
 ) -> None:
     def make(sid: str, n: str) -> dict[str, Any]:
-        return _item(sid, f"Policy {n}", "reading" if n == "a" else "indexed")
+        return item_row(sid, f"Policy {n}", "reading" if n == "a" else "indexed")
 
     shown, seen = await _per_source_list(kb, engine, tenant, child="items", table=kb_items, make=make)
     assert shown == sorted(seen["mine"])
@@ -183,7 +183,9 @@ async def test_items_list_only_the_sources_team_rows_oldest_first_with_ties_by_i
     assert seen["first"]["facets"]["status"] == {"processing": 1, "indexed": 2}
 
 
-def _base(tenant: str, team: str, name: str, *, refreshed: bool = True, template: str | None = None) -> dict[str, Any]:
+def base_row(
+    tenant: str, team: str, name: str, *, refreshed: bool = True, template: str | None = None
+) -> dict[str, Any]:
     return {
         "tenant_id": tenant,
         "id": f"kb_{uuid4().hex[:12]}",
@@ -209,20 +211,20 @@ async def test_bases_list_only_the_teams_rows_with_health_counted_and_ids_answer
 ) -> None:
     store = KnowledgeStore(engine)
     [failing] = await _seed_sources(engine, tenant, "team_ops", "Rates")
-    await _insert(engine, tenant, "team_ops", kb_items, _item(failing, "Rate sheet", "failed"))
+    await insert_rows(engine, tenant, "team_ops", kb_items, item_row(failing, "Rate sheet", "failed"))
     made = [
-        _base(tenant, "team_ops", "Disputes", template="banking/policies"),
-        _base(tenant, "team_ops", "Hardship", refreshed=False),
-        _base(tenant, "team_ops", "Rates"),
+        base_row(tenant, "team_ops", "Disputes", template="banking/policies"),
+        base_row(tenant, "team_ops", "Hardship", refreshed=False),
+        base_row(tenant, "team_ops", "Rates"),
     ]
     with isolation.scope(tenant, "team_ops"):
         for row in made:
             await store.create_base(row, [failing] if row["name"] == "Rates" else [])
-    lending = _base(tenant, "team_lending", "Lending")
+    lending = base_row(tenant, "team_lending", "Lending")
     with isolation.scope(tenant, "team_lending"):
         await store.create_base(lending, [])
     elsewhere = f"t_{uuid4().hex[:10]}"
-    other = _base(elsewhere, "team_ops", "Other tenant rates")
+    other = base_row(elsewhere, "team_ops", "Other tenant rates")
     with isolation.scope(elsewhere, "team_ops"):
         await store.create_base(other, [])
     mine = sorted((r["id"] for r in made), reverse=True)

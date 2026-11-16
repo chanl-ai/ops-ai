@@ -872,7 +872,8 @@ class KnowledgeService:
                     "name": b.name,
                     "slug": b.slug,
                     "color": b.color,
-                    "health": self._base(b, [], await self._counts(who.tenant_id))["health"],
+                    # The base's health as judged without its sources (never refreshed or not), so no counts read.
+                    "health": self._base(b, [], {})["health"],
                 }
                 for b in readers
             ],
