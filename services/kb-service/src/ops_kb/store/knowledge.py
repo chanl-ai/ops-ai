@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import Any, ClassVar, NamedTuple, cast
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -499,6 +500,35 @@ class BaseOption(Out):
     owner: str
 
 
+class ChunkRow(Out):
+    """A live piece of an item, as its detail and a re-sync's change read it."""
+
+    id: str
+    position: int
+    section: str
+    page: int | None
+    tokens: int
+    text: str
+    metadata: dict[str, JsonValue] | None
+
+
+class UnitRow(Out):
+    """What one piece is searched as: its own text, a child or a likely question."""
+
+    chunk_id: str
+    kind: str
+    position: int
+    text: str
+
+
+class VersionRow(Out):
+    version: int
+    digest: str
+    status: str
+    allowed: list[JsonValue] | None
+    created_at: datetime
+
+
 class SameText(Out):
     """An indexed document of a base this one shares, holding the same text."""
 
@@ -726,9 +756,10 @@ class KnowledgeStore(Store):
         async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q.order_by(kb_items.c.created_at))).mappings()]
 
-    async def versions(self, tenant: str, item_id: str) -> list[dict[str, Any]]:
+    async def versions(self, tenant: str, item_id: str) -> list[VersionRow]:
+        v = kb_item_versions.c
         q = (
-            sa.select(kb_item_versions)
+            sa.select(v.version, v.digest, v.status, v.allowed, v.created_at)
             .where(
                 kb_item_versions.c.tenant_id == tenant,
                 kb_item_versions.c.item_id == item_id,
@@ -737,9 +768,9 @@ class KnowledgeStore(Store):
             .order_by(kb_item_versions.c.version.desc())
         )
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, VersionRow)
 
-    async def chunks(self, tenant: str, item_id: str) -> list[dict[str, Any]]:
+    async def chunks(self, tenant: str, item_id: str) -> list[ChunkRow]:
         """The item's live chunks, in reading order."""
         q = (
             sa.select(
@@ -760,9 +791,9 @@ class KnowledgeStore(Store):
             .order_by(kb_chunks.c.position)
         )
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, ChunkRow)
 
-    async def units(self, tenant: str, item_id: str) -> list[dict[str, Any]]:
+    async def units(self, tenant: str, item_id: str) -> list[UnitRow]:
         """The index units of the item's live pieces: what each is searched as."""
         q = (
             sa.select(kb_units.c.chunk_id, kb_units.c.kind, kb_units.c.position, kb_units.c.text)
@@ -779,7 +810,7 @@ class KnowledgeStore(Store):
             .order_by(kb_chunks.c.position, kb_units.c.position)
         )
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, UnitRow)
 
     async def index_version(
         self,

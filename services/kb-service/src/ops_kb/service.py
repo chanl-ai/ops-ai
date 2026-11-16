@@ -62,6 +62,7 @@ from .source_settings import (
     wire,
 )
 from .store import DECIDABLE, KnowledgeStore
+from .store.knowledge import ChunkRow
 from .store.vectors import PgVectorStore
 from .tool_sources import ToolReader, declared_source, refusal_of, source_config, sync_tool_source
 
@@ -1591,14 +1592,14 @@ class KnowledgeService:
                 continue
             detail = detail_of(d)
             quote = " ".join(str(detail.get("quote") or "").split()).lower()
-            holder = next((c for c in live if quote and quote in " ".join(str(c["text"]).split()).lower()), None)
+            holder = next((c for c in live if quote and quote in " ".join(c.text.split()).lower()), None)
             if holder is None:
                 continue
-            heading = " ".join(p for p in (str(d["title"]), str(holder["section"] or "")) if p)
+            heading = " ".join(p for p in (str(d["title"]), holder.section) if p)
             units.append(
                 {
                     "id": new_id("unt"),
-                    "chunk_id": holder["id"],
+                    "chunk_id": holder.id,
                     "item_id": item_id,
                     "kind": "faq",
                     "position": FAQ_POSITION + len(units),
@@ -1653,11 +1654,11 @@ class KnowledgeService:
     async def _known_questions(self, tenant: str, item_id: str) -> dict[str, list[str]]:
         """The questions the item's live pieces have, by piece_digest of their text: a piece split again with the same
         text keeps them, and the model is not asked again."""
-        texts = {str(c["id"]): str(c["text"]) for c in await self.store.chunks(tenant, item_id)}
+        texts = {c.id: c.text for c in await self.store.chunks(tenant, item_id)}
         known: dict[str, list[str]] = {}
         for u in await self.store.units(tenant, item_id):
-            if u["kind"] == "question" and str(u["chunk_id"]) in texts:
-                known.setdefault(piece_digest(texts[str(u["chunk_id"])]), []).append(str(u["text"]))
+            if u.kind == "question" and u.chunk_id in texts:
+                known.setdefault(piece_digest(texts[u.chunk_id]), []).append(u.text)
         return known
 
     def _metadata(self, s: dict[str, Any], doc: ParsedDocument) -> dict[str, str]:
@@ -2741,9 +2742,9 @@ class KnowledgeService:
         i = found[0]
         s = await self._source_row(who, i["source_id"])
         chunks = await self.store.chunks(who.tenant_id, item_id)
-        searched: dict[str, list[dict[str, Any]]] = {}
+        searched: dict[str, list[dict[str, str]]] = {}
         for u in await self.store.units(who.tenant_id, item_id):
-            searched.setdefault(str(u["chunk_id"]), []).append({"kind": u["kind"], "text": u["text"]})
+            searched.setdefault(u.chunk_id, []).append({"kind": u.kind, "text": u.text})
         versions = await self.store.versions(who.tenant_id, item_id)
         settings = self.settings_of(s)
         return {
@@ -2758,18 +2759,18 @@ class KnowledgeService:
             "sourceName": s["name"],
             "sourceType": s["type"],
             "detail": {
-                "content": "\n\n".join(c["text"] for c in chunks),
+                "content": "\n\n".join(c.text for c in chunks),
                 "chunks": [
                     {
-                        "index": c["position"],
-                        "tokens": c["tokens"],
-                        "location": _location(c["section"], c["page"]),
-                        **({"page": c["page"]} if c["page"] else {}),
+                        "index": c.position,
+                        "tokens": c.tokens,
+                        "location": _location(c.section, c.page),
+                        **({"page": c.page} if c.page else {}),
                         "kind": "content",
-                        "text": c["text"],
+                        "text": c.text,
                         # What search matches for this piece: its own text, its children and its questions.
-                        "units": searched.get(str(c["id"]), []),
-                        "metadata": c["metadata"] or {},
+                        "units": searched.get(c.id, []),
+                        "metadata": c.metadata or {},
                     }
                     for c in chunks
                 ],
@@ -2778,13 +2779,13 @@ class KnowledgeService:
                     {
                         "itemId": item_id,
                         "title": i["title"],
-                        "version": f"v{v['version']}",
-                        "effectiveDate": v["created_at"].date().isoformat(),
-                        "status": v["status"],
-                        "digest": v["digest"],
+                        "version": f"v{v.version}",
+                        "effectiveDate": v.created_at.date().isoformat(),
+                        "status": v.status,
+                        "digest": v.digest,
                         "sourceName": s["name"],
                         # Who the source system lets see this version; stored, not yet enforced.
-                        **({"allowed": v["allowed"]} if v.get("allowed") else {}),
+                        **({"allowed": v.allowed} if v.allowed else {}),
                     }
                     for v in versions
                 ],
@@ -2797,12 +2798,12 @@ def _change(  # noqa: PLR0917 - one call site, every argument a different part o
     s: dict[str, Any],
     item: dict[str, Any],
     from_version: int,
-    before: list[dict[str, Any]],
+    before: list[ChunkRow],
     after: list[dict[str, Any]],
     at: datetime,
 ) -> dict[str, Any]:
     """The change a re-sync made: the first section whose text differs, before and after."""
-    old = {c["section"]: c["text"] for c in reversed(before)}
+    old = {c.section: c.text for c in reversed(before)}
     new = {c["section"]: c["text"] for c in reversed(after)}
     section = next((k for k in [*new, *old] if old.get(k) != new.get(k)), "")
     return {

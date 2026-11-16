@@ -173,7 +173,7 @@ async def test_a_changed_document_keeps_the_ids_and_vectors_of_its_unchanged_pie
 
     async def pieces() -> dict[str, str]:
         with isolation.tenant_wide("test: the item's live pieces", tenant_id=tenant):
-            return {str(c["id"]): str(c["text"]) for c in await store.chunks(tenant, item["id"])}
+            return {c.id: c.text for c in await store.chunks(tenant, item["id"])}
 
     before = await pieces()
     embedded = stack.embedder.texts
