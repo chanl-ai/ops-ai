@@ -380,6 +380,8 @@ async def test_an_install_block_calls_only_the_listed_functions(engine: AsyncEng
     st = Install(engine)
     allowed: list[sa.Executable] = [
         sa.select(sa.func.count(settings.c.name), sa.func.coalesce(sa.func.max(settings.c.value), "none")),
+        # The earliest due time of a timer table, picked by the database rather than by reading every row.
+        sa.select(sa.func.min(settings.c.value)),
         sa.select(db_now(), db_epoch()),
     ]
     user = sa.func.current_user() if dialect_of(engine) == "postgresql" else sa.func.user_name()
