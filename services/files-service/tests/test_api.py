@@ -446,3 +446,44 @@ async def test_the_detail_says_who_may_delete_and_a_chat_only_member_cannot(clie
         refused = await chatter.delete(f"/v1/files/{f['id']}", headers=OPS)
     assert seen["canDelete"] is False
     assert (refused.status_code, refused.json()["error"]["code"]) == (403, "role_required"), refused.text
+
+
+_MISSING = "fil_missing0000000000000000000000"
+# The bodies the routes accept: (path, body, caller: person, admin or a service scope, the status a parsed body gets).
+# A body model moved to another base that stops taking a field's camelCase or snake_case name, or takes a field it
+# never named, fails here. A parsed body reaches the route, which answers the missing file or skips it.
+_BODIES: list[tuple[str, dict[str, Any], str, int]] = [
+    ("/v1/files/bulk-delete", {"ids": [_MISSING]}, "person", 200),
+    ("/v1/files/legal-hold", {"ids": [_MISSING], "hold": True, "reason": "Matter 114"}, "admin", 200),
+    (f"/v1/files/{_MISSING}/download-url", {"ttlSeconds": 60}, "person", 404),
+    (f"/v1/files/{_MISSING}/download-url", {"ttl_seconds": 60}, "person", 404),
+    (f"/v1/files/{_MISSING}/references", {"type": "case", "refId": "case_1", "name": "Case"}, "files:edit", 404),
+    (f"/v1/files/{_MISSING}/references", {"type": "case", "ref_id": "case_1", "name": "Case"}, "files:edit", 404),
+    ("/v1/files/scan-results", {"fileId": _MISSING, "status": "clean", "engine": "clamav"}, "files:decide", 404),
+    ("/v1/files/scan-results", {"file_id": _MISSING, "status": "clean", "engine": "clamav"}, "files:decide", 404),
+]
+
+
+@pytest.mark.parametrize("case", _BODIES)
+async def test_each_body_takes_both_names_of_a_field_and_refuses_an_unknown_one(
+    client: Client, tenant: str, case: tuple[str, dict[str, Any], str, int]
+) -> None:
+    path, body, caller, parsed = case
+    headers = OPS
+    if caller.startswith("files:"):
+        # The scanner alone holds files:decide and names no team; kb acts in its token's team.
+        scanner = caller == "files:decide"
+        token = mint_service_token(
+            dev_service_signer(),
+            service="scanner" if scanner else "kb",
+            audience="files",
+            tenant_id=tenant,
+            scopes=[caller],
+            team_id=None if scanner else "team_ops",
+        )
+        headers = {"Authorization": f"Bearer {token}"}
+    async with client(admin=caller == "admin") as c:
+        known = await c.post(path, json=body, headers=headers)
+        unknown = await c.post(path, json={**body, "teamName": "ops"}, headers=headers)
+    assert known.status_code == parsed, known.text
+    assert unknown.status_code == 400, unknown.text
