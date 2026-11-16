@@ -6,14 +6,9 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints, model_validator
-from pydantic.alias_generators import to_camel
 
 from ops_service_kit.flags import FlagName
-from ops_service_kit.http import ListResult, Out
-
-
-class In(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+from ops_service_kit.http import In, ListResult, Out
 
 
 class SignIn(In):
