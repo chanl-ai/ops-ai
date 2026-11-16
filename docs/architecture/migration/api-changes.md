@@ -14,6 +14,7 @@ that has not changed still gets the same answer.
 | Route | What changed | Before | After | What a caller must change | Old form works |
 |---|---|---|---|---|---|
 | `GET /health/background` | `state` and `lastError` of an event-run process | not reported | `state` follows the process's last pass; an event-run process (no interval) keeps `lastError` and `lastErrorAt` for an hour after a failure and then drops them, even if no later pass failed (`packages/ops_store/src/ops_store/background.py`, `FAILURE_SHOWN_S`) | Nothing; new. A missing `lastError` is not proof of no failure in the last hour | Yes |
+| Every list route (`ListQuery`: today `GET /v1/files`, `GET /v1/document-types`, `GET /v1/documents/extractions`, `GET /v1/models/calls`) | parameter `ids` | any number of values; SQL Server refuses a statement with more than 2100 parameters, which answered 500 | at most 1000 values (`ops_service_kit.listing.IDS_MAX`, `maxItems` in each document); more answers 400 `validation_failed` in the standard error format | Ask for 1000 ids or fewer per call; a picker with more asks in batches. Follow: none known; no console screen, hand-written SDK noun or CLI verb sends more than a page of ids | Yes, up to 1000 |
 
 ## files-service
 

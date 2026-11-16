@@ -71,3 +71,10 @@ async def test_a_page_or_order_the_store_cannot_use_is_refused() -> None:
     for query in ("?page=0", "?pageSize=0", "?sortOrder=up"):
         r = await asked(query)
         assert (r.status_code, r.json()["error"]["code"]) == (400, "validation_failed"), query
+
+
+async def test_ids_above_the_cap_answer_400_in_the_standard_error_format() -> None:
+    at_cap = "&".join(f"ids=r{i}" for i in range(listing.IDS_MAX))
+    assert len((await asked(f"?{at_cap}")).json()["ids"]) == listing.IDS_MAX
+    r = await asked(f"?{at_cap}&ids=one-more")
+    assert (r.status_code, r.json()["error"]["code"]) == (400, "validation_failed"), r.text

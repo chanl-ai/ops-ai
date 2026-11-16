@@ -12,11 +12,12 @@ from typing import Any, Literal
 
 import pytest
 import sqlalchemy as sa
+from pydantic import ValidationError
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.http import LabelledListResult
-from ops_service_kit.listing import ListParams
+from ops_service_kit.listing import IDS_MAX, ListParams
 from ops_service_kit.settings import Settings
 from ops_store.backends import backends
 from ops_store.conformance import engine_for, sql_server_database
@@ -197,6 +198,17 @@ async def test_ids_answer_exactly_those_rows_whatever_the_search_says(engine: As
     async with engine.connect() as c:
         page = await list_page(c, LIST, ListParams(ids=["r04", "r09", "gone"], search="renewal"), **SHAPE)
     assert [r["id"] for r in page["data"]] == ["r04", "r09"] and page["pagination"]["total"] == 2
+
+
+async def test_ids_at_the_cap_run_on_the_database_and_one_above_is_refused_before_it(engine: AsyncEngine) -> None:
+    """SQL Server takes at most 2100 parameters in a statement, so a longer `ids` would fail there as a 500."""
+    await seed(engine, 12)
+    asked = ["r04", *(f"gone-{i}" for i in range(IDS_MAX - 1))]
+    async with engine.connect() as c:
+        page = await list_page(c, LIST, ListParams(ids=asked), **SHAPE)
+    assert [r["id"] for r in page["data"]] == ["r04"]
+    with pytest.raises(ValidationError):
+        ListParams(ids=[*asked, "one-more"])
 
 
 async def test_a_list_with_no_filter_counts_every_row_whether_or_not_it_joins(engine: AsyncEngine) -> None:
