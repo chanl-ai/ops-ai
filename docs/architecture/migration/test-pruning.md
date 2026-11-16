@@ -44,8 +44,10 @@ CI shards are unchanged: a shard runs serially.
 
 | Test | Reason | Surviving cover |
 |---|---|---|
-| agents-service `tests/test_settings_without_shared_token.py::test_production_settings_start_without_a_shared_service_token` | Code that no longer exists: it asserts the removed `service_token` setting is absent. Production settings starting without a required token is still held by the survivor; re-adding the field as an optional one is no longer caught by any test | `tests/unit/test_engine_fault_settings.py::test_a_production_deployment_without_faults_starts` (required-token case only) |
 | agents-service `tests/test_settings_without_shared_token.py::test_a_leftover_shared_token_in_the_environment_is_ignored` | Passes because pydantic-settings ignores unknown variables (`extra="ignore"`) and the field is gone; it tests the library and removed code | none: no code reads `OPS_SERVICE_TOKEN` |
+
+Kept: `test_production_settings_start_without_a_shared_service_token`, which fails if `service_token` comes back as a
+settings field, optional or required; it guards the tokens area, which is not pruned.
 
 A strict read of agents-service's `unit/` and `api/` files found no other test that meets the rules: near-duplicates
 there hit different routes or stores (different seams), and the excluded kinds (reply pins, isolation, migrations,
