@@ -447,3 +447,61 @@ async def test_an_install_block_touches_only_the_tables_it_declared(engine: Asyn
     with pytest.raises(InstallScopeError, match="cannot be declared"):
         async with st.install_tx(SETTINGS, tables=(notes,)):
             pass
+
+
+class _Spelled(sa.types.UserDefinedType[str]):
+    """A cast type whose spelling is whatever its author wrote: SQL the guard cannot read."""
+
+    cache_ok = True
+
+    def get_col_spec(self, **_: Any) -> str:
+        return "VARCHAR(64)"
+
+
+class _Picked(sa.types.TypeDecorator[str]):
+    """A decorator over a plain string that renders another type on each database."""
+
+    impl = sa.String(64)
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect: sa.Dialect) -> sa.types.TypeEngine[Any]:
+        return _Spelled()
+
+
+async def test_an_install_block_holds_a_declared_table_by_identity_not_by_name(engine: AsyncEngine) -> None:
+    """A same-named table in another schema (here the default one, so it would run), a schema map that renames the
+    declared table's schema, and a cast to a type whose spelling is free text each reach past the declared table."""
+    st = Install(engine)
+    schema = "public" if dialect_of(engine) == "postgresql" else "dbo"
+    twin = sa.Table(
+        settings.name,
+        sa.MetaData(),
+        sa.Column("name", sa.String(64), primary_key=True),
+        sa.Column("value", sa.String(64)),
+        schema=schema,
+        info=system("a twin of the install's settings"),
+    )
+    statements: list[sa.Executable] = [
+        sa.select(twin.c.value),
+        sa.select(settings.c.value).execution_options(schema_translate_map={None: schema}),
+        sa.select(sa.cast(settings.c.value, _Spelled())),
+        sa.select(sa.cast(settings.c.value, _Picked())),
+        sa.select(sa.cast(settings.c.value, sa.String(64, collation="Latin1_General_CI_AS (SELECT 1)"))),
+    ]
+    out: list[str] = []
+    for statement in statements:
+        try:
+            async with st.install_tx(SETTINGS, tables=(settings,)) as c:
+                await c.execute(statement)
+            out.append("ran")
+        except InstallScopeError:
+            out.append("refused")
+        except Exception as e:  # what the database made of a statement that reached it
+            out.append(f"reached the database: {type(e).__name__}")
+    assert out == ["refused"] * len(statements), out
+    with pytest.raises(InstallScopeError):
+        async with st.install_tx(SETTINGS, tables=(settings,)) as c:
+            await c.execution_options(schema_translate_map={None: schema})
+            await c.execute(sa.select(settings.c.value))
+    async with st.install_tx(SETTINGS, tables=(settings,)) as c:
+        assert await c.scalar(sa.select(sa.cast(settings.c.value, sa.String(64)))) == "eu", "a plain cast still runs"

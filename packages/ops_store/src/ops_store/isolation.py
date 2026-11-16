@@ -40,7 +40,7 @@ from sqlalchemy.engine import ExceptionContext
 from sqlalchemy.exc import DBAPIError, InvalidRequestError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncTransaction
 from sqlalchemy.sql import operators, visitors
-from sqlalchemy.sql.elements import CollationClause, Extract, quoted_name
+from sqlalchemy.sql.elements import Cast, CollationClause, Extract, quoted_name
 from sqlalchemy.sql.functions import FunctionElement
 from sqlalchemy.sql.selectable import TableValuedAlias
 
@@ -85,8 +85,9 @@ class Isolation:
     kind: str
     # Why a wider scope than `team` is in force; None for a team scope.
     reason: str | None = None
-    # The tables an install-wide block declared it touches; None for one that declared none yet.
-    tables: frozenset[str] | None = None
+    # The tables an install-wide block declared it touches, the objects themselves: a same-named table in another
+    # schema or metadata is another table. None for one that declared none yet.
+    tables: frozenset[sa.Table] | None = None
 
 
 class Caller(Protocol):
@@ -200,15 +201,15 @@ def install_wide(reason: str, *, tables: Iterable[sa.Table] | None = None) -> Ge
         _ctx.reset(token)
 
 
-def _declared(tables: Iterable[sa.Table]) -> frozenset[str]:
-    names: set[str] = set()
+def _declared(tables: Iterable[sa.Table]) -> frozenset[sa.Table]:
+    found: set[sa.Table] = set()
     for table in tables:
         if not table.info.get(SYSTEM_KEY):
             raise InstallScopeError(f"refused: {table.name} is not marked system(...) and cannot be declared")
-        names.add(table.name)
-    if not names:
+        found.add(table)
+    if not found:
         raise ValueError("an install-wide block declares at least one table")
-    return frozenset(names)
+    return frozenset(found)
 
 
 def _in_force() -> Isolation:
@@ -244,7 +245,7 @@ def tenant_wide(reason: str, *, tenant_id: str | None = None) -> Generator[Isola
 
 # What a connection's settings say: the context's tenant, team and scope, the PostgreSQL role, and the tables an
 # install-wide block declared (checked here, not by the database, so a change of them alone costs no statement).
-_Carried = tuple[str, str | None, str, str | None, frozenset[str] | None]
+_Carried = tuple[str, str | None, str, str | None, frozenset[sa.Table] | None]
 
 
 @dataclass
@@ -533,8 +534,15 @@ _TEXT_PARTS = ("_prefixes", "_suffixes", "_statement_hints")
 
 
 def _refuse_driver_sql(conn: sa.Connection, _cursor: Any, _sql: str, _params: Any, context: Any, _many: bool) -> None:
-    if conn.info.get(_INSTALL) and context.compiled is None:
+    """Raises before a statement in install scope reaches the cursor when it is SQL for the driver, or when a schema map
+    (`schema_translate_map`: on the statement, the call, the connection or the engine, all merged by now) rendered its
+    tables under another schema than the one `_refuse_outside_install` checked."""
+    if not conn.info.get(_INSTALL):
+        return
+    if context.compiled is None:
         raise InstallScopeError("refused: SQL for the driver inside an install-wide block names no table to check")
+    if context.execution_options.get("schema_translate_map"):
+        raise InstallScopeError("refused: a schema map (schema_translate_map) inside an install-wide block")
 
 
 def _refuse_outside_install(conn: sa.Connection, statement: Any, *_: Any) -> None:
@@ -552,13 +560,13 @@ def _refuse_outside_install(conn: sa.Connection, statement: Any, *_: Any) -> Non
     if not issubclass(kind, _STATEMENTS):
         raise InstallScopeError(f"refused: a {kind.__name__} inside an install-wide block")
     found: object = conn.info[_INSTALL]
-    declared = cast(frozenset[str], found) if isinstance(found, frozenset) else None
+    declared = cast(frozenset[sa.Table], found) if isinstance(found, frozenset) else None
     problem = next(_install_problems(statement, declared), None)
     if problem is not None:
         raise InstallScopeError(f"refused: {problem} inside an install-wide block")
 
 
-def _install_problems(statement: sa.ClauseElement, declared: frozenset[str] | None) -> Iterator[str]:
+def _install_problems(statement: sa.ClauseElement, declared: frozenset[sa.Table] | None) -> Iterator[str]:
     """Each part of `statement` an install-wide block may not send. A column's table is walked too, since a column
     can stand in a statement whose tree never holds its table (an UPDATE's value, a RETURNING)."""
     seen: set[int] = set()
@@ -579,7 +587,7 @@ def _install_problems(statement: sa.ClauseElement, declared: frozenset[str] | No
             yield from _part_problems(e, declared)
 
 
-def _part_problems(e: object, declared: frozenset[str] | None) -> Iterator[str]:
+def _part_problems(e: object, declared: frozenset[sa.Table] | None) -> Iterator[str]:
     """What is wrong with one element of an install-wide statement, read by attribute: the element classes differ.
     Judged by its class (`issubclass`), so the attributes read first stay one type each."""
     kind = type(e)
@@ -597,8 +605,9 @@ def _part_problems(e: object, declared: frozenset[str] | None) -> Iterator[str]:
         yield "raw SQL (a text clause or a literal column)"
     if issubclass(kind, sa.TableClause) and not marked:
         yield f"{name} is not marked system(...); an install-wide block reaches only the install's own tables"
-    elif marked and declared is not None and str(name) not in declared:
-        yield f"{name} is not among the tables this block declared ({', '.join(sorted(declared))})"
+    elif marked and declared is not None and e not in declared:
+        names = ", ".join(sorted(t.fullname for t in declared))
+        yield f"{cast(sa.Table, e).fullname} is not among the tables this block declared ({names})"
     if isinstance(name, quoted_name) and name.quote is False and not _BARE.fullmatch(str(name)):
         yield f"an unquoted name {str(name)!r}"
     if any(isinstance(op, operators.custom_op) for op in ops):
@@ -607,6 +616,8 @@ def _part_problems(e: object, declared: frozenset[str] | None) -> Iterator[str]:
         yield f"raw SQL (an EXTRACT field or collation {text!r})"
     if issubclass(kind, TableValuedAlias):
         yield "a function used as a table"
+    if issubclass(kind, Cast):
+        yield from _cast_problems(cast(Cast[Any], e).type)
     if issubclass(kind, FunctionElement) and not issubclass(kind, _CLOCK):
         fn = str(name or kind.__name__).lower()
         if packages or fn not in INSTALL_FUNCTIONS:
@@ -615,6 +626,28 @@ def _part_problems(e: object, declared: frozenset[str] | None) -> Iterator[str]:
         yield "raw SQL (a prefix, suffix or statement hint)"
     if any(hint not in dialect.LOCK_HINTS for hint in hints.values()):
         yield "raw SQL (a table hint other than the dialect's lock hints)"
+
+
+def _cast_problems(type_: sa.types.TypeEngine[Any]) -> Iterator[str]:
+    """A CAST renders its type's spelling into the statement: a type defined outside SQLAlchemy (a
+    `UserDefinedType`'s `get_col_spec`) spells whatever its author wrote, and a collation is text. A decorator is read
+    through to its impl unless it picks one per dialect, and each `with_variant` type is read as well."""
+    todo = [type_]
+    while todo:
+        t = todo.pop()
+        variants: dict[str, sa.types.TypeEngine[Any]] = getattr(t, "_variant_mapping", None) or {}
+        todo += variants.values()
+        if isinstance(t, sa.types.TypeDecorator):
+            picked: object = getattr(type(t), "load_dialect_impl", None)
+            if picked is not getattr(sa.types.TypeDecorator, "load_dialect_impl", None):
+                yield f"a cast to {type(t).__name__}, which picks its type per database"
+            todo.append(t.impl_instance)
+            continue
+        if not type(t).__module__.startswith("sqlalchemy."):
+            yield f"a cast to {type(t).__name__}, a type defined outside SQLAlchemy"
+        collation: object = getattr(t, "collation", None)
+        if collation is not None and not _NAME.fullmatch(str(collation)):
+            yield f"raw SQL (a cast's collation {collation!r})"
 
 
 # The three keys in one batch, one round trip to set them and one to clear them (slow-tests RCA A3).
