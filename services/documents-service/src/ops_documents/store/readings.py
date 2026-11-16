@@ -141,7 +141,6 @@ class ReadingsStore(Store):
 
     role = ROLE
     system_role = SYSTEM_ROLE
-    system_role = SYSTEM_ROLE
 
     @staticmethod
     def _where(t: sa.Table, team: str, digest: str, version: str, key: str) -> sa.ColumnElement[bool]:

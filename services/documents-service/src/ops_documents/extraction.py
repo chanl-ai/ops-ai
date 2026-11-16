@@ -629,7 +629,19 @@ class Extractor:
         row = await self.store.get(extraction_id)
         if row is None or row.team != who.team:
             return None
-        return answer_of(row) | {"corrections": await self.store.corrections(extraction_id)}
+        corrections = [
+            {
+                "field": k.field,
+                "record": k.record,
+                "original": k.original,
+                "originalConfidence": k.original_confidence,
+                "corrected": k.corrected,
+                "correctedBy": k.corrected_by,
+                "correctedAt": k.corrected_at.isoformat(),
+            }
+            for k in await self.store.corrections(extraction_id)
+        ]
+        return answer_of(row) | {"corrections": corrections}
 
     async def for_file(self, who: Who, file_id: str, *, page: int, page_size: int) -> tuple[list[dict[str, Any]], int]:
         """One page of the team's extractions of a file it can see, newest first (the file page's Fields tab)."""
