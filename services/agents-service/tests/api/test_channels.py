@@ -4,15 +4,12 @@ loses the types not built yet, or a page for one of them fails to load."""
 
 from __future__ import annotations
 
-import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from httpx import AsyncClient
-from sqlalchemy import event
-from sqlalchemy.pool import Pool
 
 from ops_agents.store.agent_registry import registry_agents
 from ops_agents.store.engine import EngineTransactions
@@ -27,6 +24,7 @@ from tests.api.test_case_routes import started_run
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from tests.engine.test_lifecycle_rights import BUILDER, TENANT, VIEWER, person
 
+from .connections import Request, connections
 from .test_reply_pins import FIXTURES, answer, compare
 
 FRAUD_BUILDER = person("omar", "team_fraud", "builder")
@@ -339,32 +337,6 @@ async def test_a_chat_channel_is_renamed_its_websites_wait_for_review_and_it_ret
     assert retired.status_code == 200 and retired.json()["data"]["retiredAt"], retired.text
     assert (again.status_code, again.json()["error"]["code"]) == (409, "channel_retired"), again.text
     assert (await channels(c, BUILDER, type="chat"))["data"] == []
-
-
-Request = tuple[str, str, dict[str, Any] | None, dict[str, str]]
-
-
-async def connections(c: AsyncClient, requests: list[Request]) -> list[tuple[str, str, int, int]]:
-    """Each request's status and how many connections it checked out. One: the route answers in the request
-    transaction. More: it calls another party, so each read takes and returns its own and none is held meanwhile."""
-    request_task = asyncio.current_task()
-    counted: list[int] = []
-
-    def checked_out(*_: object) -> None:
-        # The app's loops check out connections too; only the request's own task counts.
-        if asyncio.current_task() is request_task:
-            counted[-1] += 1
-
-    event.listen(Pool, "checkout", checked_out)
-    seen: list[tuple[str, str, int, int]] = []
-    try:
-        for method, path, body, who in requests:
-            counted.append(0)
-            r = await c.request(method, path, json=body, headers=who)
-            seen.append((method, path, r.status_code, counted[-1]))
-    finally:
-        event.remove(Pool, "checkout", checked_out)
-    return seen
 
 
 DEPLOYMENT = {"id": "dep_pin", "graph": "complex_workflow", "channel": "api"}

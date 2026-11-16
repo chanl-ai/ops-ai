@@ -1,7 +1,10 @@
 """A person's memories: `/v1/me/memories` lists, corrects, exports, forgets, takes back and erases what
 agents remember about the caller, and only the caller. A forget can be taken back for 30 days; an erase is final.
 There is no route that reads another person's memories: an admin manages the agent's memory setting, not what it holds
-about people."""
+about people.
+
+Every route answers in one request transaction (`Tx`): it reads and writes this service's database only, so a
+correction's new value, the old one superseded and the audit line land together or not at all."""
 
 from __future__ import annotations
 
@@ -12,9 +15,9 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import Field
 
 from ops_access import can
-from ops_contracts.chat import WireModel
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound, ValidationFailed
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, In, Out
 
 from ...store.memories import ACTIVE, FORGOTTEN, PERSON, Memories
 from ...store.tenancy import current_team
@@ -31,11 +34,11 @@ Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI re
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 
 
-class Forgotten(WireModel):
+class Forgotten(Out):
     forgotten: int
 
 
-class MemoryCorrection(WireModel):
+class MemoryCorrection(In):
     value: str = Field(min_length=1, max_length=2000)
 
 
@@ -70,7 +73,9 @@ def _view(rt: Runtime, r: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.get("", response_model=Envelope[list[MemoryView]])
-async def list_memories(rt: Rt, me: Me, agent_id: Annotated[str | None, Query(alias="agentId")] = None) -> JSONResponse:
+async def list_memories(
+    rt: Rt, me: Me, _: Tx, agent_id: Annotated[str | None, Query(alias="agentId")] = None
+) -> JSONResponse:
     """What agents remember about the caller, newest first; `agentId` keeps one agent's."""
     # The team the request acts in, named: team_visible passes every team for a caller acting in none.
     rows = await _store(rt, me).current(person_of(me), agent_id, team_id=current_team() or me.team_id)
@@ -78,7 +83,7 @@ async def list_memories(rt: Rt, me: Me, agent_id: Annotated[str | None, Query(al
 
 
 @router.patch("/{memory_id}", response_model=Envelope[MemoryView])
-async def correct_memory(rt: Rt, me: Me, memory_id: str, body: MemoryCorrection) -> JSONResponse:
+async def correct_memory(rt: Rt, me: Me, _: Tx, memory_id: str, body: MemoryCorrection) -> JSONResponse:
     """Replaces a memory's value with the caller's own; the old value is kept as superseded and is no longer loaded."""
     store, person = _store(rt, me, edit=True), person_of(me)
     old = await store.get(person, memory_id)
@@ -109,7 +114,7 @@ async def correct_memory(rt: Rt, me: Me, memory_id: str, body: MemoryCorrection)
 
 
 @router.delete("/{memory_id}", status_code=204, response_class=Response)
-async def forget_memory(rt: Rt, me: Me, memory_id: str) -> Response:
+async def forget_memory(rt: Rt, me: Me, _: Tx, memory_id: str) -> Response:
     """Forgets one memory at once: it is no longer used or listed, and is erased with its earlier versions after 30
     days unless taken back; recorded with who and when."""
     if not await _store(rt, me, edit=True).forget(person_of(me), actor=me.email, memory_id=memory_id):
@@ -118,7 +123,7 @@ async def forget_memory(rt: Rt, me: Me, memory_id: str) -> Response:
 
 
 @router.post("/{memory_id}/confirm", response_model=Envelope[MemoryView])
-async def confirm_memory(rt: Rt, me: Me, memory_id: str) -> JSONResponse:
+async def confirm_memory(rt: Rt, me: Me, _: Tx, memory_id: str) -> JSONResponse:
     """Keeps a suggested memory: the person said yes under the reply that suggested it, or on the Memory page. It is
     in use from the next turn and replaces the memory it changes. 404 when nothing of the caller's waits under that
     id; saying no is /undo."""
@@ -129,7 +134,7 @@ async def confirm_memory(rt: Rt, me: Me, memory_id: str) -> JSONResponse:
 
 
 @router.post("/{memory_id}/undo", status_code=204, response_class=Response)
-async def undo_memory(rt: Rt, me: Me, memory_id: str) -> Response:
+async def undo_memory(rt: Rt, me: Me, _: Tx, memory_id: str) -> Response:
     """Takes back a memory: one forgotten in the last 30 days is in use again; one a reply just saved is forgotten,
     and the memory it replaced, if any, is in use again."""
     store, person = _store(rt, me, edit=True), person_of(me)
@@ -146,7 +151,7 @@ async def undo_memory(rt: Rt, me: Me, memory_id: str) -> Response:
 
 
 @router.post("/{memory_id}/erase", status_code=204, response_class=Response)
-async def erase_memory(rt: Rt, me: Me, memory_id: str) -> Response:
+async def erase_memory(rt: Rt, me: Me, _: Tx, memory_id: str) -> Response:
     """Erases a memory now, with every earlier version; it cannot be taken back."""
     if not await _store(rt, me, edit=True).erase(person_of(me), memory_id, actor=me.email):
         raise NotFound("Memory")
@@ -155,7 +160,7 @@ async def erase_memory(rt: Rt, me: Me, memory_id: str) -> Response:
 
 @router.delete("", response_model=Envelope[Forgotten])
 async def forget_agent_memories(
-    rt: Rt, me: Me, agent_id: Annotated[str | None, Query(alias="agentId")] = None
+    rt: Rt, me: Me, _: Tx, agent_id: Annotated[str | None, Query(alias="agentId")] = None
 ) -> JSONResponse:
     """Forgets everything one agent remembers about the caller."""
     if not agent_id:
@@ -164,7 +169,7 @@ async def forget_agent_memories(
 
 
 @router.get("/export", response_model=Envelope[MemoryExport])
-async def export_memories(rt: Rt, me: Me) -> JSONResponse:
+async def export_memories(rt: Rt, me: Me, _: Tx) -> JSONResponse:
     """Everything agents remember about the caller and every forget and correction, as one JSON document."""
     store, person = _store(rt, me), person_of(me)
     rows = await store.current(person, None, limit=10_000)
