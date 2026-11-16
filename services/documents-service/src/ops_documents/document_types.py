@@ -12,7 +12,6 @@ test spends a model call per sample, so its estimate (calls and cost from the al
 
 from __future__ import annotations
 
-import asyncio
 import re
 import uuid
 from collections.abc import Callable
@@ -25,8 +24,10 @@ import httpx
 
 from ops_contracts.field_values import DATE_ORDERS, DEFAULT_DATE_ORDER, normalise
 from ops_documents.errors import CreateNotAllowedError, DocumentTypeMissingError, InvalidRequestError, StateError
-from ops_documents.extraction import ALIAS, FALLBACK_ALIAS, PATH_TEMPLATE, Extractor, reading, request_of
+from ops_documents.extraction import ALIAS, FALLBACK_ALIAS, PATH_TEMPLATE, Extractor, request_of
 from ops_documents.files import Files, Who
+from ops_documents.pending import Pending
+from ops_documents.readings import READING_PROCESS
 from ops_documents.store.document_types import (
     SINGLE,
     DocumentTypesStore,
@@ -44,7 +45,7 @@ from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable, se
 from ops_pii import mask
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
-from ops_store import isolation
+from ops_store import background, isolation
 
 log = get_logger("ops_documents.document_types")
 
@@ -180,7 +181,7 @@ class DocumentTypes:
     extractor: Extractor
     prices: Prices | None = None
     clock: Callable[[], datetime] = lambda: datetime.now(UTC)
-    _tasks: set[asyncio.Task[None]] = field(default_factory=set[asyncio.Task[None]])
+    _pending: Pending = field(default_factory=Pending)
 
     # ── types and versions ──
 
@@ -597,7 +598,7 @@ class DocumentTypes:
                 finished_at=None,
             )
             await self.store.insert_test(test)
-        self._later(test)
+        await self._later(test)
         return _test_view(test)
 
     async def get_test(self, who: Who, type_id: str, test_id: str) -> dict[str, Any] | None:
@@ -609,27 +610,25 @@ class DocumentTypes:
     async def resume(self) -> int:
         pending = await self.store.pending_tests()
         for t in pending:
-            self._later(t)
+            await self._later(t)
         return len(pending)
 
     async def drain(self) -> None:
-        while self._tasks:
-            await asyncio.gather(*list(self._tasks), return_exceptions=True)
+        """Waits until no test run is running in this process (tests and shutdown)."""
+        await self._pending.none()
 
-    def _later(self, test: TestRow) -> None:
-        task = asyncio.create_task(self._as_owner(test))
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+    async def _later(self, test: TestRow) -> None:
+        self._pending.add()
+        await background.start(self._as_owner(test), key=READING_PROCESS)
 
     async def _as_owner(self, test: TestRow) -> None:
-        """The run as the test's own tenant and team: a restart picks tests up with no request behind them."""
-        with isolation.scope(test.tenant_id, test.team):
-            try:
+        """The run as the test's own tenant and team: a restart picks tests up with no request behind them. It runs on
+        the supervisor, which shows a failure on /health/background."""
+        try:
+            with isolation.scope(test.tenant_id, test.team):
                 await self._run(test)
-            except Exception as e:
-                await reading().failed(e)
-                raise
-        await reading().ok(1, waiting=max(0, len(self._tasks) - 1))
+        finally:
+            self._pending.done()
 
     async def _run(self, test: TestRow) -> None:
         test_id = test.id

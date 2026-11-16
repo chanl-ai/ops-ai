@@ -20,7 +20,6 @@ import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from functools import cache
 from typing import Any, Protocol, cast
 
 import httpx
@@ -30,7 +29,8 @@ from ops_access import team_off, team_on
 from ops_contracts.field_values import FIELD_TYPES
 from ops_documents.errors import IdempotencyConflictError, InvalidRequestError, StateError
 from ops_documents.files import Files, Who
-from ops_documents.readings import SYNC_BYTES, SYNC_PAGES, Readings, settings_of
+from ops_documents.pending import Pending
+from ops_documents.readings import READING_PROCESS, SYNC_BYTES, SYNC_PAGES, Readings, settings_of
 from ops_documents.store import ExtractionRow, ExtractionsStore
 from ops_documents.store.document_types import SINGLE
 from ops_documents.store.extractions import file_read
@@ -451,12 +451,6 @@ def answer_of(row: ExtractionRow) -> dict[str, Any]:
     return out
 
 
-@cache
-def reading() -> background.Beat:
-    """The document reading process's heartbeat in this process, shared by extractions and type tests."""
-    return background.Beat("document_reading", background.LOCAL)
-
-
 @dataclass
 class Extractor:
     files: Files
@@ -472,7 +466,7 @@ class Extractor:
     # The team's masking of personal data in what people see; without it, masked.
     masking: MaskingPolicy | None = None
     clock: Callable[[], datetime] = lambda: datetime.now(UTC)
-    _tasks: set[asyncio.Task[None]] = field(default_factory=set[asyncio.Task[None]])
+    _pending: Pending = field(default_factory=Pending)
 
     async def ask(
         self,
@@ -565,7 +559,7 @@ class Extractor:
         if inline or row.size <= SYNC_BYTES:
             pages = await self._pages(who, row, request)
         if not inline and (pages is None or pages.count > SYNC_PAGES):
-            self._later(held)
+            await self._later(held)
             return 202, answer_of(held)
         assert pages is not None  # parsed above whenever the extraction runs now
         return 200, answer_of(await self._run(held, row, pages))
@@ -779,29 +773,25 @@ class Extractor:
         """Starts every queued or running extraction again, after a restart; the number started."""
         pending = await self.store.pending()
         for row in pending:
-            self._later(row)
+            await self._later(row)
         return len(pending)
 
     async def drain(self) -> None:
-        """Waits for the extractions running in this process (tests and shutdown)."""
-        while self._tasks:
-            await asyncio.gather(*list(self._tasks), return_exceptions=True)
+        """Waits until no extraction is running in this process (tests and shutdown)."""
+        await self._pending.none()
 
-    def _later(self, row: ExtractionRow) -> None:
-        task = asyncio.create_task(self._background(row))
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+    async def _later(self, row: ExtractionRow) -> None:
+        self._pending.add()
+        await background.start(self._background(row), key=READING_PROCESS)
 
     async def _background(self, row: ExtractionRow) -> None:
-        """The read as the extraction's own tenant and team: a restart picks reads up with no request behind them.
-        Each finished read counts on the document reading process's heartbeat."""
-        with isolation.scope(row.tenant_id, row.team):
-            try:
+        """The read as the extraction's own tenant and team: a restart picks reads up with no request behind them. It
+        runs on the supervisor, which counts each finished read and shows a failure on /health/background."""
+        try:
+            with isolation.scope(row.tenant_id, row.team):
                 await self._read(row)
-            except Exception as e:
-                await reading().failed(e)
-                raise
-        await reading().ok(1, waiting=max(0, len(self._tasks) - 1))
+        finally:
+            self._pending.done()
 
     async def _read(self, row: ExtractionRow) -> None:
         try:

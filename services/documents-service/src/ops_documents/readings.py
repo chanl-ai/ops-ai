@@ -22,6 +22,7 @@ from typing import Any
 
 from ops_documents.errors import FileMissingError, FileNotReadyError
 from ops_documents.files import Files, Who
+from ops_documents.pending import Pending
 from ops_documents.store.readings import PENDING, ReadingRow, ReadingsStore
 from ops_files_client import FileInfo
 from ops_ingest.reading import (
@@ -36,7 +37,7 @@ from ops_ingest.reading import (
     read,
 )
 from ops_service_kit.logging import get_logger
-from ops_store import isolation
+from ops_store import background, isolation
 
 log = get_logger("ops_documents.readings")
 
@@ -45,6 +46,8 @@ SYNC_PAGES = 5
 SYNC_BYTES = 5 * 1024 * 1024
 # Files read at once in one process.
 SLOTS = 2
+# The process every background reading, extraction and type test reports under on /health/background.
+READING_PROCESS = "document_reading"
 # A page that takes longer is listed as unread with the reason, and the read goes on with the next page.
 PAGE_TIMEOUT_S = 60.0
 # A reading that failed for an unexpected reason this many times is given up, with the reason.
@@ -117,7 +120,7 @@ class Readings:
     page_timeout_s: float = PAGE_TIMEOUT_S
     _queued: list[ReadingRow] = field(default_factory=list[ReadingRow])
     _running: dict[tuple[str, ...], str] = field(default_factory=dict[tuple[str, ...], str])
-    _tasks: set[asyncio.Task[None]] = field(default_factory=set[asyncio.Task[None]])
+    _pending: Pending = field(default_factory=Pending)
 
     # ── Asking ────────────────────────────────────────────────────────────
 
@@ -155,7 +158,7 @@ class Readings:
                 digest, READER_VERSION, settings.key, file_id=file.id, team=who.team, actor=who.actor, at=self.clock()
             )
         if row.status in PENDING:
-            self._later(row)
+            await self._later(row)
         return 202, answer_of(row, file_id)
 
     async def get(
@@ -249,48 +252,51 @@ class Readings:
         """Queues every unfinished reading again after a restart; the number queued."""
         pending = await self.store.pending()
         for row in pending:
-            self._later(row)
+            await self._later(row)
         return len(pending)
 
     async def drain(self) -> None:
-        """Waits for every queued and running reading in this process (tests and shutdown)."""
-        while self._tasks or self._queued:
-            if self._tasks:
-                await asyncio.gather(*list(self._tasks), return_exceptions=True)
-            else:
-                self._pump()
+        """Waits until no reading is queued or running in this process (tests and shutdown)."""
+        await self._pending.none()
 
-    def _later(self, row: ReadingRow) -> None:
+    async def _later(self, row: ReadingRow) -> None:
         key = _identity(row)
         if key in self._running or any(_identity(q) == key for q in self._queued):
             return
         self._queued.append(row)
-        self._pump()
+        self._pending.add()
+        await self._pump()
 
-    def _pump(self) -> None:
+    async def _pump(self) -> None:
         while len(self._running) < self.slots:
             i = next_reading(self._queued, list(self._running.values()))
             if i is None:
                 return
             row = self._queued.pop(i)
-            key = _identity(row)
-            self._running[key] = row.team
-            task = asyncio.create_task(self._background(row))
-            self._tasks.add(task)
-
-            def done(t: asyncio.Task[None], key: tuple[str, ...] = key) -> None:
-                self._tasks.discard(t)
-                self._running.pop(key, None)
-                self._pump()
-
-            task.add_done_callback(done)
+            self._running[_identity(row)] = row.team
+            await background.start(self._background(row), key=READING_PROCESS)
 
     async def _background(self, row: ReadingRow) -> None:
-        with isolation.scope(row.tenant_id, row.team):
-            try:
+        """One reading on the supervisor: a failure is raised to it (logged, shown on /health/background) after the
+        next queued reading is started from here. A cancelled one (the process stopping) starts nothing, and what is
+        still queued is left to `resume` after the restart."""
+        try:
+            with isolation.scope(row.tenant_id, row.team):
                 await self._run(row)
-            except Exception as e:
-                log.warning("reading failed", extra={"digest": row.digest, "error": str(e)})
+        except asyncio.CancelledError:
+            self._running.pop(_identity(row), None)
+            self._pending.done(1 + len(self._queued))
+            self._queued.clear()
+            raise
+        except Exception:
+            await self._finished(row)
+            raise
+        await self._finished(row)
+
+    async def _finished(self, row: ReadingRow) -> None:
+        self._running.pop(_identity(row), None)
+        self._pending.done()
+        await self._pump()
 
     async def _run(self, row: ReadingRow) -> None:
         tries = await self.store.start(row, at=self.clock())

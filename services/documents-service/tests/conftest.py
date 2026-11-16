@@ -28,7 +28,7 @@ from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
 from ops_service_kit.testdb import isolate_from_stack
-from ops_store import isolation
+from ops_store import background, isolation
 from ops_store.testing import DATABASES, NO_SQL_SERVER, postgresql_only, sql_server_schema
 
 OPS = {"X-Team-Id": "team_ops"}
@@ -201,3 +201,11 @@ def make(engine: AsyncEngine, tenant: str) -> Make:
 @pytest.fixture(autouse=True)
 def _release_apps() -> Iterator[None]:
     yield from released_apps()
+
+
+@pytest.fixture(autouse=True)
+async def _supervisor() -> AsyncIterator[None]:
+    """The supervisor a lifespan holds, around each test: requests queue readings, extractions and type tests onto it
+    without the lifespan running. Leaving it cancels whatever a test left running."""
+    async with background.supervisor():
+        yield

@@ -105,7 +105,7 @@ async def test_a_queued_extraction_runs_again_after_a_restart(make: Make, monkey
     assert body["status"] == "done" and body["fields"]["amount"]["value"] == 1250.0, body
 
 
-def _stopped(row: Any) -> None:
+async def _stopped(row: Any) -> None:
     return None
 
 
