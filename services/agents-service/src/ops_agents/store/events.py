@@ -96,7 +96,8 @@ class EventLog(RuntimeStore):
             try:
                 async with self.tx() as c:
                     await check_fence(c, thread_id, generation)
-                    seq = int((await c.execute(stmt)).scalar_one())
+                    async with self.attempt(c):
+                        seq = int((await c.execute(stmt)).scalar_one())
             except IntegrityError:
                 continue
             return {k: values[k] for k in ("id", "type", "node", "at", "data")} | {

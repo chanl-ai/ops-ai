@@ -86,7 +86,7 @@ class ModelCallLedger(RuntimeStore):
             else model_call_records.insert().values(**values)
         )
         try:
-            async with self.tx() as c:
+            async with self.tx() as c, self.attempt(c):
                 return (await c.execute(stmt)).rowcount != 0
         except IntegrityError:
             return False

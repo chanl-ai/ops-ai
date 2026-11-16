@@ -1,17 +1,20 @@
-"""Shared test wiring: a scripted model standing in for the provider, and the app on an in-memory database."""
+"""Shared test wiring: a scripted model standing in for the provider, and the app on the PostgreSQL test database."""
 
 from __future__ import annotations
 
 import json
 import os
 import re
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncGenerator, AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 import pytest
+import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic_ai.messages import (
@@ -26,8 +29,7 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.api.app import create_app
@@ -331,29 +333,66 @@ def graph_models() -> FakeGraphModels:
     return FakeGraphModels()
 
 
-@pytest.fixture
-async def client(graph_models: FakeGraphModels) -> AsyncIterator[AsyncClient]:
-    settings = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED)
-    engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
+async def emptied(engine: AsyncEngine) -> None:
+    """Every table the app's metadata names, emptied in one statement. The app starts and seeds on the dev caller's
+    fixed tenant and team, so a test that counts what it made needs the rows of the tests before it gone. Safe because
+    the database is this make run's alone (make/env.mk) and the suite runs one test at a time; the migrations seed no
+    rows but their version tables, which are not in the metadata. A connection an earlier test left open in a
+    transaction would hold the truncate forever, so it waits 5 s and fails naming the lock."""
+    names = ", ".join(f'"{t.name}"' for t in [*metadata.sorted_tables, *engine_metadata.sorted_tables])
     async with engine.begin() as c:
-        await c.run_sync(metadata.create_all)
-        await c.run_sync(engine_metadata.create_all)
+        await c.execute(sa.text("set local lock_timeout = '5s'"))
+        await c.execute(sa.text(f"truncate {names} restart identity cascade"))
+
+
+@asynccontextmanager
+async def empty_engine(database_url: str) -> AsyncGenerator[AsyncEngine]:
+    """An engine on the PostgreSQL test database with the app's tables emptied, disposed after. Savepoints
+    (`Store.attempt`) need a real connection per checkout, which an in-memory SQLite engine on one shared connection
+    cannot give, so a test that starts the app starts it here."""
+    engine = create_async_engine(database_url)
+    try:
+        await emptied(engine)
+        yield engine
+    finally:
+        await engine.dispose()
+
+
+@asynccontextmanager
+async def started(
+    engine: AsyncEngine,
+    settings: Settings,
+    graph_models: Any,
+    *,
+    checkpointer: Any = None,
+    base_url: str = "http://test",
+    checked: bool = False,
+    **wiring: Any,
+) -> AsyncGenerator[tuple[FastAPI, AsyncClient]]:
+    """One start of the app on the scripted model and the fixture knowledge, with a client on it. `checked` holds
+    every reply to its documented schema (contract.py); `wiring` passes more of create_app's (a gateway)."""
     app = create_app(
         settings,
         model=scripted_model(),
         engine=engine,
-        checkpointer=InMemorySaver(),
+        checkpointer=checkpointer if checkpointer is not None else InMemorySaver(),
         graph_models=graph_models,
         knowledge=fixture_knowledge(),
+        **wiring,
     )
+    hooks = {"response": [response_checker(app)]} if checked else {}
     async with (
         app.router.lifespan_context(app),
-        AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-            event_hooks={"response": [response_checker(app)]},
-        ) as c,
+        AsyncClient(transport=ASGITransport(app=app), base_url=base_url, event_hooks=hooks) as c,
     ):
+        yield app, c
+
+
+@pytest.fixture
+async def client(graph_models: FakeGraphModels, database_url: str) -> AsyncIterator[AsyncClient]:
+    """The app on the PostgreSQL test database, on empty tables."""
+    settings = Settings(database_url=database_url, seed_dir=SEED)
+    async with empty_engine(database_url) as engine, started(engine, settings, graph_models, checked=True) as (_, c):
         yield c
 
 
