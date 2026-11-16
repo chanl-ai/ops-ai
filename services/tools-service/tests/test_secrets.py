@@ -153,10 +153,7 @@ async def test_every_create_rotate_delete_and_use_is_audited(keyed: Bank, engine
     await c.post("/v1/secrets/SPARE_KEY/rotate", json={"value": ROTATED})
     gone = await c.delete("/v1/secrets/SPARE_KEY")
     assert gone.status_code == 204
-    trail = [
-        (a["name"], a["action"], a["version"], a["tool"])
-        for a in await SecretStore(engine).audit(keyed.api.tenant, TEAM)
-    ]
+    trail = [(a.name, a.action, a.version, a.tool) for a in await SecretStore(engine).audit(keyed.api.tenant, TEAM)]
     assert trail == [
         ("BANK_KEY", "created", 1, None),
         ("BANK_KEY", "used", 1, f"echo_{keyed.api.tenant}"),

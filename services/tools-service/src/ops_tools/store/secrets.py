@@ -11,8 +11,10 @@ import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from ops_service_kit.http import Out
 from ops_store import Guarantee, background
 from ops_store.dialect import locked
+from ops_store.rows import rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.search import contains
 from ops_store.store import Store
@@ -78,7 +80,43 @@ secret_audit = sa.Table(
 
 # How long a secret's use and change rows are kept: the sweep deletes older ones, every tenant's, as the system role.
 AUDIT_KEPT_S = 90 * 86400.0
+
+
 # Why the sweep deletes across tenants: rows of every team pass their age on one clock.
+class SecretMeta(Out):
+    """A team secret as listed: everything but the value's reference."""
+
+    tenant_id: str
+    team_id: str
+    name: str
+    version: int
+    ends: str | None
+    created_by: str
+    created_at: datetime
+    rotated_at: datetime | None
+    last_used_at: datetime | None
+    template_id: str | None
+    protection: str | None
+    connection_id: str | None
+    credential_id: str | None
+
+
+class SecretChange(Out):
+    """One audit row: a secret created, rotated, renamed, deleted or used."""
+
+    id: int
+    tenant_id: str
+    team_id: str
+    name: str
+    action: str
+    version: int
+    actor: str
+    tool: str | None
+    at: datetime
+
+
+_META = [c for c in tool_secrets.c if c.name != "ciphertext"]
+
 AUDIT_RETENTION = "the retention sweep deletes every tenant's secret use rows past their age"
 
 
@@ -119,12 +157,11 @@ class SecretStore(Store):
     async def _audit(self, c: AsyncConnection, tenant_id: str, team_id: str, change: dict[str, Any]) -> None:
         await c.execute(secret_audit.insert().values(tenant_id=tenant_id, team_id=team_id, **change))
 
-    async def listed(self, tenant_id: str, team_id: str) -> list[dict[str, Any]]:
+    async def listed(self, tenant_id: str, team_id: str) -> list[SecretMeta]:
         """The team's secrets' metadata; the ciphertext is not selected."""
-        cols = [c for c in tool_secrets.c if c.name != "ciphertext"]
-        q = sa.select(*cols).where(_of(tenant_id, team_id)).order_by(tool_secrets.c.name)
+        q = sa.select(*_META).where(_of(tenant_id, team_id)).order_by(tool_secrets.c.name)
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, SecretMeta)
 
     async def page(
         self,
@@ -135,17 +172,16 @@ class SecretStore(Store):
         offset: int,
         limit: int,
         template_id: str | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[SecretMeta]:
         """One page of the team's secrets whose name contains `search`, by name, leaving out accounts' secret parts;
         the ciphertext is not selected, and LIMIT and OFFSET run in the query."""
-        cols = [c for c in tool_secrets.c if c.name != "ciphertext"]
         q = (
-            sa.select(*cols)
+            sa.select(*_META)
             .where(self._matching(tenant_id, team_id, search, template_id))
             .order_by(sa.func.lower(tool_secrets.c.name))
         )
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q.offset(offset).limit(limit))).mappings()]
+            return await rows(c, q.offset(offset).limit(limit), SecretMeta)
 
     async def count(self, tenant_id: str, team_id: str, search: str, template_id: str | None = None) -> int:
         q = (
@@ -316,8 +352,8 @@ class SecretStore(Store):
                 await self._audit(c, tenant_id, team_id, change)
         return found
 
-    async def audit(self, tenant_id: str, team_id: str) -> list[dict[str, Any]]:
+    async def audit(self, tenant_id: str, team_id: str) -> list[SecretChange]:
         mine = (secret_audit.c.tenant_id == tenant_id, secret_audit.c.team_id == team_id, team_visible(secret_audit))
         q = secret_audit.select().where(*mine).order_by(secret_audit.c.id)
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, SecretChange)

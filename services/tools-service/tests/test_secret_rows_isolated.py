@@ -49,7 +49,7 @@ async def test_another_team_finds_no_secret_through_the_store(engine: AsyncEngin
     with isolation.scope(tenant, TEAM_B):
         assert await store.listed(tenant, TEAM_A) == []
     with isolation.scope(tenant, TEAM_A):
-        assert [s["name"] for s in await store.listed(tenant, TEAM_A)] == ["DESK_KEY"]
+        assert [s.name for s in await store.listed(tenant, TEAM_A)] == ["DESK_KEY"]
 
 
 async def test_the_database_alone_hides_and_guards_them(engine: AsyncEngine, tenant: str) -> None:

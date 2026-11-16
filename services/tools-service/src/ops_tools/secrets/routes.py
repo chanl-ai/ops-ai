@@ -27,6 +27,7 @@ from ..callers import Person, person
 from ..executor import secret_names
 from ..store.connections import ConnectionStore
 from ..store.modules import ModuleStore
+from ..store.secrets import SecretMeta as StoredSecret
 from . import SecretResolver
 
 
@@ -133,30 +134,30 @@ def users_of(modules: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
 
 
 def _meta(
-    row: dict[str, Any], users: dict[str, list[dict[str, Any]]] | None = None, configs: dict[str, str] | None = None
+    row: StoredSecret, users: dict[str, list[dict[str, Any]]] | None = None, configs: dict[str, str] | None = None
 ) -> dict[str, Any]:
-    config = row.get("credential_id")
-    config_name = (configs or {}).get(str(config), str(config)) if config else None
+    config = row.credential_id
+    config_name = (configs or {}).get(config, config) if config else None
     out = {
-        "name": row["name"],
-        "version": row["version"],
-        "ends": row.get("ends"),
-        "createdBy": row["created_by"],
-        "createdAt": row["created_at"].isoformat(),
-        "usedBy": (users or {}).get(row["name"], []),
-        "teamId": row["team_id"],
-        "teams": [row["team_id"]],
-        "templateId": row.get("template_id"),
-        "protection": row.get("protection"),
-        "connectionId": row.get("connection_id"),
+        "name": row.name,
+        "version": row.version,
+        "ends": row.ends,
+        "createdBy": row.created_by,
+        "createdAt": row.created_at.isoformat(),
+        "usedBy": (users or {}).get(row.name, []),
+        "teamId": row.team_id,
+        "teams": [row.team_id],
+        "templateId": row.template_id,
+        "protection": row.protection,
+        "connectionId": row.connection_id,
         "credentialId": config,
-        "authConfig": {"id": str(config), "name": config_name} if config_name else None,
-        "readOnly": bool(config or row.get("connection_id")),
+        "authConfig": {"id": config, "name": config_name} if config_name else None,
+        "readOnly": bool(config or row.connection_id),
         "label": f"{config_name} client secret" if config_name else None,
     }
-    for key, col in (("rotatedAt", "rotated_at"), ("lastUsedAt", "last_used_at")):
-        if row.get(col):
-            out[key] = row[col].isoformat()
+    for key, at in (("rotatedAt", row.rotated_at), ("lastUsedAt", row.last_used_at)):
+        if at:
+            out[key] = at.isoformat()
     return out
 
 
@@ -214,8 +215,8 @@ def secrets_router(
         with acting_as(owner):
             return users_of(await modules.secret_readers(tenant_id))
 
-    async def _row(who: Person, owner: str, name: str) -> dict[str, Any]:
-        row = next((x for x in await store.listed(who.tenant_id, owner) if x["name"] == name), None)
+    async def _row(who: Person, owner: str, name: str) -> StoredSecret:
+        row = next((x for x in await store.listed(who.tenant_id, owner) if x.name == name), None)
         if row is None:
             raise NotFound(f"Secret {name}")
         return row
@@ -232,20 +233,20 @@ def secrets_router(
         configs = await _configs(who.tenant_id, owner)
         return _meta(await _row(who, owner, name), await _users(who.tenant_id, owner), configs)
 
-    async def _not_a_connection_part(who: Person, owner: str, row: dict[str, Any]) -> None:
+    async def _not_a_connection_part(who: Person, owner: str, row: StoredSecret) -> None:
         """A connection's secret part changes with the connection, which knows which environment and field it fills."""
-        if row.get("connection_id"):
+        if row.connection_id:
             raise Conflict(
-                f"{row['name']} belongs to a connection. Replace or remove it on that connection.",
+                f"{row.name} belongs to a connection. Replace or remove it on that connection.",
                 code="connection_secret",
-                details={"connectionId": row["connection_id"]},
+                details={"connectionId": row.connection_id},
             )
-        if row.get("credential_id"):
-            config = (await _configs(who.tenant_id, owner)).get(str(row["credential_id"]), str(row["credential_id"]))
+        if row.credential_id:
+            config = (await _configs(who.tenant_id, owner)).get(row.credential_id, row.credential_id)
             raise Conflict(
-                f"{row['name']} is the client secret of the auth config {config}. Change it on that auth config.",
+                f"{row.name} is the client secret of the auth config {config}. Change it on that auth config.",
                 code="credential_secret",
-                details={"credentialId": row["credential_id"], "authConfig": config},
+                details={"credentialId": row.credential_id, "authConfig": config},
             )
 
     @contextmanager
@@ -283,11 +284,7 @@ def secrets_router(
                 listed = await store.listed(who.tenant_id, owner)
                 configs = await _configs(who.tenant_id, owner)
                 return ok(
-                    [
-                        _meta(x, users, configs)
-                        for x in listed
-                        if template_id is None or x.get("template_id") == template_id
-                    ]
+                    [_meta(x, users, configs) for x in listed if template_id is None or x.template_id == template_id]
                 )
             total = await store.count(who.tenant_id, owner, search, template_id)
             page, offset = page_window(total, page, page_size)
@@ -345,7 +342,7 @@ def secrets_router(
         with _in(who, owner):
             row = await _row(who, owner, name)
             await _not_a_connection_part(who, owner, row)
-            _may_write(who, "edit", owner, row.get("protection"))
+            _may_write(who, "edit", owner, row.protection)
             if users := (await _users(who.tenant_id, owner)).get(name):
                 ops = ", ".join(u["operation"] for u in users)
                 raise Conflict(
@@ -369,7 +366,7 @@ def secrets_router(
         with _in(who, owner):
             row = await _row(who, owner, name)
             await _not_a_connection_part(who, owner, row)
-            _may_write(who, "delete", owner, row.get("protection"))
+            _may_write(who, "delete", owner, row.protection)
             # A secret an operation names, staged or published, is not deleted: the next call would fail SECRET_MISSING.
             if users := (await _users(who.tenant_id, owner)).get(name):
                 ops = ", ".join(u["operation"] for u in users)

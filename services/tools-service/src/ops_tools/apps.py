@@ -69,6 +69,7 @@ from .plugins.routes import PluginAccounts, TeamPluginIn, not_offered
 from .plugins.templates import view_of
 from .store.connections import DEFAULT_VALUE, FIXED_VALUE, PERSON_ORIGIN, name_key, plugin_app, plugin_of, split_config
 from .store.modules import ModuleStore
+from .store.secrets import SecretMeta
 from .store.team_defaults import TeamDefaults
 
 AccountState = Literal["connected", "not_signed_in", "expired", "refused", "revoked"]
@@ -845,7 +846,7 @@ class Apps:
         team_tokens = await store.team_tokens(who.tenant_id, ids)
         # The team's auth configs, each with whether its client secret is held, read once: an account signs in only
         # through one of these or Ops AI's app where the install has one.
-        held = {str(r["name"]) for r in await self.connections.secrets.store.listed(who.tenant_id, who.team.id)}
+        held = {r.name for r in await self.connections.secrets.store.listed(who.tenant_id, who.team.id)}
         creds = [
             {**c, "holds_secret": bool(c.get("secret_name")) and str(c["secret_name"]) in held}
             for c in await store.team_credentials(who.tenant_id, who.team.id)
@@ -1183,7 +1184,7 @@ async def _row(
     secret = await _secret_row(apps, who, cred)
     return {
         "teamId": str(cred["team_id"]) if own else who.team.id,
-        "secretEnds": (secret or {}).get("ends"),
+        "secretEnds": secret.ends if secret else None,
         "holdsSecret": secret is not None,
         "id": str(cred["id"]) if own else f"{OPS_AI}{card['id']}",
         "name": str(cred["name"]) if own else "Ops AI's app",
@@ -1206,15 +1207,15 @@ async def _row(
     }
 
 
-async def _secret_row(apps: Apps, who: Caller, cred: dict[str, Any] | None) -> dict[str, Any] | None:
+async def _secret_row(apps: Apps, who: Caller, cred: dict[str, Any] | None) -> SecretMeta | None:
     """The team secret holding a credential's client secret, as listed (never its value); None while it holds none."""
     if cred is None or not cred.get("secret_name"):
         return None
     name, team = str(cred["secret_name"]), str(cred["team_id"])
     rows = await apps.connections.secrets.store.listed(who.tenant_id, team)
-    row = next((r for r in rows if r["name"] == name), None)
-    if row is not None and row.get("ends") is None:
-        row = {**row, "ends": await apps.connections.secrets.ends_of(who.tenant_id, team, name)}
+    row = next((r for r in rows if r.name == name), None)
+    if row is not None and row.ends is None:
+        row = row.model_copy(update={"ends": await apps.connections.secrets.ends_of(who.tenant_id, team, name)})
     return row
 
 
@@ -2031,7 +2032,7 @@ async def _auth_configs(
                 "name": str(cred["name"]),
                 "type": "own",
                 "clientId": cred["client_id"] if may else None,
-                "secretEnds": (secret or {}).get("ends"),
+                "secretEnds": secret.ends if secret else None,
                 "canEdit": may,
                 "canDelete": may,
                 "fields": config_fields(apps, card, cred.get("settings"), cred.get("setting_modes")),

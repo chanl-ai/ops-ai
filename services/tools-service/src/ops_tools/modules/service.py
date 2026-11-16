@@ -425,7 +425,7 @@ class ModuleService:
         if self.secrets is None:
             return {}
         owners = sorted({str(m["team_id"]) for m in mods if m["team_id"]})
-        return {team: {str(r["name"]) for r in await self.secrets.store.listed(tenant_id, team)} for team in owners}
+        return {team: {r.name for r in await self.secrets.store.listed(tenant_id, team)} for team in owners}
 
     async def _as_team_sees(self, tenant_id: str, team_id: str, mods: list[Aggregate]) -> list[Aggregate]:
         """The modules with a plugin's module showing the team's own connection: the gateway signs a plugin

@@ -58,6 +58,7 @@ from ..store.connections import (
     plugin_of,
     verifier_context,
 )
+from ..store.secrets import SecretMeta
 from .account_events import connected_event
 from .records import status_of
 
@@ -300,12 +301,11 @@ class ConnectionService:
 
     # ── Views ─────────────────────────────────────────────────────────────
 
-    async def _secret_meta(self, tenant_id: str, team_id: str, names: list[str]) -> dict[str, dict[str, Any]]:
-        rows = {r["name"]: r for r in await self.secrets.store.listed(tenant_id, team_id) if r["name"] in names}
-        return rows
+    async def _secret_meta(self, tenant_id: str, team_id: str, names: list[str]) -> dict[str, SecretMeta]:
+        return {r.name: r for r in await self.secrets.store.listed(tenant_id, team_id) if r.name in names}
 
     def _keys(
-        self, kind: Kind, conn: dict[str, Any], meta: dict[str, dict[str, Any]], token: dict[str, Any] | None
+        self, kind: Kind, conn: dict[str, Any], meta: dict[str, SecretMeta], token: dict[str, Any] | None
     ) -> dict[str, Any]:
         """The account's settings, which secret parts are set (by whom and when, never a value), the team's sign-in and
         the signing certificate's view."""
@@ -315,7 +315,7 @@ class ConnectionService:
         for f in secret_fields:
             row = meta.get(named.get(f.name, ""))
             secrets[f.name] = (
-                {"set": True, "setBy": row["created_by"], "setAt": _iso(row.get("rotated_at") or row["created_at"])}
+                {"set": True, "setBy": row.created_by, "setAt": _iso(row.rotated_at or row.created_at)}
                 if row
                 else {"set": False}
             )
