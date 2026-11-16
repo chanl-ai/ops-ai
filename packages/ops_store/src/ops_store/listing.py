@@ -78,7 +78,9 @@ async def list_page(
     wanted = {key: filters[key].in_(values) for key, values in params.filters.items() if key in filters and values}
     listed = query.where(*chosen, *wanted.values())
 
-    total = int((await conn.execute(listed.with_only_columns(sa.func.count()).order_by(None))).scalar_one())
+    # The FROM is kept: a table only the columns named would drop with them and the count would be one row.
+    counting = listed.with_only_columns(sa.func.count(), maintain_column_froms=True).order_by(None)
+    total = int((await conn.execute(counting)).scalar_one())
     page, offset = page_window(total, params.page, params.page_size)
     by = sortable.get(params.sort_by or "")
     if by is not None:
@@ -93,7 +95,8 @@ async def list_page(
     counted: dict[str, dict[str, int]] = {}
     for name, column in facets.items():
         others = [clause for key, clause in wanted.items() if key != name]
-        q = query.where(*chosen, *others).with_only_columns(column, sa.func.count()).group_by(column).order_by(None)
+        q = query.where(*chosen, *others).with_only_columns(column, sa.func.count(), maintain_column_froms=True)
+        q = q.group_by(column).order_by(None)
         counted[name] = {str(value): int(n) for value, n in await conn.execute(q) if value is not None}
 
     named = {name: await _labels(conn, read, sorted(counted.get(name, {}))) for name, read in labels.items()}

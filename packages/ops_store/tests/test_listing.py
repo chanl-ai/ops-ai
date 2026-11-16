@@ -43,6 +43,13 @@ runs = sa.Table(
     sa.Column("at", sa.DateTime, nullable=False, info=LISTED),
     sa.Index("ix_store_test_list_runs_status", "status"),
 )
+# Keyed by name, as a model alias is: no `id` column.
+aliases = sa.Table(
+    "store_test_list_aliases",
+    meta,
+    sa.Column("name", sa.String(32), primary_key=True),
+    sa.Column("target", sa.String(32), nullable=False),
+)
 LIST = sa.select(runs.c.id, runs.c.title, runs.c.status, agents.c.name.label("agent")).join(
     agents, agents.c.id == runs.c.agent_id
 )
@@ -92,6 +99,7 @@ async def engine(request: pytest.FixtureRequest) -> AsyncIterator[AsyncEngine]:
             await c.execute(
                 agents.insert(), [{"id": "a_claims", "name": "Claims intake"}, {"id": "a_loans", "name": "Loan desk"}]
             )
+            await c.execute(aliases.insert(), [{"name": f"alias-{i}", "target": f"model-{i}"} for i in range(1, 6)])
         yield e
         async with e.begin() as c:
             await c.run_sync(meta.drop_all)
@@ -174,6 +182,20 @@ async def test_ids_answer_exactly_those_rows_whatever_the_search_says(engine: As
     async with engine.connect() as c:
         page = await list_page(c, LIST, ListParams(ids=["r04", "r09", "gone"], search="renewal"), **SHAPE)
     assert [r["id"] for r in page["data"]] == ["r04", "r09"] and page["pagination"]["total"] == 2
+
+
+async def test_a_list_with_no_filter_counts_every_row_whether_or_not_it_joins(engine: AsyncEngine) -> None:
+    """A count that keeps only the columns' FROM drops a table that only the columns named, so it counts one row."""
+    await seed(engine, 5)
+    joined = sa.select(runs.c.id).join(agents, agents.c.id == runs.c.agent_id)
+    async with engine.connect() as c:
+        alone = await list_page(
+            c, sa.select(aliases.c.name, aliases.c.target), ListParams(), default_sort=aliases.c.name
+        )
+        both = await list_page(c, joined, ListParams(), default_sort=runs.c.id, facets={"desk": agents.c.name})
+    assert (alone["pagination"]["total"], len(alone["data"])) == (5, 5)
+    assert (both["pagination"]["total"], len(both["data"])) == (5, 5)
+    assert both["facets"] == {"desk": {"Claims intake": 3, "Loan desk": 2}}
 
 
 async def test_rows_sharing_a_sort_value_appear_once_across_pages_ordered_by_primary_key(engine: AsyncEngine) -> None:
