@@ -13,13 +13,24 @@ from pathlib import Path
 from typing import Any, cast
 
 import httpx
+from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_identity.fastapi import DEV_TEAM
+from ops_kb.files import FilesServiceIntake
+
+from .conftest import kb_client
+from .files_fake import FakeFilesService
 from .pdfs import HARDSHIP, RATES, policy_pdf
+from .test_add_existing_files import stored
+from .test_readings import documents
 from .test_retrieval import agents
 from .test_sync import file_source, upload
 
 PINS = Path(__file__).parent / "fixtures" / "reply-pins.json"
+BODY_PINS = Path(__file__).parent / "fixtures" / "body-pins.json"
 _TIME = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(\+00:00|Z)?$")
+# A day such as a document's effective date, which is the day the test runs.
+_DATE = re.compile(r"^\d{4}-\d\d-\d\d$")
 # A generated id holds a digit, so a code such as validation_error is compared as itself.
 _ID = re.compile(r"^([a-z]+)_(?=[0-9a-z]*[0-9])[0-9a-z]{6,40}$")
 # Measured, so only their being numbers is compared.
@@ -46,6 +57,8 @@ def scrubbed(value: Any) -> Any:
         return items
     if isinstance(value, str) and (m := _TIME.match(value)):
         return f"<time{m.group(2) or ''}>"
+    if isinstance(value, str) and _DATE.match(value):
+        return "<date>"
     if isinstance(value, str) and (m := _ID.match(value)):
         return f"<{m.group(1)}>"
     return value
@@ -128,3 +141,72 @@ async def test_the_knowledge_routes_keep_every_key_value_and_error_object(
     seen["deleteBaseAgain"] = answer(await client.delete(f"/v1/knowledge-bases/{kb}"))
     seen["deleteSource"] = answer(await client.delete(f"/v1/sources/{sid}"))
     compare(seen, PINS)
+
+
+async def test_every_body_route_accepts_the_names_the_console_and_services_send(
+    engine: AsyncEngine, tenant: str
+) -> None:
+    """Each route that takes a body, sent its fields under the console's camelCase names (and the snake_case spelling
+    where a name has two words): a renamed or dropped name answers 422 instead of the pinned reply."""
+    fake = FakeFilesService()
+    files = fake.client()
+    seen: dict[str, Any] = {}
+    async with kb_client(engine, tenant, files=FilesServiceIntake(files)) as client:
+        fid = await stored(fake, files, tenant, "rates.pdf", RATES)
+        doc = await stored(fake, files, tenant, "hardship.pdf", HARDSHIP)
+        src = (await client.post("/v1/sources", json={"type": "file", "name": "Policies", "aiCeiling": 2.5})).json()
+        sid = src["data"]["id"]
+        base = {"name": "Lending", "owner": "maya@harborpine.example", "sourceIds": [sid], "templateId": "lending"}
+        seen["createBaseTemplate"] = answer(await client.post("/v1/knowledge-bases", json=base))
+        base = {**base, "sourceDefaults": {"size": 700}}
+        del base["templateId"]
+        kb = (await client.post("/v1/knowledge-bases", json=base)).json()["data"]["id"]
+        spare = (await client.post("/v1/sources", json={"type": "file", "name": "Spare"})).json()["data"]["id"]
+        mapping: list[object] = []
+        sent: dict[str, tuple[str, str, dict[str, object]]] = {
+            "patchBase": ("PATCH", f"/v1/knowledge-bases/{kb}", {"sourceDefaults": {"size": 900}, "templateId": "x"}),
+            "patchBaseSnake": ("PATCH", f"/v1/knowledge-bases/{kb}", {"source_defaults": {"size": 800}}),
+            "attach": ("POST", f"/v1/knowledge-bases/{kb}/sources", {"sourceIds": [spare]}),
+            "attachSnake": ("POST", f"/v1/knowledge-bases/{kb}/sources", {"source_ids": [spare]}),
+            "addFiles": ("POST", f"/v1/sources/{sid}/files", {"fileIds": [fid]}),
+            "addFilesSnake": ("POST", f"/v1/sources/{sid}/files", {"file_ids": [fid]}),
+            "addDocuments": ("POST", f"/v1/knowledge-bases/{kb}/documents", {"fileIds": [doc]}),
+            "sync": ("POST", f"/v1/sources/{sid}/sync", {"full": True, "retry": False}),
+            "queryCollection": ("POST", f"/v1/knowledge-bases/{kb}/query", {"question": "fee", "collection": "x"}),
+            "patchSource": ("PATCH", f"/v1/sources/{sid}", {"aiCeiling": 3.0, "metadataMapping": mapping}),
+            "patchSourceSnake": ("PATCH", f"/v1/sources/{sid}", {"ai_ceiling": 4.0, "metadata_mapping": mapping}),
+            "createSource": ("POST", "/v1/sources", {"type": "file", "name": "More", "kbIds": [kb], "fileIds": []}),
+            "createSourceSnake": ("POST", "/v1/sources", {"type": "file", "name": "Most", "kb_ids": [kb]}),
+            "preview": ("POST", "/v1/sources/preview", {"config": {"plugin": "opsai.nothing", "source": "pages"}}),
+            "scopes": ("POST", "/v1/sources/scopes", {"plugin": "opsai.nothing", "source": "sites", "query": "x"}),
+            "liftTombstones": ("POST", f"/v1/sources/{sid}/tombstones/lift", {"ids": ["item_missing1"]}),
+            "aiApproval": ("POST", f"/v1/sources/{sid}/ai-approval", {"decision": "approve"}),
+            "decide": ("POST", "/v1/knowledge-changes/decide", {"ids": ["chg_missing1"], "decision": "reject"}),
+            "editChange": ("PATCH", "/v1/knowledge-changes/chg_missing1", {"question": "Q?", "answer": "A."}),
+        }
+        for key, (method, path, body) in sent.items():
+            seen[key] = answer(await client.request(method, path, json=body))
+    event = {"name": "reading.failed", "key": "evt_1", "teamId": DEV_TEAM, "payload": {"fileId": "fil_missing1"}}
+    async with kb_client(engine, tenant) as client:
+        page = {"title": "Fees", "text": "No fee to defer."}
+        seen["addPage"] = answer(await client.post(f"/v1/knowledge-bases/{kb}/pages", json=page))
+        push = (await client.post("/v1/sources", json={"type": "push", "name": "Rules", "kbIds": [kb]})).json()
+        item = {
+            "name": "fees",
+            "title": "Fees",
+            "text": "# Fees",
+            "mime": "text/markdown",
+            "url": "https://x.example/f",
+        }
+        written = await client.post(f"/v1/sources/{push['data']['id']}/items", json=item)
+        seen["putItem"] = answer(written)
+        iid = written.json()["data"]["item"]["id"]
+        seen["verifyItem"] = answer(await client.post(f"/v1/items/{iid}/verify", json={"verified": True}))
+        owner = {"owner": "maya@harborpine.example"}
+        seen["itemOwner"] = answer(await client.put(f"/v1/items/{iid}/owner", json=owner))
+        # The event route is a service's: documents-service reports a reading under these names.
+        seen["event"] = answer(await client.post("/v1/events", json=event, headers=documents(tenant)))
+        snake = {**event, "team_id": DEV_TEAM, "key": "evt_2"}
+        del snake["teamId"]
+        seen["eventSnake"] = answer(await client.post("/v1/events", json=snake, headers=documents(tenant)))
+    compare(seen, BODY_PINS)
