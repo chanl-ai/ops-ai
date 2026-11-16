@@ -149,6 +149,33 @@ async def test_tool_module_and_tool_replies(bank: Bank) -> None:
     pins.check()
 
 
+async def test_tool_module_list_and_grant_replies(bank: Bank) -> None:
+    """The two lists of the tool-modules page as they page, sort, filter and refuse, before they page in SQL."""
+    api = bank.api
+    pins = Pins("tool_module_lists", api.tenant)
+    for name, params in (
+        ("list failing", {"view": "failing"}),
+        ("list needs approval page 2", {"view": "needs_approval", "pageSize": 2, "page": 2}),
+        ("list by name asc", {"sortBy": "name", "sortOrder": "asc", "pageSize": 4}),
+        ("list by operations desc", {"sortBy": "operationCount", "sortOrder": "desc", "pageSize": 4}),
+        ("list searched", {"search": "bank"}),
+        ("list code writes", {"type": "code", "access": "write"}),
+        ("list approval state", {"approvalState": "expiring"}),
+        ("list past the end", {"page": 99, "pageSize": 5}),
+        ("list unknown view", {"view": "nothing"}),
+        ("list page too big", {"pageSize": 500}),
+    ):
+        pins.reply(name, await api.call("GET", "", params=params))
+    grants = "/v1/tool-modules/grants"
+    pins.reply("grants", await api.client.get(grants))
+    pins.reply("grants expired", await api.client.get(grants, params={"view": "expired"}))
+    pins.reply("grants page 2", await api.client.get(grants, params={"pageSize": 1, "page": 2}))
+    pins.reply("grants past the end", await api.client.get(grants, params={"pageSize": 2, "page": 99}))
+    pins.reply("grants searched", await api.client.get(grants, params={"search": "dispute"}))
+    pins.reply("grants unknown view", await api.client.get(grants, params={"view": "nothing"}))
+    pins.check()
+
+
 async def test_app_and_account_replies(bank: Bank) -> None:
     api = bank.api
     pins = Pins("apps_and_accounts", api.tenant)
