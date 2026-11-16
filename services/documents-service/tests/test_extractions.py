@@ -25,6 +25,7 @@ from ops_documents.store.extractions import service_outbox
 from ops_extract.floor import FloorUnreadError
 from ops_files_client import FilesRefused
 from ops_identity import dev_service_signer, mint_service_token
+from ops_store import background
 
 from .conftest import OPS, Make
 
@@ -344,3 +345,28 @@ async def test_a_queued_read_cut_off_at_shutdown_during_the_model_call_finishes_
         await restarted.extractor.drain()
         body = (await c.get(f"/v1/documents/extractions/{queued['id']}", headers=OPS)).json()["data"]
     assert body["status"] == "done", body
+
+
+async def test_a_queued_read_whose_task_cannot_start_is_settled_and_drain_returns(make: Make, monkeypatch: Any) -> None:
+    """The background task is refused: drain still returns (it waited forever on a read that never started), and the
+    row is failed, so a retry with the same key queues it again rather than answering 202 with nothing running."""
+    monkeypatch.setattr(extraction, "SYNC_BYTES", 10)  # every file is large: queued, run as a task
+    s = make(Models(), Floor())
+    real_start = background.start
+
+    async def refused(coro: Any, *, key: str, **kwargs: Any) -> None:
+        coro.close()
+        raise OSError("the task could not start")
+
+    async with s.client as c:
+        fid = await s.stored(NOTICE)
+        key = {**OPS, "Idempotency-Key": "run_1:read:unstarted"}
+        monkeypatch.setattr(background, "start", refused)
+        first = await extract(c, fid, headers=key)
+        await asyncio.wait_for(s.extractor.drain(), 5)
+        monkeypatch.setattr(background, "start", real_start)
+        again = (await extract(c, fid, headers=key)).json()["data"]
+        await s.extractor.drain()
+        body = (await c.get(f"/v1/documents/extractions/{again['id']}", headers=OPS)).json()["data"]
+    assert first.status_code >= 500, first.text
+    assert again["status"] == "queued" and body["status"] == "done", (again, body)

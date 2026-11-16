@@ -808,8 +808,14 @@ class Extractor:
         await self._pending.none()
 
     async def _later(self, row: ExtractionRow) -> None:
+        # Counted before the start, as the task may finish first; uncounted when it never starts, or drain would wait
+        # on it forever.
         self._pending.add()
-        await background.start(self._background(row), key=READING_PROCESS)
+        try:
+            await background.start(self._background(row), key=READING_PROCESS)
+        except BaseException:
+            self._pending.done()
+            raise
 
     async def _background(self, row: ExtractionRow) -> None:
         """The read as the extraction's own tenant and team: a restart picks reads up with no request behind them. It
