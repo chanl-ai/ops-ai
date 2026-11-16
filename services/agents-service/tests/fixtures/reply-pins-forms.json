@@ -195,6 +195,18 @@
     },
     "status": 404
   },
+  "public.otherTenant": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Form was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
   "public.rotated": {
     "body": {
       "error": {

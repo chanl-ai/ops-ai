@@ -58,6 +58,13 @@ def source_of(form_id: str) -> str:
     return f"form:{form_id}"
 
 
+def _mine(f: sa.Table) -> sa.ColumnElement[bool]:
+    """The acting tenant's rows the acting team may see. The tenant is named here and not left to the row policy: a
+    link's token names its tenant, and a database without row policies (SQLite) would otherwise open another
+    tenant's form that has the same id."""
+    return sa.and_(f.c.tenant_id == current_tenant(), team_visible(f))
+
+
 class FormLinks:
     requires: ClassVar[frozenset[Guarantee]] = frozenset()
 
@@ -101,26 +108,26 @@ class FormLinks:
     async def get(self, form_id: str) -> dict[str, Any] | None:
         f = form_links
         async with tenant_tx(self.engine) as c:
-            found = (await c.execute(sa.select(f).where(f.c.id == form_id, team_visible(f)))).mappings().first()
+            found = (await c.execute(sa.select(f).where(_mine(f), f.c.id == form_id))).mappings().first()
         return dict(found) if found is not None else None
 
     async def by_slug(self, slug: str) -> dict[str, Any] | None:
         """The form at `slug` among the acting team's forms (a members-only page, read as a signed-in person)."""
         f = form_links
         async with tenant_tx(self.engine) as c:
-            found = (await c.execute(sa.select(f).where(f.c.slug == slug, team_visible(f)))).mappings().first()
+            found = (await c.execute(sa.select(f).where(_mine(f), f.c.slug == slug))).mappings().first()
         return dict(found) if found is not None else None
 
     async def of_workflow(self, workflow_id: str) -> list[dict[str, Any]]:
         f = form_links
-        q = sa.select(f).where(f.c.workflow_id == workflow_id, team_visible(f)).order_by(f.c.created_at.desc())
+        q = sa.select(f).where(_mine(f), f.c.workflow_id == workflow_id).order_by(f.c.created_at.desc(), f.c.id)
         async with tenant_tx(self.engine) as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def update(self, form_id: str, **values: Any) -> dict[str, Any] | None:
         f = form_links
         async with tenant_tx(self.engine) as c:
-            await c.execute(f.update().where(f.c.id == form_id, team_visible(f)).values(**values))
+            await c.execute(f.update().where(_mine(f), f.c.id == form_id).values(**values))
         return await self.get(form_id)
 
     async def titles(self, form_ids: set[str]) -> dict[str, str]:
@@ -128,7 +135,7 @@ class FormLinks:
         if not form_ids:
             return {}
         f = form_links
-        q = sa.select(f.c.id, f.c.title).where(f.c.id.in_(form_ids), team_visible(f))
+        q = sa.select(f.c.id, f.c.title).where(_mine(f), f.c.id.in_(form_ids))
         async with tenant_tx(self.engine) as c:
             return {str(i): str(t) for i, t in (await c.execute(q)).all()}
 

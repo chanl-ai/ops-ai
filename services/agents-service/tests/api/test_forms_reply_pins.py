@@ -49,6 +49,10 @@ async def test_the_form_routes_keep_every_key_value_and_error_object(stack: Stac
     seen["public"] = _seen(await c.get(public, params={"t": token}))
     seen["public.notOurs"] = _seen(await c.get(public, params={"t": "not-a-token"}))
     seen["public.otherSlug"] = _seen(await c.get("/v1/forms/public/another-form", params={"t": token}))
+    # The same team, form id and secret under another tenant's name: the form is not that tenant's.
+    _, team, form_id, secret = token.rsplit(".", 3)
+    elsewhere = f"fk.tenant_elsewhere.{team}.{form_id}.{secret}"
+    seen["public.otherTenant"] = _seen(await c.get(public, params={"t": elsewhere}))
     seen["submit"] = _seen(await c.post(f"{public}/submit", params={"t": token}, json={"values": VALUES}))
     seen["submit.stray"] = _seen(
         await c.post(f"{public}/submit", params={"t": token}, json={"values": VALUES, "extra": 1})
