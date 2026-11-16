@@ -21,6 +21,7 @@ from ops_store import Guarantee, background, isolation
 from ops_store.dialect import insert_ignore
 from ops_store.listing import list_page
 from ops_store.rows import rows
+from ops_store.search import contains
 from ops_store.store import Store
 
 from .provider_keys import ROLE
@@ -237,11 +238,16 @@ class CallLog(Store):
         thread_id: str | None = None,
     ) -> CallList:
         """One page of the tenant's matching calls on the shared list contract, newest first, and per key the number
-        of all matching calls and their cost, read in one transaction so the totals count the rows the page counts."""
+        of all matching calls and their cost, read in one transaction so the totals count the rows the page counts.
+        `search` matches the key, the alias or the outcome; `ids` names exact rows whatever the search says."""
         given = {"key_id": key_id, "alias": alias, "outcome": outcome, "thread_id": thread_id}
         where = [t.c[name] == value for name, value in given.items() if value]
+        words = (params.search or "").strip()
         if params.ids is not None:
             where.append(t.c.id.in_(params.ids))
+        elif words:
+            # Here rather than list_page's `search`, so the key totals count the same rows as the page.
+            where.append(sa.or_(*(contains(c, words) for c in (t.c.key_id, t.c.alias, t.c.outcome))))
         totals = (
             sa.select(
                 t.c.key_id,
@@ -254,7 +260,11 @@ class CallLog(Store):
         query = sa.select(*LISTED).where(*where)
         async with self.tx() as c:
             page = await list_page(
-                c, query, params, sortable={"createdAt": t.c.created_at}, default_sort=t.c.created_at.desc()
+                c,
+                query,
+                params,
+                sortable={"createdAt": t.c.created_at},
+                default_sort=t.c.created_at.desc(),
             )
             by_key = await rows(c, totals, KeyTotal)
         return CallList.model_validate({**page, "by_key": by_key})

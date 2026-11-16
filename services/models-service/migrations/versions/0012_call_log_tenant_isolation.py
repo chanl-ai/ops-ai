@@ -149,6 +149,9 @@ def upgrade() -> None:
     )
     # Every read of the log names the tenant (the policy adds it) and the page sorts newest first.
     op.create_index("ix_model_call_log_tenant_created", "model_call_log", ["tenant_id", "created_at"])
+    # The call list is searched and filtered on its alias and outcome.
+    op.create_index("ix_model_call_log_alias", "model_call_log", ["alias"])
+    op.create_index("ix_model_call_log_outcome", "model_call_log", ["outcome"])
     if dialect not in ("postgresql", "mssql"):
         return
     if dialect == "postgresql":
@@ -176,6 +179,8 @@ def downgrade() -> None:
     if dialect in ("postgresql", "mssql"):
         for statement in move_sql("model_calls_untenanted", "model_call_log", "1 = 1"):
             op.execute(statement)
+    op.drop_index("ix_model_call_log_outcome", table_name="model_call_log")
+    op.drop_index("ix_model_call_log_alias", table_name="model_call_log")
     op.drop_index("ix_model_call_log_tenant_created", table_name="model_call_log")
     op.drop_table("model_key_spend")
     op.drop_index("ix_model_calls_untenanted_created_at", table_name="model_calls_untenanted")

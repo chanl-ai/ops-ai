@@ -154,6 +154,9 @@ model_call_log = sa.Table(
     sa.Index("ix_model_call_log_key_run", "key_id", "run_id"),
     # Every read names the tenant (the policy adds it) and the page sorts newest first.
     sa.Index("ix_model_call_log_tenant_created", "tenant_id", "created_at"),
+    # The call list is searched and filtered on its alias and outcome (`CallLog.page`).
+    sa.Index("ix_model_call_log_alias", "alias"),
+    sa.Index("ix_model_call_log_outcome", "outcome"),
     # Held to its tenant by the database: written and read only as ROLE in that tenant (models_0012). A key's caps
     # are read from model_key_spend, never from here.
     info=TENANT_SCOPED,

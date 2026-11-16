@@ -117,3 +117,24 @@ async def test_pages_hold_every_call_once_and_the_key_totals_count_every_page(mo
     picked = await _list(models, tenant, ids=[seeded[3]["id"]])
     assert [r["id"] for r in picked["data"]] == [seeded[3]["id"]]
     assert picked["byKey"] == [{"keyId": key_b, "calls": 1, "cost": "0.050000"}]
+
+
+async def test_a_search_matches_the_key_alias_or_outcome_and_the_key_totals_count_only_matches(models: Models) -> None:
+    run = uuid4().hex[:8]
+    key_a, key_b, tenant = f"workflow:find-a-{run}", f"workflow:find-b-{run}", f"t_find_{run}"
+    await _seed(
+        models,
+        tenant,
+        [
+            _row(0, key_a, tenant),
+            _row(1, key_b, tenant, alias=f"extract-{run}"),
+            _row(2, key_b, tenant, outcome="denied"),
+        ],
+    )
+    by_key = await _list(models, tenant, search=f"FIND-A-{run}")
+    assert [r["keyId"] for r in by_key["data"]] == [key_a], by_key
+    assert [(k["keyId"], k["calls"]) for k in by_key["byKey"]] == [(key_a, 1)], "the totals counted calls not listed"
+    by_alias = await _list(models, tenant, search=f"extract-{run}")
+    assert [r["alias"] for r in by_alias["data"]] == [f"extract-{run}"], by_alias
+    by_outcome = await _list(models, tenant, search="denied")
+    assert [(r["keyId"], r["outcome"]) for r in by_outcome["data"]] == [(key_b, "denied")], by_outcome

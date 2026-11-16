@@ -78,11 +78,15 @@ CREATE TABLE model_call_log (
 	CONSTRAINT model_call_log_pkey PRIMARY KEY (id)
 );
 GO
+CREATE INDEX ix_model_call_log_alias ON model_call_log (alias);
+GO
 CREATE INDEX ix_model_call_log_created_at ON model_call_log (created_at);
 GO
 CREATE INDEX ix_model_call_log_key_id ON model_call_log (key_id);
 GO
 CREATE INDEX ix_model_call_log_key_run ON model_call_log (key_id, run_id);
+GO
+CREATE INDEX ix_model_call_log_outcome ON model_call_log (outcome);
 GO
 CREATE INDEX ix_model_call_log_tenant_created ON model_call_log (tenant_id, created_at);
 GO
