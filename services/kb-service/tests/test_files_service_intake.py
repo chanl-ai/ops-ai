@@ -4,16 +4,20 @@ says what failed. Adding files by id: test_add_existing_files.py."""
 
 from __future__ import annotations
 
+import asyncio
+import time
 from pathlib import Path
 
+from pydantic import HttpUrl
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_kb.__main__ import move_to_files_service
+from ops_kb.__main__ import move_to_files_service, wait_for_files
 from ops_kb.agents import StaticAgents
 from ops_kb.files import FilesServiceIntake, KnowledgeFiles
 from ops_kb.search import HybridRetriever
 from ops_kb.service import KnowledgeService
 from ops_kb.store import KnowledgeStore
+from ops_service_kit.settings import FilesEndpoint, Settings
 
 from .conftest import kb_client
 from .files_fake import FakeFilesService
@@ -111,3 +115,23 @@ async def test_an_item_written_before_its_scan_is_refused_as_not_ready_then_read
         assert (early.status_code, early.json()["error"]["code"]) == (409, "file_not_ready"), early.text
         await scanned()
         assert data(await client.post(f"/v1/knowledge-bases/{kb['id']}/pages", json=page), 201)["title"] == "Vault"
+
+
+async def test_start_up_waits_for_files_service_about_its_setting_not_a_probe_timeout_per_try() -> None:
+    """files-service accepting connections and never answering: each probe gives up after the probe timeout, so the
+    start-up wait ends near `ready_wait_s` rather than after tries of the files endpoint's 30 s."""
+
+    async def hold(_r: asyncio.StreamReader, _w: asyncio.StreamWriter) -> None:
+        await asyncio.sleep(60)
+
+    server = await asyncio.start_server(hold, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    settings = Settings(
+        files=FilesEndpoint(url=HttpUrl(f"http://127.0.0.1:{port}")), ready_wait_s=0.6, ready_probe_s=0.2
+    )
+    started = time.monotonic()
+    try:
+        await asyncio.wait_for(wait_for_files(settings), 5)
+    finally:
+        server.close()
+    assert time.monotonic() - started < 2

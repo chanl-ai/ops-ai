@@ -134,6 +134,10 @@ class Settings(BaseSettings):
     # How long a stopping process waits for its background loops to finish their pass. Below the smallest grace the
     # platform gives a stopping process (deploy/fly kill_timeout, processes.toml grace_seconds), or the pass is killed.
     stop_wait_s: float = Field(default=15.0, gt=0)
+    # How long a starting process waits for a service it needs at start (kb-service's seed uploads through
+    # files-service), and how long each probe of it may take: a short probe keeps the whole wait near ready_wait_s.
+    ready_wait_s: float = Field(default=60.0, gt=0)
+    ready_probe_s: float = Field(default=2.0, gt=0)
     # Each service this process calls. None: this install does not run that service, or this process does not call it.
     # A process names the ones it cannot run without in `require`, first thing in its __main__.
     agents: Endpoint | None = None

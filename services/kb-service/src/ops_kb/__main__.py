@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 
 import httpx
@@ -46,7 +47,7 @@ async def _seed(settings: Settings) -> None:
         ocr=settings.kb_ocr,
     )
     try:
-        await _files_ready(settings)
+        await wait_for_files(settings)
         if settings.files is not None:
             await move_to_files_service(service, KnowledgeFiles(settings.kb_files_dir))
         with isolation.tenant_wide(DEMO_SEED, tenant_id=TENANT):
@@ -73,19 +74,22 @@ async def move_to_files_service(
                     log.info("kb_files_moved_to_files_service", source=s.id, files=len(moved))
 
 
-async def _files_ready(settings: Settings) -> None:
-    """The stack starts files-service just before kb-service; the seed uploads through it, so wait up to a minute."""
+async def wait_for_files(settings: Settings) -> None:
+    """The stack starts files-service just before kb-service; the seed uploads through it, so wait up to
+    `ready_wait_s`. Each probe gives up after `ready_probe_s`, not the files endpoint's upload timeout, so a
+    files-service that accepts and never answers cannot stretch the wait to many times that."""
     if settings.files is None:
         return
     files = ServiceClient.for_settings(settings, service="kb", audience="files")
+    deadline = time.monotonic() + settings.ready_wait_s
     try:
-        for _ in range(60):
+        while time.monotonic() < deadline:
             try:
-                if (await files.http.get("/health")).status_code == 200:
+                if (await files.http.get("/health", timeout=settings.ready_probe_s)).status_code == 200:
                     return
             except httpx.HTTPError:
                 pass
-            await asyncio.sleep(1)
+            await asyncio.sleep(max(0.0, min(settings.ready_probe_s, deadline - time.monotonic())))
     finally:
         await files.aclose()
     log.warning("files_service_not_ready", url=settings.files.base)
