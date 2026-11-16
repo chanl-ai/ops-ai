@@ -209,18 +209,18 @@ class GraphStore(RuntimeStore):
 
     async def versions(self, name: str) -> list[dict[str, Any]]:
         q = graph_versions.select().where(graph_versions.c.name == name).order_by(graph_versions.c.version)
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def version(self, name: str, version: int) -> dict[str, Any] | None:
         q = graph_versions.select().where(graph_versions.c.name == name, graph_versions.c.version == version)
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             row = (await c.execute(q)).mappings().first()
         return dict(row) if row else None
 
     async def publish(self, name: str, definition: dict[str, Any], digest: str, now: str) -> int:
         """Stores the next version of a workflow; a definition already stored under its digest returns that version."""
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             same = (
                 await c.execute(sa.select(graph_versions.c.version).where(graph_versions.c.digest == digest))
             ).first()
@@ -466,7 +466,7 @@ class GraphStore(RuntimeStore):
     async def latest_versions(self) -> dict[str, int]:
         """Every published definition's name and its highest version."""
         q = sa.select(graph_versions.c.name, sa.func.max(graph_versions.c.version)).group_by(graph_versions.c.name)
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             return {str(r[0]): int(r[1]) for r in await c.execute(q)}
 
     async def run_summaries(self, only: str | None = None) -> dict[str, list[dict[str, Any]]]:
