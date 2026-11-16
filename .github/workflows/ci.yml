@@ -302,12 +302,35 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
+      - name: The base revision's copies of the gate
+        # The scripts, the make list and the ratchet tests below decide whether a rise passes, and this pull request
+        # may have edited them to say it does. They are replaced here by the base's own files, so what judges the pull
+        # request is what was already merged. An edit to any of them is itself a rise (scripts/baseline_history.py
+        # PROTECTED), and this workflow file is the root of that trust: protect it with a code owner rule on .github/.
+        # The pull request that adds the gate has no base copy: its own run, with a warning, and the owner's review by hand.
+        env:
+          TRUSTED: >-
+            scripts/check_review_approval.py scripts/baseline_history.py scripts/check_access_exceptions.py
+            scripts/check_portable_store.py scripts/check_config_literals.py scripts/check_typed_boundaries.py
+            scripts/keep_going.sh make/checks.mk Makefile
+            packages/ops_store/tests/test_isolation_sites.py packages/ops_store/tests/test_relay_sites.py
+            packages/ops_store/tests/test_loop_health.py deploy/database/tests/test_indexes.py
+        run: |
+          if ! git cat-file -e "$BASE_SHA:scripts/check_review_approval.py" 2>/dev/null; then
+            echo "::warning title=Gate added here::The base has no maintainer-review gate, so this pull request's own copies run; its review is the owner's, by hand."
+            exit 0
+          fi
+          for f in $TRUSTED; do
+            if git cat-file -e "$BASE_SHA:$f" 2>/dev/null; then git show "$BASE_SHA:$f" > "$f"; fi
+          done
+          echo "gate files taken from $BASE_SHA"
       - name: A rise needs a maintainer's approval
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          review=$(uv run python scripts/check_review_approval.py --repo "$GITHUB_REPOSITORY" --pr "$PR" --base "$BASE_SHA")
+          review=$(uv run python scripts/check_review_approval.py --repo "$GITHUB_REPOSITORY" --pr "$PR" --base "$BASE_SHA" --head "$HEAD_SHA")
           echo "maintainer review: $review"
           OPS_STANDARDS_BASE=$(git merge-base "$BASE_SHA" HEAD) OPS_STANDARDS_REVIEW="$review" make -s checks-history
 

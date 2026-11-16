@@ -109,3 +109,17 @@ def test_a_rise_made_inside_a_merge_commit_is_found_from_the_net_effect_of_the_b
     assert any("raw b.py (0 -> 1)" in p for p in found), found
     monkeypatch.setenv(h.REVIEW_ENV, "approved")
     assert h.problems(tmp_path, began, ["sites"]) == []
+
+
+def test_an_edit_to_the_gate_itself_is_a_rise_whatever_it_says(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The scripts that decide, the make list that runs them and the workflow that calls them: an edit to one of them
+    could make every other rise pass, so it needs the review too, as a commit and as the branch's net effect."""
+    began = _repo(tmp_path)
+    monkeypatch.setenv(h.REVIEW_ENV, "required")
+    assert h.problems(tmp_path, began, ["sites"]) == []
+    for path in h.PROTECTED:
+        (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / path).write_text("print('approved')\n")
+        _git(tmp_path, "add", ".")
+        _git(tmp_path, "commit", "-qm", f"edit {path}")
+        assert any(path in p for p in h.problems(tmp_path, began, ["sites"])), path

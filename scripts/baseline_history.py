@@ -147,12 +147,41 @@ def awaiting_review(rises: list[str]) -> list[str]:
     return []
 
 
+# The files that decide whether a rise passes: an edit to one could make every other rise pass, so an edit is a rise.
+# CI also runs the base revision's copies of these (the maintainer-review job), so an edit here never judges itself.
+PROTECTED = (
+    ".github/workflows/ci.yml",
+    "make/checks.mk",
+    "scripts/baseline_history.py",
+    "scripts/check_review_approval.py",
+)
+
+
 def list_rises(root: Path, began: str) -> list[str]:
-    """Commits that edit the maintainers file after its first: the list is a baseline too, and a login added to it is
-    a rise a listed maintainer's review approves."""
+    """Commits that edit the maintainers file after its first (the list is a baseline too, and a login added to it is
+    a rise a listed maintainer's review approves), and any edit to a file that decides rises (PROTECTED), one by one
+    and as the net effect of the branch, so a merge commit's own edit is seen too."""
+    out: list[str] = []
+    seen: set[str] = set()
     shas = _git(root, "log", "--format=%H", f"{began}..HEAD", "--", MAINTAINERS).stdout.split()
     first = _git(root, "log", "--format=%H", "--", MAINTAINERS).stdout.split()[-1:]
-    return [f"{sha[:8]} edits {MAINTAINERS}" for sha in shas if sha not in first]
+    for sha in shas:
+        if sha not in first:
+            out.append(f"{sha[:8]} edits {MAINTAINERS}")
+            seen.add(MAINTAINERS)
+    for sha in reversed(_git(root, "log", "--format=%H", f"{began}..HEAD", "--", *PROTECTED).stdout.split()):
+        for name in _git(
+            root, "diff-tree", "--no-commit-id", "--name-only", "-r", sha, "--", *PROTECTED
+        ).stdout.split():
+            out.append(f"{sha[:8]} edits {name}")
+            seen.add(name)
+    base = _git(root, "merge-base", began, "HEAD").stdout.strip() or began
+    head = _git(root, "rev-parse", "HEAD").stdout.strip()
+    for name in _git(root, "diff", "--name-only", base, "HEAD", "--", MAINTAINERS, *PROTECTED).stdout.split():
+        if name in seen or (name == MAINTAINERS and not has_maintainers(root, base)):
+            continue
+        out.append(f"{head[:8]} edits {name} (net of the branch)")
+    return out
 
 
 def rises(root: Path, began: str, pathspecs: list[str], parse: Parse = rows) -> list[str]:
