@@ -17,7 +17,6 @@
 1 reply agents_get_skill
 1 reply agents_get_tool
 1 reply agents_get_widget
-1 body agents_give_assistant_app_tools
 1 reply agents_list_agents
 1 reply agents_list_tools
 1 reply agents_list_widgets
@@ -52,8 +51,6 @@
 1 body assurance_save_skill_cases
 1 reply assurance_save_skill_cases
 1 reply assurance_skill_cases
-1 body auth_sso_step_up
-1 body auth_step_up
 1 reply batches_batch_page
 1 body batches_start_batch
 1 reply batches_start_batch
@@ -343,8 +340,6 @@
 1 body threads_migrate
 1 body threads_post_inbox
 1 reply threads_reattach
-1 body threads_route_one
-1 body threads_route_version
 1 body threads_stream_run
 1 reply threads_stream_run
 1 reply threads_team_stream

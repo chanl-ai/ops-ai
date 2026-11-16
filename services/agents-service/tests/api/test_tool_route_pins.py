@@ -96,6 +96,8 @@ CHECKOUTS: list[tuple[str, str, dict[str, Any] | None, int]] = [
     ("GET", "/v1/tools?pageSize=3", None, 22),
     ("GET", "/v1/tools/options?limit=3", None, 5),
     ("GET", "/v1/tools/place_wire_hold", None, 22),
+    ("POST", STEP_UP, {"password": DEV_PASSWORD, "code": DEV_TOTP}, 0),
+    ("POST", f"{STEP_UP}/sso", {"code": base64.b64encode(DEV.encode()).decode()}, 0),
 ]
 
 

@@ -1,5 +1,7 @@
 """Step-up in dev auth mode: the console's "Confirm it is you" re-authenticates here and gets a signed step-up token
-for the calling person, which money decisions then verify (ops_policy.step_up)."""
+for the calling person, which money decisions then verify (ops_policy.step_up).
+
+Neither route reads or writes this service's rows, so neither takes the request transaction (`Tx`)."""
 
 from __future__ import annotations
 
@@ -12,10 +14,9 @@ from urllib.parse import unquote
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
-from ops_contracts.chat import WireModel
 from ops_policy import STEP_UP_TTL_S, mint_step_up
 from ops_service_kit.errors import Unauthorized
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, In
 
 from ..auth import DEV_PASSWORD, DEV_TOTP, Principal, principal, step_up_signer
 from ..deps import Runtime, runtime
@@ -27,12 +28,12 @@ Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI re
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 
 
-class StepUpInput(WireModel):
+class StepUpInput(In):
     password: str
     code: str | None = None
 
 
-class SsoStepUpInput(WireModel):
+class SsoStepUpInput(In):
     code: str
 
 
