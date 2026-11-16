@@ -90,56 +90,67 @@
   },
   "case-types.list": {
     "body": {
-      "data": [
-        {
-          "copiedFrom": null,
-          "description": "A hold placed on a customer's account.",
-          "id": "account_hold",
-          "name": "Account hold",
-          "origin": "seed",
-          "publishedVersion": 1,
-          "teamId": "team_ops",
-          "updatedAt": "<timeZ>",
-          "updatedBy": "seed",
-          "version": 1
-        },
-        {
-          "copiedFrom": null,
-          "description": "A customer's complaint and how it was triaged.",
-          "id": "complaint",
-          "name": "Complaint",
-          "origin": "seed",
-          "publishedVersion": 1,
-          "teamId": "team_ops",
-          "updatedAt": "<timeZ>",
-          "updatedBy": "seed",
-          "version": 1
-        },
-        {
-          "copiedFrom": null,
-          "description": "A court's restraining notice on a debtor's accounts.",
-          "id": "restraining_notice",
-          "name": "Restraining notice",
-          "origin": "seed",
-          "publishedVersion": 2,
-          "teamId": "team_ops",
-          "updatedAt": "<timeZ>",
-          "updatedBy": "seed",
-          "version": 2
-        },
-        {
-          "copiedFrom": null,
-          "description": "A tax authority's levy on a taxpayer's accounts.",
-          "id": "tax_levy",
-          "name": "Tax levy",
-          "origin": "seed",
-          "publishedVersion": 2,
-          "teamId": "team_ops",
-          "updatedAt": "<timeZ>",
-          "updatedBy": "seed",
-          "version": 2
+      "data": {
+        "data": [
+          {
+            "copiedFrom": null,
+            "description": "A hold placed on a customer's account.",
+            "id": "account_hold",
+            "name": "Account hold",
+            "origin": "seed",
+            "publishedVersion": 1,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 1
+          },
+          {
+            "copiedFrom": null,
+            "description": "A customer's complaint and how it was triaged.",
+            "id": "complaint",
+            "name": "Complaint",
+            "origin": "seed",
+            "publishedVersion": 1,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 1
+          },
+          {
+            "copiedFrom": null,
+            "description": "A court's restraining notice on a debtor's accounts.",
+            "id": "restraining_notice",
+            "name": "Restraining notice",
+            "origin": "seed",
+            "publishedVersion": 2,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 2
+          },
+          {
+            "copiedFrom": null,
+            "description": "A tax authority's levy on a taxpayer's accounts.",
+            "id": "tax_levy",
+            "name": "Tax levy",
+            "origin": "seed",
+            "publishedVersion": 2,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 2
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 20,
+          "total": 4,
+          "totalPages": 1
         }
-      ],
+      },
       "success": true
     },
     "status": 200
@@ -552,92 +563,103 @@
   },
   "task-types.list": {
     "body": {
-      "data": [
-        {
-          "copiedFrom": null,
-          "description": "Enter the details a workflow needs to go on.",
-          "id": "data_entry",
-          "name": "Data entry",
-          "origin": "seed",
-          "publishedVersion": 1,
-          "teamId": "team_ops",
-          "updatedAt": "<timeZ>",
-          "updatedBy": "seed",
-          "version": 1
-        },
-        {
-          "copiedFrom": null,
-          "description": "A yes-or-no question with the facts it rests on.",
-          "id": "generic_decision",
-          "name": "Decision",
-          "origin": "seed",
-          "publishedVersion": 1,
-          "teamId": "team_ops",
-          "updatedAt": "<timeZ>",
-          "updatedBy": "seed",
-          "version": 1
-        },
-        {
-          "copiedFrom": null,
-          "description": "Check the values read from a document before they are used.",
-          "id": "document_check",
-          "name": "Document check",
-          "origin": "seed",
-          "publishedVersion": 3,
-          "teamId": "team_ops",
-          "updatedAt": "<timeZ>",
-          "updatedBy": "seed",
-          "version": 3
-        },
-        {
-          "copiedFrom": null,
-          "description": "An app turned down the team's account, or its sign-in ended; reconnect it on the app's page.",
-          "id": "app_reconnect",
-          "name": "Reconnect an app",
-          "origin": "seed",
-          "publishedVersion": 1,
-          "teamId": "team_ops",
-          "updatedAt": "<timeZ>",
-          "updatedBy": "seed",
-          "version": 1
-        },
-        {
-          "copiedFrom": null,
-          "description": "Read a reply before it is sent.",
-          "id": "acknowledgement",
-          "name": "Reply check",
-          "origin": "seed",
-          "publishedVersion": 2,
-          "teamId": "team_ops",
-          "updatedAt": "<timeZ>",
-          "updatedBy": "seed",
-          "version": 2
-        },
-        {
-          "copiedFrom": null,
-          "description": "Let a workflow or agent use a tool module. A copy of Write approval with the agent's reason first.",
-          "id": "tool_access_request",
-          "name": "Tool access request",
-          "origin": "seed",
-          "publishedVersion": 2,
-          "teamId": "team_ops",
-          "updatedAt": "<timeZ>",
-          "updatedBy": "seed",
-          "version": 2
-        },
-        {
-          "copiedFrom": null,
-          "description": "Approve a change before it is made in another system.",
-          "id": "write_approval",
-          "name": "Write approval",
-          "origin": "seed",
-          "publishedVersion": 1,
-          "teamId": "team_ops",
-          "updatedAt": "<timeZ>",
-          "updatedBy": "seed",
-          "version": 1
+      "data": {
+        "data": [
+          {
+            "copiedFrom": null,
+            "description": "Enter the details a workflow needs to go on.",
+            "id": "data_entry",
+            "name": "Data entry",
+            "origin": "seed",
+            "publishedVersion": 1,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 1
+          },
+          {
+            "copiedFrom": null,
+            "description": "A yes-or-no question with the facts it rests on.",
+            "id": "generic_decision",
+            "name": "Decision",
+            "origin": "seed",
+            "publishedVersion": 1,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 1
+          },
+          {
+            "copiedFrom": null,
+            "description": "Check the values read from a document before they are used.",
+            "id": "document_check",
+            "name": "Document check",
+            "origin": "seed",
+            "publishedVersion": 3,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 3
+          },
+          {
+            "copiedFrom": null,
+            "description": "An app turned down the team's account, or its sign-in ended; reconnect it on the app's page.",
+            "id": "app_reconnect",
+            "name": "Reconnect an app",
+            "origin": "seed",
+            "publishedVersion": 1,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 1
+          },
+          {
+            "copiedFrom": null,
+            "description": "Read a reply before it is sent.",
+            "id": "acknowledgement",
+            "name": "Reply check",
+            "origin": "seed",
+            "publishedVersion": 2,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 2
+          },
+          {
+            "copiedFrom": null,
+            "description": "Let a workflow or agent use a tool module. A copy of Write approval with the agent's reason first.",
+            "id": "tool_access_request",
+            "name": "Tool access request",
+            "origin": "seed",
+            "publishedVersion": 2,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 2
+          },
+          {
+            "copiedFrom": null,
+            "description": "Approve a change before it is made in another system.",
+            "id": "write_approval",
+            "name": "Write approval",
+            "origin": "seed",
+            "publishedVersion": 1,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 1
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 20,
+          "total": 7,
+          "totalPages": 1
         }
-      ],
+      },
       "success": true
     },
     "status": 200
