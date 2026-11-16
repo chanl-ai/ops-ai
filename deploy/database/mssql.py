@@ -156,7 +156,8 @@ BASELINE = {
     "tools": "tools_0030_call_channel",
     "models": "models_0006",
     "kb": "kb_0009",
-    "platform": "0025_connections_cells",
+    # 0026 holds PostgreSQL-only SQL (DISTINCT ON, md5, a SECURITY DEFINER function), so it is history here too.
+    "platform": "0026_workspace_owner",
     "files": "files_0009",
     "documents": "documents_0009",
 }

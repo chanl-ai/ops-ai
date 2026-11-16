@@ -24,6 +24,16 @@ branch_labels = None
 depends_on = None
 
 NEW_KEYS = ("appChanges", "appChangesByApp")
+OLD_KEYS = ("toolWritesNeedApproval", "appWritesNeedApproval", "appsChangeWithoutAsking")
+# Built, not written as text: `key` is a reserved word on SQL Server and needs the dialect's quoting.
+POLICIES = sa.table(
+    "policies",
+    sa.column("tenant_id", sa.String),
+    sa.column("key", sa.String),
+    sa.column("value", sa.JSON),
+    sa.column("updated_by", sa.String),
+    sa.column("updated_at", sa.String),
+)
 
 
 def _value(raw: object) -> dict[str, object]:
@@ -33,11 +43,9 @@ def _value(raw: object) -> dict[str, object]:
 
 def upgrade() -> None:
     bind = op.get_bind()
+    p = POLICIES.c
     rows = bind.execute(
-        sa.text(
-            "SELECT tenant_id, key, value, updated_by, updated_at FROM policies "
-            "WHERE key IN ('toolWritesNeedApproval', 'appWritesNeedApproval', 'appsChangeWithoutAsking')"
-        )
+        sa.select(p.tenant_id, p.key, p.value, p.updated_by, p.updated_at).where(p.key.in_(OLD_KEYS))
     ).all()
     changes: dict[str, dict[str, object]] = {}
     by_app: dict[str, dict[str, object]] = {}
@@ -60,18 +68,10 @@ def upgrade() -> None:
     for key, per_tenant in (("appChanges", changes), ("appChangesByApp", by_app)):
         for tenant, value in per_tenant.items():
             by, at = who[tenant]
-            if bind.execute(
-                sa.text("SELECT 1 FROM policies WHERE tenant_id = :t AND key = :k"), {"t": tenant, "k": key}
-            ).first():
+            if bind.execute(sa.select(sa.literal(1)).where(p.tenant_id == tenant, p.key == key)).first():
                 continue
-            bind.execute(
-                sa.text(
-                    "INSERT INTO policies (tenant_id, key, value, updated_by, updated_at) "
-                    "VALUES (:t, :k, cast(:v as json), :by, :at)"
-                ),
-                {"t": tenant, "k": key, "v": json.dumps(value), "by": by, "at": at},
-            )
+            bind.execute(POLICIES.insert().values(tenant_id=tenant, key=key, value=value, updated_by=by, updated_at=at))
 
 
 def downgrade() -> None:
-    op.execute("DELETE FROM policies WHERE key IN ('appChanges', 'appChangesByApp')")
+    op.execute(POLICIES.delete().where(POLICIES.c.key.in_(NEW_KEYS)))

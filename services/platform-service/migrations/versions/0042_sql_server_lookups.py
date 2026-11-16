@@ -43,8 +43,16 @@ def _column_type(column: sa.Column[Any]) -> str:
     return column.type.compile(dialect=mssql.dialect())
 
 
+def _policed(name: str) -> sa.Table:
+    # `tenants` is isolated by its own key (ops_store.schema.tenant_column), every other table by tenant_id.
+    column = (
+        sa.Column("id", sa.String(64), primary_key=True) if name == "tenants" else sa.Column("tenant_id", sa.String(64))
+    )
+    return sa.Table(name, sa.MetaData(), column, info=TENANT_SCOPED)
+
+
 def _reissue_predicates(system_user: str | None) -> None:
-    tables = [sa.Table(n, sa.MetaData(), sa.Column("tenant_id", sa.String(64)), info=TENANT_SCOPED) for n in POLICED]
+    tables = [_policed(n) for n in POLICED]
     for table in tables:
         for statement in isolation_drop_ddl(table, "mssql"):
             op.execute(statement)
