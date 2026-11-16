@@ -41,7 +41,7 @@ def seed_team(signin: SignInRig) -> SeedTeam:
     """`n` more people in the Security team (the rig admin's acting team), invites, API keys, teams, custom roles,
     sign-in secrets and OIDC providers; once, a SAML provider and a test sign-in through it for the ids their paths
     name."""
-    ids: dict[str, str] = {"team_id": signin.ops_team, "role_id": "admin", "key": "requesterMayDecide"}
+    ids: dict[str, str] = {"team_id": signin.ops_team, "role_id": "viewer", "key": "requesterMayDecide"}
 
     async def seed(n: int) -> Seeded:
         now = now_iso()
