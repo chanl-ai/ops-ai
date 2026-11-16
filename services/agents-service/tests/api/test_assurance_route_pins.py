@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 from httpx import AsyncClient, Response
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.settings import Settings
@@ -75,3 +76,27 @@ async def test_every_evals_route_keeps_its_reply_status_and_error_object(client:
     )
     seen["suites.chatUser"] = _seen(await c.get("/v1/assurance/suites", headers=who("usr_c", "chat_user")))
     compare(seen, FIXTURES / "reply-pins-assurance.json")
+
+
+async def test_each_eval_case_route_holds_one_transaction(client: AsyncClient) -> None:
+    c = client
+    aid, sid = await _assets(c)
+    steps: list[tuple[str, str, str, object]] = [
+        ("agent.save", "PUT", f"/v1/agents/{aid}/eval-cases", {"cases": [PASSING]}),
+        ("agent.read", "GET", f"/v1/agents/{aid}/eval-cases", None),
+        ("skill.save", "PUT", f"/v1/skills/{sid}/eval-cases", {"cases": [PASSING]}),
+        ("skill.read", "GET", f"/v1/skills/{sid}/eval-cases", None),
+    ]
+    begun: list[int] = []
+
+    def began(_conn: object) -> None:
+        begun.append(1)
+
+    event.listen(_ENGINES[-1].sync_engine, "begin", began)
+    counts: dict[str, int] = {}
+    for name, method, path, body in steps:
+        begun.clear()
+        r = await c.request(method, path, json=body, headers=OPS)
+        assert r.status_code == 200, (name, r.text)
+        counts[name] = len(begun)
+    assert counts == {name: 1 for name, *_ in steps}, counts

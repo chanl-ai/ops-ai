@@ -1,4 +1,10 @@
-"""/v1/assurance: the Evals page's suites, runs and publish checks, and the saved cases on an agent or a skill."""
+"""/v1/assurance: the Evals page's suites, runs and publish checks, and the saved cases on an agent or a skill.
+
+The saved-case routes answer in one request transaction (`Tx`), so a replace and the cases read back are one moment.
+The three lists take none: each names every asset's team through platform-service (`team_name`) while it builds the
+snapshot, and no connection is held while that answers. They page that snapshot in memory rather than in SQL, because
+each row is computed from several stores (an asset's cases, its latest run and its publish requests).
+"""
 
 from __future__ import annotations
 
@@ -11,8 +17,8 @@ from pydantic import Field
 from ops_access import can
 from ops_agents.app.evals import parse_cases
 from ops_agents.domain.evals import ASSET_AGENT, ASSET_SKILL, CASE_ACTIVE
-from ops_contracts.chat import WireModel
-from ops_service_kit.http import Envelope, Out
+from ops_identity.fastapi import Tx
+from ops_service_kit.http import Envelope, In, Out
 
 from ...store.evals import EvalStore
 from ...store.skills import SkillRegistry
@@ -139,7 +145,7 @@ async def list_gates(
     )
 
 
-class EvalCasesInput(WireModel):
+class EvalCasesInput(In):
     cases: list[EvalCaseInput] = Field(default_factory=list[EvalCaseInput], max_length=200)
 
 
@@ -193,27 +199,27 @@ async def _save(
 
 
 @router.get("/v1/agents/{agent_id}/eval-cases", response_model=Envelope[SavedCases])
-async def agent_cases(rt: Rt, _: Reader, agent_id: str) -> JSONResponse:
+async def agent_cases(rt: Rt, _: Reader, __: Tx, agent_id: str) -> JSONResponse:
     """The agent's saved cases: the active ones its runs use, and drafts proposed from reviews."""
     await agent_registry(rt).row(agent_id)
     return ok(_view(await EvalStore(rt.db).cases(ASSET_AGENT, agent_id)))
 
 
 @router.put("/v1/agents/{agent_id}/eval-cases", response_model=Envelope[SavedCases])
-async def save_agent_cases(rt: Rt, me: Me, agent_id: str, body: EvalCasesInput) -> JSONResponse:
+async def save_agent_cases(rt: Rt, me: Me, _: Tx, agent_id: str, body: EvalCasesInput) -> JSONResponse:
     """Replaces the agent's active cases with these. An unknown check type is 422 and nothing changes."""
     row = await agent_registry(rt).row(agent_id)
     return await _save(rt, me, ASSET_AGENT, agent_id, team_id=row["team_id"], body=body)
 
 
 @router.get("/v1/skills/{skill_id}/eval-cases", response_model=Envelope[SavedCases])
-async def skill_cases(rt: Rt, _: Reader, skill_id: str) -> JSONResponse:
+async def skill_cases(rt: Rt, _: Reader, __: Tx, skill_id: str) -> JSONResponse:
     await SkillRegistry(rt.db).row(skill_id)
     return ok(_view(await EvalStore(rt.db).cases(ASSET_SKILL, skill_id)))
 
 
 @router.put("/v1/skills/{skill_id}/eval-cases", response_model=Envelope[SavedCases])
-async def save_skill_cases(rt: Rt, me: Me, skill_id: str, body: EvalCasesInput) -> JSONResponse:
+async def save_skill_cases(rt: Rt, me: Me, _: Tx, skill_id: str, body: EvalCasesInput) -> JSONResponse:
     row = await SkillRegistry(rt.db).row(skill_id)
     return await _save(rt, me, ASSET_SKILL, skill_id, team_id=row["team_id"], body=body)
 
