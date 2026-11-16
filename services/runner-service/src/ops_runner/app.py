@@ -13,7 +13,7 @@ from typing import Annotated, Any, cast
 import anyio
 from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from ops_identity import (
     Auth,
@@ -24,7 +24,7 @@ from ops_identity import (
     current_service,
     install_auth,
 )
-from ops_service_kit.http import Envelope, Out, error_responses, install_error_handlers, ok, operation_id
+from ops_service_kit.http import Envelope, In, Out, error_responses, install_error_handlers, ok, operation_id
 from ops_service_kit.settings import Settings
 
 from .domain import DEFAULT_CALLS, DEFAULT_MEMORY_MB, DEFAULT_TIME_S, CallAnswer, Limits, RunResult, failure
@@ -33,13 +33,13 @@ from .wasm import WasmPython
 SOURCE_CAP = 100_000
 
 
-class LimitsIn(Out):
+class LimitsIn(In):
     memory_mb: int = Field(default=DEFAULT_MEMORY_MB, ge=32)
     time_s: float = Field(default=DEFAULT_TIME_S, gt=0)
     calls: int = Field(default=DEFAULT_CALLS, ge=0)
 
 
-class RunIn(Out):
+class RunIn(In):
     source: str = Field(min_length=1, max_length=SOURCE_CAP)
     entry: str = Field(default="main", pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
     input: Any = None
@@ -70,7 +70,7 @@ class RunOut(Out):
     trace: list[TraceOut]
 
 
-class Health(BaseModel):
+class Health(Out):
     status: str
     running: int
     capacity: int
@@ -130,8 +130,8 @@ def create_runner_app(
     running = 0
 
     @app.get("/health", tags=["health"], response_model=Health)
-    async def health() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
-        return {"status": "ok", "running": running, "capacity": settings.runner_concurrency}
+    async def health() -> Health:  # pyright: ignore[reportUnusedFunction]
+        return Health(status="ok", running=running, capacity=settings.runner_concurrency)
 
     @app.post("/v1/runs", tags=["runs"], response_model=Envelope[RunOut], responses=error_responses())
     async def run(  # pyright: ignore[reportUnusedFunction]

@@ -91,6 +91,7 @@
         "type": "object"
       },
       "Health": {
+        "additionalProperties": false,
         "properties": {
           "capacity": {
             "title": "Capacity",
