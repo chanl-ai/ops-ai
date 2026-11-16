@@ -49,19 +49,16 @@ class TeamNotUsableError(Exception):
     """The team is not an active team of this workspace."""
 
 
-class WorkspaceStore:
+class WorkspaceStore(TenantDb):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS})
 
-    def __init__(self, db: TenantDb) -> None:
-        self.db = db
-
     async def security_team(self, tenant_id: str) -> str | None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return await security_team_in(c, tenant_id)
 
     async def rename(self, tenant_id: str, name: str, *, by: str, request_id: str) -> str:
         """The workspace's display name, as the console's header and team switcher show it; the change is audited."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             before = (await c.execute(sa.select(tenants.c.name).where(tenants.c.id == tenant_id))).scalar()
             await c.execute(tenants.update().where(tenants.c.id == tenant_id).values(name=name))
             await record(
@@ -78,13 +75,13 @@ class WorkspaceStore:
         return name
 
     async def read(self, tenant_id: str) -> WorkspaceTeams:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return WorkspaceTeams(await security_team_in(c, tenant_id), await default_team_in(c, tenant_id))
 
     async def set(
         self, tenant_id: str, *, security_team: str, default_team: str | None, by: str, at: str, request_id: str
     ) -> WorkspaceTeams:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             wanted = {security_team, *([default_team] if default_team else [])}
             found = await c.execute(
                 sa.select(teams.c.id).where(teams.c.id.in_(sorted(wanted)), teams.c.status == "active")

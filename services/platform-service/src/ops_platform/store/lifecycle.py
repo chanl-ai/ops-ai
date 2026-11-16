@@ -119,14 +119,11 @@ async def _status_locked(c: AsyncConnection, tenant_id: str) -> str:
     return str((await c.execute(q)).scalar_one())
 
 
-class LifecycleStore:
+class LifecycleStore(TenantDb):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS})
 
-    def __init__(self, db: TenantDb) -> None:
-        self.db = db
-
     async def state(self, tenant_id: str) -> WorkspaceState:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             row = (
                 await c.execute(sa.select(tenants.c.status, tenants.c.closed_at).where(tenants.c.id == tenant_id))
             ).one()
@@ -134,15 +131,15 @@ class LifecycleStore:
 
     async def status(self, tenant_id: str) -> str | None:
         """The workspace's status; None for a tenant this database does not hold."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return (await c.execute(sa.select(tenants.c.status).where(tenants.c.id == tenant_id))).scalar()
 
     async def name(self, tenant_id: str) -> str:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return str((await c.execute(sa.select(tenants.c.name).where(tenants.c.id == tenant_id))).scalar_one())
 
     async def transfer(self, tenant_id: str, *, by: str, to: str, at: str, request_id: str) -> None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             if await _status_locked(c, tenant_id) != ACTIVE:
                 raise WorkspaceNotActiveError
             gone = await c.execute(
@@ -169,7 +166,7 @@ class LifecycleStore:
     async def leave(self, tenant_id: str, *, user_id: str, at: str, request_id: str) -> None:
         """The person loses every team: memberships removed, every assignment of theirs deleted, sessions ended. Their
         account stays, so a later invite reaches the same person."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             if await _owner_in(c, tenant_id) == user_id:
                 raise NotOwnerError  # the route refuses the owner before this; a transfer racing it lands here
             await c.execute(
@@ -206,7 +203,7 @@ class LifecycleStore:
     async def close(self, tenant_id: str, *, by: str, at: str, request_id: str) -> None:
         """Closes at once: every session but the owner's ends and every key stops working, with one `at` so a restore
         re-enables only the keys this close disabled."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             if await _status_locked(c, tenant_id) != ACTIVE:
                 raise WorkspaceNotActiveError
             if await _owner_in(c, tenant_id) != by:
@@ -224,7 +221,7 @@ class LifecycleStore:
             )  # fmt: skip
 
     async def restore(self, tenant_id: str, *, by: str, request_id: str) -> None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             status = await _status_locked(c, tenant_id)
             if status != CLOSED:
                 raise PurgeStartedError if status in (PURGING, PURGED) else WorkspaceNotActiveError
@@ -242,7 +239,7 @@ class LifecycleStore:
         """The workspaces closed longer than the window; a pre-tenant lookup (migration 0026's function)."""
         cutoff = (now or datetime.now(UTC)) - timedelta(days=restore_days)
         stamp = cutoff.isoformat(timespec="milliseconds").replace("+00:00", "Z")
-        async with self.db.system_tx(PURGE_LOOKUP) as c:
+        async with self.system_tx(PURGE_LOOKUP) as c:
             rows = await c.execute(sa.text("SELECT tenant_id FROM platform_purge_due(:c)"), {"c": stamp})
             return [str(r[0]) for r in rows]
 
@@ -250,11 +247,11 @@ class LifecycleStore:
         """Marks the workspace `purging` in its own transaction, so a restore that comes after is refused, then
         removes platform-service's records of it but its tenant, people, teams, policies and audit entries (the
         tenant role may not delete a policy). False when it is no longer closed (restored in between)."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             if await _status_locked(c, tenant_id) != CLOSED:
                 return False
             await c.execute(tenants.update().where(tenants.c.id == tenant_id).values(status=PURGING))
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             for table in (
                 sessions, api_keys, role_assignments, members, signin_flows, signin_identities,
                 signin_domains, signin_providers, password_resets, password_credentials, signin_lockouts,
@@ -270,7 +267,7 @@ class LifecycleStore:
 
     async def leave_team(self, tenant_id: str, team_id: str, *, user_id: str, at: str, request_id: str) -> bool:
         """False when the person is not an active member of the team."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             admins_q = sa.select(members.c.user_id).where(
                 members.c.team_id == team_id, members.c.role == ADMIN, members.c.status == "active"
             )
@@ -303,7 +300,7 @@ class LifecycleStore:
 
     async def team_state(self, tenant_id: str, team_id: str) -> tuple[str, str | None] | None:
         """(status, archived at) of a team that is not deleted; None when there is none."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             row = (
                 await c.execute(
                     sa.select(teams.c.status, teams.c.archived_at).where(
@@ -318,7 +315,7 @@ class LifecycleStore:
     ) -> bool:
         """Deletes a team archived at or before `archived_before`: its members and assignments go, its name is free
         again, its row stays. False when the team is not archived that long (restored or deleted in between)."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             done = await c.execute(
                 teams.update()
                 .where(teams.c.id == team_id, teams.c.status == "archived", teams.c.archived_at <= archived_before)

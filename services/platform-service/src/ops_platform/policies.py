@@ -68,7 +68,7 @@ class Policies:
             entries = [cast(dict[str, Any], e) for e in cast(dict[str, Any], value).values() if isinstance(e, dict)]
         else:
             return
-        roles = self.members.roles or RoleStore(self.members.store.db)
+        roles = self.members.roles or RoleStore(self.members.store)
         for entry in entries:
             if entry.get("answer") != "reviewer":
                 continue

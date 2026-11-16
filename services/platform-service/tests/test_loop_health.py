@@ -54,8 +54,8 @@ async def test_the_relay_reports_a_failed_pass(platform: Platform) -> None:
         await gone.dispose()
 
 
-def _gone_under(db: TenantDb, gone: AsyncEngine) -> Callable[[], None]:
-    return lambda: setattr(db, "engine", gone)
+def _gone_under(store: TenantDb, gone: AsyncEngine) -> Callable[[], None]:
+    return lambda: setattr(store, "engine", gone)
 
 
 def _every(key: str, once: Callable[[], Awaitable[int | None]]) -> Callable[[asyncio.Event], Coroutine[Any, Any, None]]:
@@ -64,19 +64,19 @@ def _every(key: str, once: Callable[[], Awaitable[int | None]]) -> Callable[[asy
 
 
 async def test_the_workspace_purge_reports_a_failed_pass(platform: Platform) -> None:
-    db = TenantDb(platform.engine)
-    purge = WorkspacePurge(LifecycleStore(db), restore_days=30)
+    lifecycle = LifecycleStore(platform.engine)
+    purge = WorkspacePurge(lifecycle, restore_days=30)
     gone = create_async_engine("sqlite+aiosqlite://")
     try:
         async with _running(_every("workspace_lifecycle", purge.once)):
-            await loop_reports_failure(platform.public, "workspace_lifecycle", _gone_under(db, gone), within_s=5.0)
+            trip = _gone_under(lifecycle, gone)
+            await loop_reports_failure(platform.public, "workspace_lifecycle", trip, within_s=5.0)
     finally:
         await gone.dispose()
 
 
 async def test_the_certificate_watch_reports_a_failed_pass(platform: Platform) -> None:
-    db = TenantDb(platform.engine)
-    store = SignInStore(db)
+    store = SignInStore(platform.engine)
 
     async def fetch(url: str) -> bytes:
         raise AssertionError(f"no provider is read in this test: {url}")
@@ -84,11 +84,11 @@ async def test_the_certificate_watch_reports_a_failed_pass(platform: Platform) -
     watch = SignInWatch(
         store,
         ProviderMetadata(store, fetch),
-        SecurityNotices(store, HolderStore(db), WorkspaceStore(db), None, None),
+        SecurityNotices(store, HolderStore(store), WorkspaceStore(store), None, None),
     )
     gone = create_async_engine("sqlite+aiosqlite://")
     try:
         async with _running(_every("signin_watch", watch.once)):
-            await loop_reports_failure(platform.public, "signin_watch", _gone_under(db, gone), within_s=5.0)
+            await loop_reports_failure(platform.public, "signin_watch", _gone_under(store, gone), within_s=5.0)
     finally:
         await gone.dispose()

@@ -24,16 +24,13 @@ from .tenancy import TenantDb
 OLD_KEYS = ("toolWritesNeedApproval", "appWritesNeedApproval", "appsChangeWithoutAsking")
 
 
-class PolicyStore:
+class PolicyStore(TenantDb):
     # `before` is read in the transaction that writes the change, so the audit entry and the row always agree.
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION})
 
-    def __init__(self, db: TenantDb) -> None:
-        self.db = db
-
     async def values(self, tenant_id: str) -> dict[str, Any]:
         """Every policy's value: what an admin set, else the catalogue's open default."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             rows = (await c.execute(sa.select(policies.c.key, policies.c.value))).all()
         held = {r.key: r.value for r in rows}
         return {p.key: held.get(p.key, p.default) for p in POLICIES}
@@ -57,7 +54,7 @@ class PolicyStore:
             value = check_value(key, value)
         spec = BY_KEY[key]
         at = now_iso()
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             row = (await c.execute(sa.select(policies.c.value).where(policies.c.key == key))).first()
             whole = row.value if row else spec.default
             after_of_team: Any = None
@@ -98,7 +95,7 @@ class PolicyStore:
         return before, (after_of_team if spec.per_team else value)
 
     async def _team_part(self, tenant_id: str, key: str, team_id: str | None) -> Any:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             row = (await c.execute(sa.select(policies.c.value).where(policies.c.key == key))).first()
         return dict(row.value if row else BY_KEY[key].default).get(team_id)
 

@@ -32,11 +32,8 @@ class TeamNameTakenError(Exception):
     """Another team of the workspace has this name in some case."""
 
 
-class TeamAdminStore:
+class TeamAdminStore(TenantDb):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS})
-
-    def __init__(self, db: TenantDb) -> None:
-        self.db = db
 
     async def every(
         self,
@@ -84,7 +81,7 @@ class TeamAdminStore:
         if search:
             escaped = search.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             where.append(teams.c.name_key.like(f"%{escaped}%", escape="\\"))
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             security = await security_team_in(c, tenant_id)
             total = int((await c.execute(sa.select(sa.func.count()).select_from(teams).where(*where))).scalar_one())
             page, offset = page_window(total, page, page_size)
@@ -116,7 +113,7 @@ class TeamAdminStore:
         `TeamNameTakenError` when the name is taken."""
         team_id = new_id("team")
         try:
-            async with self.db.tenant_tx(tenant_id) as c:
+            async with self.tenant_tx(tenant_id) as c:
                 person = (
                     await c.execute(
                         sa.select(users.c.id, users.c.email).where(
@@ -193,7 +190,7 @@ class TeamAdminStore:
 
     async def rename(self, tenant_id: str, team_id: str, name: str, *, by: str, at: str, request_id: str) -> bool:
         try:
-            async with self.db.tenant_tx(tenant_id) as c:
+            async with self.tenant_tx(tenant_id) as c:
                 before = (await c.execute(sa.select(teams.c.name).where(teams.c.id == team_id))).scalar()
                 if before is None:
                     return False
@@ -216,12 +213,12 @@ class TeamAdminStore:
         return True
 
     async def security_team_of(self, tenant_id: str) -> str | None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return await security_team_in(c, tenant_id)
 
     async def set_status(self, tenant_id: str, team_id: str, status: str, *, by: str, at: str, request_id: str) -> bool:
         """Archives or restores the team; False when the workspace has no such team."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             done = await c.execute(
                 teams.update()
                 .where(teams.c.id == team_id)

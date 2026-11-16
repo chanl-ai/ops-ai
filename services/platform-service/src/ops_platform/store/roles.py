@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncConnection
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_access import (
     ANY_TEAM,
@@ -31,6 +31,7 @@ from ops_identity import Principal
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
 from ops_store.dialect import lock_key
+from ops_store.store import Store
 
 from .audit import record
 from .tables import members, role_assignments, role_permissions, roles, teams, tenants, users
@@ -66,8 +67,9 @@ class Holdings:
 class RoleStore:
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS})
 
-    def __init__(self, db: TenantDb) -> None:
-        self.db = db
+    def __init__(self, db: AsyncEngine | Store) -> None:
+        # Holds its database rather than extending TenantDb: its `role(...)` read would hide the base's `role`.
+        self.db = TenantDb(db)
 
     async def roles(self, tenant_id: str) -> list[dict[str, Any]]:
         """Every role with its permission and assignment counts, built-in roles first in their fixed order."""

@@ -21,17 +21,17 @@ from .tenancy import TenantDb
 META = (t.c.name, t.c.version, t.c.created_by, t.c.created_at, t.c.rotated_at)
 
 
-class SignInSecretStore:
+class SignInSecretStore(TenantDb):
     # A save locks the name's row while it moves the version on, so two saves never both write version 2.
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS, Guarantee.LOCK})
 
     def __init__(self, db: TenantDb, credentials: CredentialStore) -> None:
-        self.db = db
+        super().__init__(db)
         self.credentials = credentials
 
     async def listed(self, tenant_id: str) -> list[dict[str, Any]]:
         """Each secret's name and history, never its value."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             rows = await c.execute(sa.select(*META).where(t.c.tenant_id == tenant_id).order_by(t.c.name))
             return [dict(r) for r in rows.mappings()]
 
@@ -44,7 +44,7 @@ class SignInSecretStore:
         context = context_of(tenant_id, name)
         ref = await self.credentials.put(value, context=context)
         mine = sa.and_(t.c.tenant_id == tenant_id, t.c.name == name)
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             version = (await c.execute(locked(sa.select(t.c.version).where(mine), t))).scalar()
             # Read under the row lock just taken, so two saves each drop the value they replaced.
             old = await c.scalar(sa.select(t.c.ciphertext).where(mine)) if version is not None else None
@@ -75,7 +75,7 @@ class SignInSecretStore:
         return saved
 
     async def delete(self, tenant_id: str, name: str, *, by: str, request_id: str) -> bool:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             gone = await c.scalar(
                 t.delete().where(t.c.tenant_id == tenant_id, t.c.name == name).returning(t.c.ciphertext)
             )
@@ -97,7 +97,7 @@ class SignInSecretStore:
 
     async def value(self, tenant_id: str, name: str) -> str | None:
         """The secret's value, or None when the workspace holds none by that name."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             ref = await c.scalar(sa.select(t.c.ciphertext).where(t.c.tenant_id == tenant_id, t.c.name == name))
         if ref is None:
             return None

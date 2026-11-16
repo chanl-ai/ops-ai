@@ -41,7 +41,7 @@ class SecurityNotices:
         team = await self.workspace.security_team(tenant_id)
         found: dict[str, Any] = await self.holders.holders(tenant_id, team, "settings", "manage") if team else {}
         people: list[dict[str, Any]] = found.get("holders", [])
-        async with self.store.db.tenant_tx(tenant_id) as c:
+        async with self.store.tenant_tx(tenant_id) as c:
             await record(
                 c,
                 tenant_id=tenant_id,

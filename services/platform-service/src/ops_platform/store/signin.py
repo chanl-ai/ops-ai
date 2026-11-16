@@ -177,11 +177,8 @@ class DomainListedError(Exception):
     """The domain is on another provider of this workspace."""
 
 
-class SignInStore:
+class SignInStore(TenantDb):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION, Guarantee.RLS})
-
-    def __init__(self, db: TenantDb) -> None:
-        self.db = db
 
     # ── Providers and domains ──
 
@@ -189,7 +186,7 @@ class SignInStore:
         q = sa.text(
             "SELECT tenant_id, provider_id, kind, label, enabled, password_enabled FROM platform_signin_domain(:d)"
         )
-        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+        async with self.system_tx(SIGNIN_LOOKUP) as c:
             row = (await c.execute(q, {"d": domain.strip().lower()})).first()
         return (
             DomainHit(str(row[0]), str(row[1]), str(row[2]), str(row[3]), bool(row[4]), bool(row[5])) if row else None
@@ -198,16 +195,16 @@ class SignInStore:
     async def sp(self, sp_id: str) -> SpHit | None:
         """The provider whose own SAML addresses carry `sp_id`, through the pre-tenant lookup."""
         q = sa.text("SELECT tenant_id, provider_id, kind, enabled, tiles FROM platform_signin_sp(:s)")
-        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+        async with self.system_tx(SIGNIN_LOOKUP) as c:
             row = (await c.execute(q, {"s": sp_id})).first()
         return SpHit(str(row[0]), str(row[1]), str(row[2]), bool(row[3]), bool(row[4])) if row else None
 
     async def providers(self, tenant_id: str) -> list[Provider]:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return await _providers(c)
 
     async def provider(self, tenant_id: str, provider_id: str) -> Provider | None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             found = await _providers(c, provider_id)
         return found[0] if found else None
 
@@ -215,7 +212,7 @@ class SignInStore:
         """A workspace with no enabled provider signs in by password, so turning its only SSO provider off never locks
         everyone out; once any provider is enabled, only an enabled password row allows it. Read inside the caller's
         own check, never cached."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             kinds = (await c.execute(sa.select(signin_providers.c.kind, signin_providers.c.enabled))).all()
         return _password_on(kinds)
 
@@ -243,7 +240,7 @@ class SignInStore:
             "updated_at": at,
         }
         try:
-            async with self.db.tenant_tx(p.tenant_id) as c:
+            async with self.tenant_tx(p.tenant_id) as c:
                 done = await c.execute(signin_providers.update().where(signin_providers.c.id == p.id).values(**values))
                 if done.rowcount == 0:
                     await c.execute(
@@ -277,13 +274,13 @@ class SignInStore:
     ) -> list[TrustedCertificate]:
         """Adds the certificates the provider is not yet trusted with (a metadata refresh), each audited; returns
         the ones added."""
-        async with self.db.tenant_tx(p.tenant_id) as c:
+        async with self.tenant_tx(p.tenant_id) as c:
             return await _add_certificates(c, p, certificates, actor="system", at=at, request_id=request_id)
 
     async def metadata_read(self, p: Provider, *, at: str, error: str | None) -> None:
         """Records when the provider's metadata URL was last read and what was wrong with it, if anything."""
         config = {**p.config, "metadataReadAt": at, "metadataError": error}
-        async with self.db.tenant_tx(p.tenant_id) as c:
+        async with self.tenant_tx(p.tenant_id) as c:
             await c.execute(
                 signin_providers.update().where(signin_providers.c.id == p.id).values(config=config, updated_at=at)
             )
@@ -294,12 +291,12 @@ class SignInStore:
             .where(signin_certificates.c.provider_id == provider_id, signin_certificates.c.fingerprint == fingerprint)
             .values(warned=level)
         )
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             await c.execute(q)
 
     async def watched(self) -> list[tuple[str, str]]:
         """(tenant, provider) of every SAML provider of an open workspace, for the daily certificate watch."""
-        async with self.db.system_tx(SIGNIN_WATCH) as c:
+        async with self.system_tx(SIGNIN_WATCH) as c:
             rows = (await c.execute(sa.text("SELECT tenant_id, provider_id FROM platform_signin_watch()"))).all()
         return [(str(r[0]), str(r[1])) for r in rows]
 
@@ -312,7 +309,7 @@ class SignInStore:
         return False
 
     async def claim(self, tenant_id: str, domain: str) -> DomainClaim | None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             row = (
                 await c.execute(
                     sa.select(
@@ -329,7 +326,7 @@ class SignInStore:
         """Marks this workspace's claim verified, audited. DomainTakenError when another workspace verified it first;
         the DNS answer is read before, outside the transaction."""
         try:
-            async with self.db.tenant_tx(tenant_id) as c:
+            async with self.tenant_tx(tenant_id) as c:
                 await c.execute(
                     signin_domains.update()
                     .where(signin_domains.c.domain == domain, signin_domains.c.verified_at.is_(None))
@@ -352,7 +349,7 @@ class SignInStore:
             raise
 
     async def delete_provider(self, tenant_id: str, provider_id: str, *, actor: str, at: str, request_id: str) -> bool:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             await c.execute(signin_certificates.delete().where(signin_certificates.c.provider_id == provider_id))
             await c.execute(signin_flows.delete().where(signin_flows.c.provider_id == provider_id))
             await c.execute(signin_identities.delete().where(signin_identities.c.provider_id == provider_id))
@@ -383,13 +380,13 @@ class SignInStore:
             .join(users, sa.and_(users.c.id == b.user_id, users.c.status == "active"))
             .order_by(b.added_at)
         )
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             rows = (await c.execute(q)).all()
         keys = ("userId", "email", "addedBy", "addedAt", "lastUsedAt")
         return [dict(zip(keys, (str(r[0]), str(r[1]), str(r[2]), str(r[3]), r[4]), strict=True)) for r in rows]
 
     async def add_break_glass(self, tenant_id: str, user_id: str, *, actor: str, at: str, request_id: str) -> None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             held = await c.execute(
                 sa.select(signin_break_glass.c.user_id).where(signin_break_glass.c.user_id == user_id)
             )
@@ -404,7 +401,7 @@ class SignInStore:
             )
 
     async def remove_break_glass(self, tenant_id: str, user_id: str, *, actor: str, request_id: str) -> bool:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             done = await c.execute(signin_break_glass.delete().where(signin_break_glass.c.user_id == user_id))
             if done.rowcount:
                 await _record_break_glass(
@@ -413,7 +410,7 @@ class SignInStore:
         return bool(done.rowcount)
 
     async def break_glass_used(self, tenant_id: str, user_id: str, *, at: str, request_id: str) -> None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             await c.execute(
                 signin_break_glass.update().where(signin_break_glass.c.user_id == user_id).values(last_used_at=at)
             )
@@ -422,25 +419,25 @@ class SignInStore:
             )
 
     async def team_exists(self, tenant_id: str, team_id: str) -> bool:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return (await c.execute(sa.select(teams.c.id).where(teams.c.id == team_id))).first() is not None
 
     # ── Passwords ──
 
     async def password_hash(self, tenant_id: str, user_id: str) -> str | None:
         q = sa.select(password_credentials.c.hash).where(password_credentials.c.user_id == user_id)
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return (await c.execute(q)).scalar()
 
     async def set_password(self, tenant_id: str, user_id: str, encoded: str, *, at: str) -> None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             await _set_password(c, tenant_id, user_id, encoded, at)
 
     # ── Wrong passwords ──
 
     async def locked_until(self, tenant_id: str, user_id: str, *, now: str) -> str | None:
         """When the person's lock ends, while it lasts; None when they are not locked."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             until = (
                 await c.execute(sa.select(signin_lockouts.c.locked_until).where(signin_lockouts.c.user_id == user_id))
             ).scalar()
@@ -462,7 +459,7 @@ class SignInStore:
         starts the count again. Returns whether this wrong password locked them."""
         t = signin_lockouts
         stale = t.c.first_failed_at < window_start
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             row = (
                 await c.execute(
                     insert(t)
@@ -498,7 +495,7 @@ class SignInStore:
     async def email_locked_until(self, email_hash: str, *, now: str) -> str | None:
         """When sign-in for this address stops refusing, while it is locked; None when it is not."""
         t = signin_email_failures
-        async with self.db.system_tx(SIGNIN_LOCKOUT) as c:
+        async with self.system_tx(SIGNIN_LOCKOUT) as c:
             until = (await c.execute(sa.select(t.c.locked_until).where(t.c.email_hash == email_hash))).scalar()
         return str(until) if until and str(until) > now else None
 
@@ -509,7 +506,7 @@ class SignInStore:
         not the address has an account. Returns whether this one locked it."""
         t = signin_email_failures
         stale = t.c.first_failed_at < window_start
-        async with self.db.system_tx(SIGNIN_LOCKOUT) as c:
+        async with self.system_tx(SIGNIN_LOCKOUT) as c:
             failures = (
                 await c.execute(
                     insert(t)
@@ -534,23 +531,23 @@ class SignInStore:
         return True
 
     async def clear_email_failures(self, email_hash: str) -> None:
-        async with self.db.system_tx(SIGNIN_LOCKOUT) as c:
+        async with self.system_tx(SIGNIN_LOCKOUT) as c:
             await c.execute(signin_email_failures.delete().where(signin_email_failures.c.email_hash == email_hash))
 
     async def clear_failures(self, tenant_id: str, user_id: str) -> None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             await c.execute(signin_lockouts.delete().where(signin_lockouts.c.user_id == user_id))
 
     async def resets_since(self, tenant_id: str, user_id: str, since: str) -> int:
         """Reset links sent to the person since `since`."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             q = sa.select(sa.func.count()).where(
                 password_resets.c.user_id == user_id, password_resets.c.created_at >= since
             )
             return int((await c.execute(q)).scalar_one())
 
     async def open_reset(self, tenant_id: str, user_id: str, *, token_hash: str, at: str, expires_at: str) -> None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             await c.execute(
                 password_resets.insert().values(
                     id=new_id("prs"),
@@ -565,14 +562,14 @@ class SignInStore:
     async def use_reset(self, token_hash: str, encoded: str, *, at: str, request_id: str) -> tuple[str, str] | None:
         """Spends the reset token, sets the new password and ends every session of the person, in one transaction.
         Returns (tenant, user), or None when the token is unknown, used or expired."""
-        async with self.db.system_tx(RESET_LOOKUP) as c:
+        async with self.system_tx(RESET_LOOKUP) as c:
             row = (
                 await c.execute(sa.text("SELECT id, tenant_id FROM platform_password_reset(:h)"), {"h": token_hash})
             ).first()
         if row is None:
             return None
         reset_id, tenant_id = str(row[0]), str(row[1])
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             # The workspace may have turned passwords off since the link was sent.
             kinds = (await c.execute(sa.select(signin_providers.c.kind, signin_providers.c.enabled))).all()
             if not _password_on(kinds):
@@ -637,7 +634,7 @@ class SignInStore:
         user_id: str | None = None,
     ) -> str:
         flow_id = new_id("flw")
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             await c.execute(
                 signin_flows.insert().values(
                     id=flow_id,
@@ -665,7 +662,7 @@ class SignInStore:
         return await self._flow("platform_signin_handoff", handoff_hash)
 
     async def _flow(self, function: str, value: str) -> Flow | None:
-        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
+        async with self.system_tx(SIGNIN_LOOKUP) as c:
             row = (await c.execute(sa.text(f"SELECT id, tenant_id FROM {function}(:v)"), {"v": value})).first()  # noqa: S608
         if row is None:
             return None
@@ -685,7 +682,7 @@ class SignInStore:
             cols.created_at,
             cols.expires_at,
         ).where(cols.id == str(row[0]))
-        async with self.db.tenant_tx(str(row[1])) as c:
+        async with self.tenant_tx(str(row[1])) as c:
             found = (await c.execute(q)).first()
         return Flow(*found) if found else None
 
@@ -696,12 +693,12 @@ class SignInStore:
             .where(signin_flows.c.id == flow.id, signin_flows.c.answered_at.is_(None), signin_flows.c.expires_at > at)
             .values(user_id=user_id, handoff_hash=handoff_hash, answered_at=at)
         )
-        async with self.db.tenant_tx(flow.tenant_id) as c:
+        async with self.tenant_tx(flow.tenant_id) as c:
             return (await c.execute(q)).rowcount == 1
 
     async def record_test(self, flow: Flow, result: dict[str, Any], *, at: str) -> bool:
         """Keeps a test flow's result, once and before it expires. Sets no handoff, so no session can follow."""
-        async with self.db.tenant_tx(flow.tenant_id) as c:
+        async with self.tenant_tx(flow.tenant_id) as c:
             done = await c.execute(
                 signin_flows.update()
                 .where(
@@ -718,7 +715,7 @@ class SignInStore:
         """A test flow's result for the admin who started it: `waiting` until the provider answers."""
         f = signin_flows.c
         q = sa.select(f.test_result, f.answered_at).where(f.id == flow_id, f.purpose == "test", f.user_id == user_id)
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             row = (await c.execute(q)).first()
         if row is None:
             return None
@@ -737,7 +734,7 @@ class SignInStore:
             )
             .values(used_at=at)
         )
-        async with self.db.tenant_tx(flow.tenant_id) as c:
+        async with self.tenant_tx(flow.tenant_id) as c:
             return (await c.execute(q)).rowcount == 1
 
     # ── People behind an SSO answer ──
@@ -753,7 +750,7 @@ class SignInStore:
                 users.c.status == "active",
             )
         )
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return (await c.execute(q)).scalar()
 
     async def resolve(
@@ -792,7 +789,7 @@ class SignInStore:
         request_id: str,
         groups: tuple[str, ...] | None,
     ) -> SsoPerson | None:
-        async with self.db.tenant_tx(p.tenant_id) as c:
+        async with self.tenant_tx(p.tenant_id) as c:
             person = await self._person(c, p, subject=subject, email=email, name=name, at=at, request_id=request_id)
             if person is not None:
                 await self._join_groups(c, p, person.user_id, email, groups, at=at, request_id=request_id)

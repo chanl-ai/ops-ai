@@ -196,17 +196,17 @@ async def record_delivered(
     return True
 
 
-class TeamNameAudit:
+class TeamNameAudit(TenantDb):
     """Conformance adapter: one tenant and team per entity id, renamed with an audited write."""
 
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS})
 
     def __init__(self, db: TenantDb, tenant_id: str) -> None:
-        self.db = db
+        super().__init__(db)
         self.tenant_id = tenant_id
 
     @classmethod
-    async def open(cls, url: str) -> TeamNameAudit:
+    async def create(cls, url: str) -> TeamNameAudit:
         db = TenantDb.open(url)
         tenant_id = new_id("ten")
         # The tenants policy keys on the row's own id, so the new tenant is written as itself.
@@ -219,7 +219,7 @@ class TeamNameAudit:
         return cls(db, tenant_id)
 
     async def apply(self, entity_id: str, value: str, entry: dict[str, Any] | None) -> None:
-        async with self.db.tenant_tx(self.tenant_id) as c:
+        async with self.tenant_tx(self.tenant_id) as c:
             updated = await c.execute(
                 teams.update().where(teams.c.id == entity_id).values(name=value, name_key=value.lower())
             )
@@ -247,12 +247,12 @@ class TeamNameAudit:
             )
 
     async def value(self, entity_id: str) -> str | None:
-        async with self.db.tenant_tx(self.tenant_id) as c:
+        async with self.tenant_tx(self.tenant_id) as c:
             return (await c.execute(sa.select(teams.c.name).where(teams.c.id == entity_id))).scalar()
 
     async def entries(self, entity_id: str) -> int:
         q = sa.select(sa.func.count()).select_from(audit_entries).where(audit_entries.c.target_id == entity_id)
-        async with self.db.tenant_tx(self.tenant_id) as c:
+        async with self.tenant_tx(self.tenant_id) as c:
             return int((await c.execute(q)).scalar_one())
 
 
@@ -264,14 +264,11 @@ def _seen(team_id: str, account: bool) -> sa.ColumnElement[bool]:
     return sa.or_(own, audit_entries.c.team_id.is_(None), audit_entries.c.team_id == "")
 
 
-class AuditLog:
+class AuditLog(TenantDb):
     """Reads one team's entries, newest first, and with `account` the entries no team holds (sign-in, membership: the
     account's own records). Never another team's."""
 
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.RLS})
-
-    def __init__(self, db: TenantDb) -> None:
-        self.db = db
 
     async def page(
         self,
@@ -320,7 +317,7 @@ class AuditLog:
             .offset((page - 1) * size)
         )
         total = sa.select(sa.func.count()).select_from(audit_entries).where(*where)
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             found = [dict(r) for r in (await c.execute(rows)).mappings().all()]
             count = int((await c.execute(total)).scalar_one())
         return found, count
@@ -332,5 +329,5 @@ class AuditLog:
             .where(_seen(team_id, account))
             .group_by(audit_entries.c.action, audit_entries.c.target_kind)
         )
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return {(a, k): int(n) for a, k, n in (await c.execute(q)).all()}

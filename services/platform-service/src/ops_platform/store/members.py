@@ -63,21 +63,18 @@ class Invite:
     allowed_domains: list[str]
 
 
-class TeamStore:
+class TeamStore(TenantDb):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS, Guarantee.LOCK})
-
-    def __init__(self, db: TenantDb) -> None:
-        self.db = db
 
     async def people_names(self, tenant_id: str) -> list[dict[str, str]]:
         """Every person of the workspace as `{email, name}`, suspended ones too: a record keeps naming who acted."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             rows = (await c.execute(sa.select(users.c.email, users.c.name).order_by(users.c.email))).all()
         return [{"email": str(r.email), "name": str(r.name)} for r in rows]
 
     async def names(self, tenant_id: str) -> list[dict[str, str]]:
         """Every team of the workspace, archived ones too, as `{id, name}` by name: a record keeps naming its team."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             rows = (await c.execute(sa.select(teams.c.id, teams.c.name).order_by(teams.c.name, teams.c.id))).all()
         return [{"id": str(r.id), "name": str(r.name)} for r in rows]
 
@@ -94,7 +91,7 @@ class TeamStore:
         )
 
     async def security_team_of(self, tenant_id: str) -> str | None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return await security_team_in(c, tenant_id)
 
     async def teams_of(self, tenant_id: str, user_id: str, *, everywhere: bool = False) -> list[dict[str, Any]]:
@@ -111,7 +108,7 @@ class TeamStore:
             .where(members.c.status == "active")
             .group_by(members.c.team_id)
         )
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             rows = list((await c.execute(mine)).all())
             sizes = {str(r[0]): int(r[1]) for r in (await c.execute(counts)).all()}
             if everywhere:
@@ -132,14 +129,14 @@ class TeamStore:
         ]
 
     async def scope_of(self, tenant_id: str, team_id: str) -> str | None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return (await c.execute(sa.select(teams.c.scope).where(teams.c.id == team_id))).scalar()
 
     async def role_in(self, tenant_id: str, team_id: str, user_id: str) -> str | None:
         q = sa.select(members.c.role).where(
             members.c.team_id == team_id, members.c.user_id == user_id, members.c.status == "active"
         )
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return (await c.execute(q)).scalar()
 
     async def members(
@@ -166,7 +163,7 @@ class TeamStore:
             q = q.where(members.c.role.in_(roles))
         if statuses:
             q = q.where(members.c.status.in_(statuses))
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             rows = (await c.execute(q)).all()
         return [
             {
@@ -200,7 +197,7 @@ class TeamStore:
         elif search:
             like = f"%{search.strip().lower()}%"
             q = q.where(sa.or_(sa.func.lower(name).like(like), sa.func.lower(members.c.email).like(like)))
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             rows = (await c.execute(q.offset(offset).limit(limit))).all()
         return [{"id": r[0], "label": r[1], "hint": r[0] if r[1] != r[0] else None} for r in rows]
 
@@ -210,7 +207,7 @@ class TeamStore:
         """`invites` maps each lower-cased email to its token hash. Returns the bulk result and, per new invite, its
         member id and email; the caller pairs those with the plain tokens it kept."""
         bulk, made = Bulk(), list[dict[str, str]]()
-        async with self.db.tenant_tx(actor.tenant_id) as c:
+        async with self.tenant_tx(actor.tenant_id) as c:
             status = (await c.execute(sa.select(teams.c.status).where(teams.c.id == actor.team_id))).scalar()
             if status != "active":
                 raise TeamArchivedError
@@ -255,7 +252,7 @@ class TeamStore:
 
     async def set_role(self, actor: Actor, ids: list[str], role: str, *, at: str) -> Bulk:
         bulk = Bulk()
-        async with self.db.tenant_tx(actor.tenant_id) as c:
+        async with self.tenant_tx(actor.tenant_id) as c:
             admins = await _lock_admins(c, actor.team_id)
             for member_id in ids:
                 row = await _member(c, actor.team_id, member_id)
@@ -278,7 +275,7 @@ class TeamStore:
 
     async def remove(self, actor: Actor, ids: list[str], *, at: str) -> Bulk:
         bulk = Bulk()
-        async with self.db.tenant_tx(actor.tenant_id) as c:
+        async with self.tenant_tx(actor.tenant_id) as c:
             admins = await _lock_admins(c, actor.team_id)
             for member_id in ids:
                 row = await _member(c, actor.team_id, member_id)
@@ -321,7 +318,7 @@ class TeamStore:
             "SELECT member_id, tenant_id, team_id, team, email, role, status, invited_at, expires_at, allowed_domains"
             " FROM platform_invite(:h)"
         )
-        async with self.db.system_tx(INVITE_LOOKUP) as c:
+        async with self.system_tx(INVITE_LOOKUP) as c:
             r = (await c.execute(q, {"h": token_hash})).first()
         if r is None:
             return None
@@ -330,7 +327,7 @@ class TeamStore:
     async def account_of(self, invite: Invite) -> str | None:
         """The id of the tenant's person who already has the invited email, if any."""
         q = sa.select(users.c.id).where(sa.func.lower(users.c.email) == invite.email.lower())
-        async with self.db.tenant_tx(invite.tenant_id) as c:
+        async with self.tenant_tx(invite.tenant_id) as c:
             return (await c.execute(q)).scalar()
 
     async def inviter(self, invite: Invite) -> str | None:
@@ -342,7 +339,7 @@ class TeamStore:
             .order_by(audit_entries.c.at.desc())
             .limit(1)
         )
-        async with self.db.tenant_tx(invite.tenant_id) as c:
+        async with self.tenant_tx(invite.tenant_id) as c:
             return (await c.execute(q)).scalar()
 
     async def accept(self, invite: Invite, *, name: str, caller: str | None, at: str, request_id: str) -> str | None:
@@ -360,7 +357,7 @@ class TeamStore:
             raise NotTheInvitee(signed_in=caller is not None) from e
 
     async def _accept(self, invite: Invite, *, name: str, caller: str | None, at: str, request_id: str) -> str:
-        async with self.db.tenant_tx(invite.tenant_id) as c:
+        async with self.tenant_tx(invite.tenant_id) as c:
             user_id = (
                 await c.execute(sa.select(users.c.id).where(sa.func.lower(users.c.email) == invite.email.lower()))
             ).scalar()
