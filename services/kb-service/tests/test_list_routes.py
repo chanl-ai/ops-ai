@@ -311,3 +311,69 @@ async def test_item_page_keeps_another_teams_rows_out_by_its_own_predicate(engin
         page, _ = await KnowledgeStore(engine).item_page(tenant, sid, ListParams())
     assert [r["id"] for r in page["data"]] == sorted(mine)
     assert (page["pagination"]["total"], page["facets"]) == (2, {"status": {"indexed": 2}})
+
+
+async def test_documents_list_only_the_bases_team_rows_with_tags_and_shown_status_faceted(
+    kb: httpx.AsyncClient,  # noqa: F811
+    engine: AsyncEngine,
+    tenant: str,
+) -> None:
+    """A base's documents across two sources, with a row on the same source written as another team and in another
+    tenant. Tags are the source's, several to a row: a row counts under each of its tags and once in the total."""
+    store = KnowledgeStore(engine)
+    cards: dict[str, Any] = {**source_row(tenant, "team_ops", "Cards feed"), "tags": ["cards", "disputes"]}
+    rules: dict[str, Any] = {**source_row(tenant, "team_ops", "Rules feed"), "tags": ["cards"]}
+    cards["collection"], rules["collection"] = "Cards", "Compliance"
+    with isolation.scope(tenant, "team_ops"):
+        for row in (cards, rules):
+            await store.create_source(row, [])
+    base = base_row(tenant, "team_ops", "Card policies")
+    with isolation.scope(tenant, "team_ops"):
+        await store.create_base(base, [cards["id"], rules["id"]])
+    elsewhere = f"t_{uuid4().hex[:10]}"
+    with isolation.scope(elsewhere, "team_ops"):
+        await store.create_source({**source_row(elsewhere, "team_ops", "Cards feed"), "id": cards["id"]}, [])
+    mine = await insert_rows(
+        engine,
+        tenant,
+        "team_ops",
+        kb_items,
+        item_row(cards["id"], "Dispute limits"),
+        item_row(cards["id"], "Chargebacks", "reading"),
+        item_row(cards["id"], "Lost card"),
+        item_row(rules["id"], "Complaints policy"),
+    )
+    await insert_rows(engine, tenant, "team_lending", kb_items, item_row(cards["id"], "Lending sheet", "failed"))
+    await insert_rows(engine, elsewhere, "team_ops", kb_items, item_row(cards["id"], "Other tenant sheet", "failed"))
+    path = f"/v1/knowledge-bases/{base['id']}/documents"
+    try:
+        first = await _page(kb, path, pageSize=2)
+        second = await _page(kb, path, pageSize=2, page=2)
+        past = await _page(kb, path, pageSize=2, page=9)
+        assert [r["id"] for r in first["data"] + second["data"]] == sorted(mine)
+        assert first["pagination"]["total"] == 4
+        assert (past["pagination"]["page"], [r["id"] for r in past["data"]]) == (2, [r["id"] for r in second["data"]])
+        assert first["facets"] == {
+            "sourceId": {cards["id"]: 3, rules["id"]: 1},
+            "status": {"indexed": 3, "processing": 1},
+            "collection": {"Cards": 3, "Compliance": 1},
+            "docType": {"pdf": 4},
+            "freshness": {"no_schedule": 4},
+            "sensitivity": {"internal": 4},
+            "tags": {"cards": 4, "disputes": 3},
+        }
+        # A tag keeps the rows holding it; its own facet still counts every tag over the other filters.
+        tagged = await _page(kb, path, tags="disputes", status="indexed")
+        indexed = [mine[0], mine[2]]
+        assert ([r["id"] for r in tagged["data"]], tagged["pagination"]["total"]) == (sorted(indexed), 2)
+        assert tagged["facets"]["tags"] == {"cards": 3, "disputes": 2}
+        assert tagged["facets"]["status"] == {"indexed": 2, "processing": 1}
+        shown = await _page(kb, path, status="processing", search="charge")
+        assert [r["title"] for r in shown["data"]] == ["Chargebacks"]
+        assert (await _page(kb, path, tags="disputes", collection="Compliance"))["pagination"]["total"] == 0
+    finally:
+        with isolation.scope(tenant, "team_ops"):
+            async with store.tx() as c:
+                await c.execute(
+                    sa.delete(kb_items).where(kb_items.c.tenant_id == tenant, kb_items.c.status == "reading")
+                )
