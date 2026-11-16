@@ -23,38 +23,11 @@ def test_a_public_key_verifies_what_the_private_key_signed() -> None:
     assert verify(token, verifier, now=T0, audience="agents")["sub"] == "u1"
 
 
-def test_a_token_from_another_key_is_refused() -> None:
-    issuer, other = Ed25519Signer.generate("k1"), Ed25519Signer.generate("k1")
-    token = mint({"sub": "u1", "aud": "agents"}, other, ttl_s=60, now=T0)
-    with pytest.raises(TokenError) as e:
-        verify(token, issuer.verifier("agents"), now=T0)
-    assert e.value.reason == "signature"
-
-
 def test_a_holder_of_the_public_key_cannot_mint() -> None:
     verifier = Ed25519Signer.generate("k1").verifier("agents")
     with pytest.raises(TokenError) as e:
         mint({"sub": "u1"}, verifier, ttl_s=60, now=T0)
     assert e.value.reason == "cannot_sign"
-
-
-def test_an_hs256_token_keyed_with_the_public_key_is_refused() -> None:
-    """The classic algorithm swap: sign HS256 with the public key bytes and hope the verifier uses them as a secret."""
-    issuer = Ed25519Signer.generate("k1")
-    public = base64.urlsafe_b64decode(issuer.public_jwk()["x"] + "==")
-    forged = mint({"sub": "attacker", "aud": "agents"}, HmacSigner(public), ttl_s=60, now=T0)
-    with pytest.raises(TokenError) as e:
-        verify(forged, issuer.verifier("agents"), now=T0)
-    assert e.value.reason == "algorithm"
-
-
-def test_a_token_for_another_audience_is_refused() -> None:
-    issuer = Ed25519Signer.generate("k1")
-    for claims in ({"sub": "u1", "aud": "tools"}, {"sub": "u1"}):
-        token = mint(claims, issuer, ttl_s=60, now=T0)
-        with pytest.raises(TokenError) as e:
-            verify(token, issuer.verifier("agents"), now=T0)
-        assert e.value.reason == "audience"
 
 
 def test_a_list_audience_names_the_service() -> None:
@@ -84,17 +57,33 @@ def test_hmac_still_works_unchanged() -> None:
     assert "kid" not in header_of(token)
 
 
-def test_an_eddsa_verify_without_an_audience_is_refused() -> None:
-    issuer = Ed25519Signer.generate("k1")
-    token = mint({"sub": "u1", "aud": "agents"}, issuer, ttl_s=60, now=T0)
-    with pytest.raises(TokenError) as e:
-        verify(token, issuer, now=T0)
-    assert e.value.reason == "audience"
+ISSUER = Ed25519Signer.generate("k1")
+AGENTS = {"sub": "u1", "aud": "agents"}
+# The classic algorithm swap: sign HS256 with the public key bytes and hope the verifier uses them as a secret.
+PUBLIC_AS_SECRET = HmacSigner(base64.urlsafe_b64decode(ISSUER.public_jwk()["x"] + "=="))
 
 
-def test_a_call_cannot_widen_a_verifier_bound_to_another_audience() -> None:
-    issuer = Ed25519Signer.generate("k1")
-    token = mint({"sub": "u1", "aud": "agents"}, issuer, ttl_s=60, now=T0)
+@pytest.mark.parametrize(
+    ("claims", "signer", "verifier", "audience", "why"),
+    [
+        (AGENTS, Ed25519Signer.generate("k1"), ISSUER.verifier("agents"), None, "signature"),
+        ({"sub": "attacker", "aud": "agents"}, PUBLIC_AS_SECRET, ISSUER.verifier("agents"), None, "algorithm"),
+        ({"sub": "u1", "aud": "tools"}, ISSUER, ISSUER.verifier("agents"), None, "audience"),
+        ({"sub": "u1"}, ISSUER, ISSUER.verifier("agents"), None, "audience"),
+        # A verify that names no audience, and a call that tries to widen a verifier bound to another one.
+        (AGENTS, ISSUER, ISSUER, None, "audience"),
+        (AGENTS, ISSUER, ISSUER.verifier("tools"), "agents", "audience"),
+    ],
+    ids=["another-key", "hs256-with-public-key", "another-audience", "no-audience-claim", "unbound", "widened"],
+)
+def test_a_token_that_proves_nothing_is_refused(
+    claims: dict[str, str],
+    signer: Ed25519Signer | HmacSigner,
+    verifier: Ed25519Signer | Ed25519Verifier,
+    audience: str | None,
+    why: str,
+) -> None:
+    token = mint(claims, signer, ttl_s=60, now=T0)
     with pytest.raises(TokenError) as e:
-        verify(token, issuer.verifier("tools"), now=T0, audience="agents")
-    assert e.value.reason == "audience"
+        verify(token, verifier, now=T0, audience=audience)
+    assert e.value.reason == why
