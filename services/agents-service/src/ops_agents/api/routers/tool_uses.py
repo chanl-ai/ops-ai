@@ -93,7 +93,8 @@ async def tool_uses(rt: Runtime, team_id: str | None, tools: list[str]) -> dict[
             tool = str(dict(node.get("parameters") or {}).get("operation") or "")
             if node.get("type") == "ops.action.tool" and tool in wanted:
                 add(tool, {"kind": "workflow", "id": str(d["workflow_id"]), "name": str(d["name"])})
-    return out
+    # Agents then workflows, each by id: the registry reads are unordered, so an updated row would otherwise move.
+    return {t: sorted(uses, key=lambda u: (u["kind"], u["id"])) for t, uses in out.items()}
 
 
 @router.get("", response_model=Envelope[dict[str, list[ToolUser]]])
