@@ -4632,7 +4632,7 @@ export interface components {
             deltaLink: string | null;
             /** Items */
             items: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /** Nextlink */
             nextLink: string | null;

@@ -42,12 +42,6 @@
 1 body gateway_platform_event
 1 body gateway_raise_fence
 1 reply gateway_tool_access
-1 body mailboxes_read
-1 reply mailboxes_read
-1 body mailboxes_test
-1 reply mailboxes_test
-1 body mailboxes_wait
-1 reply mailboxes_wait
 1 reply plugins_list_plugin_templates
 2 dict-any services/tools-service/src/ops_tools/__main__.py
 12 dict-any services/tools-service/src/ops_tools/app.py
@@ -78,7 +72,7 @@
 2 dict-any services/tools-service/src/ops_tools/held_hosts.py
 4 dict-any services/tools-service/src/ops_tools/knowledge_tools.py
 2 dict-any services/tools-service/src/ops_tools/limits.py
-4 dict-any services/tools-service/src/ops_tools/mailboxes.py
+3 dict-any services/tools-service/src/ops_tools/mailboxes.py
 23 dict-any services/tools-service/src/ops_tools/mcp.py
 13 dict-any services/tools-service/src/ops_tools/mcp_server.py
 31 dict-any services/tools-service/src/ops_tools/mcp_tools.py

@@ -736,9 +736,9 @@ class PackageCheck(TypedDict, closed=True):
     title: str
 
 
-class PageOut(TypedDict):
+class PageOut(TypedDict, closed=True):
     deltaLink: str | None
-    items: list[dict[str, Any]]
+    items: list[dict[str, JsonValue]]
     nextLink: str | None
 
 
@@ -1079,7 +1079,7 @@ class TestRequestOut(TypedDict, closed=True):
     url: str
 
 
-class TestStep(TypedDict):
+class TestStep(TypedDict, closed=True):
     state: Literal["done", "failed", "skipped"]
     title: str
 
@@ -1256,7 +1256,7 @@ class WaitIn(TypedDict, closed=True):
     seconds: NotRequired[float]
 
 
-class WaitOut(TypedDict):
+class WaitOut(TypedDict, closed=True):
     changed: bool
 
 
@@ -1885,7 +1885,7 @@ class SystemPlugin(TypedDict, closed=True):
     values: NotRequired[dict[str, Any]]
 
 
-class TestOut(TypedDict):
+class TestOut(TypedDict, closed=True):
     error: NotRequired[str | None]
     newest: NotRequired[dict[str, str] | None]
     ok: bool

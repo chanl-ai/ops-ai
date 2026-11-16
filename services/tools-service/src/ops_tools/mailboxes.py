@@ -19,14 +19,13 @@ from typing import Annotated, Any, Literal
 import httpx
 from fastapi import APIRouter, Body
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
 
 from ops_access import can
 from ops_email import GraphSender, ImapMailSource, MailNotConfiguredError, MailSender, ResendSender, SmtpSender
 from ops_identity import CurrentService, ServiceCallError, ServiceClient
 from ops_service_kit.errors import Forbidden, Unprocessable
-from ops_service_kit.http import Envelope, ok
+from ops_service_kit.http import Envelope, In, JsonValue, Out, ok
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 
@@ -48,11 +47,7 @@ log = get_logger("ops_tools.mailboxes")
 IMAP_DEFAULT_PORT = {True: 993, False: 143}
 
 
-class _In(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
-
-
-class Connection(_In):
+class Connection(In):
     """How to sign in to one mailbox; the password goes by its secret's name only."""
 
     address: str = Field(min_length=3, max_length=320)
@@ -67,7 +62,7 @@ class Connection(_In):
     graph_client_id: str | None = Field(default=None, max_length=64)
 
 
-class ReadIn(_In):
+class ReadIn(In):
     connection: Connection
     folder: str = "inbox"
     # None: the first pass, which takes the cursor at the folder's end and reads nothing (`now`), or reads from the
@@ -76,38 +71,35 @@ class ReadIn(_In):
     now: bool = False
 
 
-class WaitIn(_In):
+class WaitIn(In):
     connection: Connection
     folder: str = "inbox"
     cursor: str
     seconds: float = Field(default=25.0, gt=0, le=600)
 
 
-class TestIn(_In):
+class TestIn(In):
     connection: Connection
     folder: str = "inbox"
 
 
-class _Out(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-
-class PageOut(_Out):
-    items: list[dict[str, Any]]
+class PageOut(Out):
+    # Each message as the mailbox gave it: an IMAP message's raw bytes, or a Microsoft 365 message's own JSON.
+    items: list[dict[str, JsonValue]]
     next_link: str | None
     delta_link: str | None
 
 
-class WaitOut(_Out):
+class WaitOut(Out):
     changed: bool
 
 
-class TestStep(_Out):
+class TestStep(Out):
     title: str
     state: Literal["done", "failed", "skipped"]
 
 
-class TestOut(_Out):
+class TestOut(Out):
     ok: bool
     steps: list[TestStep]
     newest: dict[str, str] | None = None
@@ -316,7 +308,8 @@ def mailboxes_router(
 
     @r.post("/read", response_model=Envelope[PageOut])
     async def read(body: Annotated[ReadIn, Body()], caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """One page of the folder after `cursor`, or with `now` and no cursor, the cursor at its end and no mail."""
+        """One page of the folder after `cursor`, or with `now` and no cursor, the cursor at its end and no mail. Off
+        the request transaction: the mailbox is dialled, and it can take seconds to answer."""
         src = await source(caller, body.connection, body.folder, audit=False)
         try:
             if body.cursor is None and body.now:
@@ -332,7 +325,8 @@ def mailboxes_router(
 
     @r.post("/wait", response_model=Envelope[WaitOut])
     async def wait(body: Annotated[WaitIn, Body()], caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        """True as soon as the folder has mail after `cursor` (IDLE); false after `seconds` with none."""
+        """True as soon as the folder has mail after `cursor` (IDLE); false after `seconds` with none. Off the request
+        transaction: it holds the mailbox open for up to `seconds`."""
         src = await source(caller, body.connection, body.folder, audit=False)
         try:
             changed = await src.wait(body.cursor, body.seconds)
@@ -343,7 +337,8 @@ def mailboxes_router(
     @r.post("/test", response_model=Envelope[TestOut])
     async def test(body: Annotated[TestIn, Body()], caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Test connection: the secret and host checks, then sign-in and the folder's newest message, read without
-        marking it read. A refused check or failed sign-in is a result (ok false, the reason), not an error."""
+        marking it read. A refused check or failed sign-in is a result (ok false, the reason), not an error. Off the
+        request transaction: the mailbox is dialled."""
         graph_box = body.connection.provider == "graph"
         steps = (
             [

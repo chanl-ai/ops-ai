@@ -9180,6 +9180,7 @@
         "type": "object"
       },
       "PageOut": {
+        "additionalProperties": false,
         "properties": {
           "deltaLink": {
             "anyOf": [
@@ -9194,7 +9195,9 @@
           },
           "items": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "title": "Items",
@@ -11885,6 +11888,7 @@
         "type": "object"
       },
       "TestOut": {
+        "additionalProperties": false,
         "properties": {
           "error": {
             "anyOf": [
@@ -11969,6 +11973,7 @@
         "type": "object"
       },
       "TestStep": {
+        "additionalProperties": false,
         "properties": {
           "state": {
             "enum": [
@@ -13580,6 +13585,7 @@
         "type": "object"
       },
       "WaitOut": {
+        "additionalProperties": false,
         "properties": {
           "changed": {
             "title": "Changed",
@@ -23430,7 +23436,7 @@
     },
     "/v1/mailboxes/read": {
       "post": {
-        "description": "One page of the folder after `cursor`, or with `now` and no cursor, the cursor at its end and no mail.",
+        "description": "One page of the folder after `cursor`, or with `now` and no cursor, the cursor at its end and no mail. Off\nthe request transaction: the mailbox is dialled, and it can take seconds to answer.",
         "operationId": "mailboxes_read",
         "parameters": [
           {
@@ -23491,7 +23497,7 @@
     },
     "/v1/mailboxes/test": {
       "post": {
-        "description": "Test connection: the secret and host checks, then sign-in and the folder's newest message, read without\nmarking it read. A refused check or failed sign-in is a result (ok false, the reason), not an error.",
+        "description": "Test connection: the secret and host checks, then sign-in and the folder's newest message, read without\nmarking it read. A refused check or failed sign-in is a result (ok false, the reason), not an error. Off the\nrequest transaction: the mailbox is dialled.",
         "operationId": "mailboxes_test",
         "parameters": [
           {
@@ -23552,7 +23558,7 @@
     },
     "/v1/mailboxes/wait": {
       "post": {
-        "description": "True as soon as the folder has mail after `cursor` (IDLE); false after `seconds` with none.",
+        "description": "True as soon as the folder has mail after `cursor` (IDLE); false after `seconds` with none. Off the request\ntransaction: it holds the mailbox open for up to `seconds`.",
         "operationId": "mailboxes_wait",
         "parameters": [
           {
