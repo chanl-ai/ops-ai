@@ -99,6 +99,8 @@ WIDENINGS: dict[str, set[str]] = {
     "PURGE_WITHDRAWN": {"services/kb-service/src/ops_kb/schedule.py"},
     "FIND_PENDING": {"services/kb-service/src/ops_kb/embedding.py"},
     "RELAY": {"packages/ops_store/src/ops_store/outbox.py"},
+    # The install's model provider connections, read by every tenant's calls (`Store.install_tx`, no tenant).
+    "CONNECTIONS": {"services/models-service/src/ops_models/store/providers.py"},
     # Heartbeats describe a process, which serves every tenant; the Background page reads every team's jobs.
     "HEARTBEAT": {"packages/ops_store/src/ops_store/background.py"},
     "BACKGROUND_PAGE": {"services/agents-service/src/ops_agents/store/background.py"},
