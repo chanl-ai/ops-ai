@@ -1,4 +1,4 @@
-# 74 boundaries crossed without a model in services/files-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 66 boundaries crossed without a model in services/files-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body files_attach
 1 reply files_attach
 1 body files_bulk_delete
@@ -29,11 +29,10 @@
 1 gather services/files-service/src/ops_files/app.py
 1 task services/files-service/src/ops_files/app.py
 4 dict-any services/files-service/src/ops_files/settings.py
-11 dict-any services/files-service/src/ops_files/store/files.py
-1 store-dict services/files-service/src/ops_files/store/files.py
+6 dict-any services/files-service/src/ops_files/store/files.py
 4 dict-any services/files-service/src/ops_files/store/read_requests.py
 2 dict-any services/files-service/src/ops_files/store/settings.py
-11 dict-any services/files-service/src/ops_files/tenant_files.py
+9 dict-any services/files-service/src/ops_files/tenant_files.py
 1 reply settings_get_settings
 1 reply settings_list_credentials
 1 body settings_save_settings

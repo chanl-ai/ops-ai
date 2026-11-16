@@ -74,8 +74,8 @@ async def test_two_completions_of_the_same_bytes_leave_one_available_file(engine
     with isolation.scope(tenant, "team_ops"):
         listed = await store.list("team_ops", page=1, page_size=10)
         loser_row = await store.get(loser)
-    assert [row["id"] for row in listed.rows] == [winner]
-    assert loser_row is not None and loser_row["status"] == "uploading"
+    assert [row.id for row in listed.rows] == [winner]
+    assert loser_row is not None and loser_row.file.status == "uploading"
 
 
 async def test_the_same_bytes_in_another_team_are_a_second_file(engine: AsyncEngine, tenant: str) -> None:

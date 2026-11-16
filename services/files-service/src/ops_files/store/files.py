@@ -16,15 +16,19 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from ops_service_kit.http import Out
 from ops_store import Guarantee, isolation
 from ops_store.database import open_database
 from ops_store.outbox import add as add_event
 from ops_store.outbox import outbox_table
+from ops_store.rows import one, rows
 from ops_store.schema import TENANT_SCOPED, team_owned
 from ops_store.search import contains
+from ops_store.store import Store
 from ops_store.team_scope import any_team, team_visible
 
 # Listed in Files only when a filter asks for them: every email's text is stored so a workflow can read it, and
@@ -37,10 +41,15 @@ __all__ = [
     "ROLE",
     "SYSTEM_ROLE",
     "AsyncEngine",
+    "FileOut",
     "FileRow",
     "FilesStore",
     "HoldRow",
+    "ListedFile",
+    "OptionRow",
     "Page",
+    "ReferenceOut",
+    "VersionOut",
     "engine_for",
     "metadata",
     "reachable",
@@ -184,30 +193,107 @@ file_legal_holds = sa.Table(
 )
 
 
-@dataclass(frozen=True)
-class HoldRow:
+class HoldRow(Out):
     id: str
     placed_by: str
     placed_at: datetime
     reason: str
 
 
-@dataclass(frozen=True)
-class FileRow:
+class FileOut(Out):
+    """A row of `files`, every column."""
+
+    id: str
+    tenant_id: str
+    team: str
+    name: str
+    mime: str
+    sniffed_mime: str | None
+    size: int
+    digest: str | None
+    purpose: str
+    status: str
+    scan_status: str
+    scan_engine: str | None
+    scan_at: datetime | None
+    scan_detail: str | None
+    sensitivity: str
+    sensitivity_suggested: bool
+    retention_class_id: str
+    delete_after: date | None
+    immutable: bool
+    storage_backend: str
+    storage_container: str
+    storage_key: str
+    multipart_upload_id: str | None
+    declared_size: int
+    declared_digest: str | None
+    upload_expires_at: datetime | None
+    uploaded_by: str
+    uploaded_at: datetime
+    version_count: int
+    data: JsonValue
+    read_as: str | None
+    read_path: str | None
+
+
+class ListedFile(FileOut):
+    """A list row: the file with its reference count and its open hold's who, when and why."""
+
+    reference_count: int
+    hold_by: str | None
+    hold_at: datetime | None
+    hold_reason: str | None
+
+
+class VersionOut(Out):
+    file_id: str
+    version: int
+    tenant_id: str
+    digest: str
+    size: int
+    storage_key: str
+    uploaded_by: str
+    uploaded_at: datetime
+    current: bool
+    team: str
+
+
+class ReferenceOut(Out):
+    file_id: str
+    ref_type: str
+    ref_id: str
+    tenant_id: str
+    owner_service: str
+    name: str
+    href: str | None
+    added_at: datetime
+    blocked: str | None
+    team: str
+
+
+class OptionRow(Out):
+    """A picker's row."""
+
+    id: str
+    name: str
+    size: int
+    scan_status: str
+    uploaded_at: datetime
+
+
+class FileRow(Out):
     """One file with the rows the API shows beside it."""
 
-    file: Mapping[str, Any]
-    versions: Sequence[Mapping[str, Any]]
-    references: Sequence[Mapping[str, Any]]
+    file: FileOut
+    versions: list[VersionOut]
+    references: list[ReferenceOut]
     hold: HoldRow | None
-
-    def __getitem__(self, column: str) -> Any:
-        return self.file[column]
 
 
 @dataclass(frozen=True)
 class Page:
-    rows: Sequence[Mapping[str, Any]]
+    rows: Sequence[ListedFile]
     total: int
     view_counts: Mapping[str, int] = field(default_factory=dict[str, int])
     facets: Mapping[str, Mapping[str, int]] = field(default_factory=dict[str, Mapping[str, int]])
@@ -235,86 +321,40 @@ async def reachable(engine: AsyncEngine) -> bool:
     return True
 
 
-class FilesStore:
+class FilesStore(Store):
+    role = ROLE
     # Completion claims the digest and marks the file available in one transaction (file_blobs above).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION})
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
 
     # ── reads ──
 
     async def get(self, file_id: str) -> FileRow | None:
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             return await self._get(c, tenant, file_id)
 
     async def _get(self, c: AsyncConnection, tenant: str, file_id: str) -> FileRow | None:
-        row = (
-            (
-                await c.execute(
-                    sa.select(files).where(files.c.tenant_id == tenant, files.c.id == file_id, team_visible(files))
-                )
-            )
-            .mappings()
-            .first()
+        found = await one(
+            c, sa.select(files).where(files.c.tenant_id == tenant, files.c.id == file_id, team_visible(files)), FileOut
         )
-        if row is None:
+        if found is None:
             return None
-        versions = (
-            (
-                await c.execute(
-                    sa.select(file_versions)
-                    .where(
-                        file_versions.c.tenant_id == tenant,
-                        file_versions.c.file_id == file_id,
-                        team_visible(file_versions),
-                    )
-                    .order_by(file_versions.c.version)
-                )
-            )
-            .mappings()
-            .all()
-        )
-        references = (
-            (
-                await c.execute(
-                    sa.select(file_references)
-                    .where(
-                        file_references.c.tenant_id == tenant,
-                        file_references.c.file_id == file_id,
-                        team_visible(file_references),
-                    )
-                    .order_by(file_references.c.added_at)
-                )
-            )
-            .mappings()
-            .all()
-        )
-        hold = (
-            (
-                await c.execute(
-                    sa.select(file_legal_holds).where(
-                        file_legal_holds.c.tenant_id == tenant,
-                        file_legal_holds.c.file_id == file_id,
-                        file_legal_holds.c.released_at.is_(None),
-                        team_visible(file_legal_holds),
-                    )
-                )
-            )
-            .mappings()
-            .first()
+        v, r, h = file_versions, file_references, file_legal_holds
+        versions = sa.select(v).where(v.c.tenant_id == tenant, v.c.file_id == file_id, team_visible(v))
+        references = sa.select(r).where(r.c.tenant_id == tenant, r.c.file_id == file_id, team_visible(r))
+        hold = sa.select(h.c.id, h.c.placed_by, h.c.placed_at, h.c.reason).where(
+            h.c.tenant_id == tenant, h.c.file_id == file_id, h.c.released_at.is_(None), team_visible(h)
         )
         return FileRow(
-            file=dict(row),
-            versions=[dict(v) for v in versions],
-            references=[dict(r) for r in references],
-            hold=HoldRow(hold["id"], hold["placed_by"], hold["placed_at"], hold["reason"]) if hold else None,
+            file=found,
+            versions=await rows(c, versions.order_by(v.c.version), VersionOut),
+            references=await rows(c, references.order_by(r.c.added_at), ReferenceOut),
+            hold=next(iter(await rows(c, hold.limit(1), HoldRow)), None),
         )
 
     async def options(
         self, team: str, *, search: str, offset: int, limit: int, ids: list[str] | None
-    ) -> list[dict[str, Any]]:
+    ) -> list[OptionRow]:
         """A picker's page of one team's available files, newest first: searched by name in the query, or the given
         ids. Returns id, name, size, scan status and upload time."""
         tenant = isolation.tenant()
@@ -330,9 +370,8 @@ class FilesStore:
             where.append(contains(files.c.name, search))
         cols = (files.c.id, files.c.name, files.c.size, files.c.scan_status, files.c.uploaded_at)
         q = sa.select(*cols).where(*where).order_by(files.c.uploaded_at.desc(), files.c.id)
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            rows = await c.execute(q if ids is not None else q.limit(limit).offset(offset))
-            return [dict(r) for r in rows.mappings().all()]
+        async with self.tx() as c:
+            return await rows(c, q if ids is not None else q.limit(limit).offset(offset), OptionRow)
 
     async def list(
         self,
@@ -399,20 +438,16 @@ class FilesStore:
             return [*(facet_cols[k].in_(v) for k, v in chosen.items() if k != skip), *shown]
 
         where = [*base, *facet_where(), self._in_view(view, tenant, at)]
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             total = int((await c.execute(sa.select(sa.func.count()).select_from(files).where(*where))).scalar_one())
-            rows = (
-                (
-                    await c.execute(
-                        sa.select(files, self._reference_count(), *self._hold_columns())
-                        .where(*where)
-                        .order_by(files.c.uploaded_at.desc(), files.c.id)
-                        .limit(page_size)
-                        .offset((page - 1) * page_size)
-                    )
-                )
-                .mappings()
-                .all()
+            listed = await rows(
+                c,
+                sa.select(files, self._reference_count(), *self._hold_columns())
+                .where(*where)
+                .order_by(files.c.uploaded_at.desc(), files.c.id)
+                .limit(page_size)
+                .offset((page - 1) * page_size),
+                ListedFile,
             )
             counts: dict[str, int] = {}
             for v in VIEWS:
@@ -427,7 +462,7 @@ class FilesStore:
                     .group_by(col)
                 )
                 facets[key] = {str(k): int(n) for k, n in (await c.execute(q)).all()}
-        return Page(rows=[dict(r) for r in rows], total=total, view_counts=counts, facets=facets)
+        return Page(rows=listed, total=total, view_counts=counts, facets=facets)
 
     @staticmethod
     def _in_view(view: str, tenant: str, now: datetime) -> sa.ColumnElement[bool]:
@@ -501,45 +536,47 @@ class FilesStore:
         transaction. When another upload already holds the key, nothing is written and (its file id, its request
         hash) is returned."""
         tenant = str(values["tenant_id"])
-        try:
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                if idempotency is not None:
-                    await c.execute(
-                        sa.insert(file_idempotency).values(
-                            tenant_id=tenant,
-                            key_hash=idempotency["key_hash"],
-                            request_hash=idempotency["request_hash"],
-                            file_id=values["id"],
-                            created_at=values["uploaded_at"],
+        async with self.tx() as c:
+            try:
+                async with self.attempt(c):
+                    if idempotency is not None:
+                        await c.execute(
+                            sa.insert(file_idempotency).values(
+                                tenant_id=tenant,
+                                key_hash=idempotency["key_hash"],
+                                request_hash=idempotency["request_hash"],
+                                file_id=values["id"],
+                                created_at=values["uploaded_at"],
+                            )
                         )
-                    )
-                await c.execute(sa.insert(files).values(**values))
-        except IntegrityError:
-            if idempotency is None:
-                raise
-            held = await self.idempotent_upload(idempotency["key_hash"])
-            if held is None:
-                raise
-            return held
+                    await c.execute(sa.insert(files).values(**values))
+            except IntegrityError:
+                if idempotency is None:
+                    raise
+                held = await self._idempotent(c, idempotency["key_hash"])
+                if held is None:
+                    raise
+                return held
         return None
 
     async def idempotent_upload(self, key_hash: str) -> tuple[str, str] | None:
         """(file id, request hash) an Idempotency-Key already holds, or None."""
-        tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            row = (
-                await c.execute(
-                    sa.select(file_idempotency.c.file_id, file_idempotency.c.request_hash).where(
-                        file_idempotency.c.tenant_id == tenant, file_idempotency.c.key_hash == key_hash
-                    )
-                )
-            ).first()
+        async with self.tx() as c:
+            return await self._idempotent(c, key_hash)
+
+    @staticmethod
+    async def _idempotent(c: AsyncConnection, key_hash: str) -> tuple[str, str] | None:
+        t = file_idempotency
+        q = sa.select(t.c.file_id, t.c.request_hash).where(
+            t.c.tenant_id == isolation.tenant(), t.c.key_hash == key_hash
+        )
+        row = (await c.execute(q)).first()
         return (str(row[0]), str(row[1])) if row is not None else None
 
     async def repoint_idempotency(self, from_file: str, to_file: str) -> None:
         """A deduplicated upload's keys now name the file it was folded into, so a retry finds that file."""
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(file_idempotency)
                 .where(file_idempotency.c.tenant_id == tenant, file_idempotency.c.file_id == from_file)
@@ -548,42 +585,38 @@ class FilesStore:
 
     async def update(self, file_id: str, values: Mapping[str, Any]) -> None:
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(sa.update(files).where(files.c.tenant_id == tenant, files.c.id == file_id).values(**values))
 
     async def make_available(self, file_id: str, values: Mapping[str, Any], version: Mapping[str, Any]) -> str | None:
         """Marks an upload available and claims its digest for the team in one transaction. When another file of the
         team already holds the digest, nothing is written and that file's id is returned."""
         tenant = isolation.tenant()
-        row = await self.get(file_id)
-        assert row is not None
-        try:
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                await c.execute(
-                    sa.insert(file_blobs).values(
-                        tenant_id=tenant, team=row["team"], digest=values["digest"], file_id=file_id
-                    )
-                )
-                await c.execute(
-                    sa.update(files)
-                    .where(files.c.tenant_id == tenant, files.c.id == file_id, files.c.status == "uploading")
-                    .values(**values)
-                )
-                await c.execute(
-                    sa.insert(file_versions).values(file_id=file_id, tenant_id=tenant, team=row["team"], **version)
-                )
-        except IntegrityError:
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                return (
+        async with self.tx() as c:
+            row = await self._get(c, tenant, file_id)
+            assert row is not None
+            team = row.file.team
+            try:
+                async with self.attempt(c):
                     await c.execute(
-                        sa.select(file_blobs.c.file_id).where(
-                            file_blobs.c.tenant_id == tenant,
-                            file_blobs.c.team == row["team"],
-                            file_blobs.c.digest == values["digest"],
-                            team_visible(file_blobs),
+                        sa.insert(file_blobs).values(
+                            tenant_id=tenant, team=team, digest=values["digest"], file_id=file_id
                         )
                     )
-                ).scalar_one()
+                    await c.execute(
+                        sa.update(files)
+                        .where(files.c.tenant_id == tenant, files.c.id == file_id, files.c.status == "uploading")
+                        .values(**values)
+                    )
+                    await c.execute(
+                        sa.insert(file_versions).values(file_id=file_id, tenant_id=tenant, team=team, **version)
+                    )
+            except IntegrityError:
+                b = file_blobs
+                held = sa.select(b.c.file_id).where(
+                    b.c.tenant_id == tenant, b.c.team == team, b.c.digest == values["digest"], team_visible(b)
+                )
+                return (await c.execute(held)).scalar_one()
         return None
 
     async def released_due(self, purposes: Sequence[str], today: date) -> list[tuple[str, str, str]]:
@@ -606,7 +639,7 @@ class FilesStore:
         payload) is written to the outbox in the same transaction, so the deletion and its file.deleted event commit
         together and a relay delivers it however long agents-service is down."""
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             if event is not None:
                 await add_event(
                     c,
@@ -633,7 +666,7 @@ class FilesStore:
 
     async def place_hold(self, file_id: str, hold_id: str, *, by: str, at: datetime, reason: str) -> None:
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.insert(file_legal_holds).values(
                     id=hold_id,
@@ -648,7 +681,7 @@ class FilesStore:
 
     async def release_hold(self, hold_id: str, *, by: str, at: datetime, reason: str) -> None:
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(file_legal_holds)
                 .where(file_legal_holds.c.tenant_id == tenant, file_legal_holds.c.id == hold_id)
@@ -658,17 +691,18 @@ class FilesStore:
     async def add_reference(self, values: Mapping[str, Any]) -> bool:
         """False when the file already has this reference."""
         tenant = isolation.tenant()
-        try:
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                team = _team_of(str(values["file_id"]))
-                await c.execute(sa.insert(file_references).values(tenant_id=tenant, team=team, **values))
-        except IntegrityError:
-            return False
+        team = _team_of(str(values["file_id"]))
+        async with self.tx() as c:
+            try:
+                async with self.attempt(c):
+                    await c.execute(sa.insert(file_references).values(tenant_id=tenant, team=team, **values))
+            except IntegrityError:
+                return False
         return True
 
     async def remove_reference(self, file_id: str, ref_type: str, ref_id: str) -> None:
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.delete(file_references).where(
                     file_references.c.tenant_id == tenant,
@@ -680,7 +714,7 @@ class FilesStore:
 
     async def set_blocked(self, file_id: str, blocked: str | None) -> None:
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(file_references)
                 .where(file_references.c.tenant_id == tenant, file_references.c.file_id == file_id)
