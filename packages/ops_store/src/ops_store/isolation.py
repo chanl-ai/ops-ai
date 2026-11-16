@@ -515,9 +515,14 @@ async def enter_transaction(
             # same membership check, and a transaction's setup is one round trip.
             as_role = role or ("none" if reset_role else None)
             settings = [*([("role", as_role)] if as_role else []), *((SETTINGS[k], v) for k, v in values.items())]
-            await conn.execute(sa.select(*(sa.func.set_config(name, v, True) for name, v in settings)))
+            await conn.execute(
+                sa.select(*(sa.func.set_config(name, v, True) for name, v in settings)),
+                execution_options=dialect.ISOLATION,
+            )
         case "mssql":
-            await conn.execute(_MS_SET, {**values, "tenant_id": None} if install else values)
+            await conn.execute(
+                _MS_SET, {**values, "tenant_id": None} if install else values, execution_options=dialect.ISOLATION
+            )
         case _:
             pass
     # Marked after the statement that set it: the connection now carries the scope its statements are checked by.
@@ -539,7 +544,7 @@ def _mark(conn: AsyncConnection, ctx: Isolation) -> None:
 async def leave_transaction(conn: AsyncConnection) -> None:
     conn.info.pop(_INSTALL, None)
     if dialect.dialect_of(conn) == "mssql":
-        await conn.execute(_MS_SET, dict.fromkeys(SETTINGS))
+        await conn.execute(_MS_SET, dict.fromkeys(SETTINGS), execution_options=dialect.ISOLATION)
 
 
 # Install-wide statements -------------------------------------------------------------------------------------------

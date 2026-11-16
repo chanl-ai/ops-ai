@@ -29,6 +29,7 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy import event
 from sqlalchemy.engine import make_url
+from sqlalchemy.engine.interfaces import ExecutionContext
 from sqlalchemy.exc import DisconnectionError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import AsyncAdaptedQueuePool, ConnectionPoolEntry, NullPool
@@ -38,6 +39,8 @@ from ops_service_kit.logging import get_logger
 from ops_service_kit.request_timing import RequestTiming
 from ops_service_kit.request_timing import current as current_request
 from ops_service_kit.settings import PoolSettings, Settings
+
+from .dialect import ISOLATION_STATEMENT
 
 log = get_logger(__name__)
 # The handle routes, workers and entry points hold. It is the engine today; code outside a store only passes it to a
@@ -114,7 +117,9 @@ def _statement_started(conn: sa.Connection, *_: Any) -> None:
     conn.info.setdefault(_STARTED, []).append(time.perf_counter())
 
 
-def _statement_finished(conn: sa.Connection, *_: Any) -> None:
+def _statement_finished(
+    conn: sa.Connection, _cursor: Any, _sql: str, _params: Any, context: ExecutionContext | None, *_: Any
+) -> None:
     started = conn.info.get(_STARTED)
     if not started:
         return
@@ -122,7 +127,8 @@ def _statement_finished(conn: sa.Connection, *_: Any) -> None:
     # Counted to the request whose task ran the statement; a worker or poller statement has no request.
     request = current_request()
     if request is not None:
-        request.add_query((time.perf_counter() - begun) * 1000)
+        isolating = context is not None and bool(context.execution_options.get(ISOLATION_STATEMENT))
+        request.add_query((time.perf_counter() - begun) * 1000, isolation=isolating)
 
 
 def _transaction_began(conn: sa.Connection) -> None:

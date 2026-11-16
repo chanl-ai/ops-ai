@@ -7,7 +7,9 @@ OPS_REQUEST_TIMING on the response also carries Server-Timing (`app` and `db`), 
 shows. Field names follow OpenTelemetry's HTTP conventions so a later exporter can send the same data.
 
 Database time and query count come from the engine listeners `ops_store.open_database` installs, added to the
-`RequestTiming` of the request whose task ran the query. Work outside a request (workers, the engine poller) has no
+`RequestTiming` of the request whose task ran the query. `db.query_count` is the route's own statements; the isolation
+layer's statements that enter and leave a transaction's scope or role, whose number differs by database, are timed
+with them and counted apart (`db.isolation_query_count`). Work outside a request (workers, the engine poller) has no
 `RequestTiming`, so its queries are never counted to one. The same listeners count the request's transactions
 (`db.tx_count`, one for a route on the request transaction), the longest any of them stayed open (`db.tx_open_ms`) and
 what the pool cost it: the connections it checked out (`db.connection_count`, one for a route on the request
@@ -43,6 +45,7 @@ class RequestTiming:
     started: float = field(default_factory=time.perf_counter)
     db_ms: float = 0.0
     db_queries: int = 0
+    db_isolation_queries: int = 0
     # The verified caller's tenant and team (note_caller), for the request's log line.
     tenant_id: str | None = None
     team_id: str | None = None
@@ -59,9 +62,15 @@ class RequestTiming:
     pool_in_use: int = 0
     pool_limit: int | None = None
 
-    def add_query(self, ms: float) -> None:
+    def add_query(self, ms: float, *, isolation: bool = False) -> None:
+        """`isolation`: a statement the store's isolation layer ran to enter or leave a scope or role, timed with the
+        route's but counted apart, since the number differs by database (PostgreSQL one per transaction, SQL Server
+        more) and a route's statement budget holds on both."""
         self.db_ms += ms
-        self.db_queries += 1
+        if isolation:
+            self.db_isolation_queries += 1
+        else:
+            self.db_queries += 1
 
     def begin_transaction(self) -> None:
         self.db_tx_open += 1
@@ -168,6 +177,7 @@ def _request_line(scope: Scope, timing: RequestTiming, status: int) -> None:
         "duration_ms": round((time.perf_counter() - timing.started) * 1000, 1),
         "db.duration_ms": round(timing.db_ms, 1),
         "db.query_count": timing.db_queries,
+        "db.isolation_query_count": timing.db_isolation_queries,
         "db.tx_count": timing.db_tx,
         "db.tx_open_ms": round(timing.db_tx_open_ms, 1),
         "db.connection_count": timing.db_connections,

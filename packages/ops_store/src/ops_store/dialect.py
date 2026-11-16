@@ -31,6 +31,12 @@ from sqlalchemy.sql.functions import FunctionElement
 SUPPORTED = ("postgresql", "mssql", "sqlite")
 Bind = sa.Connection | sa.Engine | AsyncConnection | AsyncEngine | sa.Dialect
 
+# The execution option on a statement the isolation layer runs to enter or leave a transaction's scope or role. A
+# request's statement count leaves these out: PostgreSQL needs one per transaction and SQL Server two (and two more
+# around a system block), so a route's budget counts only its own statements and holds on both databases.
+ISOLATION_STATEMENT = "ops_isolation_statement"
+ISOLATION = {ISOLATION_STATEMENT: True}
+
 
 def dialect_of(bind: Bind) -> str:
     name = bind.name if isinstance(bind, sa.Dialect) else bind.dialect.name
@@ -260,17 +266,19 @@ async def system_tx(engine: AsyncEngine, *, role: str | None = None) -> AsyncGen
                 match dialect_of(conn):
                     case "postgresql":
                         if role:
-                            await conn.execute(sa.text(f"SET LOCAL ROLE {_pg_role(role)}"))
+                            await conn.execute(sa.text(f"SET LOCAL ROLE {_pg_role(role)}"), execution_options=ISOLATION)
                     case "mssql":
                         if role:
-                            await conn.execute(sa.text(f"EXECUTE AS USER = N'{_ms_user(role)}'"))
+                            await conn.execute(
+                                sa.text(f"EXECUTE AS USER = N'{_ms_user(role)}'"), execution_options=ISOLATION
+                            )
                             impersonating = True
                     case _:
                         pass
                 yield conn
         finally:
             if impersonating:
-                await conn.execute(sa.text("REVERT"))
+                await conn.execute(sa.text("REVERT"), execution_options=ISOLATION)
             if conn.in_transaction():
                 await conn.commit()
 
@@ -486,6 +494,8 @@ def vector_index_ddl(dialect: str, table: str, column: str, width: int) -> str |
 
 
 __all__ = [
+    "ISOLATION",
+    "ISOLATION_STATEMENT",
     "Vector",
     "claim",
     "db_after",

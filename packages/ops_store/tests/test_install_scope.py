@@ -2,17 +2,22 @@
 marked `system(...)` (policed, unpoliced or unknown to the metadata, or as a login row security does not apply to),
 a team filter that passes every team's rows, one that opens a second connection inside a request, one that leaves the
 request's connection in its scope afterwards, and the guard on `Store.tx()` loosened by it. `Store.system_tx(reason)`
-beside it: a system block that runs as the login instead of the store's system role, or opens with no reason."""
+beside it: a system block that runs as the login instead of the store's system role, or opens with no reason. A
+request's statement count that includes the isolation layer's own entry and exit statements, which differ by
+database."""
 
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
+import httpx
 import pytest
 import sqlalchemy as sa
+from fastapi import FastAPI
 from sqlalchemy import event
 from sqlalchemy.dialects import mssql
 from sqlalchemy.exc import DBAPIError
@@ -20,7 +25,9 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.pool import QueuePool
 from sqlalchemy.sql.elements import quoted_name
 
+from ops_service_kit.http import install_error_handlers
 from ops_service_kit.listing import ListParams
+from ops_service_kit.logging import captured_logging
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 from ops_store.backends import backends
@@ -562,3 +569,29 @@ async def test_an_install_block_holds_a_declared_table_by_identity_not_by_name(e
             await c.execute(sa.select(settings.c.value))
     async with st.install_tx(SETTINGS, tables=(settings,)) as c:
         assert await c.scalar(sa.select(sa.cast(settings.c.value, sa.String(64)))) == "eu", "a plain cast still runs"
+
+
+async def test_a_request_counts_its_own_statements_and_not_the_isolation_layers_on_either_database(
+    engine: AsyncEngine,
+) -> None:
+    """One budget holds on both databases: the request transaction's context statements (and SQL Server's clear at
+    its end) and a system block's role switch (and SQL Server's REVERT) are the isolation layer's, not the route's."""
+    st = Recovery(engine)
+    app = FastAPI()
+    install_error_handlers(app)
+
+    @app.get("/notes")
+    async def read() -> list[str]:  # pyright: ignore[reportUnusedFunction]
+        with isolation.scope("t1", None):
+            async with isolation.request_transaction():
+                mine = await st.note_ids()
+        _, every = await st.every_note()
+        return mine + every
+
+    with captured_logging("store-statement-count") as stream:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t") as c:
+            r = await c.get("/notes")
+    assert (r.status_code, r.json()) == (200, ["n1", "n1", "n2"]), r.text
+    (line,) = [x for x in map(json.loads, stream.getvalue().splitlines()) if x.get("event") == "http.request"]
+    # note_ids' select; every_note's select and its user name.
+    assert line["db.query_count"] == 3, line
