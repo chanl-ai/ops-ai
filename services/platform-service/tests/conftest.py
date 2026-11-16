@@ -88,8 +88,7 @@ def database_url() -> str:
 def store_url(request: pytest.FixtureRequest) -> Iterator[str]:
     """The chain on PostgreSQL, and on a scratch SQL Server database holding its golden DDL when OPS_MSSQL_SERVER and
     MSSQL_SA_PASSWORD are set (ops_store.testing), for the store tests that run on both. The rest of the suite stays on
-    PostgreSQL: its rigs write as the database owner, and the lookups before a tenant is known are PostgreSQL
-    functions with no SQL Server form yet."""
+    PostgreSQL: its rigs write as the database owner."""
     if request.param == "postgresql":
         command.upgrade(alembic_config(), "head")
         yield Settings().database_url

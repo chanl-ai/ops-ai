@@ -12,21 +12,26 @@ import pytest
 import sqlalchemy as sa
 
 from ops_access import ANY_TEAM
+from ops_platform.store.identity import Client, IdentityStore
 from ops_platform.store.me import MeStore, MyTeam
-from ops_platform.store.roles import ensure_builtin_roles
+from ops_platform.store.roles import RoleStore, ensure_builtin_roles
 from ops_platform.store.signin import SignInStore
+from ops_platform.store.signin_secrets import SignInSecretStore
 from ops_platform.store.tables import (
     members,
     role_assignments,
     signin_grants,
     signin_group_rules,
     signin_providers,
+    signin_secrets,
     teams,
     tenants,
     users,
 )
 from ops_platform.store.tenancy import TenantDb
+from ops_service_kit.credentials import credential_store
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.settings import Settings
 
 WINDOW, UNTIL = "2000-01-01T00:00:00.000Z", "2999-01-01T00:00:00.000Z"
 
@@ -175,3 +180,39 @@ async def test_a_provider_delete_takes_its_group_rules_and_grants(store: SignInS
             for t in (signin_providers, signin_group_rules, signin_grants)
         ]
     assert (deleted, left) == (True, [0, 0, 0])
+
+
+async def test_install_rows_and_deletes_that_return_a_row_on_each_database(store: SignInStore) -> None:
+    """The assistant registry and address counts, read and written with no tenant, and the two deletes that read back
+    what they removed (a given role, a sign-in secret), which SQL Server writes as OUTPUT."""
+    identity, roles = IdentityStore(store), RoleStore(store)
+    secrets = SignInSecretStore(store, credential_store(Settings()))
+    tenant, user, team, client, now = new_id("ten"), new_id("usr"), new_id("team"), new_id("cli"), now_iso()
+    await identity.register_client(
+        Client(client, "Desk", ["https://desk.test/cb"], None, None), at=now, stale_before=WINDOW
+    )
+    found = await identity.client(client)
+    assert found is not None
+    assert (found.name, found.redirect_uris, found.consented_at) == ("Desk", ["https://desk.test/cb"], None)
+    address = new_id("ip")
+    counts = [(await identity.count_address("token", address, at=now, window_start=WINDOW))[0] for _ in range(2)]
+    assert counts == [1, 2]
+    assert await identity.clients_of_tenant(tenant) == 0
+    async with store.tenant_tx(tenant) as c:
+        await c.execute(
+            tenants.insert().values(id=tenant, name=tenant, status="active", allowed_domains=[], created_at=now)
+        )
+        await ensure_builtin_roles(c, tenant, at=now)
+        await c.execute(
+            teams.insert().values(id=team, tenant_id=tenant, name=team, owner_groups=[], scope="owned", created_at=now)
+        )
+        await c.execute(
+            signin_secrets.insert().values(
+                tenant_id=tenant, name="okta", ciphertext="sealed", version=1, created_by=user, created_at=now
+            )
+        )
+    grant = await roles.grant(tenant, user, "builder", team, by=user, request_id=new_id("req"))
+    assert await roles.ungrant(tenant, grant, by=user, request_id=new_id("req")) is True
+    assert await roles.ungrant(tenant, grant, by=user, request_id=new_id("req")) is False
+    assert await secrets.delete(tenant, "okta", by=user, request_id=new_id("req")) is True
+    assert await secrets.delete(tenant, "okta", by=user, request_id=new_id("req")) is False
