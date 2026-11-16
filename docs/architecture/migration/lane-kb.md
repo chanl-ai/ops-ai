@@ -117,6 +117,12 @@ run_relay(relay(engine, outbox, routes={"kb.audit": ("platform",), "*": ("agents
 | Budgets | 20 GET routes green at 5 and 50 rows on both databases |
 | Behaviour and staging | Tests, the seven use cases and `make verify` green on the merge commit; staging deployed with every process up and the console walk green; the Knowledge screens opened by hand, a sync run |
 
+## Exceptions
+
+| Site | Why it stays | Baseline rows kept |
+|---|---|---|
+| `app.py` `_models_http`: an `httpx.AsyncClient` for rerank, rewrite and embeddings; `ai.py` `models_clients`: an `httpx.Client` per sync run for likely questions | Both call models-service with kb-service's own model key (`models_key`), not a service token, so `ServiceClient.for_settings` does not fit. The kit's model clients (`ops_service_kit.model_calls.ModelCalls` and `IngestModel`) take the key but expect the caller to build the HTTP client; the kit has no constructor that builds one from the `models` endpoint. The address and timeout still come from `settings.models`, and a search's model steps are bound by `kb_search_wait_s`. The rows go when the kit gives `ModelCalls` and `IngestModel` a constructor from settings | `config-literals-baseline.txt`: `client` for `ai.py` and `app.py` |
+
 ## Branch and pull request
 
 Branch `refactor/kb-store-and-api-layers` from `origin/develop`, one pull request into `develop`, rebased once on the
