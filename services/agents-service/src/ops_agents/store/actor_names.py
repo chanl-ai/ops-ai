@@ -6,7 +6,6 @@ from __future__ import annotations
 from typing import ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_engine.store.tables import engine_definitions, engine_runs
 from ops_store import Guarantee
@@ -15,23 +14,20 @@ from ops_store.team_scope import team_visible
 from .agent_registry import registry_agent_versions, registry_agents
 from .form_links import form_links
 from .mailboxes import mailboxes
-from .tenancy import current_tenant, tenant_tx
+from .tenancy import RuntimeStore, current_tenant
 
 # What a run of a workflow version with no name is called where people read it: never its id.
 UNNAMED_WORKFLOW = "a workflow run"
 FORM = "form:"
 
 
-class ActorNames:
+class ActorNames(RuntimeStore):
     requires: ClassVar[frozenset[Guarantee]] = frozenset()
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
 
     async def names(self, *, addresses: set[str], run_ids: set[str], agent_ids: set[str]) -> dict[tuple[str, str], str]:
         """`{(kind, id): name}` for kinds trigger (by mailbox address), run and agent; what is not found is left out."""
         names: dict[tuple[str, str], str] = {}
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             if addresses:
                 m = mailboxes
                 q = sa.select(m.c.address, m.c.name).where(
@@ -61,14 +57,12 @@ class ActorNames:
                 )
                 names |= {("run", str(i)): str(n) for i, n in (await c.execute(q)).all()}
         if agent_ids:
-            # The registry is not a tenant table: the tenant role cannot read it, so it is read on its own connection,
-            # as the registry store reads it.
             a, v = registry_agents, registry_agent_versions
             q = (
                 sa.select(a.c.id, v.c.spec["name"].as_string())
                 .select_from(a.join(v, sa.and_(v.c.agent_id == a.c.id, v.c.version == a.c.version)))
-                .where(a.c.id.in_(agent_ids))
+                .where(a.c.id.in_(agent_ids), team_visible(a))
             )
-            async with self.engine.connect() as c:
+            async with self.tx() as c:
                 names |= {("agent", str(i)): str(n) for i, n in (await c.execute(q)).all() if n}
         return names

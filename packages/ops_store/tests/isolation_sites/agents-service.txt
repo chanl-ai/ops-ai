@@ -8,7 +8,6 @@
 1 install services/agents-service/src/ops_agents/store/leases.py
 2 install services/agents-service/src/ops_agents/store/timers.py
 1 raw services/agents-service/src/ops_agents/api/channels/inbox.py
-1 raw services/agents-service/src/ops_agents/store/actor_names.py
 1 raw services/agents-service/src/ops_agents/store/base.py
 3 raw services/agents-service/src/ops_agents/store/channel_list.py
 10 raw services/agents-service/src/ops_agents/store/channels.py
