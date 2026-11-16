@@ -271,10 +271,11 @@ jobs:
             [models-service]="tests/test_call_log_isolation_migration.py tests/test_call_log_rows_isolated.py tests/test_model_key_share_rows_isolated.py tests/test_provider_key_rows_isolated.py tests/test_alias_current_index.py tests/test_spend_caps.py tests/test_key_spend_race.py tests/test_spend_retention.py"
             [documents-service]="tests/test_isolation.py tests/test_template_copies.py"
             [files-service]="tests/test_isolation.py tests/test_store.py"
+            [kb-service]="tests/test_kb_isolation.py tests/test_kb_changed.py tests/test_team_isolation.py"
           )
           failed=0
           printf '| service | PostgreSQL passed | SQL Server passed | result |\n|---|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
-          for s in models-service documents-service files-service; do
+          for s in models-service documents-service files-service kb-service; do
             log="$RUNNER_TEMP/mssql-$s.log"
             read -ra picked <<<"${files[$s]}"
             (cd "services/$s" && OPS_DATABASE_URL=$OPS_TEST_DATABASE_URL uv run pytest -vv -rs -p no:cacheprovider "${picked[@]}") > "$log" 2>&1 || failed=1

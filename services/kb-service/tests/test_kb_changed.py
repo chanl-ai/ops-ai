@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_kb.store import knowledge
 from ops_kb.store.knowledge import kb_outbox
+from ops_store import isolation
 
 from .test_bases_and_sources import data
 
@@ -22,14 +23,16 @@ BASE = {"name": "Claims", "owner": "maya@harborpine.example", "color": "blue"}
 
 
 async def reported(engine: AsyncEngine, tenant: str) -> list[dict[str, Any]]:
-    """The tenant's kb.changed events, oldest first, as the relay sends their payloads."""
+    """The tenant's kb.changed events, oldest first, as the relay sends their payloads. Read in the tenant's scope, so
+    SQL Server's tenant predicate passes the read as PostgreSQL's policy does."""
     q = (
         sa.select(kb_outbox.c.event_key, kb_outbox.c.payload)
         .where(kb_outbox.c.tenant_id == tenant, kb_outbox.c.name == "kb.changed")
         .order_by(kb_outbox.c.created_at, kb_outbox.c.id)
     )
-    async with engine.connect() as c:
-        return [{"key": r.event_key, **r.payload} for r in await c.execute(q)]
+    with isolation.tenant_wide("test: the tenant's kb.changed events", tenant_id=tenant):
+        async with isolation.isolated_tx(engine) as c:
+            return [{"key": r.event_key, **r.payload} for r in await c.execute(q)]
 
 
 async def test_create_rename_recolour_and_delete_each_report_once_with_a_rising_revision(

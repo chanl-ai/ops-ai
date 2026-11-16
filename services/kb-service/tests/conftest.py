@@ -1,9 +1,12 @@
-"""kb-service in-process on the compose PostgreSQL (`make db-up`), migrated by its own chain."""
+"""kb-service in-process on the compose PostgreSQL (`make db-up`), migrated by its own chain, and on a scratch SQL
+Server database holding the chain's golden DDL when OPS_MSSQL_SERVER and MSSQL_SA_PASSWORD are set
+(ops_store.testing). The store, isolation and outbox tests in BOTH_DATABASES run on both; the rest read the
+PostgreSQL-only search lanes or have not been run on SQL Server yet, and run on PostgreSQL alone."""
 
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from tempfile import mkdtemp
 from uuid import uuid4
@@ -27,10 +30,13 @@ from ops_kb.service import Who
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
 from ops_service_kit.testdb import isolate_from_stack, refusal, unanswered_endpoints
+from ops_store.testing import DATABASES, NO_SQL_SERVER, postgresql_only, sql_server_schema
 
 from .readings_fake import LocalReadings
 
 ROOT = Path(__file__).parents[1]
+# The test files that run on SQL Server too; the store-mssql job in .github/workflows/ci.yml runs the same list.
+BOTH_DATABASES = frozenset({"test_kb_isolation.py", "test_kb_changed.py", "test_team_isolation.py"})
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -41,12 +47,33 @@ def pytest_configure(config: pytest.Config) -> None:
     # Before any fixture or migration: the test database only, never the live one (ops_service_kit.testdb).
     if (why := refusal(Settings().database_url, os.environ.get("OPS_TEST_DATABASE_URL"))) is not None:
         pytest.exit(why, returncode=4)
+    config.addinivalue_line("markers", "postgresql_only(why): runs on PostgreSQL only, for the reason given")
 
 
-@pytest.fixture(scope="session")
-def database_url() -> str:
-    command.upgrade(Config(str(ROOT / "alembic.ini")), "head")
-    return Settings().database_url
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    for item in items:
+        if item.path.name not in BOTH_DATABASES and item.get_closest_marker("postgresql_only") is None:
+            item.add_marker(pytest.mark.postgresql_only("not in BOTH_DATABASES"))
+    keep, dropped = postgresql_only(items)
+    if dropped:
+        config.hook.pytest_deselected(items=[i for i in items if i not in keep])
+        items[:] = keep
+        terminal = config.pluginmanager.get_plugin("terminalreporter")
+        for nodeid, why in dropped:
+            if terminal is not None and why != "not in BOTH_DATABASES":
+                terminal.write_line(f"postgresql only: {nodeid}: {why}")
+
+
+@pytest.fixture(scope="session", params=DATABASES)
+def database_url(request: pytest.FixtureRequest) -> Iterator[str]:
+    if request.param == "postgresql":
+        command.upgrade(Config(str(ROOT / "alembic.ini")), "head")
+        yield Settings().database_url
+        return
+    with sql_server_schema("kb", os.environ.get("OPS_MSSQL_SERVER"), os.environ.get("MSSQL_SA_PASSWORD")) as url:
+        if url is None:
+            pytest.skip(NO_SQL_SERVER)
+        yield url
 
 
 @pytest.fixture
