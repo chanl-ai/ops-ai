@@ -1,4 +1,8 @@
-"""Cases: workflow runs across every thread, on the console's `/runs` routes (see hitl_facade)."""
+"""Cases: workflow runs across every thread, on the console's `/runs` routes (see hitl_facade).
+
+Neither route takes the request transaction (`Tx`): each row names the team that decides its step through
+platform-service (`deciding_team`) and a held tool call's write policy through tools-service, and no connection is held
+while they answer. The list pages rows computed from several stores in memory rather than in SQL."""
 
 from __future__ import annotations
 
