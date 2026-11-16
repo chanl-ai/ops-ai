@@ -2,7 +2,7 @@
 with raw SQL and no WHERE clause as ops_documents_tenant, by failure mode: a team transaction reading or writing
 another team's document type, version, sample, test, example, extraction or correction; a transaction reading or
 changing another tenant's readings or outbox events; a dropped policy that nobody notices; and the system role reaching
-more than the outbox and the work a restart picks up. On the PostgreSQL test database migrated to head."""
+more than the outbox and the work a restart picks up. On each database, at the chain's head."""
 
 from __future__ import annotations
 
@@ -19,8 +19,11 @@ from ops_documents.store.metadata import ROLE, SYSTEM_ROLE
 from ops_documents.store.readings import documents_reading_files, documents_reading_pages, documents_readings
 from ops_store import isolation
 from ops_store.conformance import isolation_suite
-from ops_store.schema import isolation_ddl, isolation_kind
+from ops_store.dialect import system_tx
+from ops_store.schema import isolation_ddl, isolation_drop_ddl, isolation_kind
 
+# PostgreSQL says "permission denied for table"; SQL Server "The SELECT permission was denied on the object".
+DENIED = "permission (was )?denied"
 TABLES = [t for t in metadata.sorted_tables if isolation_kind(t) in ("team", "tenant")]
 # What the system role reads: the outbox (the relay) and the queued work a restart picks up again.
 SYSTEM_READS = {"documents_outbox", "extractions", "document_type_tests", "documents_readings"}
@@ -35,13 +38,15 @@ async def test_each_table_holds_a_team_or_a_tenant_to_its_rows(engine: AsyncEngi
 
 
 async def test_a_dropped_policy_fails_the_suite_naming_its_table(engine: AsyncEngine) -> None:
+    dialect = engine.dialect.name
     async with engine.begin() as c:
-        await c.execute(sa.text("DROP POLICY extractions_isolation ON extractions"))
+        for statement in isolation_drop_ddl(extractions, dialect):
+            await c.execute(sa.text(statement))
     try:
         failures = await isolation_suite(engine, TABLES, role=ROLE)
     finally:
         async with engine.begin() as c:
-            for statement in isolation_ddl(extractions, "postgresql"):
+            for statement in isolation_ddl(extractions, dialect, chain="documents"):
                 await c.execute(sa.text(statement))
     assert failures and {f.split(":")[0] for f in failures} == {"extractions"}, failures
 
@@ -49,13 +54,11 @@ async def test_a_dropped_policy_fails_the_suite_naming_its_table(engine: AsyncEn
 async def test_the_system_role_reads_the_outbox_and_queued_work_and_nothing_else(engine: AsyncEngine) -> None:
     for table in TABLES:
         if table.name in SYSTEM_READS:
-            async with engine.begin() as c:
-                await c.execute(sa.text(f"SET LOCAL ROLE {SYSTEM_ROLE}"))
+            async with system_tx(engine, role=SYSTEM_ROLE) as c:
                 await c.execute(sa.select(sa.func.count()).select_from(table))
             continue
-        with pytest.raises(ProgrammingError, match="permission denied"):
-            async with engine.begin() as c:
-                await c.execute(sa.text(f"SET LOCAL ROLE {SYSTEM_ROLE}"))
+        with pytest.raises(ProgrammingError, match=DENIED):
+            async with system_tx(engine, role=SYSTEM_ROLE) as c:
                 await c.execute(sa.select(sa.func.count()).select_from(table))
 
 

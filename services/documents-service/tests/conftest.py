@@ -29,26 +29,47 @@ from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
 from ops_service_kit.testdb import isolate_from_stack
 from ops_store import isolation
+from ops_store.testing import DATABASES, NO_SQL_SERVER, postgresql_only, sql_server_schema
 
 OPS = {"X-Team-Id": "team_ops"}
 
 
 def pytest_configure(config: pytest.Config) -> None:
     isolate_from_stack()
+    config.addinivalue_line("markers", "postgresql_only(why): runs on PostgreSQL only, for the reason given")
 
 
-@pytest.fixture(scope="session")
-def database_url() -> str:
-    from alembic import command  # noqa: PLC0415
-    from alembic.config import Config  # noqa: PLC0415
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    keep, dropped = postgresql_only(items)
+    if dropped:
+        config.hook.pytest_deselected(items=[i for i in items if i not in keep])
+        items[:] = keep
+        terminal = config.pluginmanager.get_plugin("terminalreporter")
+        for nodeid, why in dropped:
+            if terminal is not None:
+                terminal.write_line(f"postgresql only: {nodeid}: {why}")
 
-    from ops_service_kit.testdb import refusal  # noqa: PLC0415
 
-    url = Settings().database_url
-    if (why := refusal(url, os.environ.get("OPS_TEST_DATABASE_URL"))) is not None:
-        pytest.fail(why)
-    command.upgrade(Config(str(Path(__file__).parents[1] / "alembic.ini")), "head")
-    return url
+@pytest.fixture(scope="session", params=DATABASES)
+def database_url(request: pytest.FixtureRequest) -> Iterator[str]:
+    if request.param == "postgresql":
+        from alembic import command  # noqa: PLC0415
+        from alembic.config import Config  # noqa: PLC0415
+
+        from ops_service_kit.testdb import refusal  # noqa: PLC0415
+
+        url = Settings().database_url
+        if (why := refusal(url, os.environ.get("OPS_TEST_DATABASE_URL"))) is not None:
+            pytest.fail(why)
+        command.upgrade(Config(str(Path(__file__).parents[1] / "alembic.ini")), "head")
+        yield url
+        return
+    with sql_server_schema(
+        "documents", os.environ.get("OPS_MSSQL_SERVER"), os.environ.get("MSSQL_SA_PASSWORD")
+    ) as mssql_url:
+        if mssql_url is None:
+            pytest.skip(NO_SQL_SERVER)
+        yield mssql_url
 
 
 @pytest.fixture

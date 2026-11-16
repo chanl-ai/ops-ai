@@ -38,6 +38,7 @@ from ops_storage.azure_blob import AzureBlobConfig, AzureBlobObjectStore
 from ops_storage.base import ObjectStore, UploadRejectedError
 from ops_storage.local import LocalObjectStore
 from ops_storage.s3 import S3Config, S3ObjectStore
+from ops_store.testing import DATABASES, NO_SQL_SERVER, postgresql_only, sql_server_schema
 
 if TYPE_CHECKING:
     from mypy_boto3_s3 import S3Client
@@ -97,6 +98,18 @@ def _query(url: str) -> dict[str, str]:
 
 def pytest_configure(config: pytest.Config) -> None:
     isolate_from_stack()
+    config.addinivalue_line("markers", "postgresql_only(why): runs on PostgreSQL only, for the reason given")
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    keep, dropped = postgresql_only(items)
+    if dropped:
+        config.hook.pytest_deselected(items=[i for i in items if i not in keep])
+        items[:] = keep
+        terminal = config.pluginmanager.get_plugin("terminalreporter")
+        for nodeid, why in dropped:
+            if terminal is not None:
+                terminal.write_line(f"postgresql only: {nodeid}: {why}")
 
 
 @pytest.fixture(scope="session")
@@ -235,19 +248,27 @@ def service(harness: Harness) -> FileService:
 # ── the hosted service's database (make db-up; `make test` sets OPS_TEST_DATABASE_URL) ──
 
 
-@pytest.fixture(scope="session")
-def database_url() -> str:
-    from alembic import command  # noqa: PLC0415
-    from alembic.config import Config  # noqa: PLC0415
+@pytest.fixture(scope="session", params=DATABASES)
+def database_url(request: pytest.FixtureRequest) -> Iterator[str]:
+    if request.param == "postgresql":
+        from alembic import command  # noqa: PLC0415
+        from alembic.config import Config  # noqa: PLC0415
 
-    from ops_service_kit.settings import Settings  # noqa: PLC0415
-    from ops_service_kit.testdb import refusal  # noqa: PLC0415
+        from ops_service_kit.settings import Settings  # noqa: PLC0415
+        from ops_service_kit.testdb import refusal  # noqa: PLC0415
 
-    url = Settings().database_url
-    if (why := refusal(url, os.environ.get("OPS_TEST_DATABASE_URL"))) is not None:
-        pytest.fail(why)
-    command.upgrade(Config(str(Path(__file__).parents[1] / "alembic.ini")), "head")
-    return url
+        url = Settings().database_url
+        if (why := refusal(url, os.environ.get("OPS_TEST_DATABASE_URL"))) is not None:
+            pytest.fail(why)
+        command.upgrade(Config(str(Path(__file__).parents[1] / "alembic.ini")), "head")
+        yield url
+        return
+    with sql_server_schema(
+        "files", os.environ.get("OPS_MSSQL_SERVER"), os.environ.get("MSSQL_SA_PASSWORD")
+    ) as mssql_url:
+        if mssql_url is None:
+            pytest.skip(NO_SQL_SERVER)
+        yield mssql_url
 
 
 @pytest.fixture

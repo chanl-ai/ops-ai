@@ -1,9 +1,12 @@
-"""models-service in-process on the compose PostgreSQL (`make db-up`), migrated by its own chain and seeded."""
+"""models-service in-process on the compose PostgreSQL (`make db-up`), migrated by its own chain and seeded, and on a
+scratch SQL Server database holding the chain's golden DDL when OPS_MSSQL_SERVER and MSSQL_SA_PASSWORD are set
+(ops_store.testing): every test that asks for `database_url` runs on both."""
 
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncGenerator, AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -12,9 +15,10 @@ from uuid import uuid4
 
 import httpx
 import pytest
+import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_identity import dev_service_signer, mint_service_token
 from ops_models.app import create_models_app
@@ -24,6 +28,7 @@ from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
 from ops_service_kit.testdb import isolate_from_stack, refusal
 from ops_store.database import open_database
+from ops_store.testing import DATABASES, NO_SQL_SERVER, postgresql_only, sql_server_schema
 
 ROOT = Path(__file__).parents[1]
 # agents-service's Ed25519 token for models-service's internal routes (dev key, dev only), naming its tenant.
@@ -47,12 +52,51 @@ def pytest_configure(config: pytest.Config) -> None:
     # Before any fixture or migration: the test database only, never the live one (ops_service_kit.testdb).
     if (why := refusal(Settings().database_url, os.environ.get("OPS_TEST_DATABASE_URL"))) is not None:
         pytest.exit(why, returncode=4)
+    config.addinivalue_line("markers", "postgresql_only(why): runs on PostgreSQL only, for the reason given")
 
 
-@pytest.fixture(scope="session")
-def database_url() -> str:
-    command.upgrade(Config(str(ROOT / "alembic.ini")), "head")
-    return Settings().database_url
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    keep, dropped = postgresql_only(items)
+    if dropped:
+        config.hook.pytest_deselected(items=[i for i in items if i not in keep])
+        items[:] = keep
+        terminal = config.pluginmanager.get_plugin("terminalreporter")
+        for nodeid, why in dropped:
+            if terminal is not None:
+                terminal.write_line(f"postgresql only: {nodeid}: {why}")
+
+
+@pytest.fixture(scope="session", params=DATABASES)
+def database_url(request: pytest.FixtureRequest) -> Iterator[str]:
+    if request.param == "postgresql":
+        command.upgrade(Config(str(ROOT / "alembic.ini")), "head")
+        yield Settings().database_url
+        return
+    with sql_server_schema("models", os.environ.get("OPS_MSSQL_SERVER"), os.environ.get("MSSQL_SA_PASSWORD")) as url:
+        if url is None:
+            pytest.skip(NO_SQL_SERVER)
+        yield url
+
+
+# SQL Server has no row_security setting: the administrator turns the call log's tenant policy off, in the transaction,
+# when the policy exists (models_0012 adds it). Deferred in EXEC, as SQL Server resolves the name when it compiles.
+CALL_LOG_POLICY = "ops_security.model_call_log_tenant"
+_MSSQL_POLICY = (
+    f"IF OBJECT_ID(N'{CALL_LOG_POLICY}', N'SP') IS NOT NULL "
+    f"EXEC (N'ALTER SECURITY POLICY {CALL_LOG_POLICY} WITH (STATE = {{}})')"
+)
+
+
+@asynccontextmanager
+async def past_the_call_log_policy(c: AsyncConnection) -> AsyncGenerator[None]:
+    """The database owner's statements in this block read and write the call log past its tenant policy."""
+    if c.dialect.name != "mssql":
+        await c.execute(sa.text("SET LOCAL row_security = off"))
+        yield
+        return
+    await c.execute(sa.text(_MSSQL_POLICY.format("OFF")))
+    yield
+    await c.execute(sa.text(_MSSQL_POLICY.format("ON")))
 
 
 @dataclass

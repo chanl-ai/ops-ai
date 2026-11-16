@@ -14,8 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_files.store import metadata
 from ops_files.store.files import ROLE, SYSTEM_ROLE, files, service_outbox
 from ops_store.conformance import isolation_suite
-from ops_store.schema import isolation_ddl, isolation_kind
+from ops_store.dialect import system_tx
+from ops_store.schema import isolation_ddl, isolation_drop_ddl, isolation_kind
 
+# PostgreSQL says "permission denied for table"; SQL Server "The SELECT permission was denied on the object".
+DENIED = "permission (was )?denied"
 TABLES = [t for t in metadata.sorted_tables if isolation_kind(t) in ("team", "tenant")]
 
 
@@ -28,32 +31,31 @@ async def test_each_table_holds_a_team_or_a_tenant_to_its_rows(engine: AsyncEngi
 
 
 async def test_a_dropped_policy_fails_the_suite_naming_its_table(engine: AsyncEngine) -> None:
+    dialect = engine.dialect.name
     async with engine.begin() as c:
-        await c.execute(sa.text("DROP POLICY files_isolation ON files"))
+        for statement in isolation_drop_ddl(files, dialect):
+            await c.execute(sa.text(statement))
     try:
         failures = await isolation_suite(engine, TABLES, role=ROLE)
     finally:
         async with engine.begin() as c:
-            for statement in isolation_ddl(files, "postgresql"):
+            for statement in isolation_ddl(files, dialect, chain="files"):
                 await c.execute(sa.text(statement))
     assert failures and {f.split(":")[0] for f in failures} == {"files"}, failures
 
 
 async def test_the_system_role_reads_its_outbox_and_the_file_list_and_nothing_else(engine: AsyncEngine) -> None:
-    async with engine.begin() as c:
-        await c.execute(sa.text(f"SET LOCAL ROLE {SYSTEM_ROLE}"))
+    async with system_tx(engine, role=SYSTEM_ROLE) as c:
         await c.execute(sa.select(sa.func.count()).select_from(service_outbox))
         await c.execute(service_outbox.update().where(sa.false()).values(attempts=0))
         # The retention process lists released files past their date; it deletes each as the file's own tenant.
         await c.execute(sa.select(sa.func.count()).select_from(files))
-    with pytest.raises(ProgrammingError, match="permission denied"):
-        async with engine.begin() as c:
-            await c.execute(sa.text(f"SET LOCAL ROLE {SYSTEM_ROLE}"))
+    with pytest.raises(ProgrammingError, match=DENIED):
+        async with system_tx(engine, role=SYSTEM_ROLE) as c:
             await c.execute(files.delete().where(sa.false()))
     for table in TABLES:
         if table.name in (service_outbox.name, files.name):
             continue
-        with pytest.raises(ProgrammingError, match="permission denied"):
-            async with engine.begin() as c:
-                await c.execute(sa.text(f"SET LOCAL ROLE {SYSTEM_ROLE}"))
+        with pytest.raises(ProgrammingError, match=DENIED):
+            async with system_tx(engine, role=SYSTEM_ROLE) as c:
                 await c.execute(sa.select(sa.func.count()).select_from(table))

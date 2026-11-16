@@ -18,7 +18,7 @@ from ops_store import isolation
 from ops_store.schema import isolation_kind
 from ops_store.team_scope import InstallScopeError
 
-from .conftest import Models
+from .conftest import Models, past_the_call_log_policy
 
 ROLE = "ops_models_tenant"
 
@@ -65,9 +65,8 @@ async def test_a_call_that_names_no_tenant_is_kept_apart_from_every_tenants_log(
     async with log.spend.install_tx("probe") as c:
         q = sa.select(sa.func.count()).select_from(model_call_refusals).where(model_call_refusals.c.id == row["id"])
         kept = (await c.execute(q)).scalar_one()
-    async with models.engine.connect() as c:
+    async with models.engine.connect() as c, past_the_call_log_policy(c):
         # The database's owner, past the policy: the log has no tenant-less row for the key.
-        await c.execute(sa.text("SET LOCAL row_security = off"))
         q = sa.select(sa.func.count()).select_from(model_call_log).where(model_call_log.c.key_id == key_id)
         logged = (await c.execute(q)).scalar_one()
     assert (kept, logged) == (1, 0)

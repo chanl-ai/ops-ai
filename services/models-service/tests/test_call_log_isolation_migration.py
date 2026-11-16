@@ -1,6 +1,7 @@
 """Migration models_0012 moves the call log under the tenant policy, by failure mode: a key's caps lose the spend its
 log recorded before the move; a call that named no tenant is lost, or stays in the policed log; a re-run of the
-backfill doubles a total; the down path loses the tenant-less calls. Seeded with two tenants' calls and refusals."""
+backfill doubles a total; the down path loses the tenant-less calls. Seeded with two tenants' calls and refusals, on
+each database; the seed and the checks read past the tenant policy, as the migration does."""
 
 from __future__ import annotations
 
@@ -11,10 +12,14 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
 import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
+
+from .conftest import past_the_call_log_policy
 
 ROOT = Path(__file__).resolve().parents[1]
 BEFORE = "models_0011"
@@ -24,8 +29,7 @@ MIGRATION = ROOT / "migrations" / "versions" / "0012_call_log_tenant_isolation.p
 async def _sql(url: str, statements: list[tuple[str, dict[str, object]]]) -> list[list[tuple[object, ...]]]:
     engine = create_async_engine(url)
     out: list[list[tuple[object, ...]]] = []
-    async with engine.begin() as c:
-        await c.execute(sa.text("SET LOCAL row_security = off"))
+    async with engine.begin() as c, past_the_call_log_policy(c):
         for text, params in statements:
             result = await c.execute(sa.text(text), params)
             out.append([tuple(r) for r in result.all()] if result.returns_rows else [])
@@ -36,7 +40,7 @@ async def _sql(url: str, statements: list[tuple[str, dict[str, object]]]) -> lis
 INSERT = (
     "INSERT INTO model_call_log (id, key_id, alias, input_tokens, output_tokens, cost, latency_ms, outcome, run_id, "
     "tenant_id, created_at, images) "
-    "VALUES (:id, :k, 'bank-standard', 1, 1, :cost, 1, :outcome, :run, :tenant, now(), 0)"
+    "VALUES (:id, :k, 'bank-standard', 1, 1, :cost, 1, :outcome, :run, :tenant, :at, 0)"
 )
 
 
@@ -44,7 +48,12 @@ async def _rerun(url: str, statements: list[str]) -> None:
     await _sql(url, [(text, {}) for text in statements])
 
 
-def test_the_log_moves_under_the_policy_with_its_spend_and_its_refusals_kept(database_url: str) -> None:
+def test_the_log_moves_under_the_policy_with_its_spend_and_its_refusals_kept(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The chain's env reads the URL from Settings, so Alembic migrates the database this case runs on.
+    monkeypatch.setenv("OPS_DATABASE_URL", database_url)
+    dialect = make_url(database_url).get_backend_name()
     cfg = Config(str(ROOT / "alembic.ini"))
     key = f"workflow:mig-{uuid4().hex[:8]}"
     seeded = [
@@ -55,10 +64,11 @@ def test_the_log_moves_under_the_policy_with_its_spend_and_its_refusals_kept(dat
         (None, "denied", "0", None),
     ]
     ids = [f"mc_mig_{uuid4().hex[:10]}" for _ in seeded]
+    now = datetime.now(UTC)
     command.downgrade(cfg, BEFORE)
     try:
         rows: list[tuple[str, dict[str, object]]] = [
-            (INSERT, {"id": i, "k": key, "tenant": t, "outcome": o, "cost": Decimal(c), "run": r})
+            (INSERT, {"id": i, "k": key, "tenant": t, "outcome": o, "cost": Decimal(c), "run": r, "at": now})
             for i, (t, o, c, r) in zip(ids, seeded, strict=True)
         ]
         asyncio.run(_sql(database_url, rows))
@@ -69,7 +79,7 @@ def test_the_log_moves_under_the_policy_with_its_spend_and_its_refusals_kept(dat
         )
         log_q = "SELECT id FROM model_call_log WHERE key_id = :k AND tenant_id IS NULL"
         kept_q = "SELECT count(*) FROM model_call_refusals WHERE key_id = :k"
-        day = f"day:{datetime.now(UTC).date().isoformat()}"
+        day = f"day:{now.date().isoformat()}"
         spend, nulls, kept = asyncio.run(
             _sql(database_url, [(spend_q, {"k": key}), (log_q, {"k": key}), (kept_q, {"k": key})])
         )
@@ -81,14 +91,15 @@ def test_the_log_moves_under_the_policy_with_its_spend_and_its_refusals_kept(dat
         assert spec is not None and spec.loader is not None
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        asyncio.run(_rerun(database_url, module.backfill_sql("postgresql")))
+        asyncio.run(_rerun(database_url, module.backfill_sql(dialect)))
         assert asyncio.run(_sql(database_url, [(spend_q, {"k": key})]))[0] == spend, "a re-run changed a total"
 
         command.downgrade(cfg, BEFORE)
         back = "SELECT count(*) FROM model_call_log WHERE key_id = :k AND tenant_id IS NULL"
         tables = (
-            "SELECT count(*) FROM information_schema.tables "
-            "WHERE table_name IN ('model_key_spend', 'model_call_refusals')"
+            # Upper case: SQL Server's binary collation matches catalog names exactly; PostgreSQL folds them.
+            "SELECT count(*) FROM INFORMATION_SCHEMA.TABLES "
+            "WHERE TABLE_NAME IN ('model_key_spend', 'model_call_refusals')"
         )
         restored, gone = asyncio.run(_sql(database_url, [(back, {"k": key}), (tables, {})]))
         assert (restored, gone) == ([(2,)], [(0,)]), "the down path lost the tenant-less calls or left a table"
