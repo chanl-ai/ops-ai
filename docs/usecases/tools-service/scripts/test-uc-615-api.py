@@ -73,6 +73,7 @@ with apps_stack(ops_ai_apps={"test.person": "multi-zoom"}) as w:
     made = w.kept(w.gw.post("/v1/secrets", json={"name": "DESK_WEBHOOK", "value": "whk-7d1e40c2"}, headers=admin))
     # Every page of the list, which answers 50 at most.
     names: list[Any] = []
+    before = len(w.seen)
     for n in range(1, 100):
         listed = data(w.kept(w.gw.get(f"/v1/secrets?page={n}&pageSize=50", headers=admin))) or {}
         names += [s.get("name") for s in listed.get("data") or []]
@@ -83,7 +84,7 @@ with apps_stack(ops_ai_apps={"test.person": "multi-zoom"}) as w:
         made.status_code in (200, 201)
         and "DESK_WEBHOOK" in names
         and not any("multi-app" in str(n) or "sign" in str(n).lower() for n in names)
-        and not any("whk-7d1e40c2" in t for t in w.seen[-1:]),
+        and not any("whk-7d1e40c2" in t for t in w.seen[before:]),
         {"made": made.text[:200], "names": names},
     )
 

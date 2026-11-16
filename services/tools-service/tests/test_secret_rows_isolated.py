@@ -1,8 +1,9 @@
 """Sealed secret values are held by the database (proved across every locked table in C5), by failure mode:
 another team reads a team's tool secrets or their audit through the store; another team reads or changes them, or a
-team's own app credential, with SQL that names no team, which only the database policy can stop.
-Runs on the compose PostgreSQL as `ops_tools_tenant`, the role every store transaction runs as, since the database
-user the tests connect as bypasses row security."""
+team's own app credential, with SQL that names no team, which only the database policy can stop; the store's page
+reading another team's secrets while the database lets every team through. Runs on the compose PostgreSQL as
+`ops_tools_tenant`, the role every store transaction runs as, since the database user the tests connect as bypasses
+row security."""
 
 from __future__ import annotations
 
@@ -12,8 +13,10 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_service_kit.listing import ListParams
 from ops_store import isolation
 from ops_store.schema import isolation_kind
+from ops_store.team_scope import acting_as
 from ops_tools.store.connections import app_credentials
 from ops_tools.store.secrets import SecretStore, secret_audit, tool_secrets
 
@@ -82,3 +85,17 @@ async def test_the_database_alone_hides_and_guards_them(engine: AsyncEngine, ten
             for name, rows in (("tool_secrets", 1), ("secret_audit", 1), ("app_credentials", 1)):
                 seen = await c.execute(sa.text(f"SELECT count(*) FROM {name} WHERE tenant_id = :t"), {"t": tenant})  # noqa: S608
                 assert seen.scalar_one() == rows, name
+
+
+async def test_the_store_page_holds_the_acting_team_when_the_policy_lets_every_team_through(
+    engine: AsyncEngine, tenant: str
+) -> None:
+    await _sealed(engine, tenant)
+    with isolation.scope(tenant, TEAM_B):
+        await SecretStore(engine).create(tenant, TEAM_B, "OPS_KEY", "sealed-b", actor="t", at=datetime.now(UTC))
+    # Tenant-wide with a team acting, so the database policy lets every team through and the query alone holds them.
+    wide = isolation.tenant_wide("a test reads the secrets list with every team let through", tenant_id=tenant)
+    with wide, acting_as(TEAM_A):
+        _, mine = await SecretStore(engine).page(tenant, TEAM_A, ListParams())
+        _, theirs = await SecretStore(engine).page(tenant, TEAM_B, ListParams())
+    assert ([x.name for x in mine], theirs) == (["DESK_KEY"], [])
