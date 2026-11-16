@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import canonical_json, new_id, now_iso
-from ops_store import Guarantee
+from ops_store import Guarantee, isolation
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 from ops_store.team_scope import any_team, team_visible
 
@@ -198,6 +198,21 @@ class AgentRegistry(RuntimeStore):
         """The team that owns an agent, whoever is acting; None when there is no such agent. Only for deciding a
         refusal by the owning team, never for showing the agent."""
         return (await self.owner_teams(conn, registry_agents, {agent_id}, OWNER)).get(agent_id)
+
+    async def tenant_owners(self, ids: set[str]) -> dict[str, str]:
+        """Of `ids`, the agents the caller's tenant holds, each with its owning team ('' for none), whoever is acting.
+        The serving catalogue holds every tenant's agents by id, so a route asks this before it serves one from it;
+        only for deciding a refusal, never for showing the agent."""
+        if not ids:
+            return {}
+        q = sa.select(registry_agents.c.id, registry_agents.c.team_id).where(
+            registry_agents.c.tenant_id == current_tenant(),
+            registry_agents.c.id.in_(sorted(ids)),
+            any_team(registry_agents, OWNER),
+        )
+        with isolation.tenant_wide(OWNER):
+            async with self.tx() as c:
+                return {str(i): str(team or "") for i, team in (await c.execute(q)).all()}
 
     async def row(self, agent_id: str, c: AsyncConnection | None = None, *, lock: bool = False) -> dict[str, Any]:
         """The agent, when the acting team owns it; another team's agent is NotFound, so its routes answer 404."""

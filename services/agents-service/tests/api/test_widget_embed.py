@@ -41,7 +41,7 @@ def who(sub: str, role: str, team: str = "team_ops") -> dict[str, str]:
         "kind": "person",
         "security_team": "team_security",
         "aud": ["agents"],
-        "tenant_id": "acme",
+        "tenant_id": "local",
         "team_ids": [team],
         "roles": {team: role},
     }
@@ -68,7 +68,7 @@ async def introspect(key: str) -> dict[str, Any] | None:
     return {
         "sub": f"key_{team}",
         "name": "bank server",
-        "tenantId": "acme",
+        "tenantId": "local",
         "teamId": team,
         "scopes": ["read", "write"],
     }
@@ -323,7 +323,7 @@ async def test_a_session_is_refused_for_another_team_deployment_or_after_expiry(
     dep, other = await deploy(client), await deploy(client)
     signer = HmacSigner.derived(SETTINGS.review_key.get_secret_value(), "widget-session")
     claims = {"typ": widget_sessions.SESSION_TYPE, "dep": dep["id"], "origin": INTRANET, "email": "x@y.z", "name": "X"}
-    forged = mint({**claims, "tenant": "acme", "team": "team_security", "sub": "x"}, signer, ttl_s=TEST_TOKEN_TTL_S)
+    forged = mint({**claims, "tenant": "local", "team": "team_security", "sub": "x"}, signer, ttl_s=TEST_TOKEN_TTL_S)
     elsewhere = await session(client, other["id"])
     monkeypatch.setattr(widget_sessions, "SESSION_TTL_S", -5)
     expired = await session(client, dep["id"])
@@ -367,19 +367,19 @@ async def test_a_widget_hold_waits_for_human_tasks_and_the_page_has_no_route_to_
 async def test_the_public_config_answers_a_listed_page_or_a_mint_key_and_names_no_team(client: AsyncClient) -> None:
     dep = await deploy(client, [INTRANET, PORTAL])
     url = f"/v1/widget/{dep['id']}/config"
-    res = await client.get(url, params={"tenant": "acme"}, headers={"Origin": PORTAL})
+    res = await client.get(url, params={"tenant": "local"}, headers={"Origin": PORTAL})
     assert res.status_code == 200 and res.headers.get("access-control-allow-origin") == PORTAL, res.text
     data = res.json()["data"]
     assert set(data) == {"agentName", "deploymentName", "allowedOrigins", "paused", "retired", "suggestions"}, data
     assert sorted(data["allowedOrigins"]) == sorted([INTRANET, PORTAL]) and data["paused"] is False
-    assert "team_ops" not in res.text and "acme" not in res.text
+    assert "team_ops" not in res.text and "local" not in res.text
     key = {"Authorization": f"Bearer {await mint_key(client, dep['id'])}"}
-    assert (await client.get(url, params={"tenant": "acme"}, headers=key)).status_code == 200
+    assert (await client.get(url, params={"tenant": "local"}, headers=key)).status_code == 200
     # Nobody else reads it: no Origin and no key, an unlisted page, or another credential.
     for headers in ({}, {"Origin": "https://evil.example"}, OPS_KEY, {"Authorization": "Bearer ok_ops.k1"}):
-        refused = await client.get(url, params={"tenant": "acme"}, headers=headers)
+        refused = await client.get(url, params={"tenant": "local"}, headers=headers)
         assert refused.status_code in (401, 403) and "access-control-allow-origin" not in refused.headers, headers
-    for params, dep_id in (({"tenant": "other"}, dep["id"]), ({"tenant": "acme"}, "wd_missing")):
+    for params, dep_id in (({"tenant": "other"}, dep["id"]), ({"tenant": "local"}, "wd_missing")):
         missing = await client.get(f"/v1/widget/{dep_id}/config", params=params, headers={"Origin": PORTAL})
         assert missing.status_code == 404, missing.text
 

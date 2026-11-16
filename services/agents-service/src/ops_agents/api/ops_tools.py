@@ -33,6 +33,7 @@ from ..store.cases import CaseNotFound, CaseStore
 from ..store.team_defaults import TeamDefaults
 from ..store.tenancy import ASSISTANT_CATCH_UP
 from . import hitl_facade
+from .agent_calls import live_agent
 from .agent_registry import SEED_FIELDS, go_live, registry, seed_agent_version, spec_from_seed
 from .auth import Principal, caller_of, reader_teams
 from .child_runs import TURN_PERSON, ChildRuns, engine_workflows
@@ -128,12 +129,12 @@ async def ensure_ops_assistant(rt: Runtime, team_id: str) -> AgentDefinition:
     the second insert meets the first's row and serves it. Setting the default is recorded like a team admin's
     (`TeamDefaults.set_agent`, `by`)."""
     aid = ops_assistant_id(team_id)
-    if (live := rt.catalog.agent(aid)) is None:
+    if (live := await live_agent(rt, aid)) is None:
         spec = _declared(rt, aid)
         # False when another first chat of the team made it a moment ago; either way it is served below.
         if not await registry(rt).create_if_absent(spec, by=SYSTEM, team_id=team_id, agent_id=aid):
             await follow_declared(rt, team_id)
-        if rt.catalog.agent(aid) is None:
+        if await live_agent(rt, aid) is None:
             go_live(rt, aid, 1, spec)
         live = cast(AgentDefinition, rt.catalog.agent(aid))
     await TeamDefaults(rt.db).set_agent(team_id, aid, by=SYSTEM)

@@ -179,11 +179,12 @@ async def new_chat_connectors(
     """A new chat's connectors before it exists, for the picker on Chat's home: the agent's (the team's default when
     none is named), every one on. The chosen set goes onto the chat as soon as it is made, before its first message."""
     named = agent_id or await TeamDefaults(rt.db).agent(me.team_id)
+    team = await agent_team(rt, named) if named else None
     agent = rt.catalog.agent(named) if named else None
     if named and agent is None:
         raise Unprocessable("That agent is not live, so it cannot be chatted with.")
     if agent is not None:
-        require_chat_use(me, team_id=await agent_team(rt, agent.id))
+        require_chat_use(me, team_id=team)
     held = list(limits_for(agent, rt.settings.model_alias).switchable_tool_ids) if agent is not None else []
     apps = await _by_app(rt, me, me.team_id, agent.id, held) if agent is not None else []
     # A new chat starts on the agent's accounts, else each app's default, so the picker names the one in use.

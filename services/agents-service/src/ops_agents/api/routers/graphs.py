@@ -36,6 +36,7 @@ from ops_service_kit.ids import new_id, now_iso
 
 from ...store.leases import LeaseHeldError
 from .. import hitl_facade
+from ..agent_calls import agent_team, live_agent
 from ..agent_registry import refuse_new_turns
 from ..auth import (
     Principal,
@@ -175,6 +176,9 @@ async def create_thread(rt: Rt, me: Me, body: ThreadInput) -> JSONResponse:
     thread_id = new_id("gth")
     version: int | None = None
     digest: str | None = None
+    if body.graph.startswith("agent:"):
+        # Another tenant's agent id is NotFound: the catalogue holds every tenant's.
+        await agent_team(rt, body.graph.removeprefix("agent:"))
     if body.graph.startswith("agent:") and rt.catalog.agent(body.graph.removeprefix("agent:")) is None:
         # Its graph stays compiled while turns under way drain; no new thread starts on it.
         await refuse_new_turns(rt, body.graph.removeprefix("agent:"))
@@ -381,7 +385,7 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
         if agent_id is not None:
             await refuse_new_turns(rt, agent_id)
             # The thread's budget is the agent's caps, or the caller's where lower, from its first turn on.
-            if (agent := rt.catalog.agent(agent_id)) is not None:
+            if (agent := await live_agent(rt, agent_id)) is not None:
                 await cap_at_agent(rt, thread_id, agent)
         graph_input = body.input
         journal_input = {"input": body.input}
@@ -567,7 +571,7 @@ def owned(metadata: dict[str, Any] | None, me: Principal) -> dict[str, Any]:
 async def _agent_budget(rt: Runtime, thread_id: str, graph: str) -> None:
     """An agent's own thread takes the agent's caps when it is made, or the caller's where lower; the shared wrapper
     learns its agent from the first input and takes them then."""
-    if graph.startswith("agent:") and (agent := rt.catalog.agent(graph.removeprefix("agent:"))) is not None:
+    if graph.startswith("agent:") and (agent := await live_agent(rt, graph.removeprefix("agent:"))) is not None:
         await cap_at_agent(rt, thread_id, agent)
 
 

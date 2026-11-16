@@ -53,6 +53,9 @@ WIDENINGS: dict[str, set[str]] = {
     },
     "SESSION_LOOKUP": {"services/platform-service/src/ops_platform/store/identity.py"},
     "WIDGET_LOOKUP": {"services/agents-service/src/ops_agents/api/routers/widget.py"},
+    # Whether the caller's tenant holds an agent and which of its teams owns it, before the serving catalogue (every
+    # tenant's agents by id) serves it.
+    "OWNER": {"services/agents-service/src/ops_agents/store/agent_registry.py"},
     # The workflow worker reads every tenant's pending batch rows, then starts each in its own tenant and team.
     "BATCH_START": {"services/agents-service/src/ops_agents/store/batches.py"},
     # The operator preflight before agents 0106 reads every tenant's references and teams; it writes nothing.

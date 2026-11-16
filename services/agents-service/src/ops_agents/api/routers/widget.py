@@ -43,6 +43,7 @@ from ops_store import isolation
 
 from ...store.widget_deployments import WidgetDeployments
 from ...store.widget_keys import WidgetKeys
+from ..agent_calls import live_agent
 from ..agent_registry import pinned_definition, registry
 from ..auth import Principal, caller_of, principal, reader_of, require_builder
 from ..chat_threads import chat_row, update_meta
@@ -534,8 +535,8 @@ async def send(rt: Rt, caller: Caller, deployment_id: str, thread_id: str, body:
     limits.check(deployment_id, session.email)
     if body.overrides is not None:
         # A page is a public caller: only what the agent lets a public key change (overrides.resolve, caller class).
-        agent = rt.catalog.agent_at(str(row["agent_id"]), await served_version(rt, row)) or rt.catalog.agent(
-            str(row["agent_id"])
+        agent = await pinned_definition(rt, str(row["agent_id"]), await served_version(rt, row)) or await live_agent(
+            rt, str(row["agent_id"])
         )
         if agent is None:
             raise Unprocessable("This widget's agent is no longer live.")

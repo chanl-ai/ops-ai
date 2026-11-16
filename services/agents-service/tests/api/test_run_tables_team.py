@@ -29,7 +29,7 @@ def builder(sub: str, team: str) -> dict[str, str]:
         "kind": "person",
         "security_team": "team_security",
         "aud": ["agents"],
-        "tenant_id": "acme",
+        "tenant_id": "local",
         "team_ids": [team],
         "roles": {team: "builder"},
     }

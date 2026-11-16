@@ -14,8 +14,10 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import StaticPool
 
 from ops_agents.activities.catalog import AgentDefinition
+from ops_agents.api.agent_registry import registry, spec_from_seed
 from ops_agents.api.app import create_app
 from ops_agents.store.base import metadata
+from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, scripted_model, sse_events
@@ -58,8 +60,14 @@ async def test_without_a_kb_service_knowledge_is_refused_as_unavailable(no_kb: t
 
 async def test_a_knowledge_free_agent_works_without_a_kb_service(no_kb: tuple[AsyncClient, Any]) -> None:
     client, rt = no_kb
-    plain = rt.catalog.agent("ag_branch")
-    rt.catalog.put_agent(AgentDefinition.model_validate({**plain.model_dump(), "id": "ag_plain", "default_kb_ids": []}))
+    plain = AgentDefinition.model_validate(
+        {**rt.catalog.agent("ag_branch").model_dump(), "id": "ag_plain", "default_kb_ids": []}
+    )
+    # Served only with a registry row in the caller's tenant, as a published agent is.
+    with tenant_scope(LOCAL_TENANT):
+        spec = spec_from_seed(plain, rt.settings.model_alias)
+        await registry(rt).create(spec, by="seed", team_id="team_ops", agent_id="ag_plain", published=True)
+    rt.catalog.put_agent(plain)
     created = await client.post("/chat/threads", json={"agentId": "ag_plain", "kbIds": []})
     assert created.status_code == 201, created.text
     events = await say(client, created.json()["data"]["id"], "Hello there")

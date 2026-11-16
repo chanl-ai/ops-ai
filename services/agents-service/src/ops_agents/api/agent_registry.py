@@ -248,7 +248,10 @@ def take_down(rt: Runtime, agent_id: str) -> None:
 
 async def pinned_definition(rt: Runtime, agent_id: str, version: int) -> AgentDefinition | None:
     """The agent at a published version a deployment pins, from the registry store, kept in the catalogue so the
-    chat graph serves it; None when that version was never published."""
+    chat graph serves it; None when that version was never published or the caller's tenant holds no such agent (the
+    catalogue holds every tenant's)."""
+    if agent_id not in await registry(rt).tenant_owners({agent_id}):
+        return None
     if (known := rt.catalog.agent_at(agent_id, version)) is not None:
         return known
     spec = await registry(rt).published_spec(agent_id, version)

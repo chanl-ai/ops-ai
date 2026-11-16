@@ -25,6 +25,7 @@ from ops_service_kit.logging import get_logger
 
 from ...store.team_defaults import TeamDefaults
 from ...store.template_copies import TemplateCopies
+from ..agent_calls import live_agent
 from ..agent_registry import agent_review_body, go_live, registry
 from ..auth import Principal, caller_in, caller_of
 from ..deps import Runtime, runtime
@@ -66,7 +67,7 @@ async def give_app_tools(rt: Runtime, me: Principal, module_ids: list[str]) -> A
     team = me.team_id
     can(caller_of(me), "agents", "edit", team=team, what="the team's assistant")
     agent_id = await TeamDefaults(rt.db).agent(team)
-    agent = rt.catalog.agent(agent_id) if agent_id else None
+    agent = await live_agent(rt, agent_id) if agent_id else None
     if agent is None:
         agent = await ensure_ops_assistant(rt, team)
     directory = rt.directory()

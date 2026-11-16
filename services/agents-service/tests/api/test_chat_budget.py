@@ -33,7 +33,7 @@ def who(sub: str, role: str) -> dict[str, str]:
         "kind": "person",
         "security_team": "team_security",
         "aud": ["agents"],
-        "tenant_id": "acme",
+        "tenant_id": "local",
         "team_ids": ["team_ops"],
         "roles": {"team_ops": role},
     }

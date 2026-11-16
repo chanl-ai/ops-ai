@@ -14,6 +14,7 @@ from ops_service_kit.http import Envelope, options_page, options_window, page_wi
 
 from ...activities.tool_directory import ToolsUnavailable
 from ...store.tenancy import current_team
+from ..agent_registry import registry
 from ..auth import Principal, principal, reader_of
 from ..child_runs import (
     EMAIL_SCHEMA,
@@ -90,7 +91,9 @@ async def known_tools(rt: Runtime, *, fresh: bool = False) -> list[dict[str, Any
         )
     from ..agent_calls import QUESTION_SCHEMA  # noqa: PLC0415 - keep the catalog import cycle out of the module top
 
-    for a in rt.catalog.agents:
+    # The catalogue holds every tenant's agents; only the caller's tenant's are its tools.
+    ours = await registry(rt).tenant_owners({a.id for a in rt.catalog.agents})
+    for a in (a for a in rt.catalog.agents if a.id in ours):
         rows.append(
             {
                 "id": f"agent:{a.id}",

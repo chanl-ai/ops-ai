@@ -74,7 +74,7 @@ from ...store.leases import LeaseHeldError
 from ...store.team_defaults import TeamDefaults
 from ...store.tenancy import current_tenant
 from .. import hitl_facade
-from ..agent_calls import agent_team
+from ..agent_calls import agent_team, live_agent
 from ..agent_registry import definition_of, pinned_definition, refuse_new_turns, registry
 from ..auth import Principal, caller_of, principal, require_chat_use
 from ..chat_attachments import ChatAttachmentReader
@@ -330,7 +330,7 @@ async def list_threads(
 async def get_default_agent(rt: Rt, me: Me) -> JSONResponse:
     """The agent the caller's team starts chats on; its name is absent when that agent is no longer live."""
     agent_id = await TeamDefaults(rt.db).agent(me.team_id)
-    agent = rt.catalog.agent(agent_id) if agent_id else None
+    agent = await live_agent(rt, agent_id) if agent_id else None
     try:
         can(caller_of(me), "chat", "manage", team=me.team_id, what="the team's default agent")
         may = True
@@ -344,10 +344,11 @@ async def set_default_agent(rt: Rt, me: Me, body: TeamDefaultAgentInput) -> JSON
     """chat.manage (team admins): the default changes where every member's new chat starts. Provisioning sets
     a team's first one through this route; the agent must be live and belong to the team, or to no team."""
     can(caller_of(me), "chat", "manage", team=me.team_id, what="the team's default agent")
+    team = await agent_team(rt, body.agent_id)
     agent = rt.catalog.agent(body.agent_id)
     if agent is None:
         raise Unprocessable("That agent is not live, so new chats cannot start on it.", code="agent_not_live")
-    if (team := await agent_team(rt, agent.id)) and team != me.team_id:
+    if team and team != me.team_id:
         raise Unprocessable(f"{agent.name} belongs to another team.", code="other_team_agent")
     await TeamDefaults(rt.db).set_agent(me.team_id, agent.id, by=me.email)
     return ok(TeamDefaultAgent(agent_id=agent.id, agent_name=agent.name, can_change=True).wire())
@@ -360,7 +361,7 @@ async def _team_default(rt: Runtime, me: Principal) -> AgentDefinition:
     agent_id = await TeamDefaults(rt.db).agent(me.team_id)
     if agent_id is None:
         return await ensure_ops_assistant(rt, me.team_id)
-    agent = rt.catalog.agent(agent_id)
+    agent = await live_agent(rt, agent_id)
     if agent is None:
         why = "default agent is not live"
         raise Conflict(
@@ -389,7 +390,7 @@ async def thread_agent(rt: Runtime, me: Principal, meta: dict[str, Any]) -> Agen
     agent_id = str(meta.get("agentId"))
     if meta.get("test"):
         return await _test_agent(rt, me, agent_id, cast(int | None, meta.get("testVersion")))
-    return rt.catalog.agent(agent_id)
+    return await live_agent(rt, agent_id)
 
 
 @router.post("/threads")
@@ -401,6 +402,7 @@ async def create_thread(rt: Rt, me: Me, body: ChatThreadInput) -> JSONResponse:
     elif body.agent_id is None:
         agent = await _team_default(rt, me)
     else:
+        await agent_team(rt, body.agent_id)
         agent = rt.catalog.agent(body.agent_id)
         if agent is None:
             await refuse_new_turns(rt, body.agent_id)
@@ -515,10 +517,11 @@ async def _handover(rt: Runtime, me: Principal, meta: dict[str, Any], agent_id: 
     it started on, and that agent's bases, are kept so handing back to it restores them."""
     if meta.get("deploymentId"):
         raise Unprocessable("A conversation on an embedded page stays on its agent.", code="handover_not_allowed")
+    team = await agent_team(rt, agent_id)
     agent = rt.catalog.agent(agent_id)
     if agent is None:
         raise Unprocessable("That agent is not live, so the conversation cannot move to it.", code="agent_not_live")
-    require_chat_use(me, team_id=await agent_team(rt, agent.id))
+    require_chat_use(me, team_id=team)
     start = {
         "id": meta.get("startAgentId") or meta.get("agentId"),
         "name": meta.get("startAgentName") or meta.get("agentName"),
@@ -659,7 +662,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
     tested = (
         await _test_agent(rt, me, str(meta.get("agentId")), cast(int | None, meta.get("testVersion"))) if test else None
     )
-    if pinned is not None and rt.catalog.agent(str(meta.get("agentId"))) is None:
+    if pinned is not None and await live_agent(rt, str(meta.get("agentId"))) is None:
         # The pin chooses the version only: a paused or withdrawn agent takes no new turns on a widget conversation.
         await refuse_new_turns(rt, str(meta.get("agentId")))
         raise Unprocessable("This conversation's agent is no longer live.")
@@ -668,7 +671,7 @@ async def send(rt: Rt, me: Me, thread_id: str, body: SendInput) -> EventSourceRe
         if test
         else await pinned_definition(rt, str(meta.get("agentId")), int(pinned))
         if pinned is not None
-        else rt.catalog.agent(str(meta.get("agentId")))
+        else await live_agent(rt, str(meta.get("agentId")))
     )
     if agent is None:
         await refuse_new_turns(rt, str(meta.get("agentId")))
