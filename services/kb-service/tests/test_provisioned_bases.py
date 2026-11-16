@@ -136,3 +136,17 @@ async def test_a_managed_base_is_edited_and_keeps_its_template(kb: httpx.AsyncCl
 async def test_a_base_made_without_a_template_reads_as_neither(kb: httpx.AsyncClient) -> None:
     own = _data(await kb.post("/v1/knowledge-bases", json={"name": "Plain", "owner": "james@harborpine.example"}), 201)
     assert (own["templateId"], own["protection"]) == (None, None)
+
+
+async def test_a_service_reads_refs_and_plugin_sources_but_not_a_persons_lists(
+    kb: httpx.AsyncClient,
+    tenant: str,
+) -> None:
+    service = provisioner(tenant, ["knowledge:view"])
+    refs = await kb.get("/v1/knowledge-bases/refs", headers=service)
+    plugin = await kb.get("/v1/sources/from-plugin", params={"plugin": "opsai.salesforce"}, headers=service)
+    assert (refs.status_code, refs.json()["data"]) == (200, []), refs.text
+    assert (plugin.status_code, plugin.json()["data"]) == (200, []), plugin.text
+    for path in ("/v1/sources", "/v1/knowledge/lookups", "/v1/knowledge-changes"):
+        r = await kb.get(path, headers=service)
+        assert (r.status_code, r.json()["error"]["code"]) == (403, "scope_required"), (path, r.text)

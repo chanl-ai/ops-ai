@@ -1788,10 +1788,18 @@ export interface components {
             color?: string | null;
             /** Description */
             description?: string | null;
+            /** Metadataprofile */
+            metadataProfile?: {
+                [key: string]: unknown;
+            } | null;
             /** Name */
             name?: string | null;
             /** Owner */
             owner?: string | null;
+            /** Precedence */
+            precedence?: {
+                [key: string]: unknown;
+            }[] | null;
             /** Protection */
             protection?: ("system" | "managed") | null;
             /** Retrieval */
@@ -2195,10 +2203,26 @@ export interface components {
         };
         /** QueryIn */
         QueryIn: {
+            /** Alsokbids */
+            alsoKbIds?: string[] | null;
             /** Collection */
             collection?: string | null;
+            /** Overrides */
+            overrides?: {
+                [key: string]: unknown;
+            } | null;
             /** Question */
             question: string;
+            /** Runasid */
+            runAsId?: string | null;
+            /** Runtime */
+            runtime?: {
+                [key: string]: unknown;
+            } | null;
+            /** Settings */
+            settings?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** Reader */
         Reader: {
@@ -2305,8 +2329,22 @@ export interface components {
             kbIds: string[];
             /** Limit */
             limit?: number | null;
+            /** Overrides */
+            overrides?: {
+                [key: string]: unknown;
+            } | null;
             /** Question */
             question: string;
+            /** Runasid */
+            runAsId?: string | null;
+            /** Runtime */
+            runtime?: {
+                [key: string]: unknown;
+            } | null;
+            /** Settings */
+            settings?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** SearchOut */
         SearchOut: {

@@ -13,7 +13,7 @@ class AddedFile(TypedDict, closed=True):
     name: str
 
 
-class AiApprovalIn(TypedDict):
+class AiApprovalIn(TypedDict, closed=True):
     decision: Literal["approve", "revoke"]
 
 
@@ -23,7 +23,7 @@ class AnswerSettings(TypedDict, closed=True):
     withholdUncited: bool
 
 
-class AttachIn(TypedDict):
+class AttachIn(TypedDict, closed=True):
     sourceIds: list[str]
 
 
@@ -50,7 +50,7 @@ class ChangeViewCounts(TypedDict, closed=True):
     resolved: int
 
 
-class DecideIn(TypedDict):
+class DecideIn(TypedDict, closed=True):
     decision: Literal["approve", "reject"]
     ids: list[str]
 
@@ -94,7 +94,7 @@ class DocumentRow(TypedDict, closed=True):
     warning: NotRequired[str | None]
 
 
-class DraftEdit(TypedDict):
+class DraftEdit(TypedDict, closed=True):
     answer: str
     question: str
 
@@ -147,7 +147,7 @@ class FaqDraft(TypedDict, closed=True):
     sectionPath: list[str]
 
 
-class FileIdsIn(TypedDict):
+class FileIdsIn(TypedDict, closed=True):
     fileIds: list[str]
 
 
@@ -271,7 +271,7 @@ class KnowledgeBase(TypedDict, closed=True):
     templateId: NotRequired[str | None]
 
 
-class KnowledgeBaseIn(TypedDict):
+class KnowledgeBaseIn(TypedDict, closed=True):
     access: NotRequired[dict[str, Any] | None]
     answer: NotRequired[dict[str, Any] | None]
     collections: NotRequired[list[str]]
@@ -289,14 +289,16 @@ class KnowledgeBaseIn(TypedDict):
     templateId: NotRequired[str | None]
 
 
-class KnowledgeBasePatch(TypedDict):
+class KnowledgeBasePatch(TypedDict, closed=True):
     access: NotRequired[dict[str, Any] | None]
     answer: NotRequired[dict[str, Any] | None]
     collections: NotRequired[list[str] | None]
     color: NotRequired[str | None]
     description: NotRequired[str | None]
+    metadataProfile: NotRequired[dict[str, Any] | None]
     name: NotRequired[str | None]
     owner: NotRequired[str | None]
+    precedence: NotRequired[list[dict[str, Any]] | None]
     protection: NotRequired[Literal["system", "managed"] | None]
     retrieval: NotRequired[dict[str, Any] | None]
     sourceDefaults: NotRequired[dict[str, Any] | None]
@@ -360,11 +362,11 @@ class OptionsPage(TypedDict, closed=True):
     nextCursor: NotRequired[str | None]
 
 
-class OwnerIn(TypedDict):
+class OwnerIn(TypedDict, closed=True):
     owner: str
 
 
-class PageIn(TypedDict):
+class PageIn(TypedDict, closed=True):
     text: str
     title: str
 
@@ -403,7 +405,7 @@ class PluginSource(TypedDict, closed=True):
     source: str
 
 
-class PreviewIn(TypedDict):
+class PreviewIn(TypedDict, closed=True):
     config: dict[str, Any]
 
 
@@ -413,9 +415,14 @@ class PreviewPage(TypedDict, closed=True):
     willFetch: bool
 
 
-class QueryIn(TypedDict):
+class QueryIn(TypedDict, closed=True):
+    alsoKbIds: NotRequired[list[str] | None]
     collection: NotRequired[str | None]
+    overrides: NotRequired[dict[str, Any] | None]
     question: str
+    runAsId: NotRequired[str | None]
+    runtime: NotRequired[dict[str, Any] | None]
+    settings: NotRequired[dict[str, Any] | None]
 
 
 class Reader(TypedDict, closed=True):
@@ -449,7 +456,7 @@ class Scope(TypedDict, closed=True):
     title: str
 
 
-class ScopesIn(TypedDict):
+class ScopesIn(TypedDict, closed=True):
     cursor: NotRequired[str | None]
     parent: NotRequired[str | None]
     plugin: str
@@ -466,11 +473,15 @@ class SearchCost(TypedDict, closed=True):
     embeddingTokens: int
 
 
-class SearchIn(TypedDict):
+class SearchIn(TypedDict, closed=True):
     collection: NotRequired[str | None]
     kbIds: list[str]
     limit: NotRequired[int | None]
+    overrides: NotRequired[dict[str, Any] | None]
     question: str
+    runAsId: NotRequired[str | None]
+    runtime: NotRequired[dict[str, Any] | None]
+    settings: NotRequired[dict[str, Any] | None]
 
 
 class SkippedLane(TypedDict, closed=True):
@@ -478,7 +489,7 @@ class SkippedLane(TypedDict, closed=True):
     reason: str
 
 
-class SourceIn(TypedDict):
+class SourceIn(TypedDict, closed=True):
     aiCeiling: NotRequired[float | None]
     cleaning: NotRequired[dict[str, Any] | None]
     collection: NotRequired[str]
@@ -518,7 +529,7 @@ class SourceKind(TypedDict, closed=True):
     type: str
 
 
-class SourcePatch(TypedDict):
+class SourcePatch(TypedDict, closed=True):
     aiCeiling: NotRequired[float | None]
     cleaning: NotRequired[dict[str, Any] | None]
     collection: NotRequired[str | None]
@@ -572,7 +583,7 @@ class Tombstone(TypedDict, closed=True):
     reason: NotRequired[str | None]
 
 
-class TombstonesIn(TypedDict):
+class TombstonesIn(TypedDict, closed=True):
     ids: list[str]
 
 
@@ -584,7 +595,7 @@ class ValidationError(TypedDict):
     type: str
 
 
-class VerifyIn(TypedDict):
+class VerifyIn(TypedDict, closed=True):
     verified: bool
 
 
@@ -593,7 +604,7 @@ class WrittenItem(TypedDict, closed=True):
     outcome: Literal["created", "updated", "unchanged"]
 
 
-class WrittenItemIn(TypedDict):
+class WrittenItemIn(TypedDict, closed=True):
     content: NotRequired[str | None]
     mime: NotRequired[str | None]
     name: str

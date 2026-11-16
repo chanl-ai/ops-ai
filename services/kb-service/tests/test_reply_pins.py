@@ -82,8 +82,8 @@ async def test_the_knowledge_routes_keep_every_key_value_and_error_object(
     src = await file_source(client)
     sid = src["id"]
     seen["createSource"] = answer(await client.post("/v1/sources", json={"type": "file", "name": "Spare"}))
-    # Both spellings of a body's names are accepted today, and a key no route reads is ignored.
-    body = {"name": "Lending", "owner": "maya@harborpine.example", "sourceIds": [sid], "unread": 1}
+    # Both spellings of a body's names are accepted.
+    body = {"name": "Lending", "owner": "maya@harborpine.example", "sourceIds": [sid]}
     created = await client.post("/v1/knowledge-bases", json=body)
     seen["createBase"] = answer(created)
     kb = created.json()["data"]["id"]
@@ -130,7 +130,11 @@ async def test_the_knowledge_routes_keep_every_key_value_and_error_object(
     search = {"kbIds": [kb], "question": "five-year fixed mortgage rate", "limit": 3}
     seen["search"] = answer(await client.post("/v1/knowledge-bases/search", json=search))
     seen["searchAsAgent"] = answer(
-        await client.post("/v1/knowledge-bases/search", json={**search, "kb_ids": [kb]}, headers=agents(tenant))
+        await client.post(
+            "/v1/knowledge-bases/search",
+            json={"kb_ids": [kb], "question": search["question"], "limit": 3},
+            headers=agents(tenant),
+        )
     )
     seen["missingBase"] = answer(await client.get("/v1/knowledge-bases/kb_missing"))
     seen["missingSource"] = answer(await client.get("/v1/sources/src_missing"))

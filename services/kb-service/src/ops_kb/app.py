@@ -19,7 +19,16 @@ from pydantic.alias_generators import to_camel
 
 from ops_access import can
 from ops_documents_client import DocumentsClient
-from ops_identity import Auth, CurrentCaller, CurrentService, CurrentTenantCaller, ServiceClient, install_auth
+from ops_identity import (
+    Auth,
+    CurrentCaller,
+    CurrentPrincipal,
+    CurrentService,
+    CurrentTenantCaller,
+    ServiceClient,
+    install_auth,
+)
+from ops_identity.fastapi import Tx
 from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.http import (
@@ -130,6 +139,14 @@ async def who(p: CurrentCaller, held: Annotated[dict[str, str] | None, Depends(p
 
 
 Caller = Annotated[Who, Depends(who)]
+
+
+async def person(_: CurrentPrincipal, caller: Caller) -> Who:
+    """`who` for a route only people and API keys use: a service token is refused (403 `scope_required`)."""
+    return caller
+
+
+Person = Annotated[Who, Depends(person)]
 
 
 async def knowledge_reader(p: CurrentTenantCaller) -> Who:
@@ -378,7 +395,8 @@ def create_kb_app(
 
     @kbs.get("/options", response_model=Envelope[OptionsPage])
     async def knowledge_base_options(  # pyright: ignore[reportUnusedFunction]
-        who: Caller,
+        who: Person,
+        _: Tx,
         search: str = "",
         cursor: str | None = None,
         limit: Annotated[int, Query(ge=1, le=100)] = 25,
@@ -389,7 +407,7 @@ def create_kb_app(
         return ok(await service.base_options(who, search=search, cursor=cursor, limit=limit, ids=ids))
 
     @kbs.get("/refs", response_model=Envelope[list[NamedRef]])
-    async def knowledge_base_refs(caller: KnowledgeReader) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def knowledge_base_refs(caller: KnowledgeReader, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Knowledge bases by id and name, for agents-service's grant check and thread names, and for a person's picker
         or script: the tenant's for a service, the team's and unowned ones for a person."""
         return ok([{"id": b.id, "name": b.name} for b in await service.readable_bases(caller)])
@@ -421,7 +439,8 @@ def create_kb_app(
     @kbs.get("/{kb_id}/documents", response_model=Envelope[ListResult[DocumentRow]])
     async def list_documents(  # pyright: ignore[reportUnusedFunction]
         kb_id: str,
-        who: Caller,
+        who: Person,
+        _: Tx,
         *,
         page: Page = 1,
         page_size: PageSize = 25,
@@ -482,20 +501,20 @@ def create_kb_app(
 
     @sources.get("", response_model=Envelope[ListResult[SourceRow]])
     async def list_sources(  # pyright: ignore[reportUnusedFunction]
-        who: Caller, page: Page = 1, page_size: PageSize = 25, search: str | None = None
+        who: Person, _: Tx, page: Page = 1, page_size: PageSize = 25, search: str | None = None
     ) -> JSONResponse:
         return ok(await service.list_sources(who, page=page, page_size=page_size, search=search))
 
     @sources.get("/from-plugin", response_model=Envelope[list[PluginSource]])
     async def list_plugin_sources(  # pyright: ignore[reportUnusedFunction]
-        who: Caller, plugin: Annotated[str, Query(min_length=1, max_length=200)]
+        who: Caller, _: Tx, plugin: Annotated[str, Query(min_length=1, max_length=200)]
     ) -> JSONResponse:
         """The sources the team made from a plugin's knowledge sources, for the app's resource list in tools-service:
         each with the plugin's source name and the bases it feeds."""
         return ok(await service.plugin_sources(who, plugin))
 
     @sources.get("/{source_id}", response_model=Envelope[SourceDetail])
-    async def get_source(source_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_source(source_id: str, who: Person, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.get_source(who, source_id))
 
     @sources.post("", status_code=201, response_model=Envelope[Source])
@@ -515,7 +534,7 @@ def create_kb_app(
         return ok(await service.source_scopes(who, body.model_dump()))
 
     @sources.get("/{source_id}/tombstones", response_model=Envelope[list[Tombstone]])
-    async def list_tombstones(source_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def list_tombstones(source_id: str, who: Person, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Addresses removed after answering gone twice at their source; a sync leaves them out until lifted."""
         return ok(await service.tombstones(who, source_id))
 
@@ -548,7 +567,7 @@ def create_kb_app(
 
     @sources.get("/{source_id}/runs", response_model=Envelope[ListResult[SyncRun]])
     async def list_runs(  # pyright: ignore[reportUnusedFunction]
-        source_id: str, who: Caller, page: Page = 1, page_size: PageSize = 25
+        source_id: str, who: Person, _: Tx, page: Page = 1, page_size: PageSize = 25
     ) -> JSONResponse:
         return ok(await service.source_runs(who, source_id, page=page, page_size=page_size))
 
@@ -572,7 +591,7 @@ def create_kb_app(
 
     @sources.get("/{source_id}/items", response_model=Envelope[ListResult[Item]])
     async def list_items(  # pyright: ignore[reportUnusedFunction]
-        source_id: str, who: Caller, page: Page = 1, page_size: PageSize = 25, search: str | None = None
+        source_id: str, who: Person, _: Tx, page: Page = 1, page_size: PageSize = 25, search: str | None = None
     ) -> JSONResponse:
         return ok(await service.source_items(who, source_id, page=page, page_size=page_size, search=search))
 
@@ -599,7 +618,8 @@ def create_kb_app(
 
     @changes.get("", response_model=Envelope[ChangeList])
     async def list_changes(  # pyright: ignore[reportUnusedFunction]
-        who: Caller,
+        who: Person,
+        _: Tx,
         *,
         page: Page = 1,
         page_size: PageSize = 25,
@@ -627,13 +647,13 @@ def create_kb_app(
         return ok(edited)
 
     @changes.get("/{change_id}", response_model=Envelope[KnowledgeChange])
-    async def get_change(change_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_change(change_id: str, who: Person, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.get_change(who, change_id))
 
     runs = APIRouter(prefix="/v1/sync-runs", tags=["sources"], responses=errors)
 
     @runs.get("/{run_id}", response_model=Envelope[SyncRun])
-    async def get_run(run_id: str, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_run(run_id: str, who: Person, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.get_run(who, run_id))
 
     @runs.post("/{run_id}/cancel", response_model=Envelope[SyncRun])
@@ -650,7 +670,7 @@ def create_kb_app(
         return ok(await service.source_kinds(who))
 
     @app.get("/v1/knowledge/lookups", tags=["knowledge-bases"], response_model=Envelope[Lookups], responses=errors)
-    async def lookups(who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def lookups(who: Person, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.lookups(who))
 
     app.include_router(runs)

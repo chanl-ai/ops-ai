@@ -47,6 +47,7 @@
         "type": "object"
       },
       "AiApprovalIn": {
+        "additionalProperties": false,
         "properties": {
           "decision": {
             "enum": [
@@ -146,6 +147,7 @@
         "type": "object"
       },
       "AttachIn": {
+        "additionalProperties": false,
         "properties": {
           "sourceIds": {
             "items": {
@@ -366,6 +368,7 @@
         "type": "object"
       },
       "DecideIn": {
+        "additionalProperties": false,
         "properties": {
           "decision": {
             "enum": [
@@ -656,6 +659,7 @@
         "type": "object"
       },
       "DraftEdit": {
+        "additionalProperties": false,
         "properties": {
           "answer": {
             "maxLength": 4000,
@@ -1470,6 +1474,7 @@
         "type": "object"
       },
       "FileIdsIn": {
+        "additionalProperties": false,
         "properties": {
           "fileIds": {
             "items": {
@@ -2620,6 +2625,7 @@
         "type": "object"
       },
       "KnowledgeBaseIn": {
+        "additionalProperties": false,
         "properties": {
           "access": {
             "anyOf": [
@@ -2780,6 +2786,7 @@
         "type": "object"
       },
       "KnowledgeBasePatch": {
+        "additionalProperties": false,
         "properties": {
           "access": {
             "anyOf": [
@@ -2841,6 +2848,18 @@
             ],
             "title": "Description"
           },
+          "metadataProfile": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadataprofile"
+          },
           "name": {
             "anyOf": [
               {
@@ -2862,6 +2881,21 @@
               }
             ],
             "title": "Owner"
+          },
+          "precedence": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precedence"
           },
           "protection": {
             "anyOf": [
@@ -3635,6 +3669,7 @@
         "type": "object"
       },
       "OwnerIn": {
+        "additionalProperties": false,
         "properties": {
           "owner": {
             "title": "Owner",
@@ -3648,6 +3683,7 @@
         "type": "object"
       },
       "PageIn": {
+        "additionalProperties": false,
         "properties": {
           "text": {
             "maxLength": 100000,
@@ -3961,6 +3997,7 @@
         "type": "object"
       },
       "PreviewIn": {
+        "additionalProperties": false,
         "properties": {
           "config": {
             "additionalProperties": true,
@@ -3999,7 +4036,22 @@
         "type": "object"
       },
       "QueryIn": {
+        "additionalProperties": false,
         "properties": {
+          "alsoKbIds": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alsokbids"
+          },
           "collection": {
             "anyOf": [
               {
@@ -4013,9 +4065,56 @@
             ],
             "title": "Collection"
           },
+          "overrides": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrides"
+          },
           "question": {
             "title": "Question",
             "type": "string"
+          },
+          "runAsId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runasid"
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settings"
           }
         },
         "required": [
@@ -4188,6 +4287,7 @@
         "type": "object"
       },
       "ScopesIn": {
+        "additionalProperties": false,
         "description": "What a person searches for while picking what a plugin source takes in: sites or spaces by name, or, with\n`parent`, what one picked site holds (its libraries).",
         "properties": {
           "cursor": {
@@ -4283,6 +4383,7 @@
         "type": "object"
       },
       "SearchIn": {
+        "additionalProperties": false,
         "properties": {
           "collection": {
             "anyOf": [
@@ -4317,9 +4418,56 @@
             ],
             "title": "Limit"
           },
+          "overrides": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overrides"
+          },
           "question": {
             "title": "Question",
             "type": "string"
+          },
+          "runAsId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runasid"
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settings"
           }
         },
         "required": [
@@ -4985,6 +5133,7 @@
         "type": "object"
       },
       "SourceIn": {
+        "additionalProperties": false,
         "properties": {
           "aiCeiling": {
             "anyOf": [
@@ -5285,6 +5434,7 @@
         "type": "object"
       },
       "SourcePatch": {
+        "additionalProperties": false,
         "properties": {
           "aiCeiling": {
             "anyOf": [
@@ -5904,6 +6054,7 @@
         "type": "object"
       },
       "TombstonesIn": {
+        "additionalProperties": false,
         "properties": {
           "ids": {
             "items": {
@@ -5962,6 +6113,7 @@
         "type": "object"
       },
       "VerifyIn": {
+        "additionalProperties": false,
         "properties": {
           "verified": {
             "title": "Verified",
@@ -5998,6 +6150,7 @@
         "type": "object"
       },
       "WrittenItemIn": {
+        "additionalProperties": false,
         "description": "One item written into a typed text or push source. `name` is its key: sent again with the same content it is\nunchanged, with new content it is the item's next version.",
         "properties": {
           "content": {

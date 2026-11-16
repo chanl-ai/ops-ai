@@ -8,14 +8,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from ops_service_kit.http import ListResult, Out
+from ops_service_kit.http import In, ListResult, Out
 
 Json = dict[str, Any]
-
-
-class In(BaseModel):
-    # The console sends its whole input type; fields this slice does not run are accepted and ignored.
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="ignore")
 
 
 class _Section(BaseModel):
@@ -110,10 +105,10 @@ class KnowledgeBaseIn(In):
     owner: str | None = None
     description: str = ""
     color: str = "blue"
-    source_ids: list[str] = []
+    source_ids: list[str] = Field(default=[])
     # Fills every settings section as a starting point; `raw` is shown as "Search only". The base does not remember it.
     preset: Literal["balanced", "precise", "raw"] = "balanced"
-    collections: list[str] = []
+    collections: list[str] = Field(default=[])
     # Values over the preset's, section by section, checked as a patch is.
     retrieval: Json | None = None
     answer: Json | None = None
@@ -131,6 +126,9 @@ class KnowledgeBasePatch(In):
     description: str | None = None
     color: str | None = None
     collections: list[str] | None = None
+    # Sent by the console's settings form; not kept yet, so accepted and ignored.
+    precedence: list[Json] | None = None
+    metadata_profile: Json | None = None
     # Each section merges over what is stored: the keys sent change, the rest stay.
     retrieval: Json | None = None
     answer: Json | None = None
@@ -150,9 +148,9 @@ class SourceIn(In):
     owner: str | None = None
     sensitivity: str = "internal"
     status: str | None = None
-    tags: list[str] = []
-    file_ids: list[str] = []
-    kb_ids: list[str] = []
+    tags: list[str] = Field(default=[])
+    file_ids: list[str] = Field(default=[])
+    kb_ids: list[str] = Field(default=[])
     sync: bool = False
     # A "tool" source's plugin and source names: {"plugin": "opsai.salesforce", "source": "articles"}. Any
     # values: the console's Add source sends its whole draft config for every type, and only a tool source reads it.
@@ -408,6 +406,12 @@ class QueryIn(In):
     question: str
     # Only pieces of this collection, on top of the base's own scope (the Test sheet's filter).
     collection: str | None = Field(default=None, min_length=1, max_length=120)
+    # Sent by the console's QueryInput; not run yet, so accepted and ignored.
+    settings: Json | None = None
+    overrides: Json | None = None
+    runtime: Json | None = None
+    run_as_id: str | None = None
+    also_kb_ids: list[str] | None = None
 
 
 class PageIn(In):
@@ -443,6 +447,11 @@ class SearchIn(In):
     limit: int | None = Field(default=None, ge=1, le=20)
     # Only pieces of this collection, on top of each base's own scope (the Test sheet's filter).
     collection: str | None = Field(default=None, min_length=1, max_length=120)
+    # Sent by the console's RetrieveInput; not run yet, so accepted and ignored.
+    settings: Json | None = None
+    overrides: Json | None = None
+    runtime: Json | None = None
+    run_as_id: str | None = None
 
 
 class PassageOut(Out):
@@ -593,11 +602,10 @@ class ChangeList(ListResult[KnowledgeChange]):
     view_counts: ChangeViewCounts
 
 
-class SyncIn(BaseModel):
+class SyncIn(In):
     """The console's SyncOptions. Unknown fields are refused rather than ignored, so a caller never believes an option
     it sent was honoured."""
 
-    model_config = ConfigDict(extra="forbid")
     full: bool = False
     retry: bool = False
 
