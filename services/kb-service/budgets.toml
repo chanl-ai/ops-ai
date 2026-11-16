@@ -10,65 +10,65 @@ queries = 0
 
 # Short transactions, one per store read, since documents-service is asked for the file's reading between them.
 ["GET /v1/items/{item_id}"]
-queries = 11
+queries = 6
 transactions = 5
 connections = 5
 
 # The page, its count, the health GROUP BY, the page's links, and its sources with their item counts.
 ["GET /v1/knowledge-bases"]
-queries = 7
+queries = 6
 
 ["GET /v1/knowledge-bases/options"]
-queries = 2
+queries = 1
 
 ["GET /v1/knowledge-bases/refs"]
-queries = 2
+queries = 1
 
 # Short transactions, one per store read, since agents-service is asked who uses the base between them.
 ["GET /v1/knowledge-bases/{kb_id}"]
-queries = 14
+queries = 8
 transactions = 6
 connections = 6
 
 ["GET /v1/knowledge-bases/{kb_id}/documents"]
-queries = 6
+queries = 5
 
 ["GET /v1/knowledge-changes"]
-queries = 9
+queries = 8
 
 ["GET /v1/knowledge-changes/{change_id}"]
-queries = 6
+queries = 5
 
 ["GET /v1/knowledge/lookups"]
-queries = 5
+queries = 4
 
 ["GET /v1/knowledge/source-kinds"]
 queries = 0
 
 # The page, its count, a GROUP BY per facet, and the page's item counts, bases fed and running runs.
 ["GET /v1/sources"]
-queries = 8
+queries = 7
 
 ["GET /v1/sources/from-plugin"]
 not_budgeted = "requires the plugin query parameter, which the budget's call by path cannot send"
 
 ["GET /v1/sources/{source_id}"]
-queries = 9
+queries = 8
 
 # Two transactions, one per store read (the source, its items); the sampled files are read from storage with none open.
 ["GET /v1/sources/{source_id}/ai-estimate"]
-queries = 5
+queries = 3
 transactions = 2
 connections = 2
 
 ["GET /v1/sources/{source_id}/items"]
-queries = 6
+queries = 5
 
 ["GET /v1/sources/{source_id}/runs"]
-queries = 6
+queries = 5
 
 ["GET /v1/sources/{source_id}/tombstones"]
-queries = 3
+queries = 2
 
 ["GET /v1/sync-runs/{run_id}"]
-queries = 2
+queries = 1
