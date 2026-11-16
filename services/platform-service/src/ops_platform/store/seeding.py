@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Any
 
 import sqlalchemy as sa
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_access import ANY_TEAM
@@ -35,6 +35,13 @@ GRANT_KEY = ["tenant_id", "subject_kind", "subject_id", "role_id", "team_id"]
 
 class SeedConflictError(RuntimeError):
     """A seeded id belongs to another tenant."""
+
+    def __init__(self, tenant_id: str, held: list[tuple[str, str]]) -> None:
+        names = ", ".join(f"{t} {i}" for t, i in held)
+        super().__init__(
+            f"seed: {names} already exist under another tenant than {tenant_id}; rebuild the dev database "
+            "(make up without KEEP_DATA=1, or make db-reset) and start again"
+        )
 
 
 async def _visible(c: AsyncConnection, table: sa.Table, ids: list[str]) -> set[str]:
@@ -69,22 +76,19 @@ async def write_seed(
                 .values(security_team_id=security_team)
             )
         # Before any upsert: an id another tenant holds conflicts invisibly, and the error would not say which.
+        team_ids, user_ids = [str(t["id"]) for t in data["teams"]], [str(p["id"]) for p in data["people"]]
+        hidden = {
+            teams.name: set(team_ids) - await _visible(c, teams, team_ids),
+            users.name: set(user_ids) - await _visible(c, users, user_ids),
+        }
         held = [
             (table.name, i)
-            for table, ids in (
-                (teams, [str(t["id"]) for t in data["teams"]]),
-                (users, [str(p["id"]) for p in data["people"]]),
-            )
-            if (missing := set(ids) - await _visible(c, table, ids))
-            for i in sorted(missing)
+            for table in (teams, users)
+            for i in sorted(hidden[table.name])
             if await _taken(db, table, i)
         ]
         if held:
-            names = ", ".join(f"{t} {i}" for t, i in held)
-            raise SeedConflictError(
-                f"seed: {names} already exist under another tenant than {tenant_id}; rebuild the dev database "
-                "(make up without KEEP_DATA=1, or make db-reset) and start again"
-            )
+            raise SeedConflictError(tenant_id, held)
         await ensure_builtin_roles(c, tenant_id, at=now)
         for team in data["teams"]:
             fields = {
@@ -94,7 +98,14 @@ async def write_seed(
                 "scope": team["scope"],
             }
             row = {"id": team["id"], "tenant_id": tenant_id, "created_at": now, **fields}
-            made = await c.execute(insert_ignore(c, teams, row, keys=["id"]))
+            made = await _insert_new(
+                c,
+                insert_ignore(c, teams, row, keys=["id"]),
+                teams,
+                str(team["id"]),
+                tenant_id,
+                hidden=hidden[teams.name],
+            )
             if made.rowcount:
                 # A seeded team, the install's first team included, gets each service's defaults like any new team;
                 # a team already there reports nothing again.
@@ -107,7 +118,11 @@ async def write_seed(
             # A seeded person's address and name belong to the seed file (no route changes them), so a database seeded
             # before the file changed them signs in with the new ones; their roles and status stay as people set them.
             row = {"id": person["id"], "tenant_id": tenant_id, "created_at": now, **fields}
-            await c.execute(upsert(c, users, row, keys=["id"], update=["email", "name"]))
+            if str(person["id"]) in hidden[users.name]:
+                new_user = insert_ignore(c, users, row, keys=["id"])
+                await _insert_new(c, new_user, users, str(person["id"]), tenant_id, hidden=hidden[users.name])
+            else:
+                await c.execute(upsert(c, users, row, keys=["id"], update=["email", "name"]))
             await c.execute(sa.update(members).where(members.c.user_id == person["id"]).values(email=person["email"]))
             for team_id, role in person["teams"].items():
                 fields = {"email": person["email"], "role": role, "status": "active", "updated_at": now}
@@ -155,6 +170,23 @@ async def write_seed(
             if every:
                 await bump_version(c, tenant_id)
         await ensure_owner(c, tenant_id, at=now)
+
+
+async def _insert_new(
+    c: AsyncConnection, insert: sa.Executable, table: sa.Table, row_id: str, tenant_id: str, *, hidden: set[str]
+) -> sa.CursorResult[Any]:
+    """Inserts a seeded row unless it is there. An id this tenant cannot see that is there after all belongs to another
+    tenant, which `_taken` misses for a login row security applies to: PostgreSQL skips the insert and SQL Server
+    refuses it on the primary key. Either way the seed stops with the conflict, as it does for an id `_taken` saw."""
+    try:
+        made = await c.execute(insert)
+    except IntegrityError as e:
+        if row_id not in hidden:
+            raise
+        raise SeedConflictError(tenant_id, [(table.name, row_id)]) from e
+    if made.rowcount == 0 and row_id in hidden:
+        raise SeedConflictError(tenant_id, [(table.name, row_id)])
+    return made
 
 
 async def _taken(db: TenantDb, table: sa.Table, row_id: str) -> bool:

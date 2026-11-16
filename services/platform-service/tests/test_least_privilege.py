@@ -4,7 +4,9 @@ before a tenant is known (email, session, key prefix, invite token) found nothin
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 import httpx
 import pytest
@@ -14,8 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_platform.api.app import create_internal_app, create_public_app
 from ops_platform.keys import dev_signer
+from ops_platform.seed import seed
 from ops_platform.signin_options import SignInOptions
 from ops_platform.store.identity import IdentityStore
+from ops_platform.store.seeding import SeedConflictError
 from ops_platform.store.tables import users
 from ops_platform.store.tenancy import ROLE, TenantDb
 from ops_service_kit.public_address import PublicFetch
@@ -23,6 +27,7 @@ from ops_service_kit.public_address import PublicFetch
 from .conftest import CONSOLE, DEMO_PASSWORD, PUBLIC_URL, SERVICE, SERVICES, Platform, SignInRig
 
 APP_ROLE = "ops_platform_app_test"
+PEOPLE = Path(__file__).parents[1] / "seed" / "people.json"
 
 
 @pytest.fixture
@@ -144,3 +149,16 @@ async def test_sign_in_lookups_work_as_the_app_role(app_url: str, signin: SignIn
             assert r.status_code == 204, r.text
     finally:
         await store.close()
+
+
+async def test_a_seeded_id_another_tenant_holds_stops_the_seed_as_the_app_role(
+    app_url: str, database_url: str, tmp_path: Path
+) -> None:
+    # Row security hides the other tenant's row from this login, so only the insert sees the clash.
+    await seed(database_url, PEOPLE)
+    data = json.loads(PEOPLE.read_text())
+    data["tenant"]["id"] = "ten_moved_app"
+    moved = tmp_path / "people.json"
+    moved.write_text(json.dumps(data))
+    with pytest.raises(SeedConflictError, match="another tenant than ten_moved_app; rebuild the dev database"):
+        await seed(app_url, moved)
