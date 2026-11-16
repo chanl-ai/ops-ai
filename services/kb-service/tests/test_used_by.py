@@ -4,15 +4,19 @@ console's typed confirmation."""
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 from typing import Any
 
 import httpx
+import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import ServiceClient, dev_service_signer
 from ops_kb.agents import AgentsUsage, StaticAgents
+from ops_kb.app import agents_usage
+from ops_service_kit.settings import Settings
 
 from .conftest import kb_client
 from .test_bases_and_sources import POLICIES, data
@@ -69,3 +73,30 @@ async def test_agents_of_other_teams_are_counted_not_named(engine: AsyncEngine, 
         detail = data(await c.get(f"/v1/knowledge-bases/{kb['id']}"))
     assert (detail["agentNames"], detail["agentsElsewhere"], detail["agentsKnown"]) == (["Branch Policy"], 2, True)
     assert seen and seen[0], "kb-service names the caller's team in its token"
+
+
+async def test_a_slow_agents_service_is_asked_once_within_its_short_wait(
+    engine: AsyncEngine, tenant: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """agents-service accepting the connection and never answering: the list asks once, waits the "used by" timeout
+    and answers without usage, well inside the console's own wait, instead of three tries of the endpoint's 10 s."""
+    asked = 0
+
+    async def hold(_r: asyncio.StreamReader, _w: asyncio.StreamWriter) -> None:
+        nonlocal asked
+        asked += 1
+        await asyncio.sleep(60)
+
+    server = await asyncio.start_server(hold, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    monkeypatch.setenv("OPS_AGENTS_URL", f"http://127.0.0.1:{port}")
+    monkeypatch.setenv("OPS_KB_USED_BY_TIMEOUT_S", "0.3")
+    async with kb_client(engine, tenant) as setup:
+        kb = data(await setup.post("/v1/knowledge-bases", json=POLICIES), 201)
+    try:
+        async with kb_client(engine, tenant, agents=agents_usage(Settings())) as c:
+            listed = data(await asyncio.wait_for(c.get("/v1/knowledge-bases"), 5))["data"]
+    finally:
+        server.close()
+    assert next(r for r in listed if r["id"] == kb["id"])["agentsKnown"] is False
+    assert asked == 1

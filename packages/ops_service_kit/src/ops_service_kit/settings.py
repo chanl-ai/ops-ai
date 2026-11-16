@@ -369,6 +369,9 @@ class Settings(BaseSettings):
     # The chat-model alias kb-service reranks and rewrites questions on, for a knowledge base that names none of its
     # own (its retrieval's queryModel). Both steps are off on a base until its owner turns them on.
     kb_query_alias: str = "bank-standard"
+    # How long kb-service waits for agents-service's "used by" on a knowledge base list or page, asked once: the page
+    # answers without it (usage unknown) rather than hold the console for the agents endpoint's tries and timeout.
+    kb_used_by_timeout_s: float = Field(default=5.0, gt=0)
     embedding_width: int = 1536
     # The share of saved eval cases a version must pass before a publish check passes (0-1); the check blocks the
     # publish at the risk tiers whose steps are blocking (agents-service domain.evals).

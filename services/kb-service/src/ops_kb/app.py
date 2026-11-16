@@ -167,8 +167,11 @@ Page = Annotated[int, Query(ge=1)]
 PageSize = Annotated[int, Query(alias="pageSize", ge=1, le=100)]
 
 
-def _agents_service(settings: Settings) -> AgentsUsage:
-    return AgentsUsage(ServiceClient.for_settings(settings, service="kb", audience="agents", scopes=["agents:view"]))
+def agents_usage(settings: Settings) -> AgentsUsage:
+    """agents-service's "used by", asked once within `kb_used_by_timeout_s`: a list or page then answers without it."""
+    agents = settings.endpoint("agents").model_copy(update={"timeout_s": settings.kb_used_by_timeout_s, "retries": 0})
+    once = settings.model_copy(update={"agents": agents})
+    return AgentsUsage(ServiceClient.for_settings(once, service="kb", audience="agents", scopes=["agents:view"]))
 
 
 def _tools_service(settings: Settings) -> ToolReader | None:
@@ -332,7 +335,7 @@ def create_kb_app(
         KnowledgeStore(engine),
         files or file_intake(Settings()),
         HybridRetriever(engine, embedder),
-        agents or _agents_service(Settings()),
+        agents or agents_usage(Settings()),
         reader,
         readings=readings,
         ocr=Settings().kb_ocr,
