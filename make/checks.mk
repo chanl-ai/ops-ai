@@ -16,7 +16,7 @@ CHECKS = \
   access-exceptions access-exceptions-commits access-exceptions-self-test \
   portable-store portable-store-commits \
   config-literals config-literals-commits \
-  typed-boundaries \
+  typed-boundaries typed-boundaries-commits \
   isolation-markings isolation-sites \
   store-inventory roles-matrix sbom k8s-base \
   ratchet-history lint-imports sdk-drift changelog-entries console-standards \
@@ -49,6 +49,8 @@ check-paths.config-literals-commits = (^|/)config-literals-baseline\.txt$$
 # A dict, gather, bare task, loose body or untyped reply beyond the member's typed-boundaries-baseline.txt; any print.
 check-run.typed-boundaries = $(PY) scripts/check_typed_boundaries.py --strict
 check-paths.typed-boundaries = ^(services|packages)/[^/]+/(src/.*\.py|typed-boundaries-baseline\.txt)$$|^scripts/check_typed_boundaries\.py$$
+check-run.typed-boundaries-commits = $(PY) scripts/check_typed_boundaries.py --commits
+check-paths.typed-boundaries-commits = (^|/)typed-boundaries-baseline\.txt$$
 
 # Every table marked and indexed; the raw transaction, savepoint, relay and loop-health sites each service still holds.
 check-run.isolation-markings = $(PYTEST) deploy/database/tests/test_isolation_markings.py deploy/database/tests/test_indexes.py

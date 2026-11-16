@@ -1,18 +1,19 @@
-# 70 boundaries crossed without a model in services/models-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 84 boundaries crossed without a model in services/models-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body completions_completions
 1 reply completions_completions
 1 reply completions_embeddings
 1 reply health_health
-11 dict-any services/models-service/src/ops_models/app.py
+15 dict-any services/models-service/src/ops_models/app.py
 1 task services/models-service/src/ops_models/app.py
 1 dict-any services/models-service/src/ops_models/key_check.py
-34 dict-any services/models-service/src/ops_models/providers.py
+35 dict-any services/models-service/src/ops_models/providers.py
 3 dict-any services/models-service/src/ops_models/schemas.py
-1 dict-any services/models-service/src/ops_models/store/aliases.py
+4 dict-any services/models-service/src/ops_models/store/aliases.py
 1 store-dict services/models-service/src/ops_models/store/aliases.py
-1 dict-any services/models-service/src/ops_models/store/calls.py
+2 dict-any services/models-service/src/ops_models/store/calls.py
 1 store-dict services/models-service/src/ops_models/store/calls.py
-4 dict-any services/models-service/src/ops_models/store/keys.py
+6 dict-any services/models-service/src/ops_models/store/keys.py
 4 store-dict services/models-service/src/ops_models/store/keys.py
 2 dict-any services/models-service/src/ops_models/store/provider_keys.py
 2 store-dict services/models-service/src/ops_models/store/provider_keys.py
+3 dict-any services/models-service/src/ops_models/store/providers.py

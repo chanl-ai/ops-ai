@@ -1,4 +1,7 @@
-# 25 boundaries crossed without a model in services/runner-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 28 boundaries crossed without a model in services/runner-service (scripts/check_typed_boundaries.py). A row may only fall.
+1 reply health_health
+1 body runs_run
+1 reply runs_run
 6 dict-any services/runner-service/src/ops_runner/app.py
 5 dict-any services/runner-service/src/ops_runner/domain.py
 6 dict-any services/runner-service/src/ops_runner/guest.py

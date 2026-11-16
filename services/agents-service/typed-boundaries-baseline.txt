@@ -1,4 +1,4 @@
-# 2529 boundaries crossed without a model in services/agents-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 2557 boundaries crossed without a model in services/agents-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body agents_attach_skill
 1 body agents_create_agent
 1 reply agents_create_agent
@@ -140,7 +140,7 @@
 19 dict-any services/agents-service/src/ops_agents/activities/shaper.py
 8 dict-any services/agents-service/src/ops_agents/activities/tool_directory.py
 4 dict-any services/agents-service/src/ops_agents/activities/tools.py
-7 dict-any services/agents-service/src/ops_agents/api/account_names.py
+9 dict-any services/agents-service/src/ops_agents/api/account_names.py
 4 dict-any services/agents-service/src/ops_agents/api/actors.py
 6 dict-any services/agents-service/src/ops_agents/api/agent_calls.py
 34 dict-any services/agents-service/src/ops_agents/api/agent_registry.py
@@ -180,7 +180,7 @@
 5 dict-any services/agents-service/src/ops_agents/api/event_workflows.py
 2 dict-any services/agents-service/src/ops_agents/api/file_names.py
 14 dict-any services/agents-service/src/ops_agents/api/guardrails.py
-102 dict-any services/agents-service/src/ops_agents/api/hitl_facade.py
+104 dict-any services/agents-service/src/ops_agents/api/hitl_facade.py
 2 dict-any services/agents-service/src/ops_agents/api/key_summaries.py
 23 dict-any services/agents-service/src/ops_agents/api/legacy_tasks.py
 6 dict-any services/agents-service/src/ops_agents/api/mailbox_gateway.py
@@ -197,7 +197,7 @@
 15 dict-any services/agents-service/src/ops_agents/api/publish_policy.py
 14 dict-any services/agents-service/src/ops_agents/api/publish_reviews.py
 1 dict-any services/agents-service/src/ops_agents/api/review_sla.py
-14 dict-any services/agents-service/src/ops_agents/api/review_text.py
+16 dict-any services/agents-service/src/ops_agents/api/review_text.py
 11 dict-any services/agents-service/src/ops_agents/api/routers/activity.py
 28 dict-any services/agents-service/src/ops_agents/api/routers/agents.py
 5 dict-any services/agents-service/src/ops_agents/api/routers/ai_steps.py
@@ -235,7 +235,7 @@
 68 dict-any services/agents-service/src/ops_agents/api/routers/templates.py
 11 dict-any services/agents-service/src/ops_agents/api/routers/tool_catalog.py
 4 dict-any services/agents-service/src/ops_agents/api/routers/tool_uses.py
-20 dict-any services/agents-service/src/ops_agents/api/routers/widget.py
+21 dict-any services/agents-service/src/ops_agents/api/routers/widget.py
 9 dict-any services/agents-service/src/ops_agents/api/routers/widgets.py
 17 dict-any services/agents-service/src/ops_agents/api/routers/workflows.py
 6 dict-any services/agents-service/src/ops_agents/api/routing.py
@@ -260,7 +260,7 @@
 12 dict-any services/agents-service/src/ops_agents/api/tool_module_reviews.py
 7 dict-any services/agents-service/src/ops_agents/api/typed_record_routes.py
 2 dict-any services/agents-service/src/ops_agents/api/usage.py
-3 dict-any services/agents-service/src/ops_agents/api/widget_sessions.py
+4 dict-any services/agents-service/src/ops_agents/api/widget_sessions.py
 14 dict-any services/agents-service/src/ops_agents/api/widgets.py
 1 dict-any services/agents-service/src/ops_agents/api/worker.py
 3 task services/agents-service/src/ops_agents/api/worker.py
@@ -269,11 +269,11 @@
 5 dict-any services/agents-service/src/ops_agents/case_fields.py
 1 dict-any services/agents-service/src/ops_agents/case_wording.py
 6 dict-any services/agents-service/src/ops_agents/domain/evals.py
-25 dict-any services/agents-service/src/ops_agents/graphs/agent_wrapper.py
-15 dict-any services/agents-service/src/ops_agents/graphs/common.py
+27 dict-any services/agents-service/src/ops_agents/graphs/agent_wrapper.py
+16 dict-any services/agents-service/src/ops_agents/graphs/common.py
 10 dict-any services/agents-service/src/ops_agents/graphs/complex_workflow.py
-73 dict-any services/agents-service/src/ops_agents/graphs/definition.py
-3 dict-any services/agents-service/src/ops_agents/graphs/metering.py
+88 dict-any services/agents-service/src/ops_agents/graphs/definition.py
+5 dict-any services/agents-service/src/ops_agents/graphs/metering.py
 2 dict-any services/agents-service/src/ops_agents/graphs/models.py
 3 dict-any services/agents-service/src/ops_agents/graphs/simple_workflow.py
 5 dict-any services/agents-service/src/ops_agents/graphs/sla.py

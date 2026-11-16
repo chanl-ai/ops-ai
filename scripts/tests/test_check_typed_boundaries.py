@@ -114,7 +114,7 @@ def _git(repo: Path, *args: str) -> str:
     return subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, check=True, env=env).stdout.strip()
 
 
-def test_a_baseline_row_raised_or_a_file_added_needs_the_trailer(
+def test_a_baseline_row_raised_or_a_file_added_waits_for_a_review(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     kb = tmp_path / "services/kb-service"
@@ -128,6 +128,7 @@ def test_a_baseline_row_raised_or_a_file_added_needs_the_trailer(
     _git(tmp_path, "add", ".")
     _git(tmp_path, "commit", "-qm", "the baselines begin")
     monkeypatch.setattr(c, "BASELINES_BEGAN", _git(tmp_path, "rev-parse", "HEAD"))
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "required")
     (kb / c.BASELINE_NAME).write_text("# header\n1 gather services/kb-service/src/app.py\n")
     _git(tmp_path, "commit", "-qam", "a gather became a task group")
     assert c.commit_problems(tmp_path) == []
@@ -135,8 +136,9 @@ def test_a_baseline_row_raised_or_a_file_added_needs_the_trailer(
     _git(tmp_path, "commit", "-qam", "a gather back in code")
     [raised] = c.commit_problems(tmp_path)
     assert "gather services/kb-service/src/app.py (1 -> 3)" in raised
-    _git(tmp_path, "commit", "-q", "--amend", "-m", "x\n\nStandards-exception: approved by owner-login: three")
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "approved")
     assert c.commit_problems(tmp_path) == []
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "required")
     # Deleting the file and regenerating it with `--update` is a new file holding every row: a rise.
     (kb / c.BASELINE_NAME).unlink()
     _git(tmp_path, "commit", "-qam", "drop the baseline")
@@ -152,6 +154,22 @@ def test_main_commits_flag_exits_1_on_a_raised_row(
     monkeypatch.setattr(c, "commit_problems", lambda _root: ["abc raises x"])  # pyright: ignore[reportUnknownLambdaType]
     assert run(tmp_path, monkeypatch, "--commits") == 1
     assert "abc raises x" in capsys.readouterr().out
+
+
+def test_a_service_with_routes_and_no_walk_script_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = repo(tmp_path, "x = 1\n")
+    app = root / "services/runner-service/src/ops_runner/app.py"
+    app.parent.mkdir(parents=True)
+    app.write_text('@app.post("/v1/runs")\nasync def run(): ...\n')
+    monkeypatch.setattr(c, "routes", lambda _root: Counter())  # pyright: ignore[reportUnknownLambdaType]
+    assert run(root, monkeypatch, "--strict") == 1
+    assert "services/runner-service: has routes and no scripts/check_openapi.py" in capsys.readouterr().err
+    script = root / "services/runner-service/scripts/check_openapi.py"
+    script.parent.mkdir()
+    script.write_text("")
+    assert run(root, monkeypatch, "--strict") == 0
 
 
 FORMS = """
@@ -190,3 +208,16 @@ def test_a_call_through_an_alias_a_loop_or_a_plain_dict_config_is_found_and_a_ta
         ("task", 12),
         ("task", 13),
     ]
+
+
+def test_an_object_or_mapping_valued_dict_is_a_dict_any_and_a_typed_one_is_not() -> None:
+    src = (
+        "from typing import Any, Mapping\n"
+        "from collections.abc import Mapping as M\n"
+        "a: dict[str, object]\n"
+        "b: Mapping[str, Any]\n"
+        "c: M[str, object]\n"
+        "d: dict[str, int]\n"
+        "e: Mapping[str, str]\n"
+    )
+    assert sorted(c.findings(src, "x/app.py")) == [("dict-any", 3), ("dict-any", 4), ("dict-any", 5)]

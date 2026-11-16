@@ -32,6 +32,7 @@ import ast
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 from collections import Counter
@@ -82,19 +83,29 @@ def _dotted(node: ast.expr) -> str:
     return ""
 
 
-def _dict_any(node: ast.AST) -> bool:
-    if not (isinstance(node, ast.Subscript) and _dotted(node.value) in ("dict", "Dict", "typing.Dict")):
+def _dict_any(node: ast.AST, names: dict[str, str] | None = None) -> bool:
+    """`dict[str, Any]` or `dict[str, object]`, or the same under `Mapping`/`MutableMapping`, by any import spelling."""
+    if not isinstance(node, ast.Subscript):
+        return False
+    base = _resolved(node.value, names or {})
+    if base not in _DICTS:
         return False
     s = node.slice
-    return (
-        isinstance(s, ast.Tuple)
-        and len(s.elts) == 2
-        and [_dotted(e) for e in s.elts]
-        in (
-            ["str", "Any"],
-            ["str", "typing.Any"],
-        )
-    )
+    if not (isinstance(s, ast.Tuple) and len(s.elts) == 2):
+        return False
+    return _resolved(s.elts[0], names or {}) == "str" and _resolved(s.elts[1], names or {}) in _LOOSE
+
+
+_DICTS = (
+    "dict",
+    "Dict",
+    "typing.Dict",
+    "typing.Mapping",
+    "typing.MutableMapping",
+    "collections.abc.Mapping",
+    "collections.abc.MutableMapping",
+)
+_LOOSE = ("Any", "typing.Any", "object")
 
 
 def _aliases(tree: ast.AST) -> dict[str, str]:
@@ -137,13 +148,13 @@ def findings(source: str, path: str) -> list[tuple[str, int]]:
             for k, v in zip(node.keys, node.values, strict=True)
         ):
             found.append(("extra-allow", node.lineno))
-        if _dict_any(node):
+        if _dict_any(node, names):
             found.append(("dict-any", getattr(node, "lineno", 0)))
         elif (
             in_store
             and isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
             and node.returns is not None
-            and any(_dict_any(n) for n in ast.walk(node.returns))
+            and any(_dict_any(n, names) for n in ast.walk(node.returns))
         ):
             found.append(("store-dict", node.lineno))
         if not isinstance(node, ast.Call):
@@ -225,6 +236,23 @@ def routes(root: Path) -> Counter[Key]:
         for kind, op in json.loads(out.strip().splitlines()[-1]):
             now[(kind, f"{name}#{op}")] += 1
     return now
+
+
+ROUTE_DECORATOR = re.compile(r"@\w+\.(?:get|post|put|patch|delete|api_route)\(|\bAPIRouter\(|\.add_api_route\(")
+
+
+def unwalked(root: Path) -> list[str]:
+    """Services with routes in `src` and no scripts/check_openapi.py: their routes are never walked, so a body or reply
+    without a model could not be seen, and the baselines would say nothing about them."""
+    out: list[str] = []
+    for m in members(root):
+        if not m.name.endswith("-service") or (m / "scripts" / "check_openapi.py").exists():
+            continue
+        if any(ROUTE_DECORATOR.search(f.read_text()) for f in (m / "src").rglob("*.py")):
+            out.append(
+                f"{m.relative_to(root).as_posix()}: has routes and no scripts/check_openapi.py, so none is walked"
+            )
+    return out
 
 
 def read_baseline(text: str, member: str) -> Counter[Key]:
@@ -332,7 +360,7 @@ def main(root: Path = ROOT, *, with_routes: bool = True) -> int:
         sys.stdout.write(f"check_typed_boundaries: baselines hold {update(root, now)} findings\n")
         return 0
     base = baselines(root)
-    found = problems(now, base, where)
+    found = problems(now, base, where) + (unwalked(root) if with_routes else [])
     for line in found:
         sys.stderr.write(line + "\n")
     fell = sum(base.values()) - sum(min(n, base[k]) for k, n in now.items() if k[0] not in ZERO)
