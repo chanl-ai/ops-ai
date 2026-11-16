@@ -272,8 +272,8 @@ def mailboxes_router(
         return GraphReader(http, token, conn.address, folder, seal=CursorSeal(cursors, tenant, conn.address, folder))
 
     async def source(caller: Any, conn: Connection, folder: str, *, audit: bool) -> ImapMailSource | GraphReader:
-        """The mailbox's reader. `audit` False for the mail listener's polls, which would otherwise write a secret use
-        row every few seconds; a person's Test connection is audited."""
+        """The mailbox's reader. `audit` False for the mail listener's polls, which leave one secret use row a day
+        rather than one every few seconds; a person's Test connection is audited each time."""
         if resolver is None or egress is None:
             raise Unprocessable("This tools-service has no secrets or egress policy, so it reads no mailbox.")
         can(caller, "deployments", "run", team=caller.team_id, what=f"the mailbox {conn.address}")

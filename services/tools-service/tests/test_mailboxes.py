@@ -138,8 +138,8 @@ async def test_a_mailbox_is_read_with_its_secret_and_the_password_never_comes_ba
     assert b"notice-1-" in base64.b64decode(item["rfc822"])
     assert "app-password" not in page.text and "app-password" not in first.text
     used = await SecretStore(env.engine).audit(env.tenant, TEAM)
-    # The mail listener reads every few seconds: its reads keep the secret's time of use and write no audit row each.
-    assert not [u for u in used if u.name == SECRET and u.action == "used"], used
+    # The mail listener reads every few seconds: its reads keep the secret's time of use and leave one row a day.
+    assert len([u for u in used if u.name == SECRET and u.action == "used"]) == 1, used
 
 
 async def test_a_caller_of_another_team_cannot_use_this_teams_secret(env: Env) -> None:

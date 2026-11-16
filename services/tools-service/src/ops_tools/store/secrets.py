@@ -4,7 +4,7 @@ change it records. Values are put and read through `secrets.SecretResolver`; thi
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
@@ -333,7 +333,8 @@ class SecretStore(Store):
     ) -> dict[str, tuple[str, int]]:
         """The reference and version of each named secret the team has, recording the use of each in one
         transaction. Read on every call, never cached, so a rotation applies to the next call. `audit` False is a
-        poller's read (a mailbox read every few seconds): its time of use is kept, with no audit row per poll."""
+        poller's read (a mailbox read every few seconds): its time of use is kept, and it leaves one audit row a day
+        for each secret, tool and actor, so an automated use shows without a row per poll."""
         if not names:
             return {}
         async with self.tx() as c:
@@ -347,7 +348,24 @@ class SecretStore(Store):
                     .where(_of(tenant_id, team_id), tool_secrets.c.name.in_(list(found)))
                     .values(last_used_at=at)
                 )
-            for name, (_, version) in found.items() if audit else ():
+            a = secret_audit.c
+            day = at.replace(hour=0, minute=0, second=0, microsecond=0)
+            seen: set[str] = set()
+            if not audit and found:
+                today = sa.select(a.name).where(
+                    a.tenant_id == tenant_id,
+                    a.team_id == team_id,
+                    a.name.in_(list(found)),
+                    a.action == "used",
+                    a.actor == actor,
+                    a.tool == tool,
+                    a.at >= day,
+                    a.at < day + timedelta(days=1),
+                )
+                seen = {str(n) for n in (await c.execute(today)).scalars()}
+            for name, (_, version) in found.items():
+                if name in seen:
+                    continue
                 change = {"name": name, "action": "used", "version": version, "actor": actor, "tool": tool, "at": at}
                 await self._audit(c, tenant_id, team_id, change)
         return found
