@@ -35,7 +35,7 @@ from ops_documents.tools_client import PluginTemplates
 from ops_identity import ServiceCallError, ServiceUnreachable
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import ApiError, Conflict, NotFound, ServiceUnavailable, ValidationFailed
-from ops_service_kit.http import Envelope, In, Out, ok
+from ops_service_kit.http import Envelope, In, JsonValue, Out, ok
 from ops_service_kit.template_merge import FieldOutcome, apply, merge
 
 Kind = Literal["document_type"]
@@ -152,8 +152,9 @@ class FieldReview(Out):
     label: str
     # kept: only the team changed it; taken: only the template did; conflict: both did, the team's unless chosen.
     outcome: Literal["kept", "taken", "conflict"]
-    yours: Any = None
-    template: Any = None
+    # The field's definition as the team holds it and as the template ships it.
+    yours: JsonValue = None
+    template: JsonValue = None
 
 
 class UpdateReview(Out):

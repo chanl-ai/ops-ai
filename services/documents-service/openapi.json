@@ -612,7 +612,7 @@
             "title": "Record"
           },
           "value": {
-            "title": "Value"
+            "$ref": "#/components/schemas/JsonValue"
           }
         },
         "required": [
@@ -881,10 +881,13 @@
       },
       "DocumentTypeVersion": {
         "additionalProperties": false,
+        "description": "A saved version. Its field definitions, layout templates and checks are the documents the builder wrote, held\nas JSON: the engine (`ops_extract`) reads them and DocumentTypeVersionIn bounds what is saved.",
         "properties": {
           "checks": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "title": "Checks",
@@ -909,7 +912,9 @@
           },
           "fields": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "title": "Fields",
@@ -952,7 +957,9 @@
           },
           "templates": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "title": "Templates",
@@ -1562,8 +1569,7 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/ExtractionCorrection"
                 },
                 "type": "array"
               },
@@ -1607,7 +1613,9 @@
           "fields": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -1639,8 +1647,7 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/ImageCall"
                 },
                 "type": "array"
               },
@@ -1664,7 +1671,16 @@
           "needsReview": {
             "anyOf": [
               {
-                "items": {},
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    }
+                  ]
+                },
                 "type": "array"
               },
               {
@@ -1697,7 +1713,9 @@
               },
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -1737,7 +1755,9 @@
           "proposal": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -1761,7 +1781,9 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -1790,7 +1812,9 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -1851,6 +1875,57 @@
           "status"
         ],
         "title": "Extraction",
+        "type": "object"
+      },
+      "ExtractionCorrection": {
+        "additionalProperties": false,
+        "description": "A person's value for a field, with the value and confidence it replaced (`record` for a read of several).",
+        "properties": {
+          "corrected": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "correctedAt": {
+            "format": "date-time",
+            "title": "Correctedat",
+            "type": "string"
+          },
+          "correctedBy": {
+            "title": "Correctedby",
+            "type": "string"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "original": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "originalConfidence": {
+            "title": "Originalconfidence",
+            "type": "number"
+          },
+          "record": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record"
+          }
+        },
+        "required": [
+          "field",
+          "record",
+          "original",
+          "originalConfidence",
+          "corrected",
+          "correctedBy",
+          "correctedAt"
+        ],
+        "title": "ExtractionCorrection",
         "type": "object"
       },
       "ExtractionError": {
@@ -2062,10 +2137,10 @@
             "type": "string"
           },
           "template": {
-            "title": "Template"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "yours": {
-            "title": "Yours"
+            "$ref": "#/components/schemas/JsonValue"
           }
         },
         "required": [
@@ -2074,6 +2149,38 @@
           "outcome"
         ],
         "title": "FieldReview",
+        "type": "object"
+      },
+      "FieldScore": {
+        "additionalProperties": false,
+        "description": "How a version read one field across the samples.",
+        "properties": {
+          "accuracy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy"
+          },
+          "matches": {
+            "title": "Matches",
+            "type": "integer"
+          },
+          "misses": {
+            "title": "Misses",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "matches",
+          "misses",
+          "accuracy"
+        ],
+        "title": "FieldScore",
         "type": "object"
       },
       "FileFacts": {
@@ -2354,6 +2461,39 @@
         "title": "Health",
         "type": "object"
       },
+      "ImageCall": {
+        "additionalProperties": false,
+        "description": "A model call that carried page images: its step, the pages shown, how many images and the alias.",
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          },
+          "images": {
+            "title": "Images",
+            "type": "integer"
+          },
+          "pages": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "step": {
+            "title": "Step",
+            "type": "string"
+          }
+        },
+        "required": [
+          "step",
+          "pages",
+          "images",
+          "alias"
+        ],
+        "title": "ImageCall",
+        "type": "object"
+      },
       "InstallInput": {
         "additionalProperties": false,
         "properties": {
@@ -2451,6 +2591,7 @@
         "title": "Installed",
         "type": "object"
       },
+      "JsonValue": {},
       "Layout": {
         "additionalProperties": false,
         "description": "A file's layout: pages, blocks in reading order with their table cells, and words.",
@@ -3081,7 +3222,7 @@
             "type": "string"
           },
           "expected": {
-            "title": "Expected"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "fileId": {
             "title": "Fileid",
@@ -3107,6 +3248,28 @@
         "title": "Sample",
         "type": "object"
       },
+      "SampleComparison": {
+        "additionalProperties": false,
+        "properties": {
+          "expected": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "got": {
+            "$ref": "#/components/schemas/JsonValue"
+          },
+          "match": {
+            "title": "Match",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "expected",
+          "got",
+          "match"
+        ],
+        "title": "SampleComparison",
+        "type": "object"
+      },
       "SampleIn": {
         "additionalProperties": false,
         "properties": {
@@ -3123,6 +3286,87 @@
           "expected"
         ],
         "title": "SampleIn",
+        "type": "object"
+      },
+      "SampleResult": {
+        "additionalProperties": false,
+        "description": "One sample's read in a test: its extraction, how it was read and each field against what it should be.",
+        "properties": {
+          "extractionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extractionid"
+          },
+          "fields": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/SampleComparison"
+              },
+              "type": "array"
+            },
+            "title": "Fields",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "enum": [
+                  "template",
+                  "model"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "sampleId": {
+            "title": "Sampleid",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "templateId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Templateid"
+          }
+        },
+        "required": [
+          "sampleId",
+          "name",
+          "extractionId",
+          "status",
+          "fields"
+        ],
+        "title": "SampleResult",
         "type": "object"
       },
       "TemplateMiss": {
@@ -3265,14 +3509,18 @@
         "properties": {
           "checks": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "title": "Checks",
             "type": "array"
           },
           "template": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Template",
             "type": "object"
           }
@@ -3439,6 +3687,43 @@
         "title": "TestEstimate",
         "type": "object"
       },
+      "TestResult": {
+        "additionalProperties": false,
+        "properties": {
+          "accuracy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy"
+          },
+          "fields": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FieldScore"
+            },
+            "title": "Fields",
+            "type": "object"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/SampleResult"
+            },
+            "title": "Samples",
+            "type": "array"
+          }
+        },
+        "required": [
+          "accuracy",
+          "fields",
+          "samples"
+        ],
+        "title": "TestResult",
+        "type": "object"
+      },
       "TestRun": {
         "additionalProperties": false,
         "properties": {
@@ -3469,14 +3754,12 @@
           "result": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/TestResult"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Result"
+            ]
           },
           "samples": {
             "title": "Samples",

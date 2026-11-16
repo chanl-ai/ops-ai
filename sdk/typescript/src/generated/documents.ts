@@ -842,8 +842,7 @@ export interface components {
             line: string | null;
             /** Record */
             record: number | null;
-            /** Value */
-            value: unknown;
+            value: components["schemas"]["JsonValue"];
         };
         /**
          * DocumentTypeIn
@@ -933,11 +932,15 @@ export interface components {
             /** Name */
             name: string;
         };
-        /** DocumentTypeVersion */
+        /**
+         * DocumentTypeVersion
+         * @description A saved version. Its field definitions, layout templates and checks are the documents the builder wrote, held
+         *     as JSON: the engine (`ops_extract`) reads them and DocumentTypeVersionIn bounds what is saved.
+         */
         DocumentTypeVersion: {
             /** Checks */
             checks: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /**
              * Createdat
@@ -953,7 +956,7 @@ export interface components {
             dateOrder: "MDY" | "DMY";
             /** Fields */
             fields: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /** Many */
             many: boolean;
@@ -970,7 +973,7 @@ export interface components {
             reviewBelow: number | null;
             /** Templates */
             templates: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /** Version */
             version: number;
@@ -1224,16 +1227,14 @@ export interface components {
         Extraction: {
             classification?: components["schemas"]["Classification"] | null;
             /** Corrections */
-            corrections?: {
-                [key: string]: unknown;
-            }[] | null;
+            corrections?: components["schemas"]["ExtractionCorrection"][] | null;
             /** Count */
             count?: number | null;
             documentType?: components["schemas"]["DocumentTypeRef"] | null;
             error?: components["schemas"]["ExtractionError"] | null;
             /** Fields */
             fields?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Fileid */
             fileId: string;
@@ -1242,18 +1243,16 @@ export interface components {
             /** Id */
             id: string;
             /** Imagecalls */
-            imageCalls?: {
-                [key: string]: unknown;
-            }[] | null;
+            imageCalls?: components["schemas"]["ImageCall"][] | null;
             /** Imagerefused */
             imageRefused?: string | null;
             /** Needsreview */
-            needsReview?: unknown[] | null;
+            needsReview?: (string | number)[] | null;
             /** Outcome */
             outcome?: ("ok" | "review" | "unreadable" | "unknown") | null;
             /** Pages */
             pages?: number | {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[] | null;
             /** Partial */
             partial?: boolean | null;
@@ -1261,13 +1260,13 @@ export interface components {
             path?: ("template" | "model") | null;
             /** Proposal */
             proposal?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Readpages */
             readPages?: number | null;
             /** Records */
             records?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[] | null;
             /** Rereadtokens */
             rereadTokens?: {
@@ -1275,7 +1274,7 @@ export interface components {
             } | null;
             /** Schema */
             schema?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[] | null;
             /**
              * Status
@@ -1287,6 +1286,27 @@ export interface components {
             templateMiss?: components["schemas"]["TemplateMiss"] | null;
             /** Text */
             text?: string | null;
+        };
+        /**
+         * ExtractionCorrection
+         * @description A person's value for a field, with the value and confidence it replaced (`record` for a read of several).
+         */
+        ExtractionCorrection: {
+            corrected: components["schemas"]["JsonValue"];
+            /**
+             * Correctedat
+             * Format: date-time
+             */
+            correctedAt: string;
+            /** Correctedby */
+            correctedBy: string;
+            /** Field */
+            field: string;
+            original: components["schemas"]["JsonValue"];
+            /** Originalconfidence */
+            originalConfidence: number;
+            /** Record */
+            record: number | null;
         };
         /** ExtractionError */
         ExtractionError: {
@@ -1356,10 +1376,20 @@ export interface components {
              * @enum {string}
              */
             outcome: "kept" | "taken" | "conflict";
-            /** Template */
-            template?: unknown;
-            /** Yours */
-            yours?: unknown;
+            template?: components["schemas"]["JsonValue"];
+            yours?: components["schemas"]["JsonValue"];
+        };
+        /**
+         * FieldScore
+         * @description How a version read one field across the samples.
+         */
+        FieldScore: {
+            /** Accuracy */
+            accuracy: number | null;
+            /** Matches */
+            matches: number;
+            /** Misses */
+            misses: number;
         };
         /**
          * FileFacts
@@ -1458,6 +1488,20 @@ export interface components {
              */
             status: "ok" | "degraded";
         };
+        /**
+         * ImageCall
+         * @description A model call that carried page images: its step, the pages shown, how many images and the alias.
+         */
+        ImageCall: {
+            /** Alias */
+            alias: string;
+            /** Images */
+            images: number;
+            /** Pages */
+            pages: number[];
+            /** Step */
+            step: string;
+        };
         /** InstallInput */
         InstallInput: {
             /** Name */
@@ -1489,6 +1533,7 @@ export interface components {
             /** Version */
             version: number | null;
         };
+        JsonValue: unknown;
         /**
          * Layout
          * @description A file's layout: pages, blocks in reading order with their table cells, and words.
@@ -1721,8 +1766,7 @@ export interface components {
             addedAt: string;
             /** Addedby */
             addedBy: string;
-            /** Expected */
-            expected: unknown;
+            expected: components["schemas"]["JsonValue"];
             /** Fileid */
             fileId: string;
             /** Id */
@@ -1730,12 +1774,41 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** SampleComparison */
+        SampleComparison: {
+            expected: components["schemas"]["JsonValue"];
+            got: components["schemas"]["JsonValue"];
+            /** Match */
+            match: boolean;
+        };
         /** SampleIn */
         SampleIn: {
             /** Expected */
             expected: unknown;
             /** Fileid */
             fileId: string;
+        };
+        /**
+         * SampleResult
+         * @description One sample's read in a test: its extraction, how it was read and each field against what it should be.
+         */
+        SampleResult: {
+            /** Extractionid */
+            extractionId: string | null;
+            /** Fields */
+            fields: {
+                [key: string]: components["schemas"]["SampleComparison"][];
+            };
+            /** Name */
+            name: string;
+            /** Path */
+            path?: ("template" | "model") | null;
+            /** Sampleid */
+            sampleId: string;
+            /** Status */
+            status: string | null;
+            /** Templateid */
+            templateId?: string | null;
         };
         /** TemplateMiss */
         TemplateMiss: {
@@ -1794,11 +1867,11 @@ export interface components {
         TemplateSuggestion: {
             /** Checks */
             checks: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /** Template */
             template: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /** TemplateView */
@@ -1857,6 +1930,17 @@ export interface components {
             /** Samples */
             samples: number;
         };
+        /** TestResult */
+        TestResult: {
+            /** Accuracy */
+            accuracy: number | null;
+            /** Fields */
+            fields: {
+                [key: string]: components["schemas"]["FieldScore"];
+            };
+            /** Samples */
+            samples: components["schemas"]["SampleResult"][];
+        };
         /** TestRun */
         TestRun: {
             /**
@@ -1870,10 +1954,7 @@ export interface components {
             error?: string | null;
             /** Id */
             id: string;
-            /** Result */
-            result?: {
-                [key: string]: unknown;
-            } | null;
+            result?: components["schemas"]["TestResult"] | null;
             /** Samples */
             samples: number;
             /**
