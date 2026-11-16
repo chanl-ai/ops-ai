@@ -47,6 +47,17 @@ def test_a_feat_on_services_with_no_card_is_refused(tmp_path: Path) -> None:
     assert head(repo) == before, "the refused commit reached HEAD"
 
 
+def test_a_scope_with_no_changed_path_under_it_is_refused(tmp_path: Path) -> None:
+    repo = clone(tmp_path)
+    before = head(repo)
+    readme = repo / "services" / "tools-service" / "README.md"
+    readme.write_text(readme.read_text(encoding="utf-8") + "\nA probe line.\n", encoding="utf-8")
+    done = commit(repo, "fix(kb): a probe line in the readme\n", "services/tools-service/README.md")
+    out = done.stdout + done.stderr
+    assert done.returncode != 0 and "right message file" in out, out[-2000:]
+    assert head(repo) == before, "the mislabelled commit reached HEAD"
+
+
 def test_a_good_commit_lands_with_only_its_paths(tmp_path: Path) -> None:
     repo = clone(tmp_path)
     readme = repo / "services" / "tools-service" / "README.md"
