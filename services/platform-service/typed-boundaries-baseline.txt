@@ -1,4 +1,4 @@
-# 262 boundaries crossed without a model in services/platform-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 245 boundaries crossed without a model in services/platform-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body access_check_access
 1 body api_keys_create_api_key
 1 reply audit_read_audit
@@ -51,7 +51,7 @@
 4 dict-any services/platform-service/src/ops_platform/oauth/token.py
 10 dict-any services/platform-service/src/ops_platform/policies.py
 12 dict-any services/platform-service/src/ops_platform/roles.py
-18 dict-any services/platform-service/src/ops_platform/signin_settings.py
+17 dict-any services/platform-service/src/ops_platform/signin_settings.py
 2 dict-any services/platform-service/src/ops_platform/signin_watch.py
 3 dict-any services/platform-service/src/ops_platform/sso.py
 4 dict-any services/platform-service/src/ops_platform/store/audit.py
@@ -62,8 +62,7 @@
 2 store-dict services/platform-service/src/ops_platform/store/identity.py
 2 dict-any services/platform-service/src/ops_platform/store/keys.py
 1 dict-any services/platform-service/src/ops_platform/store/lifecycle.py
-5 dict-any services/platform-service/src/ops_platform/store/members.py
-4 store-dict services/platform-service/src/ops_platform/store/members.py
+1 dict-any services/platform-service/src/ops_platform/store/members.py
 6 dict-any services/platform-service/src/ops_platform/store/policies.py
 4 store-dict services/platform-service/src/ops_platform/store/policies.py
 9 dict-any services/platform-service/src/ops_platform/store/roles.py
@@ -71,10 +70,6 @@
 2 dict-any services/platform-service/src/ops_platform/store/seeding.py
 7 dict-any services/platform-service/src/ops_platform/store/signin.py
 3 store-dict services/platform-service/src/ops_platform/store/signin.py
-2 dict-any services/platform-service/src/ops_platform/store/signin_secrets.py
-2 store-dict services/platform-service/src/ops_platform/store/signin_secrets.py
-2 dict-any services/platform-service/src/ops_platform/store/teams.py
-2 store-dict services/platform-service/src/ops_platform/store/teams.py
 9 dict-any services/platform-service/src/ops_platform/team_admin.py
 1 dict-any services/platform-service/src/ops_platform/team_usage.py
 5 dict-any services/platform-service/src/ops_platform/teams.py

@@ -133,7 +133,7 @@ class WorkspaceLifecycle:
         rows, _, _ = await self.teams.every(actor.tenant_id, statuses=["active", "archived"], page_size=10_000)
         if name.strip() != (await self.store.name(actor.tenant_id)):
             raise ValidationFailed("Type the workspace's name exactly to delete it.", code="name_mismatch")
-        found = await self._usages(actor.tenant_id, [str(r["id"]) for r in rows], usage)
+        found = await self._usages(actor.tenant_id, [r.id for r in rows], usage)
         running = sum(u.runs_in_progress for u in found.values())
         if running:
             raise Conflict(

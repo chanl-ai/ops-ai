@@ -17,9 +17,11 @@ import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
 from ops_store.outbox import add as add_event
+from ops_store.rows import one, rows
 
 from .audit import record, record_grants_ending
 from .roles import mirror_membership
@@ -63,20 +65,68 @@ class Invite:
     allowed_domains: list[str]
 
 
+class PersonName(Out):
+    email: str
+    name: str
+
+
+class TeamName(Out):
+    id: str
+    name: str
+
+
+class TeamOf(Out):
+    """A team the person may switch to, with their role there and its active member count."""
+
+    id: str
+    name: str
+    owner_groups: list[str]
+    scope: str
+    role: str
+    member_count: int
+
+
+class MemberRow(Out):
+    """A team member or invite; `created_at` is when an invite was sent."""
+
+    id: str
+    name: str
+    email: str
+    role: str
+    team_id: str
+    team: str
+    status: str
+    created_at: str
+    user_id: str | None
+
+
+class PersonOption(Out):
+    """A picker choice: the email is the value, the name the label; the hint is the email when they differ."""
+
+    id: str
+    label: str
+    hint: str | None
+
+
+class _MemberState(Out):
+    role: str
+    status: str
+    user_id: str | None
+    email: str
+
+
 class TeamStore(TenantDb):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS, Guarantee.LOCK})
 
-    async def people_names(self, tenant_id: str) -> list[dict[str, str]]:
-        """Every person of the workspace as `{email, name}`, suspended ones too: a record keeps naming who acted."""
+    async def people_names(self, tenant_id: str) -> list[PersonName]:
+        """Every person of the workspace, suspended ones too: a record keeps naming who acted."""
         async with self.tenant_tx(tenant_id) as c:
-            rows = (await c.execute(sa.select(users.c.email, users.c.name).order_by(users.c.email))).all()
-        return [{"email": str(r.email), "name": str(r.name)} for r in rows]
+            return await rows(c, sa.select(users.c.email, users.c.name).order_by(users.c.email), PersonName)
 
-    async def names(self, tenant_id: str) -> list[dict[str, str]]:
-        """Every team of the workspace, archived ones too, as `{id, name}` by name: a record keeps naming its team."""
+    async def names(self, tenant_id: str) -> list[TeamName]:
+        """Every team of the workspace, archived ones too, by name: a record keeps naming its team."""
         async with self.tenant_tx(tenant_id) as c:
-            rows = (await c.execute(sa.select(teams.c.id, teams.c.name).order_by(teams.c.name, teams.c.id))).all()
-        return [{"id": str(r.id), "name": str(r.name)} for r in rows]
+            return await rows(c, sa.select(teams.c.id, teams.c.name).order_by(teams.c.name, teams.c.id), TeamName)
 
     async def _mirror(self, c: AsyncConnection, actor: Actor, user_id: str, role: str | None, at: str) -> None:
         await mirror_membership(
@@ -94,7 +144,7 @@ class TeamStore(TenantDb):
         async with self.tenant_tx(tenant_id) as c:
             return await security_team_in(c, tenant_id)
 
-    async def teams_of(self, tenant_id: str, user_id: str, *, everywhere: bool = False) -> list[dict[str, Any]]:
+    async def teams_of(self, tenant_id: str, user_id: str, *, everywhere: bool = False) -> list[TeamOf]:
         """The person's active teams with their role; `everywhere` (a workspace admin) adds every other active
         team of the workspace with the role `admin` they hold there through their workspace role."""
         mine = (
@@ -109,23 +159,18 @@ class TeamStore(TenantDb):
             .group_by(members.c.team_id)
         )
         async with self.tenant_tx(tenant_id) as c:
-            rows = list((await c.execute(mine)).all())
+            found = list((await c.execute(mine)).all())
             sizes = {str(r[0]): int(r[1]) for r in (await c.execute(counts)).all()}
             if everywhere:
-                member_of = {str(r[0]) for r in rows}
+                member_of = {str(r[0]) for r in found}
                 others = sa.select(teams.c.id, teams.c.name, teams.c.owner_groups, teams.c.scope, sa.literal("admin"))
                 others = others.where(teams.c.status == "active").order_by(teams.c.created_at, teams.c.id)
-                rows += [r for r in (await c.execute(others)).all() if str(r[0]) not in member_of]
+                found += [r for r in (await c.execute(others)).all() if str(r[0]) not in member_of]
         return [
-            {
-                "id": r[0],
-                "name": r[1],
-                "ownerGroups": list(r[2]),
-                "scope": r[3],
-                "role": r[4],
-                "memberCount": sizes.get(str(r[0]), 0),
-            }
-            for r in rows
+            TeamOf(
+                id=r[0], name=r[1], owner_groups=list(r[2]), scope=r[3], role=r[4], member_count=sizes.get(str(r[0]), 0)
+            )
+            for r in found
         ]
 
     async def scope_of(self, tenant_id: str, team_id: str) -> str | None:
@@ -139,17 +184,15 @@ class TeamStore(TenantDb):
         async with self.tenant_tx(tenant_id) as c:
             return (await c.execute(q)).scalar()
 
-    async def members(
-        self, tenant_id: str, team_id: str, *, roles: list[str], statuses: list[str]
-    ) -> list[dict[str, Any]]:
+    async def members(self, tenant_id: str, team_id: str, *, roles: list[str], statuses: list[str]) -> list[MemberRow]:
         q = (
             sa.select(
                 members.c.id,
-                sa.func.coalesce(users.c.name, members.c.email),
+                sa.func.coalesce(users.c.name, members.c.email).label("name"),
                 members.c.email,
                 members.c.role,
                 members.c.team_id,
-                teams.c.name,
+                teams.c.name.label("team"),
                 members.c.status,
                 members.c.created_at,
                 members.c.user_id,
@@ -164,25 +207,11 @@ class TeamStore(TenantDb):
         if statuses:
             q = q.where(members.c.status.in_(statuses))
         async with self.tenant_tx(tenant_id) as c:
-            rows = (await c.execute(q)).all()
-        return [
-            {
-                "id": r[0],
-                "name": r[1],
-                "email": r[2],
-                "role": r[3],
-                "teamId": r[4],
-                "team": r[5],
-                "status": r[6],
-                "userId": r[8],
-                **({"invitedAt": r[7]} if r[6] == "invited" else {}),
-            }
-            for r in rows
-        ]
+            return await rows(c, q, MemberRow)
 
     async def people_options(
         self, tenant_id: str, team_id: str, *, search: str | None, ids: list[str], offset: int, limit: int
-    ) -> list[dict[str, Any]]:
+    ) -> list[PersonOption]:
         """The team's active people as picker choices, searched and paged here: the value is the email (assignments
         match a person by email), the label their name. `ids` resolves stored emails to their names."""
         name = sa.func.coalesce(users.c.name, members.c.email)
@@ -198,8 +227,8 @@ class TeamStore(TenantDb):
             like = f"%{search.strip().lower()}%"
             q = q.where(sa.or_(sa.func.lower(name).like(like), sa.func.lower(members.c.email).like(like)))
         async with self.tenant_tx(tenant_id) as c:
-            rows = (await c.execute(q.offset(offset).limit(limit))).all()
-        return [{"id": r[0], "label": r[1], "hint": r[0] if r[1] != r[0] else None} for r in rows]
+            found = (await c.execute(q.offset(offset).limit(limit))).all()
+        return [PersonOption(id=r[0], label=r[1], hint=r[0] if r[1] != r[0] else None) for r in found]
 
     async def invite(
         self, actor: Actor, *, invites: dict[str, str], role: str, expires_at: str, at: str
@@ -263,13 +292,13 @@ class TeamStore(TenantDb):
                     bulk.skip(member_id, "last_admin")
                     continue
                 await c.execute(members.update().where(members.c.id == member_id).values(role=role, updated_at=at))
-                if row["status"] == "active" and row["user_id"] is not None:
-                    await self._mirror(c, actor, str(row["user_id"]), role, at)
-                if role == ADMIN and row["status"] == "active":
+                if row.status == "active" and row.user_id is not None:
+                    await self._mirror(c, actor, row.user_id, role, at)
+                if role == ADMIN and row.status == "active":
                     admins.add(member_id)
                 else:
                     admins.discard(member_id)
-                await _audit(c, actor, "member.role", member_id, {"from": row["role"], "to": role})
+                await _audit(c, actor, "member.role", member_id, {"from": row.role, "to": role})
                 bulk.updated.append(member_id)
         return bulk
 
@@ -285,8 +314,8 @@ class TeamStore(TenantDb):
                 if member_id in admins and len(admins) == 1:
                     bulk.skip(member_id, "last_admin")
                     continue
-                user_id = row["user_id"]
-                await end_membership(c, actor, member_id, str(user_id) if user_id is not None else None, at=at)
+                user_id = row.user_id
+                await end_membership(c, actor, member_id, user_id, at=at)
                 admins.discard(member_id)
                 if user_id is not None:
                     # I10: their sessions end now, and keys they made for this team stop working. An assistant they
@@ -309,7 +338,7 @@ class TeamStore(TenantDb):
                         )
                         .values(disabled_at=at)
                     )
-                await _audit(c, actor, "member.remove", member_id, {"email": row["email"]})
+                await _audit(c, actor, "member.remove", member_id, {"email": row.email})
                 bulk.updated.append(member_id)
         return bulk
 
@@ -447,12 +476,11 @@ async def _lock_admins(c: AsyncConnection, team_id: str) -> set[str]:
     return {str(i) for i in (await c.execute(q)).scalars().all()}
 
 
-async def _member(c: AsyncConnection, team_id: str, member_id: str) -> dict[str, Any] | None:
+async def _member(c: AsyncConnection, team_id: str, member_id: str) -> _MemberState | None:
     q = sa.select(members.c.role, members.c.status, members.c.user_id, members.c.email).where(
         members.c.id == member_id, members.c.team_id == team_id, members.c.status != "removed"
     )
-    row = (await c.execute(q)).mappings().first()
-    return dict(row) if row else None
+    return await one(c, q, _MemberState)
 
 
 async def _audit(c: AsyncConnection, actor: Actor, action: str, member_id: str, detail: dict[str, Any]) -> None:

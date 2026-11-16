@@ -8,13 +8,13 @@ requests racing for one name cannot both win. Each change is audited in its own 
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
 from ops_access.platform_events import TEAM_CREATED
-from ops_service_kit.http import page_window
+from ops_service_kit.http import Out, page_window
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
 from ops_store.outbox import add as add_event
@@ -32,6 +32,20 @@ class TeamNameTakenError(Exception):
     """Another team of the workspace has this name in some case."""
 
 
+class TeamRow(Out):
+    """A team with its active member and admin counts, and whether it is the workspace's Security team."""
+
+    id: str
+    name: str
+    status: str
+    scope: str
+    created_at: str
+    archived_at: str | None
+    member_count: int
+    admin_count: int
+    security: bool
+
+
 class TeamAdminStore(TenantDb):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS})
 
@@ -44,7 +58,7 @@ class TeamAdminStore(TenantDb):
         page: int = 1,
         page_size: int = 50,
         team_id: str | None = None,
-    ) -> tuple[list[dict[str, Any]], int, int]:
+    ) -> tuple[list[TeamRow], int, int]:
         """One page of the workspace's teams, active first then by name, with each one's active member and admin
         counts; returns the rows, the total and the page answered."""
         active = members.c.status == "active"
@@ -87,22 +101,22 @@ class TeamAdminStore(TenantDb):
             page, offset = page_window(total, page, page_size)
             rows = (await c.execute(q.where(*where).limit(page_size).offset(offset))).all()
         out = [
-            {
-                "id": r[0],
-                "name": r[1],
-                "status": r[2],
-                "scope": r[3],
-                "createdAt": r[4],
-                "archivedAt": r[5],
-                "memberCount": int(r[6]),
-                "adminCount": int(r[7]),
-                "security": r[0] == security,
-            }
+            TeamRow(
+                id=r[0],
+                name=r[1],
+                status=r[2],
+                scope=r[3],
+                created_at=r[4],
+                archived_at=r[5],
+                member_count=int(r[6]),
+                admin_count=int(r[7]),
+                security=r[0] == security,
+            )
             for r in rows
         ]
         return out, total, page
 
-    async def one(self, tenant_id: str, team_id: str) -> dict[str, Any] | None:
+    async def one(self, tenant_id: str, team_id: str) -> TeamRow | None:
         rows, _, _ = await self.every(tenant_id, statuses=[], team_id=team_id)
         return rows[0] if rows else None
 

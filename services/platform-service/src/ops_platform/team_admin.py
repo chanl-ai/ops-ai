@@ -75,7 +75,7 @@ class TeamAdmin:
         rows, total, answered = await self.store.every(
             actor.tenant_id, statuses=statuses, search=search, page=page, page_size=page_size
         )
-        return paged(rows, total, answered, page_size)
+        return paged([r.model_dump(by_alias=True) for r in rows], total, answered, page_size)
 
     async def create(self, actor: Actor, name: str, admin_email: str) -> dict[str, Any]:
         await self.members.require_admin(workspace(actor), "access", "manage")
@@ -123,4 +123,4 @@ class TeamAdmin:
         found = await self.store.one(actor.tenant_id, team_id)
         if found is None:
             raise NotFound("team")
-        return found
+        return found.model_dump(by_alias=True)

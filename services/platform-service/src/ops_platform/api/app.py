@@ -542,7 +542,7 @@ def create_public_app(
                 "user": {"id": found.id, "email": found.email, "name": found.name},
                 "tenantId": tenant,
                 "tenantName": await store.tenant_name(tenant) or None,
-                "teams": [{"id": t["id"], "name": t["name"], "role": t["role"]} for t in teams],
+                "teams": [{"id": t.id, "name": t.name, "role": t.role} for t in teams],
                 "policies": await policy_store.values(tenant),
                 "securityTeamId": await team_store.security_team_of(tenant),
                 "workspace": await lifecycle.state(tenant),
@@ -554,7 +554,8 @@ def create_public_app(
     async def list_teams(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The teams the caller may switch to: their own, and every active team for a workspace admin."""
         tenant, user = str(claims["tenant_id"]), str(claims["sub"])
-        return ok(await team_store.teams_of(tenant, user, everywhere=await everywhere(tenant, user)))
+        teams = await team_store.teams_of(tenant, user, everywhere=await everywhere(tenant, user))
+        return ok([t.model_dump(by_alias=True) for t in teams])
 
     @app.get("/v1/settings/members", tags=["members"], response_model=Envelope[ListResult[MemberOut]], responses=ERRORS)
     async def list_members(  # pyright: ignore[reportUnusedFunction]
@@ -565,13 +566,18 @@ def create_public_app(
         # Every built-in role but Chat user reads the team's people; a chat-only member does not.
         await people.require_admin(actor, "access", "view")
         everyone = await team_store.members(actor.tenant_id, actor.team_id, roles=[], statuses=[])
-        rows = [m for m in everyone if (not role or m["role"] in role) and (not status or m["status"] in status)]
-        joined = [str(m["userId"]) for m in rows if m.get("userId")]
+        shown = [m for m in everyone if (not role or m.role in role) and (not status or m.status in status)]
+        joined = [m.user_id for m in shown if m.user_id]
         wide = await RoleStore(store.db).workspace_roles(actor.tenant_id, joined, now=now_iso())
-        rows = [m | {"workspaceRoles": wide.get(str(m.get("userId")), [])} for m in rows]
+        rows = [
+            m.model_dump(by_alias=True, exclude={"created_at"})
+            | ({"invitedAt": m.created_at} if m.status == "invited" else {})
+            | {"workspaceRoles": wide.get(str(m.user_id), [])}
+            for m in shown
+        ]
         facets = {
-            key: {v: sum(1 for m in everyone if m[key] == v) for v in sorted({m[key] for m in everyone})}
-            for key in ("role", "status")
+            "role": {v: sum(1 for m in everyone if m.role == v) for v in sorted({m.role for m in everyone})},
+            "status": {v: sum(1 for m in everyone if m.status == v) for v in sorted({m.status for m in everyone})},
         }
         pagination = {
             "page": 1,
@@ -597,7 +603,7 @@ def create_public_app(
         rows = await team_store.people_options(
             actor.tenant_id, actor.team_id, search=search, ids=ids or [], offset=offset, limit=window
         )
-        return ok(options_page(rows, offset, limit))
+        return ok(options_page([r.model_dump(by_alias=True) for r in rows], offset, limit))
 
     @app.post("/v1/settings/members/invite", tags=["members"], response_model=Envelope[InviteBulkOut], responses=ERRORS)
     async def invite_members(body: InviteIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
@@ -605,7 +611,7 @@ def create_public_app(
 
     async def users_of(actor: Actor, member_ids: list[str]) -> list[str]:
         rows = await team_store.members(actor.tenant_id, actor.team_id, roles=[], statuses=[])
-        return [str(m["userId"]) for m in rows if m["id"] in member_ids and m.get("userId")]
+        return [m.user_id for m in rows if m.id in member_ids and m.user_id]
 
     @app.post("/v1/settings/members/role", tags=["members"], response_model=Envelope[BulkOut], responses=ERRORS)
     async def change_roles(body: RoleIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
@@ -989,7 +995,7 @@ def create_public_app(
             tenant = svc.tenant_id
         else:
             tenant = str((await claims_of(token))["tenant_id"])
-        return ok(await team_store.names(tenant))
+        return ok([t.model_dump(by_alias=True) for t in await team_store.names(tenant)])
 
     @app.get("/v1/people-names", tags=["people"], response_model=Envelope[list[PersonName]], responses=ERRORS)
     async def people_names(  # pyright: ignore[reportUnusedFunction]
@@ -1004,7 +1010,7 @@ def create_public_app(
             tenant = svc.tenant_id
         else:
             tenant = str((await claims_of(token))["tenant_id"])
-        return ok(await team_store.people_names(tenant))
+        return ok([p.model_dump(by_alias=True) for p in await team_store.people_names(tenant)])
 
     @app.put("/v1/policies/{key}", tags=["policies"], response_model=Envelope[PolicyOut], responses=ERRORS)
     async def set_policy(  # pyright: ignore[reportUnusedFunction]
