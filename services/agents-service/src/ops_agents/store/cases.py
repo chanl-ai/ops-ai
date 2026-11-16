@@ -205,7 +205,10 @@ class CaseStore:
     ) -> tuple[list[dict[str, Any]], int]:
         """One page of the teams' cases, the soonest resolution deadline first, and the count that matched; for the
         overview and the Ops assistant's case search. `search` as in `_chosen`."""
-        where = self._chosen(teams, overdue=overdue, due_before=due_before, search=search, now=now)
+        where = [
+            *self._chosen(teams, overdue=overdue, due_before=due_before, search=search, now=now),
+            team_visible(cases),
+        ]
         if status:
             where.append(cases.c.status.in_(status))
         if assignee:
@@ -231,7 +234,7 @@ class CaseStore:
         `status`, `priority`, `assignee` and `customerId` filter (each value given once per key), `search` as in
         `_chosen` unless `ids` names the cases, and `overdue` keeps the open ones past their deadline."""
         search = None if params.ids is not None else params.search
-        q = sa.select(cases).where(*self._chosen(teams, overdue=overdue, search=search))
+        q = sa.select(cases).where(*self._chosen(teams, overdue=overdue, search=search), team_visible(cases))
         c_ = cases.c
         async with tenant_tx(self.engine) as c:
             return await list_page(
@@ -256,13 +259,13 @@ class CaseStore:
         search: str | None = None,
         now: datetime | None = None,
     ) -> list[sa.ColumnElement[bool]]:
-        """The tenant's cases in `teams`, the acting team's only. `search` keeps the cases holding every one of its
-        words, in any order and ignoring case, each word in the subject, the customer's name or the customer's id."""
+        """The tenant's cases in `teams`; each caller adds `team_visible`, the acting team's only. `search` keeps the
+        cases holding every one of its words, in any order and ignoring case, each word in the subject, the customer's
+        name or the customer's id."""
         at = _iso(now or datetime.now(UTC))
         where: list[sa.ColumnElement[bool]] = [
             cases.c.tenant_id == current_tenant(),
             cases.c.team_id.in_(teams),
-            team_visible(cases),
         ]
         # Word by word: "application documents" finds "Loan application: ..., waiting on documents: ...", which the
         # phrase does not.

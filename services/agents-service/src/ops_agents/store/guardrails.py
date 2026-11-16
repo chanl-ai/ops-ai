@@ -98,7 +98,7 @@ class GuardrailRegistry(RuntimeStore):
             q = (
                 sa.select(registry_guardrails)
                 .where(team_visible(registry_guardrails))
-                .order_by(registry_guardrails.c.name)
+                .order_by(registry_guardrails.c.name, registry_guardrails.c.id)
             )
             return [dict(r) for r in (await c.execute(q)).mappings()]
 

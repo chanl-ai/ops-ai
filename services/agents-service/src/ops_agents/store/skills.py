@@ -118,7 +118,11 @@ class SkillRegistry(RuntimeStore):
 
     async def rows(self) -> list[dict[str, Any]]:
         async with self.tx() as c:
-            q = sa.select(registry_skills).where(team_visible(registry_skills)).order_by(registry_skills.c.slug)
+            q = (
+                sa.select(registry_skills)
+                .where(team_visible(registry_skills))
+                .order_by(registry_skills.c.slug, registry_skills.c.id)
+            )
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def attachable(

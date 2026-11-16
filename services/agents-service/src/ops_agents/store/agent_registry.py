@@ -210,8 +210,10 @@ class AgentRegistry(RuntimeStore):
 
     async def rows(self) -> list[dict[str, Any]]:
         """The acting team's agents of the caller's tenant (every team's with no acting team: a loop or the seed)."""
-        q = sa.select(registry_agents).where(
-            registry_agents.c.tenant_id == current_tenant(), team_visible(registry_agents)
+        q = (
+            sa.select(registry_agents)
+            .where(registry_agents.c.tenant_id == current_tenant(), team_visible(registry_agents))
+            .order_by(registry_agents.c.id)
         )
         async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]

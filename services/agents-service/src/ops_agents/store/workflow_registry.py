@@ -95,8 +95,10 @@ class WorkflowRegistry(RuntimeStore):
                 return {str(i) for i in (await c.execute(q)).scalars()}
 
     async def rows(self) -> list[dict[str, Any]]:
-        q = sa.select(registry_workflows).where(
-            registry_workflows.c.status != "deleted", mine(registry_workflows), team_visible(registry_workflows)
+        q = (
+            sa.select(registry_workflows)
+            .where(registry_workflows.c.status != "deleted", mine(registry_workflows), team_visible(registry_workflows))
+            .order_by(registry_workflows.c.id)
         )
         async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
@@ -104,10 +106,14 @@ class WorkflowRegistry(RuntimeStore):
     async def refs_every_team(self) -> list[dict[str, Any]]:
         """Every team's workflows, for a service that governs calls on their behalf (tools-service checks a grant's
         workflow and team here): what it reads decides access by the workflow's own team, not the caller's."""
-        q = sa.select(registry_workflows).where(
-            registry_workflows.c.status != "deleted",
-            mine(registry_workflows),
-            any_team(registry_workflows, "a service checks a workflow's team for a tool grant"),
+        q = (
+            sa.select(registry_workflows)
+            .where(
+                registry_workflows.c.status != "deleted",
+                mine(registry_workflows),
+                any_team(registry_workflows, "a service checks a workflow's team for a tool grant"),
+            )
+            .order_by(registry_workflows.c.id)
         )
         with isolation.tenant_wide(TOOL_GRANTS):
             async with self.tx() as c:
