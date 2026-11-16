@@ -53,5 +53,5 @@ mssql-remote-status: ## The shared SQL Server machine's state and the proxy's po
 mssql-remote-sweep: ## Drop databases on the shared SQL Server left by killed runs (HOURS=2: older than that)
 	bash $(ROOT)/deploy/database/mssql_remote.sh sweep $(or $(HOURS),2)
 
-mssql-remote-down: ## Stop the proxy and the shared SQL Server machine (stopped, only its volume is billed)
-	bash $(ROOT)/deploy/database/mssql_remote.sh down
+mssql-remote-down: ## Stop the proxy and the shared SQL Server machine; refuses while test databases exist (FORCE=1)
+	FORCE=$(FORCE) bash $(ROOT)/deploy/database/mssql_remote.sh down

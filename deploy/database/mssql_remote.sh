@@ -104,6 +104,13 @@ case "${1:-}" in
       SELECT CONCAT('dropped ', @c, ' databases older than $hours hours; ', (SELECT COUNT(*) FROM sys.databases WHERE database_id > 4), ' left');"
     ;;
   down)
+    # A scratch database means a run is under way (or was killed: `sweep` clears those); FORCE=1 stops regardless.
+    if [ "${FORCE:-}" != 1 ] && proxy_alive; then
+      busy=$(sql -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM sys.databases WHERE database_id > 4" 2>/dev/null | tr -d '[:space:]')
+      if [ "${busy:-0}" != 0 ]; then
+        echo "mssql-remote: $busy test databases exist, so a run may be under way; sweep, or FORCE=1 to stop anyway" >&2; exit 1
+      fi
+    fi
     if [ -f "$PIDFILE" ]; then kill "$(cat "$PIDFILE")" 2>/dev/null || true; rm -f "$PIDFILE"; fi
     id=$(machine)
     [ -n "$id" ] && fly machine stop "$id" -a "$APP" >/dev/null && echo "$APP: machine $id stopped"

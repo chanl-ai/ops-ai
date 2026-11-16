@@ -225,16 +225,16 @@ Developer), one shared-cpu-2x machine with 4 GB and a 5 GB volume in ewr, no ser
 | One member's tests (the client container, PostgreSQL from `make db-up`) | `make mssql-remote-test PKG=services/kb-service T="tests/test_kb_isolation.py"` |
 | The proxy alone, for your own client; prints the port | `make mssql-remote-proxy` |
 | State of the machine and the proxy | `make mssql-remote-status` |
-| Drop databases a killed run left (older than `HOURS`, default 2) | `make mssql-remote-sweep` |
-| Stop the proxy and the machine | `make mssql-remote-down` |
+| Drop databases a killed run left (older than `HOURS`, default 2; `HOURS=0` drops live runs' too) | `make mssql-remote-sweep` |
+| Stop the proxy and the machine; refuses while test databases exist (`FORCE=1` stops anyway) | `make mssql-remote-down` |
 
 Settings come from the staging config file (`deploy/fly/staging.env.example`): the app is `<STG_APP_PREFIX>-test-mssql`
 and creating it needs `STG_FLY_ORG`. The SA password is the app's `MSSQL_SA_PASSWORD` secret, kept in
 `<config dir>/test-mssql-sa.txt` (mode 600); `up` generates both on first use. Several builders can share it: each test
 makes its own randomly named database and drops it. A member whose tests start their own OPA (tools-service) gets one
 started on the host for the run. Fly cannot stop an idle machine that has no service, so run `make mssql-remote-down`
-when done. Each statement crosses the proxy (about 60 ms a round trip from ewr's neighbourhood), so runs are slow:
-`packages/ops_store` about 11 minutes, kb-service's `store-mssql` list about 12, tools-service's about 20. Timing
+when done. Each statement crosses the proxy (about 60 ms a round trip), so runs are slow:
+one test file about 1.5 minutes (10 seconds on the local Edge server), `packages/ops_store` about 11 minutes, kb-service's `store-mssql` list about 12, tools-service's about 20. Timing
 assertions do not hold there: tools-service's `test_statement_budget.py` fails its 2-second open-transaction budget on
 latency alone, and needs `OPS_TEST_HANG_SECONDS=2400` to finish at all. Cost: about 21 USD a month if left running (about 3 cents an hour), about 1 USD a month stopped (the
 volume and the stopped image).
