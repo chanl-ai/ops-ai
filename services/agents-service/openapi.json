@@ -7599,6 +7599,25 @@
         "title": "Envelope[ListResult[TaskTypeView]]",
         "type": "object"
       },
+      "Envelope_ListResult_ThreadView__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ListResult_ThreadView_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ListResult[ThreadView]]",
+        "type": "object"
+      },
       "Envelope_ListResult_WorkflowRun__": {
         "additionalProperties": false,
         "properties": {
@@ -9071,29 +9090,6 @@
           "data"
         ],
         "title": "Envelope[list[TemplateView]]",
-        "type": "object"
-      },
-      "Envelope_list_ThreadView__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/ThreadView"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[list[ThreadView]]",
         "type": "object"
       },
       "Envelope_list_Version__": {
@@ -11692,6 +11688,38 @@
           "facets"
         ],
         "title": "ListResult[TaskTypeView]",
+        "type": "object"
+      },
+      "ListResult_ThreadView_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ThreadView"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets"
+        ],
+        "title": "ListResult[ThreadView]",
         "type": "object"
       },
       "ListResult_WorkflowRun_": {
@@ -52054,7 +52082,7 @@
     },
     "/v1/threads": {
       "get": {
-        "description": "The threads the caller may read, of one graph when `graph` is given.",
+        "description": "The threads the caller may read on the shared list contract, of one graph when `graph` is given: newest update\nfirst (`sortBy` updatedAt), then by id. Who reads which thread (`may_read_thread`) is decided in the\nlist's SQL (`store.thread_list`), so the page and its total count only readable threads.",
         "operationId": "threads_list_threads",
         "parameters": [
           {
@@ -52071,6 +52099,100 @@
                 }
               ],
               "title": "Graph"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -52143,7 +52265,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_ThreadView__"
+                  "$ref": "#/components/schemas/Envelope_ListResult_ThreadView__"
                 }
               }
             },

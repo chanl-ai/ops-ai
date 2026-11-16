@@ -1675,7 +1675,13 @@ export const agentsOperations = {
     "path": "/v1/threads",
     "pathParams": [],
     "query": [
-      "graph"
+      "graph",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },

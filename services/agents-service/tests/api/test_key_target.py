@@ -73,5 +73,5 @@ async def test_a_scoped_key_reads_only_its_targets_runs_and_threads(stack: Stack
     assert (await c.get(f"/v1/runs/{other_run}", headers=WF)).status_code == 404
     thread = await c.post("/v1/threads", json={"graph": "complex_workflow", "metadata": {}}, headers=BUILDER)
     tid = thread.json()["data"]["threadId"]
-    assert tid not in [t["threadId"] for t in (await c.get("/v1/threads", headers=WF)).json()["data"]]
+    assert tid not in [t["threadId"] for t in (await c.get("/v1/threads", headers=WF)).json()["data"]["data"]]
     assert (await c.get(f"/v1/threads/{tid}/state", headers=WF)).status_code == 404

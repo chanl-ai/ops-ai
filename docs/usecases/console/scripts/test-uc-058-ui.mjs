@@ -49,7 +49,14 @@ await withUiStack(
       check("a teammate reads only that the owner's chat is not theirs and sees none of it", sealed && mayaReads === 0, { mayaApi, mayaReads });
       // The thread routes the console's case pages read: a teammate reaches the chat through none of them.
       const mayaState = (await fetch(`${agentsUrl}/v1/threads/${thread}/state`, { headers: M })).status;
-      const mayaListed = (await json(await fetch(`${agentsUrl}/v1/threads`, { headers: M }))).some((t) => t.threadId === thread);
+      // Every page: one page holds at most 50 threads.
+      const mayaThreads = [];
+      for (let page = 1; ; page += 1) {
+        const body = await json(await fetch(`${agentsUrl}/v1/threads?pageSize=50&page=${page}`, { headers: M }));
+        mayaThreads.push(...(body?.data ?? []));
+        if (!body?.pagination?.hasNext) break;
+      }
+      const mayaListed = mayaThreads.some((t) => t.threadId === thread);
       check("a teammate gets 404 on the chat's thread state and the thread list leaves it out", mayaState === 404 && !mayaListed, { mayaState, mayaListed });
 
       const james = await open('j.richardson@harborpine.example', true);

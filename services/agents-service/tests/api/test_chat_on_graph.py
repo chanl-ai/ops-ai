@@ -54,7 +54,7 @@ async def test_a_conversation_is_a_graph_thread_and_a_message_is_a_run(stack: tu
     client, _ = stack
     thread = await new_thread(client)
     await send(client, thread["id"], {"content": QUESTION})
-    listed = (await client.get("/v1/threads", params={"graph": "agent_wrapper"})).json()["data"]
+    listed = (await client.get("/v1/threads", params={"graph": "agent_wrapper"})).json()["data"]["data"]
     assert thread["id"] in [t["threadId"] for t in listed]
     runs = (await client.get(f"/v1/threads/{thread['id']}/runs")).json()["data"]
     assert [r["kind"] for r in runs] == ["input"] and runs[0]["status"] == "done"

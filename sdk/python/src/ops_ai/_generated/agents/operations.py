@@ -1324,7 +1324,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/threads",
         "pathParams": [],
-        "query": ["graph"],
+        "query": ["graph", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "threads_migrate": {
@@ -2860,9 +2860,34 @@ class Operations:
             SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind, "source": source}, {}, None
         )  # type: ignore[no-any-return]
 
-    def threads_list_threads(self, *, graph: str | None = None) -> list[ThreadView]:
+    def threads_list_threads(
+        self,
+        *,
+        graph: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultThreadView:
         "List Threads"
-        return self._t.call(SERVICE, OPERATIONS["threads_list_threads"], {}, {"graph": graph}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["threads_list_threads"],
+            {},
+            {
+                "graph": graph,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def threads_create_thread(self, body: ThreadInput) -> ThreadCreated:
         "Create Thread"
@@ -4378,9 +4403,34 @@ class AsyncOperations:
             SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind, "source": source}, {}, None
         )  # type: ignore[no-any-return]
 
-    async def threads_list_threads(self, *, graph: str | None = None) -> list[ThreadView]:
+    async def threads_list_threads(
+        self,
+        *,
+        graph: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultThreadView:
         "List Threads"
-        return await self._t.call(SERVICE, OPERATIONS["threads_list_threads"], {}, {"graph": graph}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["threads_list_threads"],
+            {},
+            {
+                "graph": graph,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def threads_create_thread(self, body: ThreadInput) -> ThreadCreated:
         "Create Thread"

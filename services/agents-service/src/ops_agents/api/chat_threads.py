@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from pydantic import TypeAdapter
 
@@ -61,6 +61,7 @@ from ..store.chat_search import index_thread, indexed_ids, matching_threads
 from ..store.events import EventLog, EventOut
 from ..store.reviews import DecisionOut, ReviewStore
 from ..store.tenancy import current_team
+from ..store.thread_list import ThreadReader
 from .auth import Principal, caller_of, graph_target, key_scope
 from .chat_history import PLAN_PART
 from .deps import Runtime
@@ -570,6 +571,24 @@ def may_read_thread(row: dict[str, Any], me: Principal) -> bool:
     if person is None or not (person.email or meta.get("chat") or meta.get("owner")):
         return True
     return may_read({**meta, "ownerEmail": person.email} if person.email else meta, me)
+
+
+def thread_reader(me: Principal) -> ThreadReader:
+    """`may_read_thread`'s caller half, worked out once for a list (`store.thread_list.readable` is its row half): a
+    scoped key's one graph, and chat.view for anyone's thread (`all`) or the caller's own (`own`), each probed through
+    `can` as a row would ask it, so the dev caller, a key and a custom role answer as they do there."""
+    scope = key_scope(me)
+    graphs: tuple[str, ...] | None = None
+    if scope is not None:
+        kind, target = scope
+        graph = f"agent:{target}" if kind == "agent" else target
+        graphs = (graph,) if graph_target(graph) == scope else ()
+    chat: Literal["none", "own", "all"] = "none"
+    if may_read({"ownerEmail": "-"}, me):
+        chat = "all"
+    elif may_read({"ownerEmail": me.email}, me):
+        chat = "own"
+    return ThreadReader(graphs=graphs, chat=chat, email=me.email.strip().lower(), name=me.name)
 
 
 async def chat_rows(rt: Runtime, me: Principal) -> list[dict[str, Any]]:

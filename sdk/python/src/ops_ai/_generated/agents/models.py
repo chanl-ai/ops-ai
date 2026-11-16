@@ -3067,11 +3067,6 @@ class EnvelopeListTemplateView(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListThreadView(TypedDict, closed=True):
-    data: list[ThreadView]
-    success: Literal[True]
-
-
 class EnvelopeListVersion(TypedDict, closed=True):
     data: list[Version]
     success: Literal[True]
@@ -3195,6 +3190,12 @@ class ListResultFormView(TypedDict, closed=True):
 
 class ListResultTaskTypeView(TypedDict, closed=True):
     data: list[TaskTypeView]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultThreadView(TypedDict, closed=True):
+    data: list[ThreadView]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
 
@@ -3832,6 +3833,11 @@ class EnvelopeListResultFormView(TypedDict, closed=True):
 
 class EnvelopeListResultTaskTypeView(TypedDict, closed=True):
     data: ListResultTaskTypeView
+    success: Literal[True]
+
+
+class EnvelopeListResultThreadView(TypedDict, closed=True):
+    data: ListResultThreadView
     success: Literal[True]
 
 

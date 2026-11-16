@@ -142,7 +142,7 @@ async def test_outside_dev_approving_the_seed_request_moves_the_pointer_to_the_s
         assert t.status_code == 201, t.text
         versions = (await client.get("/v1/graphs/levy-case/versions")).json()["data"]
         seed_digest = next(v["digest"] for v in versions if v["version"] == first + 1)
-        threads = (await client.get("/v1/threads", params={"graph": "levy-case"})).json()["data"]
+        threads = (await client.get("/v1/threads", params={"graph": "levy-case"})).json()["data"]["data"]
         mine = next(x for x in threads if x["threadId"] == t.json()["data"]["threadId"])
         assert mine["version"] == first + 1 and seed_digest
 

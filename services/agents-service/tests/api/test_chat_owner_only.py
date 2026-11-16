@@ -134,7 +134,7 @@ async def test_a_teammate_lists_and_streams_no_chat_but_still_the_teams_workflow
 
     def listed(r: Any) -> set[str]:
         assert r.status_code == 200, r.text
-        return {t["threadId"] for t in r.json()["data"]}
+        return {t["threadId"] for t in r.json()["data"]["data"]}
 
     assert {thread, workflow} <= listed(await c.get("/v1/threads", headers=VIEWER))
     seen = listed(await c.get("/v1/threads", headers=TEAMMATE))

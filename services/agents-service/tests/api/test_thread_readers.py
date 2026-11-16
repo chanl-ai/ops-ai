@@ -164,8 +164,6 @@ async def test_each_reader_sees_exactly_the_threads_the_rule_gives_it(c: AsyncCl
     seen: dict[str, tuple[int, list[str]]] = {}
     for name, headers, _, _ in READERS:
         r = await c.get("/v1/threads", headers=headers)
-        body: Any = r.json().get("data") if r.status_code == 200 else None
-        # A bare array today; the list contract's page once the list pages.
-        rows = cast(list[dict[str, Any]], body["data"] if isinstance(body, dict) else body or [])
+        rows = cast(list[dict[str, Any]], r.json()["data"]["data"] if r.status_code == 200 else [])
         seen[name] = (r.status_code, sorted(str(t["threadId"]) for t in rows))
     assert seen == {name: (status, sorted(ids)) for name, _, status, ids in READERS}

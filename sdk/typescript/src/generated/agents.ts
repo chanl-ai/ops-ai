@@ -2480,7 +2480,9 @@ export interface paths {
         };
         /**
          * List Threads
-         * @description The threads the caller may read, of one graph when `graph` is given.
+         * @description The threads the caller may read on the shared list contract, of one graph when `graph` is given: newest update
+         *     first (`sortBy` updatedAt), then by id. Who reads which thread (`may_read_thread`) is decided in the
+         *     list's SQL (`store.thread_list`), so the page and its total count only readable threads.
          */
         get: operations["threads_list_threads"];
         put?: never;
@@ -5985,6 +5987,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ListResult[ThreadView]] */
+        Envelope_ListResult_ThreadView__: {
+            data: components["schemas"]["ListResult_ThreadView_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ListResult[WorkflowRun]] */
         Envelope_ListResult_WorkflowRun__: {
             data: components["schemas"]["ListResult_WorkflowRun_"];
@@ -6656,16 +6667,6 @@ export interface components {
         Envelope_list_TemplateView__: {
             /** Data */
             data: components["schemas"]["TemplateView"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[ThreadView]] */
-        Envelope_list_ThreadView__: {
-            /** Data */
-            data: components["schemas"]["ThreadView"][];
             /**
              * Success
              * @constant
@@ -7610,6 +7611,18 @@ export interface components {
         ListResult_TaskTypeView_: {
             /** Data */
             data: components["schemas"]["TaskTypeView"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[ThreadView] */
+        ListResult_ThreadView_: {
+            /** Data */
+            data: components["schemas"]["ThreadView"][];
             /** Facets */
             facets: {
                 [key: string]: {
@@ -26243,6 +26256,12 @@ export interface operations {
         parameters: {
             query?: {
                 graph?: string | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -26256,7 +26275,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_ThreadView__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_ThreadView__"];
                 };
             };
             /** @description Invalid request */

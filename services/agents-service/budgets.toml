@@ -227,7 +227,7 @@ queries = 7
 not_budgeted = "refuses the dev caller (team_required: a dev session acts across teams); needs a person token in the seed"
 
 ["GET /v1/threads"]
-queries = 1
+queries = 2
 
 ["GET /v1/threads/{thread_id}/inbox"]
 queries = 2

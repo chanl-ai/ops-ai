@@ -14,5 +14,5 @@ async def test_dev_opens_and_lists_a_thread_from_any_team(client: AsyncClient) -
     tid = created.json()["data"]["threadId"]
     lending = {"X-Team-Id": "team_lending"}
     assert (await client.get(f"/v1/threads/{tid}/state", headers=lending)).status_code == 200
-    listed = (await client.get("/v1/threads", headers=lending)).json()["data"]
+    listed = (await client.get("/v1/threads", headers=lending)).json()["data"]["data"]
     assert tid in [t["threadId"] for t in listed]

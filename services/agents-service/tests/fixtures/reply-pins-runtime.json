@@ -469,53 +469,64 @@
   },
   "threads.list": {
     "body": {
-      "data": [
-        {
-          "createdAt": "<timeZ>",
-          "graph": "dispute_email",
-          "metadata": {
-            "ownerEmail": "j.richardson@harborpine.example",
-            "startedBy": "j.richardson@harborpine.example"
-          },
-          "status": "idle",
-          "threadId": "<gth>",
-          "updatedAt": "<timeZ>",
-          "version": 1
-        },
-        {
-          "createdAt": "<timeZ>",
-          "graph": "agent_wrapper",
-          "metadata": {
-            "agentId": "ag_fraud",
-            "agentName": "Wire Fraud Sentinel",
-            "agentVersion": 7,
-            "archived": false,
-            "budgetAllotment": {
-              "maxCalls": 200,
-              "maxCost": "5.0"
+      "data": {
+        "data": [
+          {
+            "createdAt": "<timeZ>",
+            "graph": "dispute_email",
+            "metadata": {
+              "ownerEmail": "j.richardson@harborpine.example",
+              "startedBy": "j.richardson@harborpine.example"
             },
-            "chat": true,
-            "hidden": false,
-            "kbIds": [
-              "kb_people"
-            ],
-            "kbNames": [
-              "Fraud & payments"
-            ],
-            "lastMessageAt": "<timeZ>",
-            "messageCount": 2,
-            "owner": "James Richardson",
-            "ownerEmail": "j.richardson@harborpine.example",
-            "pinned": false,
-            "preview": "The daily wire limit for a personal account is $25,000 online [1].",
-            "title": "What is the daily wire limit for a personal acc\u2026"
+            "status": "idle",
+            "threadId": "<gth>",
+            "updatedAt": "<timeZ>",
+            "version": 1
           },
-          "status": "idle",
-          "threadId": "<th>",
-          "updatedAt": "<timeZ>",
-          "version": null
+          {
+            "createdAt": "<timeZ>",
+            "graph": "agent_wrapper",
+            "metadata": {
+              "agentId": "ag_fraud",
+              "agentName": "Wire Fraud Sentinel",
+              "agentVersion": 7,
+              "archived": false,
+              "budgetAllotment": {
+                "maxCalls": 200,
+                "maxCost": "5.0"
+              },
+              "chat": true,
+              "hidden": false,
+              "kbIds": [
+                "kb_people"
+              ],
+              "kbNames": [
+                "Fraud & payments"
+              ],
+              "lastMessageAt": "<timeZ>",
+              "messageCount": 2,
+              "owner": "James Richardson",
+              "ownerEmail": "j.richardson@harborpine.example",
+              "pinned": false,
+              "preview": "The daily wire limit for a personal account is $25,000 online [1].",
+              "title": "What is the daily wire limit for a personal acc\u2026"
+            },
+            "status": "idle",
+            "threadId": "<th>",
+            "updatedAt": "<timeZ>",
+            "version": null
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 3,
+          "total": 2,
+          "totalPages": 1
         }
-      ],
+      },
       "success": true
     },
     "status": 200

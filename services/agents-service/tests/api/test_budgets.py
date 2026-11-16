@@ -120,7 +120,7 @@ async def test_a_key_at_its_cap_cannot_open_a_thread() -> None:
         assert res.status_code == 429
         assert res.json()["error"]["code"] == "key_budget_exhausted"
         assert "5.00" in res.json()["error"]["message"]
-        assert (await c.get("/v1/threads")).json()["data"] == []
+        assert (await c.get("/v1/threads")).json()["data"]["data"] == []
 
 
 async def agent_turn_cost(prices: dict[str, dict[str, str]]) -> dict[str, Any]:

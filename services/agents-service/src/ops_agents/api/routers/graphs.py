@@ -31,10 +31,12 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
-from ops_service_kit.http import Envelope, In
+from ops_service_kit.http import Envelope, In, ListResult
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListQuery
 
 from ...store.leases import LeaseHeldError
+from ...store.thread_list import threads_page
 from .. import hitl_facade
 from ..agent_calls import agent_team
 from ..agent_registry import live_agent, refuse_new_turns, registry
@@ -51,7 +53,7 @@ from ..auth import (
     started_by,
 )
 from ..chat_budget import cap_at_agent, run_api_answer
-from ..chat_threads import may_read_thread
+from ..chat_threads import may_read_thread, thread_reader
 from ..child_runs import acting_for
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -255,10 +257,14 @@ async def _thread_for(rt: Runtime, me: Principal, thread_id: str) -> tuple[dict[
     return row, graph
 
 
-@router.get("", response_model=Envelope[list[ThreadView]])
-async def list_threads(rt: Rt, me: Me, _: Tx, graph: str | None = None) -> JSONResponse:
-    """The threads the caller may read, of one graph when `graph` is given."""
-    return ok([_thread_view(r) for r in await _store(rt).threads(graph) if may_read_thread(r, me)])
+@router.get("", response_model=Envelope[ListResult[ThreadView]])
+async def list_threads(rt: Rt, me: Me, _: Tx, q: ListQuery, graph: str | None = None) -> JSONResponse:
+    """The threads the caller may read on the shared list contract, of one graph when `graph` is given: newest update
+    first (`sortBy` updatedAt), then by id. Who reads which thread (`may_read_thread`) is decided in the
+    list's SQL (`store.thread_list`), so the page and its total count only readable threads."""
+    del graph  # read from `q.filters`; declared so the document and the SDKs name it
+    listed = await threads_page(rt.db, q, thread_reader(me))
+    return ok({**listed, "data": [_thread_view(dict(r)) for r in listed["data"]]})
 
 
 async def _worded_failure(rt: Runtime, values: dict[str, Any]) -> dict[str, Any]:

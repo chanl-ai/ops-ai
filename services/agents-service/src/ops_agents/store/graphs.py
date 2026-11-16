@@ -12,6 +12,7 @@ import sqlalchemy as sa
 
 from ops_store import Guarantee
 from ops_store.dialect import insert_ignore, locked
+from ops_store.listing import LISTED
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import any_team, team_visible
 
@@ -23,11 +24,11 @@ graph_threads = sa.Table(
     "graph_threads",
     metadata,
     sa.Column("id", sa.String(64), primary_key=True),
-    sa.Column("graph", sa.String(64), nullable=False, index=True),
+    sa.Column("graph", sa.String(64), nullable=False, index=True, info=LISTED),
     sa.Column("meta", sa.JSON, nullable=False),
     sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("created_at", sa.String(32), nullable=False),
-    sa.Column("updated_at", sa.String(32), nullable=False),
+    sa.Column("updated_at", sa.String(32), nullable=False, info=LISTED),
     sa.Column("status", sa.String(16), nullable=False),
     # Set for definition-built workflows: the version the thread started on and its digest. Every run and resume
     # compiles this version, so later publishes do not change a running or paused case.
