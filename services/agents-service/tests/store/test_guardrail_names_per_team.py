@@ -22,8 +22,9 @@ from ops_service_kit.ids import new_id, now_iso
 ROOT = Path(__file__).resolve().parents[2]
 
 INSERT = (
-    "INSERT INTO registry_guardrails (id, slug, name, kind, team_id, owner, version, status, created_at, updated_at) "
-    "VALUES (:id, :slug, 'Same rule', 'blocked_topics', :team, 'Ops', 1, 'live', :at, :at)"
+    "INSERT INTO registry_guardrails "
+    "(tenant_id, id, slug, name, kind, team_id, owner, version, status, created_at, updated_at) "
+    "VALUES ('local', :id, :slug, 'Same rule', 'blocked_topics', :team, 'Ops', 1, 'live', :at, :at)"
 )
 
 
@@ -62,8 +63,9 @@ def test_the_slug_key_is_per_team_on_the_migrated_database(database_url: str) ->
 
 
 SKILL = (
-    "INSERT INTO registry_skills (id, slug, owner_team, team_id, origin, version, created_at, updated_at, updated_by) "
-    "VALUES (:id, :slug, 'Ops', :team, 'team', 1, :at, :at, 'lee@harborpine.example')"
+    "INSERT INTO registry_skills "
+    "(tenant_id, id, slug, owner_team, team_id, origin, version, created_at, updated_at, updated_by) "
+    "VALUES ('local', :id, :slug, 'Ops', :team, 'team', 1, :at, :at, 'lee@harborpine.example')"
 )
 
 
