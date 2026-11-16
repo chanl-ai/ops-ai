@@ -119,6 +119,8 @@ async def test_a_completion_writes_one_metadata_row_and_no_prompt_text(models: M
     key_id, secret = await models.key(budget="5")
     r = await models.complete(secret, **{"X-Run-Id": "run_1", "X-Step-Id": "draft"})
     assert r.status_code == 200 and r.json()["object"] == "chat.completion"
+    # OpenAI omits the key on a reply without tool calls; some clients read a null as an empty call list.
+    assert "tool_calls" not in r.json()["choices"][0]["message"]
     rows = await models.calls(key_id)
     assert len(rows) == 1
     assert (rows[0]["outcome"], rows[0]["runId"], rows[0]["stepId"]) == ("ok", "run_1", "draft")

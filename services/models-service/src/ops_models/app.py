@@ -56,10 +56,15 @@ from .schemas import (
     AliasOut,
     AliasRef,
     CallPage,
+    ChatChoice,
     ChatCompletion,
     ChatCompletionRequest,
+    ChatMessage,
+    ChatUsage,
+    EmbeddingRow,
     Embeddings,
     EmbeddingsRequest,
+    EmbeddingsUsage,
     Health,
     KeyOut,
     KeyRotated,
@@ -913,7 +918,7 @@ def create_models_app(
         x_request_hash: Annotated[str | None, Header()] = None,
         x_tenant_id: Annotated[str | None, Header()] = None,
         x_run_spend_cap: Annotated[str | None, Header()] = None,
-    ) -> Response:
+    ) -> ChatCompletion | Response:
         body = request.model_dump(exclude_unset=True)
         alias_name = request.model
         gate = await open_gate(
@@ -977,22 +982,23 @@ def create_models_app(
             return await failed(e)
         await observed()
         await settle(done.input_tokens, done.output_tokens)
-        message: dict[str, Any] = {"role": "assistant", "content": done.text}
-        if done.tool_calls:
-            message["tool_calls"] = done.tool_calls
-        return JSONResponse(
-            {
-                "id": call_id,
-                "object": "chat.completion",
-                "created": created,
-                "model": alias_name,
-                "choices": [{"index": 0, "message": message, "finish_reason": done.finish_reason}],
-                "usage": {
-                    "prompt_tokens": done.input_tokens,
-                    "completion_tokens": done.output_tokens,
-                    "total_tokens": done.input_tokens + done.output_tokens,
-                },
-            }
+        # `tool_calls` is left unset, not None, when there are none: the route drops unset fields, so the key is absent.
+        message = (
+            ChatMessage(role="assistant", content=done.text, tool_calls=done.tool_calls)
+            if done.tool_calls
+            else ChatMessage(role="assistant", content=done.text)
+        )
+        return ChatCompletion(
+            id=call_id,
+            object="chat.completion",
+            created=created,
+            model=alias_name,
+            choices=[ChatChoice(index=0, message=message, finish_reason=done.finish_reason)],
+            usage=ChatUsage(
+                prompt_tokens=done.input_tokens,
+                completion_tokens=done.output_tokens,
+                total_tokens=done.input_tokens + done.output_tokens,
+            ),
         )
 
     # OpenAI's path shape: clients built on the OpenAI SDK append `/chat/completions` to their base URL.
@@ -1008,6 +1014,7 @@ def create_models_app(
         "/v1/models/chat/completions",
         tags=["completions"],
         response_model=ChatCompletion,
+        response_model_exclude_unset=True,
         responses={200: {"content": {"text/event-stream": {}}}, **error_responses(provider_errors)},
     )(completions)
 
@@ -1020,7 +1027,7 @@ def create_models_app(
         x_step_id: Annotated[str | None, Header()] = None,
         x_tenant_id: Annotated[str | None, Header()] = None,
         x_run_spend_cap: Annotated[str | None, Header()] = None,
-    ) -> Response:
+    ) -> Embeddings | Response:
         """Vectors for one text or a batch, from an alias of kind embedding, through the same key, budget and clearance
         checks as a completion, and one call-log row per request."""
         inputs = [request.input] if isinstance(request.input, str) else list(request.input)
@@ -1046,13 +1053,11 @@ def create_models_app(
             return await gate.failed(e)
         await gate.observed()
         await gate.settle(done.input_tokens, 0)
-        return JSONResponse(
-            {
-                "object": "list",
-                "model": request.model,
-                "data": [{"object": "embedding", "index": i, "embedding": v} for i, v in enumerate(done.vectors)],
-                "usage": {"prompt_tokens": done.input_tokens, "total_tokens": done.input_tokens},
-            }
+        return Embeddings(
+            object="list",
+            model=request.model,
+            data=[EmbeddingRow(object="embedding", index=i, embedding=v) for i, v in enumerate(done.vectors)],
+            usage=EmbeddingsUsage(prompt_tokens=done.input_tokens, total_tokens=done.input_tokens),
         )
 
     app.post(

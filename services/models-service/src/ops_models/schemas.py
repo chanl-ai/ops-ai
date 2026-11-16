@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
-from ops_service_kit.http import In, Out, Passthrough
+from ops_service_kit.http import ExternalOut, In, Out, Passthrough
 
 
 class Health(BaseModel):
@@ -135,29 +135,25 @@ class ChatCompletionRequest(Passthrough):
     tools: list[dict[str, Any]] | None = None
 
 
-class _OpenAI(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class ChatMessage(_OpenAI):
+class ChatMessage(ExternalOut):
     role: Literal["assistant"]
     content: str | None
     tool_calls: list[dict[str, Any]] | None = None
 
 
-class ChatChoice(_OpenAI):
+class ChatChoice(ExternalOut):
     index: int
     message: ChatMessage
     finish_reason: Literal["stop", "tool_calls"]
 
 
-class ChatUsage(_OpenAI):
+class ChatUsage(ExternalOut):
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
 
 
-class ChatCompletion(_OpenAI):
+class ChatCompletion(ExternalOut):
     id: str
     object: Literal["chat.completion"]
     created: int
@@ -175,18 +171,18 @@ class EmbeddingsRequest(In):
     dimensions: int | None = Field(default=None, ge=1, le=4096)
 
 
-class EmbeddingRow(_OpenAI):
+class EmbeddingRow(ExternalOut):
     object: Literal["embedding"]
     index: int
     embedding: list[float]
 
 
-class EmbeddingsUsage(_OpenAI):
+class EmbeddingsUsage(ExternalOut):
     prompt_tokens: int
     total_tokens: int
 
 
-class Embeddings(_OpenAI):
+class Embeddings(ExternalOut):
     object: Literal["list"]
     model: str
     data: list[EmbeddingRow]
