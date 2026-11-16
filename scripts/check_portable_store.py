@@ -408,8 +408,8 @@ def warnings(now: Counter[str], base: Counter[str], where: dict[str, list[str]])
 def render(counts: Counter[str]) -> str:
     head = [
         f"# {sum(counts.values())} findings: code and metadata outside ops_store that would not run on SQL Server"
-        " (scripts/check_portable_store.py). A row may only fall;"
-        " a raise waits for a maintainer's review on the pull request.",
+        " (scripts/check_portable_store.py). A row may only fall; raising one needs a maintainer's review on the pull"
+        " request.",
     ]
     head.append(
         "# Burned down by ops_store.dialect: row lock and SKIP LOCKED -> locked/claim, database clock -> db_now and"

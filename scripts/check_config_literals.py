@@ -178,6 +178,9 @@ def findings(source: str) -> list[tuple[str, int]]:
             for kw in node.keywords:
                 if kw.arg == "timeout" and _fixed(kw.value, scope):
                     found.append(("timeout", kw.value.lineno))
+            # `asyncio.wait_for(work(), 30)` gives its limit by position.
+            if scope.dotted(node.func) == "asyncio.wait_for" and len(node.args) > 1 and _fixed(node.args[1], scope):
+                found.append(("timeout", node.args[1].lineno))
             # `httpx.Timeout(10.0, connect=3)` states the same limits as a number at the call.
             if _is_timeout_class(node.func, scope) and any(
                 _fixed(a, scope) for a in [*node.args, *(k.value for k in node.keywords)]

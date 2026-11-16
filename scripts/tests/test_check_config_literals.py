@@ -185,12 +185,13 @@ limits = Limit(5)
 """
 
 
-def test_a_fallback_in_a_constant_or_a_ternary_a_named_number_and_an_aliased_client_are_found() -> None:
+def test_a_fallback_in_a_constant_or_a_ternary_a_wait_for_a_named_number_and_an_aliased_client_are_found() -> None:
     assert sorted(c.findings(FORMS)) == [
         ("client", 18),
         ("client", 19),
         ("loopback", 10),
         ("loopback", 11),
+        ("timeout", 13),
         ("timeout", 14),
         ("timeout", 16),
         ("timeout", 20),
