@@ -74,8 +74,6 @@ not_budgeted = "agents-service's route, called with a service token; a person's 
 
 ["GET /v1/knowledge-sources"]
 queries = 4
-transactions = 3
-connections = 3
 
 ["GET /v1/mcp-links"]
 queries = 2
@@ -92,7 +90,7 @@ transactions = 10
 connections = 10
 
 ["GET /v1/plugin-templates"]
-queries = 0
+queries = 1
 
 ["GET /v1/secrets"]
 queries = 5

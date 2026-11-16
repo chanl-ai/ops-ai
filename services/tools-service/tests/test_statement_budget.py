@@ -22,6 +22,7 @@ from ops_store import isolation
 from ops_store.database import open_database
 from ops_tools.modules.tool_users import StaticToolUsers
 from ops_tools.plugins.host import PluginHost
+from ops_tools.plugins.templates import plugin_templates_router
 from ops_tools.store import CallLog
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.egress import EgressStore
@@ -31,6 +32,7 @@ from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
 
 from .conftest import build_app, opa_client, team_credential
+from .test_plugin_templates import FakeCopies
 from .test_plugin_versions import ID, V1
 from .test_review_decisions import introspect, jwks, person
 from .test_traffic import logged
@@ -62,7 +64,10 @@ async def app(database_url: str, seed: dict[str, Any]) -> AsyncIterator[FastAPI]
         versions=True,
     )
     users = StaticToolUsers({})
-    yield build_app(engine, seed, "t_unused", opa=opa_client(), auth=auth, plugins=host, users=users)
+    app = build_app(engine, seed, "t_unused", opa=opa_client(), auth=auth, plugins=host, users=users)
+    # As __main__ mounts it beside the plugin routes; agents-service's copies answer from memory.
+    app.include_router(plugin_templates_router(host, FakeCopies()))
+    yield app
     await engine.dispose()
 
 
