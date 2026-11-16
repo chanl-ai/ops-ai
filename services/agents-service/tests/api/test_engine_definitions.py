@@ -6,8 +6,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 from httpx import AsyncClient
+
+from ops_agents.store.template_copies import TemplateCopies
+from ops_service_kit.errors import ServiceUnavailable
 
 BASIC = Path(__file__).parents[1] / "fixtures" / "engine" / "basic.yaml"
 
@@ -127,3 +131,19 @@ async def test_the_workflows_list_holds_v2_beside_v1_on_the_server(client: Async
     await client.post("/v1/runs", json={"workflowId": "both_e", "input": {"customerId": "C1", "amount": 5}})
     found = (await client.get("/v1/workflows", params={"search": "both kinds"})).json()["data"]["data"]
     assert [(w["id"], w["status"], w["runs24h"]) for w in found] == [("both_e", "live", 1)]
+
+
+async def test_a_draft_stays_when_its_template_copy_cannot_be_released(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Deleting a draft and releasing its template copy commit together: when the release fails, the draft is kept,
+    so a team is never left with a template it cannot install again for a workflow it no longer has."""
+    await client.post("/v1/workflows/definitions", json={"definition": named("draft_t", "Draft T")})
+
+    async def refused(self: TemplateCopies, kind: str, record_id: str) -> None:
+        raise ServiceUnavailable("template copies refused")
+
+    monkeypatch.setattr(TemplateCopies, "removed_record", refused)
+    gone = await client.delete("/v1/workflows/definitions/draft_t")
+    assert gone.status_code == 503, gone.text
+    assert (await client.get("/v1/workflows/definitions/draft_t")).status_code == 200

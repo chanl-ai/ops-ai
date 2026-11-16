@@ -16,7 +16,6 @@ from pydantic import BaseModel, Field, model_validator
 from sse_starlette import EventSourceResponse
 
 from ops_agent_kernel.pii import masked
-from ops_contracts.chat import WireModel
 from ops_documents_client import DocumentNotFound, DocumentsClient
 from ops_engine import default_registry
 from ops_engine.definition import InvalidDefinitionError, WorkflowDefinition, advise, parse, validate
@@ -31,7 +30,7 @@ from ops_engine.store import (
 )
 from ops_engine.store.definitions import HUMAN_REVIEW
 from ops_files_client import FilesClient, FilesRefused
-from ops_identity.fastapi import ActingPerson
+from ops_identity.fastapi import ActingPerson, Tx
 from ops_service_kit.errors import (
     ApiError,
     Conflict,
@@ -41,7 +40,7 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
-from ops_service_kit.http import Envelope, ListResult, paged
+from ops_service_kit.http import Envelope, In, ListResult, paged
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 
@@ -149,7 +148,8 @@ class NodeTypeView(Out):
 @router.get("/node-types", response_model=Envelope[list[NodeTypeView]])
 async def node_types(rt: Rt, me: Me) -> JSONResponse:
     """Every registered node type at every version: ports with their connection types, parameters as JSON Schema with
-    the form generated from them, effects, retry and executor, and why the acting team cannot use one now."""
+    the form generated from them, effects, retry and executor, and why the acting team cannot use one now. No request
+    transaction: it reads no row, and the AI-steps policy comes from platform-service."""
     ai_on = await ai_steps_gate.allowed(rt, current_team() or me.team_id or None)
     return ok(
         [
@@ -162,7 +162,7 @@ async def node_types(rt: Rt, me: Me) -> JSONResponse:
     )
 
 
-class DefinitionInput(WireModel):
+class DefinitionInput(In):
     """Exactly one of `yaml` (YAML or JSON text) and `definition` (the parsed object)."""
 
     yaml: str | None = None
@@ -320,7 +320,8 @@ def _parsed(body: DefinitionInput) -> WorkflowDefinition:
 async def validate_definition(rt: Rt, body: DefinitionInput) -> JSONResponse:
     """Per-node checks against the type registry: unknown type or version, unknown port, an out port that leads
     nowhere (End has none), an unreachable node, parameters that do not match the type's schema; and warnings that
-    never refuse a save (level `warning`, e.g. a step two branches meet at without a Join). Saves nothing."""
+    never refuse a save (level `warning`, e.g. a step two branches meet at without a Join). Saves nothing.
+    No request transaction: it reads no row, and documents-service is asked for field shapes."""
     try:
         d = parse(body.yaml if body.yaml is not None else body.definition or {})
     except InvalidDefinitionError as e:
@@ -342,7 +343,9 @@ async def validate_definition(rt: Rt, body: DefinitionInput) -> JSONResponse:
 async def create_definition(rt: Rt, me: Me, body: DefinitionInput) -> JSONResponse:
     """Stores the definition as the workflow's next version, once it passes every check; the same definition again
     returns its version (200). A definition with failing checks is refused with them in `details.checks`. 403 unless
-    the caller is a builder or admin of the team that owns the workflow (the acting team for a new one)."""
+    the caller is a builder or admin of the team that owns the workflow (the acting team for a new one).
+    No request transaction: the AI-steps policy (platform-service) and document types (documents-service) are asked
+    between its reads and its write, with none open."""
     d = _parsed(body)
     held = await definitions(rt).get(d.id, team=current_team())
     # A new workflow belongs to the team the caller names, or its own; a dev session acts across teams, so with neither
@@ -450,6 +453,7 @@ class AccountUses(Out):
 async def account_uses(
     rt: Rt,
     me: Me,
+    _: Tx,
     app: Annotated[str, Query(min_length=1, max_length=120)],
     name: Annotated[str, Query(min_length=1, max_length=200)],
 ) -> JSONResponse:
@@ -463,6 +467,7 @@ async def list_definitions(
     *,
     request: Request,
     rt: Rt,
+    _: Tx,
     page_no: Annotated[int, Query(alias="page", ge=1)] = 1,
     page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
     search: str | None = None,
@@ -587,7 +592,7 @@ async def v2_workflow_rows(rt: Runtime, since: str) -> list[dict[str, Any]]:
 
 
 @router.delete("/definitions/{workflow_id}", status_code=204, response_model=None)
-async def delete_definition(rt: Rt, me: Me, workflow_id: str) -> Response:
+async def delete_definition(rt: Rt, me: Me, _: Tx, workflow_id: str) -> Response:
     """Deletes a draft (every version); a workflow that has run is kept, since its runs are pinned to its versions.
     403 unless the caller is a builder or admin of the owning team."""
     row = await definitions(rt).get(workflow_id, team=current_team())
@@ -607,14 +612,14 @@ async def delete_definition(rt: Rt, me: Me, workflow_id: str) -> Response:
 
 
 @router.post("/definitions/{workflow_id}/archive", response_model=Envelope[DefinitionView])
-async def archive_definition(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
+async def archive_definition(rt: Rt, me: Me, _: Tx, workflow_id: str) -> JSONResponse:
     """Archives the workflow: it starts no run of any mode, a trigger no longer serves it, and it leaves the
     lists; its versions and runs are kept. Who may delete the workflow may archive it."""
     return ok(await _archived(rt, me, workflow_id, True))
 
 
 @router.post("/definitions/{workflow_id}/restore", response_model=Envelope[DefinitionView])
-async def restore_definition(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
+async def restore_definition(rt: Rt, me: Me, _: Tx, workflow_id: str) -> JSONResponse:
     """Restores an archived workflow as it was: the version that served it serves again, live or paused."""
     return ok(await _archived(rt, me, workflow_id, False))
 
@@ -638,7 +643,8 @@ class DefinitionShapes(Out):
 @router.get("/definitions/{workflow_id}/versions/{version}/shapes", response_model=Envelope[DefinitionShapes])
 async def definition_shapes(rt: Rt, workflow_id: str, version: int) -> JSONResponse:
     """What each step of a saved version outputs, by port, before it has run: fixed by its type, built from
-    its settings, or read from its document type or operation. A mapping picker reads it."""
+    its settings, or read from its document type or operation. A mapping picker reads it.
+    No request transaction: the version is read, then documents-service is asked with none open."""
     row = await definitions(rt).get(workflow_id, version, team=current_team())
     if row is None:
         raise NotFound(f"Workflow definition {workflow_id} version {version}")
@@ -647,7 +653,8 @@ async def definition_shapes(rt: Rt, workflow_id: str, version: int) -> JSONRespo
 
 
 @router.get("/definitions/{workflow_id}", response_model=Envelope[DefinitionView])
-async def get_definition(rt: Rt, workflow_id: str, version: int | None = None) -> JSONResponse:
+async def get_definition(rt: Rt, _: Tx, workflow_id: str, version: int | None = None) -> JSONResponse:
+    """One definition at a version (its newest when left out), its versions and its open review."""
     return ok(await definition_view(rt, workflow_id, version))
 
 
@@ -690,7 +697,7 @@ async def definition_view(rt: Runtime, workflow_id: str, version: int | None = N
     }
 
 
-class DefinitionPublishInput(WireModel):
+class DefinitionPublishInput(In):
     # The draft to publish; the newest version when left out.
     version: int | None = None
     note: str = Field(default="", max_length=2000)
@@ -701,7 +708,9 @@ async def request_definition_publish(rt: Rt, me: Me, workflow_id: str, body: Def
     """Opens a publish request for a draft in Reviews; the version goes live when a second person approves it (at once
     under the dev auto-approve setting). 409 when the version is not a draft or a request is already open, 422 when it
     no longer passes its checks, 403 unless the caller is a builder or admin of the owning team (an admin for a
-    workflow no team owns). The request lists what each step acts on: its operation, agent and approver."""
+    workflow no team owns). The request lists what each step acts on: its operation, agent and approver.
+    No request transaction: the team's accounts (tools-service) and the review deadline (platform-service) are asked
+    with none open."""
     return ok(await engine_lifecycle.request_publish(rt, me, workflow_id, body.version, body.note), status=201)
 
 
@@ -716,14 +725,14 @@ async def set_paused(rt: Runtime, me: Principal, workflow_id: str, paused: bool)
 
 
 @router.post("/definitions/{workflow_id}/pause", response_model=Envelope[DefinitionView])
-async def pause_definition(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
+async def pause_definition(rt: Rt, me: Me, _: Tx, workflow_id: str) -> JSONResponse:
     """Stops new live runs of the workflow; runs under way keep going on their version. 409 before any is live; 403
     unless the caller is a builder or admin of the owning team (an admin for a workflow no team owns)."""
     return ok(await set_paused(rt, me, workflow_id, True))
 
 
 @router.post("/definitions/{workflow_id}/resume", response_model=Envelope[DefinitionView])
-async def resume_definition(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
+async def resume_definition(rt: Rt, me: Me, _: Tx, workflow_id: str) -> JSONResponse:
     """Live runs start again on the live version. 409 before any is live; 403 as for pause."""
     return ok(await set_paused(rt, me, workflow_id, False))
 
@@ -744,7 +753,8 @@ OptionSource: TypeAlias = Literal["agents", "tools", "workflows", "mailboxes"]  
 async def option_sources(rt: Rt, me: Me, source: OptionSource) -> JSONResponse:
     """The choices a node form offers for a field with an option source (`ui.fields.*.source`): published agents,
     registry operations, live v2 workflows, the acting team's mailboxes (Channels > Email). `steps` comes from
-    the definition being edited; `knowledge` is not served yet, since no built node type reads a knowledge base."""
+    the definition being edited; `knowledge` is not served yet, since no built node type reads a knowledge base.
+    No request transaction: the tools source is asked of tools-service."""
     options: list[dict[str, str]]
     if source == "mailboxes":
         # The team the caller acts in (X-Team-Id), also for a dev-password session, which reads across teams.
@@ -787,7 +797,7 @@ run_start_router = APIRouter(prefix="/v1/runs")
 POLL_SECONDS = 0.25
 
 
-class EngineRunInput(WireModel):
+class EngineRunInput(In):
     workflow_id: str
     # The version to pin: the live version when left out, or the latest in test mode. A live run starts only on the
     # live version; test mode starts any version, a draft included.
@@ -1168,7 +1178,7 @@ def started_view(run: dict[str, Any], created: bool) -> dict[str, Any]:
     }
 
 
-class StartInput(WireModel):
+class StartInput(In):
     workflow_id: str
     # As for POST /v1/runs: the live version when left out, or the latest in test mode.
     version: int | None = None
@@ -1184,7 +1194,8 @@ async def start_by_hand(rt: Rt, me: Me, body: StartInput) -> JSONResponse:
     the trigger's real source uses: a test email goes through the mailbox listener's own start, so its run gets the
     input and steps a mailbox email gets; a form's values become the input. The run records the person and how they
     started it (`startedBy.via`). The same callers may start it as for POST /v1/runs; 422 `no_start_form` for a trigger
-    only its source starts, `email_filtered` for a test email the trigger's filters would skip."""
+    only its source starts, `email_filtered` for a test email the trigger's filters would skip.
+    No request transaction: a test email's attachments go to files-service between its reads and its writes."""
     stored = await startable(rt, me, body.workflow_id, body.version, body.mode)
     run = await run_starts.start(rt, me, stored, body.values, body.mode)
     return ok(started_view(run, True), status=202)
@@ -1200,7 +1211,8 @@ async def start_engine_run(rt: Rt, me: Starter, body: EngineRunInput) -> JSONRes
     """Writes the run and its start work row in one transaction and returns at once: a worker runs it. With no worker
     running the run stays queued. A live run is refused (409) unless it pins the live version: `not_live` before a
     version is approved or for another version, `workflow_paused` while the workflow is paused. An API key scoped to
-    one workflow starts that one only, on the version it pins when it pins one."""
+    one workflow starts that one only, on the version it pins when it pins one.
+    No request transaction: the run and its work row keep start_run's own transaction, which a worker claims from."""
     stored = await startable(rt, me, body.workflow_id, body.version, body.mode)
     form = start_form(stored["definition"], REGISTRY)
     # A Schedule trigger's input schema is held to the same check as Fire now (POST /v1/runs/start).
@@ -1231,7 +1243,8 @@ class RunsQuery(BaseModel):
 @runs_router.get("", response_model=Envelope[ListResult[RunRow]])
 async def list_engine_runs(rt: Rt, me: Me, q: Annotated[RunsQuery, Query()]) -> JSONResponse:
     """The selected team's runs, newest first, a page at a time; `status` repeats to keep several. `facets.status`
-    counts the runs per status under the other filters. A scoped API key lists its own workflow's runs only."""
+    counts the runs per status under the other filters. A scoped API key lists its own workflow's runs only.
+    No request transaction: people's names and the masking policy come from platform-service, with none open."""
     wanted = q.workflowId or q.workflow_id
     if (scope := key_scope(me)) is not None:
         if scope[0] != "workflow" or wanted not in (None, scope[1]):
@@ -1263,7 +1276,8 @@ async def list_engine_runs(rt: Rt, me: Me, q: Annotated[RunsQuery, Query()]) -> 
 
 @runs_router.get("/{run_id}", response_model=Envelope[RunDetail])
 async def get_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
-    """The run with every step from the journal: per node its input, output, port, attempts and errors."""
+    """The run with every step from the journal: per node its input, output, port, attempts and errors.
+    No request transaction: names, the masking policy and file names come from platform-service and files-service."""
     store = runs(rt)
     run = await visible_run(rt, run_id, me)
     steps = steps_view(await store.steps(run_id))
@@ -1381,7 +1395,8 @@ async def run_result(
 async def cancel_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     """Cancels a run that has not ended: a queued run never starts, a waiting run's review leaves Reviews, a running
     pass finishes and journals the step under way and begins no other. Cancelling a cancelled run returns it; a run
-    that succeeded or failed is refused (409)."""
+    that succeeded or failed is refused (409).
+    No request transaction: the masking policy (platform-service) is asked after the writes, with none open."""
     run = await visible_run(rt, run_id, me)
     require_runs_cancel(me, team_id=str(run["team_id"]), started_by=str(run["created_by"]), what=f"run {run_id}")
     if run["status"] == "cancelled":
@@ -1400,7 +1415,8 @@ async def cancel_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
 async def retry_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     """Queues a Stuck run again from its last recorded step: recorded steps are not run again and a write
     with a record at the gateway is never sent again. Who may cancel the run may retry it; a run that is not Stuck is
-    refused (409 run_not_stuck)."""
+    refused (409 run_not_stuck).
+    No request transaction: the masking policy (platform-service) is asked after the write, with none open."""
     run = await visible_run(rt, run_id, me)
     require_runs_cancel(me, team_id=str(run["team_id"]), started_by=str(run["created_by"]), what=f"run {run_id}")
     retried, changed = await runs(rt).retry(run_id)
@@ -1424,7 +1440,8 @@ async def run_set_aside_email(rt: Rt, me: Me, event_id: str) -> JSONResponse:
     """Run again on an email the mailbox listener set aside: its run starts on the workflow's live version under
     the email's own run key, as the person, and the kept copy of the email is dropped. Who may start the workflow may
     run it; 404 when there is no such email in the team or it already ran, 503 when Files did not store an attachment
-    (the email stays set aside)."""
+    (the email stays set aside).
+    No request transaction: the email's attachments are stored in files-service between its reads and its write."""
     event = await TriggerEvents(rt.db).set_aside(event_id)
     if event is None:
         raise NotFound(f"Set-aside email {event_id}")
@@ -1462,7 +1479,8 @@ async def event_frames(
 @runs_router.get("/{run_id}/events", response_model=None, responses=SSE_RESPONSE)
 async def engine_run_events(rt: Rt, me: Me, run_id: str, after: int = 0, follow: bool = True) -> EventSourceResponse:
     """The run's events with `seq` above `after`; the SSE `id` is the seq to resume from. With `follow` it keeps
-    polling until the run ends or waits for a person."""
+    polling until the run ends or waits for a person.
+    No request transaction: the masking policy comes from platform-service, and each frame's read opens its own."""
     run = await visible_run(rt, run_id, me)
     mask = await ai_steps_gate.people_see_masked(rt, run.get("team_id") or None)
     return EventSourceResponse(event_frames(rt, run_id, after, follow=follow, mask=mask), sep="\n", ping=15)
