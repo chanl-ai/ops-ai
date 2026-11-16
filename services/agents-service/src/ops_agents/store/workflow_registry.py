@@ -10,20 +10,20 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.errors import NotFound
 from ops_service_kit.ids import now_iso
-from ops_store import Guarantee
-from ops_store.schema import TEAM_OWNED, team_owned_via
+from ops_store import Guarantee, isolation
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
 from .graphs import mine
-from .tenancy import OWNER, RuntimeStore, current_tenant
+from .tenancy import OWNER, TOOL_GRANTS, UNIQUE_KEY, RuntimeStore, current_tenant
 
 registry_workflows = sa.Table(
     "registry_workflows",
     metadata,
-    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106). Leads the
+    # The tenant the row belongs to, the caller's on insert, with no default (agents 0109). Leads the
     # key (agents 0108): a seeded workflow's id is chosen, and a tenant whose threads run it holds its own copy.
-    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant, server_default="local"),
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("name", sa.String(200), nullable=False),
@@ -39,14 +39,14 @@ registry_workflows = sa.Table(
     sa.Column("draft_saved_by", sa.String(200)),
     sa.Column("created_at", sa.String(32), nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
-    info=TEAM_OWNED,
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 registry_workflow_versions = sa.Table(
     "registry_workflow_versions",
     metadata,
     # Its workflow's tenant; the composite key below holds a version to a workflow of the same tenant (agents 0108).
-    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant, server_default="local"),
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant),
     sa.Column("workflow_id", sa.String(64), primary_key=True),
     # Same number as the graph_versions row it published.
     sa.Column("version", sa.Integer, primary_key=True),
@@ -63,20 +63,21 @@ registry_workflow_versions = sa.Table(
         ondelete="CASCADE",
         onupdate="CASCADE",
     ),
-    info=team_owned_via("registry_workflows", "workflow_id"),
+    info={**TENANT_SCOPED, **team_owned_via("registry_workflows", "workflow_id")},
 )
 
 registry_validations = sa.Table(
     "registry_validations",
     metadata,
-    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
+    # The tenant the row belongs to, the caller's on insert, with no default (agents 0109).
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("workflow_id", sa.String(64), nullable=False, index=True),
     sa.Column("ran_at", sa.String(32), nullable=False),
     sa.Column("target", sa.String(8), nullable=False),
     sa.Column("results", sa.JSON, nullable=False),
     sa.Column("summary", sa.JSON, nullable=False),
+    info=TENANT_SCOPED,
 )
 
 
@@ -89,8 +90,9 @@ class WorkflowRegistry(RuntimeStore):
         q = sa.select(registry_workflows.c.id).where(
             mine(registry_workflows), any_team(registry_workflows, "a workflow id is unique across every team")
         )
-        async with self.tx() as c:
-            return {str(i) for i in (await c.execute(q)).scalars()}
+        with isolation.tenant_wide(UNIQUE_KEY):
+            async with self.tx() as c:
+                return {str(i) for i in (await c.execute(q)).scalars()}
 
     async def rows(self) -> list[dict[str, Any]]:
         q = sa.select(registry_workflows).where(
@@ -107,8 +109,9 @@ class WorkflowRegistry(RuntimeStore):
             mine(registry_workflows),
             any_team(registry_workflows, "a service checks a workflow's team for a tool grant"),
         )
-        async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+        with isolation.tenant_wide(TOOL_GRANTS):
+            async with self.tx() as c:
+                return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def owner_team(self, workflow_id: str, conn: AsyncConnection | None = None) -> str | None:
         """The team that owns it, whoever is acting; None when there is none. Only for deciding a refusal by the

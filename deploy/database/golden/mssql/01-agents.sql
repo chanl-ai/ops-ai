@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0108_registry_tenant_keys
+-- agents-service, stamped at 0109_registry_policies
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -166,7 +166,7 @@ GO
 CREATE UNIQUE INDEX uq_graph_threads_tenant_external_key ON graph_threads (tenant_id, external_key) WHERE external_key IS NOT NULL;
 GO
 CREATE TABLE graph_versions (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	name VARCHAR(64) NOT NULL, 
 	version INTEGER NOT NULL, 
 	digest VARCHAR(64) NOT NULL, 
@@ -177,7 +177,7 @@ CREATE TABLE graph_versions (
 );
 GO
 CREATE TABLE registry_agents (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
 	slug VARCHAR(120) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
@@ -195,7 +195,7 @@ GO
 CREATE INDEX ix_registry_agents_template_id ON registry_agents (template_id);
 GO
 CREATE TABLE registry_publish_requests (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
 	kind VARCHAR(16) NOT NULL, 
 	subject_id VARCHAR(64) NOT NULL, 
@@ -526,7 +526,7 @@ CREATE TABLE poll_cursors (
 );
 GO
 CREATE TABLE deployments (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
 	graph VARCHAR(64) NOT NULL, 
 	channel VARCHAR(32) NOT NULL, 
@@ -539,7 +539,7 @@ CREATE TABLE deployments (
 );
 GO
 CREATE TABLE channel_messages (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	deployment_id VARCHAR(64) NOT NULL, 
 	message_key VARCHAR(512) NOT NULL, 
 	thread_id VARCHAR(64) NULL, 
@@ -551,7 +551,7 @@ CREATE TABLE channel_messages (
 );
 GO
 CREATE TABLE channel_cursors (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	deployment_id VARCHAR(64) NOT NULL, 
 	delta_link VARCHAR(max) NOT NULL, 
 	updated_at VARCHAR(32) NOT NULL, 
@@ -559,7 +559,7 @@ CREATE TABLE channel_cursors (
 );
 GO
 CREATE TABLE thread_inbox (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	thread_id VARCHAR(64) NOT NULL, 
 	message_key VARCHAR(512) NOT NULL, 
 	seq BIGINT NOT NULL, 
@@ -631,7 +631,7 @@ GO
 CREATE INDEX ix_eval_runs_asset ON eval_runs (tenant_id, team_id, kind, asset_id, ran_at);
 GO
 CREATE TABLE registry_guardrails (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
 	slug VARCHAR(120) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -744,7 +744,7 @@ GO
 CREATE INDEX ix_review_assignments_review ON review_assignments (tenant_id, review_id, assigned_at);
 GO
 CREATE TABLE registry_skills (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
 	slug VARCHAR(64) NOT NULL, 
 	owner_team VARCHAR(200) NOT NULL, 
@@ -877,7 +877,7 @@ GO
 CREATE INDEX ix_widget_mint_key_audit_tenant_id ON widget_mint_key_audit (tenant_id);
 GO
 CREATE TABLE registry_widgets (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL DEFAULT '', 
@@ -891,7 +891,7 @@ CREATE TABLE registry_widgets (
 );
 GO
 CREATE TABLE registry_workflows (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -908,7 +908,7 @@ CREATE TABLE registry_workflows (
 );
 GO
 CREATE TABLE registry_validations (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
 	ran_at VARCHAR(32) NOT NULL, 
@@ -1002,7 +1002,7 @@ GO
 CREATE INDEX ix_graph_runs_thread_id ON graph_runs (thread_id);
 GO
 CREATE TABLE registry_agent_versions (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	agent_id VARCHAR(64) NOT NULL, 
 	version INTEGER NOT NULL, 
 	spec NVARCHAR(max) NOT NULL, 
@@ -1019,7 +1019,7 @@ CREATE TABLE registry_agent_versions (
 );
 GO
 CREATE TABLE registry_guardrail_versions (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	guardrail_id VARCHAR(64) NOT NULL, 
 	version INTEGER NOT NULL, 
 	config NVARCHAR(max) NOT NULL, 
@@ -1035,7 +1035,7 @@ CREATE TABLE registry_guardrail_versions (
 );
 GO
 CREATE TABLE registry_skill_versions (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	skill_id VARCHAR(64) NOT NULL, 
 	version INTEGER NOT NULL, 
 	content NVARCHAR(max) NOT NULL, 
@@ -1053,7 +1053,7 @@ CREATE TABLE registry_skill_versions (
 );
 GO
 CREATE TABLE registry_widget_versions (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	widget_id VARCHAR(64) NOT NULL, 
 	version INTEGER NOT NULL, 
 	content NVARCHAR(max) NOT NULL, 
@@ -1069,7 +1069,7 @@ CREATE TABLE registry_widget_versions (
 );
 GO
 CREATE TABLE registry_workflow_versions (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
 	version INTEGER NOT NULL, 
 	graph NVARCHAR(max) NOT NULL, 
@@ -1134,6 +1134,18 @@ CREATE SECURITY POLICY ops_security.graph_threads_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.graph_threads,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.graph_threads AFTER INSERT,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.graph_threads AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.graph_versions_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.graph_versions,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.graph_versions AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.graph_versions AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.registry_agents_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.registry_agents,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_agents AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_agents AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.registry_publish_requests_tenant
@@ -1238,6 +1250,30 @@ CREATE SECURITY POLICY ops_security.poll_cursors_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.poll_cursors AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.deployments_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.deployments,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.deployments AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.deployments AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.channel_messages_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.channel_messages,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.channel_messages AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.channel_messages AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.channel_cursors_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.channel_cursors,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.channel_cursors AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.channel_cursors AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.thread_inbox_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.thread_inbox,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.thread_inbox AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.thread_inbox AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.chat_search_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.chat_search,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.chat_search AFTER INSERT,
@@ -1254,6 +1290,12 @@ CREATE SECURITY POLICY ops_security.eval_runs_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.eval_runs,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.eval_runs AFTER INSERT,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.eval_runs AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.registry_guardrails_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.registry_guardrails,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_guardrails AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_guardrails AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.agent_memories_isolation
@@ -1284,6 +1326,12 @@ CREATE SECURITY POLICY ops_security.review_assignments_tenant
     ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.review_assignments,
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.review_assignments AFTER INSERT,
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.review_assignments AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.registry_skills_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.registry_skills,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_skills AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_skills AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.task_assists_tenant
@@ -1334,6 +1382,24 @@ CREATE SECURITY POLICY ops_security.widget_mint_key_audit_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.widget_mint_key_audit AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.registry_widgets_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.registry_widgets,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_widgets AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_widgets AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.registry_workflows_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.registry_workflows,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_workflows AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_workflows AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.registry_validations_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.registry_validations,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_validations AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_validations AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.ops_checkpoints_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.ops_checkpoints,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.ops_checkpoints AFTER INSERT,
@@ -1358,6 +1424,36 @@ CREATE SECURITY POLICY ops_security.graph_runs_isolation
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.graph_runs AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.registry_agent_versions_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.registry_agent_versions,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_agent_versions AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_agent_versions AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.registry_guardrail_versions_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.registry_guardrail_versions,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_guardrail_versions AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_guardrail_versions AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.registry_skill_versions_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.registry_skill_versions,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_skill_versions AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_skill_versions AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.registry_widget_versions_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.registry_widget_versions,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_widget_versions AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_widget_versions AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.registry_workflow_versions_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.registry_workflow_versions,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_workflow_versions AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_workflow_versions AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 IF FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') = 1 BEGIN IF NOT EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = 'ops_memory') EXEC('CREATE FULLTEXT CATALOG ops_memory'); IF NOT EXISTS (SELECT 1 FROM sys.fulltext_indexes WHERE object_id = OBJECT_ID('agent_memories')) EXEC('CREATE FULLTEXT INDEX ON agent_memories ([key], value) KEY INDEX agent_memories_pkey ON ops_memory WITH CHANGE_TRACKING AUTO'); END
 GO
 CREATE TABLE alembic_version (
@@ -1365,5 +1461,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0108_registry_tenant_keys');
+INSERT INTO alembic_version (version_num) VALUES ('0109_registry_policies');
 GO

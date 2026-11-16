@@ -20,13 +20,13 @@ from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
 from .graphs import mine
-from .tenancy import LOCAL_TENANT, OWNER, SERVE_PUBLISHED, RuntimeStore, current_tenant
+from .tenancy import OWNER, SERVE_PUBLISHED, UNIQUE_KEY, RuntimeStore, current_tenant
 
 registry_agents = sa.Table(
     "registry_agents",
     metadata,
-    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
+    # The tenant the row belongs to, the caller's on insert, with no default (agents 0109).
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("slug", sa.String(120), nullable=False),
     sa.Column("team_id", sa.String(64), nullable=False),
@@ -43,14 +43,14 @@ registry_agents = sa.Table(
     sa.Column("protection", sa.String(16)),
     # A slug is unique within its tenant only.
     sa.UniqueConstraint("tenant_id", "slug", name="uq_registry_agents_tenant_slug"),
-    info=TEAM_OWNED,
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 registry_agent_versions = sa.Table(
     "registry_agent_versions",
     metadata,
-    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
+    # The tenant the row belongs to, the caller's on insert, with no default (agents 0109).
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant),
     sa.Column("agent_id", sa.String(64), sa.ForeignKey("registry_agents.id", ondelete="CASCADE"), primary_key=True),
     sa.Column("version", sa.Integer, primary_key=True),
     sa.Column("spec", sa.JSON, nullable=False),
@@ -62,7 +62,7 @@ registry_agent_versions = sa.Table(
     sa.Column("published_at", sa.String(32)),
     sa.Column("published_by", sa.String(200)),
     sa.Column("review_id", sa.String(64)),
-    info=team_owned_via("registry_agents", "agent_id"),
+    info={**TENANT_SCOPED, **team_owned_via("registry_agents", "agent_id")},
 )
 
 publish_requests = sa.Table(
@@ -70,7 +70,7 @@ publish_requests = sa.Table(
     metadata,
     # Per tenant (migration 0067): a request id is unique within its tenant, and RLS shows a tenant only
     # its own. The records a request publishes (agents, guardrails, skills, widgets) are not per tenant yet (phase B).
-    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant, server_default=LOCAL_TENANT),
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("kind", sa.String(16), nullable=False),  # agent | workflow
     sa.Column("subject_id", sa.String(64), nullable=False),
@@ -331,17 +331,14 @@ class AgentRegistry(RuntimeStore):
 
     async def _unique_slug(self, c: AsyncConnection, name: str) -> str:
         base = slugify(name)
-        taken = {
-            str(s)
-            for s in (
-                await c.execute(
-                    sa.select(registry_agents.c.slug).where(
-                        registry_agents.c.slug.like(f"{base}%"),
-                        any_team(registry_agents, "a slug is unique across every team"),
-                    )
-                )
-            ).scalars()
-        }
+        q = sa.select(registry_agents.c.slug).where(
+            mine(registry_agents),
+            registry_agents.c.slug.like(f"{base}%"),
+            any_team(registry_agents, "a slug is unique across every team"),
+        )
+        # The team policy shows a team only its own rows; the slug is unique across the tenant's teams.
+        async with isolation.tenant_wide_on(c, UNIQUE_KEY) as wide:
+            taken = {str(s) for s in (await wide.execute(q)).scalars()}
         n, slug = 2, base
         while slug in taken:
             slug, n = f"{base}-{n}", n + 1

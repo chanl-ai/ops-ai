@@ -59,8 +59,8 @@ graph_threads = sa.Table(
 graph_versions = sa.Table(
     "graph_versions",
     metadata,
-    # The workflow's tenant (agents 0106); "local" until the registry stores write the caller's.
-    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant, server_default="local"),
+    # The workflow's tenant (agents 0106), with no default (agents 0109).
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant),
     sa.Column("name", sa.String(64), primary_key=True),
     sa.Column("version", sa.Integer, primary_key=True),
     sa.Column("digest", sa.String(64), nullable=False),
@@ -68,6 +68,7 @@ graph_versions = sa.Table(
     sa.Column("created_at", sa.String(32), nullable=False),
     # A digest is stored once per tenant.
     sa.UniqueConstraint("tenant_id", "digest", name="uq_graph_versions_tenant_digest"),
+    info=TENANT_SCOPED,
 )
 
 graph_runs = sa.Table(

@@ -61,13 +61,13 @@ BACKGROUND = {
     "service_events": "background process: the update notices of the account-level event workflows have no team and "
     "show to every team; every other event carries its team",
 }
-# Until the agents registry stores and their row policies land together (agents Migration C,
-# docs/architecture/migration/agents-registry-tenancy.md): then this list is empty.
-REGISTRY_UNTIL_POLICIES = {
-    "registry_publish_requests": "team_id is filled from the subject's team by agents 0106; the marking lands with "
-    "the policies, after deciding how a reviewer outside the owning team still reads the request",
+# Read by reviewers outside the owning team (the security team, for one), so the database holds it to its tenant and
+# the team is checked in code through can() (docs/architecture/migration/agents-registry-tenancy.md).
+REVIEWED_ACROSS_TEAMS = {
+    "registry_publish_requests": "a publish request is read by reviewers outside its subject's team; can() checks the "
+    "team, the tenant policy holds the tenant",
 }
-ALLOWED_TABLES = TENANT_HELD | TOOLS_UNTIL_C509 | BACKGROUND | REGISTRY_UNTIL_POLICIES
+ALLOWED_TABLES = TENANT_HELD | TOOLS_UNTIL_C509 | BACKGROUND | REVIEWED_ACROSS_TEAMS
 
 # Source lines allowed to mean "every team", each with its reason; the tools entries leave.
 ALLOWED_BRANCHES = {

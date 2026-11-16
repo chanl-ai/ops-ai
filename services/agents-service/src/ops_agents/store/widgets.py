@@ -16,22 +16,22 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import now_iso
-from ops_store import Guarantee
-from ops_store.schema import TEAM_OWNED, team_owned_via
+from ops_store import Guarantee, isolation
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 from ops_store.search import contains
 from ops_store.team_scope import any_team, team_visible
 
 from .agent_registry import digest_of
 from .base import metadata
 from .graphs import mine
-from .tenancy import OWNER, RuntimeStore, current_tenant
+from .tenancy import OWNER, UNIQUE_KEY, RuntimeStore, current_tenant
 
 registry_widgets = sa.Table(
     "registry_widgets",
     metadata,
-    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106). Leads the
+    # The tenant the row belongs to, the caller's on insert, with no default (agents 0109). Leads the
     # key (agents 0108): a widget id is a slug, so two tenants may choose the same one.
-    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant, server_default="local"),
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant),
     # The widget id agents pin, a slug of its first name (hold-review).
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("team_id", sa.String(64), nullable=False),
@@ -45,14 +45,14 @@ registry_widgets = sa.Table(
     sa.Column("created_at", sa.String(32), nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
     sa.Column("updated_by", sa.String(200), nullable=False),
-    info=TEAM_OWNED,
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 registry_widget_versions = sa.Table(
     "registry_widget_versions",
     metadata,
     # Its widget's tenant; the composite key below holds a version to a widget of the same tenant (agents 0108).
-    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant, server_default="local"),
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant),
     sa.Column("widget_id", sa.String(64), primary_key=True),
     sa.Column("version", sa.Integer, primary_key=True),
     sa.Column("content", sa.JSON, nullable=False),
@@ -70,7 +70,7 @@ registry_widget_versions = sa.Table(
         ondelete="CASCADE",
         onupdate="CASCADE",
     ),
-    info=team_owned_via("registry_widgets", "widget_id"),
+    info={**TENANT_SCOPED, **team_owned_via("registry_widgets", "widget_id")},
 )
 
 LABELS = {"name": "name", "useWhen": "use-when line", "tree": "layout", "dataSchema": "data schema", "sample": "sample"}
@@ -199,7 +199,10 @@ class WidgetRegistry(RuntimeStore):
                 registry_widgets.c.id == widget_id,
                 any_team(registry_widgets, "a widget id is unique across the tenant's teams"),
             )
-            if (await c.execute(taken)).first() is not None:
+            # The team policy shows a team only its own rows; the id is unique across the tenant's teams.
+            async with isolation.tenant_wide_on(c, UNIQUE_KEY) as wide:
+                held = (await wide.execute(taken)).first()
+            if held is not None:
                 raise Conflict(f"A widget with id {widget_id} exists; rename it.", code="widget_taken")
             await c.execute(
                 registry_widgets.insert().values(

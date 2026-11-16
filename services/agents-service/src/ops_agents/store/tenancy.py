@@ -45,6 +45,8 @@ MAIL_LISTENER = "mail_listener"  # the mailbox listener polls one tenant's bound
 RUN_RECONCILER = "run_reconciler"  # the run reconciler gives one tenant's run with nothing behind it its state
 TESTS = "tests"  # `tenant_scope`, which tests use to act for a tenant
 ASSISTANT_CATCH_UP = "assistant_catch_up"  # start-up: one tenant's Ops Assistants brought to the declared version
+UNIQUE_KEY = "unique_key"  # a chosen id or slug is checked against every team of the tenant before an insert
+TOOL_GRANTS = "tool_grants"  # a service reads every team's workflows to check a tool grant against their own team
 OWNER = "owner_team"  # a registry record's owning team, read across teams only to decide a refusal (`owner_teams`)
 
 # Why a path reads past the tenant (`isolation.system_tx`): only to find the tenant of what it claimed.

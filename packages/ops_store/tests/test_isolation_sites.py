@@ -56,6 +56,15 @@ WIDENINGS: dict[str, set[str]] = {
     # Whether the caller's tenant holds an agent and which of its teams owns it, before the serving catalogue (every
     # tenant's agents by id) serves it.
     "OWNER": {"services/agents-service/src/ops_agents/store/agent_registry.py"},
+    # Under the registry's team policy (agents 0109) a chosen agent slug, widget id or workflow id is checked against
+    # every team of the tenant before it is taken.
+    "UNIQUE_KEY": {
+        "services/agents-service/src/ops_agents/store/agent_registry.py",
+        "services/agents-service/src/ops_agents/store/widgets.py",
+        "services/agents-service/src/ops_agents/store/workflow_registry.py",
+    },
+    # A service checks a tool grant against the workflow's own team, so it reads every team's workflows.
+    "TOOL_GRANTS": {"services/agents-service/src/ops_agents/store/workflow_registry.py"},
     # The workflow worker reads every tenant's pending batch rows, then starts each in its own tenant and team.
     "BATCH_START": {"services/agents-service/src/ops_agents/store/batches.py"},
     # The operator preflight before agents 0106 reads every tenant's references and teams; it writes nothing.

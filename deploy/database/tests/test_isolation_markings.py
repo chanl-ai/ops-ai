@@ -18,26 +18,6 @@ from ops_store.schema import isolation_ddl, isolation_kind
 
 # Area -> tables the database does not isolate yet.
 WAITING: dict[str, set[str]] = {
-    "agents runtime": {
-        "channel_cursors",
-        "channel_messages",
-        "deployments",
-        "graph_versions",
-        "thread_inbox",
-    },
-    "agents registry": {
-        "registry_agent_versions",
-        "registry_agents",
-        "registry_guardrail_versions",
-        "registry_guardrails",
-        "registry_skill_versions",
-        "registry_skills",
-        "registry_validations",
-        "registry_widget_versions",
-        "registry_widgets",
-        "registry_workflow_versions",
-        "registry_workflows",
-    },
     "tools": {
         # A module with no team is read and called by every team, and the generated team policy reads only the
         # acting team's rows; it waits for a marking whose policy also reads the tenant's no-team rows.

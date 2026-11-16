@@ -17,7 +17,7 @@ from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
 from ops_store.dialect import locked
-from ops_store.schema import TEAM_OWNED, team_owned_via
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 from ops_store.search import contains
 from ops_store.team_scope import any_team, team_visible
 
@@ -28,8 +28,8 @@ from .tenancy import OWNER, RuntimeStore, current_tenant
 registry_guardrails = sa.Table(
     "registry_guardrails",
     metadata,
-    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
+    # The tenant the row belongs to, the caller's on insert, with no default (agents 0109).
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("slug", sa.String(120), nullable=False),
     sa.Column("name", sa.String(200), nullable=False),
@@ -47,14 +47,14 @@ registry_guardrails = sa.Table(
     # A guardrail's name is unique within its team only, so many teams can hold a copy of the same template.
     sa.UniqueConstraint("team_id", "slug", name="uq_registry_guardrails_team_slug"),
     sa.Index("ix_registry_guardrails_tenant_team", "tenant_id", "team_id"),
-    info=TEAM_OWNED,
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 registry_guardrail_versions = sa.Table(
     "registry_guardrail_versions",
     metadata,
-    # The tenant the row belongs to; "local" until the registry stores write the caller's (agents 0106).
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local"),
+    # The tenant the row belongs to, the caller's on insert, with no default (agents 0109).
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant),
     sa.Column(
         "guardrail_id", sa.String(64), sa.ForeignKey("registry_guardrails.id", ondelete="CASCADE"), primary_key=True
     ),
@@ -67,7 +67,7 @@ registry_guardrail_versions = sa.Table(
     sa.Column("published_at", sa.String(32)),
     sa.Column("published_by", sa.String(200)),
     sa.Column("review_id", sa.String(64)),
-    info=team_owned_via("registry_guardrails", "guardrail_id"),
+    info={**TENANT_SCOPED, **team_owned_via("registry_guardrails", "guardrail_id")},
 )
 
 
