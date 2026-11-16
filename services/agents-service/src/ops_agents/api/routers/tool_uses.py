@@ -3,7 +3,10 @@ agents.view in their team, or a service holding `agents:view` for the team its t
 
 An agent uses a tool its newest or published version grants (`toolIds`, operation names). A workflow uses it when it
 runs such an agent (the agent's "used in", `used_in_all`, v1 and v2 alike) or a published v1 workflow's tool step names
-it, or a v2 workflow's tool node does. Only the team's own agents and workflows are read: no team sees another's."""
+it, or a v2 workflow's tool node does. Only the team's own agents and workflows are read: no team sees another's.
+
+Every route here reads only this service's rows, so each answers in the request transaction (`Tx`): one connection, and
+one moment for the agents, workflows and versions it joins."""
 
 from __future__ import annotations
 
@@ -14,6 +17,7 @@ from fastapi.responses import JSONResponse
 
 from ops_access import can
 from ops_identity import CurrentTenantCaller
+from ops_identity.fastapi import Tx
 from ops_service_kit.http import Envelope, Out
 
 from ..account_names import account_uses_in
@@ -94,7 +98,7 @@ async def tool_uses(rt: Runtime, team_id: str | None, tools: list[str]) -> dict[
 
 @router.get("", response_model=Envelope[dict[str, list[ToolUser]]])
 async def list_tool_uses(
-    rt: Rt, caller: CurrentTenantCaller, tools: Annotated[str, Query(min_length=1, max_length=8000)]
+    rt: Rt, caller: CurrentTenantCaller, _: Tx, tools: Annotated[str, Query(min_length=1, max_length=8000)]
 ) -> JSONResponse:
     """`tools` is a comma-separated list of tool names (operation names); each comes back with its users."""
     team = None if caller.kind == "service" else caller.team_id
@@ -121,7 +125,7 @@ async def document_type_uses(rt: Runtime, types: list[str]) -> dict[str, list[di
 
 @document_type_router.get("", response_model=Envelope[dict[str, list[ToolUser]]])
 async def list_document_type_uses(
-    rt: Rt, caller: CurrentTenantCaller, types: Annotated[str, Query(min_length=1, max_length=8000)]
+    rt: Rt, caller: CurrentTenantCaller, _: Tx, types: Annotated[str, Query(min_length=1, max_length=8000)]
 ) -> JSONResponse:
     """`types` is a comma-separated list of document type ids; each comes back with the workflows that read it. A
     person with workflows.view in their team, or a service holding `workflows:view` for the team its token names."""
@@ -144,6 +148,7 @@ class AccountUsers(Out):
 async def list_account_uses(
     rt: Rt,
     caller: CurrentTenantCaller,
+    _: Tx,
     app: Annotated[str, Query(min_length=1, max_length=120)],
     name: Annotated[str, Query(min_length=1, max_length=200)],
 ) -> JSONResponse:

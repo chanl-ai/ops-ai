@@ -90,6 +90,9 @@ async def test_the_tool_and_step_up_routes_keep_every_key_value_and_error_object
 # and none is held while the other service answers.
 CHECKOUTS: list[tuple[str, str, dict[str, Any] | None, int]] = [
     ("POST", "/v1/team-assistant/app-tools", {"moduleIds": ["mod_nothing"]}, 6),
+    ("GET", "/v1/tool-uses?tools=place_wire_hold,get_customer_profile", None, 1),
+    ("GET", "/v1/document-type-uses?types=dt_missing", None, 1),
+    ("GET", "/v1/account-uses?app=salesforce&name=Main", None, 1),
 ]
 
 
