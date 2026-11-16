@@ -18,6 +18,11 @@ that has not changed still gets the same answer.
 | `GET /v1/files` | parameter `search` | string, default `""` | string or null, unset by default | Nothing | Yes |
 | `GET /v1/files` | `page` past the last page | an empty `data` with that page number | the last page, with its page number in `pagination.page` | Read `pagination.page` | Partly |
 | `GET /v1/files` | reply field `facets` | a value with no read-as type or read path counted under the key `"None"` | null values not counted | Do not read `facets.readAs.None` or `facets.readPath.None`; files with no reading are the total minus the counts | Partly |
+| `PUT /v1/files/{file_id}/data` | body schema name | `FileData`, also the reply's `data` | `FileDataIn`; the reply's `FileData` keeps the fields without the length and range limits | Nothing in the JSON; a generated-SDK caller names `FileDataIn` | Yes |
+| `PUT /v1/settings/storage`, `POST /v1/settings/storage/test` | body schema names | `StorageDocument`, `StorageTarget`, `PurposeLimit`, `PurposeRetention`, each also in the reply | `StorageDocumentIn`, `StorageTargetIn`, `PurposeLimitIn`, `PurposeRetentionIn`; the reply models keep their names without the body's limits | Nothing in the JSON; a generated-SDK caller of `settings_test_target` names `StorageTargetIn` | Yes |
+| `POST /v1/files/{file_id}/download-url` | body | `DownloadIn` or null, optional | `DownloadIn`, optional, `{}` when absent | Send no body or an object, not a JSON `null` (not tested either way) | Yes, for no body and an object |
+| `GET /v1/files` | reply schema of each row | `scan`, `retention`, `legalHold`, `storage` described as free objects | described as `FileScan`, `FileRetention`, `LegalHold`, `StorageLocation`, as on the detail | Nothing; the values are the same | Yes |
+| `GET /v1/settings/storage`, `PUT /v1/settings/storage` | reply schema of `retentionClasses` | free objects | `RetentionClassView` (`id`, `name`, `days`) | Nothing; the values are the same | Yes |
 
 ### Follow-ups for the SDK and console steps (files-service)
 
@@ -25,6 +30,7 @@ that has not changed still gets the same answer.
 |---|---|
 | `sdk/python/src/ops_ai/_cli/testdata.py:21` (`PAGE = 100`) | `_pages` stops when a page holds fewer than `PAGE` rows, so with the cap of 50 it reads only the first 50 test files; set `PAGE = 50` or stop on `pagination.hasNext` |
 | `sdk/python/src/ops_ai/_generated/files/operations.py`, `sdk/typescript/src/generated/files*.ts` | Regenerate: `files_list_files` gains `sortBy`, `sortOrder`, `ids`; `pageSize` loses its default and maximum |
+| Typed bodies and replies | The generated layer is regenerated in the same commit; no hand-written SDK noun, CLI verb or console file calls `files_set_file_data` or `settings_test_target`, and the console's own types in `apps/console/src/lib/types/files.ts` read the same JSON, so none must follow |
 | `apps/console/src/lib/api/files-service-http.ts:30` (`list`) | Send `sortBy`/`sortOrder` from the table's sort; keep `pageSize` at 50 or less |
 
 ## models-service

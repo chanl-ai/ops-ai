@@ -406,7 +406,7 @@ class Operations:
         "Get Content"
         return self._t.call(SERVICE, OPERATIONS["files_get_content"], {"file_id": file_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def files_set_file_data(self, file_id: str, body: FileData) -> FileDetail:
+    def files_set_file_data(self, file_id: str, body: FileDataIn) -> FileDetail:
         "Set File Data"
         return self._t.call(SERVICE, OPERATIONS["files_set_file_data"], {"file_id": file_id}, {}, {}, body)  # type: ignore[no-any-return]
 
@@ -468,7 +468,7 @@ class Operations:
         "Delete Credential"
         return self._t.call(SERVICE, OPERATIONS["settings_delete_credential"], {"name": name}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def settings_test_target(self, body: StorageTarget) -> ProbeResult:
+    def settings_test_target(self, body: StorageTargetIn) -> ProbeResult:
         "Test Target"
         return self._t.call(SERVICE, OPERATIONS["settings_test_target"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
@@ -614,7 +614,7 @@ class AsyncOperations:
         "Get Content"
         return await self._t.call(SERVICE, OPERATIONS["files_get_content"], {"file_id": file_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def files_set_file_data(self, file_id: str, body: FileData) -> FileDetail:
+    async def files_set_file_data(self, file_id: str, body: FileDataIn) -> FileDetail:
         "Set File Data"
         return await self._t.call(SERVICE, OPERATIONS["files_set_file_data"], {"file_id": file_id}, {}, {}, body)  # type: ignore[no-any-return]
 
@@ -676,6 +676,6 @@ class AsyncOperations:
         "Delete Credential"
         return await self._t.call(SERVICE, OPERATIONS["settings_delete_credential"], {"name": name}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def settings_test_target(self, body: StorageTarget) -> ProbeResult:
+    async def settings_test_target(self, body: StorageTargetIn) -> ProbeResult:
         "Test Target"
         return await self._t.call(SERVICE, OPERATIONS["settings_test_target"], {}, {}, {}, body)  # type: ignore[no-any-return]

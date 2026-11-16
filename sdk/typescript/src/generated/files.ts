@@ -705,11 +705,39 @@ export interface components {
         };
         /**
          * FileData
+         * @description What was recorded from a file, as FileDataIn took it.
+         */
+        FileData: {
+            /** Extractionid */
+            extractionId: string;
+            /** Fieldstocheck */
+            fieldsToCheck: number;
+            /**
+             * Path
+             * @enum {string}
+             */
+            path: "template" | "model";
+            /**
+             * Readat
+             * Format: date-time
+             */
+            readAt: string;
+            /** Templateid */
+            templateId?: string | null;
+            /** Typeid */
+            typeId?: string | null;
+            /** Typename */
+            typeName?: string | null;
+            /** Version */
+            version?: number | null;
+        };
+        /**
+         * FileDataIn
          * @description What was read from the file, as the extract workflow records it: the document type and version it was
          *     read as, whether a template or the model read it, how many fields wait for a person, and the extraction. A file read
          *     with Detect whose kind is none of the team's types has no type and no version: it was not recognised.
          */
-        FileData: {
+        FileDataIn: {
             /** Extractionid */
             extractionId: string;
             /** Fieldstocheck */
@@ -867,10 +895,7 @@ export interface components {
             id: string;
             /** Immutable */
             immutable: boolean;
-            /** Legalhold */
-            legalHold?: {
-                [key: string]: unknown;
-            } | null;
+            legalHold?: components["schemas"]["LegalHold"] | null;
             /** Mime */
             mime: string;
             /** Name */
@@ -882,24 +907,15 @@ export interface components {
             purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
             /** Referencecount */
             referenceCount: number;
-            /** Retention */
-            retention: {
-                [key: string]: unknown;
-            };
-            /** Scan */
-            scan: {
-                [key: string]: unknown;
-            };
+            retention: components["schemas"]["FileRetention"];
+            scan: components["schemas"]["FileScan"];
             /** Sensitivity */
             sensitivity: string;
             /** Sensitivitysuggested */
             sensitivitySuggested: boolean;
             /** Size */
             size: number;
-            /** Storage */
-            storage?: {
-                [key: string]: unknown;
-            } | null;
+            storage?: components["schemas"]["StorageLocation"] | null;
             /** Team */
             team: string;
             /** Uploadedat */
@@ -1039,8 +1055,30 @@ export interface components {
              */
             purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
         };
+        /** PurposeLimitIn */
+        PurposeLimitIn: {
+            /** Allowedtypes */
+            allowedTypes: string[];
+            /** Maxsizemb */
+            maxSizeMb: number;
+            /**
+             * Purpose
+             * @enum {string}
+             */
+            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+        };
         /** PurposeRetention */
         PurposeRetention: {
+            /**
+             * Purpose
+             * @enum {string}
+             */
+            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+            /** Retentionclass */
+            retentionClass: string;
+        };
+        /** PurposeRetentionIn */
+        PurposeRetentionIn: {
             /**
              * Purpose
              * @enum {string}
@@ -1110,6 +1148,15 @@ export interface components {
              */
             type: "source" | "case" | "chat" | "eval_set" | "test_set" | "evidence" | "export" | "tool_module";
         };
+        /** RetentionClassView */
+        RetentionClassView: {
+            /** Days */
+            days: number | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+        };
         /** ScanResultIn */
         ScanResultIn: {
             /** Detail */
@@ -1131,7 +1178,10 @@ export interface components {
             /** Reason */
             reason: string;
         };
-        /** StorageDocument */
+        /**
+         * StorageDocument
+         * @description A saved document, as StorageDocumentIn took it.
+         */
         StorageDocument: {
             /**
              * Downloadlinkseconds
@@ -1144,6 +1194,20 @@ export interface components {
             retention?: components["schemas"]["PurposeRetention"][];
             /** Targets */
             targets?: components["schemas"]["StorageTarget"][];
+        };
+        /** StorageDocumentIn */
+        StorageDocumentIn: {
+            /**
+             * Downloadlinkseconds
+             * @default 300
+             */
+            downloadLinkSeconds: number;
+            /** Limits */
+            limits?: components["schemas"]["PurposeLimitIn"][];
+            /** Retention */
+            retention?: components["schemas"]["PurposeRetentionIn"][];
+            /** Targets */
+            targets?: components["schemas"]["StorageTargetIn"][];
         };
         /** StorageLocation */
         StorageLocation: {
@@ -1179,7 +1243,7 @@ export interface components {
         };
         /** StorageSettingsInput */
         StorageSettingsInput: {
-            document: components["schemas"]["StorageDocument"];
+            document: components["schemas"]["StorageDocumentIn"];
             /** Version */
             version: number;
         };
@@ -1187,9 +1251,7 @@ export interface components {
         StorageSettingsView: {
             document: components["schemas"]["StorageDocument"];
             /** Retentionclasses */
-            retentionClasses: {
-                [key: string]: unknown;
-            }[];
+            retentionClasses: components["schemas"]["RetentionClassView"][];
             /** Scanning */
             scanning: string;
             /** Updatedat */
@@ -1201,9 +1263,50 @@ export interface components {
         };
         /**
          * StorageTarget
-         * @description Where one purpose's bytes go. `default` covers every purpose without its own target.
+         * @description A saved target, as StorageTargetIn took it.
          */
         StorageTarget: {
+            /**
+             * Backend
+             * @enum {string}
+             */
+            backend: "local" | "s3" | "azure_blob";
+            /** Container */
+            container: string;
+            /**
+             * Credential
+             * @default
+             */
+            credential: string;
+            /**
+             * Encryption
+             * @default
+             */
+            encryption: string;
+            /**
+             * Endpoint
+             * @default
+             */
+            endpoint: string;
+            /** Purpose */
+            purpose: ("knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar") | "default";
+            /**
+             * Region
+             * @default
+             */
+            region: string;
+            /**
+             * Uploadpath
+             * @default direct
+             * @enum {string}
+             */
+            uploadPath: "direct" | "proxy";
+        };
+        /**
+         * StorageTargetIn
+         * @description Where one purpose's bytes go. `default` covers every purpose without its own target.
+         */
+        StorageTargetIn: {
             /**
              * Backend
              * @enum {string}
@@ -2952,7 +3055,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["FileData"];
+                "application/json": components["schemas"]["FileDataIn"];
             };
         };
         responses: {
@@ -3086,7 +3189,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["DownloadIn"] | null;
+                "application/json": components["schemas"]["DownloadIn"];
             };
         };
         responses: {
@@ -4267,7 +4370,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["StorageTarget"];
+                "application/json": components["schemas"]["StorageTargetIn"];
             };
         };
         responses: {

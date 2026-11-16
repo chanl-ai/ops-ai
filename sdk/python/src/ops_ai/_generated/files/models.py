@@ -89,6 +89,17 @@ class FileData(TypedDict, closed=True):
     version: NotRequired[int | None]
 
 
+class FileDataIn(TypedDict, closed=True):
+    extractionId: str
+    fieldsToCheck: int
+    path: Literal["template", "model"]
+    readAt: str
+    templateId: NotRequired[str | None]
+    typeId: NotRequired[str | None]
+    typeName: NotRequired[str | None]
+    version: NotRequired[int | None]
+
+
 class FileReference(TypedDict, closed=True):
     addedAt: str
     blocked: NotRequired[str | None]
@@ -111,40 +122,6 @@ class FileRetention(TypedDict, closed=True):
     classId: str
     className: str
     deleteAfter: NotRequired[str | None]
-
-
-class FileRow(TypedDict, closed=True):
-    data: NotRequired[FileData | None]
-    digest: str
-    id: str
-    immutable: bool
-    legalHold: NotRequired[dict[str, Any] | None]
-    mime: str
-    name: str
-    purpose: Literal[
-        "knowledge_source",
-        "chat_attachment",
-        "case_attachment",
-        "document_type_sample",
-        "email_body",
-        "knowledge_snapshot",
-        "test_import",
-        "evidence_bundle",
-        "export",
-        "tool_spec",
-        "avatar",
-    ]
-    referenceCount: int
-    retention: dict[str, Any]
-    scan: dict[str, Any]
-    sensitivity: str
-    sensitivitySuggested: bool
-    size: int
-    storage: NotRequired[dict[str, Any] | None]
-    team: str
-    uploadedAt: str
-    uploadedBy: str
-    versionCount: int
 
 
 class FileScan(TypedDict, closed=True):
@@ -225,7 +202,42 @@ class PurposeLimit(TypedDict, closed=True):
     ]
 
 
+class PurposeLimitIn(TypedDict, closed=True):
+    allowedTypes: list[str]
+    maxSizeMb: int
+    purpose: Literal[
+        "knowledge_source",
+        "chat_attachment",
+        "case_attachment",
+        "document_type_sample",
+        "email_body",
+        "knowledge_snapshot",
+        "test_import",
+        "evidence_bundle",
+        "export",
+        "tool_spec",
+        "avatar",
+    ]
+
+
 class PurposeRetention(TypedDict, closed=True):
+    purpose: Literal[
+        "knowledge_source",
+        "chat_attachment",
+        "case_attachment",
+        "document_type_sample",
+        "email_body",
+        "knowledge_snapshot",
+        "test_import",
+        "evidence_bundle",
+        "export",
+        "tool_spec",
+        "avatar",
+    ]
+    retentionClass: str
+
+
+class PurposeRetentionIn(TypedDict, closed=True):
     purpose: Literal[
         "knowledge_source",
         "chat_attachment",
@@ -278,6 +290,12 @@ class ReferenceIn(TypedDict, closed=True):
     ]
 
 
+class RetentionClassView(TypedDict, closed=True):
+    days: int | None
+    id: str
+    name: str
+
+
 class ScanResultIn(TypedDict, closed=True):
     detail: NotRequired[str | None]
     engine: str
@@ -301,6 +319,32 @@ class StorageLocation(TypedDict, closed=True):
 
 
 class StorageTarget(TypedDict, closed=True):
+    backend: Literal["local", "s3", "azure_blob"]
+    container: str
+    credential: NotRequired[str]
+    encryption: NotRequired[str]
+    endpoint: NotRequired[str]
+    purpose: (
+        Literal[
+            "knowledge_source",
+            "chat_attachment",
+            "case_attachment",
+            "document_type_sample",
+            "email_body",
+            "knowledge_snapshot",
+            "test_import",
+            "evidence_bundle",
+            "export",
+            "tool_spec",
+            "avatar",
+        ]
+        | Literal["default"]
+    )
+    region: NotRequired[str]
+    uploadPath: NotRequired[Literal["direct", "proxy"]]
+
+
+class StorageTargetIn(TypedDict, closed=True):
     backend: Literal["local", "s3", "azure_blob"]
     container: str
     credential: NotRequired[str]
@@ -436,11 +480,38 @@ class FileDetail(TypedDict, closed=True):
     versions: NotRequired[list[FileVersion]]
 
 
-class FileList(TypedDict, closed=True):
-    data: list[FileRow]
-    facets: dict[str, dict[str, int]]
-    pagination: Pagination
-    viewCounts: dict[str, int]
+class FileRow(TypedDict, closed=True):
+    data: NotRequired[FileData | None]
+    digest: str
+    id: str
+    immutable: bool
+    legalHold: NotRequired[LegalHold | None]
+    mime: str
+    name: str
+    purpose: Literal[
+        "knowledge_source",
+        "chat_attachment",
+        "case_attachment",
+        "document_type_sample",
+        "email_body",
+        "knowledge_snapshot",
+        "test_import",
+        "evidence_bundle",
+        "export",
+        "tool_spec",
+        "avatar",
+    ]
+    referenceCount: int
+    retention: FileRetention
+    scan: FileScan
+    sensitivity: str
+    sensitivitySuggested: bool
+    size: int
+    storage: NotRequired[StorageLocation | None]
+    team: str
+    uploadedAt: str
+    uploadedBy: str
+    versionCount: int
 
 
 class ProbeResult(TypedDict, closed=True):
@@ -455,14 +526,21 @@ class StorageDocument(TypedDict, closed=True):
     targets: NotRequired[list[StorageTarget]]
 
 
+class StorageDocumentIn(TypedDict, closed=True):
+    downloadLinkSeconds: NotRequired[int]
+    limits: NotRequired[list[PurposeLimitIn]]
+    retention: NotRequired[list[PurposeRetentionIn]]
+    targets: NotRequired[list[StorageTargetIn]]
+
+
 class StorageSettingsInput(TypedDict, closed=True):
-    document: StorageDocument
+    document: StorageDocumentIn
     version: int
 
 
 class StorageSettingsView(TypedDict, closed=True):
     document: StorageDocument
-    retentionClasses: list[dict[str, Any]]
+    retentionClasses: list[RetentionClassView]
     scanning: str
     updatedAt: str | None
     updatedBy: str | None
@@ -484,11 +562,6 @@ class EnvelopeFileDetail(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeFileList(TypedDict, closed=True):
-    data: FileList
-    success: Literal[True]
-
-
 class EnvelopeProbeResult(TypedDict, closed=True):
     data: ProbeResult
     success: Literal[True]
@@ -496,4 +569,16 @@ class EnvelopeProbeResult(TypedDict, closed=True):
 
 class EnvelopeStorageSettingsView(TypedDict, closed=True):
     data: StorageSettingsView
+    success: Literal[True]
+
+
+class FileList(TypedDict, closed=True):
+    data: list[FileRow]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+    viewCounts: dict[str, int]
+
+
+class EnvelopeFileList(TypedDict, closed=True):
+    data: FileList
     success: Literal[True]

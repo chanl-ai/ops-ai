@@ -8,8 +8,9 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import ConfigDict, Field
+
+from ops_service_kit.http import In, Out
 
 FilePurpose = Literal[
     "knowledge_source",
@@ -37,11 +38,7 @@ FileReferenceType = Literal["source", "case", "chat", "eval_set", "test_set", "e
 FileStatus = Literal["uploading", "available", "rejected"]
 
 
-class Model(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
-
-
-class StorageLocation(Model):
+class StorageLocation(Out):
     backend: StorageBackendName
     environment: StorageEnvironment
     container: str
@@ -51,7 +48,7 @@ class StorageLocation(Model):
     locked: bool = False
 
 
-class FileReference(Model):
+class FileReference(Out):
     type: FileReferenceType
     id: str
     name: str
@@ -60,7 +57,7 @@ class FileReference(Model):
     blocked: str | None = None
 
 
-class FileVersion(Model):
+class FileVersion(Out):
     version: int
     digest: str
     size: int
@@ -69,26 +66,26 @@ class FileVersion(Model):
     current: bool
 
 
-class FileScan(Model):
+class FileScan(Out):
     status: ScanStatus = "pending"
     engine: str | None = None
     at: datetime | None = None
     detail: str | None = None
 
 
-class FileRetention(Model):
+class FileRetention(Out):
     class_id: str
     class_name: str
     delete_after: date | None = None
 
 
-class LegalHold(Model):
+class LegalHold(Out):
     by: str
     at: datetime
     reason: str
 
 
-class FileData(Model):
+class FileDataIn(In):
     """What was read from the file, as the extract workflow records it: the document type and version it was
     read as, whether a template or the model read it, how many fields wait for a person, and the extraction. A file read
     with Detect whose kind is none of the team's types has no type and no version: it was not recognised."""
@@ -104,7 +101,20 @@ class FileData(Model):
     read_at: datetime
 
 
-class ReadRequestIn(Model):
+class FileData(Out):
+    """What was recorded from a file, as FileDataIn took it."""
+
+    type_id: str | None = None
+    type_name: str | None = None
+    version: int | None = None
+    path: Literal["template", "model"]
+    template_id: str | None = None
+    fields_to_check: int
+    extraction_id: str
+    read_at: datetime
+
+
+class ReadRequestIn(In):
     """Read the file with a team's document type, the newest version when none is named; with no type, the file
     is classified over the team's types and read with the one found (Detect)."""
 
@@ -118,7 +128,7 @@ class ReadRequestIn(Model):
     max_pages: int | None = Field(default=None, ge=1)
 
 
-class ReadRequest(Model):
+class ReadRequest(Out):
     """A read request and the system extract run it started, once the event was delivered."""
 
     key: str
@@ -131,7 +141,7 @@ class ReadRequest(Model):
     requested_at: datetime
 
 
-class FileRecord(Model):
+class FileRecord(Out):
     id: str
     name: str
     mime: str
@@ -166,7 +176,10 @@ class FileDetail(FileRecord):
 
 
 class StoredFile(FileDetail):
-    """What the repository keeps: the detail plus upload state the API does not return."""
+    """What the repository keeps: the detail plus upload state the API does not return. Never a reply, and changed in
+    place by FileService as an upload completes, so it is not frozen as the detail is."""
+
+    model_config = ConfigDict(frozen=False)
 
     status: FileStatus = "uploading"
     declared_size: int
@@ -174,7 +187,7 @@ class StoredFile(FileDetail):
     upload_expires_at: datetime | None = None
 
 
-class UploadRequest(Model):
+class UploadRequest(In):
     name: str
     size: int = Field(gt=0)
     mime: str
@@ -185,7 +198,7 @@ class UploadRequest(Model):
     sensitivity: FileSensitivity = "internal"
 
 
-class UploadTicket(Model):
+class UploadTicket(Out):
     file_id: str
     upload_url: str
     method: Literal["PUT"]
@@ -193,18 +206,18 @@ class UploadTicket(Model):
     expires_at: datetime
 
 
-class CompletedUpload(Model):
+class CompletedUpload(Out):
     file: FileDetail
     deduplicated: bool
 
 
-class DownloadLink(Model):
+class DownloadLink(Out):
     url: str
     expires_at: datetime
     ttl_seconds: int
 
 
-class RetentionClass(Model):
+class RetentionClass(Out):
     id: str
     name: str
     days: int | None
@@ -216,7 +229,13 @@ class RetentionClass(Model):
     after_release: bool = False
 
 
-class PurposeLimit(Model):
+class PurposeLimit(Out):
+    purpose: FilePurpose
+    allowed_types: list[str]
+    max_size_mb: int
+
+
+class PurposeLimitIn(In):
     purpose: FilePurpose
     allowed_types: list[str]
     max_size_mb: int

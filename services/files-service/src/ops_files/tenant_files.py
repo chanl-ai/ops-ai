@@ -24,6 +24,7 @@ from ops_files.models import (
     CompletedUpload,
     DownloadLink,
     FileData,
+    FileDataIn,
     FileDetail,
     FilePurpose,
     FileReference,
@@ -269,7 +270,7 @@ class TenantFiles:
             raise FileMissingError(key)
         return _read_request(found)
 
-    async def set_data(self, who: Who, file_id: str, data: FileData) -> FileDetail:
+    async def set_data(self, who: Who, file_id: str, data: FileDataIn) -> FileDetail:
         """Records what was read from an available file of the caller's team, replacing what was recorded before. For
         the same extraction the fields to check never rise again: the read's own save (extraction.read) can
         arrive after a workflow saved it checked or a correction lowered the count, and must not put fields back."""

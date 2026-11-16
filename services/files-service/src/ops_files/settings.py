@@ -28,10 +28,11 @@ from azure.storage.blob import BlobServiceClient
 from obstore.store import AzureStore, S3Store
 from pydantic import Field, model_validator
 
-from ops_files.models import FilePurpose, Model, PurposeLimit
+from ops_files.models import FilePurpose, PurposeLimit, PurposeLimitIn
 from ops_files.secrets import FIELDS, CredentialCipher, CredentialKind
 from ops_files.service import FilesConfig
 from ops_files.store.settings import SavedSettings, SettingsStore
+from ops_service_kit.http import In, Out
 from ops_service_kit.logging import get_logger
 from ops_storage.azure_blob import AzureBlobConfig, AzureBlobObjectStore
 from ops_storage.base import StreamingObjectStore
@@ -46,7 +47,7 @@ PROBE_KEY = "ops-files-probe/{nonce}"
 _CACHE_SECONDS = 5.0
 
 
-class StorageTarget(Model):
+class StorageTargetIn(In):
     """Where one purpose's bytes go. `default` covers every purpose without its own target."""
 
     purpose: TargetPurpose
@@ -64,30 +65,48 @@ class StorageTarget(Model):
     encryption: str = ""
 
     @model_validator(mode="after")
-    def _credential_needed(self) -> StorageTarget:
+    def _credential_needed(self) -> StorageTargetIn:
         if self.backend != "local" and not self.credential:
             raise ValueError(f"the {self.purpose} target needs a credential to sign in to {self.backend}")
         return self
+
+
+class StorageTarget(Out):
+    """A saved target, as StorageTargetIn took it."""
+
+    purpose: TargetPurpose
+    backend: BackendName
+    container: str
+    region: str = ""
+    endpoint: str = ""
+    credential: str = ""
+    upload_path: Literal["direct", "proxy"] = "direct"
+    encryption: str = ""
 
     @property
     def location(self) -> tuple[str, str]:
         return (self.backend, self.container)
 
 
-class PurposeRetention(Model):
+class PurposeRetentionIn(In):
     purpose: FilePurpose
     retention_class: str
 
 
-class StorageDocument(Model):
-    targets: list[StorageTarget] = Field(default_factory=list[StorageTarget])
-    limits: list[PurposeLimit] = Field(default_factory=list[PurposeLimit])
-    retention: list[PurposeRetention] = Field(default_factory=list[PurposeRetention])
+class PurposeRetention(Out):
+    purpose: FilePurpose
+    retention_class: str
+
+
+class StorageDocumentIn(In):
+    targets: list[StorageTargetIn] = Field(default_factory=list[StorageTargetIn])
+    limits: list[PurposeLimitIn] = Field(default_factory=list[PurposeLimitIn])
+    retention: list[PurposeRetentionIn] = Field(default_factory=list[PurposeRetentionIn])
     # How long a signed download link lasts, at most what the backends sign.
     download_link_seconds: int = Field(300, ge=30, le=3600)
 
     @model_validator(mode="after")
-    def _one_each(self) -> StorageDocument:
+    def _one_each(self) -> StorageDocumentIn:
         for what, keys in (
             ("target", [t.purpose for t in self.targets]),
             ("limit", [x.purpose for x in self.limits]),
@@ -99,35 +118,50 @@ class StorageDocument(Model):
             raise ValueError("name a default target for the purposes without their own")
         return self
 
+
+class StorageDocument(Out):
+    """A saved document, as StorageDocumentIn took it."""
+
+    targets: list[StorageTarget] = Field(default_factory=list[StorageTarget])
+    limits: list[PurposeLimit] = Field(default_factory=list[PurposeLimit])
+    retention: list[PurposeRetention] = Field(default_factory=list[PurposeRetention])
+    download_link_seconds: int = 300
+
     def target_for(self, purpose: str) -> StorageTarget | None:
         return next((t for t in self.targets if t.purpose == purpose), None) or next(
             (t for t in self.targets if t.purpose == "default"), None
         )
 
 
-class StorageSettingsView(Model):
+class RetentionClassView(Out):
+    id: str
+    name: str
+    days: int | None
+
+
+class StorageSettingsView(Out):
     version: int
     updated_by: str | None
     updated_at: datetime | None
     document: StorageDocument
     # Scanning is a deployment setting (files-service-design Q4), shown and never changed here.
     scanning: str
-    retention_classes: list[dict[str, Any]]
+    retention_classes: list[RetentionClassView]
 
 
-class StorageSettingsInput(Model):
+class StorageSettingsInput(In):
     version: int = Field(ge=0)
-    document: StorageDocument
+    document: StorageDocumentIn
 
 
-class CredentialView(Model):
+class CredentialView(Out):
     name: str
     kind: CredentialKind
     set_by: str
     set_at: datetime
 
 
-class CredentialInput(Model):
+class CredentialInput(In):
     kind: CredentialKind
     # The values the kind needs (FIELDS); write-only.
     values: dict[str, str]
@@ -143,13 +177,13 @@ class CredentialInput(Model):
         return self
 
 
-class ProbeStep(Model):
+class ProbeStep(Out):
     label: str
     ok: bool
     detail: str
 
 
-class ProbeResult(Model):
+class ProbeResult(Out):
     ok: bool
     steps: list[ProbeStep]
 
@@ -362,7 +396,9 @@ class StorageSettings:
             updated_at=saved.updated_at if saved else None,
             document=await self.document(tenant),
             scanning=self._scanning,
-            retention_classes=[{"id": r.id, "name": r.name, "days": r.days} for r in self._defaults.retention_classes],
+            retention_classes=[
+                RetentionClassView(id=r.id, name=r.name, days=r.days) for r in self._defaults.retention_classes
+            ],
         )
 
     async def config_for(self, tenant: str) -> FilesConfig:
@@ -419,8 +455,9 @@ class StorageSettings:
 
     async def save(self, tenant: str, body: StorageSettingsInput, *, by: str) -> StorageSettingsView:
         before = await self.document(tenant)
+        document = StorageDocument.model_validate(body.document.model_dump())
         old = {t.purpose: t for t in before.targets}
-        for target in body.document.targets:
+        for target in document.targets:
             if target.backend != "local" and await self._store.credential(target.credential) is None:
                 raise UnknownCredentialError(
                     f"the {target.purpose} target names {target.credential}, which is not a storage credential"
@@ -429,18 +466,16 @@ class StorageSettings:
                 result = await self.test(tenant, target)
                 if not result.ok:
                     raise ProbeFailedError(target.purpose, result)
-        kept = {t.location for t in body.document.targets} | {
-            (self._default.store.backend, self._default.store.container)
-        }
+        kept = {t.location for t in document.targets} | {(self._default.store.backend, self._default.store.container)}
         used = await self._store.locations_in_use()
         if stranded := sorted(used - kept):
             raise TargetInUseError(f"{stranded[0][0]}/{stranded[0][1]} still holds files; keep a target on it")
         saved = await self._store.save(
             base_version=body.version,
-            document=body.document.model_dump(mode="json", by_alias=True),
+            document=document.model_dump(mode="json", by_alias=True),
             by=by,
             at=self._clock(),
-            detail=_changes(before, body.document),
+            detail=_changes(before, document),
         )
         self._cache[tenant] = (time.monotonic(), saved)
         return await self.view(tenant)

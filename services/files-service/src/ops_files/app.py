@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, FastAPI, Header, Query, Request, Response
+from fastapi import APIRouter, Body, Depends, FastAPI, Header, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import Field
@@ -27,13 +27,17 @@ from ops_files.models import (
     CompletedUpload,
     DownloadLink,
     FileData,
+    FileDataIn,
     FileDetail,
     FilePurpose,
     FileReferenceType,
-    Model,
+    FileRetention,
+    FileScan,
+    LegalHold,
     PurposeLimit,
     ReadRequest,
     ReadRequestIn,
+    StorageLocation,
     UploadRequest,
     UploadTicket,
 )
@@ -63,6 +67,7 @@ from ops_files.settings import (
     StorageSettingsInput,
     StorageSettingsView,
     StorageTarget,
+    StorageTargetIn,
     TargetInUseError,
     UnknownCredentialError,
 )
@@ -116,7 +121,7 @@ class Health(Out):
     reason: str | None = None
 
 
-class FileRow(Model):
+class FileRow(Out):
     """A list row: the file record without versions and references."""
 
     id: str
@@ -128,15 +133,15 @@ class FileRow(Model):
     team: str
     uploaded_by: str
     uploaded_at: str
-    scan: dict[str, Any]
+    scan: FileScan
     sensitivity: str
     sensitivity_suggested: bool
-    retention: dict[str, Any]
+    retention: FileRetention
     immutable: bool
     reference_count: int
     version_count: int
-    legal_hold: dict[str, Any] | None = None
-    storage: dict[str, Any] | None = None
+    legal_hold: LegalHold | None = None
+    storage: StorageLocation | None = None
     # What was read from the file, so the list's "read as" column needs no call per row.
     data: FileData | None = None
 
@@ -149,6 +154,10 @@ class FileList(ListResult[FileRow]):
 
 class DownloadIn(In):
     ttl_seconds: int | None = None
+
+
+# The body is optional: a link asked for with none lasts the tenant's longest.
+_NO_TTL = DownloadIn()
 
 
 class LegalHoldIn(In):
@@ -172,7 +181,7 @@ class BulkDeleteIn(In):
     ids: list[str] = Field(min_length=1, max_length=100)
 
 
-class UploadLimits(Model):
+class UploadLimits(Out):
     per_purpose: list[PurposeLimit]
     scanning: bool
 
@@ -353,10 +362,11 @@ def create_files_app(
         response_model_exclude_none=True,
         responses={503: {"model": Health}},
     )
-    async def health() -> dict[str, str] | JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def health(response: Response) -> Health:  # pyright: ignore[reportUnusedFunction]
         if not await reachable(engine):
-            return JSONResponse({"status": "degraded", "reason": "database"}, status_code=503)
-        return {"status": "ok"}
+            response.status_code = 503
+            return Health(status="degraded", reason="database")
+        return Health(status="ok")
 
     @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
     async def health_background() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
@@ -373,7 +383,9 @@ def create_files_app(
         on Tx: the rows are read in one transaction and written in another, with none open while the URL is signed
         (tests/test_request_transactions.py)."""
         ticket = await files.create_upload(who, body, idempotency_key=idempotency_key)
-        ticket.upload_url = _absolute(request, ticket.upload_url, config.files_public_url)
+        ticket = ticket.model_copy(
+            update={"upload_url": _absolute(request, ticket.upload_url, config.files_public_url)}
+        )
         return ok(ticket.model_dump(mode="json", by_alias=True), 201)
 
     @public.put("/uploads/{file_id}/content", status_code=204, response_class=Response)
@@ -446,7 +458,7 @@ def create_files_app(
         return ok((await files.read_request(who, file_id, key)).model_dump(mode="json", by_alias=True))
 
     @public.put("/{file_id}/data", response_model=Envelope[FileDetail], dependencies=[service_scope("edit")])
-    async def set_file_data(file_id: str, body: FileData, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def set_file_data(file_id: str, body: FileDataIn, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Records what was read from the file: its document type and version, template or model, how many fields
         wait for a person, and the extraction. The extract workflow's step writes it; files-service calls no
         other service for it."""
@@ -494,12 +506,12 @@ def create_files_app(
 
     @public.post("/{file_id}/download-url", response_model=Envelope[DownloadLink])
     async def download_url(  # pyright: ignore[reportUnusedFunction]
-        file_id: str, request: Request, who: Caller, body: DownloadIn | None = None
+        file_id: str, request: Request, who: Caller, body: Annotated[DownloadIn, Body()] = _NO_TTL
     ) -> JSONResponse:
         """A short-lived link; 423 until the file is scanned clean. Not on Tx: no transaction is open while the link
         is signed."""
-        link = await files.download_url(who, file_id, expires_in=body.ttl_seconds if body else None)
-        link.url = _absolute(request, link.url, config.files_public_url)
+        link = await files.download_url(who, file_id, expires_in=body.ttl_seconds)
+        link = link.model_copy(update={"url": _absolute(request, link.url, config.files_public_url)})
         return ok(link.model_dump(mode="json", by_alias=True))
 
     @public.get("/{file_id}/content", response_class=StreamingResponse, dependencies=[service_scope("view")])
@@ -644,9 +656,10 @@ def _settings_router(settings: StorageSettings) -> APIRouter:
         return ok(view.model_dump(mode="json", by_alias=True))
 
     @router.post("/test", response_model=Envelope[ProbeResult])
-    async def test_target(body: StorageTarget, who: StorageAdmin) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def test_target(body: StorageTargetIn, who: StorageAdmin) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Writes, reads and deletes a small object on the target with its credential; saves nothing."""
-        return ok((await settings.test(who.tenant_id, body)).model_dump(mode="json", by_alias=True))
+        target = StorageTarget.model_validate(body.model_dump())
+        return ok((await settings.test(who.tenant_id, target)).model_dump(mode="json", by_alias=True))
 
     @router.get("/credentials", response_model=Envelope[list[CredentialView]])
     async def list_credentials(who: StorageAdmin, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
