@@ -84,6 +84,12 @@ SYSTEM_USERS: dict[str, tuple[str, Grants]] = {
         "ops_files_system",
         {"files_outbox": (("SELECT", "UPDATE", "DELETE"), ()), "files": (("SELECT",), ())},
     ),
+    # kb: the relay, and the listing of every tenant holding a source that the schedule, the embedding backlog and the
+    # start-up move read (kb_0011, kb_0014, kb_0026).
+    "kb": (
+        "ops_kb_system",
+        {"kb_sources": (("SELECT",), ()), "kb_outbox": (("SELECT", "UPDATE", "DELETE"), ())},
+    ),
     "documents": (
         "ops_documents_system",
         {

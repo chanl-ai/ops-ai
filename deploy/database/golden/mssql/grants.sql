@@ -150,6 +150,12 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.kb_chunks TO ops_kb_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.kb_units TO ops_kb_runtime;
 GRANT SELECT ON dbo.alembic_version_kb TO ops_kb_runtime;
 GO
+IF USER_ID(N'ops_kb_system') IS NULL CREATE USER ops_kb_system WITHOUT LOGIN;
+GO
+GRANT SELECT ON dbo.kb_sources TO ops_kb_system;
+GRANT SELECT, UPDATE, DELETE ON dbo.kb_outbox TO ops_kb_system;
+GRANT IMPERSONATE ON USER::ops_kb_system TO ops_kb_runtime;
+GO
 -- platform-service
 IF USER_ID(N'ops_platform_runtime') IS NULL CREATE USER ops_platform_runtime FOR LOGIN ops_platform_runtime WITH DEFAULT_SCHEMA = dbo;
 GO
