@@ -98,7 +98,7 @@ members = sa.Table(
     sa.Column("team_id", sa.String(64), nullable=False, index=True),
     sa.Column("user_id", sa.String(64)),  # null while invited
     sa.Column("email", sa.String(320), nullable=False),
-    sa.Column("role", sa.String(16), nullable=False, info=LISTED),  # admin | builder | approver | viewer
+    sa.Column("role", sa.String(16), nullable=False, info=LISTED),  # a key of ops_access MEMBER_ROLE_TO_BUILTIN
     sa.Column("status", sa.String(16), nullable=False, info=LISTED),  # active | invited | removed
     sa.Column("invite_token_hash", sa.String(64), unique=True),
     sa.Column("invite_expires_at", sa.String(40)),

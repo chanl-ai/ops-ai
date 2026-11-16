@@ -7,6 +7,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints, model_validator
 
+from ops_access.catalogue import INVITE_ROLES
 from ops_service_kit.flags import FlagName
 from ops_service_kit.http import In, ListResult, Out
 
@@ -131,7 +132,8 @@ class Health(Out):
     status: str
 
 
-ROLE = r"^(admin|builder|approver|viewer)$"
+# The membership roles an invite or a role change may give, from the catalogue (Chat user among them, E31).
+ROLE = rf"^({'|'.join(INVITE_ROLES)})$"
 MEMBER_ID = r"^mem_[A-Za-z0-9_-]{1,60}$"
 EMAIL = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 

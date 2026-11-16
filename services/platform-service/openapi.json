@@ -2738,7 +2738,7 @@
             "type": "array"
           },
           "role": {
-            "pattern": "^(admin|builder|approver|viewer)$",
+            "pattern": "^(admin|builder|approver|viewer|chat_user)$",
             "title": "Role",
             "type": "string"
           }
@@ -4779,7 +4779,7 @@
             "type": "array"
           },
           "role": {
-            "pattern": "^(admin|builder|approver|viewer)$",
+            "pattern": "^(admin|builder|approver|viewer|chat_user)$",
             "title": "Role",
             "type": "string"
           }

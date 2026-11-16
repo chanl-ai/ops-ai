@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from ops_access import ANY_TEAM
+from ops_access.catalogue import BUILTIN_ROLES, MEMBER_ROLE_TO_BUILTIN
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.listing import ListParams
 
@@ -14,8 +15,10 @@ from .store.audit import EVERYTHING_BUT, KIND, VIEWS, AuditEntryRow, AuditLog
 from .store.members import Actor, TeamStore
 from .teams import Members
 
-# People read reviewer for the stored `approver` (roles-and-permissions, open question 1).
-ROLE_LABEL = {"admin": "admin", "builder": "builder", "approver": "reviewer", "viewer": "viewer"}
+# A stored membership role as people read it: its built-in role's name, so `approver` reads "reviewer" and
+# `chat_user` reads "chat user" (roles-and-permissions, open question 1).
+_NAMES = {r.id: r.name.lower() for r in BUILTIN_ROLES}
+ROLE_LABEL = {member: _NAMES[builtin] for member, builtin in MEMBER_ROLE_TO_BUILTIN.items()}
 
 
 def words(key: object) -> str:
