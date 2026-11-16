@@ -1,0 +1,3 @@
+# platform-service: install-wide blocks by reason and declared tables, and blocks that declare none
+# (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
+3 SIGNIN_LOCKOUT signin_email_failures

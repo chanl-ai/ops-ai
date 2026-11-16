@@ -18,7 +18,6 @@ from ops_store.schema import isolation_ddl, isolation_kind
 
 # Area -> tables the database does not isolate yet.
 WAITING: dict[str, set[str]] = {
-    "platform sign-in": {"signin_email_failures"},
     "agents runtime": {
         "channel_cursors",
         "channel_files",

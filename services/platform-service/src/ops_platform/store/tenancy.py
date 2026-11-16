@@ -33,7 +33,9 @@ SIGNIN_LOOKUP = "signin_lookup"  # people by email, a sign-in domain, an SSO flo
 SESSION_LOOKUP = "session_lookup"  # a session by id
 KEY_LOOKUP = "key_lookup"  # an API key by its id
 INVITE_LOOKUP = "invite_lookup"  # an invitation by its token hash
-SIGNIN_LOCKOUT = "signin_lockout"  # failed sign-ins counted by email hash (signin_email_failures holds no tenant)
+# Failed sign-ins counted by email hash: `signin_email_failures` is the install's own table (`system(...)`), reached
+# through `install_tx` with no tenant.
+SIGNIN_LOCKOUT = "signin_lockout"
 RESET_LOOKUP = "reset_lookup"  # a password reset by its token hash
 SIGNIN_WATCH = "signin_watch"  # the SAML providers of open workspaces, for the daily certificate watch
 PURGE_LOOKUP = "purge_lookup"  # workspaces closed longer than the restore window, for the purge loop

@@ -507,6 +507,7 @@ signin_email_failures = sa.Table(
     sa.Column("failures", sa.Integer, nullable=False),
     sa.Column("first_failed_at", sa.String(40), nullable=False),
     sa.Column("locked_until", sa.String(40)),
+    info=system("sign-in names no workspace, so wrong passwords are counted per address for the whole install"),
 )
 
 # Assistants that registered themselves at /oauth/register (migration 0035). Registration happens before anyone signs

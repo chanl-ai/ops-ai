@@ -514,7 +514,7 @@ class SignInStore(TenantDb):
     async def email_locked_until(self, email_hash: str, *, now: str) -> str | None:
         """When sign-in for this address stops refusing, while it is locked; None when it is not."""
         t = signin_email_failures
-        async with self.system_tx(SIGNIN_LOCKOUT) as c:
+        async with self.install_tx(SIGNIN_LOCKOUT, tables=(signin_email_failures,)) as c:
             until = (await c.execute(sa.select(t.c.locked_until).where(t.c.email_hash == email_hash))).scalar()
         return str(until) if until and str(until) > now else None
 
@@ -525,7 +525,7 @@ class SignInStore(TenantDb):
         not the address has an account. Returns whether this one locked it."""
         t = signin_email_failures
         stale = t.c.first_failed_at < window_start
-        async with self.system_tx(SIGNIN_LOCKOUT) as c:
+        async with self.install_tx(SIGNIN_LOCKOUT, tables=(signin_email_failures,)) as c:
             failures = (
                 await c.execute(
                     insert(t)
@@ -550,7 +550,7 @@ class SignInStore(TenantDb):
         return True
 
     async def clear_email_failures(self, email_hash: str) -> None:
-        async with self.system_tx(SIGNIN_LOCKOUT) as c:
+        async with self.install_tx(SIGNIN_LOCKOUT, tables=(signin_email_failures,)) as c:
             await c.execute(signin_email_failures.delete().where(signin_email_failures.c.email_hash == email_hash))
 
     async def clear_failures(self, tenant_id: str, user_id: str) -> None:
