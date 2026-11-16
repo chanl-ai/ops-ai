@@ -7,6 +7,7 @@ files stored earlier becoming unreadable; a target that still holds files droppe
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Callable
 from pathlib import Path
@@ -377,3 +378,32 @@ async def test_a_probe_error_never_returns_the_sdks_text(client: Client) -> None
 
     result = await probe(Broken())  # pyright: ignore[reportArgumentType]
     assert result.steps[0].detail == REFUSED and key_id not in result.model_dump_json()
+
+
+async def test_the_settings_replies_keep_their_shape(client: Client) -> None:
+    """Every key of the settings view, a credential and a probe, with the datetime format and the values a save
+    leaves at their defaults; the models behind them are body and reply both and may be split."""
+    when = r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d{1,6})?Z$"
+    async with client() as c:
+        empty = _data(await c.get("/v1/settings/storage"))
+        cred = _data(
+            await c.put(
+                "/v1/settings/storage/credentials/BANK_S3",
+                json={"kind": "aws_access_key", "values": {"accessKeyId": "a", "secretAccessKey": "b"}},
+            )
+        )
+        limit = {"purpose": "chat_attachment", "allowedTypes": ["pdf"], "maxSizeMb": 5}
+        document = _doc(DEFAULT, limits=[limit])
+        saved = _data(await c.put("/v1/settings/storage", json={"version": 0, "document": document}))
+        probe = _data(await c.post("/v1/settings/storage/test", json=DEFAULT))
+    assert (empty["version"], empty["updatedBy"], empty["updatedAt"]) == (0, None, None)
+    assert set(empty) == {"version", "updatedBy", "updatedAt", "document", "scanning", "retentionClasses"}
+    assert empty["retentionClasses"][0] == {"id": "standard", "name": "Standard", "days": None}
+    assert set(cred) == {"name", "kind", "setBy", "setAt"} and re.match(when, cred["setAt"])
+    assert re.match(when, saved["updatedAt"]) and saved["document"] == {
+        "targets": [{**DEFAULT, "region": "", "endpoint": "", "credential": "", "encryption": ""}],
+        "limits": [limit],
+        "retention": [],
+        "downloadLinkSeconds": 300,
+    }
+    assert set(probe) == {"ok", "steps"} and set(probe["steps"][0]) == {"label", "ok", "detail"}
