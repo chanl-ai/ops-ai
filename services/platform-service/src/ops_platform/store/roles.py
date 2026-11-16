@@ -721,6 +721,16 @@ async def ensure_owner(c: AsyncConnection, tenant_id: str, *, at: str) -> str | 
     return str(first)
 
 
+def membership_admins() -> sa.Select[str, str]:
+    """Each (team, person) whose membership in that team gives the built-in Admin role. Admin given on its own, by a
+    grant, is not a team admin here: a team's admin count and the Security mirror follow memberships (E17)."""
+    return sa.select(role_assignments.c.team_id, role_assignments.c.subject_id.label("user_id")).where(
+        role_assignments.c.subject_kind == "person",
+        role_assignments.c.source == MEMBERSHIP,
+        role_assignments.c.role_id == ADMIN.id,
+    )
+
+
 async def mirror_membership(
     c: AsyncConnection,
     *,

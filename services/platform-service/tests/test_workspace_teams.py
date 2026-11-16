@@ -11,7 +11,8 @@ import httpx
 import sqlalchemy as sa
 
 from ops_platform.keys import dev_signer
-from ops_platform.store.tables import audit_entries, members, teams, tenants
+from ops_platform.store.roles import mirror_membership
+from ops_platform.store.tables import audit_entries, members, role_assignments, teams, tenants
 from ops_policy import Ed25519Verifier, verify
 from ops_service_kit.ids import new_id, now_iso
 
@@ -62,6 +63,39 @@ async def test_moving_the_security_team_moves_security_admin_and_the_token_names
     assert claims["security_team"] == risk
     # The new security team cannot be archived; the old one now can.
     assert (await signin.public.post(f"/v1/settings/teams/{risk}/archive", headers=signin.admin)).status_code == 409
+
+
+async def test_admin_given_by_a_grant_is_not_a_team_admin_in_the_count_or_the_security_move(signin: SignInRig) -> None:
+    """A team's admins are its members whose membership role is admin. Admin given on its own, by a grant, is
+    neither counted on the teams list nor given Security admin when the Security team moves to that team."""
+    risk = await _team(signin, "Risk")
+    email = f"{new_id('granted').lower()}@{signin.zone}"
+    user = await signin.person(email, role="viewer")
+    now = now_iso()
+    async with signin.engine.begin() as c:
+        await c.execute(
+            members.insert().values(
+                id=new_id("mem"), tenant_id=signin.tenant, team_id=risk, user_id=user, email=email, role="viewer",
+                status="active", created_at=now, updated_at=now,
+            )
+        )  # fmt: skip
+        await mirror_membership(
+            c, tenant_id=signin.tenant, team_id=risk, user_id=user, member_role="viewer",
+            security_team=signin.security_team, granted_by="test", at=now,
+        )  # fmt: skip
+        await c.execute(
+            role_assignments.insert().values(
+                id=new_id("ras"), tenant_id=signin.tenant, subject_kind="person", subject_id=user, role_id="admin",
+                team_id=risk, granted_by="test", reason="a grant", source="grant", created_at=now,
+            )
+        )  # fmt: skip
+    listed = await signin.public.get("/v1/settings/teams", headers=signin.admin)
+    assert listed.status_code == 200, listed.text
+    row = next(t for t in listed.json()["data"]["data"] if t["id"] == risk)
+    assert (row["memberCount"], row["adminCount"]) == (2, 1)
+    assert (await _put(signin, {"securityTeam": risk, "defaultTeam": None})).status_code == 200
+    roles = await _roles_in(signin, email, risk)
+    assert "admin" in roles and "security_admin" not in roles
 
 
 async def test_a_workspace_that_names_no_security_team_has_none_whatever_the_install_says(signin: SignInRig) -> None:

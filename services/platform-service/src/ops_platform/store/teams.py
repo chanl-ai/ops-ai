@@ -23,7 +23,7 @@ from ops_store.outbox import add as add_event
 from ops_store.rows import rows
 
 from .audit import record
-from .roles import mirror_membership
+from .roles import membership_admins, mirror_membership
 from .tables import members, platform_outbox, teams, users
 from .tenancy import TenantDb
 from .workspace import security_team_in
@@ -52,11 +52,13 @@ class TeamRow(Out):
 def _listing(statuses: list[str], security: str | None) -> Rows:
     """The workspace's teams with each one's active member and admin counts; teams first, so a list pages by its id.
     A deleted team keeps its row for its audit entries and is out of every list."""
+    admins = membership_admins().subquery()
     counts = (
-        sa.select(
-            members.c.team_id,
-            sa.func.count().label("n"),
-            sa.func.sum(sa.case((members.c.role == "admin", 1), else_=0)).label("admins"),
+        sa.select(members.c.team_id, sa.func.count().label("n"), sa.func.count(admins.c.user_id).label("admins"))
+        .select_from(
+            members.outerjoin(
+                admins, sa.and_(admins.c.team_id == members.c.team_id, admins.c.user_id == members.c.user_id)
+            )
         )
         .where(members.c.status == "active")
         .group_by(members.c.team_id)

@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from ops_store import Guarantee
 
 from .audit import record
-from .roles import bump_version, mirror_membership
+from .roles import bump_version, membership_admins, mirror_membership
 from .tables import members, teams, tenants
 from .tenancy import TenantDb
 
@@ -95,12 +95,15 @@ class WorkspaceStore(TenantDb):
                 .values(security_team_id=security_team, default_team_id=default_team)
             )
             if before != security_team:
+                held = membership_admins().subquery()
                 admins = (
                     await c.execute(
-                        sa.select(members.c.team_id, members.c.user_id).where(
-                            members.c.team_id.in_([t for t in (before, security_team) if t]),
-                            members.c.status == "active",
-                            members.c.role == "admin",
+                        sa.select(held.c.team_id, held.c.user_id)
+                        .join(
+                            members, sa.and_(members.c.team_id == held.c.team_id, members.c.user_id == held.c.user_id)
+                        )
+                        .where(
+                            held.c.team_id.in_([t for t in (before, security_team) if t]), members.c.status == "active"
                         )
                     )
                 ).all()
