@@ -140,6 +140,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/migration/lane-kb.md` | Phase 2: kb-service's four lists in SQL, typed rows, the `kb.changed` event |
 | `architecture/migration/lane-tools.md` | Phase 2: tools-service's sixteen tables policed, hand filters onto `team_visible()`, the catalogue events |
 | `architecture/migration/lane-agents.md` | Phase 2: agents-service's 43 store files on the base, 21 tables policed, lists and labels in SQL from local copies |
+| `architecture/migration/agents-registry-tenancy.md` | The agents registry, graph version and channel tables: where each row's tenant comes from, key changes, the two migrations |
 | `architecture/migration/lane-console.md` | Phase 3: the console's data layer onto the list contract and the fields the lanes return |
 | `architecture/definitions-and-versions.md` | Draft to publish, pointers, the pin per thread, what happens without it, migrate |
 | `architecture/durability-failure-and-audit.md` | Leases, sweeper, fencing, re-execution, idempotency, side-effect classes, journal, checkpoint growth and pruning |

@@ -100,7 +100,9 @@ async def receive(p: CurrentPrincipal, _: Tx, event: Event, rt: Rt) -> JSONRespo
    so a store builder and a request builder can work the same days.
 3. Markings and migrations first, in both chains: the 21 tables, the publish-request team column with its backfill,
    the `graph_threads` owner column, the indexes, the three copy tables; `test_isolation_markings.py` green for agents
-   before any store call moves.
+   before any store call moves. The registry, graph version and channel tables follow
+   [agents-registry-tenancy.md](agents-registry-tenancy.md): where each row's tenant comes from, the key changes and
+   the order of the two migrations.
 4. Store layer: the 43 files onto the base; `owner_team()` deleted five times for `Store.owner_teams()`; the 7 caught
    errors inside `attempt()`; 89 functions onto `rows()` and `one()`; the inbox lock moved into `store/mailboxes.py`.
 5. Request layer: `Tx` on every route; the 7 lists and `/v1/tools` onto `list_page`; the 6 streaming routes as above;
