@@ -1,12 +1,14 @@
 """`list_page` on each database, by failure mode: a page counted or cut in Python, a page past the end answering
 nothing, a facet that loses its other choices once one is picked, statements that grow with the rows, a search
-narrowing the rows a picker asked for by id, and a filter column nobody declared."""
+narrowing the rows a picker asked for by id, a filter column nobody declared, and rows sharing a sort value that
+repeat or vanish between pages."""
 
 from __future__ import annotations
 
 import os
 from collections.abc import AsyncIterator
-from typing import Any
+from datetime import datetime
+from typing import Any, Literal
 
 import pytest
 import sqlalchemy as sa
@@ -38,6 +40,7 @@ runs = sa.Table(
     sa.Column("agent_id", sa.String(32), nullable=False, info=LISTED),
     sa.Column("minutes", sa.Integer, nullable=False, info=LISTED),
     sa.Column("note", sa.String(16), nullable=True),
+    sa.Column("at", sa.DateTime, nullable=False, info=LISTED),
     sa.Index("ix_store_test_list_runs_status", "status"),
 )
 LIST = sa.select(runs.c.id, runs.c.title, runs.c.status, agents.c.name.label("agent")).join(
@@ -53,6 +56,9 @@ SHAPE: dict[str, Any] = {
 }
 
 
+AT = datetime(2026, 11, 16, 9, 30)
+
+
 def rows(n: int) -> list[dict[str, Any]]:
     """Run r01..: every third is held, the rest open; odd ones are Claims intake's; one in four is titled a refund."""
     return [
@@ -62,6 +68,7 @@ def rows(n: int) -> list[dict[str, Any]]:
             "status": "held" if i % 3 == 0 else "open",
             "agent_id": "a_claims" if i % 2 else "a_loans",
             "minutes": 100 - i,
+            "at": AT,
         }
         for i in range(1, n + 1)
     ]
@@ -91,10 +98,12 @@ async def engine(request: pytest.FixtureRequest) -> AsyncIterator[AsyncEngine]:
         await e.dispose()
 
 
-async def seed(engine: AsyncEngine, n: int) -> None:
+async def seed(engine: AsyncEngine, n: int, *, shuffled: bool = False) -> None:
+    """`shuffled` inserts out of id order, so a database answering ties in insertion order is not id order by luck."""
+    made = sorted(rows(n), key=lambda r: int(r["id"][1:]) * 37 % 61) if shuffled else rows(n)
     async with engine.begin() as c:
         await c.execute(runs.delete())
-        await c.execute(runs.insert(), rows(n))
+        await c.execute(runs.insert(), made)
 
 
 async def test_a_page_is_filtered_sorted_counted_and_cut_in_sql_and_one_past_the_end_answers_the_last(
@@ -165,6 +174,31 @@ async def test_ids_answer_exactly_those_rows_whatever_the_search_says(engine: As
     async with engine.connect() as c:
         page = await list_page(c, LIST, ListParams(ids=["r04", "r09", "gone"], search="renewal"), **SHAPE)
     assert [r["id"] for r in page["data"]] == ["r04", "r09"] and page["pagination"]["total"] == 2
+
+
+async def test_rows_sharing_a_sort_value_appear_once_across_pages_ordered_by_primary_key(engine: AsyncEngine) -> None:
+    await seed(engine, 60, shuffled=True)
+    ids = sorted(r["id"] for r in rows(60))
+    held = [i for i in ids if int(i[1:]) % 3 == 0]
+    opened = [i for i in ids if int(i[1:]) % 3]
+    cases: list[tuple[Any, str | None, Literal["asc", "desc"], list[str]]] = [
+        (runs.c.at.desc(), None, "desc", ids[::-1]),
+        (runs.c.at.asc(), None, "asc", ids),
+        # sortBy on a column with two values: the default sort ties too, so the key follows sortBy's direction.
+        (runs.c.at.desc(), "status", "asc", held + opened),
+        (runs.c.at.desc(), "status", "desc", opened[::-1] + held[::-1]),
+    ]
+    for default_sort, sort_by, order, expected in cases:
+        for _ in range(2):
+            seen: list[str] = []
+            async with engine.connect() as c:
+                for n in (1, 2, 3):
+                    asked = ListParams(page=n, page_size=20, sort_by=sort_by, sort_order=order)
+                    page = await list_page(
+                        c, LIST, asked, sortable={"status": runs.c.status}, default_sort=default_sort
+                    )
+                    seen += [r["id"] for r in page["data"]]
+            assert seen == expected, (sort_by, order)
 
 
 async def test_a_filter_or_sort_column_nobody_declared_is_refused() -> None:

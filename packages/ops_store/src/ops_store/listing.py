@@ -21,6 +21,7 @@ from typing import Any, NotRequired, TypedDict, cast
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection
+from sqlalchemy.sql import operators
 
 from ops_service_kit.http import PageJSON, page_window, paged
 from ops_service_kit.listing import ListParams
@@ -60,6 +61,10 @@ async def list_page(
     """count(*), ORDER BY, LIMIT and OFFSET, one GROUP BY per facet, all on `query`; `labels` maps each facet value to
     its label in the same transaction. default_sort is required: SQL Server's OFFSET needs an ORDER BY.
 
+    The order always ends with the primary key of `query`'s first table, in the main sort's direction (`sortBy`'s
+    when given, else default_sort's), unless the order already names every key column. Without it, rows that share
+    a sort value come back in any order, so they repeat or vanish between pages.
+
     `search` columns are matched for `params.search`; `sortable` and `filters` name the columns `sortBy` and the other
     query keys may use, and a key they do not name is ignored; `params.ids` answers exactly those rows of `query`'s
     `id` column, whatever the search says. A `labels` entry is a select of (value, label), read for the values its
@@ -76,7 +81,13 @@ async def list_page(
     total = int((await conn.execute(listed.with_only_columns(sa.func.count()).order_by(None))).scalar_one())
     page, offset = page_window(total, params.page, params.page_size)
     by = sortable.get(params.sort_by or "")
-    order = [by.asc() if params.sort_order == "asc" else by.desc(), default_sort] if by is not None else [default_sort]
+    if by is not None:
+        descending = params.sort_order != "asc"
+        order = [by.desc() if descending else by.asc(), default_sort]
+    else:
+        descending = isinstance(default_sort, sa.UnaryExpression) and default_sort.modifier is operators.desc_op
+        order = [default_sort]
+    order += _key_order(query, order, descending)
     rows = await conn.execute(listed.order_by(None).order_by(*order).limit(params.page_size).offset(offset))
 
     counted: dict[str, dict[str, int]] = {}
@@ -96,6 +107,25 @@ async def _labels(conn: AsyncConnection, read: Rows, values: list[str]) -> dict[
         return {}
     value = next(iter(read.selected_columns))
     return {str(v): str(label) for v, label in await conn.execute(read.where(value.in_(values)))}
+
+
+def _key_order(query: Rows, order: list[sa.ColumnElement[Any]], descending: bool) -> list[sa.ColumnElement[Any]]:
+    """The primary key of the query's first table, as the last ORDER BY terms, so every row has one place."""
+    table: Any = query.get_final_froms()[0]
+    while isinstance(table, sa.Join):
+        table = table.left
+    named = {_column(term) for term in order}
+    key = list(table.primary_key.columns)
+    if not key or all(c in named for c in key):
+        return []
+    return [c.desc() if descending else c.asc() for c in key]
+
+
+def _column(term: sa.ColumnElement[Any]) -> Any:
+    """The column under a term's ASC, DESC or label."""
+    while isinstance(term, sa.UnaryExpression | sa.Label):
+        term = term.element
+    return term
 
 
 def _declared(columns: Mapping[str, sa.ColumnElement[Any]]) -> None:
