@@ -37,12 +37,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from models import chain_metadata
 from schema import MIGRATOR, ONLINE_ONLY, Checkout, chains, exported, runtime_role, sha256, write_sums
 
-from ops_store.schema import MSSQL_SECURITY, mssql_full_text_ddl, security_ddl
+from ops_store.schema import MSSQL_COLLATION, MSSQL_PRECONDITIONS, MSSQL_SECURITY, mssql_full_text_ddl, security_ddl
 from ops_store.schema import POSTGRES_ONLY as POSTGRES_ONLY_TABLE
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "mssql"
 OFFLINE_URL = "mssql+aioodbc://offline:offline@localhost:1/offline"
-COLLATION = "Latin1_General_100_BIN2_UTF8"
+COLLATION = MSSQL_COLLATION
 SECURITY = MSSQL_SECURITY
 # PostgreSQL's ops_runtime_system, the BYPASSRLS role agents-service's loops switch to before they know a thread's
 # tenant, as a database user without a login: ops_agents_runtime alone may impersonate it (EXECUTE AS USER in
@@ -303,17 +303,7 @@ def batches(statements: Iterable[str]) -> str:
     return "".join(f"{s}\nGO\n" for s in statements)
 
 
-PRECONDITIONS = batches(
-    [
-        "SET XACT_ABORT ON;",
-        "IF CONVERT(nvarchar(128), DATABASEPROPERTYEX(DB_NAME(), 'Collation')) <> N'" + COLLATION + "'\n"  # noqa: S608 - the collation is a module constant
-        f"    THROW 50001, N'Ops AI needs the database collation {COLLATION}', 1;\n"
-        "IF NOT EXISTS (SELECT 1 FROM sys.databases WHERE name = DB_NAME() AND is_read_committed_snapshot_on = 1)\n"
-        "    THROW 50002, N'Ops AI needs READ_COMMITTED_SNAPSHOT ON', 1;\n"
-        "IF (SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME()) < 160\n"
-        "    THROW 50003, N'Ops AI needs compatibility level 160 or higher', 1;",
-    ]
-)
+PRECONDITIONS = batches(MSSQL_PRECONDITIONS)
 
 
 @dataclass

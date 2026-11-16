@@ -31,7 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from .guarantees import Backend, unmet
 from .isolation import isolated_tx, scope, tenant_wide
 from .ports import AuditPort, LeasePort, TimerClaimPort
-from .schema import isolation_kind, team_column, tenant_column
+from .schema import MSSQL_COLLATION, isolation_kind, team_column, tenant_column
 
 CONTENDERS = 8
 
@@ -52,10 +52,14 @@ async def engine_for(backend: Backend) -> AsyncEngine:
 
 
 @contextmanager
-def sql_server_database(prefix: str, server: str | None, password: str | None) -> Generator[str | None]:
+def sql_server_database(
+    prefix: str, server: str | None, password: str | None, *, batches: Sequence[str] | None = None
+) -> Generator[str | None]:
     """The async URL of a scratch SQL Server database, dropped afterwards, for a test that runs on both databases.
     `server` is `host,port` and `password` the administrator's, which a test reads from OPS_MSSQL_SERVER and
-    MSSQL_SA_PASSWORD; None where either is unset, and the test skips."""
+    MSSQL_SA_PASSWORD; None where either is unset, and the test skips. With `batches` (a service's schema), the
+    database is made as roles.sql makes a deployment's, with its collation and read-committed snapshot, and the
+    batches run in it in order; the first that fails raises and the database is still dropped."""
     if not server or not password:
         yield None
         return
@@ -65,14 +69,37 @@ def sql_server_database(prefix: str, server: str | None, password: str | None) -
     name = f"{prefix}_{token_hex(4)}"
     admin = sa.create_engine(master, isolation_level="AUTOCOMMIT")
     with admin.connect() as c:
-        c.execute(text(f"CREATE DATABASE [{name}]"))
+        if batches is None:
+            c.execute(text(f"CREATE DATABASE [{name}]"))
+        else:
+            c.execute(text(f"CREATE DATABASE [{name}] COLLATE {MSSQL_COLLATION}"))
+            c.execute(text(f"ALTER DATABASE [{name}] SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE"))
     try:
+        if batches is not None:
+            _run_batches(master.set(database=name), batches)
         yield master.set(drivername="mssql+aioodbc", database=name).render_as_string(hide_password=False)
     finally:
         with admin.connect() as c:
             c.execute(text(f"ALTER DATABASE [{name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE"))
             c.execute(text(f"DROP DATABASE [{name}]"))
         admin.dispose()
+
+
+def _run_batches(url: sa.URL, batches: Sequence[str]) -> None:
+    """Each batch as sqlcmd runs one between GO lines, outside a transaction (as full-text DDL needs). Every result
+    set is read: the driver raises a THROW after a batch's first statement only when its result is reached."""
+    engine = sa.create_engine(url, isolation_level="AUTOCOMMIT")
+    raw = engine.raw_connection()
+    try:
+        cursor = raw.cursor()
+        for batch in batches:
+            cursor.execute(batch)
+            while cursor.nextset():
+                pass
+        cursor.close()
+    finally:
+        raw.close()
+        engine.dispose()
 
 
 def _guarantees(repo: object, backend: Backend) -> None:

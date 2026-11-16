@@ -148,6 +148,20 @@ SYSTEM_KEY = "system_reason"
 IsolationKind = Literal["team", "tenant", "system"]
 # The schema SQL Server's predicate functions and policies live in.
 MSSQL_SECURITY = "ops_security"
+# A SQL Server database's collation: VARCHAR holds UTF-8 and comparisons are binary, as on PostgreSQL.
+MSSQL_COLLATION = "Latin1_General_100_BIN2_UTF8"
+# The batches the SQL Server bundle starts with: it refuses a database without the collation, read-committed snapshot
+# (readers never block writers) or compatibility level 160. A service's test database runs them too.
+MSSQL_PRECONDITIONS = [
+    "SET XACT_ABORT ON;",
+    # Literal, as MSSQL_COLLATION (tests/test_sql_server_schema.py holds them equal).
+    "IF CONVERT(nvarchar(128), DATABASEPROPERTYEX(DB_NAME(), 'Collation')) <> N'Latin1_General_100_BIN2_UTF8'\n"
+    "    THROW 50001, N'Ops AI needs the database collation Latin1_General_100_BIN2_UTF8', 1;\n"
+    "IF NOT EXISTS (SELECT 1 FROM sys.databases WHERE name = DB_NAME() AND is_read_committed_snapshot_on = 1)\n"
+    "    THROW 50002, N'Ops AI needs READ_COMMITTED_SNAPSHOT ON', 1;\n"
+    "IF (SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME()) < 160\n"
+    "    THROW 50003, N'Ops AI needs compatibility level 160 or higher', 1;",
+]
 
 
 def system(reason: str) -> dict[str, Any]:
