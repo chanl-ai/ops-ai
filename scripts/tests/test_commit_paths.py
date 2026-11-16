@@ -18,7 +18,7 @@ def clone(tmp_path: Path) -> Path:
     # A runner has no git identity, and a commit without one stops with exit 128.
     for key, value in (("user.name", "Commit Paths Test"), ("user.email", "commit-paths@example.test")):
         subprocess.run(["git", "config", key, value], cwd=repo, check=True)
-    for name in ("commit-paths.sh", "commit-lock.sh"):
+    for name in ("commit-paths.sh", "commit-lock.sh", "commit-message-check.mjs"):
         shutil.copy2(ROOT / "scripts" / name, repo / "scripts" / name)
     for dep in (".venv", "node_modules"):
         if (ROOT / dep).exists():
@@ -81,7 +81,7 @@ def lock_repo(tmp_path: Path) -> Path:
     repo = tmp_path / "lock-repo"
     (repo / "scripts").mkdir(parents=True)
     (repo / ".githooks").mkdir()
-    for name in ("commit-paths.sh", "commit-lock.sh"):
+    for name in ("commit-paths.sh", "commit-lock.sh", "commit-message-check.mjs"):
         shutil.copy2(ROOT / "scripts" / name, repo / "scripts" / name)
     (repo / ".githooks" / "commit-msg").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     (repo / ".githooks" / "pre-commit").write_text("#!/bin/sh\nsleep 2\n", encoding="utf-8")
