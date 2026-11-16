@@ -32,6 +32,8 @@ from ops_tools.store.send_policies import send_checks, send_policies
 from ops_tools.store.team_defaults import team_defaults
 from ops_tools.store.tenancy import ROLE
 
+from .conftest import setup_tx
+
 POLICED = [
     egress_audit,
     egress_hosts,
@@ -49,6 +51,14 @@ POLICED = [
     team_defaults,
 ]
 TEAM, OTHER_TEAM = "team_cards", "team_ops"
+
+
+@pytest.fixture
+def engine(both_engine: AsyncEngine) -> AsyncEngine:
+    """This file's tests run on PostgreSQL and SQL Server (conftest.database_url)."""
+    return both_engine
+
+
 MODULE, HOST = "mod_policed", "policed.example.com"
 
 
@@ -92,7 +102,7 @@ def _row(table: sa.Table, tenant: str, n: int = 1) -> dict[str, Any]:
 async def _parents(engine: AsyncEngine, table: sa.Table, tenant: str) -> None:
     """The module and listed host a child row's foreign keys name, written as the database owner."""
     needs = {fk.column.table.name for fk in table.foreign_keys}
-    async with engine.begin() as c:
+    async with setup_tx(engine, tenant, TEAM) as c:
         if "egress_hosts" in needs:
             await c.execute(egress_hosts.insert().values(**_row(egress_hosts, tenant)))
         if "tool_modules" in needs:
@@ -113,7 +123,7 @@ async def test_a_policed_row_is_read_and_written_only_in_its_tenant_and_team(
     assert isolation_kind(table) in ("team", "tenant"), table.name
     tenant, elsewhere = f"t_{uuid4().hex[:10]}", f"t_{uuid4().hex[:10]}"
     await _parents(engine, table, tenant)
-    async with engine.begin() as c:
+    async with setup_tx(engine, tenant, TEAM) as c:
         await c.execute(table.insert().values(**_row(table, tenant)))
 
     assert await _count(engine, table, tenant, TEAM) == 1, "the owning team reads its row"

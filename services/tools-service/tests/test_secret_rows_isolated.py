@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -16,8 +17,16 @@ from ops_store.schema import isolation_kind
 from ops_tools.store.connections import app_credentials
 from ops_tools.store.secrets import SecretStore, secret_audit, tool_secrets
 
+from .conftest import setup_tx
+
 ROLE = "ops_tools_tenant"
 TEAM_A, TEAM_B = "team_cards", "team_ops"
+
+
+@pytest.fixture
+def engine(both_engine: AsyncEngine) -> AsyncEngine:
+    """This file's tests run on PostgreSQL and SQL Server (conftest.database_url)."""
+    return both_engine
 
 
 async def _sealed(engine: AsyncEngine, tenant: str) -> SecretStore:
@@ -25,7 +34,7 @@ async def _sealed(engine: AsyncEngine, tenant: str) -> SecretStore:
     store = SecretStore(engine)
     with isolation.scope(tenant, TEAM_A):
         await store.create(tenant, TEAM_A, "DESK_KEY", "sealed-a", actor="t", at=datetime.now(UTC))
-    async with engine.begin() as c:
+    async with setup_tx(engine, tenant, TEAM_A) as c:
         await c.execute(
             app_credentials.insert().values(
                 tenant_id=tenant,

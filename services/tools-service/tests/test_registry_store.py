@@ -17,7 +17,7 @@ import sqlalchemy as sa
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_service_kit.settings import Settings
 from ops_store import isolation
@@ -27,6 +27,12 @@ from ops_tools.store.modules import ModuleStore, RetiredAccessError, StaleModule
 
 SERVICE = Path(__file__).parents[1]
 REGISTRY = {"tool_modules", "module_operations", "module_versions", "module_approvals"}
+
+
+@pytest.fixture
+def engine(both_engine: AsyncEngine) -> AsyncEngine:
+    """This file's tests run on PostgreSQL and SQL Server (conftest.database_url)."""
+    return both_engine
 
 
 async def _tables(url: str) -> set[str]:

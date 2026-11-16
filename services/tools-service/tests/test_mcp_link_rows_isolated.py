@@ -5,6 +5,7 @@ tests connect as bypasses row security."""
 
 from __future__ import annotations
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -14,6 +15,12 @@ from ops_tools.store.mcp_links import LinkedTool, McpLinks, mcp_links
 from ops_tools.store.tenancy import ROLE
 
 TEAM_A, TEAM_B = "team_cards", "team_ops"
+
+
+@pytest.fixture
+def engine(both_engine: AsyncEngine) -> AsyncEngine:
+    """This file's tests run on PostgreSQL and SQL Server (conftest.database_url)."""
+    return both_engine
 
 
 async def test_another_team_or_tenant_reads_no_link_without_the_team_clause(engine: AsyncEngine, tenant: str) -> None:

@@ -6,7 +6,8 @@ from __future__ import annotations
 import faulthandler
 import json
 import os
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncGenerator, AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,7 +17,7 @@ from uuid import uuid4
 import httpx
 import pytest
 from fastapi import FastAPI
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
 from ops_agents.activities.catalog import Catalog, load_catalog
 from ops_email import MemorySender
@@ -31,6 +32,8 @@ from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
 from ops_service_kit.testdb import isolate_from_stack, refusal
 from ops_store import isolation
+from ops_store.database import open_database
+from ops_store.testing import DATABASES, NO_SQL_SERVER, postgresql_only, sql_server_schema
 from ops_tools.app import create_gateway_app
 from ops_tools.apps import Apps, apps_router
 from ops_tools.auth import Authenticator, Tokens
@@ -62,6 +65,7 @@ from ops_tools.store.mocks import MockStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.secrets import SecretStore
 from ops_tools.store.send_policies import SendPolicies
+from ops_tools.store.tenancy import ROLE
 from ops_tools.tools import LocalToolRunner
 
 from .fake_mcp import tools as fake_tools
@@ -102,6 +106,18 @@ def pytest_configure(config: pytest.Config) -> None:
     # Before any fixture or migration: the test database only, never the live one (ops_service_kit.testdb).
     if (why := refusal(Settings().database_url, os.environ.get("OPS_TEST_DATABASE_URL"))) is not None:
         pytest.exit(why, returncode=4)
+    config.addinivalue_line("markers", "postgresql_only(why): runs on PostgreSQL only, for the reason given")
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    keep, dropped = postgresql_only(items)
+    if dropped:
+        config.hook.pytest_deselected(items=[i for i in items if i not in keep])
+        items[:] = keep
+        terminal = config.pluginmanager.get_plugin("terminalreporter")
+        for nodeid, why in dropped:
+            if terminal is not None:
+                terminal.write_line(f"postgresql only: {nodeid}: {why}")
 
 
 # A test that waits forever on a child process or a socket held QA's whole run for over an hour on 409d50d9 (a
@@ -150,6 +166,42 @@ async def engine() -> AsyncIterator[AsyncEngine]:
     e = create_async_engine(Settings().database_url)
     yield e
     await e.dispose()
+
+
+@pytest.fixture(scope="session", params=DATABASES)
+def database_url(request: pytest.FixtureRequest) -> Iterator[str]:
+    """The test database on PostgreSQL, and a scratch SQL Server database holding the tools chain's golden DDL when
+    OPS_MSSQL_SERVER and MSSQL_SA_PASSWORD are set (ops_store.testing). Only the store and isolation files ask for it,
+    through `both_engine`; the route tests stay on PostgreSQL."""
+    if request.param == "postgresql":
+        yield Settings().database_url
+        return
+    with sql_server_schema("tools", os.environ.get("OPS_MSSQL_SERVER"), os.environ.get("MSSQL_SA_PASSWORD")) as url:
+        if url is None:
+            pytest.skip(NO_SQL_SERVER)
+        yield url
+
+
+@pytest.fixture
+async def both_engine(database_url: str) -> AsyncIterator[AsyncEngine]:
+    """An engine on each database in turn; a file overrides `engine` with it to run its tests on both."""
+    e = open_database(database_url)
+    yield e
+    await e.dispose()
+
+
+@asynccontextmanager
+async def setup_tx(engine: AsyncEngine, tenant: str, team: str) -> AsyncGenerator[AsyncConnection]:
+    """A transaction that writes a test's own rows past the row policies. PostgreSQL's database owner bypasses row
+    security; SQL Server applies its security policies to every user, so there the rows are written in the tenant
+    and team they carry."""
+    if engine.dialect.name != "mssql":
+        async with engine.begin() as c:
+            yield c
+        return
+    with isolation.scope(tenant, team):
+        async with isolation.isolated_tx(engine, role=ROLE) as c:
+            yield c
 
 
 @pytest.fixture
