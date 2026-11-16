@@ -66,11 +66,11 @@ async def move_to_files_service(
     for tenant in tenants if tenants is not None else await service.store.tenants():
         with isolation.tenant_wide(MOVE_FILES, tenant_id=tenant):
             for s in await service.store.sources(tenant):
-                names: dict[str, str] = s.get("file_names") or {}
-                moved = await move_files(tenant, source_team(s), list(s["file_ids"]), names, to=service.files, old=old)
+                names: dict[str, str] = s.file_names or {}
+                moved = await move_files(tenant, source_team(s), list(s.file_ids), names, to=service.files, old=old)
                 if moved:
-                    await service.store.swap_files(tenant, str(s["id"]), moved)
-                    log.info("kb_files_moved_to_files_service", source=s["id"], files=len(moved))
+                    await service.store.swap_files(tenant, str(s.id), moved)
+                    log.info("kb_files_moved_to_files_service", source=s.id, files=len(moved))
 
 
 async def _files_ready(settings: Settings) -> None:

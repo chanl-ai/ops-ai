@@ -25,7 +25,7 @@ from ops_service_kit.ids import new_id
 from .ai import spent_on
 from .files import FileNotScanned, Stored
 from .origin import Origin, source_team
-from .store.knowledge import ItemRow
+from .store.knowledge import ItemRow, SourceRow
 
 if TYPE_CHECKING:
     from .service import KnowledgeService, Who
@@ -274,14 +274,14 @@ async def sync_tool_source(
     service: KnowledgeService,
     reader: ToolReader,
     who: Who,
-    s: dict[str, Any],
+    s: SourceRow,
     *,
     full: bool,
     trigger: str,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> dict[str, Any]:
-    cfg: dict[str, Any] = dict(s.get("config") or {})
-    tenant, team, source_id = who.tenant_id, str(s["team_id"]), str(s["id"])
+    cfg: dict[str, Any] = dict(s.config or {})
+    tenant, team, source_id = who.tenant_id, str(s.team_id), str(s.id)
     act = f"kb-sync:{source_id}"
     if cfg.get("paused") == "needs_reconnect":
         healthy = any(
@@ -500,7 +500,7 @@ async def sync_tool_source(
                 else:
                     counts["failed"] += 1
         # A base this source feeds may keep what its source removed: then it stays searchable and says so.
-        keep = (await service.sync_rules(tenant, str(s["id"])))["removedAtSource"] == "keep"
+        keep = (await service.sync_rules(tenant, str(s.id)))["removedAtSource"] == "keep"
         if gone_now:
             gone_ids = [known[p].id for p in gone_now]
             gone_files = [known[p].file_id for p in gone_now]
@@ -577,7 +577,7 @@ async def sync_tool_source(
 async def _put(
     service: KnowledgeService,
     who: Who,
-    s: dict[str, Any],
+    s: SourceRow,
     known: dict[str, ItemRow],
     item: dict[str, Any],
     *,
@@ -593,13 +593,13 @@ async def _put(
     data = _content(item)
     item_id = str(item["id"])
     ex = known.get(item_id)
-    tenant, team, source_id = who.tenant_id, source_team(s), str(s["id"])
+    tenant, team, source_id = who.tenant_id, source_team(s), str(s.id)
     name, mime = _filename(item), str(item.get("mime") or "text/plain")
     try:
         stored = await service.files.put(
             tenant, team, data, name=name, mime=mime, actor=f"kb-sync:{source_id}", purpose="knowledge_snapshot"
         )
-        await service.files.use(tenant, team, stored.file_id, source_id=source_id, source_name=str(s["name"]))
+        await service.files.use(tenant, team, stored.file_id, source_id=source_id, source_name=str(s.name))
     except (ValueError, FileNotScanned) as e:
         counts["failed"] += 1
         errors.append({"itemTitle": item.get("title"), "phase": "store", "errorClass": "snapshot", "message": str(e)})
@@ -650,11 +650,11 @@ async def _put(
         counts["upserted"] += 1
 
 
-async def release_snapshots(service: KnowledgeService, who: Who, s: dict[str, Any], file_ids: list[str]) -> None:
+async def release_snapshots(service: KnowledgeService, who: Who, s: SourceRow, file_ids: list[str]) -> None:
     """Lets go of snapshots no item of the source uses any more; files-service keeps each for its retention days."""
-    held = {i.file_id for i in await service.store.items(who.tenant_id, source_ids=[str(s["id"])])}
+    held = {i.file_id for i in await service.store.items(who.tenant_id, source_ids=[str(s.id)])}
     for file_id in dict.fromkeys(f for f in file_ids if f and f not in held):
-        await service.files.release(who.tenant_id, source_team(s), file_id, source_id=str(s["id"]))
+        await service.files.release(who.tenant_id, source_team(s), file_id, source_id=str(s.id))
 
 
 # What a kept item says once its source has removed it.

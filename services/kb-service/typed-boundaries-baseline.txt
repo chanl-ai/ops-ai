@@ -1,4 +1,4 @@
-# 418 boundaries crossed without a model in services/kb-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 370 boundaries crossed without a model in services/kb-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body changes_decide_changes
 1 reply changes_decide_changes
 1 body changes_edit_change
@@ -33,23 +33,22 @@
 4 dict-any services/kb-service/src/ops_kb/app.py
 3 task services/kb-service/src/ops_kb/app.py
 2 dict-any services/kb-service/src/ops_kb/files.py
-3 dict-any services/kb-service/src/ops_kb/origin.py
+2 dict-any services/kb-service/src/ops_kb/origin.py
 8 dict-any services/kb-service/src/ops_kb/query_steps.py
 6 dict-any services/kb-service/src/ops_kb/readings.py
 5 dict-any services/kb-service/src/ops_kb/retrieval.py
-1 dict-any services/kb-service/src/ops_kb/schedule.py
 5 dict-any services/kb-service/src/ops_kb/schemas.py
 2 dict-any services/kb-service/src/ops_kb/search.py
-222 dict-any services/kb-service/src/ops_kb/service.py
+181 dict-any services/kb-service/src/ops_kb/service.py
 2 task services/kb-service/src/ops_kb/service.py
 8 dict-any services/kb-service/src/ops_kb/source_settings.py
 4 dict-any services/kb-service/src/ops_kb/store/fulltext.py
 3 store-dict services/kb-service/src/ops_kb/store/fulltext.py
-34 dict-any services/kb-service/src/ops_kb/store/knowledge.py
-3 store-dict services/kb-service/src/ops_kb/store/knowledge.py
+33 dict-any services/kb-service/src/ops_kb/store/knowledge.py
+2 store-dict services/kb-service/src/ops_kb/store/knowledge.py
 3 dict-any services/kb-service/src/ops_kb/store/vectors.py
 2 store-dict services/kb-service/src/ops_kb/store/vectors.py
-45 dict-any services/kb-service/src/ops_kb/tool_sources.py
+42 dict-any services/kb-service/src/ops_kb/tool_sources.py
 1 gather services/kb-service/src/ops_kb/tool_sources.py
 1 body sources_add_files
 1 reply sources_cancel_run

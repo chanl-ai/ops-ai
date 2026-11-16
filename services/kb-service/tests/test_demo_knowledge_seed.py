@@ -190,8 +190,8 @@ async def test_a_dev_start_leaves_a_persons_source_of_a_demo_sources_name_alone(
             {"type": "file", "name": "Fee schedule", "collection": "Mine", "owner": "m.okafor@harborpine.example"},
         )
         assert await seed_demo(service, tenant) == ["kb_retail_products"]
-        row = next(s for s in await store.sources(tenant) if s["id"] == mine["id"])
-    assert row["file_ids"] == [] and row["owner"] == "m.okafor@harborpine.example", row
+        row = next(s for s in await store.sources(tenant) if s.id == mine["id"])
+    assert row.file_ids == [] and row.owner == "m.okafor@harborpine.example", row
 
 
 async def test_a_start_on_a_new_file_store_uploads_the_demo_files_again(
@@ -210,5 +210,5 @@ async def test_a_start_on_a_new_file_store_uploads_the_demo_files_again(
         assert await seed_demo(after, tenant) == [], "a second start on the new store changes nothing"
         sources = await store.sources(tenant)
     for s in sources:
-        assert len(s["file_ids"]) == 1, s
-        await after.files.read(tenant, "team_ops", s["file_ids"][0])
+        assert len(s.file_ids) == 1, s
+        await after.files.read(tenant, "team_ops", s.file_ids[0])

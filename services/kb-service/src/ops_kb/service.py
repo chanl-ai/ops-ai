@@ -26,7 +26,7 @@ from ops_access import can, require_provisioner
 from ops_documents_client import DocumentsRefused
 from ops_identity import Principal, ServiceUnreachable
 from ops_ingest import InvalidIngestError, ParsedDocument, SplitResult, split, validate_settings
-from ops_ingest.metadata import resolve_metadata
+from ops_ingest.metadata import Sensitivity, resolve_metadata
 from ops_ingest.models import AI_STEPS, IngestApproval, IngestSettings
 from ops_ingest.rules import ItemFacts, evaluate_rules
 from ops_ingest.split import ai_step_allowed, document_digest
@@ -62,7 +62,7 @@ from .source_settings import (
     wire,
 )
 from .store import DECIDABLE, KnowledgeStore
-from .store.knowledge import BaseRow, ChangeRow, ChunkRow, ItemRow, RunRow
+from .store.knowledge import BaseRow, ChangeRow, ChunkRow, ItemRow, RunRow, SourceRow
 from .store.vectors import PgVectorStore
 from .tool_sources import ToolReader, declared_source, refusal_of, source_config, sync_tool_source
 
@@ -268,15 +268,15 @@ def item_total(counts: dict[str, int]) -> int:
     return sum(n for status, n in counts.items() if status != "chunks")
 
 
-def _item_counts(s: dict[str, Any]) -> dict[str, int]:
+def _item_counts(s: SourceRow) -> dict[str, int]:
     """What the source's documents are, from their items; an uploaded file not yet synced has no item and is pending.
     A source row built in memory (just created) has no documents yet."""
-    counts: dict[str, int] = s.get("item_counts") or {}
+    counts: dict[str, int] = s.item_counts or {}
     synced = item_total(counts)
     return {
         "itemsIndexed": counts.get("indexed", 0),
         "itemsFailed": counts.get("failed", 0),
-        "itemsPending": counts.get("pending", 0) + counts.get("reading", 0) + max(len(s["file_ids"]) - synced, 0),
+        "itemsPending": counts.get("pending", 0) + counts.get("reading", 0) + max(len(s.file_ids) - synced, 0),
     }
 
 
@@ -393,50 +393,50 @@ class KnowledgeService:
 
     # ── Serialising ──────────────────────────────────────────────────────
 
-    def settings_of(self, s: dict[str, Any]) -> SourceSettings:
+    def settings_of(self, s: SourceRow) -> SourceSettings:
         """The source's saved settings over its kind's defaults; the environment's OCR mode is the default's. A plugin
         source whose items are a website's pages starts with a website's defaults."""
-        return stored(kind_of(s), s.get("settings"), ocr=self.ocr)
+        return stored(kind_of(s), s.settings, ocr=self.ocr)
 
-    def schedule_of(self, s: dict[str, Any]) -> dict[str, Any]:
+    def schedule_of(self, s: SourceRow) -> dict[str, Any]:
         """When the source syncs on its own: its saved schedule, else its plugin's for its kind of source, else a
         website's daily check, else manual."""
         saved = self.settings_of(s).schedule
         if saved is not None:
             return saved
-        cfg = dict(s.get("config") or {})
+        cfg: dict[str, Any] = dict(s.config or {})
         if kind_of(s) == "web":
             return WEB_SCHEDULE
         return cast(dict[str, Any], cfg.get("schedule") or {"kind": "manual"})
 
-    def freshness_of(self, s: dict[str, Any], now: datetime | None = None) -> str:
+    def freshness_of(self, s: SourceRow, now: datetime | None = None) -> str:
         """`fresh`, `stale` or `no_schedule` for the source (see `freshness`). The clock is the database's, read with
         the source row, since the sync times it is compared with were written by that clock."""
-        return freshness(self.schedule_of(s), s.get("last_good_sync_at"), s.get("db_now") or now or datetime.now(UTC))
+        return freshness(self.schedule_of(s), s.last_good_sync_at, s.db_now or now or datetime.now(UTC))
 
-    def review_state(self, s: dict[str, Any] | None) -> dict[str, str]:
+    def review_state(self, s: SourceRow | None) -> dict[str, str]:
         """The Changes queue's freshness and review-by for a source's changes, from the same rule as its documents:
         review-by is the next scheduled sync, or the slot it missed when stale; blank with no schedule."""
         if s is None:
             return {"freshness": "no_schedule", "reviewBy": ""}
-        now = s.get("db_now") or datetime.now(UTC)
+        now = s.db_now or datetime.now(UTC)
         state = self.freshness_of(s, now)
         schedule = self.schedule_of(s)
-        when = last_slot(schedule, now) if state == "stale" else next_run(schedule, s.get("last_good_sync_at"), now)
+        when = last_slot(schedule, now) if state == "stale" else next_run(schedule, s.last_good_sync_at, now)
         return {"freshness": state, "reviewBy": _iso(when) or ""}
 
-    def key_of(self, s: dict[str, Any]) -> str:
+    def key_of(self, s: SourceRow) -> str:
         """The digest an item built now under the source's settings records (`indexed_with`)."""
         return index_key(self.settings_of(s), repeats_of(s))
 
-    def _source(self, s: dict[str, Any], used_by: list[str]) -> dict[str, Any]:
-        tool = s["type"] == "tool"
-        cfg: dict[str, Any] = dict(s.get("config") or {})
+    def _source(self, s: SourceRow, used_by: list[str]) -> dict[str, Any]:
+        tool = s.type == "tool"
+        cfg: dict[str, Any] = dict(s.config or {})
         applied = wire(self.settings_of(s))
         return {
-            "id": s["id"],
-            "type": s["type"],
-            "name": s["name"],
+            "id": s.id,
+            "type": s.type,
+            "name": s.name,
             # The kind its defaults and its label come from: file, web (a plugin source of one site's pages) or tool.
             "kind": kind_of(s),
             "kindLabel": kind_label(s),
@@ -457,7 +457,7 @@ class KnowledgeService:
                     )
                 }
                 if tool
-                else {"fileIds": s["file_ids"]}
+                else {"fileIds": s.file_ids}
             ),
             # Every stage's settings as a sync applies them.
             "parsing": applied["parsing"],
@@ -469,37 +469,34 @@ class KnowledgeService:
             "aiStepsWaiting": ai_steps_waiting(self.settings_of(s).ingest),
             # Hosts of the source's own site an admin has yet to approve; nothing is fetched until they are.
             "waitingHosts": list(cfg.get("waitingHosts") or []) if tool else [],
-            "tags": s["tags"],
+            "tags": s.tags,
             "titleFrom": "heading",
             "permissions": {"mode": "workspace"},
             "schedule": (schedule := self.schedule_of(s)),
             **(
                 {"nextSyncAt": _iso(n)}
-                if s["status"] == "active" and (n := next_run(schedule, s.get("last_sync_at"), datetime.now(UTC)))
+                if s.status == "active" and (n := next_run(schedule, s.last_sync_at, datetime.now(UTC)))
                 else {}
             ),
             "health": health_of(s),
             "deletedAtSource": "remove",
             "staleAfterDays": 365,
             "notifyOnFailure": True,
-            "sensitivity": s["sensitivity"],
-            "collection": s["collection"],
-            "owner": s["owner"],
-            "status": s["status"],
+            "sensitivity": s.sensitivity,
+            "collection": s.collection,
+            "owner": s.owner,
+            "status": s.status,
             **_item_counts(s),
-            **({"lastSyncAt": _iso(s["last_sync_at"])} if s["last_sync_at"] else {}),
-            **({"lastRunStatus": s["last_run_status"]} if s["last_run_status"] else {}),
+            **({"lastSyncAt": _iso(s.last_sync_at)} if s.last_sync_at else {}),
+            **({"lastRunStatus": s.last_run_status} if s.last_run_status else {}),
             "usedByKbIds": used_by,
-            "createdAt": _iso(s["created_at"]),
+            "createdAt": _iso(s.created_at),
         }
 
     async def _counts(self, tenant: str) -> dict[str, dict[str, Any]]:
         """Each source's documents by status and its indexed chunks, from its items, and when it last synced."""
         rows = await self.store.sources(tenant)
-        return {
-            str(x["id"]): {**x["item_counts"], "synced": x.get("last_sync_at"), "freshness": self.freshness_of(x)}
-            for x in rows
-        }
+        return {str(x.id): {**x.item_counts, "synced": x.last_sync_at, "freshness": self.freshness_of(x)} for x in rows}
 
     async def _jobs(self, tenant: str, source_ids: list[str]) -> list[dict[str, Any]]:
         """A knowledge base's recent index jobs: the newest runs of the sources it reads, as the Overview lists them."""
@@ -617,13 +614,13 @@ class KnowledgeService:
         bases = [
             b for b in await self.store.bases(who.tenant_id) if template_id is None or b.template_id == template_id
         ]
-        sources = {s["id"]: s for s in await self.store.sources(who.tenant_id)}
+        sources = {s.id: s for s in await self.store.sources(who.tenant_id)}
         by_kb, _ = await self._joined(who.tenant_id)
         using = await self.agents.usage(who.tenant_id, who.team_id)
         rows = [
             {
                 **self._base(b, by_kb.get(b.id, []), await self._counts(who.tenant_id)),
-                "sourceNames": [sources[s]["name"] for s in by_kb.get(b.id, []) if s in sources],
+                "sourceNames": [sources[s].name for s in by_kb.get(b.id, []) if s in sources],
                 **_used_by(using, b.id),
             }
             for b in sorted(bases, key=lambda b: b.created_at, reverse=True)
@@ -646,16 +643,16 @@ class KnowledgeService:
                 await self._counts(who.tenant_id),
                 await self._jobs(who.tenant_id, by_kb.get(kb_id, [])),
             ),
-            "sourceNames": [s["name"] for s in attached],
+            "sourceNames": [s.name for s in attached],
             **_used_by(using, kb_id),
             "attached": [
                 {
-                    "sourceId": s["id"],
-                    "itemsContributed": s["item_counts"].get("indexed", 0),
+                    "sourceId": s.id,
+                    "itemsContributed": s.item_counts.get("indexed", 0),
                     "rules": [],
-                    "source": self._source(s, by_source.get(s["id"], [])),
+                    "source": self._source(s, by_source.get(s.id, [])),
                     # A sync or rebuild holds it now, so the base's Sources tab polls while it runs.
-                    "running": s["id"] in running,
+                    "running": s.id in running,
                 }
                 for s in attached
             ],
@@ -820,7 +817,7 @@ class KnowledgeService:
         }
 
     async def _known_sources(self, who: Who, source_ids: list[str]) -> None:
-        found = {s["id"] for s in await self.store.sources(who.tenant_id, source_ids)}
+        found = {s.id for s in await self.store.sources(who.tenant_id, source_ids)}
         if missing := [s for s in source_ids if s not in found]:
             raise NotFound(f"No source with id {missing[0]}.")
 
@@ -833,12 +830,12 @@ class KnowledgeService:
         running = await self.store.running_sources(who.tenant_id)
         rows = [
             {
-                **self._source(s, by_source.get(s["id"], [])),
-                "usedBy": [{"id": k, "name": bases[k].name} for k in by_source.get(s["id"], []) if k in bases],
-                "running": s["id"] in running,
+                **self._source(s, by_source.get(s.id, [])),
+                "usedBy": [{"id": k, "name": bases[k].name} for k in by_source.get(s.id, []) if k in bases],
+                "running": s.id in running,
             }
-            for s in sorted(sources, key=lambda s: s["created_at"], reverse=True)
-            if _matches(search, s["name"], s["owner"], s["collection"])
+            for s in sorted(sources, key=lambda s: s.created_at, reverse=True)
+            if _matches(search, s.name, s.owner, s.collection)
         ]
         facets = {"type": _facet(rows, "type"), "status": _facet(rows, "status")}
         return page_of(rows, page=page, page_size=page_size, facets=facets)
@@ -853,15 +850,13 @@ class KnowledgeService:
         _, by_source = await self._joined(who.tenant_id)
         return [
             {
-                "id": s["id"],
-                "name": s["name"],
+                "id": s.id,
+                "name": s.name,
                 "source": str(cfg.get("source") or ""),
-                "kbIds": by_source.get(s["id"], []),
+                "kbIds": by_source.get(s.id, []),
             }
             for s in await self.store.sources(who.tenant_id)
-            if s["type"] == "tool"
-            and s.get("team_id") == who.team_id
-            and (cfg := dict(s.get("config") or {})).get("plugin") == plugin
+            if s.type == "tool" and s.team_id == who.team_id and (cfg := dict(s.config or {})).get("plugin") == plugin
         ]
 
     async def get_source(self, who: Who, source_id: str) -> dict[str, Any]:
@@ -892,11 +887,11 @@ class KnowledgeService:
             ],
             "recentRuns": recent,
             "running": next((r for r in recent if r["status"] == "running"), None),
-            **self._rights(who, s["team_id"], s["name"], s.get("protection")),
+            **self._rights(who, s.team_id, s.name, None),
             # The Last sync tile's "Took ..." hint; absent until a first run.
             **({"lastRunDurationSec": recent[0]["durationSec"]} if recent else {}),
             "errorGroups": [],
-            "itemCount": item_total(s["item_counts"]),
+            "itemCount": item_total(s.item_counts),
             "reindexNeeded": any(self.built_under_other_settings(s, i) for i in items),
             "requiredMetadata": [],
             "governance": {
@@ -924,37 +919,47 @@ class KnowledgeService:
         # Linking a source changes what each base cites, so it takes the right to change every base named.
         for kb_id in kb_ids:
             await self._changeable(who, kb_id)
-        row: dict[str, Any] = {
-            "tenant_id": who.tenant_id,
-            "id": new_id("src"),
-            "team_id": who.team_id,
-            "type": kind,
-            "name": name,
-            "collection": str(i.get("collection") or ""),
-            "owner": str(i.get("owner") or who.email),
-            "sensitivity": sensitivity,
-            "status": "draft" if i.get("status") == "draft" else "active",
-            "tags": list(i.get("tags") or []),
-            "file_ids": [],
-            "created_by": who.email,
-            "created_at": datetime.now(UTC),
-            "last_sync_at": None,
-            "last_run_status": None,
-        }
-        if kind == "tool":
+        if who.team_id is None:
+            raise ValidationFailed("A source is made in one team; this call names none.", code="team_required")
+        now = datetime.now(UTC)
+        row = SourceRow(
+            id=new_id("src"),
+            team_id=who.team_id,
+            type=kind,
+            name=name,
+            collection=str(i.get("collection") or ""),
+            owner=str(i.get("owner") or who.email),
+            sensitivity=sensitivity,
+            status="draft" if i.get("status") == "draft" else "active",
+            tags=list(i.get("tags") or []),
+            file_ids=[],
+            file_names=None,
+            created_by=who.email,
+            created_at=now,
+            last_sync_at=None,
+            last_run_status=None,
             # Read through a connection's tools: what tools-service declares for the team, checked now.
-            row["config"] = await source_config(self.tools, who, i)
+            config=await source_config(self.tools, who, i) if kind == "tool" else None,
+            lease_until=None,
+            lease_owner=None,
+            settings=None,
+            last_good_sync_at=None,
+            failing_since=None,
+            failures_in_row=0,
+            db_now=now,
+            item_counts={},
+        )
         given = {k: i[k] for k in SETTINGS_KEYS if i.get(k) is not None}
         if kb_ids and (split := await self._base_split(who.tenant_id, kb_ids[0])):
             # A new source of a base splits as the base says, where it says something other than the default; the
             # source keeps its own copy, and what the create sends wins.
             given["ingest"] = {**split, **dict(given.get("ingest") or {})}
-        row["settings"] = wire(self._merged(self.settings_of(row), given)) if given else None
+        row = row.model_copy(update={"settings": wire(self._merged(self.settings_of(row), given)) if given else None})
         # Files named at creation are checked and referenced like any added later, before the source exists.
         names = [await self._use_file(who, row, f) for f in dict.fromkeys(i.get("fileIds") or [])]
-        row["file_ids"] = [f for f, _ in names]
-        row["file_names"] = dict(names)
-        await self.store.create_source(row, kb_ids)
+        row = row.model_copy(update={"file_ids": [f for f, _ in names], "file_names": dict(names)})
+        stored = row.model_dump(exclude={"db_now", "item_counts"}) | {"tenant_id": who.tenant_id}
+        await self.store.create_source(stored, kb_ids)
         if i.get("sync"):
             # Add source's Create and sync: the first run starts now, in the background, and shows on the source.
             self._in_background(self._first_sync(who, row))
@@ -966,15 +971,15 @@ class KnowledgeService:
         self.rebuilds.add(task)
         task.add_done_callback(self.rebuilds.discard)
 
-    async def _first_sync(self, who: Who, s: dict[str, Any]) -> None:
+    async def _first_sync(self, who: Who, s: SourceRow) -> None:
         try:
-            if s["type"] == "tool":
+            if s.type == "tool":
                 await self.sync_tool(who, s, full=False, trigger="manual")
             else:
                 await self._held_sync(who, s, full=False, retry=False)
         except ApiError as e:
             # A sync that could not start (the lease is held, the plugin turned off) is recorded on its source.
-            logger.info("kb_first_sync_not_started", source=s["id"], code=e.code)
+            logger.info("kb_first_sync_not_started", source=s.id, code=e.code)
 
     async def source_kinds(self, who: Who) -> list[dict[str, Any]]:
         """Files, then each knowledge source the team's apps offer (none when this service reads no tools)."""
@@ -1081,16 +1086,16 @@ class KnowledgeService:
 
     # ── Files and sync ───────────────────────────────────────────────────
 
-    async def _source_row(self, who: Who, source_id: str) -> dict[str, Any]:
+    async def _source_row(self, who: Who, source_id: str) -> SourceRow:
         found = await self.store.sources(who.tenant_id, [source_id])
         if not found:
             raise NotFound("No source with that id.")
         return found[0]
 
-    async def _changeable_source(self, who: Who, source_id: str, step: str = "edit") -> dict[str, Any]:
+    async def _changeable_source(self, who: Who, source_id: str, step: str = "edit") -> SourceRow:
         """The source, when the caller may change what it holds (`_may_change`)."""
         s = await self._source_row(who, source_id)
-        self._may_change(who, s["team_id"], s["name"], step)
+        self._may_change(who, s.team_id, s.name, step)
         return s
 
     async def upload(self, who: Who, source_id: str, data: bytes, *, name: str, mime: str) -> dict[str, Any]:
@@ -1116,11 +1121,9 @@ class KnowledgeService:
             "deduplicated": stored.deduplicated,
         }
 
-    async def _use_file(self, who: Who, s: dict[str, Any], file_id: str) -> tuple[str, str]:
+    async def _use_file(self, who: Who, s: SourceRow, file_id: str) -> tuple[str, str]:
         try:
-            name = await self.files.use(
-                who.tenant_id, source_team(s), file_id, source_id=s["id"], source_name=s["name"]
-            )
+            name = await self.files.use(who.tenant_id, source_team(s), file_id, source_id=s.id, source_name=s.name)
         except FileMissing as e:
             raise UnknownFile(f"No file {file_id} in this team's Files.") from e
         except FileNotScanned as e:
@@ -1135,7 +1138,7 @@ class KnowledgeService:
         leaves the source as it was, and the references Files took for the ids before it are released; an id the
         source holds is added once."""
         s = await self._changeable_source(who, source_id)
-        held = set(cast(list[str], s.get("file_ids") or []))
+        held = set(s.file_ids)
         used: list[tuple[str, str]] = []
         try:
             for f in dict.fromkeys(file_ids):
@@ -1151,13 +1154,13 @@ class KnowledgeService:
 
     async def sync(self, who: Who, source_id: str, *, full: bool = False, retry: bool = False) -> dict[str, Any]:
         s = await self._changeable_source(who, source_id)
-        if s["type"] == "tool":
+        if s.type == "tool":
             return await self.sync_tool(who, s, full=full, trigger="full" if full else "manual")
         return await self._held_sync(who, s, full=full, retry=retry)
 
-    async def scheduled_sync(self, who: Who, s: dict[str, Any]) -> dict[str, Any]:
+    async def scheduled_sync(self, who: Who, s: SourceRow) -> dict[str, Any]:
         """A sync the schedule starts, of either kind, recorded with trigger `schedule`."""
-        if s["type"] == "tool":
+        if s.type == "tool":
             return await self.sync_tool(who, s, full=False, trigger="schedule")
         return await self._held_sync(who, s, full=False, retry=False, trigger="schedule")
 
@@ -1171,7 +1174,7 @@ class KnowledgeService:
     async def _held_sync(
         self,
         who: Who,
-        s: dict[str, Any],
+        s: SourceRow,
         *,
         full: bool,
         retry: bool,
@@ -1180,48 +1183,48 @@ class KnowledgeService:
     ) -> dict[str, Any]:
         """A file source's sync under its lease, so a rebuild, the schedule and a manual sync never run it at once.
         `only` names the one item to read (an item just written), so a write costs one file, not the whole source."""
-        source_id = str(s["id"])
+        source_id = str(s.id)
         lease = await self.take_lease(who.tenant_id, source_id)
         if lease is None:
-            raise Conflict(f"{s['name']} is syncing or rebuilding now; wait for that run to end.", code="sync_running")
+            raise Conflict(f"{s.name} is syncing or rebuilding now; wait for that run to end.", code="sync_running")
         try:
             with ai_run(self.ai_clients, who.tenant_id, ceiling=self.settings_of(s).ai_ceiling):
                 return await self._sync(who, s, full=full, retry=retry, trigger=trigger, only=only)
         finally:
             await lease.release()
 
-    async def hosts_approved(self, who: Who, s: dict[str, Any]) -> dict[str, Any]:
+    async def hosts_approved(self, who: Who, s: SourceRow) -> SourceRow:
         """The source once every host it waits on is approved, read again from tools-service as this service: 409
         `host_waiting` naming the first host still waiting, so nothing is fetched from a site no admin approved."""
-        cfg = dict(s.get("config") or {})
+        cfg: dict[str, Any] = dict(s.config or {})
         if not cfg.get("waitingHosts") or self.tools is None:
             return s
-        answers = await self.tools.source_hosts(who.tenant_id, str(s["team_id"]), cfg)
+        answers = await self.tools.source_hosts(who.tenant_id, str(s.team_id), cfg)
         still = [
             w for w in cfg["waitingHosts"] if any(a["host"] == w["host"] and a["state"] != "allowed" for a in answers)
         ]
         if still:
             raise Conflict(f"Waiting for an admin to approve {still[0]['host']}.", code="host_waiting")
         cfg["waitingHosts"] = []
-        await self.store.update_source(who.tenant_id, str(s["id"]), {"config": cfg})
-        return {**s, "config": cfg}
+        await self.store.update_source(who.tenant_id, str(s.id), {"config": cfg})
+        return s.model_copy(update={"config": cfg})
 
-    async def sync_tool(self, who: Who, s: dict[str, Any], *, full: bool, trigger: str) -> dict[str, Any]:
+    async def sync_tool(self, who: Who, s: SourceRow, *, full: bool, trigger: str) -> dict[str, Any]:
         """A tool source's sync under its lease, so a manual sync and the schedule never run it at once."""
         if self.tools is None:
             raise Conflict("This service reads no tools, so the source cannot sync.", code="tools_unavailable")
-        if s["status"] == "paused":
-            raise Conflict(f"{s['name']} is paused; resume it to sync.", code="source_paused")
+        if s.status == "paused":
+            raise Conflict(f"{s.name} is paused; resume it to sync.", code="source_paused")
         s = await self.hosts_approved(who, s)
-        lease = await self.take_lease(who.tenant_id, str(s["id"]))
+        lease = await self.take_lease(who.tenant_id, str(s.id))
         if lease is None:
-            raise Conflict(f"{s['name']} is syncing now; wait for that run to end.", code="sync_running")
+            raise Conflict(f"{s.name} is syncing now; wait for that run to end.", code="sync_running")
         try:
             with ai_run(self.ai_clients, who.tenant_id, ceiling=self.settings_of(s).ai_ceiling):
                 run = _run(run_row(await sync_tool_source(self, self.tools, who, s, full=full, trigger=trigger)))
         finally:
             await lease.release()
-        await self.settle_repeats(who, str(s["id"]))
+        await self.settle_repeats(who, str(s.id))
         return run
 
     async def settle_repeats(self, who: Who, source_id: str) -> None:
@@ -1232,34 +1235,34 @@ class KnowledgeService:
             return
         items = [i for i in await self.store.items(who.tenant_id, source_ids=[source_id]) if i.status == "indexed"]
         found = repeated([str(x) for x in i.lines] if i.lines is not None else None for i in items)
-        cfg = dict(s.get("config") or {})
+        cfg: dict[str, Any] = dict(s.config or {})
         if found == list(cfg.get("repeats") or []):
             return
         cfg["repeats"] = found
         await self.store.update_source(who.tenant_id, source_id, {"config": cfg})
-        await self.start_rebuild(who, {**s, "config": cfg})
+        await self.start_rebuild(who, s.model_copy(update={"config": cfg}))
 
-    async def settle_run(self, who: Who, s: dict[str, Any], status: str, *, activate: bool) -> None:
+    async def settle_run(self, who: Who, s: SourceRow, status: str, *, activate: bool) -> None:
         """Records a run's outcome on the source; the second failure in a row, or a failure a day into a failing
         streak, raises the failing event once, with the source and its last error."""
-        before = s.get("failing_since")
-        in_row = await self.store.mark_synced(who.tenant_id, str(s["id"]), status, activate=activate)
+        before = s.failing_since
+        in_row = await self.store.mark_synced(who.tenant_id, str(s.id), status, activate=activate)
         if status != "failed":
             await self.embed_now(who.tenant_id)
             return
         long_failing = isinstance(before, datetime) and datetime.now(UTC) - before >= FAILING_AFTER
-        if not (await self.sync_rules(who.tenant_id, str(s["id"])))["notifyOnFailure"]:
+        if not (await self.sync_rules(who.tenant_id, str(s.id)))["notifyOnFailure"]:
             # Every base the source feeds turned the alert off; the run is still recorded as failed.
             return
         if in_row == FAILING_AFTER_RUNS or (long_failing and in_row > FAILING_AFTER_RUNS and in_row % 24 == 0):
             payload = {
-                "sourceId": s["id"],
-                "sourceName": s["name"],
-                "owner": s["owner"],
+                "sourceId": s.id,
+                "sourceName": s.name,
+                "owner": s.owner,
                 "failedRuns": in_row,
                 "failingSince": _iso(before) if isinstance(before, datetime) else None,
             }
-            await self.store.record_event(who.tenant_id, str(s["id"]), name=FAILING_EVENT, payload=payload)
+            await self.store.record_event(who.tenant_id, str(s.id), name=FAILING_EVENT, payload=payload)
 
     async def embed_now(self, tenant: str) -> int:
         """Embeds the tenant's units that have no vector yet, as a sync settles; a model that cannot answer leaves them
@@ -1272,12 +1275,12 @@ class KnowledgeService:
             logger.warning("kb_embed_deferred", tenant=tenant, code=e.code)
             return 0
 
-    async def start_rebuild(self, who: Who, s: dict[str, Any]) -> dict[str, Any] | None:
+    async def start_rebuild(self, who: Who, s: SourceRow) -> dict[str, Any] | None:
         """Rebuilds, in the background, every item of the source built under other settings: split again from its
         stored reading, or read again when the OCR mode changed. Nothing is fetched from where the item came from. The
         run holds the source's lease, so no sync runs beside it, and stops between two items when cancelled. None when
         no item needs it, or a sync holds the source now (that sync, or the next, rebuilds them)."""
-        tenant, source_id = who.tenant_id, str(s["id"])
+        tenant, source_id = who.tenant_id, str(s.id)
         stale = [
             i for i in await self.store.items(tenant, source_ids=[source_id]) if self.built_under_other_settings(s, i)
         ]
@@ -1301,9 +1304,7 @@ class KnowledgeService:
         self._in_background(self._rebuild(who, s, run, stale, lease))
         return _run(run_row(run))
 
-    async def _rebuild(
-        self, who: Who, s: dict[str, Any], run: dict[str, Any], stale: list[ItemRow], lease: Lease
-    ) -> None:
+    async def _rebuild(self, who: Who, s: SourceRow, run: dict[str, Any], stale: list[ItemRow], lease: Lease) -> None:
         # A run of its own for the AI steps: its task may be made inside a sync, whose run it must not share.
         try:
             with ai_run(self.ai_clients, who.tenant_id, ceiling=self.settings_of(s).ai_ceiling, fresh=True):
@@ -1312,14 +1313,14 @@ class KnowledgeService:
             await lease.release()
         # Settings saved while it ran (an AI step approved just after a save) could not start their own rebuild, as
         # this one held the source: it rebuilds what they changed now, so they never wait for the next sync.
-        found = await self.store.sources(who.tenant_id, [str(s["id"])])
+        found = await self.store.sources(who.tenant_id, [str(s.id)])
         if found and self.key_of(found[0]) != self.key_of(s):
             await self.start_rebuild(who, found[0])
 
     async def _rebuild_items(
-        self, who: Who, s: dict[str, Any], run: dict[str, Any], stale: list[ItemRow], lease: Lease
+        self, who: Who, s: SourceRow, run: dict[str, Any], stale: list[ItemRow], lease: Lease
     ) -> None:
-        tenant, source_id, run_id = who.tenant_id, str(s["id"]), str(run["id"])
+        tenant, source_id, run_id = who.tenant_id, str(s.id), str(run["id"])
         counts: dict[str, int] = dict(run["counts"])
         log: list[str] = []
         errors: list[dict[str, Any]] = []
@@ -1338,7 +1339,7 @@ class KnowledgeService:
                     log.append(f"{item.title}: rebuilt at the next sync, which fetches it again")
                 else:
                     found = Stored(item.file_id, item.path, item.mime, item.size, item.digest, False)
-                    origin = Origin(item.path, item.title) if s["type"] == "tool" else None
+                    origin = Origin(item.path, item.title) if s.type == "tool" else None
                     done = await self._read_file(who, s, item, name=item.path, found=found, rebuild=True, origin=origin)
                     outcome = {"indexed": "rebuilt", "reading": "reading"}.get(str(done["status"]), "failed")
                     counts[outcome] += 1
@@ -1384,7 +1385,7 @@ class KnowledgeService:
     async def _sync(
         self,
         who: Who,
-        s: dict[str, Any],
+        s: SourceRow,
         *,
         full: bool,
         retry: bool,
@@ -1395,9 +1396,9 @@ class KnowledgeService:
         different content is its next version, identical content is unchanged. `full` rebuilds every document from its
         content and `retry` rebuilds the failed ones, both keeping their version. One file failing does not stop the
         rest; its item says why. Every sync is recorded as a run."""
-        source_id = s["id"]
-        if s["status"] == "paused":
-            raise Conflict(f"{s['name']} is paused; resume it to sync.", code="source_paused")
+        source_id = s.id
+        if s.status == "paused":
+            raise Conflict(f"{s.name} is paused; resume it to sync.", code="source_paused")
         started = datetime.now(UTC)
         settings = self.settings_of(s)
         items = {i.path: i for i in await self.store.items(who.tenant_id, source_ids=[source_id])}
@@ -1410,9 +1411,9 @@ class KnowledgeService:
         # by uploads before add_file replaced them) is dropped from the source, so it is neither indexed nor pending.
         latest: dict[str, Stored] = {}
         superseded: set[str] = set()
-        uploaded: dict[str, str] = s.get("file_names") or {}
+        uploaded: dict[str, str] = s.file_names or {}
         counts["reading"] = 0
-        for file_id in s["file_ids"] if only is None else [f for f in s["file_ids"] if uploaded.get(f) == only]:
+        for file_id in s.file_ids if only is None else [f for f in s.file_ids if uploaded.get(f) == only]:
             try:
                 found = await self.files.describe(who.tenant_id, source_team(s), file_id)
             except FileMissing:
@@ -1502,7 +1503,7 @@ class KnowledgeService:
         return _run(run_row(run))
 
     async def _chunks(
-        self, who: Who, s: dict[str, Any], doc: ParsedDocument, *, item_id: str, version: int, title: str
+        self, who: Who, s: SourceRow, doc: ParsedDocument, *, item_id: str, version: int, title: str
     ) -> tuple[list[dict[str, Any]], SplitResult]:
         """The item's pieces under the source's settings, each with its index units and its mapped metadata. With an
         approved AI step the split asks the model in a worker thread, on the run's client and ceiling, and only for
@@ -1534,7 +1535,7 @@ class KnowledgeService:
         return [d for d in await self.store.drafts(who.tenant_id, item_id) if d.status != "superseded"]
 
     async def _settle_drafts(
-        self, who: Who, s: dict[str, Any], item_id: str, rows: list[dict[str, Any]], result: SplitResult
+        self, who: Who, s: SourceRow, item_id: str, rows: list[dict[str, Any]], result: SplitResult
     ) -> None:
         """After a split: new drafts wait for review; a section whose text changed supersedes its pending drafts and
         marks its approved ones source_changed for a second look; every approved pair whose quote is still in a live
@@ -1556,7 +1557,7 @@ class KnowledgeService:
             {
                 "id": new_id("chg"),
                 "item_id": item_id,
-                "source_id": str(s["id"]),
+                "source_id": str(s.id),
                 "title": str(rows_by_index[p.chunk_index]["title"]),
                 "section": " > ".join(p.section_path)[:400],
                 "from_version": int(rows_by_index[p.chunk_index]["version"]),
@@ -1659,20 +1660,20 @@ class KnowledgeService:
                 known.setdefault(piece_digest(texts[u.chunk_id]), []).append(u.text)
         return known
 
-    def _metadata(self, s: dict[str, Any], doc: ParsedDocument) -> dict[str, str]:
+    def _metadata(self, s: SourceRow, doc: ParsedDocument) -> dict[str, str]:
         mapped = resolve_metadata(
             self.settings_of(s).metadata_mapping,
             fields=doc.source.fields,
-            collection=str(s["collection"]),
-            source_owner=str(s["owner"]),
-            source_sensitivity=s["sensitivity"],
+            collection=str(s.collection),
+            source_owner=str(s.owner),
+            source_sensitivity=cast(Sensitivity, s.sensitivity),
         )
         return mapped.values
 
     async def _reindex(
         self,
         who: Who,
-        s: dict[str, Any],
+        s: SourceRow,
         existing: ItemRow,
         *,
         name: str,
@@ -1710,7 +1711,7 @@ class KnowledgeService:
         await self._settle_drafts(who, s, existing.id, chunks, result)
         return await self._duplicates(who, s, existing.model_dump() | values)
 
-    def built_under_other_settings(self, s: dict[str, Any], item: ItemRow) -> bool:
+    def built_under_other_settings(self, s: SourceRow, item: ItemRow) -> bool:
         """Whether an indexed item's pieces were split, or its file read, under settings the source no longer has.
         An item indexed before items recorded their settings was split with its kind's defaults."""
         if item.status != "indexed":
@@ -1718,13 +1719,13 @@ class KnowledgeService:
         settings = self.settings_of(s)
         built = item.indexed_with or index_key(stored(kind_of(s), None, ocr=self.ocr))
         read_ocr = (item.read_with or "").split(":")
-        reread = s["type"] != "tool" and len(read_ocr) > 1 and read_ocr[1] != settings.parsing.ocr
+        reread = s.type != "tool" and len(read_ocr) > 1 and read_ocr[1] != settings.parsing.ocr
         return built != self.key_of(s) or reread
 
     async def _read_file(
         self,
         who: Who,
-        s: dict[str, Any],
+        s: SourceRow,
         existing: ItemRow | None,
         *,
         name: str,
@@ -1773,7 +1774,7 @@ class KnowledgeService:
         )  # fmt: skip
 
     async def _mark_reading(
-        self, who: Who, s: dict[str, Any], existing: ItemRow | None, *, name: str, found: Stored, origin: Origin
+        self, who: Who, s: SourceRow, existing: ItemRow | None, *, name: str, found: Stored, origin: Origin
     ) -> dict[str, Any]:
         """The item waits for its reading; an indexed version keeps answering until the new one is indexed."""
         values = {"status": "reading", "digest": found.digest, "file_id": found.file_id, "mime": found.mime,
@@ -1788,7 +1789,7 @@ class KnowledgeService:
     async def _failed(
         self,
         who: Who,
-        s: dict[str, Any],
+        s: SourceRow,
         existing: ItemRow | None,
         *,
         name: str,
@@ -1805,12 +1806,12 @@ class KnowledgeService:
         await self.store.add_item(who.tenant_id, item)
         return item
 
-    def _placeholder(self, who: Who, s: dict[str, Any], name: str, found: Stored, origin: Origin) -> dict[str, Any]:
+    def _placeholder(self, who: Who, s: SourceRow, name: str, found: Stored, origin: Origin) -> dict[str, Any]:
         """An item with no version yet: its first indexed version is 1."""
         return {
-            "tenant_id": who.tenant_id, "id": new_id("itm"), "source_id": s["id"], "path": origin.path,
+            "tenant_id": who.tenant_id, "id": new_id("itm"), "source_id": s.id, "path": origin.path,
             "title": origin.title or name, "mime": found.mime, "size": found.size, "file_id": found.file_id,
-            "digest": found.digest, "version": 0, "status": "reading", "chunk_count": 0, "owner": s["owner"],
+            "digest": found.digest, "version": 0, "status": "reading", "chunk_count": 0, "owner": s.owner,
             "created_at": datetime.now(UTC), **origin.extra,
         }  # fmt: skip
 
@@ -1825,20 +1826,20 @@ class KnowledgeService:
             source = found_sources[0]
             found = Stored(item.file_id, item.path, item.mime, item.size, item.digest, False)
             # A fetched item keeps the system's id as its key and its own title; a file's title comes from its reading.
-            origin = Origin(item.path, item.title) if source["type"] == "tool" else None
+            origin = Origin(item.path, item.title) if source.type == "tool" else None
             done = await self._read_file(who, source, item, name=item.path, found=found, rebuild=False, origin=origin)
             if done["status"] != "reading":
                 settled += 1
                 if done["status"] == "indexed":
                     await self.settle_run(who, source, "success", activate=True)
                     _, by_source = await self._joined(who.tenant_id)
-                    await self.store.refreshed(who.tenant_id, by_source.get(str(source["id"]), []))
+                    await self.store.refreshed(who.tenant_id, by_source.get(str(source.id), []))
         return settled
 
     async def _index(
         self,
         who: Who,
-        s: dict[str, Any],
+        s: SourceRow,
         existing: ItemRow | None,
         *,
         file_id: str,
@@ -1890,7 +1891,7 @@ class KnowledgeService:
         item = {
             "tenant_id": who.tenant_id,
             "id": item_id,
-            "source_id": s["id"],
+            "source_id": s.id,
             "path": path or name,
             "title": title,
             "mime": mime,
@@ -1904,7 +1905,7 @@ class KnowledgeService:
             "warning": None if error else warning,
             "page_count": pages,
             "chunk_count": len(chunks),
-            "owner": s["owner"],
+            "owner": s.owner,
             "created_at": existing.created_at if existing else now,
             "processed_at": now,
             "read_with": read_with,
@@ -1934,7 +1935,7 @@ class KnowledgeService:
             and existing is not None
             and not error
             and existing.content_digest != item["content_digest"]
-            and (await self.sync_rules(who.tenant_id, str(s["id"])))["changes"] == "review"
+            and (await self.sync_rules(who.tenant_id, str(s.id)))["changes"] == "review"
         ):
             return await self._hold(who, existing, item, version_row, chunks, change)
         await self.store.index_version(who.tenant_id, item, version_row, chunks, new=existing is None, change=change)
@@ -1979,7 +1980,7 @@ class KnowledgeService:
         )
         return True
 
-    async def _duplicates(self, who: Who, s: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    async def _duplicates(self, who: Who, s: SourceRow, item: dict[str, Any]) -> dict[str, Any]:
         """An item whose cleaned text another indexed item in the same knowledge base already holds. Flagged (the
         default): the older one names the newer and leaves search, and both say so. Skipped: the newer one is kept out
         of search and says which item holds the text."""
@@ -2098,12 +2099,12 @@ class KnowledgeService:
         started = datetime.now(UTC)
         found = await self._retrieve(who.tenant_id, [b], question, collection=collection)
         passages = found.passages
-        sources = {s["id"]: s for s in await self.store.sources(who.tenant_id)}
+        sources = {s.id: s for s in await self.store.sources(who.tenant_id)}
         items = {i.id: i for i in await self.store.items(who.tenant_id)}
 
         def source_name(p: Passage) -> str:
             item = items.get(p.item_id)
-            return sources[item.source_id]["name"] if item and item.source_id in sources else ""
+            return sources[item.source_id].name if item and item.source_id in sources else ""
 
         return {
             "id": new_id("qry"),
@@ -2191,21 +2192,23 @@ class KnowledgeService:
         if given:
             values["settings"] = wire(self._merged(before, given))
         if values:
-            entry = audit_entry(who, "knowledge.source.settings", "knowledge_source", source_id, s["name"], s, values)
+            entry = audit_entry(
+                who, "knowledge.source.settings", "knowledge_source", source_id, s.name, s.model_dump(), values
+            )
             await self.store.update_source(who.tenant_id, source_id, values, audit=entry)
         _, by_source = await self._joined(who.tenant_id)
-        after = {**s, **values}
+        after = s.model_copy(update=values)
         rebuild = None
         if given and rebuild_for(before, self.settings_of(after)) != "none":
             rebuild = await self.start_rebuild(who, after)
         return {**self._source(after, by_source.get(source_id, [])), "rebuild": rebuild}
 
-    async def _values_changed(self, who: Who, s: dict[str, Any], given: dict[str, Any]) -> dict[str, Any]:
+    async def _values_changed(self, who: Who, s: SourceRow, given: dict[str, Any]) -> dict[str, Any]:
         """A plugin source's own settings (a site's start, include and exclude rules, depth, pace), merged over the
         saved ones and checked against what its plugin declares, as a create checks them."""
-        if s["type"] != "tool":
+        if s.type != "tool":
             raise ValidationFailed("Only a source read through an app has settings of its own.")
-        cfg = dict(s.get("config") or {})
+        cfg: dict[str, Any] = dict(s.config or {})
         merged = {**cast(dict[str, Any], cfg.get("values") or {}), **given}
         checked = await source_config(
             self.tools, who, {"config": {"plugin": cfg.get("plugin"), "source": cfg.get("source"), "values": merged}}
@@ -2229,9 +2232,11 @@ class KnowledgeService:
         )
         after = before.model_copy(update={"ingest": before.ingest.model_copy(update={"approval": approval})})
         values = {"settings": wire(after)}
-        entry = audit_entry(who, "knowledge.source.settings", "knowledge_source", source_id, s["name"], s, values)
+        entry = audit_entry(
+            who, "knowledge.source.settings", "knowledge_source", source_id, s.name, s.model_dump(), values
+        )
         await self.store.update_source(who.tenant_id, source_id, values, audit=entry)
-        changed = {**s, **values}
+        changed = s.model_copy(update=values)
         rebuild = None
         if rebuild_for(before, self.settings_of(changed)) != "none":
             rebuild = await self.start_rebuild(who, changed)
@@ -2273,7 +2278,7 @@ class KnowledgeService:
             ),
         }
 
-    async def _stored_document(self, who: Who, s: dict[str, Any], item: ItemRow) -> ParsedDocument | None:
+    async def _stored_document(self, who: Who, s: SourceRow, item: ItemRow) -> ParsedDocument | None:
         """The item's document as its last split read it, from documents-service's kept reading; None when there is
         no reading to read now."""
         if self.readings is None or not item.file_id:
@@ -2293,13 +2298,13 @@ class KnowledgeService:
     async def tombstones(self, who: Who, source_id: str) -> list[dict[str, Any]]:
         """The addresses removed after answering gone twice, with when and why; the next sync leaves them out."""
         s = await self._source_row(who, source_id)
-        marks = cast(dict[str, dict[str, Any]], dict(s.get("config") or {}).get("tombstones") or {})
+        marks = cast(dict[str, dict[str, Any]], dict(s.config or {}).get("tombstones") or {})
         return [{"id": k, "at": v.get("at"), "reason": v.get("reason")} for k, v in sorted(marks.items())]
 
     async def lift_tombstones(self, who: Who, source_id: str, ids: list[str]) -> list[dict[str, Any]]:
         """Lets the next sync take those addresses in again, if the source still lists them."""
         s = await self._changeable_source(who, source_id)
-        cfg = dict(s.get("config") or {})
+        cfg: dict[str, Any] = dict(s.config or {})
         marks = cast(dict[str, Any], dict(cfg.get("tombstones") or {}))
         if missing := [i for i in ids if i not in marks]:
             raise NotFound(f"No tombstone for {missing[0]}.")
@@ -2319,7 +2324,7 @@ class KnowledgeService:
         status = "paused" if paused else "active"
         await self.store.update_source(who.tenant_id, source_id, {"status": status})
         _, by_source = await self._joined(who.tenant_id)
-        return self._source({**s, "status": status}, by_source.get(source_id, []))
+        return self._source(s.model_copy(update={"status": status}), by_source.get(source_id, []))
 
     async def detach(self, who: Who, kb_id: str, source_id: str) -> dict[str, Any]:
         b = await self._changeable(who, kb_id)
@@ -2333,7 +2338,7 @@ class KnowledgeService:
         b = await self._changeable(who, kb_id)
         by_kb, _ = await self._joined(who.tenant_id)
         for s in await self.store.sources(who.tenant_id, by_kb.get(kb_id, [])):
-            if s["status"] != "paused":
+            if s.status != "paused":
                 try:
                     await self._held_sync(who, s, full=False, retry=retry)
                 except Conflict:
@@ -2349,13 +2354,13 @@ class KnowledgeService:
 
     # ── Item review and lookups ──────────────────────────────────────────
 
-    async def _changeable_item(self, who: Who, item_id: str) -> tuple[ItemRow, dict[str, Any]]:
+    async def _changeable_item(self, who: Who, item_id: str) -> tuple[ItemRow, SourceRow]:
         found = await self.store.items(who.tenant_id, item_id=item_id)
         if not found:
             raise NotFound("No item with that id.")
         i = found[0]
         s = await self._source_row(who, i.source_id)
-        self._may_change(who, s["team_id"], i.title)
+        self._may_change(who, s.team_id, i.title)
         return i, s
 
     async def verify_item(self, who: Who, item_id: str, *, verified: bool) -> dict[str, Any]:
@@ -2380,11 +2385,11 @@ class KnowledgeService:
         sources = await self.store.sources(who.tenant_id)
         owners = (
             {b.owner for b in bases}
-            | {s["owner"] for s in sources}
+            | {s.owner for s in sources}
             | {i.owner for i in await self.store.items(who.tenant_id)}
         )
-        tags = {t for s in sources for t in s["tags"]}
-        collections = {c for b in bases for c in b.collections} | {s["collection"] for s in sources}
+        tags = {t for s in sources for t in s.tags}
+        collections = {c for b in bases for c in b.collections} | {s.collection for s in sources}
         return {
             "owners": sorted(o for o in owners if o),
             "tags": sorted(tags),
@@ -2397,7 +2402,7 @@ class KnowledgeService:
         """Changes as the Changes queue shows them; the sources and bases they name are read once for all of them."""
         if not found:
             return []
-        sources = {s["id"]: s for s in await self.store.sources(who.tenant_id)}
+        sources = {s.id: s for s in await self.store.sources(who.tenant_id)}
         bases = {b.id: b for b in await self.store.bases(who.tenant_id)}
         _, by_source = await self._joined(who.tenant_id)
         return [self._change_out(who, ch, sources, bases, by_source) for ch in found]
@@ -2406,7 +2411,7 @@ class KnowledgeService:
         self,
         who: Who,
         ch: ChangeRow,
-        sources: dict[str, dict[str, Any]],
+        sources: dict[str, SourceRow],
         bases: dict[str, BaseRow],
         by_source: dict[str, list[str]],
     ) -> dict[str, Any]:
@@ -2414,7 +2419,7 @@ class KnowledgeService:
         kbs = [{"id": k, "name": bases[k].name} for k in by_source.get(ch.source_id, []) if k in bases]
         if ch.origin == "faq":
             # Deciding a draft is changing the source, so it takes the right the decide route checks.
-            allowed = s is not None and self._rights(who, s["team_id"], s["name"], None)["canEdit"]
+            allowed = s is not None and self._rights(who, s.team_id, s.name, None)["canEdit"]
             draft = _draft_out(ch, s, kbs)
             return {**draft, **self.review_state(s), "canDecide": allowed and ch.status in DECIDABLE}
         held = "held" in detail_of(ch)
@@ -2432,7 +2437,7 @@ class KnowledgeService:
             "documentId": ch.item_id,
             "documentTitle": ch.title,
             "sourceId": ch.source_id,
-            "sourceName": s["name"] if s else "",
+            "sourceName": s.name if s else "",
             "section": ch.section,
             "kbs": kbs,
             "fromVersion": f"v{ch.from_version}",
@@ -2442,9 +2447,9 @@ class KnowledgeService:
             "trust": "changed",
             **self.review_state(s),
             "citedBy": [],
-            "owner": s["owner"] if s else "",
+            "owner": s.owner if s else "",
             # A sync applies its change when it runs, unless a base it feeds holds changes for review.
-            "canDecide": waiting and s is not None and self._rights(who, s["team_id"], s["name"], None)["canEdit"],
+            "canDecide": waiting and s is not None and self._rights(who, s.team_id, s.name, None)["canEdit"],
             "status": ch.status if held else "approved",
             "createdAt": _iso(ch.changed_at),
             **(
@@ -2499,7 +2504,7 @@ class KnowledgeService:
 
     # ── Items and documents ──────────────────────────────────────────────
 
-    def _item(self, i: ItemRow, s: dict[str, Any]) -> dict[str, Any]:
+    def _item(self, i: ItemRow, s: SourceRow) -> dict[str, Any]:
         return {
             "id": i.id,
             "sourceId": i.source_id,
@@ -2518,15 +2523,15 @@ class KnowledgeService:
             **({"duplicateOf": i.duplicate_of} if i.duplicate_of else {}),
             **({"folder": i.folder} if i.folder else {}),
             "chunkCount": i.chunk_count,
-            "tags": s["tags"],
+            "tags": s.tags,
             "metadata": {},
             "acl": [],
             "owner": i.owner,
             "version": f"v{i.version}",
             "effectiveDate": (i.processed_at or i.created_at).date().isoformat(),
             **self.review_state(s),
-            "sensitivity": s["sensitivity"],
-            "collection": s["collection"],
+            "sensitivity": s.sensitivity,
+            "collection": s.collection,
             "verified": i.verified,
             "queries30d": 0,
             **({"pageCount": i.page_count} if i.page_count else {}),
@@ -2560,16 +2565,19 @@ class KnowledgeService:
         by_kb, _ = await self._joined(who.tenant_id)
         name = f"{b.name} pages"
         attached = await self.store.sources(who.tenant_id, by_kb.get(kb_id, []))
-        source = next((x for x in attached if x["name"] == name), None)
+        source = next((x for x in attached if x.name == name), None)
         if source is None:
-            source = await self.create_source(
+            made = await self.create_source(
                 who, {"type": "text", "name": name, "collection": "Pages", "owner": b.owner, "kbIds": [kb_id]}
             )
-        elif source["type"] == "file":
-            # A base's pages source made before typed text existed holds its pages as files; it becomes the typed text
-            # source it always was, keeping its files and versions, so the next page is written into it.
-            await self.store.update_source(who.tenant_id, str(source["id"]), {"type": "text"})
-        put = await self.put_item(who, str(source["id"]), {"name": f"{_slug(title) or 'page'}.md", "title": title,
+            source_id = str(made["id"])
+        else:
+            source_id = source.id
+            if source.type == "file":
+                # A base's pages source made before typed text existed holds its pages as files; it becomes the typed
+                # text source it always was, keeping its files and versions, so the next page is written into it.
+                await self.store.update_source(who.tenant_id, source_id, {"type": "text"})
+        put = await self.put_item(who, source_id, {"name": f"{_slug(title) or 'page'}.md", "title": title,
                                                             "text": text})  # fmt: skip
         return cast(dict[str, Any], put["item"])
 
@@ -2580,9 +2588,9 @@ class KnowledgeService:
         `text` is Markdown (a `title` becomes its heading) or another text type by `mime`; `content` is base64 bytes
         of a file such as a PDF, with its `mime`."""
         s = await self._changeable_source(who, source_id)
-        if s["type"] not in WRITTEN_TYPES:
+        if s.type not in WRITTEN_TYPES:
             raise ValidationFailed(
-                f"{s['name']} takes its items from {KIND_LABEL.get(kind_of(s), s['type'])}; items are written only "
+                f"{s.name} takes its items from {KIND_LABEL.get(kind_of(s), s.type)}; items are written only "
                 "into a typed text or push source.",
                 code="source_not_written",
             )
@@ -2637,8 +2645,10 @@ class KnowledgeService:
         if own and own in by_kb.get(kb_id, []):
             source = (await self.store.sources(who.tenant_id, [str(own)]) or [None])[0]
         made = source is None
-        if source is None:
-            source = await self.create_source(
+        if source is not None:
+            source_id = source.id
+        else:
+            created = await self.create_source(
                 who,
                 {
                     "type": "file",
@@ -2648,18 +2658,19 @@ class KnowledgeService:
                     "kbIds": [kb_id],
                 },
             )
+            source_id = str(created["id"])
         try:
-            added = await self.add_files(who, str(source["id"]), file_ids)
+            added = await self.add_files(who, source_id, file_ids)
         except (UnknownFile, Conflict):
             # Files records a reference against the source, so it is made before the check; a refused first add must
             # not leave the base an empty documents source.
             if made:
-                await self.store.remove_source(who.tenant_id, str(source["id"]))
+                await self.store.remove_source(who.tenant_id, source_id)
             raise
         if made:
-            await self.store.update_base(who.tenant_id, kb_id, {"documents_source_id": str(source["id"])})
-        run = await self.sync(who, str(source["id"]))
-        return {"sourceId": source["id"], "files": added, "run": run}
+            await self.store.update_base(who.tenant_id, kb_id, {"documents_source_id": source_id})
+        run = await self.sync(who, source_id)
+        return {"sourceId": source_id, "files": added, "run": run}
 
     async def documents(
         self,
@@ -2674,12 +2685,12 @@ class KnowledgeService:
         if await self.store.base(who.tenant_id, kb_id) is None:
             raise NotFound("No knowledge base with that id.")
         by_kb, _ = await self._joined(who.tenant_id)
-        sources = {s["id"]: s for s in await self.store.sources(who.tenant_id, by_kb.get(kb_id, []))}
+        sources = {s.id: s for s in await self.store.sources(who.tenant_id, by_kb.get(kb_id, []))}
         rows = [
             {
                 **self._item(i, sources[i.source_id]),
-                "sourceName": sources[i.source_id]["name"],
-                "docType": doc_type(i.mime, sources[i.source_id]["type"], bool(i.url)),
+                "sourceName": sources[i.source_id].name,
+                "docType": doc_type(i.mime, sources[i.source_id].type, bool(i.url)),
             }
             for i in await self.store.items(who.tenant_id, source_ids=list(sources))
             if _matches(search, i.title, i.path)
@@ -2707,7 +2718,7 @@ class KnowledgeService:
             facets[key] = counted
         return page_of([r for r in rows if keeps(r)], page=page, page_size=page_size, facets=facets)
 
-    async def _reading_summary(self, who: Who, s: dict[str, Any], i: ItemRow) -> dict[str, Any] | None:
+    async def _reading_summary(self, who: Who, s: SourceRow, i: ItemRow) -> dict[str, Any] | None:
         """How the item's file was read and what cleaning removed, page by page, from its stored reading; None for an
         item with no file or while documents-service has no finished reading for it."""
         if self.readings is None or not i.file_id:
@@ -2769,8 +2780,8 @@ class KnowledgeService:
                 "indexedWith": i.indexed_with,
                 "current": not self.built_under_other_settings(s, i),
             },
-            "sourceName": s["name"],
-            "sourceType": s["type"],
+            "sourceName": s.name,
+            "sourceType": s.type,
             "detail": {
                 "content": "\n\n".join(c.text for c in chunks),
                 "chunks": [
@@ -2796,7 +2807,7 @@ class KnowledgeService:
                         "effectiveDate": v.created_at.date().isoformat(),
                         "status": v.status,
                         "digest": v.digest,
-                        "sourceName": s["name"],
+                        "sourceName": s.name,
                         # Who the source system lets see this version; stored, not yet enforced.
                         **({"allowed": v.allowed} if v.allowed else {}),
                     }
@@ -2808,7 +2819,7 @@ class KnowledgeService:
 
 def _change(  # noqa: PLR0917 - one call site, every argument a different part of the change
     who: Who,
-    s: dict[str, Any],
+    s: SourceRow,
     item: dict[str, Any],
     from_version: int,
     before: list[ChunkRow],
@@ -2823,7 +2834,7 @@ def _change(  # noqa: PLR0917 - one call site, every argument a different part o
         "tenant_id": who.tenant_id,
         "id": new_id("chg"),
         "item_id": item["id"],
-        "source_id": s["id"],
+        "source_id": s.id,
         "title": item["title"],
         "section": section,
         "from_version": from_version,
@@ -2941,28 +2952,20 @@ def _run(r: RunRow) -> dict[str, Any]:
     }
 
 
-def health_of(s: dict[str, Any]) -> dict[str, Any]:
+def health_of(s: SourceRow) -> dict[str, Any]:
     """A source's health in one place: never synced, healthy, failing (since when, for how many days) or waiting for
     its connection to be signed in again."""
-    cfg = dict(s.get("config") or {})
-    since: datetime | None = s.get("failing_since")
-    good: datetime | None = s.get("last_good_sync_at")
+    cfg = dict(s.config or {})
+    since: datetime | None = s.failing_since
+    good: datetime | None = s.last_good_sync_at
     reconnect = cfg.get("paused") == "needs_reconnect"
-    state = (
-        "needs_reconnect"
-        if reconnect
-        else "failing"
-        if since
-        else "healthy"
-        if good or s.get("last_sync_at")
-        else "never"
-    )
+    state = "needs_reconnect" if reconnect else "failing" if since else "healthy" if good or s.last_sync_at else "never"
     return {
         "state": state,
         **({"lastGoodSyncAt": _iso(good)} if good else {}),
         **({"failingSince": _iso(since)} if since else {}),
         "daysFailing": (datetime.now(UTC) - since).days if since else 0,
-        "failedRuns": int(s.get("failures_in_row") or 0),
+        "failedRuns": int(s.failures_in_row or 0),
         "tombstoned": len(cast(dict[str, Any], cfg.get("tombstones") or {})),
     }
 
@@ -2973,14 +2976,14 @@ def kind_defaults(kind: str, ocr: str, *, plugin_schedule: Any = None) -> dict[s
     return {"defaults": {**wire(defaults(kind, ocr=ocr)), "schedule": schedule}}
 
 
-def scope_summary(s: dict[str, Any]) -> str:
+def scope_summary(s: SourceRow) -> str:
     """What a source takes in, in a few words: a site's start address, or a plugin source's name, or its files."""
-    if s["type"] in WRITTEN_TYPES:
-        return f"{len(s['file_ids'])} {'pages' if s['type'] == 'text' else 'pushed items'}"
-    if s["type"] != "tool":
-        n = len(s["file_ids"])
+    if s.type in WRITTEN_TYPES:
+        return f"{len(s.file_ids)} {'pages' if s.type == 'text' else 'pushed items'}"
+    if s.type != "tool":
+        n = len(s.file_ids)
         return f"{n} uploaded file" if n == 1 else f"{n} uploaded files"
-    cfg = dict(s.get("config") or {})
+    cfg = dict(s.config or {})
     values = cast(dict[str, Any], cfg.get("values") or {})
     start = cast(list[Any], values.get("start") or [])
     if start:
@@ -2993,10 +2996,10 @@ def scope_summary(s: dict[str, Any]) -> str:
 KIND_LABEL = {"file": "Files", "text": "Typed text", "push": "Pushed by API", "web": "Website", "tool": "App source"}
 
 
-def kind_label(s: dict[str, Any]) -> str:
+def kind_label(s: SourceRow) -> str:
     """What the source is, as the Add source dialog named it: Files, or the plugin's title for the source."""
-    title = dict(s.get("config") or {}).get("title")
-    return str(title) if s["type"] == "tool" and title else KIND_LABEL.get(kind_of(s), str(s["type"]))
+    title = dict(s.config or {}).get("title")
+    return str(title) if s.type == "tool" and title else KIND_LABEL.get(kind_of(s), str(s.type))
 
 
 def ai_steps_waiting(settings: IngestSettings) -> list[str]:
@@ -3034,16 +3037,16 @@ def written_bytes(i: dict[str, Any], title: str) -> tuple[bytes, str]:
     return f"{body}\n".encode(), mime
 
 
-def kind_of(s: dict[str, Any]) -> str:
+def kind_of(s: SourceRow) -> str:
     """The kind a source's defaults are chosen by: a plugin source whose items are one website's pages is `web`."""
-    if s["type"] == "tool" and dict(s.get("config") or {}).get("site"):
+    if s.type == "tool" and dict(s.config or {}).get("site"):
         return "web"
-    return str(s["type"])
+    return str(s.type)
 
 
-def repeats_of(s: dict[str, Any]) -> list[str]:
+def repeats_of(s: SourceRow) -> list[str]:
     """The lines last found repeated across the source's pages."""
-    found = cast(list[Any], dict(s.get("config") or {}).get("repeats") or [])
+    found = cast(list[Any], dict(s.config or {}).get("repeats") or [])
     return [str(d) for d in found]
 
 
@@ -3115,7 +3118,7 @@ SHOWN_ORIGIN = {"sync": "source_sync", "faq": "generated_faq"}
 CHANGE_ORIGINS = {shown: stored for stored, shown in SHOWN_ORIGIN.items()}
 
 
-def _draft_out(ch: ChangeRow, s: dict[str, Any] | None, kbs: list[dict[str, Any]]) -> dict[str, Any]:
+def _draft_out(ch: ChangeRow, s: SourceRow | None, kbs: list[dict[str, Any]]) -> dict[str, Any]:
     """An FAQ draft as the Changes queue shows it: the pair, the passage it quotes beside it, and its review state."""
     detail = detail_of(ch)
     return {
@@ -3127,7 +3130,7 @@ def _draft_out(ch: ChangeRow, s: dict[str, Any] | None, kbs: list[dict[str, Any]
         "documentId": ch.item_id,
         "documentTitle": ch.title,
         "sourceId": ch.source_id,
-        "sourceName": s["name"] if s else "",
+        "sourceName": s.name if s else "",
         "section": ch.section,
         "kbs": kbs,
         "fromVersion": f"v{ch.from_version}",
@@ -3136,7 +3139,7 @@ def _draft_out(ch: ChangeRow, s: dict[str, Any] | None, kbs: list[dict[str, Any]
         "after": ch.after,
         "trust": "source_changed" if ch.status == "source_changed" else "draft",
         "citedBy": [],
-        "owner": s["owner"] if s else "",
+        "owner": s.owner if s else "",
         "canDecide": ch.status in DECIDABLE,
         "status": ch.status,
         "createdAt": _iso(ch.changed_at),

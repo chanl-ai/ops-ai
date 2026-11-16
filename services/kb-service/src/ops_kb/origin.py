@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .store.knowledge import SourceRow
+
 
 @dataclass(frozen=True)
 class Origin:
@@ -18,6 +20,6 @@ class Origin:
     allowed: list[str] | None = None
 
 
-def source_team(s: dict[str, Any]) -> str:
+def source_team(s: SourceRow) -> str:
     """The files-service team a source's files are stored under: the team that created the source."""
-    return str(s["team_id"] or "team_ops")
+    return s.team_id or "team_ops"

@@ -595,6 +595,40 @@ class BaseRow(Out):
 BASE_COLUMNS = [c for c in kb_bases.c if c.name != "tenant_id"]
 
 
+class SourceRow(Out):
+    """A source as stored, but the tenant, with `item_counts` (its documents by status, and `chunks` indexed) and the
+    database's clock when it was read (`db_now`), which a lease is judged by."""
+
+    id: str
+    team_id: str
+    type: str
+    name: str
+    collection: str
+    owner: str
+    sensitivity: str
+    status: str
+    tags: list[str]
+    file_ids: list[str]
+    file_names: dict[str, str] | None
+    created_by: str
+    created_at: datetime
+    last_sync_at: datetime | None
+    last_run_status: str | None
+    config: dict[str, JsonValue] | None
+    lease_until: datetime | None
+    lease_owner: str | None
+    settings: dict[str, JsonValue] | None
+    last_good_sync_at: datetime | None
+    failing_since: datetime | None
+    failures_in_row: int
+    db_now: datetime
+    item_counts: dict[str, int]
+
+
+# Every column of kb_sources but the tenant.
+SOURCE_COLUMNS = [c for c in kb_sources.c if c.name != "tenant_id"]
+
+
 class RunRow(Out):
     """One sync run of a source: running, or ended with its counts, errors and log."""
 
@@ -736,10 +770,10 @@ class KnowledgeStore(Store):
             q = sa.select(kb_sources.c.tenant_id).where(any_team(kb_sources, MOVE_TENANTS))
             return [str(r[0]) for r in await c.execute(q.distinct())]
 
-    async def sources(self, tenant: str, ids: list[str] | None = None) -> list[dict[str, Any]]:
+    async def sources(self, tenant: str, ids: list[str] | None = None) -> list[SourceRow]:
         """Each source with `item_counts`, its documents by status (pending, indexed, failed), so what a source says
         about its documents is what its items are."""
-        q = sa.select(kb_sources, db_now().label("db_now")).where(
+        q = sa.select(*SOURCE_COLUMNS, db_now().label("db_now")).where(
             kb_sources.c.tenant_id == tenant, team_visible(kb_sources)
         )
         if ids is not None:
@@ -764,7 +798,7 @@ class KnowledgeStore(Store):
                 mine[str(r["status"])] = int(r["n"])
                 if r["status"] == "indexed":
                     mine["chunks"] = int(r["chunks"])
-        return [{**r, "item_counts": counts.get(r["id"], {})} for r in rows]
+        return [SourceRow.model_validate({**r, "item_counts": counts.get(r["id"], {})}) for r in rows]
 
     async def links(self, tenant: str) -> list[tuple[str, str]]:
         """(knowledge base id, source id) for every attachment in the tenant."""
