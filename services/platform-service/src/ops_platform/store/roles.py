@@ -29,6 +29,7 @@ from ops_access import (
     builtin_roles_for,
 )
 from ops_access.catalogue import ADMIN
+from ops_access.check import FetchGrids
 from ops_identity import Principal
 from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id, now_iso
@@ -183,7 +184,7 @@ class RoleStore(TenantDb):
             head = await one(c, q, _RoleHead)
             if head is None:
                 return None
-            grants = await _grids(c, [role_id])
+            grants = await grids_in(c, [role_id])
         return RoleRow(**head.model_dump(), grants=grants.get(role_id, []))
 
     async def holdings(self, tenant_id: str, user_id: str) -> Holdings:
@@ -267,7 +268,7 @@ class RoleStore(TenantDb):
         async with self.tenant_tx(tenant_id) as c:
             if (await c.execute(sa.select(roles.c.id).where(roles.c.id == role_id))).first() is None:
                 return False
-            before = {(a, x): s for a, x, s in (await _grids(c, [role_id])).get(role_id, [])}
+            before = {(a, x): s for a, x, s in (await grids_in(c, [role_id])).get(role_id, [])}
             after = {(a, x): s for a, x, s in grants}
             await c.execute(role_permissions.delete().where(role_permissions.c.role_id == role_id))
             if grants:
@@ -301,7 +302,7 @@ class RoleStore(TenantDb):
 
     async def grids(self, tenant_id: str, role_ids: list[str]) -> dict[str, list[Grant]]:
         async with self.tenant_tx(tenant_id) as c:
-            return await _grids(c, role_ids)
+            return await grids_in(c, role_ids)
 
     async def create(
         self, tenant_id: str, *, name: str, description: str, grants: list[Grant], by: str, request_id: str
@@ -554,7 +555,7 @@ class RoleStore(TenantDb):
             return (await c.execute(sa.select(tenants.c.security_team_id).where(tenants.c.id == tenant_id))).scalar()
 
 
-async def _grids(c: AsyncConnection, role_ids: list[str]) -> dict[str, list[Grant]]:
+async def grids_in(c: AsyncConnection, role_ids: list[str]) -> dict[str, list[Grant]]:
     q = (
         sa.select(
             role_permissions.c.role_id, role_permissions.c.area, role_permissions.c.action, role_permissions.c.scope
@@ -584,8 +585,33 @@ async def live_in(
 ) -> tuple[Principal, Access]:
     """`RoleStore.live` on the caller's transaction."""
     held = await holdings_in(c, user_id)
-    live = active(held.assignments, now_iso())
     version = await version_in(c, tenant_id)
+    security = (await c.execute(sa.select(tenants.c.security_team_id).where(tenants.c.id == tenant_id))).scalar()
+
+    async def fetch(_t: str, _v: int, ids: list[str]) -> dict[str, list[Grant]]:
+        return await grids_in(c, ids)
+
+    # The built-in roles too, so a refusal names who holds the cell in this workspace.
+    builtins = [r.id for r in BUILTIN_ROLES]
+    return await access_from(
+        tenant_id, user_id, held, version=version, security=security, fetch=fetch, also=builtins, team=team
+    )
+
+
+async def access_from(
+    tenant_id: str,
+    user_id: str,
+    held: Holdings,
+    *,
+    version: int,
+    security: str | None,
+    fetch: FetchGrids,
+    also: list[str] | None = None,
+    team: str | None = None,
+) -> tuple[Principal, Access]:
+    """The person as `can` sees them, from rows already read: their holdings, the permission version, the Security
+    team and the grids `fetch` answers for the roles they hold (and `also`), loaded once."""
+    live = active(held.assignments, now_iso())
     p = Principal(
         kind="person",
         sub=user_id,
@@ -600,11 +626,9 @@ async def live_in(
         permission_version=version,
         auth_method="session",
     )
-    security = (await c.execute(sa.select(tenants.c.security_team_id).where(tenants.c.id == tenant_id))).scalar()
-    access = Access(security_team=security, grids=Grids(fetch=lambda _t, _v, ids: _grids(c, ids)))
-    # The built-in roles too, so a refusal names who holds the cell in this workspace.
-    await access.grids.load(tenant_id, version, [*{a.role_id for a in live}, *(r.id for r in BUILTIN_ROLES)])
-    # Loaded once on `c`; a later load would read on a transaction that has ended.
+    access = Access(security_team=security, grids=Grids(fetch=fetch))
+    await access.grids.load(tenant_id, version, [*{a.role_id for a in live}, *(also or [])])
+    # Loaded once; a later load would read on a transaction that has ended.
     access.grids.fetch = None
     return p, access
 
@@ -642,6 +666,36 @@ async def holdings_in(c: AsyncConnection, user_id: str) -> Holdings:
     if extra:
         more = await c.execute(sa.select(teams.c.id, teams.c.name).where(teams.c.id.in_(sorted(extra))))
         names |= {str(r[0]): str(r[1]) for r in more.all()}
+    assignments = [Assignment(str(r[0]), str(r[1]), str(r[2]), r[3], r[4]) for r in rows]
+    return Holdings(teams=names, assignments=assignments)
+
+
+async def holdings_with(c: AsyncConnection, user_id: str, names: dict[str, str]) -> Holdings:
+    """`holdings_in` in one statement, given the person's active member teams (id to name): the assignments made to them
+    or to one of those teams, an archived team's left out, and the names of teams only an assignment names. `/v1/me`
+    reads it this way; tests/test_me_reads.py holds it to `holdings_in`'s answer."""
+    subject = sa.or_(
+        sa.and_(role_assignments.c.subject_kind == "person", role_assignments.c.subject_id == user_id),
+        sa.and_(role_assignments.c.subject_kind == "team", role_assignments.c.subject_id.in_(list(names))),
+    )
+    q = (
+        sa.select(
+            role_assignments.c.role_id,
+            roles.c.name,
+            role_assignments.c.team_id,
+            role_assignments.c.subject_kind,
+            role_assignments.c.expires_at,
+            teams.c.name,
+        )
+        .join(roles, roles.c.id == role_assignments.c.role_id)
+        .outerjoin(teams, teams.c.id == role_assignments.c.team_id)
+        # An assignment in an archived team grants nothing there.
+        .where(subject, sa.or_(teams.c.status.is_(None), teams.c.status == "active"))
+        .order_by(role_assignments.c.created_at, role_assignments.c.id)
+    )
+    rows = (await c.execute(q)).all()
+    # A team named by an assignment but not a membership still needs its name.
+    names = {**names, **{str(r[2]): str(r[5]) for r in rows if r[5] is not None and str(r[2]) not in names}}
     assignments = [Assignment(str(r[0]), str(r[1]), str(r[2]), r[3], r[4]) for r in rows]
     return Holdings(teams=names, assignments=assignments)
 

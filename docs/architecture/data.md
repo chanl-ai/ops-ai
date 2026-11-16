@@ -82,6 +82,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | platform-service | `ops_platform.store.identity` | `IdentityStore` | CAS, RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.keys` | `KeyStore` | RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.lifecycle` | `LifecycleStore` | RLS, TRANSACTION | none |
+| platform-service | `ops_platform.store.me` | `MeStore` | RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.members` | `TeamStore` | LOCK, RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.policies` | `PolicyStore` | TRANSACTION | none |
 | platform-service | `ops_platform.store.roles` | `RoleStore` | RLS, TRANSACTION | none |

@@ -1,6 +1,7 @@
 """Wrong-password counts on PostgreSQL and SQL Server, through the store: five at once for one person, or for one
 address, count five and lock once (F3). The address count runs in install scope with no tenant, and both are an
-insert of the row at zero then one counting UPDATE, which each database must keep exact under concurrency."""
+insert of the row at zero then one counting UPDATE, which each database must keep exact under concurrency. And
+`/v1/me`'s reads (outer joins, an embedded owner read, a null-ordered team list) answering the same on each."""
 
 from __future__ import annotations
 
@@ -9,8 +10,11 @@ from collections.abc import AsyncIterator
 
 import pytest
 
+from ops_access import ANY_TEAM
+from ops_platform.store.me import MeStore, MyTeam
+from ops_platform.store.roles import ensure_builtin_roles
 from ops_platform.store.signin import SignInStore
-from ops_platform.store.tables import tenants, users
+from ops_platform.store.tables import members, role_assignments, teams, tenants, users
 from ops_platform.store.tenancy import TenantDb
 from ops_service_kit.ids import new_id, now_iso
 
@@ -65,3 +69,48 @@ async def test_five_wrong_passwords_at_once_for_an_address_lock_once(store: Sign
     assert await store.email_locked_until(address, now=now_iso()) == UNTIL
     await store.clear_email_failures(address)
     assert await store.email_locked_until(address, now=now_iso()) is None
+
+
+async def test_me_reads_the_same_on_each_database(store_url: str) -> None:
+    db = MeStore(TenantDb.open(store_url))
+    tenant, user, mine, other, now = new_id("ten"), new_id("usr"), new_id("team"), new_id("team"), now_iso()
+    try:
+        async with db.tenant_tx(tenant) as c:
+            await c.execute(
+                tenants.insert().values(id=tenant, name="Harbor", status="active", allowed_domains=[], created_at=now)
+            )
+            await ensure_builtin_roles(c, tenant, at=now)
+            await c.execute(
+                users.insert().values(
+                    id=user, tenant_id=tenant, email=f"{user}@bank.test", name="Ana", status="active", created_at=now
+                )
+            )
+            for team in (mine, other):
+                await c.execute(
+                    teams.insert().values(
+                        id=team, tenant_id=tenant, name=team, owner_groups=[], scope="owned", created_at=now
+                    )
+                )
+            await c.execute(
+                members.insert().values(
+                    id=new_id("mem"), tenant_id=tenant, team_id=mine, user_id=user, email=f"{user}@bank.test",
+                    role="builder", status="active", created_at=now, updated_at=now,
+                )
+            )  # fmt: skip
+            for role in ("admin", "owner"):
+                await c.execute(
+                    role_assignments.insert().values(
+                        id=new_id("ras"), tenant_id=tenant, subject_kind="person", subject_id=user, role_id=role,
+                        team_id=ANY_TEAM, granted_by="test", reason="test", source="grant", created_at=now,
+                    )
+                )  # fmt: skip
+        found = await db.read(tenant, user)
+        assert found is not None
+        assert (found.user.email, found.tenant_name, found.workspace.owner) == (f"{user}@bank.test", "Harbor", user)
+        assert found.member_teams == [MyTeam(mine, mine, "builder")]
+        assert found.other_teams == [MyTeam(other, other, None)]
+        assert {a.role_id for a in found.holdings.assignments} == {"admin", "owner"}
+        assert "admin" in found.grids and found.policies
+        assert await db.read(tenant, new_id("usr")) is None
+    finally:
+        await db.engine.dispose()

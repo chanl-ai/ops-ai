@@ -17,7 +17,16 @@ from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListParams
 from ops_store.listing import ListPage
 
-from .store.roles import AlreadyGrantedError, Holdings, RoleInUseError, RoleNameTakenError, RoleRow, RoleStore
+from .store.me import MeRows
+from .store.roles import (
+    AlreadyGrantedError,
+    Holdings,
+    RoleInUseError,
+    RoleNameTakenError,
+    RoleRow,
+    RoleStore,
+    access_from,
+)
 
 
 def custom_role_refuses(area: str, action: str) -> bool:
@@ -188,7 +197,8 @@ class Roles:
 
     async def of_me(self, tenant_id: str, user_id: str) -> dict[str, Any]:
         mine = await self.store.holdings(tenant_id, user_id)
-        return await self._view(tenant_id, user_id, mine, teams=None)
+        grids, security, version = await self._view_inputs(tenant_id, mine)
+        return permissions_view(user_id, mine, grids, security=security, version=version, teams=None)
 
     async def of_person(self, tenant_id: str, caller_id: str, person_id: str) -> dict[str, Any]:
         if person_id == caller_id:
@@ -201,52 +211,84 @@ class Roles:
             shared = list(person.teams)
         if not shared:
             raise NotFound("No person with that id shares a team with you.")
-        return await self._view(tenant_id, person_id, person, teams=shared)
+        grids, security, version = await self._view_inputs(tenant_id, person)
+        return permissions_view(person_id, person, grids, security=security, version=version, teams=shared)
 
-    async def _view(self, tenant_id: str, person_id: str, h: Holdings, *, teams: list[str] | None) -> dict[str, Any]:
-        """`teams` limits the answer to those teams; None shows every team the person belongs to or is assigned in."""
-        role_ids = sorted({a.role_id for a in h.assignments})
-        grids = await self.store.grids(tenant_id, role_ids)
-        assignments = h.assignments if teams is None else [a for a in h.assignments if a.team_id in (*teams, ANY_TEAM)]
-        per_team = effective(assignments, grids, teams if teams is not None else list(h.teams), now_iso())
-        if teams is not None:
-            per_team = {t: v for t, v in per_team.items() if t in teams}
-        # A Security-team action is decided in the workspace's Security team whatever team a request acts in, so a
-        # grid cell for it in any other team grants nothing and is not listed there; with no Security team named,
-        # nobody holds it.
-        security = await self.store.security_team(tenant_id)
-        per_team = {
-            t: {cell: g for cell, g in held.items() if t == security or cell not in SECURITY_TEAM_ACTIONS}
-            for t, held in per_team.items()
-        }
-        order = {(a, x): (AREAS.index(a), ACTIONS.index(x)) for a in AREAS for x in ACTIONS}
-        # What the person may do in every team at once: their `*` assignments only (a workspace admin).
-        every = [a for a in assignments if a.team_id == ANY_TEAM]
-        workspace = effective(every, grids, [ANY_TEAM], now_iso()).get(ANY_TEAM, {}) if every else {}
+    async def _view_inputs(self, tenant_id: str, h: Holdings) -> tuple[dict[str, list[Grant]], str | None, int]:
+        """The grids of the roles `h` holds, the workspace's Security team and its permission version."""
+        grids = await self.store.grids(tenant_id, sorted({a.role_id for a in h.assignments}))
+        return grids, await self.store.security_team(tenant_id), await self.store.version(tenant_id)
 
-        def rows(held: dict[tuple[str, str], Any]) -> list[dict[str, Any]]:
-            return [
-                {
-                    "area": area,
-                    "action": action,
-                    "scope": g.scope,
-                    # Held in the Security team whichever team a request acts in (SECURITY_TEAM_ACTIONS).
-                    "securityTeamOnly": (area, action) in SECURITY_TEAM_ACTIONS,
-                    "roles": g.roles,
-                }
-                for (area, action), g in sorted(held.items(), key=lambda kv: order[kv[0]])
-            ]
 
-        return {
-            "workspace": rows(workspace),
-            "personId": person_id,
-            "permissionVersion": await self.store.version(tenant_id),
-            "teams": [
-                {
-                    "teamId": team,
-                    "teamName": h.teams.get(team, team),
-                    "permissions": rows(held),
-                }
-                for team, held in per_team.items()
-            ],
-        }
+async def workspace_admin_of(found: MeRows) -> bool:
+    """`RoleStore.workspace_admin`, decided on the rows `/v1/me` read rather than on a read of its own."""
+
+    async def fetch(_t: str, _v: int, ids: list[str]) -> dict[str, list[Grant]]:
+        return {i: found.grids[i] for i in ids if i in found.grids}
+
+    p, access = await access_from(
+        found.user.tenant_id,
+        found.user.id,
+        found.holdings,
+        version=found.permission_version,
+        security=found.security_team,
+        fetch=fetch,
+    )
+    # `from_any_team`: the token-less caller acts in no team, and `roles_in(p, "*")` reads only `*` assignments.
+    return access.may(p, "access", "manage", team=ANY_TEAM, from_any_team=True)
+
+
+def permissions_view(
+    person_id: str,
+    h: Holdings,
+    grids: dict[str, list[Grant]],
+    *,
+    security: str | None,
+    version: int,
+    teams: list[str] | None,
+) -> dict[str, Any]:
+    """What a person may do, per team and in every team, from their holdings and the grids of the roles they hold: what
+    `/v1/me/permissions` answers. `teams` limits the answer to those teams; None shows every team the person belongs to
+    or is assigned in."""
+    assignments = h.assignments if teams is None else [a for a in h.assignments if a.team_id in (*teams, ANY_TEAM)]
+    per_team = effective(assignments, grids, teams if teams is not None else list(h.teams), now_iso())
+    if teams is not None:
+        per_team = {t: v for t, v in per_team.items() if t in teams}
+    # A Security-team action is decided in the workspace's Security team whatever team a request acts in, so a
+    # grid cell for it in any other team grants nothing and is not listed there; with no Security team named,
+    # nobody holds it.
+    per_team = {
+        t: {cell: g for cell, g in held.items() if t == security or cell not in SECURITY_TEAM_ACTIONS}
+        for t, held in per_team.items()
+    }
+    order = {(a, x): (AREAS.index(a), ACTIONS.index(x)) for a in AREAS for x in ACTIONS}
+    # What the person may do in every team at once: their `*` assignments only (a workspace admin).
+    every = [a for a in assignments if a.team_id == ANY_TEAM]
+    workspace = effective(every, grids, [ANY_TEAM], now_iso()).get(ANY_TEAM, {}) if every else {}
+
+    def rows(held: dict[tuple[str, str], Any]) -> list[dict[str, Any]]:
+        return [
+            {
+                "area": area,
+                "action": action,
+                "scope": g.scope,
+                # Held in the Security team whichever team a request acts in (SECURITY_TEAM_ACTIONS).
+                "securityTeamOnly": (area, action) in SECURITY_TEAM_ACTIONS,
+                "roles": g.roles,
+            }
+            for (area, action), g in sorted(held.items(), key=lambda kv: order[kv[0]])
+        ]
+
+    return {
+        "workspace": rows(workspace),
+        "personId": person_id,
+        "permissionVersion": version,
+        "teams": [
+            {
+                "teamId": team,
+                "teamName": h.teams.get(team, team),
+                "permissions": rows(held),
+            }
+            for team, held in per_team.items()
+        ],
+    }

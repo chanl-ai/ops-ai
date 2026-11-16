@@ -59,7 +59,7 @@ from ..oauth.metadata import server_metadata
 from ..oauth.token import Tokens
 from ..passwords import Passwords, email_key_from
 from ..policies import Policies
-from ..roles import Roles
+from ..roles import Roles, permissions_view, workspace_admin_of
 from ..signin_options import SignInOptions
 from ..signin_settings import ProviderMetadata, SignInSettings
 from ..signin_watch import SecurityNotices
@@ -69,6 +69,7 @@ from ..store.holders import HolderStore
 from ..store.identity import IdentityStore, SessionRef
 from ..store.keys import KeyStore
 from ..store.lifecycle import LifecycleStore
+from ..store.me import MeStore
 from ..store.members import Actor, MemberRow, TeamStore
 from ..store.policies import PolicyStore
 from ..store.roles import RoleStore
@@ -531,6 +532,7 @@ def create_public_app(
         return await acting(claims, x_team_id)
 
     policy_store = PolicyStore(store.db)
+    me_store = MeStore(store.db)
 
     async def everywhere(tenant: str, user: str) -> bool:
         return await RoleStore(store.db).workspace_admin(tenant, user, now=now_iso())
@@ -538,21 +540,29 @@ def create_public_app(
     @app.get("/v1/me", tags=["me"], response_model=Envelope[Me], responses=ERRORS)
     async def me(_: Tx, claims: Annotated[dict[str, Any], Depends(claims_open)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         tenant, user = str(claims["tenant_id"]), str(claims["sub"])
-        found = await store.user(tenant, user)
+        found = await me_store.read(tenant, user)
         if found is None:
             raise Unauthorized("Sign in again.")
-        teams = await team_store.teams_of(tenant, user, everywhere=await everywhere(tenant, user))
+        teams = [*found.member_teams, *(found.other_teams if await workspace_admin_of(found) else [])]
         return ok(
             {
-                "user": {"id": found.id, "email": found.email, "name": found.name},
+                "user": {"id": found.user.id, "email": found.user.email, "name": found.user.name},
                 # What the person may do in each team, as /v1/me/permissions answers it: the shell reads it here.
-                "permissions": await roles.of_me(tenant, user),
+                "permissions": permissions_view(
+                    user,
+                    found.holdings,
+                    found.grids,
+                    security=found.security_team,
+                    version=found.permission_version,
+                    teams=None,
+                ),
                 "tenantId": tenant,
-                "tenantName": await store.tenant_name(tenant) or None,
-                "teams": [{"id": t.id, "name": t.name, "role": t.role} for t in teams],
-                "policies": await policy_store.values(tenant),
-                "securityTeamId": await team_store.security_team_of(tenant),
-                "workspace": await lifecycle.state(tenant),
+                "tenantName": found.tenant_name or None,
+                # A workspace admin's other teams are theirs as admin, through their workspace role.
+                "teams": [{"id": t.id, "name": t.name, "role": t.role or "admin"} for t in teams],
+                "policies": found.policies,
+                "securityTeamId": found.security_team,
+                "workspace": lifecycle.state_of(found.workspace),
                 "flags": settings.feature_flags.resolved(),
             }
         )

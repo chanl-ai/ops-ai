@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import sqlalchemy as sa
 from pydantic import JsonValue
@@ -122,11 +122,15 @@ def _owner_rows(tenant_id: str) -> sa.ColumnElement[bool]:
     )
 
 
-async def _owner_in(c: AsyncConnection, tenant_id: str) -> str | None:
-    q = sa.select(role_assignments.c.subject_id).where(
+def owner_query(tenant_id: str) -> sa.Select[Any]:
+    """The workspace owner's user id, as a statement another read can embed."""
+    return sa.select(role_assignments.c.subject_id).where(
         _owner_rows(tenant_id), role_assignments.c.subject_kind == "person"
     )
-    return (await c.execute(q)).scalar()
+
+
+async def _owner_in(c: AsyncConnection, tenant_id: str) -> str | None:
+    return (await c.execute(owner_query(tenant_id))).scalar()
 
 
 async def _status_locked(c: AsyncConnection, tenant_id: str) -> str:

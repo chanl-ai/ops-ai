@@ -31,6 +31,7 @@ from .store.lifecycle import (
     NotOwnerError,
     PurgeStartedError,
     WorkspaceNotActiveError,
+    WorkspaceState,
 )
 from .store.members import Actor
 from .store.teams import TeamAdminStore
@@ -75,9 +76,8 @@ class WorkspaceLifecycle:
     async def _is_owner(self, actor: Actor) -> None:
         await self.members.require_admin(workspace(actor), "workspace", "manage")
 
-    async def state(self, tenant_id: str) -> dict[str, Any]:
+    def state_of(self, s: WorkspaceState) -> dict[str, Any]:
         """What `/v1/me` says of the workspace: its owner, status and, while closed, when it will be purged."""
-        s = await self.store.state(tenant_id)
         purge_after = None
         if s.status == CLOSED and s.closed_at:
             closed_at = datetime.fromisoformat(s.closed_at.replace("Z", "+00:00"))
@@ -104,7 +104,7 @@ class WorkspaceLifecycle:
             raise _owner_changed() from e
         except WorkspaceNotActiveError as e:
             raise closed() from e
-        return await self.state(actor.tenant_id)
+        return self.state_of(await self.store.state(actor.tenant_id))
 
     async def leave(self, actor: Actor) -> None:
         # The store refuses the owner inside the transaction that would remove them, before any write (E42).
@@ -146,7 +146,7 @@ class WorkspaceLifecycle:
             raise _owner_changed() from e
         except WorkspaceNotActiveError as e:
             raise closed() from e
-        return await self.state(actor.tenant_id)
+        return self.state_of(await self.store.state(actor.tenant_id))
 
     async def restore(self, actor: Actor) -> dict[str, Any]:
         await self._is_owner(actor)
@@ -156,7 +156,7 @@ class WorkspaceLifecycle:
             raise Conflict("The workspace's records are already being removed.", code="purged") from e
         except WorkspaceNotActiveError as e:
             raise Conflict("The workspace is not closed.", code="not_closed") from e
-        return await self.state(actor.tenant_id)
+        return self.state_of(await self.store.state(actor.tenant_id))
 
     async def leave_team(self, actor: Actor, team_id: str) -> None:
         try:

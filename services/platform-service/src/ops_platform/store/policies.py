@@ -49,8 +49,7 @@ class PolicyStore(TenantDb):
     async def values(self, tenant_id: str) -> PolicyValues:
         """Every policy's value: what an admin set, else the catalogue's open default."""
         async with self.tenant_tx(tenant_id) as c:
-            held = {r.key: r.value for r in await rows(c, sa.select(policies.c.key, policies.c.value), PolicyRow)}
-        return {p.key: held.get(p.key, p.default) for p in POLICIES}
+            return await values_in(c)
 
     async def token_values(self, tenant_id: str) -> PolicyValues:
         """The values a token carries: every policy but those read live on each decision (`live`, publishReview)."""
@@ -197,3 +196,9 @@ async def write_new_workspace_policies(c: AsyncConnection, tenant_id: str, *, at
         )
         row = {"tenant_id": tenant_id, "key": key, "value": value, "updated_by": "workspace", "updated_at": at}
         await c.execute(insert_ignore(c, policies, row, keys=["tenant_id", "key"]))
+
+
+async def values_in(c: AsyncConnection) -> PolicyValues:
+    """`PolicyStore.values` on the caller's transaction."""
+    held = {r.key: r.value for r in await rows(c, sa.select(policies.c.key, policies.c.value), PolicyRow)}
+    return {p.key: held.get(p.key, p.default) for p in POLICIES}
