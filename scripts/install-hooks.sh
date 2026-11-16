@@ -14,7 +14,10 @@ for hook in pre-commit commit-msg pre-push; do
 #!/bin/sh
 # ops-ai hook launcher (scripts/install-hooks.sh): runs this checkout's own .githooks/$hook.
 hook="\$(git rev-parse --show-toplevel)/.githooks/$hook"
-[ -f "\$hook" ] || exit 0
+if [ ! -f "\$hook" ]; then
+  echo "ops-ai $hook: this checkout has no .githooks/$hook, so its checks cannot run. Rebase onto a branch that has it." >&2
+  exit 1
+fi
 exec sh "\$hook" "\$@"
 EOF
   chmod +x "$d/hooks/$hook"

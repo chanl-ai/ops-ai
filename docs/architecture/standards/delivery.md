@@ -16,6 +16,8 @@ Why: every change is reviewed and attributable (SOC 2 CC8.1).
 Pattern (`scripts/git-rules.py`): refuses stash, hard reset, clean, skipped hooks, force push and a push to the trunk,
 as a Claude Code hook; `make git-rules` self-tests it.
 
+The installed launcher refuses a commit or push when the checkout has no `.githooks/<hook>`. A local hook can still be edited or bypassed, so CI is the backstop for every check a hook runs.
+
 Check: `scripts/git-rules.py`; `.githooks/` installed by `scripts/install-hooks.sh`; branch protection on the trunk.
 
 ## DL2 One gate, the same locally and in CI
