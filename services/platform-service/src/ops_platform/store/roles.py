@@ -366,18 +366,22 @@ class RoleStore(TenantDb):
             )
 
     async def holders(self, tenant_id: str, role_id: str, params: ListParams) -> ListPage:
-        """Who holds the role and in which team on the shared list contract, each person by name and address: by name,
-        then by assignment id; searched on name and email."""
+        """Who holds the role and in which team on the shared list contract, each person by name and address: by name
+        (a team's id standing in for its name, on both databases alike), then by assignment id; searched on name and
+        email. `ids` names the row's `id`, the person's or team's, not the assignment's."""
+        name = sa.func.coalesce(users.c.name, role_assignments.c.subject_id)
         q = (
             sa.select(role_assignments.c.subject_kind.label("kind"), role_assignments.c.subject_id.label("id"),
-                      role_assignments.c.team_id, sa.func.coalesce(users.c.name, role_assignments.c.subject_id)
-                      .label("name"), users.c.email)
+                      role_assignments.c.team_id, name.label("name"), users.c.email)
             .select_from(role_assignments.outerjoin(users, sa.and_(users.c.id == role_assignments.c.subject_id,
                                                                    role_assignments.c.subject_kind == "person")))
             .where(role_assignments.c.role_id == role_id)
         )  # fmt: skip
+        if params.ids is not None:
+            q = q.where(role_assignments.c.subject_id.in_(params.ids))
+            params = params.model_copy(update={"ids": None, "search": None})
         async with self.tenant_tx(tenant_id) as c:
-            page = await list_page(c, q, params, search=[users.c.name, users.c.email], default_sort=users.c.name.asc())
+            page = await list_page(c, q, params, search=[users.c.name, users.c.email], default_sort=name.asc())
         page["data"] = [RoleHolderRow.model_validate(r).model_dump(by_alias=True) for r in page["data"]]
         return page
 

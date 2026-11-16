@@ -163,7 +163,9 @@ async def test_role_lists_never_show_another_persons_or_tenants_rows(platform: P
         listed = {g["id"] for g in r.json()["data"]["data"]}
         assert listed == set(mine), (params, listed)
     outsiders = {people["outsidea"].user_id, people["outsideb"].user_id, people["outside"][0].user_id}
-    for params in ({}, {"search": "@"}, {"pageSize": 50}):
+    # A holder's `id` is the person's or team's, so `ids` names people and teams too.
+    asked = [people["minea"].user_id, owner.user_id, *outsiders]
+    for params in ({}, {"search": "@"}, {"pageSize": 50}, {"ids": asked}):
         r = await platform.public.get("/v1/roles/viewer/holders", headers=ah, params=params)
         assert r.status_code == 200, r.text
         held = {h["id"] for h in r.json()["data"]["data"]}
