@@ -1,3 +1,1 @@
-# 2 untyped operations. This number may only go down: type a route and remove its line; check_openapi.py fails if it grows.
-gateway_health
-gateway_tool_access
+# 0 untyped operations. This number may only go down: type a route and remove its line; check_openapi.py fails if it grows.

@@ -7,22 +7,33 @@ import re
 import time
 from collections.abc import AsyncGenerator, Callable, Coroutine
 from contextlib import asynccontextmanager, nullcontext
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Literal, cast
 
 import httpx
 from fastapi import APIRouter, FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from fastapi.responses import JSONResponse, Response
+from pydantic import Field
 from starlette.types import Receive, Scope, Send
 
 from ops_access import Access, can
 from ops_identity import Auth, CurrentService, Principal, install_auth
+from ops_identity.fastapi import Tx
 from ops_policy import input_hash
 from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.errors import Unprocessable
 from ops_service_kit.flags import Flags
-from ops_service_kit.http import Envelope, Out, error_body, error_responses, install_error_handlers, ok, operation_id
+from ops_service_kit.http import (
+    Envelope,
+    In,
+    JsonValue,
+    Out,
+    error_body,
+    error_responses,
+    install_error_handlers,
+    ok,
+    operation_id,
+)
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 from ops_store.background import LOCAL as LOCAL_BEATS
@@ -56,11 +67,7 @@ from .store.rate_windows import RateWindows
 from .tools import ToolRunner
 
 
-class _Wire(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-
-
-class RunContext(_Wire):
+class RunContext(In):
     """Where the call comes from. Who calls is not here: it is the verified service token's subject (I13)."""
 
     thread: str | None = None
@@ -77,7 +84,7 @@ class RunContext(_Wire):
     account: str | None = Field(default=None, min_length=1, max_length=200)
 
 
-class FenceIn(_Wire):
+class FenceIn(In):
     thread: str
     generation: int = Field(ge=1)
 
@@ -88,7 +95,7 @@ class FenceResult(Out):
     generation: int
 
 
-class AbandonIn(_Wire):
+class AbandonIn(In):
     key: str = Field(min_length=1, max_length=200)
     tool: str = Field(min_length=1, max_length=64)
     thread: str | None = None
@@ -101,8 +108,8 @@ class AbandonedCall(Out):
     # The row carrying the write's side effect (its claim), as opposed to a refusal or a replay.
     effect: bool
     decision: str
-    output: Any = None
-    error: dict[str, Any] | None = None
+    output: JsonValue = None
+    error: dict[str, JsonValue] | None = None
 
 
 class AbandonResult(Out):
@@ -111,7 +118,7 @@ class AbandonResult(Out):
     call: AbandonedCall | None
 
 
-class CallIn(_Wire):
+class CallIn(In):
     tool: str
     input: dict[str, Any]
     key: str
@@ -119,7 +126,7 @@ class CallIn(_Wire):
     approval_token: str | None = Field(default=None, alias="approvalToken")
 
 
-class CodeCallIn(_Wire):
+class CodeCallIn(In):
     tool: str
     input: dict[str, Any] = Field(default_factory=dict[str, Any])
 
@@ -132,7 +139,7 @@ class GrantableOperation(Out):
     title: str | None = None
     description: str
     access: str
-    input_schema: dict[str, Any]
+    input_schema: dict[str, JsonValue]
     requires_approval: bool
     # Who answers a call that waits, from the one resolver (`effective_answer`): "none", "person" (the asker confirms)
     # or "reviewer" (someone else with `reviewer_role`), and the level it came from.
@@ -158,9 +165,34 @@ class CallResult(Out):
     call_id: str
     decision: str
     ok: bool
-    output: Any
-    view: Any = None
+    output: JsonValue
+    view: JsonValue = None
     replay_of: str | None = None
+
+
+class ToolApproval(Out):
+    approvers: int
+    approver_team: str | None
+    step_up: bool
+
+
+class ToolAccess(Out):
+    """A tool's access class, the one the policy decides on, and what a step reading it needs."""
+
+    name: str
+    access: str
+    approval: ToolApproval
+    # What the operation answers, a step's output fields before it runs; null when unknown.
+    output_schema: dict[str, JsonValue] | None
+    # How long the gateway may take over one call, which the engine's step waits out.
+    deadline_seconds: float | None
+
+
+class Health(Out):
+    """ok; or 503 degraded when the database is out of reach, or policy_drift when OPA holds another policy."""
+
+    status: Literal["ok", "degraded", "policy_drift"]
+    reason: Literal["database"] | None = None
 
 
 def as_response(outcome: Outcome) -> JSONResponse:
@@ -179,7 +211,7 @@ def as_response(outcome: Outcome) -> JSONResponse:
     }
     if outcome.replay_of:
         data["replayOf"] = outcome.replay_of
-    return JSONResponse({"success": True, "data": data})
+    return ok(data)
 
 
 _TEAM_PATH = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -370,14 +402,23 @@ def create_gateway_app(
                 }
             )
 
-    @app.get("/health", response_model=None, tags=["gateway"])
-    async def health() -> dict[str, str] | JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    @app.get(
+        "/health",
+        tags=["gateway"],
+        response_model=Health,
+        response_model_exclude_none=True,
+        responses={503: {"model": Health}},
+    )
+    async def health(response: Response) -> Health:  # pyright: ignore[reportUnusedFunction]
+        """Off the request transaction: it asks the database and OPA whether they answer."""
         if not await reachable(log.engine):
-            return JSONResponse({"status": "degraded", "reason": "database"}, status_code=503)
+            response.status_code = 503
+            return Health(status="degraded", reason="database")
         # Another process writing a different policy into a shared OPA would change every decision; say so.
         if await opa.loaded_policy_hash() != expected:
-            return JSONResponse({"status": "policy_drift"}, status_code=503)
-        return {"status": "ok"}
+            response.status_code = 503
+            return Health(status="policy_drift")
+        return Health(status="ok")
 
     @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
     async def health_background() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
@@ -399,10 +440,13 @@ def create_gateway_app(
         response_model=Envelope[list[GrantableOperation]],
         responses=error_responses(),
     )
-    async def grantable_operations(caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def grantable_operations(caller: CurrentService, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The operations an agent of the caller's tenant may be granted, for a service holding `tools:view`.
-        agents-service lists, grants and hands a run its tools from here; it keeps no catalogue of its own."""
+        agents-service lists, grants and hands a run its tools from here; it keeps no catalogue of its own. The team's
+        write approval levels are asked of platform-service before the first read, so no connection is held while it
+        answers."""
         can(caller, "tools", "view", what="the grantable operations")
+        levels = await write_approvals.levels(caller.tenant_id, caller.team_id) if write_approvals else None
         rows = await registry.grantable(caller.tenant_id, team_view(caller))
         if plugins is not None and caller.team_id:
             # A tool the team has not added from its app's catalog is listed as not added: agents are not offered it,
@@ -418,7 +462,6 @@ def create_gateway_app(
         if write_approvals is not None:
             # The one rule behind the gateway's wait: each write's answer from its own setting, its app and the team.
             tested = await with_test_account(caller.tenant_id, caller.team_id, mods, rows)
-            levels = await write_approvals.levels(caller.tenant_id, caller.team_id)
             out: list[dict[str, Any]] = []
             for r in rows:
                 if r["access"] not in WRITES:
@@ -456,37 +499,27 @@ def create_gateway_app(
             ).model_dump(by_alias=True)
             for r in rows
         ]
-        return JSONResponse({"success": True, "data": data})
+        return ok(data)
 
-    @app.get("/v1/tools/{name}", tags=["gateway"], responses=error_responses())
-    async def tool_access(name: str, caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    @app.get("/v1/tools/{name}", tags=["gateway"], response_model=Envelope[ToolAccess], responses=error_responses())
+    async def tool_access(name: str, caller: CurrentService, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Internal (service token): a tool's access class from the gateway's registry, the one the policy decides
         on. The review service asks here how many approvers a call needs instead of reading the registry itself."""
         access, policy, output, deadline = await registry.described(name, caller.tenant_id, caller.team_id)
         if access == "unknown":
             return as_response(Refused("", 404, "not_found", [f"tool {name} is not registered with the gateway"]))
         approval = (
-            {
-                "approvers": policy["approvers"],
-                "approverTeam": policy["approver_team"],
-                "stepUp": policy["step_up"],
-            }
+            ToolApproval(
+                approvers=policy["approvers"], approver_team=policy["approver_team"], step_up=policy["step_up"]
+            )
             if policy
-            else {"approvers": 1, "approverTeam": None, "stepUp": False}
+            else ToolApproval(approvers=1, approver_team=None, step_up=False)
         )
-        # `output`: what the operation answers, a step's output fields before it runs; null when unknown.
-        # `deadlineSeconds`: how long the gateway may take over one call, which the engine's step waits out.
-        data = {
-            "name": name,
-            "access": access,
-            "approval": approval,
-            "outputSchema": output,
-            "deadlineSeconds": deadline,
-        }
-        return JSONResponse({"success": True, "data": data})
+        found = ToolAccess(name=name, access=access, approval=approval, output_schema=output, deadline_seconds=deadline)
+        return ok(found.model_dump(by_alias=True))
 
     @app.post("/v1/fences", tags=["gateway"], response_model=Envelope[FenceResult], responses=error_responses())
-    async def raise_fence(body: FenceIn, caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def raise_fence(body: FenceIn, caller: CurrentService, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Internal (service token): agents-service calls it when it takes a thread over, so the new generation is
         the fence before any write of the new owner, and a stalled old owner cannot write in between. Idempotent;
         a lower generation than the fence is refused with 409 `lease_superseded`, the fence's generation in the
@@ -499,7 +532,7 @@ def create_gateway_app(
     @app.post(
         "/v1/calls/abandon", tags=["gateway"], response_model=Envelope[AbandonResult], responses=error_responses()
     )
-    async def abandon(body: AbandonIn, caller: CurrentService) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def abandon(body: AbandonIn, caller: CurrentService, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Internal (service token), for a workflow that lost the answer to a write: the call the gateway has under
         `key` (a claim still running past its expiry reads as lost), or, when it has none, the key abandoned so the
         call is refused if it arrives later (it was still in flight). One transaction under the key's lock, so a call
@@ -508,18 +541,18 @@ def create_gateway_app(
         await log.expire_running(tenant_id=tenant, key=body.key)
         found = await log.abandon(tenant_id=tenant, key=body.key, tool=body.tool, thread_id=body.thread, sub=caller.sub)
         call = (
-            {
-                "id": found.id,
-                "outcome": found.outcome,
-                "effect": found.effect,
-                "decision": found.decision,
-                "output": found.output,
-                "error": found.error,
-            }
+            AbandonedCall(
+                id=found.id,
+                outcome=found.outcome,
+                effect=found.effect,
+                decision=found.decision,
+                output=found.output,
+                error=found.error,
+            )
             if found
             else None
         )
-        return JSONResponse({"success": True, "data": {"abandoned": found is None, "call": call}})
+        return ok(AbandonResult(abandoned=found is None, call=call).model_dump(by_alias=True))
 
     @app.post("/v1/calls", tags=["gateway"], response_model=Envelope[CallResult], responses=error_responses())
     async def call(  # pyright: ignore[reportUnusedFunction]
@@ -528,6 +561,8 @@ def create_gateway_app(
         x_lease_generation: Annotated[int | None, Header()] = None,
         x_acting_for: Annotated[str | None, Header()] = None,
     ) -> JSONResponse:
+        """Off the request transaction: the gateway asks OPA, then runs the tool against its system, and records the
+        call in short transactions of its own around that."""
         # Whom the call acts for comes only from the token platform-service signed for the calling service.
         acting = await resolved_auth.identity.acting_for(x_acting_for, caller) if x_acting_for else None
         request = CallRequest(
@@ -546,7 +581,8 @@ def create_gateway_app(
         body: CodeCallIn, caller: CurrentService, x_code_run: Annotated[str | None, Header()] = None
     ) -> JSONResponse:
         """Internal: one `ops.call` from a running code operation, sent by runner-service with the run's call
-        token. Only a tool the operation binds is called, decided as the run's caller's own gateway call."""
+        token. Only a tool the operation binds is called, decided as the run's caller's own gateway call. Off the
+        request transaction, as a gateway call."""
         can(caller, "tools", "run", what="a code run's calls")
         if code is None:
             raise Unprocessable("This gateway runs no code.", code="runner_unavailable")

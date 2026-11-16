@@ -14,15 +14,6 @@ class AbandonIn(TypedDict, closed=True):
     tool: str
 
 
-class AbandonedCall(TypedDict, closed=True):
-    decision: str
-    effect: bool
-    error: NotRequired[dict[str, Any] | None]
-    id: str
-    outcome: str
-    output: NotRequired[Any]
-
-
 class AccountEvent(TypedDict, closed=True):
     action: str
     actor: str
@@ -196,15 +187,6 @@ class CallIdentity(TypedDict, closed=True):
     name: str
 
 
-class CallResult(TypedDict, closed=True):
-    callId: str
-    decision: str
-    ok: bool
-    output: Any
-    replayOf: NotRequired[str | None]
-    view: NotRequired[Any]
-
-
 class CallRunAs(TypedDict, closed=True):
     email: NotRequired[str | None]
     kind: Literal["person", "team"]
@@ -360,11 +342,6 @@ class EnvelopeAppUsers(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeCallResult(TypedDict, closed=True):
-    data: CallResult
-    success: Literal[True]
-
-
 class EnvelopeCredentialDeleted(TypedDict, closed=True):
     data: CredentialDeleted
     success: Literal[True]
@@ -402,25 +379,6 @@ class FenceResult(TypedDict, closed=True):
     thread: str
 
 
-class GrantableOperation(TypedDict, closed=True):
-    access: str
-    added: NotRequired[bool]
-    answer: NotRequired[str]
-    approvers: int
-    description: str
-    inputSchema: dict[str, Any]
-    moduleId: str | None
-    moduleName: str
-    name: str
-    outputShape: NotRequired[str | None]
-    requiresApproval: bool
-    reviewerRole: NotRequired[str | None]
-    source: NotRequired[str]
-    stepUp: NotRequired[bool]
-    testAccount: NotRequired[bool]
-    title: NotRequired[str | None]
-
-
 class HeaderIn(TypedDict, closed=True):
     key: str
     value: str
@@ -429,6 +387,11 @@ class HeaderIn(TypedDict, closed=True):
 class HeaderOut(TypedDict, closed=True):
     key: str
     value: str
+
+
+class Health(TypedDict, closed=True):
+    reason: NotRequired[Literal["database"] | None]
+    status: Literal["ok", "degraded", "policy_drift"]
 
 
 class HeldHost(TypedDict, closed=True):
@@ -1084,6 +1047,12 @@ class TestStep(TypedDict, closed=True):
     title: str
 
 
+class ToolApproval(TypedDict, closed=True):
+    approverTeam: str | None
+    approvers: int
+    stepUp: bool
+
+
 class ToolCallRow(TypedDict, closed=True):
     actingFor: NotRequired[str | None]
     actor: NotRequired[CallIdentity | None]
@@ -1260,9 +1229,13 @@ class WaitOut(TypedDict, closed=True):
     changed: bool
 
 
-class AbandonResult(TypedDict, closed=True):
-    abandoned: bool
-    call: AbandonedCall | None
+class AbandonedCall(TypedDict, closed=True):
+    decision: str
+    effect: bool
+    error: NotRequired[dict[str, JsonValue] | None]
+    id: str
+    outcome: str
+    output: NotRequired[JsonValue]
 
 
 class AccountChoice(TypedDict, closed=True):
@@ -1346,6 +1319,15 @@ class CallIn(TypedDict, closed=True):
     key: str
     runContext: RunContext
     tool: str
+
+
+class CallResult(TypedDict, closed=True):
+    callId: str
+    decision: str
+    ok: bool
+    output: JsonValue
+    replayOf: NotRequired[str | None]
+    view: NotRequired[JsonValue]
 
 
 class CodeOperationIn(TypedDict, closed=True):
@@ -1442,13 +1424,13 @@ class DiscoveryResult(TypedDict, closed=True):
     warnings: list[str]
 
 
-class EnvelopeAbandonResult(TypedDict, closed=True):
-    data: AbandonResult
+class EnvelopeBulkResult(TypedDict, closed=True):
+    data: BulkResult
     success: Literal[True]
 
 
-class EnvelopeBulkResult(TypedDict, closed=True):
-    data: BulkResult
+class EnvelopeCallResult(TypedDict, closed=True):
+    data: CallResult
     success: Literal[True]
 
 
@@ -1557,11 +1539,6 @@ class EnvelopeListAppResource(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListGrantableOperation(TypedDict, closed=True):
-    data: list[GrantableOperation]
-    success: Literal[True]
-
-
 class EnvelopeListKnowledgeSourceView(TypedDict, closed=True):
     data: list[KnowledgeSourceView]
     success: Literal[True]
@@ -1581,6 +1558,25 @@ class ExecutionList(TypedDict, closed=True):
     data: list[ToolCallRow]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
+
+
+class GrantableOperation(TypedDict, closed=True):
+    access: str
+    added: NotRequired[bool]
+    answer: NotRequired[str]
+    approvers: int
+    description: str
+    inputSchema: dict[str, JsonValue]
+    moduleId: str | None
+    moduleName: str
+    name: str
+    outputShape: NotRequired[str | None]
+    requiresApproval: bool
+    reviewerRole: NotRequired[str | None]
+    source: NotRequired[str]
+    stepUp: NotRequired[bool]
+    testAccount: NotRequired[bool]
+    title: NotRequired[str | None]
 
 
 class HTTPValidationError(TypedDict):
@@ -1892,6 +1888,14 @@ class TestOut(TypedDict, closed=True):
     steps: list[TestStep]
 
 
+class ToolAccess(TypedDict, closed=True):
+    access: str
+    approval: ToolApproval
+    deadlineSeconds: float | None
+    name: str
+    outputSchema: dict[str, JsonValue] | None
+
+
 class ToolModuleDetail(TypedDict, closed=True):
     accessClasses: list[Literal["read", "write"]]
     approvalState: Literal["draft", "approved", "needs_approval", "expiring", "expired"]
@@ -1941,6 +1945,11 @@ class ToolModuleDetail(TypedDict, closed=True):
 class ToolUsedBy(TypedDict, closed=True):
     agents: list[ToolUser]
     workflows: list[ToolUser]
+
+
+class AbandonResult(TypedDict, closed=True):
+    abandoned: bool
+    call: AbandonedCall | None
 
 
 class AccountDetail(TypedDict, closed=True):
@@ -2103,6 +2112,11 @@ class Change(TypedDict, closed=True):
     value: str
 
 
+class EnvelopeAbandonResult(TypedDict, closed=True):
+    data: AbandonResult
+    success: Literal[True]
+
+
 class EnvelopeAccountDetail(TypedDict, closed=True):
     data: AccountDetail
     success: Literal[True]
@@ -2178,6 +2192,11 @@ class EnvelopeTestOut(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeToolAccess(TypedDict, closed=True):
+    data: ToolAccess
+    success: Literal[True]
+
+
 class EnvelopeToolModuleDetail(TypedDict, closed=True):
     data: ToolModuleDetail
     success: Literal[True]
@@ -2185,6 +2204,11 @@ class EnvelopeToolModuleDetail(TypedDict, closed=True):
 
 class EnvelopeListAppTool(TypedDict, closed=True):
     data: list[AppTool]
+    success: Literal[True]
+
+
+class EnvelopeListGrantableOperation(TypedDict, closed=True):
+    data: list[GrantableOperation]
     success: Literal[True]
 
 

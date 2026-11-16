@@ -853,7 +853,7 @@ class Operations:
     def __init__(self, transport: Transport) -> None:
         self._t = transport
 
-    def gateway_health(self) -> Any:
+    def gateway_health(self) -> Health:
         "Health"
         return self._t.call(SERVICE, OPERATIONS["gateway_health"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
@@ -1495,7 +1495,7 @@ class AsyncOperations:
     def __init__(self, transport: AsyncTransport) -> None:
         self._t = transport
 
-    async def gateway_health(self) -> Any:
+    async def gateway_health(self) -> Health:
         "Health"
         return await self._t.call(SERVICE, OPERATIONS["gateway_health"], {}, {}, {}, None)  # type: ignore[no-any-return]
 

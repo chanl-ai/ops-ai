@@ -74,7 +74,9 @@
           "error": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -92,7 +94,7 @@
             "type": "string"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           }
         },
         "required": [
@@ -2748,7 +2750,7 @@
             "type": "boolean"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "replayOf": {
             "anyOf": [
@@ -2762,7 +2764,7 @@
             "title": "Replayof"
           },
           "view": {
-            "title": "View"
+            "$ref": "#/components/schemas/JsonValue"
           }
         },
         "required": [
@@ -4958,6 +4960,25 @@
         "title": "Envelope[TestOut]",
         "type": "object"
       },
+      "Envelope_ToolAccess_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ToolAccess"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ToolAccess]",
+        "type": "object"
+      },
       "Envelope_ToolCallRow_": {
         "additionalProperties": false,
         "properties": {
@@ -5520,7 +5541,9 @@
             "type": "string"
           },
           "inputSchema": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Inputschema",
             "type": "object"
           },
@@ -5658,6 +5681,38 @@
           "value"
         ],
         "title": "HeaderOut",
+        "type": "object"
+      },
+      "Health": {
+        "additionalProperties": false,
+        "description": "ok; or 503 degraded when the database is out of reach, or policy_drift when OPA holds another policy.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "const": "database",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "degraded",
+              "policy_drift"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Health",
         "type": "object"
       },
       "HeldHost": {
@@ -11996,6 +12051,88 @@
         "title": "TestStep",
         "type": "object"
       },
+      "ToolAccess": {
+        "additionalProperties": false,
+        "description": "A tool's access class, the one the policy decides on, and what a step reading it needs.",
+        "properties": {
+          "access": {
+            "title": "Access",
+            "type": "string"
+          },
+          "approval": {
+            "$ref": "#/components/schemas/ToolApproval"
+          },
+          "deadlineSeconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadlineseconds"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "outputSchema": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outputschema"
+          }
+        },
+        "required": [
+          "name",
+          "access",
+          "approval",
+          "outputSchema",
+          "deadlineSeconds"
+        ],
+        "title": "ToolAccess",
+        "type": "object"
+      },
+      "ToolApproval": {
+        "additionalProperties": false,
+        "properties": {
+          "approverTeam": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approverteam"
+          },
+          "approvers": {
+            "title": "Approvers",
+            "type": "integer"
+          },
+          "stepUp": {
+            "title": "Stepup",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "approvers",
+          "approverTeam",
+          "stepUp"
+        ],
+        "title": "ToolApproval",
+        "type": "object"
+      },
       "ToolCallRow": {
         "additionalProperties": false,
         "description": "One gateway call as the console's ToolCallRow, with the identity fields the executions log fills.",
@@ -13608,15 +13745,28 @@
   "paths": {
     "/health": {
       "get": {
+        "description": "Off the request transaction: it asks the database and OPA whether they answer.",
         "operationId": "gateway_health",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
               }
             },
             "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "summary": "Health",
@@ -19784,6 +19934,7 @@
     },
     "/v1/calls": {
       "post": {
+        "description": "Off the request transaction: the gateway asks OPA, then runs the tool against its system, and records the\ncall in short transactions of its own around that.",
         "operationId": "gateway_call",
         "parameters": [
           {
@@ -20097,7 +20248,7 @@
     },
     "/v1/code-runs/calls": {
       "post": {
-        "description": "Internal: one `ops.call` from a running code operation, sent by runner-service with the run's call\ntoken. Only a tool the operation binds is called, decided as the run's caller's own gateway call.",
+        "description": "Internal: one `ops.call` from a running code operation, sent by runner-service with the run's call\ntoken. Only a tool the operation binds is called, decided as the run's caller's own gateway call. Off the\nrequest transaction, as a gateway call.",
         "operationId": "gateway_code_run_call",
         "parameters": [
           {
@@ -22897,7 +23048,7 @@
     },
     "/v1/grantable-operations": {
       "get": {
-        "description": "The operations an agent of the caller's tenant may be granted, for a service holding `tools:view`.\nagents-service lists, grants and hands a run its tools from here; it keeps no catalogue of its own.",
+        "description": "The operations an agent of the caller's tenant may be granted, for a service holding `tools:view`.\nagents-service lists, grants and hands a run its tools from here; it keeps no catalogue of its own. The team's\nwrite approval levels are asked of platform-service before the first read, so no connection is held while it\nanswers.",
         "operationId": "gateway_grantable_operations",
         "parameters": [
           {
@@ -34207,7 +34358,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ToolAccess_"
+                }
               }
             },
             "description": "Successful Response"

@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Health */
+        /**
+         * Health
+         * @description Off the request transaction: it asks the database and OPA whether they answer.
+         */
         get: operations["gateway_health"];
         put?: never;
         post?: never;
@@ -1498,14 +1501,13 @@ export interface components {
             effect: boolean;
             /** Error */
             error?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Id */
             id: string;
             /** Outcome */
             outcome: string;
-            /** Output */
-            output?: unknown;
+            output?: components["schemas"]["JsonValue"];
         };
         /**
          * AccountChoice
@@ -2354,12 +2356,10 @@ export interface components {
             decision: string;
             /** Ok */
             ok: boolean;
-            /** Output */
-            output: unknown;
+            output: components["schemas"]["JsonValue"];
             /** Replayof */
             replayOf?: string | null;
-            /** View */
-            view?: unknown;
+            view?: components["schemas"]["JsonValue"];
         };
         /**
          * CallRunAs
@@ -3239,6 +3239,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ToolAccess] */
+        Envelope_ToolAccess_: {
+            data: components["schemas"]["ToolAccess"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ToolCallRow] */
         Envelope_ToolCallRow_: {
             data: components["schemas"]["ToolCallRow"];
@@ -3492,7 +3501,7 @@ export interface components {
             description: string;
             /** Inputschema */
             inputSchema: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Moduleid */
             moduleId: string | null;
@@ -3542,6 +3551,19 @@ export interface components {
             key: string;
             /** Value */
             value: string;
+        };
+        /**
+         * Health
+         * @description ok; or 503 degraded when the database is out of reach, or policy_drift when OPA holds another policy.
+         */
+        Health: {
+            /** Reason */
+            reason?: "database" | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "degraded" | "policy_drift";
         };
         /** HeldHost */
         HeldHost: {
@@ -5547,6 +5569,32 @@ export interface components {
             title: string;
         };
         /**
+         * ToolAccess
+         * @description A tool's access class, the one the policy decides on, and what a step reading it needs.
+         */
+        ToolAccess: {
+            /** Access */
+            access: string;
+            approval: components["schemas"]["ToolApproval"];
+            /** Deadlineseconds */
+            deadlineSeconds: number | null;
+            /** Name */
+            name: string;
+            /** Outputschema */
+            outputSchema: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+        };
+        /** ToolApproval */
+        ToolApproval: {
+            /** Approverteam */
+            approverTeam: string | null;
+            /** Approvers */
+            approvers: number;
+            /** Stepup */
+            stepUp: boolean;
+        };
+        /**
          * ToolCallRow
          * @description One gateway call as the console's ToolCallRow, with the identity fields the executions log fills.
          */
@@ -6060,7 +6108,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Health"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Health"];
                 };
             };
         };
