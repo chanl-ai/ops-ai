@@ -922,8 +922,10 @@ export interface paths {
         };
         /**
          * List Cases
-         * @description The acting team's cases, the soonest resolution deadline first. `overdue` keeps the open ones past it, leaving
-         *     out a case that waits on the customer.
+         * @description The acting team's cases on the shared list contract, the soonest resolution deadline first, then by id.
+         *     `search` keeps the cases holding every word in the subject, the customer's name or id; `status`, `priority`,
+         *     `assignee` and `customerId` filter (declared here so a value outside a status or priority is refused); `overdue`
+         *     keeps the open ones past their deadline, leaving out a case that waits on the customer.
          */
         get: operations["cases_list_cases"];
         put?: never;
@@ -16692,14 +16694,17 @@ export interface operations {
     cases_list_cases: {
         parameters: {
             query?: {
-                status?: ("open" | "waiting_on_customer" | "waiting_on_us" | "resolved" | "closed")[];
-                priority?: ("low" | "normal" | "high" | "urgent")[];
+                status?: ("open" | "waiting_on_customer" | "waiting_on_us" | "resolved" | "closed")[] | null;
+                priority?: ("low" | "normal" | "high" | "urgent")[] | null;
                 assignee?: string | null;
                 customerId?: string | null;
                 overdue?: boolean;
-                search?: string | null;
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;

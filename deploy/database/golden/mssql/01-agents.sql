@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0110_agents_list_indexes
+-- agents-service, stamped at 0111_cases_list_indexes
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -273,7 +273,15 @@ CREATE TABLE cases (
 	CONSTRAINT cases_pkey PRIMARY KEY (id)
 );
 GO
+CREATE INDEX ix_cases_team_assignee ON cases (tenant_id, team_id, assignee);
+GO
+CREATE INDEX ix_cases_team_customer ON cases (tenant_id, team_id, customer_id);
+GO
 CREATE INDEX ix_cases_team_due ON cases (tenant_id, team_id, resolution_due_at);
+GO
+CREATE INDEX ix_cases_team_priority ON cases (tenant_id, team_id, priority);
+GO
+CREATE INDEX ix_cases_team_status ON cases (tenant_id, team_id, status);
 GO
 CREATE UNIQUE INDEX uq_cases_producer_key ON cases (tenant_id, team_id, producer_key) WHERE producer_key IS NOT NULL;
 GO
@@ -1465,5 +1473,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0110_agents_list_indexes');
+INSERT INTO alembic_version (version_num) VALUES ('0111_cases_list_indexes');
 GO

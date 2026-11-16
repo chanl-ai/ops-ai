@@ -149,24 +149,66 @@
   },
   "listBadSize": {
     "body": {
-      "error": {
-        "code": "validation_failed",
-        "details": [
+      "data": {
+        "data": [
           {
-            "loc": [
-              "query",
-              "pageSize"
-            ],
-            "msg": "Input should be less than or equal to 100"
+            "assignee": null,
+            "createdAt": "<timeZ>",
+            "createdBy": "vera@harborpine.example",
+            "customerId": "C-1001",
+            "customerName": "Ann",
+            "fields": null,
+            "id": "<case>",
+            "owner": null,
+            "pausedSince": null,
+            "priority": "high",
+            "producerKey": "run_pin1",
+            "resolutionDueAt": "<timeZ>",
+            "resolutionLeftS": true,
+            "respondedAt": null,
+            "responseDueAt": "<timeZ>",
+            "responseLeftS": true,
+            "status": "open",
+            "subject": "Card dispute",
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>"
+          },
+          {
+            "assignee": null,
+            "createdAt": "<timeZ>",
+            "createdBy": "vera@harborpine.example",
+            "customerId": "C-1001",
+            "customerName": "Ann",
+            "fields": null,
+            "id": "<case>",
+            "owner": null,
+            "pausedSince": null,
+            "priority": "high",
+            "producerKey": null,
+            "resolutionDueAt": "<timeZ>",
+            "resolutionLeftS": true,
+            "respondedAt": null,
+            "responseDueAt": "<timeZ>",
+            "responseLeftS": true,
+            "status": "open",
+            "subject": "Late fee",
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>"
           }
         ],
-        "message": "query.pageSize: Input should be less than or equal to 100",
-        "requestId": "<req>",
-        "status": 400
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 50,
+          "total": 2,
+          "totalPages": 1
+        }
       },
-      "success": false
+      "success": true
     },
-    "status": 400
+    "status": 200
   },
   "listOtherTeam": {
     "body": {
@@ -200,7 +242,7 @@
           "hasNext": false,
           "hasPrev": false,
           "page": 1,
-          "pageSize": 25,
+          "pageSize": 20,
           "total": 1,
           "totalPages": 1
         }
@@ -241,7 +283,7 @@
           "hasNext": false,
           "hasPrev": false,
           "page": 1,
-          "pageSize": 25,
+          "pageSize": 20,
           "total": 1,
           "totalPages": 1
         }

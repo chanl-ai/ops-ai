@@ -16,13 +16,14 @@ from typing import Annotated, Any, Literal, TypeAlias
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from ops_access import can
 from ops_engine.store import RunStore
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound, Unprocessable
-from ops_service_kit.http import Envelope, In, ListResult, Out, paged
+from ops_service_kit.http import Envelope, In, ListResult, Out
+from ops_service_kit.listing import ListQuery
 from ops_store import isolation
 
 from ...store.cases import CaseNotFound, CaseStore, Priority, Status
@@ -367,42 +368,34 @@ async def open_case(rt: Rt, me: Me, _: Tx, body: CaseIn) -> JSONResponse:
     return ok(_view(opened.case), 201 if opened.created else 200)
 
 
-class CasesQuery(BaseModel):
-    status: list[Status] = Field(default_factory=list[Status])
-    priority: list[Priority] = Field(default_factory=list[Priority])
-    assignee: str | None = None
-    customerId: str | None = None  # noqa: N815 - the console's query parameter
-    overdue: bool = False
-    # Words in the subject, the customer's name or id.
-    search: str | None = Field(default=None, max_length=200)
-    page: int = Field(default=1, ge=1)
-    pageSize: int = Field(default=25, ge=1, le=100)  # noqa: N815
-
-
 @router.get("", response_model=Envelope[ListResult[CaseRow]])
-async def list_cases(rt: Rt, me: Me, q: Annotated[CasesQuery, Query()]) -> JSONResponse:
-    """The acting team's cases, the soonest resolution deadline first. `overdue` keeps the open ones past it, leaving
-    out a case that waits on the customer."""
+async def list_cases(
+    *,
+    rt: Rt,
+    me: Me,
+    q: ListQuery,
+    status: Annotated[list[Status] | None, Query()] = None,
+    priority: Annotated[list[Priority] | None, Query()] = None,
+    assignee: str | None = None,
+    customer_id: Annotated[str | None, Query(alias="customerId")] = None,
+    overdue: bool = False,
+) -> JSONResponse:
+    """The acting team's cases on the shared list contract, the soonest resolution deadline first, then by id.
+    `search` keeps the cases holding every word in the subject, the customer's name or id; `status`, `priority`,
+    `assignee` and `customerId` filter (declared here so a value outside a status or priority is refused); `overdue`
+    keeps the open ones past their deadline, leaving out a case that waits on the customer."""
+    del status, priority, assignee, customer_id  # read from `q.filters`, which holds each value given
     async with isolation.request_transaction():
-        rows, total = await CaseStore(rt.db).list(
-            [_team(me)],
-            status=list(q.status),
-            priority=list(q.priority),
-            assignee=q.assignee,
-            customer_id=q.customerId,
-            overdue=q.overdue,
-            search=q.search,
-            page=q.page,
-            size=q.pageSize,
-        )
+        listed = await CaseStore(rt.db).page([_team(me)], q, overdue=overdue)
+    rows = listed["data"]
     # One batched read of the page's owners, with nothing open; a person platform-service cannot name keeps their email
     # as the name.
     who = await actors(rt, [str(r["assignee"]) for r in rows if r["assignee"]])
-    listed = [
+    shown = [
         _view(r) | {"owner": {"email": r["assignee"], "name": who[r["assignee"]]["name"]} if r["assignee"] else None}
         for r in rows
     ]
-    return ok(paged(listed, total, q.page, q.pageSize))
+    return ok({**listed, "data": shown})
 
 
 @router.get("/{case_id}", response_model=Envelope[CasePage])

@@ -880,9 +880,12 @@ export const agentsOperations = {
       "assignee",
       "customerId",
       "overdue",
-      "search",
       "page",
-      "pageSize"
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
