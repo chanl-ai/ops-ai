@@ -5,6 +5,9 @@
 ["GET /health"]
 queries = 0
 
+["GET /health/background"]
+queries = 0
+
 ["GET /v1/models/providers"]
 queries = 2
 

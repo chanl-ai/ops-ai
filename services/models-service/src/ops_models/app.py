@@ -13,7 +13,7 @@ import hashlib
 import json
 import secrets
 import time
-from collections.abc import AsyncGenerator, AsyncIterator, Mapping
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Coroutine, Mapping, Sequence
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -30,6 +30,7 @@ from ops_identity import Auth, CurrentPrincipal, CurrentTenantCaller, Principal,
 from ops_identity.fastapi import Tx
 from ops_metering import Price, Usage, cost
 from ops_policy import CredentialStore
+from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.credentials import credential_store
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable
 from ops_service_kit.http import (
@@ -47,6 +48,8 @@ from ops_service_kit.logging import get_logger
 from ops_service_kit.public_address import PublicFetch
 from ops_service_kit.settings import Settings
 from ops_store import isolation
+from ops_store.background import LOCAL as LOCAL_BEATS
+from ops_store.background import report as background_report
 from ops_store.database import Database
 
 from .connection_settings import azure_openai_problem
@@ -313,18 +316,39 @@ def create_models_app(
     credentials: CredentialStore | None = None,
     key_fetch: PublicFetch | None = None,
     chat_aliases: tuple[str, ...] = ("default", "assistant"),
+    background: Sequence[Callable[[], Coroutine[Any, Any, None]]] | None = None,
 ) -> FastAPI:
     """Tests inject `upstream`, the client provider calls go out on; otherwise one is opened and closed with the app.
     `auth` resolves callers (ops_identity's shared dependency); by default it is built from Settings for "models".
     Provider keys are the accounts' own (`provider_keys`), kept in `credentials` (the store the settings choose by
-    default); `provider_secrets` are the dev stack's keys from settings, behind them."""
+    default); `provider_secrets` are the dev stack's keys from settings, behind them. `background` are the processes
+    the lifespan runs beside the server, by default the sweep of idle key spend."""
     http = upstream or httpx.AsyncClient(timeout=60)
     # Testing a key sends it out: only to a public address, never following a redirect with it.
     key_fetch = key_fetch or PublicFetch(max_redirects=0, timeout_s=20)
 
+    stop = asyncio.Event()
+    providers, aliases, key_store, call_log = Providers(db), Aliases(db), ModelKeys(db), CallLog(db)
+    loops = background if background is not None else [lambda: call_log.spend.keep_sweeping(stop)]
+
+    async def kept(start: Callable[[], Coroutine[Any, Any, None]]) -> None:
+        # Each process reports its own failures on /health/background; one that still escapes is logged here, so it
+        # never cancels the group, which would stop the server and the other processes with it.
+        try:
+            await start()
+        except Exception as e:
+            log.warning("models_background_stopped", error=f"{type(e).__name__}: {e}"[:500])
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
-        yield
+        async with asyncio.TaskGroup() as group:
+            tasks = [group.create_task(kept(start)) for start in loops]
+            try:
+                yield
+            finally:
+                stop.set()
+                for task in tasks:
+                    task.cancel()
         if upstream is None:
             await http.aclose()
 
@@ -349,7 +373,6 @@ def create_models_app(
     key_vault = ProviderKeyStore(db, credentials or credential_store(settings))
     keys = ProviderKeys(key_vault, provider_secrets)
     access = Access()
-    providers, aliases, key_store, call_log = Providers(db), Aliases(db), ModelKeys(db), CallLog(db)
 
     # TODO(auth): every /v1/models/* route below takes a calling service's Ed25519 token (CurrentService), the same
     # as agents-service's alias lookup and key admission. Providers, keys and alias versions are also what a person
@@ -369,6 +392,12 @@ def create_models_app(
     @app.get("/health", tags=["health"], response_model=Health)
     async def health() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
         return {"status": "ok"}
+
+    @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
+    async def health_background() -> BackgroundHealthOut:  # pyright: ignore[reportUnusedFunction]
+        """This service's background processes and their state; counts and error types only, no record's data."""
+        listed = background_report(await LOCAL_BEATS.read(), "models", time.time())
+        return BackgroundHealthOut.model_validate({"processes": listed})
 
     connection_errors = error_responses({400: "A value the connection's type refuses", 403: "Not an account admin"})
 

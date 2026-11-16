@@ -122,6 +122,7 @@ CREATE TABLE model_key_spend (
 	amount NUMERIC(18, 6) NOT NULL, 
 	calls INTEGER NOT NULL, 
 	starts_at DATETIMEOFFSET NOT NULL, 
+	last_call_s FLOAT NOT NULL, 
 	CONSTRAINT model_key_spend_pkey PRIMARY KEY (key_id, period)
 );
 GO

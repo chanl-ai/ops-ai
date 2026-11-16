@@ -5,7 +5,9 @@ opens one when no request has), which is what its caps read."""
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
+from contextlib import AbstractAsyncContextManager
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, ClassVar
@@ -14,12 +16,13 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.http import Out
-from ops_store import Guarantee, isolation
+from ops_store import Guarantee, background, isolation
 from ops_store.dialect import insert_ignore
 from ops_store.rows import rows
 from ops_store.store import Store
 
 from .provider_keys import ROLE
+from .tables import SPEND_KEPT_IDLE_S
 from .tables import model_call_log as t
 from .tables import model_calls_untenanted as untenanted_calls
 from .tables import model_key_spend as spend
@@ -27,6 +30,12 @@ from .tables import model_key_spend as spend
 # Why a key's spend and the calls that name no tenant are read and written with no tenant (`Store.install_tx`): a
 # key's caps sum what it spent for every tenant, and a call that names no tenant has none to be held to.
 KEY_SPEND = "model_key_spend"
+
+
+# The sweep of a key's day and run spend once idle for SPEND_KEPT_IDLE_S (its `sec:` rows go sooner, in `record`).
+SPEND_SWEEP = background.register(
+    background.retention(spend, spend.c.last_call_s, SPEND_KEPT_IDLE_S, key="models_spend_retention", service="models")
+).key
 
 # The rate limit's window, and how long a second's count is kept past it.
 RATE_WINDOW = timedelta(seconds=60)
@@ -113,7 +122,7 @@ class KeySpend(Store):
         q = sa.select(spend.c.period, spend.c.amount, spend.c.calls).where(
             spend.c.key_id == key_id, sa.or_(spend.c.period.in_(periods), rate)
         )
-        async with self.install_tx(KEY_SPEND) as c:
+        async with self.install_tx(KEY_SPEND, tables=(spend,)) as c:
             found = (await c.execute(q)).all()
         amounts = {p: Decimal(str(a)) for p, a, _ in found}
         recent = sum(int(n) for p, _, n in found if p.startswith("sec:"))
@@ -130,23 +139,53 @@ class KeySpend(Store):
         periods = {f"sec:{int(second.timestamp())}": second, f"day:{now.date().isoformat()}": second}
         if run_id:
             periods[f"run:{run_id}"] = second
-        async with self.install_tx(KEY_SPEND) as c:
+        async with self.install_tx(KEY_SPEND, tables=(untenanted_calls, spend)) as c:
             if untenanted is not None:
                 await c.execute(untenanted)
             for period, starts_at in periods.items():
-                await _add(c, key_id, period, starts_at, cost)
+                await _add(c, key_id, period, starts_at, cost, at_s=now.timestamp())
             stale = sa.and_(spend.c.key_id == key_id, spend.c.period.like("sec:%"), spend.c.starts_at < now - KEPT)
             await c.execute(spend.delete().where(stale))
 
+    def sweep_tx(self) -> AbstractAsyncContextManager[AsyncConnection]:
+        """The transaction one pass of the spend sweep deletes in: install-wide, as the rows are every tenant's."""
+        return self.install_tx(KEY_SPEND, tables=(spend,))
 
-async def _add(c: AsyncConnection, key_id: str, period: str, starts_at: datetime, amount: Decimal) -> None:
+    async def keep_sweeping(self, stop: asyncio.Event, *, every_s: float | None = None) -> None:
+        """The listed spend sweep, one pass an hour (or every `every_s`), reported on /health/background."""
+
+        def tx() -> AbstractAsyncContextManager[AsyncConnection]:
+            # Looked up on each pass, so a pass reaches the store as it is then.
+            return self.sweep_tx()
+
+        await background.run_sweep(SPEND_SWEEP, tx, stop=stop, every_s=every_s)
+
+
+async def _add(
+    c: AsyncConnection, key_id: str, period: str, starts_at: datetime, amount: Decimal, *, at_s: float
+) -> None:
     """Adds in the database (amount = amount + n), so concurrent calls never lose one another's spend: an update,
     then an insert of the first row, then the update again when a concurrent call inserted it first."""
     where = (spend.c.key_id == key_id, spend.c.period == period)
-    bump = spend.update().where(*where).values(amount=spend.c.amount + amount, calls=spend.c.calls + 1)
+    bump = (
+        spend.update()
+        .where(*where)
+        .values(
+            amount=spend.c.amount + amount,
+            calls=spend.c.calls + 1,
+            last_call_s=sa.case((spend.c.last_call_s < at_s, at_s), else_=spend.c.last_call_s),
+        )
+    )
     if (await c.execute(bump)).rowcount:
         return
-    first = {"key_id": key_id, "period": period, "amount": amount, "calls": 1, "starts_at": starts_at}
+    first = {
+        "key_id": key_id,
+        "period": period,
+        "amount": amount,
+        "calls": 1,
+        "starts_at": starts_at,
+        "last_call_s": at_s,
+    }
     if not (await c.execute(insert_ignore(c, spend, first, keys=["key_id", "period"]))).rowcount:
         await c.execute(bump)
 

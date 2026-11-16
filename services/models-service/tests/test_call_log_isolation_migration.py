@@ -1,15 +1,19 @@
 """Migration models_0012 moves the call log under the tenant policy, by failure mode: a key's caps lose the spend its
 log recorded before the move; a call that named no tenant is lost, or stays in the policed log; a re-run of the
-backfill doubles a total; the down path loses the tenant-less calls. Seeded with two tenants' calls and refusals, on
-each database; the seed and the checks read past the tenant policy, as the migration does."""
+backfill doubles a total; the backfill writes spend nobody reads again (a past day, a run idle past the sweep's
+window) or drops a long-running run's earlier calls; the down path loses the tenant-less calls. Seeded with two
+tenants' calls and refusals, on each database; the seed and the checks read past the tenant policy, as the migration
+does."""
 
 from __future__ import annotations
 
 import asyncio
 import importlib.util
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from types import ModuleType
+from typing import cast
 from uuid import uuid4
 
 import pytest
@@ -18,6 +22,8 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
+
+from ops_models.store.tables import SPEND_KEPT_IDLE_S
 
 from .conftest import past_the_call_log_policy
 
@@ -44,6 +50,18 @@ INSERT = (
 )
 
 
+def _migration() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("models_0012", MIGRATION)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def module_kept_idle() -> float | None:
+    return cast(float | None, getattr(_migration(), "KEPT_IDLE_S", None))
+
+
 async def _rerun(url: str, statements: list[str]) -> None:
     await _sql(url, [(text, {}) for text in statements])
 
@@ -56,26 +74,33 @@ def test_the_log_moves_under_the_policy_with_its_spend_and_its_refusals_kept(
     dialect = make_url(database_url).get_backend_name()
     cfg = Config(str(ROOT / "alembic.ini"))
     key = f"workflow:mig-{uuid4().hex[:8]}"
+    now = datetime.now(UTC)
+    idle = now - timedelta(seconds=SPEND_KEPT_IDLE_S + 86400)
     seeded = [
-        ("t_a", "ok", "0.25", "run_m1"),
-        ("t_b", "ok", "0.50", "run_m1"),
-        ("t_b", "ok", "1.00", None),
-        (None, "denied", "0", "run_m1"),
-        (None, "denied", "0", None),
+        ("t_a", "ok", "0.25", "run_m1", now),
+        ("t_b", "ok", "0.50", "run_m1", now),
+        ("t_b", "ok", "1.00", None, now),
+        (None, "denied", "0", "run_m1", now),
+        (None, "denied", "0", None, now),
+        # A run that started before the window and is still going keeps its whole total.
+        ("t_a", "ok", "0.30", "run_long", idle),
+        ("t_a", "ok", "0.10", "run_long", now),
+        # A run idle past the window, and a past day, are spend no cap reads again.
+        ("t_a", "ok", "0.05", "run_gone", idle),
+        ("t_b", "ok", "0.07", None, now - timedelta(days=1)),
     ]
     ids = [f"mc_mig_{uuid4().hex[:10]}" for _ in seeded]
-    now = datetime.now(UTC)
     command.downgrade(cfg, BEFORE)
     try:
         rows: list[tuple[str, dict[str, object]]] = [
-            (INSERT, {"id": i, "k": key, "tenant": t, "outcome": o, "cost": Decimal(c), "run": r, "at": now})
-            for i, (t, o, c, r) in zip(ids, seeded, strict=True)
+            (INSERT, {"id": i, "k": key, "tenant": t, "outcome": o, "cost": Decimal(c), "run": r, "at": at})
+            for i, (t, o, c, r, at) in zip(ids, seeded, strict=True)
         ]
         asyncio.run(_sql(database_url, rows))
         command.upgrade(cfg, "head")
         spend_q = (
-            "SELECT period, amount, calls FROM model_key_spend WHERE key_id = :k AND period NOT LIKE 'sec:%' "
-            "ORDER BY period"
+            "SELECT period, amount, calls, last_call_s FROM model_key_spend "
+            "WHERE key_id = :k AND period NOT LIKE 'sec:%' ORDER BY period"
         )
         log_q = "SELECT id FROM model_call_log WHERE key_id = :k AND tenant_id IS NULL"
         kept_q = "SELECT count(*) FROM model_calls_untenanted WHERE key_id = :k"
@@ -83,15 +108,19 @@ def test_the_log_moves_under_the_policy_with_its_spend_and_its_refusals_kept(
         spend, nulls, kept = asyncio.run(
             _sql(database_url, [(spend_q, {"k": key}), (log_q, {"k": key}), (kept_q, {"k": key})])
         )
-        assert spend == [(day, Decimal("1.75"), 5), ("run:run_m1", Decimal("0.75"), 3)], "the caps lost logged spend"
+        assert [r[:3] for r in spend] == [
+            (day, Decimal("1.85"), 6),
+            ("run:run_long", Decimal("0.40"), 2),
+            ("run:run_m1", Decimal("0.75"), 3),
+        ], "the caps lost logged spend, or the backfill wrote spend no cap reads"
+        assert all(abs(cast(float, r[3]) - now.timestamp()) < 60 for r in spend), (
+            "a row's last call is not its newest call"
+        )
+        assert module_kept_idle() == SPEND_KEPT_IDLE_S, "the backfill and the sweep keep different windows"
         assert (nulls, kept) == ([], [(2,)]), "a tenant-less call stayed in the policed log or was lost"
 
         # The backfill sets totals from the log, so a second run changes nothing.
-        spec = importlib.util.spec_from_file_location("models_0012", MIGRATION)
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        asyncio.run(_rerun(database_url, module.backfill_sql(dialect)))
+        asyncio.run(_rerun(database_url, _migration().backfill_sql(dialect)))
         assert asyncio.run(_sql(database_url, [(spend_q, {"k": key})]))[0] == spend, "a re-run changed a total"
 
         command.downgrade(cfg, BEFORE)

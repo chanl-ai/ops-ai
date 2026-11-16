@@ -29,6 +29,9 @@ depends_on = None
 CHAIN = "models"
 ROLE = "ops_models_tenant"
 MONEY = sa.Numeric(18, 6)
+# A day or run idle this long is spend no cap reads again: not backfilled, and swept once it is
+# (ops_models.store.tables.SPEND_KEPT_IDLE_S, the same value; a migration does not import the service).
+KEPT_IDLE_S = 14 * 86400.0
 
 CALL = [
     "id",
@@ -84,21 +87,30 @@ def _call_columns() -> list[sa.Column[Any]]:
 
 
 def backfill_sql(dialect: str) -> list[str]:
-    """Sets each key's day and run totals from every call row, the log's and the untenanted calls' (a call is in one
-    of the two whether or not the move has run), so a re-run gives the same totals. A second's count is not
-    backfilled: the rate window starts empty at the migration, for at most one minute."""
+    """Sets each key's spend today and on each run with a call inside KEPT_IDLE_S from every call row, the log's and
+    the untenanted calls' (a call is in one of the two whether or not the move has run), so a re-run gives the same
+    totals. A run still going keeps every call it made, however long ago it started; past days and idle runs are not
+    written, as no cap reads them. A second's count is not backfilled: the rate window starts empty at the migration,
+    for at most one minute."""
     calls = ", ".join(("key_id", "run_id", "cost", "created_at"))
     every = f"(SELECT {calls} FROM model_call_log UNION ALL SELECT {calls} FROM model_calls_untenanted) c"
     if dialect == "postgresql":
         day, join = "to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')", "||"
+        today = "date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'"
+        since = f"now() - make_interval(secs => {KEPT_IDLE_S:g})"
+        last = "EXTRACT(EPOCH FROM MAX(created_at))"
     else:
         day, join = "CONVERT(char(10), SWITCHOFFSET(created_at, 0), 23)", "+"
-    insert = "INSERT INTO model_key_spend (key_id, period, amount, calls, starts_at) SELECT key_id, "
+        today = "CAST(CAST(SYSUTCDATETIME() AS date) AS datetimeoffset)"
+        since = f"DATEADD(second, -{KEPT_IDLE_S:.0f}, SYSDATETIMEOFFSET())"
+        last = "CAST(DATEDIFF_BIG(millisecond, '1970-01-01T00:00:00+00:00', MAX(created_at)) AS float) / 1000"
+    insert = "INSERT INTO model_key_spend (key_id, period, amount, calls, starts_at, last_call_s) SELECT key_id, "
+    totals = f"SUM(cost), COUNT(*), MIN(created_at), {last}"
     return [
         "DELETE FROM model_key_spend WHERE period LIKE 'day:%' OR period LIKE 'run:%'",
-        f"{insert}'day:' {join} {day}, SUM(cost), COUNT(*), MIN(created_at) FROM {every} GROUP BY key_id, {day}",
-        f"{insert}'run:' {join} run_id, SUM(cost), COUNT(*), MIN(created_at) FROM {every} "
-        "WHERE run_id IS NOT NULL GROUP BY key_id, run_id",
+        f"{insert}'day:' {join} {day}, {totals} FROM {every} WHERE created_at >= {today} GROUP BY key_id, {day}",
+        f"{insert}'run:' {join} run_id, {totals} FROM {every} "
+        f"WHERE run_id IS NOT NULL GROUP BY key_id, run_id HAVING MAX(created_at) >= {since}",
     ]
 
 
@@ -133,6 +145,7 @@ def upgrade() -> None:
         sa.Column("amount", MONEY, nullable=False),
         sa.Column("calls", sa.Integer, nullable=False),
         sa.Column("starts_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("last_call_s", sa.Float(asdecimal=False), nullable=False),
     )
     # Every read of the log names the tenant (the policy adds it) and the page sorts newest first.
     op.create_index("ix_model_call_log_tenant_created", "model_call_log", ["tenant_id", "created_at"])

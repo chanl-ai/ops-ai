@@ -23,9 +23,11 @@ async def test_two_first_calls_for_one_key_at_once_both_count(models: Models) ->
     second = await models.engine.connect()
     try:
         await first.begin()
-        await _add(first, key_id, period, now, Decimal("0.25"))  # the first row, not yet committed
+        await _add(
+            first, key_id, period, now, Decimal("0.25"), at_s=now.timestamp()
+        )  # the first row, not yet committed
         await second.begin()
-        racing = asyncio.ensure_future(_add(second, key_id, period, now, Decimal("0.50")))
+        racing = asyncio.ensure_future(_add(second, key_id, period, now, Decimal("0.50"), at_s=now.timestamp()))
         await asyncio.sleep(0.3)  # the second call is now waiting on the first's row
         await first.commit()
         await asyncio.wait_for(racing, 10)

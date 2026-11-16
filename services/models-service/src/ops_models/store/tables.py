@@ -167,6 +167,10 @@ model_calls_untenanted = sa.Table(
     info=system("a model call that named no tenant: no tenant column and no tenant to hold it to"),
 )
 
+# How long a key's day or run spend is kept after its last call: the sweep (`store.calls.SPEND_SWEEP`) deletes it
+# then, and models_0012 backfills only what is newer.
+SPEND_KEPT_IDLE_S = 14 * 86400.0
+
 # What a key's caps read, summed across every tenant it spends for: per `period`, `sec:<epoch second>` (the rate
 # limit, kept two minutes), `day:<UTC date>` (the daily cap) and `run:<run id>` (a caller's run cap). Written in one
 # transaction with the call's row, whichever table that is in (`CallLog.record`).
@@ -180,5 +184,8 @@ model_key_spend = sa.Table(
     # When the period's first call was counted, on the service's clock: the rate window and the sweep of old seconds
     # read it.
     sa.Column("starts_at", sa.DateTime(timezone=True), nullable=False),
+    # Unix seconds of the period's latest call, on the service's clock: the sweep deletes a row idle for
+    # SPEND_KEPT_IDLE_S, so a run that is still spending keeps its total however long ago it started.
+    sa.Column("last_call_s", sa.Float(asdecimal=False), nullable=False),
     info=system("a model key's spend and call count per period, summed across the tenants it spends for"),
 )
