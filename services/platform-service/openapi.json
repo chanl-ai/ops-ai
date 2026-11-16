@@ -1435,6 +1435,25 @@
         "title": "Envelope[InvitePreview]",
         "type": "object"
       },
+      "Envelope_ListResult_ApiKeyOut__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ListResult_ApiKeyOut_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ListResult[ApiKeyOut]]",
+        "type": "object"
+      },
       "Envelope_ListResult_MemberOut__": {
         "additionalProperties": false,
         "properties": {
@@ -1927,29 +1946,6 @@
           "data"
         ],
         "title": "Envelope[WorkspaceTeamsOut]",
-        "type": "object"
-      },
-      "Envelope_list_ApiKeyOut__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/ApiKeyOut"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[list[ApiKeyOut]]",
         "type": "object"
       },
       "Envelope_list_ApiKeySummary__": {
@@ -3074,6 +3070,38 @@
           "id"
         ],
         "title": "KeyTargetIn",
+        "type": "object"
+      },
+      "ListResult_ApiKeyOut_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ApiKeyOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets"
+        ],
+        "title": "ListResult[ApiKeyOut]",
         "type": "object"
       },
       "ListResult_MemberOut_": {
@@ -6489,7 +6517,7 @@
     },
     "/v1/api-keys": {
       "get": {
-        "description": "The team's keys; `targetKind` and `targetId` keep the keys made for one target, as an MCP link's Keys tab\nlists them.",
+        "description": "The team's keys on the shared list contract, newest first, searched on name;\n`targetKind` and `targetId` keep the keys made for one target, as an MCP link's Keys tab lists them. The\nfilters are declared here so a bad value is refused; ListQuery reads the same keys as its filters.",
         "operationId": "api_keys_list_api_keys",
         "parameters": [
           {
@@ -6531,6 +6559,100 @@
             }
           },
           {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
+          {
             "in": "header",
             "name": "x-team-id",
             "required": false,
@@ -6568,7 +6690,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_ApiKeyOut__"
+                  "$ref": "#/components/schemas/Envelope_ListResult_ApiKeyOut__"
                 }
               }
             },
@@ -13447,6 +13569,7 @@
     },
     "/v1/settings/members": {
       "get": {
+        "description": "The team's people and invites on the shared list contract: `role` and `status` filter and are counted,\n`search` matches name and email, oldest first (`sortBy` name, role or status). Every built-in role but Chat\nuser reads the team's people. The filters are declared here so a bad value is refused; ListQuery reads the\nsame keys as its filters.",
         "operationId": "members_list_members",
         "parameters": [
           {
@@ -13476,6 +13599,10 @@
               "anyOf": [
                 {
                   "items": {
+                    "enum": [
+                      "active",
+                      "invited"
+                    ],
                     "type": "string"
                   },
                   "type": "array"
@@ -13485,6 +13612,100 @@
                 }
               ],
               "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {

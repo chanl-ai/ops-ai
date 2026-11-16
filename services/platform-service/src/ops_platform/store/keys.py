@@ -11,7 +11,9 @@ from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.http import Out
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
+from ops_store.listing import ListPage, list_page
 from ops_store.rows import Select, one, rows
 
 from .audit import record
@@ -70,9 +72,20 @@ class KeyStore(TenantDb):
         )
         return q if team_id is None else q.where(api_keys.c.team_id == team_id)
 
-    async def list(self, tenant_id: str, team_id: str) -> list[KeyRow]:
+    async def page(self, tenant_id: str, team_id: str, params: ListParams) -> ListPage:
+        """The team's keys on the shared list contract, newest first: searched on name, filtered by `targetKind`
+        and `targetId` (an MCP link's Keys tab lists the keys made for it), all in SQL."""
+        q = self._listing(team_id).order_by(None)
+        by = {"targetKind": api_keys.c.target_kind, "targetId": api_keys.c.target_id}
         async with self.tenant_tx(tenant_id) as c:
-            return await rows(c, self._listing(team_id), KeyRow)
+            return await list_page(
+                c,
+                q,
+                params,
+                search=[api_keys.c.name],
+                default_sort=api_keys.c.created_at.desc(),
+                filters=by,
+            )
 
     async def every(self, tenant_id: str) -> list[KeyRow]:
         """Every team's keys in the workspace, for a service's list of API channels."""

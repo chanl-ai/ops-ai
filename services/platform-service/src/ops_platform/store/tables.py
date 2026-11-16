@@ -21,6 +21,7 @@ import sqlalchemy as sa
 from sqlalchemy.engine.default import DefaultExecutionContext
 
 from ops_access import OWNER
+from ops_store.listing import LISTED
 from ops_store.outbox import outbox_table
 from ops_store.schema import TENANT_SCOPED, system
 
@@ -97,13 +98,16 @@ members = sa.Table(
     sa.Column("team_id", sa.String(64), nullable=False, index=True),
     sa.Column("user_id", sa.String(64)),  # null while invited
     sa.Column("email", sa.String(320), nullable=False),
-    sa.Column("role", sa.String(16), nullable=False),  # admin | builder | approver | viewer
-    sa.Column("status", sa.String(16), nullable=False),  # active | invited | removed
+    sa.Column("role", sa.String(16), nullable=False, info=LISTED),  # admin | builder | approver | viewer
+    sa.Column("status", sa.String(16), nullable=False, info=LISTED),  # active | invited | removed
     sa.Column("invite_token_hash", sa.String(64), unique=True),
     sa.Column("invite_expires_at", sa.String(40)),
     sa.Column("created_at", sa.String(40), nullable=False),
     sa.Column("updated_at", sa.String(40), nullable=False),
     sa.UniqueConstraint("team_id", "email", name="uq_members_team_email"),
+    # The members list filters a team's people by role and by status.
+    sa.Index("ix_members_team_role", "team_id", "role"),
+    sa.Index("ix_members_team_status", "team_id", "status"),
     sa.ForeignKeyConstraint(["tenant_id", "team_id"], ["teams.tenant_id", "teams.id"], name="fk_members_team"),
     sa.ForeignKeyConstraint(["tenant_id", "user_id"], ["users.tenant_id", "users.id"], name="fk_members_user"),
     info=TENANT_SCOPED,
@@ -128,11 +132,14 @@ api_keys = sa.Table(
     sa.Column("expires_at", sa.String(40)),  # null: the key does not expire
     # What the key may start: agent or workflow, its id, and a pinned workflow version (null: the live one). No
     # target: any live workflow of the key's team.
-    sa.Column("target_kind", sa.String(16)),
-    sa.Column("target_id", sa.String(64)),
+    sa.Column("target_kind", sa.String(16), info=LISTED),
+    sa.Column("target_id", sa.String(64), info=LISTED),
     sa.Column("target_version", sa.Integer),
     sa.ForeignKeyConstraint(["tenant_id", "team_id"], ["teams.tenant_id", "teams.id"], name="fk_api_keys_team"),
     sa.ForeignKeyConstraint(["tenant_id", "created_by"], ["users.tenant_id", "users.id"], name="fk_api_keys_creator"),
+    # The keys list keeps the keys made for one target (an MCP link's Keys tab).
+    sa.Index("ix_api_keys_team_target_kind", "team_id", "target_kind"),
+    sa.Index("ix_api_keys_team_target_id", "team_id", "target_id"),
     info=TENANT_SCOPED,
 )
 

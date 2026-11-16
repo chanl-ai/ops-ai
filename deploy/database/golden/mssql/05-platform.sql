@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- platform-service, stamped at 0040_role_assignments_by_role
+-- platform-service, stamped at 0041_list_filters
 CREATE TABLE tenants (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -148,6 +148,10 @@ CREATE TABLE members (
 GO
 CREATE INDEX ix_members_team_id ON members (team_id);
 GO
+CREATE INDEX ix_members_team_role ON members (team_id, role);
+GO
+CREATE INDEX ix_members_team_status ON members (team_id, status);
+GO
 CREATE INDEX ix_members_tenant_id ON members (tenant_id);
 GO
 CREATE UNIQUE INDEX members_invite_token_hash_key ON members (invite_token_hash) WHERE invite_token_hash IS NOT NULL;
@@ -177,6 +181,10 @@ CREATE TABLE api_keys (
 );
 GO
 CREATE INDEX ix_api_keys_team_id ON api_keys (team_id);
+GO
+CREATE INDEX ix_api_keys_team_target_id ON api_keys (team_id, target_id);
+GO
+CREATE INDEX ix_api_keys_team_target_kind ON api_keys (team_id, target_kind);
 GO
 CREATE INDEX ix_api_keys_tenant_id ON api_keys (tenant_id);
 GO
@@ -600,5 +608,5 @@ CREATE TABLE alembic_version_platform (
     CONSTRAINT alembic_version_platform_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_platform (version_num) VALUES ('0040_role_assignments_by_role');
+INSERT INTO alembic_version_platform (version_num) VALUES ('0041_list_filters');
 GO

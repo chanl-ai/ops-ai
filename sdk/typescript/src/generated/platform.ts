@@ -116,8 +116,9 @@ export interface paths {
         };
         /**
          * List Api Keys
-         * @description The team's keys; `targetKind` and `targetId` keep the keys made for one target, as an MCP link's Keys tab
-         *     lists them.
+         * @description The team's keys on the shared list contract, newest first, searched on name;
+         *     `targetKind` and `targetId` keep the keys made for one target, as an MCP link's Keys tab lists them. The
+         *     filters are declared here so a bad value is refused; ListQuery reads the same keys as its filters.
          */
         get: operations["api_keys_list_api_keys"];
         put?: never;
@@ -933,7 +934,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Members */
+        /**
+         * List Members
+         * @description The team's people and invites on the shared list contract: `role` and `status` filter and are counted,
+         *     `search` matches name and email, oldest first (`sortBy` name, role or status). Every built-in role but Chat
+         *     user reads the team's people. The filters are declared here so a bad value is refused; ListQuery reads the
+         *     same keys as its filters.
+         */
         get: operations["members_list_members"];
         put?: never;
         post?: never;
@@ -2070,6 +2077,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ListResult[ApiKeyOut]] */
+        Envelope_ListResult_ApiKeyOut__: {
+            data: components["schemas"]["ListResult_ApiKeyOut_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ListResult[MemberOut]] */
         Envelope_ListResult_MemberOut__: {
             data: components["schemas"]["ListResult_MemberOut_"];
@@ -2298,16 +2314,6 @@ export interface components {
         /** Envelope[WorkspaceTeamsOut] */
         Envelope_WorkspaceTeamsOut_: {
             data: components["schemas"]["WorkspaceTeamsOut"];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[ApiKeyOut]] */
-        Envelope_list_ApiKeyOut__: {
-            /** Data */
-            data: components["schemas"]["ApiKeyOut"][];
             /**
              * Success
              * @constant
@@ -2737,6 +2743,18 @@ export interface components {
             kind: "agent" | "workflow" | "mcp_link";
             /** Version */
             version?: number | null;
+        };
+        /** ListResult[ApiKeyOut] */
+        ListResult_ApiKeyOut_: {
+            /** Data */
+            data: components["schemas"]["ApiKeyOut"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
         };
         /** ListResult[MemberOut] */
         ListResult_MemberOut_: {
@@ -3996,6 +4014,12 @@ export interface operations {
             query?: {
                 targetKind?: ("agent" | "workflow" | "mcp_link") | null;
                 targetId?: string | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -4009,7 +4033,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_ApiKeyOut__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_ApiKeyOut__"];
                 };
             };
             /** @description Invalid request */
@@ -8779,7 +8803,13 @@ export interface operations {
         parameters: {
             query?: {
                 role?: string[] | null;
-                status?: string[] | null;
+                status?: ("active" | "invited")[] | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;

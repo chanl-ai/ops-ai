@@ -38,6 +38,7 @@ from ops_service_kit.http import (
     options_window,
 )
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListQuery
 from ops_service_kit.request_timing import note_caller
 from ops_service_kit.settings import Settings
 from ops_signin import PasswordHasher
@@ -68,7 +69,7 @@ from ..store.holders import HolderStore
 from ..store.identity import IdentityStore, SessionRef
 from ..store.keys import KeyStore
 from ..store.lifecycle import LifecycleStore
-from ..store.members import Actor, TeamStore
+from ..store.members import Actor, MemberRow, TeamStore
 from ..store.policies import PolicyStore
 from ..store.roles import RoleStore
 from ..store.signin import SignInStore
@@ -566,35 +567,28 @@ def create_public_app(
     @app.get("/v1/settings/members", tags=["members"], response_model=Envelope[ListResult[MemberOut]], responses=ERRORS)
     async def list_members(  # pyright: ignore[reportUnusedFunction]
         _: Tx,
+        q: ListQuery,
         actor: Annotated[Actor, Depends(acting)],
         role: Annotated[list[str] | None, Query()] = None,
-        status: Annotated[list[str] | None, Query()] = None,
+        status: Annotated[list[Literal["active", "invited"]] | None, Query()] = None,
     ) -> Any:
-        # Every built-in role but Chat user reads the team's people; a chat-only member does not.
+        """The team's people and invites on the shared list contract: `role` and `status` filter and are counted,
+        `search` matches name and email, oldest first (`sortBy` name, role or status). Every built-in role but Chat
+        user reads the team's people. The filters are declared here so a bad value is refused; ListQuery reads the
+        same keys as its filters."""
+        del role, status
         await people.require_admin(actor, "access", "view")
-        everyone = await team_store.members(actor.tenant_id, actor.team_id, roles=[], statuses=[])
-        shown = [m for m in everyone if (not role or m.role in role) and (not status or m.status in status)]
-        joined = [m.user_id for m in shown if m.user_id]
+        page = await team_store.member_page(actor.tenant_id, actor.team_id, q)
+        joined = [str(m["user_id"]) for m in page["data"] if m["user_id"]]
         wide = await RoleStore(store.db).workspace_roles(actor.tenant_id, joined, now=now_iso())
-        rows = [
+        shown = [MemberRow.model_validate(m) for m in page["data"]]
+        page["data"] = [
             m.model_dump(by_alias=True, exclude={"created_at"})
             | ({"invitedAt": m.created_at} if m.status == "invited" else {})
             | {"workspaceRoles": wide.get(str(m.user_id), [])}
             for m in shown
         ]
-        facets = {
-            "role": {v: sum(1 for m in everyone if m.role == v) for v in sorted({m.role for m in everyone})},
-            "status": {v: sum(1 for m in everyone if m.status == v) for v in sorted({m.status for m in everyone})},
-        }
-        pagination = {
-            "page": 1,
-            "pageSize": len(rows),
-            "total": len(rows),
-            "totalPages": 1,
-            "hasNext": False,
-            "hasPrev": False,
-        }
-        return ok({"data": rows, "pagination": pagination, "facets": facets})
+        return ok(page)
 
     @app.get("/v1/settings/members/options", tags=["members"], response_model=Envelope[OptionsPage], responses=ERRORS)
     async def member_options(  # pyright: ignore[reportUnusedFunction]
@@ -1449,16 +1443,19 @@ def create_public_app(
 
     keys = ApiKeys(KeyStore(store.db), people)
 
-    @app.get("/v1/api-keys", tags=["api-keys"], response_model=Envelope[list[ApiKeyOut]], responses=ERRORS)
+    @app.get("/v1/api-keys", tags=["api-keys"], response_model=Envelope[ListResult[ApiKeyOut]], responses=ERRORS)
     async def list_api_keys(  # pyright: ignore[reportUnusedFunction]
         _: Tx,
+        q: ListQuery,
         actor: Annotated[Actor, Depends(acting)],
         target_kind: Annotated[Literal["agent", "workflow", "mcp_link"] | None, Query(alias="targetKind")] = None,
         target_id: Annotated[str | None, Query(alias="targetId", max_length=64)] = None,
     ) -> Any:
-        """The team's keys; `targetKind` and `targetId` keep the keys made for one target, as an MCP link's Keys tab
-        lists them."""
-        return ok(await keys.list(actor, target_kind, target_id))
+        """The team's keys on the shared list contract, newest first, searched on name;
+        `targetKind` and `targetId` keep the keys made for one target, as an MCP link's Keys tab lists them. The
+        filters are declared here so a bad value is refused; ListQuery reads the same keys as its filters."""
+        del target_kind, target_id
+        return ok(await keys.list(actor, q))
 
     @app.post(
         "/v1/api-keys", tags=["api-keys"], status_code=201, response_model=Envelope[ApiKeyCreated], responses=ERRORS

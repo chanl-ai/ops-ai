@@ -58,23 +58,34 @@
       "teamId": "<team>"
     }
   ],
-  "keys": [
-    {
-      "createdAt": "<timeZ>",
-      "createdBy": "Ana Ops",
-      "expiresAt": null,
-      "id": "<key>",
-      "lastUsedAt": null,
-      "name": "ci",
-      "prefix": "<key>",
-      "scopes": [
-        "read"
-      ],
-      "status": "active",
-      "target": null,
-      "team": "Team admin <team>"
+  "keys": {
+    "data": [
+      {
+        "createdAt": "<timeZ>",
+        "createdBy": "Ana Ops",
+        "expiresAt": null,
+        "id": "<key>",
+        "lastUsedAt": null,
+        "name": "ci",
+        "prefix": "<key>",
+        "scopes": [
+          "read"
+        ],
+        "status": "active",
+        "target": null,
+        "team": "Team admin <team>"
+      }
+    ],
+    "facets": {},
+    "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 1,
+      "totalPages": 1
     }
-  ],
+  },
   "me": {
     "flags": [
       {
@@ -5149,7 +5160,7 @@
       "hasNext": false,
       "hasPrev": false,
       "page": 1,
-      "pageSize": 2,
+      "pageSize": 20,
       "total": 2,
       "totalPages": 1
     }

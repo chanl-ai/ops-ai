@@ -72,4 +72,4 @@ async def test_a_links_key_reads_only_and_lists_under_its_link_alone(platform: P
     r = await platform.public.get(
         "/v1/api-keys", headers=h, params={"targetKind": "mcp_link", "targetId": "mcl_claims"}
     )
-    assert [k["id"] for k in r.json()["data"]] == [made["key"]["id"]], r.text  # type: ignore[index]
+    assert [k["id"] for k in r.json()["data"]["data"]] == [made["key"]["id"]], r.text  # type: ignore[index]

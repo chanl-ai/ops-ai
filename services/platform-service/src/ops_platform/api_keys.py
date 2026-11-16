@@ -12,6 +12,8 @@ from typing import Any
 
 from ops_service_kit.errors import NotFound, ValidationFailed
 from ops_service_kit.ids import new_id
+from ops_service_kit.listing import ListParams
+from ops_store.listing import ListPage
 
 from .store.keys import KeyRow, KeyStore
 from .store.members import Actor
@@ -59,15 +61,13 @@ class ApiKeys:
     store: KeyStore
     members: Members
 
-    async def list(
-        self, actor: Actor, target_kind: str | None = None, target_id: str | None = None
-    ) -> list[dict[str, Any]]:
-        """The team's keys; with a target, only the keys made for it (an MCP link's Keys tab)."""
+    async def list(self, actor: Actor, params: ListParams) -> ListPage:
+        """The team's keys on the shared list contract; `targetKind` and `targetId` keep the keys made for one target
+        (an MCP link's Keys tab)."""
         await self.members.require_admin(actor)
-        rows = await self.store.list(actor.tenant_id, actor.team_id)
-        if target_kind is not None:
-            rows = [r for r in rows if r.target_kind == target_kind and (target_id is None or r.target_id == target_id)]
-        return [shown(r) for r in rows]
+        page = await self.store.page(actor.tenant_id, actor.team_id, params)
+        page["data"] = [shown(KeyRow.model_validate(r)) for r in page["data"]]
+        return page
 
     async def create(
         self,

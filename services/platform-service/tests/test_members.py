@@ -338,3 +338,35 @@ async def test_member_writes_are_audited(platform: Platform) -> None:
             .all()
         )
     assert list(actions) == ["member.invite", "member.accept", "member.role", "member.remove"]
+
+
+async def test_the_member_list_never_shows_another_teams_or_tenants_people(platform: Platform) -> None:
+    # A filter, a search, a facet or `ids` naming them each still answers the acting team's rows only.
+    admin, h = await as_admin(platform)
+    mine = await join(platform, admin, "viewer")
+    other_team = await platform.person(roles=("viewer",), tenant_id=admin.tenant_id)
+    other_tenant = await platform.person(roles=("viewer",))
+    outside = {other_team.email, other_tenant.email}
+    ids = [f"mem_{p.user_id}" for p in (mine, other_team, other_tenant)]
+    async with platform.engine.begin() as c:
+        found = (await c.execute(sa.select(members.c.id).where(members.c.email.in_(outside)))).scalars().all()
+    for params in ({}, {"role": "viewer"}, {"search": "@"}, {"ids": [*ids, *found]}):
+        r = await platform.public.get("/v1/settings/members", headers=h, params=params)
+        assert r.status_code == 200, r.text
+        emails = {m["email"] for m in r.json()["data"]["data"]}
+        assert emails and not emails & outside, (params, emails)
+        assert r.json()["data"]["facets"]["role"].get("viewer", 0) == 1
+
+
+async def test_member_pages_follow_one_another_with_no_row_twice(platform: Platform) -> None:
+    # Every joined member shares one created_at, so only the id orders them between pages.
+    admin, h = await as_admin(platform)
+    for _ in range(4):
+        await join(platform, admin, "builder")
+    seen: list[str] = []
+    for page in (1, 2, 3):
+        r = await platform.public.get("/v1/settings/members", headers=h, params={"page": page, "pageSize": 2})
+        assert r.status_code == 200, r.text
+        seen += [m["id"] for m in r.json()["data"]["data"]]
+    assert len(seen) == 5 == len(set(seen)), seen
+    assert r.json()["data"]["pagination"]["total"] == 5

@@ -21,8 +21,10 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
 from ops_store.dialect import locked
+from ops_store.listing import ListPage, list_page
 from ops_store.outbox import add as add_event
 from ops_store.rows import one, rows
 
@@ -211,6 +213,41 @@ class TeamStore(TenantDb):
             q = q.where(members.c.status.in_(statuses))
         async with self.tenant_tx(tenant_id) as c:
             return await rows(c, q, MemberRow)
+
+    async def member_page(self, tenant_id: str, team_id: str, params: ListParams) -> ListPage:
+        """The team's people and invites on the shared list contract: searched on name and email, filtered and
+        counted by `role` and `status`, oldest first, all in SQL on one transaction."""
+        name = sa.func.coalesce(users.c.name, members.c.email)
+        q = (
+            sa.select(
+                members.c.id,
+                name.label("name"),
+                members.c.email,
+                members.c.role,
+                members.c.team_id,
+                teams.c.name.label("team"),
+                members.c.status,
+                members.c.created_at,
+                members.c.user_id,
+            )
+            # members first: list_page pages by the first table's key.
+            .select_from(
+                members.join(teams, teams.c.id == members.c.team_id).outerjoin(users, users.c.id == members.c.user_id)
+            )
+            .where(members.c.team_id == team_id, members.c.status != "removed")
+        )
+        by = {"role": members.c.role, "status": members.c.status}
+        async with self.tenant_tx(tenant_id) as c:
+            return await list_page(
+                c,
+                q,
+                params,
+                search=[name, members.c.email],
+                sortable={"name": name, **by},
+                default_sort=members.c.created_at.asc(),
+                filters=by,
+                facets=by,
+            )
 
     async def people_options(
         self, tenant_id: str, team_id: str, *, search: str | None, ids: list[str], offset: int, limit: int

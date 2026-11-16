@@ -951,11 +951,6 @@ class EnvelopeWorkspaceTeamsOut(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListApiKeyOut(TypedDict, closed=True):
-    data: list[ApiKeyOut]
-    success: Literal[True]
-
-
 class EnvelopeListApiKeySummary(TypedDict, closed=True):
     data: list[ApiKeySummary]
     success: Literal[True]
@@ -1021,6 +1016,12 @@ class InviteBulkOut(TypedDict, closed=True):
 class KeyRef(TypedDict, closed=True):
     id: str
     target: KeyTarget | None
+
+
+class ListResultApiKeyOut(TypedDict, closed=True):
+    data: list[ApiKeyOut]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
 
 
 class ListResultMemberOut(TypedDict, closed=True):
@@ -1109,6 +1110,11 @@ class EnvelopeHoldersOut(TypedDict, closed=True):
 
 class EnvelopeInviteBulkOut(TypedDict, closed=True):
     data: InviteBulkOut
+    success: Literal[True]
+
+
+class EnvelopeListResultApiKeyOut(TypedDict, closed=True):
+    data: ListResultApiKeyOut
     success: Literal[True]
 
 

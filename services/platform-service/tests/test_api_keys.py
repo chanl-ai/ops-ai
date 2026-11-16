@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hmac
 import logging
+from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -13,7 +14,7 @@ import sqlalchemy as sa
 from ops_platform.store.tables import api_keys, audit_entries
 
 from .conftest import SERVICE, Platform
-from .test_members import as_admin, join
+from .test_members import as_admin, bearer, join, team_of
 
 
 async def create(platform: Platform, h: dict[str, str], **body: object) -> dict[str, object]:
@@ -34,7 +35,7 @@ async def test_an_admin_creates_a_key_whose_secret_shows_once(platform: Platform
     assert secret.startswith("ok_") and await introspect(platform, secret) == 200
     r = await platform.public.get("/v1/api-keys", headers=h)
     assert r.status_code == 200, r.text
-    [listed] = r.json()["data"]
+    [listed] = r.json()["data"]["data"]
     assert listed["id"] == made["key"]["id"] and listed["scopes"] == ["read", "write"]  # type: ignore[index]
     assert secret.split(".", 1)[1] not in r.text and "secret" not in listed
 
@@ -76,7 +77,7 @@ async def test_use_moves_last_used_at(platform: Platform) -> None:
     made = await create(platform, h)
     assert made["key"].get("lastUsedAt") is None  # type: ignore[union-attr]
     await introspect(platform, str(made["secret"]))
-    [listed] = (await platform.public.get("/v1/api-keys", headers=h)).json()["data"]
+    [listed] = (await platform.public.get("/v1/api-keys", headers=h)).json()["data"]["data"]
     assert listed["lastUsedAt"]
 
 
@@ -153,3 +154,21 @@ async def test_creating_and_revoking_are_audited(platform: Platform) -> None:
             .all()
         )
     assert list(actions) == ["key.create", "key.revoke"]
+
+
+async def test_the_keys_list_never_shows_another_teams_or_tenants_keys(platform: Platform) -> None:
+    # A search, a filter or `ids` naming them each still answers the acting team's keys only.
+    admin, h = await as_admin(platform)
+    mine = await create(platform, h)
+    team_admin = await platform.person(roles=("admin",), tenant_id=admin.tenant_id)
+    other_team = await create(platform, {**(await bearer(platform, team_admin)), "X-Team-Id": team_of(team_admin)})
+    _, outsider = await as_admin(platform)
+    other_tenant = await create(platform, outsider)
+    theirs = {other_team["key"]["id"], other_tenant["key"]["id"]}  # type: ignore[index]
+    ids = [mine["key"]["id"], *theirs]  # type: ignore[index]
+    asks: list[dict[str, Any]] = [{}, {"search": "ci"}, {"ids": ids}, {"targetKind": "agent", "pageSize": 50}]
+    for params in asks:
+        r = await platform.public.get("/v1/api-keys", headers=h, params=params)
+        assert r.status_code == 200, r.text
+        listed = {k["id"] for k in r.json()["data"]["data"]}
+        assert listed <= {mine["key"]["id"]} and not listed & theirs, (params, listed)  # type: ignore[index]

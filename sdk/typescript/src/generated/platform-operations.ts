@@ -48,7 +48,13 @@ export const platformOperations = {
     "pathParams": [],
     "query": [
       "targetKind",
-      "targetId"
+      "targetId",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -347,7 +353,13 @@ export const platformOperations = {
     "pathParams": [],
     "query": [
       "role",
-      "status"
+      "status",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
