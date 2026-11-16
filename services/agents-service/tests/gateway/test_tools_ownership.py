@@ -71,9 +71,9 @@ def _tools_head() -> str | None:
     return ScriptDirectory.from_config(Config(str(SERVICES / "tools-service" / "alembic.ini"))).get_current_head()
 
 
-def _upgrade(service: str, db: str, monkeypatch: pytest.MonkeyPatch) -> None:
+def _upgrade(service: str, db: str, monkeypatch: pytest.MonkeyPatch, target: str = "head") -> None:
     monkeypatch.setenv("OPS_DATABASE_URL", _SERVER.set(database=db).render_as_string(hide_password=False))
-    command.upgrade(Config(str(SERVICES / service / "alembic.ini")), "head")
+    command.upgrade(Config(str(SERVICES / service / "alembic.ini")), target)
 
 
 async def test_tools_chain_creates_its_tables_on_a_fresh_database(
@@ -117,6 +117,11 @@ async def test_tools_chain_adopts_tables_the_agents_chain_created(
     db = fresh_database
     await asyncio.to_thread(_upgrade, "agents-service", db, monkeypatch)
     await _scalar(db, "INSERT INTO gateway_fences VALUES ('gth_keep', 7) RETURNING 1")
+    await asyncio.to_thread(_upgrade, "tools-service", db, monkeypatch, "tools_0081_store_roles")
+    # tools_0082 keys a fence by the tenant of the calls on its thread and deletes one no call names, so the kept
+    # fence's thread has a call in tenant t1.
+    await _scalar(db, _CALL.format(id="c_keep", effect="false", scope="row:c_keep").replace("'th_1'", "'gth_keep'"))
     await asyncio.to_thread(_upgrade, "tools-service", db, monkeypatch)
     assert await _scalar(db, "SELECT version_num FROM alembic_version_tools") == _tools_head()
-    assert await _scalar(db, "SELECT generation FROM gateway_fences WHERE thread_id = 'gth_keep'") == 7
+    fence = "SELECT tenant_id || ':' || generation FROM gateway_fences WHERE thread_id = 'gth_keep'"
+    assert await _scalar(db, fence) == "t1:7"
