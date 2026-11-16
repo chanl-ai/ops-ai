@@ -6,6 +6,10 @@ left out is kept, so the panel's four controls never wipe knowledge, budget or w
 merged result is checked by the resolver against the agent's limits, so a value outside them, or an unknown field, is
 a 422 naming the field and nothing is stored. Owner only, like every chat route. A message's attachments are files
 uploaded to files-service; the turn reads them (api/chat_attachments.py).
+
+No route here takes the request transaction (`Tx`): the settings reply names the knowledge bases from kb-service, and
+a budget answer runs the paused turn on the model, so each store call takes and returns its own connection and none
+is held while another party answers.
 """
 
 from __future__ import annotations
@@ -78,6 +82,7 @@ async def _view(rt: Runtime, row: dict[str, Any], agent: AgentDefinition, limits
 
 @router.get("/threads/{thread_id}/settings")
 async def get_settings(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
+    """Off the request transaction: the reply names the bases from kb-service."""
     row, agent, limits = await _thread(rt, me, thread_id)
     return ok((await _view(rt, row, agent, limits)).wire())
 
@@ -90,6 +95,8 @@ def merge(stored: dict[str, Any] | None, patch: dict[str, Any]) -> dict[str, Any
 
 @router.patch("/threads/{thread_id}/settings")
 async def patch_settings(rt: Rt, me: Me, thread_id: str, body: Annotated[dict[str, Any], Body()]) -> JSONResponse:
+    """Off the request transaction: the reply names the bases from kb-service. The body stays a JSON object, not a
+    model: a field sent as null clears it and one left out is kept, and the resolver names an unknown field (422)."""
     row, agent, limits = await _thread(rt, me, thread_id)
     merged = parse(merge(row.get("overrides"), body), "thread")
     resolve(
@@ -103,7 +110,8 @@ async def patch_settings(rt: Rt, me: Me, thread_id: str, body: Annotated[dict[st
 @router.post("/threads/{thread_id}/budget")
 async def budget(rt: Rt, me: Me, thread_id: str, body: BudgetAnswer) -> JSONResponse:
     """Continue (the conversation's owner) or raise (an admin of its team) a spent conversation budget; the paused
-    turn then runs and the conversation comes back with its reply. 403 for anyone else, 409 when not paused."""
+    turn then runs and the conversation comes back with its reply. 403 for anyone else, 409 when not paused. Off the
+    request transaction: the turn runs the model."""
     await answer_budget(rt, me, thread_id, body)
     row = await chat_row(rt, thread_id, None)
     assert row is not None
