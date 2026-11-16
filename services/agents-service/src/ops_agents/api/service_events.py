@@ -126,6 +126,7 @@ EVENT_OWNERS: dict[str, tuple[str, ...]] = {
     "tools": ("tool_access.", "tool_module.", "module_review.", "app_account."),
     "files": ("file.",),
     "documents": ("extraction.",),
+    "kb": ("kb.", "knowledge."),
     # The task API records a posted task as its own event, so the task runs as the api_task workflow.
     "agents": ("task.",),
 }

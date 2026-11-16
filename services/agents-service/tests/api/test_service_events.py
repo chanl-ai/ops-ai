@@ -218,6 +218,17 @@ async def test_a_service_reports_its_own_events_for_the_team_its_token_names(sta
     assert (await c.post("/v1/events", json=body, headers=service())).status_code == 202
 
 
+async def test_kb_service_reports_its_knowledge_events_and_no_other_service_can(stack: Stack) -> None:
+    c, _ = stack
+    got: dict[str, tuple[int, int]] = {}
+    for name in ("kb.changed", "knowledge.source.failing"):
+        body: dict[str, Any] = {"name": name, "key": f"k-{name}", "teamId": "team_ops", "payload": {}}
+        kb = await c.post("/v1/events", json=body, headers=service(name="kb"))
+        files = await c.post("/v1/events", json={**body, "key": f"f-{name}"}, headers=service())
+        got[name] = (kb.status_code, files.status_code)
+    assert got == {"kb.changed": (202, 403), "knowledge.source.failing": (202, 403)}, got
+
+
 async def test_a_role_without_workflows_edit_cannot_change_the_handler(stack: Stack) -> None:
     c, rt = stack
     rt.event_workflows = [event_workflow()]
