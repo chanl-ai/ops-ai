@@ -289,3 +289,52 @@ def test_a_new_unchecked_read_grid_evaluation_or_raw_role_compare_is_found_where
     # A read behind reader_of is no finding: the check is not simply flagging every route.
     (tmp_path / CHECKED[0]).write_text(CHECKED[1])
     assert "open-read" not in {f.kind for f in c._python(tmp_path / CHECKED[0])}  # pyright: ignore[reportPrivateUsage]
+
+
+def test_a_raised_lane_baseline_row_is_found_by_the_history_check_in_a_commit_a_merge_and_a_new_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The strict run no longer compares a lane's file with HEAD, so `--commits` is the only thing that sees a raised
+    row: under `required` it fails, under `approved` it passes, and a fall is never a rise."""
+    c = checker()
+    allow = tmp_path / "access-exceptions-allowlist.txt"
+    lanes = tmp_path / "scripts/access-baselines"
+    lanes.mkdir(parents=True)
+    _git(tmp_path, "init", "-q")
+    allow.write_text("")
+    (lanes / "tools.txt").write_text("a.py owner-compare owner 2\n")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "begin")
+    began = _git(tmp_path, "rev-parse", "HEAD")
+    for name, val in (("ALLOWLIST", allow), ("BASELINES", lanes), ("ROOT", tmp_path), ("LIST_BEGAN", began)):
+        monkeypatch.setattr(c, name, val)
+    (tmp_path / "page.md").write_text(REGISTER)
+    monkeypatch.setattr(c, "REGISTER_PAGE", tmp_path / "page.md")
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "required")
+    (lanes / "tools.txt").write_text("a.py owner-compare owner 1\n")
+    _git(tmp_path, "commit", "-qam", "a fall")
+    assert c.commit_problems() == []
+    # A raise made inside a merge commit.
+    main = _git(tmp_path, "rev-parse", "--abbrev-ref", "HEAD")
+    _git(tmp_path, "checkout", "-q", "-b", "side")
+    (tmp_path / "s.txt").write_text("s\n")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "side")
+    _git(tmp_path, "checkout", "-q", main)
+    (tmp_path / "m.txt").write_text("m\n")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "main")
+    _git(tmp_path, "merge", "-q", "--no-commit", "--no-ff", "side")
+    (lanes / "tools.txt").write_text("a.py owner-compare owner 7\n")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "merge")
+    assert any("tools.txt" in p and "rose" in p for p in c.commit_problems()), c.commit_problems()
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "approved")
+    assert c.commit_problems() == []
+    # A lane file added in the branch holds rows no earlier file held.
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "required")
+    monkeypatch.setattr(c, "LIST_BEGAN", _git(tmp_path, "rev-parse", "HEAD"))
+    (lanes / "kb.txt").write_text("b.py owner-compare owner 3\n")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "a new lane file")
+    assert any("kb.txt" in p and "rose" in p for p in c.commit_problems()), c.commit_problems()

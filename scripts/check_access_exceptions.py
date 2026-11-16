@@ -606,12 +606,23 @@ def commit_problems() -> list[str]:
         return [*out, *baseline_history.awaiting_review(awaiting)]
     folder = BASELINES.relative_to(ROOT).as_posix()
     touched = ["git", "log", "--format=%H", f"{began}..HEAD", "--", folder]
+    reported: set[str] = set()
     for sha in subprocess.run(touched, cwd=ROOT, capture_output=True, text=True, check=True).stdout.split():
         for lane in LANES:
             name = f"{folder}/{lane}.txt"
-            was = _at(f"{sha}^", name)
-            if was is not None:
-                awaiting.extend(f"{r} ({sha[:8]})" for r in _rises(f"{lane}.txt", was, _at(sha, name) or ""))
+            # A lane file the commit adds holds rows no earlier file held, so each is a rise.
+            for r in _rises(f"{lane}.txt", _at(f"{sha}^", name) or "", _at(sha, name) or ""):
+                awaiting.append(f"{r} ({sha[:8]})")
+                reported.add(r.split(" rose from")[0])
+    # The branch's net effect: a commit's own diff misses a rise made inside a merge commit.
+    merge_base = subprocess.run(
+        ["git", "merge-base", began, "HEAD"], cwd=ROOT, capture_output=True, text=True, check=False
+    ).stdout.strip()
+    for lane in LANES:
+        name = f"{folder}/{lane}.txt"
+        for r in _rises(f"{lane}.txt", _at(merge_base or began, name) or "", _at("HEAD", name) or ""):
+            if r.split(" rose from")[0] not in reported:
+                awaiting.append(f"{r} (net of the branch)")
     return [*out, *baseline_history.awaiting_review(awaiting)]
 
 
