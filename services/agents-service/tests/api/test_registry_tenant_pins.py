@@ -6,6 +6,8 @@ Each test starts agents-service on the shared test database with two tenants of 
 
 from __future__ import annotations
 
+import base64
+import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -93,6 +95,12 @@ async def published_agent(client: AsyncClient, rt: Runtime, tenant: str, name: s
     return agent_id
 
 
+def _claims(token: str) -> dict[str, Any]:
+    """A session token's claims, read without checking its signature (the routes that take it check that)."""
+    body = token.split(".")[1]
+    return json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+
+
 def tenants() -> tuple[str, str]:
     return f"t_{new_id('a')}", f"t_{new_id('b')}"
 
@@ -127,17 +135,24 @@ async def test_a_widget_mint_key_and_its_session_find_their_deployment_and_agent
         )
         assert made.status_code == 201, made.text
         dep = str(made.json()["data"]["id"])
+        assert (made.json()["data"]["agentId"], made.json()["data"]["agentVersion"]) == (agent, 1), made.text
         key = await client.post(f"/v1/widget-deployments/{dep}/keys", json={"name": "server"}, headers=person(b))
         assert key.status_code == 201, key.text
+        # The key names its tenant, so a mint with it finds the deployment in that tenant.
+        assert key.json()["data"]["secret"].startswith(f"wk.{b}.{key.json()['data']['key']['id']}."), key.text
         minted = await client.post(
             f"/v1/widget-deployments/{dep}/sessions",
             json={"email": "banker@bank.example", "name": "Banker", "origin": ORIGIN},
             headers={"Authorization": f"Bearer {key.json()['data']['secret']}"},
         )
         assert minted.status_code == 201, minted.text
+        claims = _claims(minted.json()["data"]["session"])
+        assert (claims["tenant"], claims["dep"], claims["origin"]) == (b, dep, ORIGIN), claims
         page = {"X-Widget-Session": minted.json()["data"]["session"], "Origin": ORIGIN}
         thread = await client.post(f"/v1/widget/{dep}/threads", headers=page)
         assert thread.status_code == 201, thread.text
+        chat = thread.json()["data"]
+        assert (chat["agentId"], chat["agentName"], chat["owner"]) == (agent, "Widget desk", "Banker"), chat
 
 
 async def test_a_thread_starts_through_its_tenants_channel_deployment(database_url: str) -> None:

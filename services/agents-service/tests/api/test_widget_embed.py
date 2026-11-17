@@ -276,9 +276,11 @@ async def test_a_session_is_refused_for_another_team_deployment_or_after_expiry(
     elsewhere = await session(client, other["id"])
     monkeypatch.setattr(widget_sessions, "SESSION_TTL_S", -5)
     expired = await session(client, dep["id"])
-    for token in (forged, elsewhere, expired):
+    another, ended = "That session is for another widget.", "The widget's session has ended; it starts a new one."
+    for token, message in ((forged, another), (elsewhere, another), (expired, ended)):
         res = await client.post(f"/v1/widget/{dep['id']}/threads", headers=page(token))
-        assert res.status_code == 401, (token[:12], res.text)
+        error = res.json()["error"]
+        assert (res.status_code, error["code"], error["message"]) == (401, "unauthorized", message), res.text
 
 
 HOLD = 'call place_wire_hold {"wireId": "W-1", "hours": 24, "reason": "Unusual payee"}'
