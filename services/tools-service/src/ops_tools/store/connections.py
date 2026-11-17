@@ -605,6 +605,23 @@ class ConnectionStore(Store):
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
             return {str(r["id"]): r for r in await self._read(c, tenant_id, rows, used=False)}
 
+    async def of_apps(self, tenant_id: str, team_id: str, app_ids: Sequence[str]) -> list[Row]:
+        """The team's accounts of the named apps (a page of the Apps grid, so a short list), with the modules using
+        them."""
+        if not app_ids:
+            return []
+        k = connections.c
+        q = (
+            connections.select()
+            .where(
+                k.tenant_id == tenant_id, k.team_id == team_id, k.app_id.in_(list(app_ids)), team_visible(connections)
+            )
+            .order_by(sa.func.lower(k.name), k.id)
+        )
+        async with self.tx() as c:
+            rows = [dict(r) for r in (await c.execute(q)).mappings()]
+            return await self._read(c, tenant_id, rows)
+
     @staticmethod
     def _visible(tenant_id: str, teams: list[str], search: str) -> sa.ColumnElement[bool]:
         """`teams`: the owning teams the caller sees (its own)."""

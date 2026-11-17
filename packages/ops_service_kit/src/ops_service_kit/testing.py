@@ -13,6 +13,9 @@
   ["GET /v1/access/holders"]
   queries = 6
   query = { area = "agents", team = "{team_id}" }   # sent as the query string; `{name}` takes a seeded id
+  ["GET /v1/apps"]
+  queries = 9
+  first_queries = 24        # listed: the first call after a write rebuilds a cache; `queries` is then the next call
   ["GET /v1/auth/oidc/callback"]
   queries = 2
   status = 303              # listed: the status it answers by design, when not 200
@@ -41,7 +44,7 @@ import tomllib
 from collections.abc import Awaitable, Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, TypedDict
 from urllib.parse import urlencode
 
 from fastapi import FastAPI
@@ -77,13 +80,27 @@ class Client(Protocol):
     async def get(self, url: str, *, headers: Mapping[str, str]) -> Answer: ...
 
 
+# The numbers the budget reads off a request's `http.request` line; other lines carry `event` and none of them.
+RequestLine = TypedDict(
+    "RequestLine",
+    {
+        "event": str,
+        "db.query_count": int,
+        "db.tx_count": int,
+        "db.connection_count": int,
+        "http.client.calls_in_tx": int,
+        "db.tx_open_ms": float,
+    },
+)
+
 SeedTeam = Callable[[int], Awaitable[Seeded]]
 StatementBudget = Callable[[Path], Awaitable[list[str]]]
 
 
 def get_routes(app: FastAPI) -> list[str]:
     found = (r for r in iter_route_contexts(app.routes) if isinstance(r.original_route, APIRoute))
-    return sorted({str(r.path_format) for r in found if "GET" in (r.methods or ()) and r.include_in_schema})
+    # A route left out of the OpenAPI document is still one a caller reaches, so it is budgeted too.
+    return sorted({str(r.path_format) for r in found if "GET" in (r.methods or ())})
 
 
 async def over_budget(
@@ -94,10 +111,13 @@ async def over_budget(
     more transactions, connections or service calls than it makes, opens more transactions or checks out more
     connections than its row lists (one of each unless it says otherwise), calls another service while a transaction
     is open (none unless listed) or keeps a transaction open too long. A row's `query` table is sent as the query
-    string, each value formatted with the seeded ids. A row with `not_budgeted = "<reason>"` is not called, and needs
-    its reason."""
+    string, each value formatted with the seeded ids. A row with `first_queries` is called twice at each size: the
+    first call, right after seeding wrote, is held to `first_queries` and the second to `queries`, so a route that
+    rebuilds a cache after a write is budgeted on both paths. A row with `not_budgeted = "<reason>"` is not called,
+    and needs its reason."""
     rows: dict[str, dict[str, Any]] = tomllib.loads(await asyncio.to_thread(budgets.read_text))
-    seen: dict[str, list[dict[str, Any]]] = {}
+    seen: dict[str, list[RequestLine]] = {}
+    first: dict[str, list[RequestLine]] = {}
     problems: list[str] = []
     for size in SIZES:
         seeded = await seed_team(size)
@@ -105,18 +125,19 @@ async def over_budget(
             row = rows.get(f"GET {route}")
             if row is None or "not_budgeted" in row:
                 continue
-            stream.seek(0)
-            stream.truncate()
             query = urlencode({str(k): str(v).format(**seeded.ids) for k, v in row.get("query", {}).items()})
             url = route.format(**seeded.ids) + (f"?{query}" if query else "")
-            answer = await client.get(url, headers=dict(seeded.headers))
-            lines = [json.loads(line) for line in stream.getvalue().splitlines()]
-            line = next((x for x in lines if x.get("event") == "http.request"), None)
             expected = int(row.get("status", 200))
-            if answer.status_code != expected or line is None:
-                problems.append(f"GET {route}: answered {answer.status_code} at {size} rows, {expected} listed")
-                continue
-            seen.setdefault(route, []).append(line)
+            for into in (first, seen) if "first_queries" in row else (seen,):
+                stream.seek(0)
+                stream.truncate()
+                answer = await client.get(url, headers=dict(seeded.headers))
+                lines: list[RequestLine] = [json.loads(line) for line in stream.getvalue().splitlines()]
+                line = next((x for x in lines if x.get("event") == "http.request"), None)
+                if answer.status_code != expected or line is None:
+                    problems.append(f"GET {route}: answered {answer.status_code} at {size} rows, {expected} listed")
+                    break
+                into.setdefault(route, []).append(line)
     for route in get_routes(app):
         row = rows.get(f"GET {route}")
         if row is None:
@@ -129,13 +150,10 @@ async def over_budget(
         measured = seen.get(route, [])
         if len(measured) != len(SIZES):
             continue
-        small, large = (int(x["db.query_count"]) for x in measured)
-        if large > small:
-            problems.append(f"GET {route}: {small} statements at {SIZES[0]} rows, {large} at {SIZES[1]}")
-        if large > int(row["queries"]):
-            problems.append(f"GET {route}: {large} statements, budget {row['queries']}")
-        elif int(row["queries"]) > large + QUERY_SLACK:
-            problems.append(f"GET {route}: budget {row['queries']}, {large} statements measured; lower it")
+        problems += _statements(f"GET {route}", measured, int(row["queries"]))
+        if "first_queries" in row:
+            problems += _statements(f"GET {route} first call", first[route], int(row["first_queries"]))
+            measured = [*first[route], *measured]
         opened, allowed = max(int(x["db.tx_count"]) for x in measured), int(row.get("transactions", 1))
         if opened > allowed:
             problems.append(f"GET {route}: {opened} transactions, {allowed} listed")
@@ -156,6 +174,17 @@ async def over_budget(
         if held > MAX_OPEN_MS:
             problems.append(f"GET {route}: a transaction stayed open {held:.0f} ms, over {MAX_OPEN_MS:.0f}")
     return problems
+
+
+def _statements(name: str, measured: list[RequestLine], budget: int) -> list[str]:
+    """Whether one call's statements, at each size, grow with rows or sit over or too far under `budget`."""
+    small, large = (int(x["db.query_count"]) for x in measured)
+    out = [f"{name}: {small} statements at {SIZES[0]} rows, {large} at {SIZES[1]}"] if large > small else []
+    if large > budget:
+        out.append(f"{name}: {large} statements, budget {budget}")
+    elif budget > large + QUERY_SLACK:
+        out.append(f"{name}: budget {budget}, {large} statements measured; lower it")
+    return out
 
 
 def budget_check(app: FastAPI, client: Client, seed_team: SeedTeam) -> Iterator[StatementBudget]:

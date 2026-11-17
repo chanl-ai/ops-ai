@@ -34,7 +34,7 @@ from ops_store import isolation
 from ops_store.listing import ListPage
 
 from .app_states import AppGroup, AppState, app_group
-from .auth.kinds import BY_ID, kind_of
+from .auth.kinds import BY_ID, Kind, kind_of
 from .callers import caller_in
 from .connections.records import (
     CONNECTED,
@@ -57,6 +57,7 @@ from .modules.seed import BUILT_IN, TOOL_ORIGIN, name_in_words, template_of, too
 from .modules.service import Caller, ModuleService
 from .modules.tool_users import ToolUsers
 from .plugins.host import (
+    TEMPLATE_PREFIX,
     PluginHost,
     account_identity,
     fixed_fields,
@@ -75,7 +76,16 @@ from .plugins.host import (
 from .plugins.routes import PluginAccounts, TeamPluginIn, not_offered
 from .plugins.templates import view_of
 from .store.app_cards import AppCards, CardRow
-from .store.connections import DEFAULT_VALUE, FIXED_VALUE, PERSON_ORIGIN, name_key, plugin_app, plugin_of, split_config
+from .store.connections import (
+    DEFAULT_VALUE,
+    FIXED_VALUE,
+    PERSON_ORIGIN,
+    PLUGIN_APP,
+    name_key,
+    plugin_app,
+    plugin_of,
+    split_config,
+)
 from .store.modules import ModuleStore
 from .store.secrets import SecretMeta
 from .store.team_defaults import TeamDefaults
@@ -655,20 +665,43 @@ class Apps:
         builtins: bool = True,
         person: str | None = None,
         only: set[str] | None = None,
+        ensured: bool = False,
     ) -> list[dict[str, Any]]:
         """Every app the team has; `listed`: only the Apps grid's (owner, 2026-11-01), the plugins and the apps a person
         added. A built-in app has its own menu, and an account made to hold a custom tool's address (origin "tool") or
         a module with none is reached from its tool, so neither is listed; their pages still answer. `builtins` keeps
         the built-in apps in a listed answer, for a picker where they belong (approvals: a mailbox reply). `only` keeps
-        the cards it names."""
-        if builtins or not listed:
+        the cards it names, and reads just the accounts of the apps it names and the modules their cards count, so a
+        page of the grid costs the same at any size. `ensured`: the caller wrote the team's defaults and the plugins'
+        modules already."""
+        if (builtins or not listed) and not ensured:
             # A team made before team.created reached this service has no defaults row, so the start-up catch-up never
             # finds it: listing its built-in apps provisions them, as a first tool lookup does.
             await ensure_defaults(
                 self.modules, TeamDefaults(self.modules.engine), tenant_id=who.tenant_id, team_id=who.team.id,
                 at=datetime.now(UTC),
             )  # fmt: skip
-        conns = await self.connections.team_rows(who)
+        if self.plugins is not None and not ensured:
+            await self.plugins.ensure(who.tenant_id, self.connections.clock())
+        team = who.team.id
+        if only is None:
+            conns = await self.connections.team_rows(who)
+            modules = await self.modules.card_modules(who.tenant_id, team)
+        else:
+            conns = await self.connections.team_rows(
+                who, sorted(i for i in only if not i.startswith(("builtin:", "module:")))
+            )
+            apps = [a for a in BUILT_IN if f"builtin:{a['id']}" in only]
+            used = {str(u["id"]) for c in conns for u in c["used_by"]}
+            # A plugin's module counts only on the card of a plugin the install no longer holds, found by its
+            # template slot.
+            plugins = [i.removeprefix(PLUGIN_APP) for i in only if i.startswith(PLUGIN_APP)]
+            chosen = (
+                sorted(used),
+                sorted([template_of(a) for a in apps] + [f"{TEMPLATE_PREFIX}{p}" for p in plugins]),
+                sorted(str(a["module"]) for a in apps),
+            )
+            modules = await self.modules.card_modules(who.tenant_id, team, chosen=chosen)
         may = self.connections.may_manage(who)
         by_id = {str(c["id"]): c for c in conns}
         sandboxes: dict[str, str] = {}
@@ -677,12 +710,9 @@ class Apps:
             if c.get("sandbox"):
                 sandboxes.setdefault(str(c["app_id"]), str(c["id"]))
         states = await self.states(who.tenant_id, conns)
-        team = who.team.id
-        modules = [m for m in await self.modules.all(who.tenant_id) if m.get("team_id") in (team, None)]
         ops = {str(m["id"]): len(m.get("operations") or []) for m in modules}
         cards: list[dict[str, Any]] = []
         if self.plugins is not None:
-            await self.plugins.ensure(who.tenant_id, self.connections.clock())
             bindings = await self.plugins.bindings.of_team(who.tenant_id, team)
             for pid, plugin in sorted(self.plugins.plugins.items()):
                 m = plugin.manifest
@@ -889,7 +919,7 @@ class Apps:
         stale = await self.app_cards.stamp(tenant, team) != stamp and await self.app_cards.claim(tenant, team, stamp)
         while True:
             # Built in full once when stale: the rows are written from it and the page's cards are taken from it.
-            every = await self.cards(who, listed=True, builtins=True, person=person) if stale else []
+            every = await self.cards(who, listed=True, builtins=True, person=person, ensured=True) if stale else []
             if stale:
                 rows = [
                     CardRow(id=str(c["id"]), kind=str(c["kind"]), name=str(c["name"]), category=c.get("category"))
@@ -899,7 +929,9 @@ class Apps:
             page = await self.app_cards.page(tenant, team, q, builtins=builtins)
             ids = [str(r["id"]) for r in page["data"]]
             if not stale:
-                every = await self.cards(who, listed=True, builtins=builtins, person=person, only=set(ids))
+                every = await self.cards(
+                    who, listed=True, builtins=builtins, person=person, only=set(ids), ensured=True
+                )
             built = {c["id"]: c for c in every}
             if stale or all(i in built for i in ids):
                 break
@@ -916,19 +948,33 @@ class Apps:
         ids = [str(c["connectionId"]) for c in cards if c.get("connectionId")]
         store = self.connections.store
         team_tokens = await store.team_tokens(who.tenant_id, ids)
-        # The team's auth configs, each with whether its client secret is held, read once: an account signs in only
-        # through one of these or Ops AI's app where the install has one.
-        held = {r.name for r in await self.connections.secrets.store.listed(who.tenant_id, who.team.id)}
+        # The team's auth configs, each with whether its client secret is held, read once and only when a card signs
+        # in through an OAuth client: an account signs in only through one of these or Ops AI's app where the install
+        # has one.
+        wanted = any(
+            c["kind"] == "plugin"
+            and c.get("plugin")
+            and c.get("pluginId")
+            and _oauth_kind(by_id.get(str(c.get("connectionId") or ""), {}).get("auth_kind") or c.get("authKind"))
+            for c in cards
+        )
+        held = (
+            {r.name for r in await self.connections.secrets.store.listed(who.tenant_id, who.team.id)}
+            if wanted
+            else set[str]()
+        )
         creds = [
             {**c, "holds_secret": bool(c.get("secret_name")) and str(c["secret_name"]) in held}
-            for c in await store.team_credentials(who.tenant_id, who.team.id)
+            for c in (await store.team_credentials(who.tenant_id, who.team.id) if wanted else [])
         ]
         mine = person or own_key(who)
         # A person's card is their own state; a service asking for nobody reads the team's.
         is_person = person is not None or who.principal is None or who.principal.kind == "person"
         may = self.connections.may_manage(who)
         own: dict[str, dict[str, Any]] = {}
-        for t in await store.own_sign_ins(who.tenant_id, mine, ids):
+        # Only an account each person signs in to has own sign-ins to read.
+        personal = [i for i in ids if (by_id.get(i, {}).get("sign_in") or "team") != "team"]
+        for t in await store.own_sign_ins(who.tenant_id, mine, personal):
             own.setdefault(str(t["connection_id"]), t)
         for c in cards:
             conn = by_id.get(str(c.get("connectionId") or ""))
@@ -973,9 +1019,8 @@ class Apps:
         pid = card.get("pluginId")
         if card["kind"] != "plugin" or not card.get("plugin") or not pid:
             return "ok"
-        name = conn["auth_kind"] if conn else card.get("authKind")
-        kind = kind_of(str(name)) if name else None
-        if kind is None or kind.field("clientId") is None:
+        kind = _oauth_kind(conn["auth_kind"] if conn else card.get("authKind"))
+        if kind is None:
             return "ok"
         usable = [c for c in creds if c["app_id"] == card["id"] and (c["holds_secret"] or not kind.signs_in)]
         installed = self.connections.store.install_client(str(pid)) is not None
@@ -1157,6 +1202,12 @@ class Apps:
             str(made["id"]),
             {"revision": made["revision"], "settings": {k: v for k, v in keys.items() if v}, "secret_values": secret},
         )
+
+
+def _oauth_kind(name: object) -> Kind | None:
+    """The sign-in kind `name` when it takes an OAuth client; None for any other."""
+    kind = kind_of(str(name)) if name else None
+    return None if kind is None or kind.field("clientId") is None else kind
 
 
 def app_state(

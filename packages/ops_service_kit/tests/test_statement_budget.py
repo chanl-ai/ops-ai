@@ -51,6 +51,12 @@ queries = 3
 ["GET /v1/asks"]
 queries = 3
 query = { area = "agents", item = "{item_id}" }
+["GET /v1/cached"]
+queries = 2
+first_queries = 8
+["GET /v1/cached-low"]
+queries = 2
+first_queries = 5
 ["GET /v1/callback"]
 not_budgeted = "a sign-in callback: answers only with the provider's code"
 ["GET /v1/no-reason"]
@@ -79,7 +85,8 @@ def spend(queries: int, transactions: int = 1, *, connections: int = 1, hop: str
 
 @pytest.fixture
 def seeded() -> dict[str, int]:
-    return {"rows": 0}
+    # `cold`: the cached routes not called since the last seed, as a bit each.
+    return {"rows": 0, "cold": 0}
 
 
 @pytest.fixture
@@ -98,9 +105,17 @@ def app(seeded: dict[str, int]) -> FastAPI:
         # Refused without its query; over budget only when both values arrive, the path id filled in.
         return spend(9 if (area, item) == ("agents", "itm_1") else 2)
 
+    def cached(bit: int) -> dict[str, int]:
+        cold, seeded["cold"] = seeded["cold"] & bit, seeded["cold"] & ~bit
+        return spend(8 if cold else 2)
+
+    app.get("/v1/cached")(lambda: cached(1))
+    app.get("/v1/cached-low")(lambda: cached(2))
     app.get("/v1/twice")(lambda: spend(2, transactions=2))
     app.get("/v1/stream")(lambda: spend(2, transactions=2))
     app.get("/v1/unlisted")(lambda: spend(1))
+    # Out of the OpenAPI document, still a route a caller reaches: it needs a row like any other.
+    app.get("/v1/hidden", include_in_schema=False)(lambda: spend(1))
     # Two statements and one transaction against a row of five and two: a budget left high lets the route grow unseen.
     app.get("/v1/roomy")(lambda: spend(2))
     app.get("/v1/two-connections")(lambda: spend(2, connections=2))
@@ -126,7 +141,7 @@ async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
 @pytest.fixture
 def seed_team(seeded: dict[str, int]) -> SeedTeam:
     async def seed(n: int) -> Seeded:
-        seeded["rows"] = n
+        seeded["rows"], seeded["cold"] = n, 3
         return Seeded(headers={}, ids={"item_id": "itm_1"})
 
     return seed
@@ -141,7 +156,9 @@ async def test_each_route_outside_its_budget_is_named_and_one_inside_it_is_not(
         "GET /v1/moved: answered 303 at 5 rows, 200 listed",
         "GET /v1/moved: answered 303 at 50 rows, 200 listed",
         "GET /v1/asks: 9 statements, budget 3",
+        "GET /v1/cached-low first call: 8 statements, budget 5",
         "GET /v1/heavy/{item_id}: 9 statements, budget 3",
+        "GET /v1/hidden: no row in budgets.toml",
         "GET /v1/hop: 1 service call while a transaction was open, 0 listed",
         "GET /v1/no-reason: not_budgeted needs a reason",
         "GET /v1/per-row: 6 statements at 5 rows, 51 at 50",

@@ -503,12 +503,17 @@ class ModuleStore(Store):
     role = ROLE
     system_role = SYSTEM_ROLE
 
-    async def _children(self, c: AsyncConnection, tenant_id: str, ids: list[str]) -> dict[str, dict[str, Any]]:
+    async def _children(
+        self, c: AsyncConnection, tenant_id: str, ids: list[str], within: sa.Select[Any] | None = None
+    ) -> dict[str, dict[str, Any]]:
+        """The children of the modules `ids`. A read of every module passes the query that chose them as `within`, which
+        the children are matched against in SQL: a list of ids is one parameter each, past SQL Server's 2,100 at about
+        2,090 modules."""
         out: dict[str, dict[str, list[dict[str, Any]]]] = {i: {k: [] for k in CHILDREN} for i in ids}
         for key, table in CHILDREN.items():
             q = (
                 table.select()
-                .where(table.c.tenant_id == tenant_id, table.c.module_id.in_(ids))
+                .where(table.c.tenant_id == tenant_id, table.c.module_id.in_(ids if within is None else within))
                 .order_by(table.c.module_id, table.c.position)
             )
             for r in (await c.execute(q)).mappings():
@@ -518,14 +523,15 @@ class ModuleStore(Store):
                         "access class; rebuild the database with `make up`"
                     )
                 out[r["module_id"]][key].append(dict(r))
-        examples = await self._examples(c, tenant_id, ids)
+        examples = await self._examples(c, tenant_id, ids, within)
         for i in ids:
             for o in out[i]["operations"]:
                 o["stub"] = examples.get((i, str(o["name"])), NO_EXAMPLE)
         hosts: dict[str, list[str]] = {i: [] for i in ids}
+        h = module_egress_hosts.c
         q = (
-            sa.select(module_egress_hosts.c.module_id, module_egress_hosts.c.host)
-            .where(module_egress_hosts.c.tenant_id == tenant_id, module_egress_hosts.c.module_id.in_(ids))
+            sa.select(h.module_id, h.host)
+            .where(h.tenant_id == tenant_id, h.module_id.in_(ids if within is None else within))
             .order_by(module_egress_hosts.c.module_id, module_egress_hosts.c.position)
         )
         for module_id, host in await c.execute(q):
@@ -533,11 +539,14 @@ class ModuleStore(Store):
         return {i: {**out[i], "egress_hosts": hosts[i]} for i in ids}
 
     @staticmethod
-    async def _examples(c: AsyncConnection, tenant_id: str, ids: list[str]) -> dict[tuple[str, str], Any]:
+    async def _examples(
+        c: AsyncConnection, tenant_id: str, ids: list[str], within: sa.Select[Any] | None = None
+    ) -> dict[tuple[str, str], Any]:
         """Each operation's example answer, by (module, operation name): the body of its example mock."""
         m = operation_mocks.c
+        chosen = m.module_id.in_(ids if within is None else within)
         q = sa.select(m.module_id, m.operation, m.body).where(
-            m.tenant_id == tenant_id, m.module_id.in_(ids), m.environment == EXAMPLE, m.is_default == sa.true()
+            m.tenant_id == tenant_id, chosen, m.environment == EXAMPLE, m.is_default == sa.true()
         )
         return {(str(r.module_id), str(r.operation)): r.body for r in await c.execute(q)}
 
@@ -569,15 +578,47 @@ class ModuleStore(Store):
     async def all(self, tenant_id: str) -> list[Aggregate]:
         """The modules the acting team reads: its own, workspace-level ones (no team) and those approved for one
         of its workflows, which is the explicit grant across teams. Every module with no acting team."""
+        where = sa.and_(tool_modules.c.tenant_id == tenant_id, sa.or_(team_modules(), granted(tenant_id)))
         async with self.tx() as c:
-            q = (
-                tool_modules.select()
-                .where(tool_modules.c.tenant_id == tenant_id, sa.or_(team_modules(), granted(tenant_id)))
-                .order_by(tool_modules.c.created_at.desc(), tool_modules.c.id.desc())
-            )
+            q = tool_modules.select().where(where).order_by(tool_modules.c.created_at.desc(), tool_modules.c.id.desc())
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
-            kids = await self._children(c, tenant_id, [r["id"] for r in rows])
+            kids = await self._children(
+                c, tenant_id, [r["id"] for r in rows], sa.select(tool_modules.c.id).where(where)
+            )
         return [{**r, **kids[r["id"]]} for r in rows]
+
+    async def card_modules(
+        self, tenant_id: str, team_id: str, *, chosen: tuple[Sequence[str], Sequence[str], Sequence[str]] | None = None
+    ) -> list[Aggregate]:
+        """The team's own and workspace-level modules (no team) with each operation's name, what the Apps grid's cards
+        count and match: every one, or with `chosen` (ids, template ids, names of modules bound to no account) only
+        those, for one page of cards. A grant to one of the team's workflows does not put another team's module on its
+        grid."""
+        t = tool_modules.c
+        where = sa.and_(t.tenant_id == tenant_id, team_modules(), sa.or_(t.team_id == team_id, t.team_id.is_(None)))
+        if chosen is not None:
+            ids, templates, names = (list(x) for x in chosen)
+            if not (ids or templates or names):
+                return []
+            where = sa.and_(
+                where,
+                sa.or_(
+                    t.id.in_(ids), t.template_id.in_(templates), sa.and_(t.name.in_(names), t.connection_id.is_(None))
+                ),
+            )
+        o = module_operations.c
+        async with self.tx() as c:
+            q = tool_modules.select().where(where).order_by(t.created_at.desc(), t.id.desc())
+            rows = [dict(r) for r in (await c.execute(q)).mappings()]
+            ops = (
+                sa.select(o.module_id, o.name)
+                .where(o.tenant_id == tenant_id, o.module_id.in_(sa.select(t.id).where(where)))
+                .order_by(o.module_id, o.position)
+            )
+            held: dict[str, list[str]] = {}
+            for module_id, name in await c.execute(ops):
+                held.setdefault(str(module_id), []).append(str(name))
+        return [{**r, "operations": [{"name": n} for n in held.get(str(r["id"]), [])]} for r in rows]
 
     async def chosen(self, tenant_id: str, ids: Sequence[str]) -> list[Aggregate]:
         """The modules named by `ids` that the acting team reads (as `all`), in `ids`' order: a list's page."""
@@ -624,14 +665,13 @@ class ModuleStore(Store):
         """Every team's modules: for what another service asks on a run's behalf (the operations an agent or workflow
         may be granted, a call's resolution), which the run's grants and its approval token decide, not the caller's
         team."""
+        where = sa.and_(tool_modules.c.tenant_id == tenant_id, any_team(tool_modules, RUN_PATHS))
         async with self.tx() as c:
-            q = (
-                tool_modules.select()
-                .where(tool_modules.c.tenant_id == tenant_id, any_team(tool_modules, RUN_PATHS))
-                .order_by(tool_modules.c.created_at.desc(), tool_modules.c.id.desc())
-            )
+            q = tool_modules.select().where(where).order_by(tool_modules.c.created_at.desc(), tool_modules.c.id.desc())
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
-            kids = await self._children(c, tenant_id, [r["id"] for r in rows])
+            kids = await self._children(
+                c, tenant_id, [r["id"] for r in rows], sa.select(tool_modules.c.id).where(where)
+            )
         return [{**r, **kids[r["id"]]} for r in rows]
 
     async def header_holders(self, tenant_id: str | None = None) -> list[Aggregate]:

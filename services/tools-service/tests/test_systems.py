@@ -404,6 +404,29 @@ async def test_a_module_write_changes_the_built_in_cards_on_the_next_list(
     assert "builtin:files" in ids and pagination["total"] == len(ids), (ids, pagination)
 
 
+async def test_a_list_of_fresh_card_rows_answers_the_cards_a_rebuild_does(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    # A list whose rows are fresh builds only its page's cards, from the accounts and modules those cards name: a
+    # custom app counting its module's tools, a built-in app, both plugins and one the install no longer holds.
+    module = next(m for m in await ModuleStore(engine).all_teams(tenant) if m["team_id"] == TEAM and m["connection_id"])
+    made = await client.post("/v1/apps", json={"name": "Claims core", "authKind": "bearer"}, headers=admin(tenant))
+    bound = await client.put(
+        f"/v1/tool-modules/{module['id']}/connection", json={"connectionId": made.json()["data"]["id"]},
+        headers=admin(tenant),
+    )  # fmt: skip
+    assert bound.status_code == 200, bound.text
+    await PluginBindings(engine).put(tenant, TEAM, "gone", enabled=True, connection_id=None, settings={}, by="t")
+    every = {"include": "builtin", "pageSize": 50}
+    rebuilt = (await client.get("/v1/apps", params=every, headers=admin(tenant))).json()["data"]["data"]
+    assert {"builtin:files", "plugin:gone", made.json()["data"]["id"]} <= {c["id"] for c in rebuilt}, rebuilt
+    fresh = (await client.get("/v1/apps", params=every, headers=admin(tenant))).json()["data"]["data"]
+    assert fresh == rebuilt
+    for card in rebuilt:
+        alone = await client.get("/v1/apps", params={"include": "builtin", "ids": card["id"]}, headers=admin(tenant))
+        assert alone.json()["data"]["data"] == [card], card["id"]
+
+
 async def _while_rebuilding(
     monkeypatch: pytest.MonkeyPatch, other: Callable[[], Coroutine[Any, Any, httpx.Response]], *, before: bool
 ) -> list[asyncio.Task[httpx.Response]]:

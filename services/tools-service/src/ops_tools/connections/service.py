@@ -18,7 +18,7 @@ import json
 import re
 import secrets as random
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, NoReturn, cast
 from urllib.parse import parse_qsl, urlencode, urlsplit
@@ -401,10 +401,12 @@ class ConnectionService:
         self._can(who, "view")
         return await self._view(who, await self._get(who, connection_id), detail=True)
 
-    async def team_rows(self, who: Caller) -> list[dict[str, Any]]:
+    async def team_rows(self, who: Caller, app_ids: Sequence[str] | None = None) -> list[dict[str, Any]]:
         """The caller's team's accounts as stored, with the modules that use them, for the Apps grid to join;
-        secrets stay names, never values."""
+        secrets stay names, never values. `app_ids`: only the accounts of those apps, one page of the grid."""
         self._can(who, "view")
+        if app_ids is not None:
+            return await self.store.of_apps(who.tenant_id, who.team.id, app_ids)
         teams = [who.team.id]
         return await self.store.page(
             who.tenant_id, teams, "", 0, max(await self.store.count(who.tenant_id, teams, ""), 1)
