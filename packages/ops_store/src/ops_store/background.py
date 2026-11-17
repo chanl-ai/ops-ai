@@ -189,6 +189,14 @@ PROCESSES: list[Process] = [
         "Any team's sign-ins can go unused; each team's are refreshed in that team.",
     ),
     Process(
+        "sign_in_test",
+        "tools",
+        "Test after sign-in",
+        "Tests an account right after it signs in, when its app names a test, without holding the sign-in's answer.",
+        None,
+        "It tests one account, in the team that signed in.",
+    ),
+    Process(
         "document_reading",
         "documents",
         "Document reading",

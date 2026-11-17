@@ -34,10 +34,12 @@ from ops_service_kit.http import (
     ok,
     operation_id,
 )
+from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 from ops_store.background import LOCAL as LOCAL_BEATS
 from ops_store.background import report as background_report
+from ops_store.background import supervisor as background_supervisor
 from ops_store.database import reachable
 
 from .auth import Authenticator
@@ -224,6 +226,18 @@ async def _mcp_off(scope: Scope, receive: Receive, send: Send) -> None:
         await JSONResponse(error_body(404, "feature_off", MCP_OFF), status_code=404)(scope, receive, send)
 
 
+log = get_logger("ops_tools.app")
+
+
+async def _kept(start: Callable[[], Coroutine[Any, Any, None]]) -> None:
+    """One process beside the server. Each reports its own failures on /health/background; one that still escapes is
+    logged here, so it never cancels the TaskGroup, which would stop the server and the other processes with it."""
+    try:
+        await start()
+    except Exception as e:
+        log.warning("tools_background_stopped", error=f"{type(e).__name__}: {e}"[:500])
+
+
 def create_gateway_app(
     *,
     opa: OpaClient,
@@ -353,13 +367,17 @@ def create_gateway_app(
         await opa.load_policy(rules)
         if await opa.loaded_policy_hash() != expected:
             raise PolicyMismatchError("OPA does not hold this gateway's policy after loading it; refusing to start.")
-        tasks = [asyncio.create_task(job()) for job in background]
-        try:
-            async with mcp.running() if mcp is not None else nullcontext():
-                yield
-        finally:
-            for t in tasks:
-                t.cancel()
+        # The supervisor every task a request starts runs on (background.start, such as the test after a sign-in), and
+        # the processes beside the server as children of one TaskGroup: leaving it cancels each and waits for it, so
+        # none outlives the server.
+        async with background_supervisor(), asyncio.TaskGroup() as group:
+            tasks = [group.create_task(_kept(job)) for job in background]
+            try:
+                async with mcp.running() if mcp is not None else nullcontext():
+                    yield
+            finally:
+                for t in tasks:
+                    t.cancel()
 
     app = FastAPI(title="Ops AI tool gateway", lifespan=lifespan, generate_unique_id_function=operation_id)
     install_error_handlers(app)

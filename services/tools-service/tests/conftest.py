@@ -31,7 +31,7 @@ from ops_service_kit.logging import quiet_request_logs
 from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
 from ops_service_kit.testdb import isolate_from_stack, refusal, use_worker_database
-from ops_store import isolation
+from ops_store import background, isolation
 from ops_store.database import open_database
 from ops_store.testing import DATABASES, NO_SQL_SERVER, postgresql_only, sql_server_schema
 from ops_tools.app import create_gateway_app
@@ -135,6 +135,14 @@ def _fail_fast_when_hung() -> Iterator[None]:
     faulthandler.dump_traceback_later(HANG_SECONDS, exit=True, file=_hang_out[0])
     yield
     faulthandler.cancel_dump_traceback_later()
+
+
+@pytest.fixture(autouse=True)
+async def _background_supervisor() -> AsyncIterator[None]:
+    """The lifespan's supervisor, which an ASGI test client never enters: a sign-in starts its account's test on it
+    (background.start), and leaving it cancels what still runs."""
+    async with background.supervisor():
+        yield
 
 
 @pytest.fixture(autouse=True)

@@ -12,7 +12,6 @@ an account already holds is kept when its value is replaced, so a name made befo
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import re
@@ -32,6 +31,7 @@ from ops_policy import CredentialStore
 from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unprocessable, ValidationFailed
 from ops_service_kit.ids import new_id
 from ops_service_kit.logging import get_logger
+from ops_store import background
 
 from ..auth import Authenticator, AuthFailed, Prepared
 from ..auth.assertion import SigningError, key_matches, read_certificate
@@ -191,6 +191,8 @@ def _hash(state: str) -> str:
 
 
 log = get_logger("ops_tools.connections")
+# The listed process (ops_store.background) a test after a sign-in runs and reports under.
+SIGN_IN_TEST = "sign_in_test"
 
 
 class ConnectionService:
@@ -254,7 +256,6 @@ class ConnectionService:
         # delete is refused while any do. Set with the app routes (Apps).
         self.account_users: Callable[[str, str, str, str], Awaitable[dict[str, Any]]] | None = None
         # Tests that run after a sign-in, held so the event loop keeps them until they finish.
-        self._after_sign_in: set[asyncio.Task[None]] = set()
 
     # ── Who may ───────────────────────────────────────────────────────────
 
@@ -996,9 +997,7 @@ class ConnectionService:
             # The sign-in alone connects the account; its test follows without holding the answer, and its outcome
             # is kept on the account's row.
             account = "self" if token_for != SHARED else "team"
-            task = asyncio.create_task(self._test_after_sign_in(who, connection_id, account))
-            self._after_sign_in.add(task)
-            task.add_done_callback(self._after_sign_in.discard)
+            await background.start(self.after_sign_in_test(who, connection_id, account), key=SIGN_IN_TEST)
         return await self.detail(who, connection_id)
 
     async def _same_identity(
@@ -1228,11 +1227,10 @@ class ConnectionService:
         await self.store.set_status(who.tenant_id, connection_id, "needs_reconnect", why)
         await self.store.note(who.tenant_id, str(conn["id"]), self._event(who, "credential_changed"))
 
-    async def _test_after_sign_in(self, who: Caller, connection_id: str, account: str) -> None:
-        try:
-            await self.test(who, connection_id, account)
-        except Exception as e:  # a test that cannot run leaves the account connected and untested
-            log.warning("test_after_sign_in_failed", connection=connection_id, error=type(e).__name__)
+    async def after_sign_in_test(self, who: Caller, connection_id: str, account: str) -> None:
+        """A test that cannot run leaves the account connected and untested; `background.start` logs it and shows it
+        on /health/background under SIGN_IN_TEST."""
+        await self.test(who, connection_id, account)
 
     async def use_platform_app(
         self,
