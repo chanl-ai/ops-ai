@@ -65,12 +65,12 @@ export function SkillMenu({
   onPick: (p: PickedSkill) => void;
   className?: string;
 }) {
-  const menu = useChatMenuSkills(agentId, true);
+  const menu = useChatMenuSkills(agentId, true, query);
   const q = query.trim().toLowerCase();
   const has = (...fields: (string | undefined)[]) => fields.join(' ').toLowerCase().includes(q);
   // A skill with parts matches by its own name (all its parts show) or part by part on each part's name and use-when;
   // its general use-when would otherwise pull in parts the search does not describe.
-  const skills = (menu.data ?? []).flatMap((sk) => {
+  const skills = ((menu.data?.data ?? []) as ChatMenuSkill[]).flatMap((sk) => {
     if (!q) return [{ s: sk, rows: entries(sk) }];
     if (!sk.parts?.length) return has(sk.name, sk.slug, sk.useWhen) ? [{ s: sk, rows: entries(sk) }] : [];
     if (has(sk.name, sk.slug)) return [{ s: sk, rows: entries(sk) }];
@@ -126,7 +126,9 @@ export function SkillMenu({
           )}
         </CommandList>
       </Command>
-      <div className="border-t px-3 py-1.5 text-xs text-muted-foreground">Published skills {agentName} can use · ↑↓ to move, Enter to pick, Esc to close</div>
+      <div className="border-t px-3 py-1.5 text-xs text-muted-foreground">
+        {menu.data?.pagination.hasNext ? `Showing the first ${menu.data.data.length} of ${menu.data.pagination.total} skills · keep typing to narrow` : `Published skills ${agentName} can use · ↑↓ to move, Enter to pick, Esc to close`}
+      </div>
     </div>
   );
 }
