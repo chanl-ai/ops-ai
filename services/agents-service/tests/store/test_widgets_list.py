@@ -13,6 +13,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agents.store.agent_registry import AgentRegistry
+from ops_agents.store.widget_picker import WidgetPicker
 from ops_agents.store.widgets import WidgetRegistry
 from ops_store import isolation
 from ops_store.team_scope import acting_as
@@ -53,6 +54,18 @@ async def test_the_page_holds_the_acting_team_when_the_policy_lets_every_team_th
         with acting_as(OTHER):
             theirs = [r.id for r in await reg.page(both, "", 0, 10, ["card-limit", "loan-limit"])]
     assert (mine, counted, theirs) == (["card-limit"], 1, ["loan-limit"])
+
+
+async def test_the_picker_holds_the_teams_asked_for_when_no_team_acts(engine: AsyncEngine, tenant: str) -> None:
+    """The agent page's picker with no acting team (the dev caller): neither the policy nor `team_visible` holds the
+    teams, so the query's own team list must."""
+    with isolation.scope(tenant, TEAM):
+        await WidgetRegistry(engine).create("card-limit", _content("Card limit"), team_id=TEAM, by="u")
+    with isolation.scope(tenant, OTHER):
+        await WidgetRegistry(engine).create("loan-limit", _content("Loan limit"), team_id=OTHER, by="u")
+    with isolation.tenant_wide("a test reads the widget picker with every team let through", tenant_id=tenant):
+        offered = await WidgetPicker(engine).pinnable([TEAM], "", 0, 10, ["card-limit", "loan-limit"])
+    assert [w.id for w in offered] == ["card-limit"]
 
 
 async def test_each_row_carries_its_newest_content_and_only_its_own_waiting_request(
