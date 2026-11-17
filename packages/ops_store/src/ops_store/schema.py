@@ -298,13 +298,17 @@ def backfill_ddl(
     tables: Iterable[sa.Table], dialect: str, *, chain: str, kind: IsolationKind = "team"
 ) -> tuple[list[str], list[str]]:
     """(before, after) a migration's backfill over every tenant's rows of `tables`, which already carry `kind`'s
-    isolation. PostgreSQL: row security off for the transaction, which is refused for a login without BYPASSRLS, so a
-    migration run under the wrong role fails instead of moving only the rows it sees. SQL Server: a security policy
-    filters every login but a chain's system user, and the migrator is none, so each table's policy is dropped before
-    and created again after; the predicate functions stay."""
+    isolation, read or written as the tables' owner (the migrator). Each table's policy is set aside before and back
+    after, inside one transaction, so no other session ever sees it apart; every policed table the backfill reads or
+    writes is listed, or the backfill sees none of that table's rows. PostgreSQL: the owner bypasses a policy that is
+    not FORCEd, so FORCE is lifted and put back; ALTER TABLE is refused for a login that does not own the table, so a
+    migration run under the wrong role fails instead of moving only the rows it sees, and no role needs BYPASSRLS.
+    SQL Server: a security policy filters every login but a chain's system user, and the migrator is none, so each
+    table's policy is dropped before and created again after; the predicate functions stay."""
     marked = list(tables)
     if dialect == "postgresql":
-        return ["SET LOCAL row_security = off"], []
+        before = [f"ALTER TABLE {t.name} NO FORCE ROW LEVEL SECURITY" for t in marked]
+        return before, [f"ALTER TABLE {t.name} FORCE ROW LEVEL SECURITY" for t in marked]
     if dialect == "mssql":
         before = [s for t in marked for s in isolation_drop_ddl(t, "mssql")]
         after = [isolation_ddl(t, "mssql", kind=kind, chain=chain)[-1] for t in marked]

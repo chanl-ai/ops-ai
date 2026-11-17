@@ -59,7 +59,6 @@ def upgrade() -> None:
     dialect = op.get_context().dialect.name
     table = _marked()
     if dialect == "postgresql":
-        op.execute("SET LOCAL row_security = off")
         op.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {TABLE} TO {ROLE}")
     elif dialect == "mssql":
         for statement in mssql_predicates_ddl(CHAIN, [table], column_type=_column_type, system_user=SYSTEM_ROLE):

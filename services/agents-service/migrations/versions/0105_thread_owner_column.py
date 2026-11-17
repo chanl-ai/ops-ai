@@ -70,18 +70,25 @@ def _fill(dialect: str, copy: str, before: list[str], after: list[str]) -> str:
             f"    UPDATE TOP ({BATCH}) g SET owner = s.v FROM graph_threads g JOIN {copy} s ON s.k = g.id "
             f"WHERE g.owner IS NULL;\n    SET @n = @@ROWCOUNT;\n{back}\n    COMMIT;\n    IF @n = 0 BREAK;\nEND"
         )
+    # The policy is back before each COMMIT, the last batch's (which finds nothing) included.
+    aside = "".join(f"        {s};\n" for s in before)
+    back = "".join(f"        {s};\n" for s in after)
     return (
-        f"DO $$\nDECLARE n integer;\nBEGIN\n    LOOP\n"
-        "        PERFORM set_config('row_security', 'off', true);\n"
+        f"DO $$\nDECLARE n integer;\nBEGIN\n    LOOP\n{aside}"
         f"        UPDATE graph_threads g SET owner = s.v FROM {copy} s WHERE s.k = g.id AND g.ctid IN "
         f"(SELECT x.ctid FROM graph_threads x JOIN {copy} y ON y.k = x.id WHERE x.owner IS NULL LIMIT {BATCH});\n"
-        f"        GET DIAGNOSTICS n = ROW_COUNT;\n        EXIT WHEN n = 0;\n        COMMIT;\n    END LOOP;\nEND $$"
+        f"        GET DIAGNOSTICS n = ROW_COUNT;\n{back}"
+        "        COMMIT;\n        EXIT WHEN n = 0;\n    END LOOP;\nEND $$"
     )
 
 
 def upgrade() -> None:
     dialect = op.get_bind().dialect.name
-    if not _has_owner():
+    if op.get_context().as_sql and dialect == "postgresql":
+        # The DBA script cannot look, and a stop after its first transaction leaves the column behind: re-run from
+        # the step's start, the column is added only where it is missing.
+        op.execute("ALTER TABLE graph_threads ADD COLUMN IF NOT EXISTS owner VARCHAR(320)")
+    elif not _has_owner():
         with op.batch_alter_table("graph_threads") as b:
             b.add_column(sa.Column("owner", sa.String(320)))
     t = _threads()

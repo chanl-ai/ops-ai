@@ -108,8 +108,6 @@ def _column_type(column: sa.Column[Any]) -> str:
 def _every_tenant(dialect: str) -> tuple[list[str], list[str]]:
     """(before, after) reading every tenant's rows of the policed tables the placing rules read, as 0106 does."""
     teams = backfill_ddl([_marked_source(n) for n in TEAM_TENANT_SOURCES], dialect, chain=CHAIN, kind="team")
-    if dialect != "mssql":
-        return teams
     requests = backfill_ddl([_marked(REQUESTS)], dialect, chain=CHAIN, kind="tenant")
     return teams[0] + requests[0], teams[1] + requests[1]
 

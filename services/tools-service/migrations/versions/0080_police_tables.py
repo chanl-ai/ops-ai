@@ -89,9 +89,6 @@ def upgrade() -> None:
         return
     tables = [_marked(n) for n in (*BY_TENANT, *BY_TEAM)]
     if dialect == "postgresql":
-        # The migrating role may own the tables; once FORCE is on, row-level security would hide rows from it.
-        op.execute("SET LOCAL row_security = off")
-    if dialect == "postgresql":
         for name in (*BY_TENANT, *BY_TEAM, FENCES):
             op.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON {name} TO {ROLE}")
         for sequence in SEQUENCES:

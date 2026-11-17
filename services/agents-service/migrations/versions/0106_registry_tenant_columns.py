@@ -96,8 +96,6 @@ def _policed(name: str, *, team: bool) -> sa.Table:
 def _every_tenant(dialect: str) -> tuple[list[str], list[str]]:
     """(before, after) reading and writing every tenant's rows of the policed tables the backfill touches."""
     teams = backfill_ddl([_policed(n, team=True) for n in TEAM_TENANT_SOURCES], dialect, chain=CHAIN, kind="team")
-    if dialect != "mssql":
-        return teams
     requests = backfill_ddl([_policed(REQUESTS, team=False)], dialect, chain=CHAIN, kind="tenant")
     return teams[0] + requests[0], teams[1] + requests[1]
 

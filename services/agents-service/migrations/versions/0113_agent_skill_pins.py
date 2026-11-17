@@ -178,10 +178,10 @@ def upgrade() -> None:
     tenant_before, tenant_after = backfill_ddl(
         [_marked("registry_agent_versions", team=False)], dialect, chain=CHAIN, kind="tenant"
     )
-    for statement in (*before, *(tenant_before if dialect == "mssql" else ())):
+    for statement in (*before, *tenant_before):
         op.execute(statement)
     copy = _list_pins(dialect)
-    for statement in (*after, *(tenant_after if dialect == "mssql" else ())):
+    for statement in (*after, *tenant_after):
         op.execute(statement)
     with op.get_context().autocommit_block():
         op.execute(_fill(dialect, copy))

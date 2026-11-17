@@ -102,7 +102,11 @@ def _fill(dialect: str, copy: str, name: str, key: str) -> str:
 def upgrade() -> None:
     dialect = op.get_bind().dialect.name
     for name in TABLES:
-        if not _has_tenant(name):
+        if op.get_context().as_sql and dialect == "postgresql":
+            # The DBA script cannot look, and a stop after its first transaction leaves the column behind: re-run
+            # from the step's start, the column is added only where it is missing.
+            op.execute(f"ALTER TABLE {name} ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(64)")
+        elif not _has_tenant(name):
             op.add_column(name, sa.Column("tenant_id", sa.String(64), nullable=True))
     if dialect not in ("postgresql", "mssql"):
         _settle(dialect)

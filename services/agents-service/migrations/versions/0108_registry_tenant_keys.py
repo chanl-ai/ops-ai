@@ -149,8 +149,6 @@ def _policed(name: str, *, team: bool) -> sa.Table:
 def _every_tenant(dialect: str) -> tuple[list[str], list[str]]:
     """(before, after) reading every tenant's threads and publish requests, as 0106 does."""
     teams = backfill_ddl([_policed("graph_threads", team=True)], dialect, chain=CHAIN, kind="team")
-    if dialect != "mssql":
-        return teams
     requests = backfill_ddl([_policed(REQUESTS, team=False)], dialect, chain=CHAIN, kind="tenant")
     return teams[0] + requests[0], teams[1] + requests[1]
 
@@ -373,12 +371,16 @@ def _repoint(dialect: str, plan: str, before: list[str], after: list[str]) -> st
                 f"{back}\n    COMMIT;\n    IF @n = 0 BREAK;\nEND"
             )
         else:
+            # The policies are back before each COMMIT, the last batch's (which finds nothing) included.
+            aside = "".join(f"        {s};\n" for s in before)
+            back = "".join(f"        {s};\n" for s in after)
             loops.append(
-                "    LOOP\n        PERFORM set_config('row_security', 'off', true);\n"
+                f"    LOOP\n{aside}"
                 f"        UPDATE {name} x SET {column} = '{prefix}' || p.dst FROM {plan} p WHERE p.tenant_id = "
                 f"x.tenant_id AND x.{column} = '{prefix}' || p.frm{x} AND x.ctid IN (SELECT y.ctid FROM {name} y "
                 f"JOIN {plan} q ON q.tenant_id = y.tenant_id AND y.{column} = '{prefix}' || q.frm{y} LIMIT {BATCH});\n"
-                "        GET DIAGNOSTICS n = ROW_COUNT;\n        EXIT WHEN n = 0;\n        COMMIT;\n    END LOOP;"
+                f"        GET DIAGNOSTICS n = ROW_COUNT;\n{back}"
+                "        COMMIT;\n        EXIT WHEN n = 0;\n    END LOOP;"
             )
     if dialect == "mssql":
         return "DECLARE @n int;\n" + "\n".join(loops)
@@ -392,10 +394,8 @@ def _agent_policies(dialect: str) -> tuple[list[str], list[str]]:
         for n in ("graph_threads", *(n for n, _c, _k in AGENT_REFS if n != REQUESTS), *MEMORY_TABLES)
     ]
     before, after = backfill_ddl(team, dialect, chain=CHAIN, kind="team")
-    if dialect == "mssql":
-        requests = backfill_ddl([_policed(REQUESTS, team=False)], dialect, chain=CHAIN, kind="tenant")
-        before, after = before + requests[0], after + requests[1]
-    return before, after
+    requests = backfill_ddl([_policed(REQUESTS, team=False)], dialect, chain=CHAIN, kind="tenant")
+    return before + requests[0], after + requests[1]
 
 
 def _move_references(dialect: str, plan: sa.TableClause) -> None:

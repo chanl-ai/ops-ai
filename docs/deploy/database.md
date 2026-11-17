@@ -70,7 +70,7 @@ make db-upgrade-sql FROM=<running release> TO=<new release> OUT=dist/db/<new>/up
 | File | What it holds |
 |---|---|
 | `upgrade-roles.sql` | Statements only a superuser may run (a new role), guarded; run first |
-| `upgrade.sql` | One step per revision, chains in migrate order. Each step names its chain and revisions and its sha256, checks the version row it starts from (and raises before any DDL when the database is elsewhere), runs in its own transaction, and records its new version row |
+| `upgrade.sql` | One step per revision, chains in migrate order. Each step names its chain and revisions and its sha256, checks the version row it starts from (and raises before any DDL when the database is elsewhere), runs in its own transaction, and records its new version row. A step that fills a large table commits each batch itself, so that fill runs between the step's transactions; if such a step stops partway, the version row still names the revision before it, and the step is run again from its start, which its revision must allow |
 | `downgrade.sql` | The reverse steps where the revision has a downgrade; a step without one says to restore a backup |
 | `SHA256SUMS` | As above |
 
