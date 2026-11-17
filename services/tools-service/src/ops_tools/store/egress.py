@@ -123,9 +123,10 @@ def _by_name(modules: list[ModuleUse]) -> list[ModuleUse]:
     return sorted(modules, key=lambda m: m.name.lower())
 
 
-def _users(tenant_id: str) -> sa.Select[str, str, str | None]:
+def _users(tenant_id: str, named: sa.ColumnElement[bool]) -> sa.Select[str, str, str | None]:
     """Each host's modules with the name a person knows them by, so the allow list never shows a bare module id. A
-    module of a team the reader is not acting in keeps its id: its name is that team's record."""
+    module of a team the reader is not acting in keeps its id: its name is that team's record. `named` is
+    `team_modules()` taken BEFORE the list's tenant-wide block, which has no acting team and would name every team's."""
     return (
         sa.select(module_egress_hosts.c.host, module_egress_hosts.c.module_id, tool_modules.c.display_name)
         .outerjoin(
@@ -133,7 +134,7 @@ def _users(tenant_id: str) -> sa.Select[str, str, str | None]:
             sa.and_(
                 tool_modules.c.tenant_id == module_egress_hosts.c.tenant_id,
                 tool_modules.c.id == module_egress_hosts.c.module_id,
-                team_modules(),
+                named,
             ),
         )
         .where(module_egress_hosts.c.tenant_id == tenant_id)
@@ -163,7 +164,7 @@ class EgressStore(Store):
         """Hosts, each with the modules that use it, and ranges."""
         hosts_q = egress_hosts.select().where(egress_hosts.c.tenant_id == tenant_id).order_by(egress_hosts.c.host)
         ranges_q = egress_ranges.select().where(egress_ranges.c.tenant_id == tenant_id).order_by(egress_ranges.c.cidr)
-        users_q = _users(tenant_id)
+        users_q = _users(tenant_id, team_modules())
         async with self._list_tx(tenant_id) as c:
             hosts = await rows(c, hosts_q, ListedHost)
             ranges = await rows(c, ranges_q, ListedRange)
@@ -177,6 +178,7 @@ class EgressStore(Store):
         template slot (`templateId`), each with the modules that use it; only that page's modules are read."""
         h = egress_hosts.c
         q = sa.select(*egress_hosts.c).where(h.tenant_id == tenant_id)
+        named = team_modules()
         async with self._list_tx(tenant_id) as c:
             page = await list_page(
                 c,
@@ -187,15 +189,16 @@ class EgressStore(Store):
                 filters={"templateId": h.template_id},
             )
             hosts = [ListedHost.model_validate(r) for r in page["data"]]
-            return page, await self._with_modules(c, tenant_id, hosts)
+            return page, await self._with_modules(c, tenant_id, hosts, named)
 
     async def entry(self, tenant_id: str, kind: str, value: str) -> ListedHost | ListedRange | None:
         """One listed host, with the modules that use it, or one listed range, in the shape the lists return; None
         when it is not listed. An add returns it, so a screen can show the new row wherever its list is paged."""
         if kind == "host":
             q = egress_hosts.select().where(egress_hosts.c.tenant_id == tenant_id, egress_hosts.c.host == value)
+            named = team_modules()
             async with self._list_tx(tenant_id) as c:
-                found = await self._with_modules(c, tenant_id, await rows(c, q, ListedHost))
+                found = await self._with_modules(c, tenant_id, await rows(c, q, ListedHost), named)
             return found[0] if found else None
         q = egress_ranges.select().where(egress_ranges.c.tenant_id == tenant_id, egress_ranges.c.cidr == value)
         async with self._list_tx(tenant_id) as c:
@@ -203,9 +206,11 @@ class EgressStore(Store):
         return ranges[0] if ranges else None
 
     @staticmethod
-    async def _with_modules(c: AsyncConnection, tenant_id: str, hosts: list[ListedHost]) -> list[ListedHost]:
+    async def _with_modules(
+        c: AsyncConnection, tenant_id: str, hosts: list[ListedHost], named: sa.ColumnElement[bool]
+    ) -> list[ListedHost]:
         """`hosts`, each with the modules that use it; only these hosts' modules are read."""
-        users_q = _users(tenant_id).where(module_egress_hosts.c.host.in_([h.host for h in hosts]))
+        users_q = _users(tenant_id, named).where(module_egress_hosts.c.host.in_([h.host for h in hosts]))
         used: dict[str, list[ModuleUse]] = {}
         for host, module_id, name in await c.execute(users_q):
             used.setdefault(host, []).append(ModuleUse(id=module_id, name=name or module_id))
