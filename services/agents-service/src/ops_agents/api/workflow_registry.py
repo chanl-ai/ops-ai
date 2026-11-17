@@ -20,6 +20,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from pydantic import JsonValue
+
 from ops_agents.graphs.definition import InvalidDefinitionError, NodeKind, WorkflowDefinition, validate
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.ids import now_iso
@@ -627,20 +629,30 @@ def _ms(a: str, b: str) -> int:
         return 0
 
 
-async def run_rows(rt: Runtime, workflow_id: str) -> list[dict[str, Any]]:
-    """The workflow's threads as the console's WorkflowRun, steps from each thread's run journal."""
+async def run_rows(
+    rt: Runtime, workflow_id: str, wanted: list[str], offset: int, limit: int
+) -> tuple[list[dict[str, Any]], int, dict[str, int]]:
+    """One page of the workflow's threads as the console's WorkflowRun, with the total and the count per status;
+    `wanted` keeps those statuses. The page, the counts and the page's run journals are each one statement, so the
+    reads stay the same however many runs the workflow has."""
     assert rt.graph_store is not None
     store = rt.graph_store
     kinds: dict[int, dict[str, str]] = {}
     for v in await store.versions(workflow_id):
         kinds[int(v["version"])] = {n["id"]: n["kind"] for n in v["definition"]["nodes"]}
+    threads, total, counted = await store.thread_page(
+        workflow_id, RUN_STATUS, "running", wanted, offset=offset, limit=limit
+    )
+    journals: dict[str, list[list[dict[str, JsonValue]]]] = {}
+    for run in await store.run_events([t.id for t in threads]):
+        journals.setdefault(run.thread_id, []).append(run.events)
     out: list[dict[str, Any]] = []
-    for t in await store.threads(workflow_id):
-        status = RUN_STATUS.get(str(t["status"]), "running")
-        node_kinds = kinds.get(int(t["version"] or 0), {})
+    for t in threads:
+        status = RUN_STATUS.get(t.status, "running")
+        node_kinds = kinds.get(t.version or 0, {})
         steps: list[dict[str, Any]] = []
-        for run in await store.runs(t["id"]):
-            for e in run["events"]:
+        for events in journals.get(t.id, []):
+            for e in events:
                 if e.get("event") == "node_start" and e.get("node") in node_kinds:
                     nid = str(e["node"])
                     steps.append(
@@ -654,18 +666,17 @@ async def run_rows(rt: Runtime, workflow_id: str) -> list[dict[str, Any]]:
                     )
         if steps and status == "waiting_review":
             steps[-1]["status"] = "waiting"
-        meta: dict[str, Any] = t["meta"] or {}
         out.append(
             {
-                "id": t["id"],
+                "id": t.id,
                 "workflowId": workflow_id,
-                "version": t["version"] or 0,
-                "subject": str(meta.get("subject") or f"Run {t['id']}"),
+                "version": t.version or 0,
+                "subject": str(t.meta.get("subject") or f"Run {t.id}"),
                 "status": status,
-                "startedAt": t["created_at"],
-                "durationMs": _ms(t["created_at"], t["updated_at"]),
-                **({"reviewId": t["id"]} if status == "waiting_review" else {}),
+                "startedAt": t.created_at,
+                "durationMs": _ms(t.created_at, t.updated_at),
+                **({"reviewId": t.id} if status == "waiting_review" else {}),
                 "steps": steps,
             }
         )
-    return out
+    return out, total, counted

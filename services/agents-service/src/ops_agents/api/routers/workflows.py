@@ -460,16 +460,11 @@ class RunsQuery(BaseModel):
 
 @router.get("/{workflow_id}/runs", response_model=Envelope[ListResult[WorkflowRun]])
 async def list_runs(rt: Rt, _: Tx, workflow_id: str, q: Annotated[RunsQuery, Query()]) -> JSONResponse:
-    """The workflow's runs, most recently changed first, a page at a time."""
+    """The workflow's runs, most recently changed first then by id, a page at a time; `status` keeps those
+    statuses, and the status counts are over every run."""
     await registry(rt).row(workflow_id)
-    rows = await run_rows(rt, workflow_id)
-    facets: dict[str, dict[str, int]] = {"status": {}}
-    for r in rows:
-        facets["status"][r["status"]] = facets["status"].get(r["status"], 0) + 1
-    if q.status:
-        rows = [r for r in rows if r["status"] in q.status]
-    start = (q.page - 1) * q.pageSize
-    return ok(paged(rows[start : start + q.pageSize], len(rows), q.page, q.pageSize, facets=facets))
+    rows, total, counted = await run_rows(rt, workflow_id, q.status, (q.page - 1) * q.pageSize, q.pageSize)
+    return ok(paged(rows, total, q.page, q.pageSize, facets={"status": counted}))
 
 
 @refs_router.get("", response_model=Envelope[list[WorkflowRef]])

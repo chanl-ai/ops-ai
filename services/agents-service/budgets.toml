@@ -1,6 +1,7 @@
 # The statement budget of each agents-service GET at 5 and 50 rows (ops_service_kit.testing.budget_check, data-access
 # standard DA1 and DA6), measured on PostgreSQL by tests/api/test_statement_budget.py. Each row is today's count at 50
-# rows. The seed adds rows to agents (each holding a tool and an account), skills, guardrails, widgets and cases only;
+# rows. The seed adds rows to agents (each holding a tool and an account), skills, guardrails, widgets, cases and runs
+# of the registry workflow (each waiting at its review) only;
 # a row for any other list proves its count, not that it stays flat as rows grow. Rows listing more than one
 # transaction or connection open one per store read and are budgeted as they run until their route is converted. A
 # `not_budgeted` row that grows names its counts.
@@ -36,9 +37,7 @@ queries = 1
 queries = 1
 
 ["GET /reviews"]
-queries = 6
-transactions = 6
-connections = 6
+not_budgeted = "grows with waiting reviews: 46 statements, transactions and checkouts at 5, 356 at 50 (about 7 per review)"
 
 ["GET /reviews/by-run-key/{run_key}"]
 not_budgeted = "needs a run waiting at a review step; the budget seed starts none yet"
@@ -52,9 +51,7 @@ connections = 5
 not_budgeted = "needs a run waiting at a review step; the budget seed starts none yet"
 
 ["GET /runs"]
-queries = 4
-transactions = 4
-connections = 4
+not_budgeted = "grows with runs: 20 statements, transactions and checkouts at 5 runs, 80 at 50"
 
 ["GET /runs/{thread_id}"]
 queries = 6
@@ -180,7 +177,7 @@ queries = 1
 query = { types = "dt_budget" }
 
 ["GET /v1/events"]
-queries = 1
+not_budgeted = "grows with runs: 6 statements, transactions and checkouts at 5 runs, 56 at 50 (one per thread)"
 query = { follow = "false" }
 
 ["GET /v1/forms/public/{slug}"]
@@ -217,9 +214,7 @@ queries = 3
 queries = 0
 
 ["GET /v1/overview"]
-queries = 12
-transactions = 9
-connections = 9
+not_budgeted = "grows with runs: 37 statements at 5 runs, 287 at 50; 284 transactions and checkouts at 50"
 
 ["GET /v1/prompts/variables"]
 queries = 0
@@ -373,7 +368,7 @@ queries = 2
 not_budgeted = "needs a live engine definition; the budget seed publishes none yet"
 
 ["GET /v1/workflows/{workflow_id}/runs"]
-queries = 3
+queries = 6
 
 ["GET /v1/workflows/{workflow_id}/validations/latest"]
 queries = 2

@@ -6,13 +6,16 @@ Column types are the portable ones (JSON, not JSONB) so the API tests run on SQL
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
+from pydantic import BaseModel, JsonValue
 
 from ops_store import Guarantee
 from ops_store.dialect import insert_ignore, locked
 from ops_store.listing import LISTED
+from ops_store.rows import rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import any_team, team_visible
 
@@ -90,6 +93,24 @@ graph_runs = sa.Table(
     sa.Column("team_id", sa.String(64), nullable=False),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
+
+
+class RunThread(BaseModel):
+    """A thread as a workflow's runs list shows it."""
+
+    id: str
+    status: str
+    version: int | None
+    meta: dict[str, JsonValue]
+    created_at: str
+    updated_at: str
+
+
+class RunJournal(BaseModel):
+    """One run's streamed events, by its thread."""
+
+    thread_id: str
+    events: list[dict[str, JsonValue]]
 
 
 def mine(table: sa.Table) -> sa.ColumnElement[bool]:
@@ -280,6 +301,51 @@ class GraphStore(RuntimeStore):
             q = q.where(graph_threads.c.graph == graph)
         async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
+
+    async def thread_page(
+        self, graph: str, labels: Mapping[str, str], other: str, wanted: Sequence[str], *, offset: int, limit: int
+    ) -> tuple[list[RunThread], int, dict[str, int]]:
+        """One page of `graph`'s threads, newest update first then by id, with the total and the count per label.
+        `labels` names a thread status's label and `other` every status it does not name; `wanted` keeps the threads
+        whose label it lists (all when empty). The counts leave `wanted` out, so a filtered list still counts each."""
+        status = graph_threads.c.status
+        scope = (graph_threads.c.graph == graph, mine(graph_threads), team_visible(graph_threads))
+        counted: dict[str, int] = {}
+        chosen: list[sa.ColumnElement[bool]] = []
+        if wanted:
+            named = [raw for raw, label in labels.items() if label in wanted]
+            chosen = [sa.or_(status.in_(named), *([status.not_in(list(labels))] if other in wanted else []))]
+        t = graph_threads.c
+        page = (
+            sa.select(t.id, t.status, t.version, t.meta, t.created_at, t.updated_at)
+            .where(*scope, *chosen)
+            .order_by(graph_threads.c.updated_at.desc(), graph_threads.c.id)
+            .offset(offset)
+            .limit(limit)
+        )
+        async with self.tx() as c:
+            for raw, n in await c.execute(sa.select(status, sa.func.count()).where(*scope).group_by(status)):
+                label = labels.get(str(raw), other)
+                counted[label] = counted.get(label, 0) + int(n)
+            total = int(
+                (
+                    await c.execute(sa.select(sa.func.count()).select_from(graph_threads).where(*scope, *chosen))
+                ).scalar_one()
+            )
+            found = await rows(c, page, RunThread)
+        return found, total, counted
+
+    async def run_events(self, thread_ids: Sequence[str]) -> list[RunJournal]:
+        """The named threads' runs' events, oldest run first, in one statement."""
+        if not thread_ids:
+            return []
+        q = (
+            sa.select(graph_runs.c.thread_id, graph_runs.c.events)
+            .where(graph_runs.c.thread_id.in_(list(thread_ids)), mine(graph_runs), team_visible(graph_runs))
+            .order_by(graph_runs.c.created_at, graph_runs.c.id)
+        )
+        async with self.tx() as c:
+            return await rows(c, q, RunJournal)
 
     async def set_thread_status(self, thread_id: str, status: str, now: str, *, generation: int | None = None) -> None:
         """`generation`: the writing run's lease generation, checked in this transaction (ADR-0016)."""

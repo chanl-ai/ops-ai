@@ -31,6 +31,7 @@ DEV = {"X-Team-Id": SEED_TEAM}
 # `{workflow_id}` names a registry workflow and, under `definitions/`, an engine definition: one seeded id each.
 REGISTRY_WORKFLOW, DEFINITION = "wire_hold_review", "refund_check"
 HOLDS = {"toolIds": ["lookup_account"], "accounts": {"salesforce": "Main"}}
+RUN_INPUT = {"email": {"sender": "ops@bank.example", "subject": "Hold the wire", "body": "Please hold wire 4411."}}
 PATH_IDS = (
     "agent_id",
     "batch_id",
@@ -103,9 +104,9 @@ def _id(answer: Any) -> str:
 
 @pytest.fixture
 def seed_team(served: tuple[FastAPI, AsyncClient]) -> SeedTeam:
-    """`n` more agents (each holding a tool and an account), skills, guardrails, widgets and cases on the dev caller's
-    team, beside the seed folder's records; the path ids name the first of each, and the seeded fraud agent and its
-    records otherwise."""
+    """`n` more agents (each holding a tool and an account), skills, guardrails, widgets, cases and runs of the registry
+    workflow (each waiting at its review) on the dev caller's team, beside the seed folder's records; the path ids
+    name the first of each, and the seeded fraud agent and its records otherwise."""
     client = served[1]
     ids: dict[str, str] = dict.fromkeys(PATH_IDS, "missing")
     ids.update(
@@ -138,6 +139,13 @@ def seed_team(served: tuple[FastAPI, AsyncClient]) -> SeedTeam:
             rule = _id(await client.post("/v1/guardrails", json={**RULE, "name": f"Rule {tag}"}, headers=DEV))
             widget = _id(await client.post("/v1/widgets", json={**LIMIT_CARD, "name": f"Card {tag}"}, headers=DEV))
             case = _id(await client.post("/v1/cases", json={**DISPUTE, "subject": f"Dispute {tag}"}, headers=DEV))
+            # A run of the registry workflow to its review, so its runs list and each run's journal grow.
+            made = await client.post("/v1/threads", json={"graph": REGISTRY_WORKFLOW}, headers=DEV)
+            assert made.status_code == 201, made.text
+            run = await client.post(
+                f"/v1/threads/{made.json()['data']['threadId']}/runs/stream", json={"input": RUN_INPUT}, headers=DEV
+            )
+            assert run.status_code == 200 and '"interrupt"' in run.text, run.text
             if i == 0 and n == 5:
                 ids.update(agent_id=agent, skill_id=skill, guardrail_id=rule, widget_id=widget, case_id=case)
         return Seeded(headers=DEV, ids=ids)
