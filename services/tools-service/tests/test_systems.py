@@ -364,6 +364,8 @@ async def test_the_apps_list_pages_searches_and_names_cards_in_sql(client: httpx
 async def test_a_write_to_an_app_shows_on_the_next_list(
     client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
 ) -> None:
+    # Each write lands after a list built the rows, so only the write's clearing of the stamp can show it.
+    await _ids(client, tenant)
     made = await client.post("/v1/apps", json={"name": "Ledger", "authKind": "none"}, headers=admin(tenant))
     app = made.json()["data"]["id"]
     assert app in (await _ids(client, tenant))[0]
@@ -375,6 +377,11 @@ async def test_a_write_to_an_app_shows_on_the_next_list(
     assert ids[0] == app, ids
     await store.delete(tenant, app, actor="t", at=datetime.now(UTC))
     assert app not in (await _ids(client, tenant))[0]
+    # A plugin the install no longer holds keeps its card while the team has it on, and loses it when turned off.
+    bindings = PluginBindings(engine)
+    for on in (True, False):
+        await bindings.put(tenant, TEAM, "gone", enabled=on, connection_id=None, settings={}, by="t")
+        assert ("plugin:gone" in (await _ids(client, tenant))[0]) is on
 
 
 async def test_a_module_write_changes_the_built_in_cards_on_the_next_list(
