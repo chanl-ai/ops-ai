@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 from ops_platform.store.tables import api_keys, audit_entries
 
-from .conftest import SERVICE, Platform
+from .conftest import SERVICE, Platform, seed_tx
 from .test_members import as_admin, bearer, join, team_of
 
 
@@ -62,10 +62,10 @@ async def test_a_revoked_key_stops_at_once(platform: Platform) -> None:
 
 
 async def test_an_expired_key_is_refused(platform: Platform) -> None:
-    _, h = await as_admin(platform)
+    p, h = await as_admin(platform)
     made = await create(platform, h, expiresInDays=30)
     assert made["key"]["expiresAt"]  # type: ignore[index]
-    async with platform.engine.begin() as c:
+    async with seed_tx(platform.engine, p.tenant_id) as c:
         await c.execute(
             api_keys.update().where(api_keys.c.id == made["key"]["id"]).values(expires_at="2020-01-01T00:00:00.000Z")  # type: ignore[index]
         )
@@ -137,11 +137,11 @@ async def test_a_body_with_unknown_fields_or_scopes_is_refused(platform: Platfor
 
 
 async def test_creating_and_revoking_are_audited(platform: Platform) -> None:
-    _, h = await as_admin(platform)
+    p, h = await as_admin(platform)
     made = await create(platform, h)
     key_id = str(made["key"]["id"])  # type: ignore[index]
     await platform.public.post(f"/v1/api-keys/{key_id}/revoke", headers=h)
-    async with platform.engine.connect() as c:
+    async with seed_tx(platform.engine, p.tenant_id) as c:
         actions = (
             (
                 await c.execute(

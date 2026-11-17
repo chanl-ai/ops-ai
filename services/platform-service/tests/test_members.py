@@ -14,7 +14,7 @@ from ops_platform.store.tables import audit_entries, members, role_assignments, 
 from ops_platform.store.workspace import security_team_in
 from ops_service_kit.ids import now_iso
 
-from .conftest import SERVICE, Person, Platform
+from .conftest import SERVICE, Person, Platform, seed_tx
 from .test_permissions import grant
 
 
@@ -37,7 +37,7 @@ async def join(platform: Platform, admin: Person, role: str) -> Person:
     """Another person in the admin's tenant, an active member of the admin's team with `role`."""
     other = await platform.person(roles=(), tenant_id=admin.tenant_id)
     team = team_of(admin)
-    async with platform.engine.begin() as c:
+    async with seed_tx(platform.engine, admin.tenant_id) as c:
         await c.execute(
             members.insert().values(
                 id=f"mem_{other.user_id}",
