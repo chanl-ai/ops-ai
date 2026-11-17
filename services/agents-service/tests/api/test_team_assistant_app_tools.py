@@ -84,9 +84,9 @@ async def test_a_draft_someone_is_editing_is_not_stepped_over(stack: Stack) -> N
     assert data["state"] == "waiting" and live is not None and "salesforce_query" not in live.tools, data
 
 
-def skill(tid: str, name: str, tools: list[str]) -> dict[str, Any]:
+def skill(tid: str, name: str, tools: list[str], source: str = "plugin:opsai.salesforce") -> dict[str, Any]:
     return {
-        "source": "plugin:opsai.salesforce",
+        "source": source,
         "kind": "skill",
         "id": tid,
         "version": 1,
@@ -103,7 +103,8 @@ def digested(t: dict[str, Any]) -> dict[str, Any]:
 
 
 class Templates:
-    """tools-service's plugin templates for the team: two skills the team can use and one naming a tool it lacks."""
+    """tools-service's plugin templates for the team: two skills the team can use, one naming a tool it lacks, and
+    another plugin's skill that names no tool."""
 
     async def get(self, path: str, **_: Any) -> list[dict[str, Any]]:
         assert path == "/v1/plugin-templates"
@@ -113,6 +114,7 @@ class Templates:
                 "salesforce-opportunities", "Salesforce opportunities", ["salesforce_query", "salesforce_update_record"]
             ),
             skill("salesforce-saving", "Salesforce saving", ["salesforce_save_records"]),
+            skill("qa", "Clarifying questions", [], source="plugin:opsai.starters"),
         ]
 
 

@@ -42,6 +42,12 @@ def reads(page: dict[str, Any]) -> list[str]:
     return sorted(str(t["name"]) for t in page.get("tools") or [] if t.get("access") == "read" and t.get("added"))
 
 
+def every_read_added(page: dict[str, Any]) -> bool:
+    """A new app starts with every tool added, writes included; the read tools are what the assistant gets."""
+    tools = [t for t in page.get("tools") or [] if t.get("access") == "read"]
+    return bool(tools) and all(t.get("added") for t in tools)
+
+
 with ExitStack() as stack:
     sf = stack.enter_context(salesforce())
     api, _ = stack.enter_context(platform())
@@ -61,7 +67,7 @@ with ExitStack() as stack:
     gw.post("/v1/egress/ranges", json={"value": sf["range"], "note": "uc-628"}, headers=sam)
 
     # 1. S1: the window's answer turns Salesforce on: each person's own account with the team account for runs
-    # nobody started, the sign-in address kept as a default on Ops AI's auth config, and the read tools added.
+    # nobody started, the sign-in address kept as a default on Ops AI's auth config, and every tool added.
     body = {"enabled": True, "signIn": "person_or_team", "settings": {"login_url": sf["login_url"]}}
     on = gw.put(f"/v1/apps/{SF}/team", json=body, headers=priya)
     card = data(on) or {}
@@ -71,9 +77,10 @@ with ExitStack() as stack:
     account = data(gw.get(f"/v1/apps/{SF}/accounts/{card.get('connectionId')}", headers=priya)) or {}
     check(
         "1 Turn on Salesforce: the address is a default on Ops AI's auth config, each person's own account with the team "
-        "account for unattended runs, and every read tool added",
+        "account for unattended runs, and every tool added",
         on.status_code == 200 and (place.get("value"), place.get("mode")) == (sf["login_url"], "default")
-        and card.get("toolsAdded") == len(reads(page)) > 0 and account.get("signIn") == "person_or_team",
+        and card.get("toolsAdded") == len(page.get("tools") or []) and every_read_added(page)
+        and account.get("signIn") == "person_or_team",
         {"place": (place.get("value"), place.get("mode")), "added": card.get("toolsAdded"), "reads": len(reads(page)),
          "signIn": account.get("signIn"), "configs": [(c.get("type"), c.get("fields")) for c in page.get("authConfigs") or []]},
     )  # fmt: skip
@@ -86,7 +93,7 @@ with ExitStack() as stack:
         "2 the team's assistant gets Salesforce's read tools at once, and asking again changes nothing",
         gave.status_code == 200 and given.get("state") == "given" and sorted(given.get("tools") or []) == reads(page)
         and (again or {}).get("state") == "already",
-        {"state": given.get("state"), "tools": len(given.get("tools") or []), "reads": len(reads(page)), "again": (again or {}).get("state")},
+        {"state": given.get("state"), "tools": len(given.get("tools") or []), "reads": len(reads(page)), "again": (again or {}).get("state"), "reply": gave.text[:300]},
     )  # fmt: skip
 
     # 3. S1: the same for GitHub, whose read tools are its own.

@@ -80,10 +80,12 @@ async def give_app_tools(rt: Runtime, me: Principal, module_ids: list[str]) -> A
     reads = sorted({o.name for o in ops if o.module_id in wanted and o.access == "read"})
 
     added = {o.name for o in ops if o.module_id in wanted}
+    # The app's skills are those that use its tools: a skill naming no tool comes from another plugin the team has
+    # on (the starters pack ships many), and pinning those would fill the assistant's twelve skill places.
     shipped = [
         t
         for t in await _shipped(rt, team)
-        if t.get("kind") == "skill" and set(cast(list[str], t["requires"]["tools"])) <= added
+        if t.get("kind") == "skill" and (needs := set(cast(list[str], t["requires"]["tools"]))) and needs <= added
     ]
     pinned: list[str] = []
 
