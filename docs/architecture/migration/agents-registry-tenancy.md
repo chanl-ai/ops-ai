@@ -24,8 +24,8 @@ with the tree.
 
 Agents database only, no service call. A seed's record (team `team_ops`, with a version saved or published by
 `seed`) stays in `local`, ahead of every rule below, because the start-up seed looks for it there by its fixed id; it
-is never counted as a gap. Another tenant's thread on a seeded agent does not resolve it once the policies hold; a
-seeded workflow is copied into each tenant that runs it (Migration C). Otherwise, in order:
+is never counted as a gap. Each other tenant that uses a seeded agent or workflow gets its own copy (0108, below).
+Otherwise, in order:
 
 1. A direct reference: `template_copies(kind, record_id)`, `team_default_agents.agent_id`,
    `widget_deployments.agent_id`, `registry_publish_requests(kind, subject_id)`, `graph_threads.graph` naming
@@ -57,6 +57,16 @@ threads or publish requests point at: the `registry_workflows` row (without its 
 `graph_versions`, with name, version and digest unchanged, so the digest check in `api/runs.py:94` still passes. Each
 copy's source is chosen before any copy is made (`local` when it holds the workflow, else the first holder by name),
 and each copied workflow version carries `review_id` `copied`.
+
+Seeded agents another tenant uses are copied in 0108 too, for exactly the (tenant, agent id) pairs that tenant's
+threads or deployments (`graph` `agent:<id>`), team defaults, widget deployments, template copies or publish requests
+point at. Agents keep the install-wide key `id` and the runtime serves every tenant's agents from one catalogue by id,
+so a copy cannot take its source's id: it takes `ag_` and the first 24 hex of the MD5 of `<tenant>/<source id>`, the
+same on both databases, and the tenant's references (those above, and `agent_memories` and `memory_audit`) move to it
+in committed batches. The copy keeps the source's slug unless the tenant holds it (then `<slug>-<6 hex of the id>`), its
+published version and pause, so the start-up reload serves it; its team is the one team that points at it, else the
+source's. Every version is copied and marked `review_id` `copied`; 0113 fills the copy's skill pins. Not rewritten:
+`agentId` inside an `agent_wrapper` thread's meta, and `agent:<id>` in the tool list of the tenant's other agents.
 
 Preflight: `make -C services/agents-service registry-tenant-preflight` lists, by the outside-dev rules, each team with
 no tenant, each deployment with no team and no thread, each team and each record with two or more tenants other than `local`, and exits 1 when any exists. It only
@@ -141,7 +151,9 @@ One Alembic chain (`CHAIN="agents"`).
   the install-wide keys, recreates `channel_files` empty and drops the columns. C's down drops policies and grants; 0108's
   down deletes each workflow copy whose versions all still carry `copied` (one a tenant has published to since is
   kept, and the down refuses with the count), then each `graph_versions` row another tenant holds with the same name,
-  version and digest, keeping the workflow's holder.
+  version and digest, keeping the workflow's holder. It first points each tenant's references to an untouched agent copy
+(every version still `copied`) back at the source and deletes the copy; a copy the tenant has saved a version of is
+kept with its references, and 0106's down then refuses on its slug, with the count.
 - Both databases.
 
 ## Tests
@@ -151,7 +163,8 @@ One per failure mode, on both databases.
 - Per table: tenant B's read, update and delete of A's row see zero rows; an insert naming A's tenant is refused.
 - Agent slug and widget id collide across tenants: allowed; within a tenant: Conflict with the suffix. A guardrail or
   skill slug in two teams: allowed.
-- After the upgrade, tenant B's thread pinned to a seed workflow resolves and its digest matches.
+- After the upgrade, tenant B's thread pinned to a seed workflow resolves and its digest matches; B's thread, team
+  default and widget deployment on a seed agent resolve B's copy, and the start-up pointers serve the seed and the copy.
 - A restart serves both tenants' published agents; tenant A's agent id from B's caller is NotFound.
 - A widget mint key or session resolves its deployment's tenant; a thread start naming another tenant's
   `deployment_id` is NotFound. A `''` deployment: a team caller gets NotFound, the tenant-wide poller sees it.

@@ -156,6 +156,18 @@ def downgrade() -> None:
             if dialect == "postgresql":
                 op.execute(f"REVOKE SELECT, INSERT, UPDATE, DELETE ON {name} FROM {TENANT_ROLE}")
     for name in TABLES:
-        # A database upgraded before the column lost its default still holds one, which SQL Server drops first.
-        with op.batch_alter_table(name) as b:
-            b.drop_column("tenant_id", mssql_drop_default=True)
+        if dialect == "mssql":
+            _drop_default(name, "tenant_id")
+        op.drop_column(name, "tenant_id")
+
+
+def _drop_default(name: str, column: str) -> None:
+    """A database upgraded before the column lost its default still holds one, which SQL Server refuses to drop the
+    column under; a database without one has nothing to drop, so the constraint is looked up first."""
+    op.execute(
+        f"DECLARE @n sysname = (SELECT d.name FROM sys.default_constraints d WHERE d.parent_object_id = "
+        f"OBJECT_ID(N'{name}') AND COL_NAME(d.parent_object_id, d.parent_column_id) = N'{column}'); "
+        # EXEC takes a variable or literals, not a function call, so the statement is built first.
+        f"IF @n IS NOT NULL BEGIN DECLARE @s nvarchar(max) = N'ALTER TABLE {name} DROP CONSTRAINT ' "
+        f"+ QUOTENAME(@n); EXEC (@s); END"
+    )

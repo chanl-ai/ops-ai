@@ -9,15 +9,17 @@ import asyncio
 import os
 import subprocess
 from collections.abc import Callable, Iterator
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.engine import URL, make_url
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from ops_service_kit.ids import new_id, now_iso
+from ops_store.testing import NO_SQL_SERVER, sql_server_schema
 
 ROOT = Path(__file__).resolve().parents[2]
 # A revision before the one that gives the registry tables a tenant; the preflight reads nothing added since.
@@ -31,6 +33,8 @@ async def sql(url: str | URL, *statements: Statement, admin: bool = False) -> li
     engine = create_async_engine(url, isolation_level="AUTOCOMMIT") if admin else create_async_engine(url)
     out: list[Any] = []
     async with engine.begin() as c:
+        # A test writes every tenant's rows as the login, which SQL Server's security policies filter and block.
+        policies = await _policies(c, "OFF") if not admin and c.dialect.name == "mssql" else []
         for statement in statements:
             match statement:
                 case (str() as text, dict() as params):
@@ -38,8 +42,21 @@ async def sql(url: str | URL, *statements: Statement, admin: bool = False) -> li
                 case _:
                     r = await c.execute(statement)
             out.append(r.all() if r.returns_rows else None)
+        for name in policies:
+            await c.execute(sa.text(f"ALTER SECURITY POLICY {name} WITH (STATE = ON)"))
     await engine.dispose()
     return out
+
+
+async def _policies(c: AsyncConnection, state: str) -> list[str]:
+    q = (
+        "SELECT QUOTENAME(SCHEMA_NAME(schema_id)) + '.' + QUOTENAME(name) FROM sys.security_policies "
+        "WHERE is_enabled = 1"
+    )
+    names = [str(n) for (n,) in (await c.execute(sa.text(q))).all()]
+    for name in names:
+        await c.execute(sa.text(f"ALTER SECURITY POLICY {name} WITH (STATE = {state})"))
+    return names
 
 
 def env_for(url: URL, **extra: str) -> dict[str, str]:
@@ -57,8 +74,11 @@ def alembic(url: URL, *args: str, **extra: str) -> subprocess.CompletedProcess[s
     )
 
 
-def scratch_at(revision: str) -> tuple[URL, Callable[[], None]]:
-    """An agents database of its own at `revision`, and how to drop it."""
+def scratch_at(revision: str, database: str = "postgresql") -> tuple[URL, Callable[[], None]]:
+    """An agents database of its own at `revision`, and how to drop it. On SQL Server: a scratch database holding the
+    chain's golden schema, stepped down to `revision`."""
+    if database == "mssql":
+        return _mssql_at(revision)
     raw = os.environ.get("OPS_TEST_DATABASE_URL", "")
     if not raw.startswith("postgresql"):
         pytest.skip("runs on PostgreSQL; set OPS_TEST_DATABASE_URL")
@@ -75,6 +95,22 @@ def scratch_at(revision: str) -> tuple[URL, Callable[[], None]]:
         drop()
         raise AssertionError(done.stderr[-2000:])
     return url, drop
+
+
+def _mssql_at(revision: str) -> tuple[URL, Callable[[], None]]:
+    stack = ExitStack()
+    raw = stack.enter_context(
+        sql_server_schema("agents", os.environ.get("OPS_MSSQL_SERVER"), os.environ.get("MSSQL_SA_PASSWORD"))
+    )
+    if raw is None:
+        stack.close()
+        pytest.skip(NO_SQL_SERVER)
+    url = make_url(raw)
+    done = alembic(url, "downgrade", revision)
+    if done.returncode != 0:
+        stack.close()
+        raise AssertionError(done.stderr[-2000:])
+    return url, stack.close
 
 
 @pytest.fixture
@@ -97,14 +133,6 @@ def _preflight(url: URL) -> subprocess.CompletedProcess[str]:
     )
 
 
-AGENT = (
-    "INSERT INTO registry_agents (id, slug, team_id, version, paused, created_at, updated_at) "
-    "VALUES (:id, :id, :team, 1, false, :at, :at)"
-)
-THREAD = (
-    "INSERT INTO graph_threads (tenant_id, id, graph, meta, team_id, created_at, updated_at, status) "
-    "VALUES (:tenant, :id, :graph, CAST('{}' AS json), :team, :at, :at, 'idle')"
-)
 DEFAULT = (
     "INSERT INTO team_default_agents (tenant_id, team_id, agent_id, updated_by, updated_at) "
     "VALUES (:tenant, :team, :agent, 'maya@harborpine.example', :at)"
@@ -112,12 +140,22 @@ DEFAULT = (
 DEPLOYMENT = "INSERT INTO deployments (id, graph, channel, created_at, team_id) VALUES (:id, 'g', 'email', :at, '')"
 
 
-def thread(tenant: str, team: str, graph: str = "chat") -> tuple[str, dict[str, Any]]:
-    return THREAD, {"tenant": tenant, "id": new_id("thr"), "graph": graph, "team": team, "at": now_iso()}
+def _columns(name: str, values: dict[str, Any]) -> sa.TableClause:
+    return sa.table(name, *(sa.column(k, sa.JSON if k == "meta" else None) for k in values))
 
 
-def agent(agent_id: str, team: str) -> tuple[str, dict[str, Any]]:
-    return AGENT, {"id": agent_id, "team": team, "at": now_iso()}
+def thread(tenant: str, team: str, graph: str = "chat") -> sa.Insert:
+    at = now_iso()
+    values: dict[str, Any] = {"tenant_id": tenant, "id": new_id("thr"), "graph": graph, "meta": {}, "team_id": team}
+    values |= {"created_at": at, "updated_at": at, "status": "idle"}
+    return sa.insert(_columns("graph_threads", values)).values(**values)
+
+
+def agent(agent_id: str, team: str) -> sa.Insert:
+    at = now_iso()
+    values: dict[str, Any] = {"id": agent_id, "slug": agent_id, "team_id": team, "version": 1, "paused": False}
+    values |= {"created_at": at, "updated_at": at}
+    return sa.insert(_columns("registry_agents", values)).values(**values)
 
 
 def test_a_database_where_every_row_has_one_tenant_passes(scratch: URL) -> None:

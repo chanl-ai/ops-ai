@@ -17,6 +17,7 @@ import sqlalchemy as sa
 from sqlalchemy.engine import URL
 
 from ops_service_kit.ids import now_iso
+from ops_store.testing import DATABASES
 
 from .test_registry_tenant_preflight import agent, alembic, scratch_at, sql, thread
 
@@ -27,8 +28,18 @@ MANY = 4001
 AT = now_iso()
 
 
+@pytest.fixture(params=DATABASES)
+def scratch(request: pytest.FixtureRequest) -> Iterator[URL]:
+    url, drop = scratch_at(BEFORE, request.param)
+    try:
+        yield url
+    finally:
+        drop()
+
+
 @pytest.fixture
-def scratch() -> Iterator[URL]:
+def pg_scratch() -> Iterator[URL]:
+    """PostgreSQL only: the batch fill below writes its rows with generate_series."""
     url, drop = scratch_at(BEFORE)
     try:
         yield url
@@ -210,7 +221,8 @@ def test_each_row_takes_its_reference_then_its_team_then_local_and_a_second_run_
     assert placed() == expected
 
 
-def test_a_fill_larger_than_a_batch_after_a_stopped_run_places_every_row(scratch: URL) -> None:
+def test_a_fill_larger_than_a_batch_after_a_stopped_run_places_every_row(pg_scratch: URL) -> None:
+    scratch = pg_scratch
     asyncio.run(
         sql(
             scratch,

@@ -7,22 +7,28 @@ path leaves the copies behind, or restores install-wide keys while two tenants h
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from collections.abc import Iterator
 
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.engine import URL
+from sqlalchemy.ext.asyncio import create_async_engine
 
-from .test_registry_tenant_migration import AT, insert, migrate
+from ops_agents.store.agent_registry import AgentRegistry
+from ops_agents.store.tenancy import tenant_scope
+from ops_store.testing import DATABASES
+
+from .test_registry_tenant_migration import AT, default, insert, migrate
 from .test_registry_tenant_preflight import alembic, scratch_at, sql, thread
 
 BEFORE = "0107_system_reads_agent_pointers"
 HEAD = "0108_registry_tenant_keys"
 
 
-@pytest.fixture
-def scratch() -> Iterator[URL]:
-    url, drop = scratch_at(BEFORE)
+@pytest.fixture(params=DATABASES)
+def scratch(request: pytest.FixtureRequest) -> Iterator[URL]:
+    url, drop = scratch_at(BEFORE, request.param)
     try:
         yield url
     finally:
@@ -169,4 +175,155 @@ def test_a_copy_carries_its_sources_versions_and_the_down_path_removes_only_the_
         (source, "wf_levy", "1")
     ]
     assert _rows(scratch, "graph_versions", "tenant_id", "name", "version") == [(source, "wf_levy", "1")]
-    migrate(scratch, "downgrade", "0105_thread_owner_column")
+    # Down past 0104, which drops thread_budgets' tenant (no default left on SQL Server), and back up.
+    migrate(scratch, "downgrade", "0103_eval_cases_runs")
+    migrate(scratch, "upgrade", "head")
+
+
+def _copy_id(tenant: str, source: str) -> str:
+    return "ag_" + hashlib.md5(f"{tenant}/{source}".encode()).hexdigest()[:24]
+
+
+def _agent(tenant: str, agent_id: str, slug: str, team: str, by: str = "seed") -> list[sa.Insert]:
+    spec = '{"name": "Intake", "skillPins": [{"skillId": "sk_forms", "version": 2}]}'
+    return [
+        insert(
+            "registry_agents",
+            tenant_id=tenant,
+            id=agent_id,
+            slug=slug,
+            team_id=team,
+            version=1,
+            published_version=1,
+            paused=False,
+            created_at=AT,
+            updated_at=AT,
+        ),
+        insert(
+            "registry_agent_versions",
+            tenant_id=tenant,
+            agent_id=agent_id,
+            version=1,
+            spec=spec,
+            digest=f"d-{agent_id}",
+            note="",
+            changes="[]",
+            saved_at=AT,
+            saved_by=by,
+            published_at=AT,
+            published_by=by,
+        ),
+    ]
+
+
+def _embed(tenant: str, team: str, agent_id: str) -> sa.Insert:
+    return insert(
+        "widget_deployments",
+        id=f"wdp_{tenant}",
+        tenant_id=tenant,
+        team_id=team,
+        name="Help",
+        agent_id=agent_id,
+        origins='["https://help.harborpine.example"]',
+        paused=False,
+        created_by="maya@x.example",
+        created_at=AT,
+        updated_at=AT,
+    )
+
+
+GRAPHS = ("graph_threads", "tenant_id", "team_id", "graph")
+
+
+def test_a_tenant_on_a_seeded_agent_gets_its_own_copy_that_its_threads_default_and_embed_resolve(scratch: URL) -> None:
+    """t-pine's one team chats with, defaults to and embeds the seed agent, and already holds its slug; t-harbor's two
+    teams chat with it. Each gets a copy under an id of its own (agents keep the install-wide key `id`), owned by the
+    one team that uses it, else the seed's team, with the published version served and the skill pins filled; `local`
+    keeps its seed and its own thread. A run stopped after the copies were made copies nothing twice."""
+    pine, harbor = _copy_id("t-pine", "ag_seed"), _copy_id("t-harbor", "ag_seed")
+    asyncio.run(
+        sql(
+            scratch,
+            *_agent("local", "ag_seed", "intake", "team_ops"),
+            *_agent("t-pine", "ag_pine", "intake", "team_cards", by="maya@x.example"),
+            thread("local", "team_ops", "agent:ag_seed"),
+            thread("t-pine", "team_cards", "agent:ag_seed"),
+            default("t-pine", "team_cards", "ag_seed"),
+            _embed("t-pine", "team_cards", "ag_seed"),
+            thread("t-harbor", "team_claims", "agent:ag_seed"),
+            thread("t-harbor", "team_wires", "agent:ag_seed"),
+        )
+    )
+    migrate(scratch, "upgrade", HEAD)
+    alembic(scratch, "stamp", BEFORE)
+    migrate(scratch, "upgrade", "head")
+    assert _rows(scratch, "registry_agents", "tenant_id", "id", "slug", "team_id", "published_version") == sorted(
+        [
+            ("local", "ag_seed", "intake", "team_ops", "1"),
+            ("t-pine", "ag_pine", "intake", "team_cards", "1"),
+            ("t-pine", pine, f"intake-{pine[3:9]}", "team_cards", "1"),
+            ("t-harbor", harbor, "intake", "team_ops", "1"),
+        ]
+    )
+    assert _rows(scratch, "registry_agent_versions", "tenant_id", "agent_id", "version", "review_id") == sorted(
+        [
+            ("local", "ag_seed", "1", "None"),
+            ("t-pine", "ag_pine", "1", "None"),
+            ("t-pine", pine, "1", "copied"),
+            ("t-harbor", harbor, "1", "copied"),
+        ]
+    )
+    assert _rows(scratch, *GRAPHS) == sorted(
+        [
+            ("local", "team_ops", "agent:ag_seed"),
+            ("t-pine", "team_cards", f"agent:{pine}"),
+            ("t-harbor", "team_claims", f"agent:{harbor}"),
+            ("t-harbor", "team_wires", f"agent:{harbor}"),
+        ]
+    )
+    assert _rows(scratch, "team_default_agents", "tenant_id", "agent_id") == [("t-pine", pine)]
+    assert _rows(scratch, "widget_deployments", "tenant_id", "agent_id") == [("t-pine", pine)]
+    assert ("t-pine", pine, "sk_forms", "2") in _rows(
+        scratch, "agent_skill_pins", "tenant_id", "agent_id", "skill_id", "version"
+    )
+
+    async def served() -> tuple[dict[str, str], list[tuple[str, str, int | None, bool]]]:
+        engine = create_async_engine(scratch)
+        try:
+            registry = AgentRegistry(engine)
+            with tenant_scope("t-pine"):
+                owners = await registry.tenant_owners({pine, "ag_seed"})
+            return owners, await registry.published_pointers()
+        finally:
+            await engine.dispose()
+
+    owners, pointers = asyncio.run(served())
+    # B's thread, default and embed resolve its copy in its tenant; the restart serves the seed and every copy.
+    assert owners == {pine: "team_cards"}
+    assert {("local", "ag_seed", 1, False), ("t-pine", pine, 1, False), ("t-harbor", harbor, 1, False)} <= set(pointers)
+
+
+def test_the_down_path_points_a_tenant_back_at_the_seed_and_keeps_a_copy_it_has_saved_to(scratch: URL) -> None:
+    pine, harbor = _copy_id("t-pine", "ag_seed"), _copy_id("t-harbor", "ag_seed")
+    asyncio.run(
+        sql(
+            scratch,
+            *_agent("local", "ag_seed", "intake", "team_ops"),
+            thread("t-pine", "team_cards", "agent:ag_seed"),
+            default("t-pine", "team_cards", "ag_seed"),
+            thread("t-harbor", "team_claims", "agent:ag_seed"),
+        )
+    )
+    migrate(scratch, "upgrade", "head")
+    edited = _agent("t-harbor", harbor, "intake", "team_claims", by="maya@x.example")[1].values(version=2)
+    asyncio.run(sql(scratch, edited))
+    migrate(scratch, "downgrade", BEFORE)
+    assert _rows(scratch, "registry_agents", "tenant_id", "id") == sorted([("local", "ag_seed"), ("t-harbor", harbor)])
+    assert _rows(scratch, "registry_agent_versions", "tenant_id", "agent_id", "version") == sorted(
+        [("local", "ag_seed", "1"), ("t-harbor", harbor, "1"), ("t-harbor", harbor, "2")]
+    )
+    assert _rows(scratch, "graph_threads", "tenant_id", "graph") == sorted(
+        [("t-pine", "agent:ag_seed"), ("t-harbor", f"agent:{harbor}")]
+    )
+    assert _rows(scratch, "team_default_agents", "tenant_id", "agent_id") == [("t-pine", "ag_seed")]
+    assert pine not in {r[0] for r in _rows(scratch, "registry_agents", "id")}
