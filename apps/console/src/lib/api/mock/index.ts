@@ -1129,14 +1129,14 @@ export function createMockApi(): OpsApi {
       ...knowledge.api,
       sources: {
         ...knowledge.api.sources,
-        // The mock source keeps each file's id and name, as kb-service's source does once Files confirms the file.
+        // The mock source keeps each file's id on its config, as kb-service's file source does once Files confirms the file.
         addFiles: async (sourceId, fileIds) => {
           const added = await Promise.all(fileIds.map(async (id) => ({ fileId: id, name: (await files.api.get(id)).name })));
           const s = await knowledge.api.sources.get(sourceId);
-          const had = (k: string) => (Array.isArray(s.config[k]) ? (s.config[k] as string[]) : []);
-          const fresh = added.filter((f) => !had('fileIds').includes(f.fileId));
+          const had = 'fileIds' in s.config ? s.config.fileIds : [];
+          const fresh = added.filter((f) => !had.includes(f.fileId));
           // The mock keeps the files on the source's config, which no save offers; the patch says so by its cast.
-          const keep = { config: { ...s.config, fileIds: [...had('fileIds'), ...fresh.map((f) => f.fileId)], fileNames: [...had('fileNames'), ...fresh.map((f) => f.name)] } };
+          const keep = { config: { fileIds: [...had, ...fresh.map((f) => f.fileId)] } };
           await knowledge.api.sources.update(sourceId, keep as SourcePatch);
           return added;
         },

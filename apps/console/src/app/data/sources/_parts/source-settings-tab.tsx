@@ -29,7 +29,7 @@ import type { IngestSettings, IngestStrategy } from '@/lib/types/knowledge-inges
 
 type Draft = Required<Pick<SourcePatch, 'name' | 'collection' | 'sensitivity' | 'tags' | 'parsing' | 'cleaning' | 'ingest' | 'rules' | 'metadataMapping' | 'schedule'>> & { values: Record<string, unknown> };
 
-const valuesOf = (src: SourceDetail) => ((src.config.values ?? {}) as Record<string, unknown>);
+const valuesOf = (src: SourceDetail): Record<string, unknown> => ('values' in src.config ? (src.config.values ?? {}) : {});
 const pick = (src: SourceDetail): Draft => ({
   name: src.name,
   collection: src.collection,
@@ -97,8 +97,8 @@ export function SourceSettingsTab({ source, onDelete }: { source: SourceDetail; 
     setEdits({});
   }, [source.id]);
 
-  const cfg = source.config as { plugin?: string; source?: string };
-  const kind = kinds.data?.find((k) => k.plugin === cfg.plugin && k.source === cfg.source);
+  const cfg = 'plugin' in source.config ? source.config : null;
+  const kind = cfg ? kinds.data?.find((k) => k.plugin === cfg.plugin && k.source === cfg.source) : undefined;
   const ruleInputs = Object.fromEntries(Object.entries(kind?.inputs ?? {}).filter(([n]) => RULE_INPUTS.includes(n)));
   const web = source.kind === 'web';
   const savedAi = saved.ingest.strategies.some((x) => x === 'faq' || x === 'faq_pairs');

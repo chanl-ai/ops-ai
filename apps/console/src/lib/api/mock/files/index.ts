@@ -17,6 +17,7 @@ import type {
   StorageSettings,
   UploadRequest,
   UploadTicket,
+  NewFileReference,
 } from '@/lib/types/files';
 import type { DocumentLayout, Extraction } from '@/lib/types/extractions';
 import type { AuditEntry } from '@/lib/types/governance';
@@ -119,15 +120,15 @@ export interface FilesDeps {
 /** What other mocks use to attach files to their records. */
 export interface FileLinks {
   /** Records `ref` on the file. Refuses files outside the team, of another purpose, quarantined or still scanning. */
-  link: (fileId: string, ref: Omit<FileReference, 'addedAt'>, purposes: FilePurpose[]) => FileRecord;
+  link: (fileId: string, ref: NewFileReference, purposes: FilePurpose[]) => FileRecord;
   /** An attachment that arrived by email: stored, scanned and referenced by the case. Identical content in a team is stored once. */
-  intake: (a: { name: string; size: number; team: string; ref: Omit<FileReference, 'addedAt'>; infected?: boolean; hold?: Omit<LegalHold, 'at'> }) => FileRecord;
+  intake: (a: { name: string; size: number; team: string; ref: NewFileReference; infected?: boolean; hold?: Omit<LegalHold, 'at'> }) => FileRecord;
   /** Current state for a referencing record (scan may finish after it was linked). */
   state: (fileId: string) => { scan: ScanStatus; blocked?: string } | undefined;
   /** A clean file's name and text, for mocks that parse what was uploaded. Refuses other teams' and unscanned files. */
   read: (fileId: string) => { name: string; size: number; purpose: FilePurpose; text?: string };
   /** Writes an export file (purpose `export`) owned by `team` and referenced by `ref`. */
-  writeExport: (a: { name: string; size: number; team: string; text: string; ref: Omit<FileReference, 'addedAt'> }) => FileRecord;
+  writeExport: (a: { name: string; size: number; team: string; text: string; ref: NewFileReference }) => FileRecord;
 }
 
 export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLinks } {
@@ -180,7 +181,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
       retentionClass: defaultClass(s.purpose),
       legalHold: s.hold ? { by: s.hold.by, reason: s.hold.reason, at: daysAgo(s.hold.daysAgo) } : null,
       immutable: s.purpose === 'evidence_bundle',
-      references: infected ? [] : (s.refs ?? []).map((r) => ({ ...r, addedAt: at })),
+      references: infected ? [] : (s.refs ?? []).map((r) => ({ ...r, blocked: null, addedAt: at })),
       versions: seedVersions(digest, size, s.by, at, s.versions ?? 1),
       content: s.content,
       sealKey: s.purpose === 'evidence_bundle' ? s.refs?.[0]?.id : undefined,
@@ -226,7 +227,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
       team: f.team,
       uploadedBy: f.uploadedBy,
       uploadedAt: f.uploadedAt,
-      scan: { status: f.scan.status, engine: f.scan.engine, at: f.scan.at, detail: f.scan.detail },
+      scan: { status: f.scan.status, engine: f.scan.engine ?? null, at: f.scan.at ?? null, detail: f.scan.detail ?? null },
       sensitivity: f.sensitivity,
       sensitivitySuggested: f.sensitivitySuggested,
       retention: { classId: f.retentionClass, className: c?.name ?? f.retentionClass, deleteAfter: deleteAfter(f) },
@@ -234,7 +235,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
       immutable: f.immutable,
       referenceCount: f.references.length,
       versionCount: f.versions.length,
-      storage: isAdmin() ? location(f) : undefined,
+      storage: isAdmin() ? location(f) : null,
       data: f.data ?? null,
     };
   }
@@ -292,7 +293,11 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
       references: f.references.map((x) => (blocked ? { ...x, blocked } : x)),
       audit: [...live, uploaded].sort((a, b) => b.at.localeCompare(a.at)),
       preview: preview(f),
-      deleteBlockedBy: deleteBlock(f),
+      deleteBlockedBy: deleteBlock(f) ?? null,
+      // files-service answers these per caller; no screen reads them and the mock has no policy to ask, so it says it does not know.
+      canDelete: null,
+      canEdit: null,
+      canPublish: null,
     };
   }
 
@@ -462,7 +467,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
       respond(() => {
         const f = find(fid);
         if (!inTeam(f.team)) return notFound('File');
-        f.data = input;
+        f.data = { ...input, templateId: input.templateId ?? null, typeId: input.typeId ?? null, typeName: input.typeName ?? null, version: input.version ?? null };
         return detail(f);
       }),
 
@@ -574,7 +579,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
         let key: string;
         let name: string;
         let owner: string;
-        let ref: Omit<FileReference, 'addedAt'>;
+        let ref: NewFileReference;
         if (input.kind === 'model') {
           const e = deps.modelEntry(input.entryId) ?? notFound('Model');
           const v = input.version ?? e.version;
@@ -598,7 +603,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
         const f = makeFile({ name, size: 2_400_000 + Math.round(Math.random() * 900_000), purpose: 'evidence_bundle', team: owner, by: me, digest, immutable: true, scanned: 'clean' });
         f.sealKey = key;
         f.sensitivitySuggested = false;
-        f.references.push({ ...ref, addedAt: f.uploadedAt });
+        f.references.push({ ...ref, blocked: null, addedAt: f.uploadedAt });
         files.unshift(f);
         const lock = prod();
         auditLog(f, 'created', 'Sealed the evidence bundle as an immutable file', [
@@ -678,7 +683,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
       },
       reference: (fid, ref) => {
         const f = files.find((x) => x.id === fid);
-        if (f && !f.references.some((r) => r.type === ref.type && r.id === ref.id)) f.references.push({ ...ref, addedAt: new Date().toISOString() });
+        if (f && !f.references.some((r) => r.type === ref.type && r.id === ref.id)) f.references.push({ ...ref, blocked: null, addedAt: new Date().toISOString() });
       },
       unreference: (fid, refId) => {
         const f = files.find((x) => x.id === fid);
@@ -755,7 +760,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
       if (f.scan.status === 'pending') throw new ApiError(`${f.name} is still being scanned.`, 409);
       const blocked = blockedText(f);
       if (blocked) throw new ApiError(`${f.name}: ${blocked}`, 409);
-      if (!f.references.some((r) => r.type === ref.type && r.id === ref.id)) f.references.push({ ...ref, addedAt: new Date().toISOString() });
+      if (!f.references.some((r) => r.type === ref.type && r.id === ref.id)) f.references.push({ ...ref, blocked: null, addedAt: new Date().toISOString() });
       return row(f);
     },
     intake: (a) => {
@@ -771,7 +776,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
         if (a.hold) f.legalHold = { ...a.hold, at: daysAgo(1) };
         files.push(f);
       }
-      if (!f.references.some((r) => r.id === a.ref.id)) f.references.push({ ...a.ref, addedAt: f.uploadedAt });
+      if (!f.references.some((r) => r.id === a.ref.id)) f.references.push({ ...a.ref, blocked: null, addedAt: f.uploadedAt });
       return row(f);
     },
     state: (fid) => {
@@ -789,7 +794,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
     },
     writeExport: (a) => {
       const f = makeFile({ name: a.name, size: a.size, purpose: 'export', team: a.team, by: me, digest: fakeDigest(`${a.name}:${Date.now()}`), scanned: 'clean', content: a.text });
-      f.references.push({ ...a.ref, addedAt: f.uploadedAt });
+      f.references.push({ ...a.ref, blocked: null, addedAt: f.uploadedAt });
       files.unshift(f);
       auditLog(f, 'created', `Exported ${a.ref.name}`, [{ field: 'Purpose', after: 'export' }]);
       return row(f);

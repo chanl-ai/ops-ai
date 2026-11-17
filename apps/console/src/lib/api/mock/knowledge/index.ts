@@ -627,7 +627,7 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
             deletedAtSource: 'remove',
             staleAfterDays: 365,
             notifyOnFailure: false,
-            config: { ...rest.config, fileIds },
+            config: sourceConfig(kind, input.config, fileIds ?? []),
             id: sid,
             owner: deps.currentUser,
             status: input.status ?? 'active',
@@ -908,6 +908,14 @@ export function createKnowledgeMock(deps: { agentNames: (kbName: string) => stri
       }
     },
   };
+}
+
+/** What kb-service keeps of a new source's settings: the ids of a file source's files, or an app source's plugin, source and values. */
+function sourceConfig(kind: Source['kind'], given: Record<string, unknown> | undefined, fileIds: string[]): Source['config'] {
+  if (kind === 'file') return { fileIds };
+  const text = (key: string) => (typeof given?.[key] === 'string' ? String(given[key]) : null);
+  const values = typeof given?.values === 'object' && given.values !== null && !Array.isArray(given.values) ? Object.fromEntries(Object.entries(given.values)) : null;
+  return { connectionId: null, getTool: null, listTool: null, paused: null, plugin: text('plugin'), site: kind === 'web' ? true : null, source: text('source'), title: null, values };
 }
 
 /** kb-service's `doc_type` rule (service.py), for the mock's Documents rows. */

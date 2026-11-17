@@ -10,7 +10,7 @@ import type {
   ExpectedRecord,
   FieldComparison,
 } from "@/lib/types/document-types";
-import type { FileReference } from "@/lib/types/files";
+import type { FileReference, NewFileReference } from "@/lib/types/files";
 
 import { ApiError } from "../../contract";
 import type { FilesApi } from "../../files-contract";
@@ -37,7 +37,7 @@ const ID = /^[a-z][a-z0-9_]{2,63}$/;
 const KEY = /^[a-z0-9_]+$/;
 
 const LEVY = "levy_notice";
-const levyRef = (sampleId: string): Omit<FileReference, "addedAt"> => ({
+const levyRef = (sampleId: string): NewFileReference => ({
   type: "test_set",
   id: sampleId,
   name: "Levy notice",
@@ -116,7 +116,7 @@ export interface DocumentTypesDeps {
   /** The name of a file in the caller's team that can be read now; throws when it cannot. */
   sampleFile: (fileId: string) => string;
   /** Records the sample on the file, so Files keeps it while the sample names it. */
-  reference: (fileId: string, ref: Omit<FileReference, "addedAt">) => void;
+  reference: (fileId: string, ref: NewFileReference) => void;
   unreference: (fileId: string, refId: string) => void;
 }
 

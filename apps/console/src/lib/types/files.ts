@@ -19,7 +19,7 @@ export type FileRecord = Omit<Reply<'files_list_files'>['data'][number], 'purpos
 export type FileScan = NonNullable<ServedDetail['scan']>;
 export type ScanStatus = FileScan['status'];
 export type FileSensitivity = ServedDetail['sensitivity'];
-/** Where the object sits. Returned to platform admins only; everyone else gets `undefined`. */
+/** Where the object sits. Returned to platform admins only; everyone else gets `null`. */
 export type StorageLocation = NonNullable<ServedDetail['storage']>;
 export type StorageBackend = StorageLocation['backend'];
 export type StorageEnvironment = StorageLocation['environment'];
@@ -31,6 +31,8 @@ export type FileDataInput = Body<'files_set_file_data'>;
 /** Something that uses the file. Removing a referenced file is refused while any reference exists. */
 export type FileReferenceType = NonNullable<ServedDetail['references']>[number]['type'] | 'skill';
 export type FileReference = Omit<NonNullable<ServedDetail['references']>[number], 'type'> & { type: FileReferenceType };
+/** A reference as a caller links it: the server adds when it was added, and what blocks the link until a scan or review settles. */
+export type NewFileReference = Omit<FileReference, 'addedAt' | 'blocked'>;
 export type FileVersion = NonNullable<ServedDetail['versions']>[number];
 export type ReadRequest = Reply<'files_get_read_request'>;
 export type ReadRequestInput = Body<'files_request_read'>;

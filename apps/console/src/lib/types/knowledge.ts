@@ -59,8 +59,8 @@ export type SourceKind = 'file' | 'text' | 'push' | 'web' | 'tool';
 /** A source's sync health, kept by kb-service as each run settles. */
 export interface SourceHealth {
   state: 'never' | 'healthy' | 'failing' | 'needs_reconnect';
-  lastGoodSyncAt?: string;
-  failingSince?: string;
+  lastGoodSyncAt?: string | null;
+  failingSince?: string | null;
   daysFailing: number;
   /** Failed runs in a row. */
   failedRuns: number;
@@ -488,7 +488,9 @@ export type KnowledgeBasePatch = Partial<Pick<KnowledgeBase, 'name' | 'descripti
 
 /** A new source, as `POST /v1/sources` takes it; settings left out start from its kind's defaults. */
 export type SourceInput = Pick<Source, 'type' | 'name'> &
-  Partial<Pick<Source, 'config' | 'parsing' | 'cleaning' | 'rules' | 'metadataMapping' | 'schedule' | 'sensitivity' | 'collection' | 'tags' | 'owner'>> & {
+  Partial<Pick<Source, 'parsing' | 'cleaning' | 'rules' | 'metadataMapping' | 'schedule' | 'sensitivity' | 'collection' | 'tags' | 'owner'>> & {
+    /** What a plugin source is set up with (`plugin`, `source`, `values`); kb-service answers it back as the source's `config`. */
+    config?: Record<string, unknown>;
     status?: 'active' | 'draft';
     /** Merged over the kind's defaults, so Add source sends only the steps it switches. */
     ingest?: Partial<IngestSettings>;
