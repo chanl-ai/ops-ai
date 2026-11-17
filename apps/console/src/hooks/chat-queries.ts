@@ -19,7 +19,7 @@ export const ck = {
   thread: (id: string) => ['chat', 'thread', id] as const,
 };
 
-export const useChatAgents = () => useTeamQuery({ queryKey: ck.agents, queryFn: api.chat.agents, staleTime: 60_000 });
+export const useChatAgents = () => useTeamQuery({ queryKey: ck.agents, queryFn: async () => (await api.chat.agents()) ?? [], staleTime: 60_000 });
 export const useChatThreads = (p: ListParams<ChatFilters>) => usePagedQuery({ queryKey: ck.threads(p), queryFn: () => api.chat.threads.list(p) });
 /** The rail: the first page, then one more page per `fetchNextPage`, each after the last row's cursor. */
 export const useChatThreadPages = (p: Omit<ChatThreadListParams, 'page' | 'cursor'>) =>
@@ -214,8 +214,8 @@ export function useSendMessage() {
   );
 }
 
-/** The agent the team's new chats start on. */
-export const useDefaultAgent = () => useTeamQuery({ queryKey: ['chat', 'default-agent'], queryFn: api.chat.defaultAgent.get, staleTime: 60_000 });
+/** The agent the team's new chats start on. An empty reply (the transport reads a body without `data` as undefined) is no default, not an undefined query result. */
+export const useDefaultAgent = () => useTeamQuery({ queryKey: ['chat', 'default-agent'], queryFn: async () => (await api.chat.defaultAgent.get()) ?? {}, staleTime: 60_000 });
 /** Whether agents-service lets the person change the default: the console offers the control only then. */
 export const useCanSetDefaultAgent = () => useDefaultAgent().data?.canChange === true;
 /** A team admin's: new chats start on `agentId` from now on. */
