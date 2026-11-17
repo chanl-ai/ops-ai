@@ -1,7 +1,8 @@
 """The agents list a page at a time in SQL (`AgentRegistry.page`), by failure mode: another team's agents on the page
 when the database lets every team through; agents with one name repeated or lost between pages, a total that counts
 rows the page does not hold, or a page past the end answering nothing; the busiest agent not first when sorted by its
-threads of the last day, or a builder's test thread counted; availability counted or filtered wrongly."""
+threads of the last day, or a builder's test thread counted; availability counted or filtered wrongly; the tenant's
+owners asked for more agents than SQL Server takes parameters in one statement."""
 
 from __future__ import annotations
 
@@ -122,3 +123,16 @@ async def test_availability_is_counted_across_the_team_and_filters_the_page(engi
         ids, shape = await _page(engine, filters={"availability": ["published"]})
     assert ids == ["ag_live"]
     assert shape["facets"]["availability"] == {"published": 1, "not_published": 1}
+
+
+async def test_owners_are_answered_for_more_agents_than_one_statement_takes(engine: AsyncEngine, tenant: str) -> None:
+    with isolation.scope(tenant, TEAM):
+        await _agent(engine, f"ag_{tenant}_a", "A")
+    with isolation.scope(tenant, OTHER):
+        await _agent(engine, f"ag_{tenant}_b", "B", team=OTHER)
+    with isolation.scope(f"{tenant}x", TEAM):
+        await _agent(engine, f"ag_{tenant}_c", "C")
+    asked = {f"ag_{tenant}_{n}" for n in ("a", "b", "c")} | {f"ag_missing_{i}" for i in range(2500)}
+    with isolation.scope(tenant, TEAM):
+        owners = [await AgentRegistry(engine).tenant_owners(ids) for ids in (asked, {f"ag_{tenant}_b"})]
+    assert owners == [{f"ag_{tenant}_a": TEAM, f"ag_{tenant}_b": OTHER}, {f"ag_{tenant}_b": OTHER}]
