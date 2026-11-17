@@ -71,11 +71,10 @@ async def test_the_relay_sends_each_tenants_events_as_that_tenant_and_marks_both
             await add_event(c, service_outbox, tenant_id=t, team_id=team, name="tool.test", key=key, payload={})
     agents = Agents()
     relay = tools_relay(engine, agents)
-    # Other tests' events may be due first; a pass takes a batch, so pass until both of these are out.
-    for _ in range(50):
-        if {k for _, k, _, _ in agents.posts} >= set(mine.values()):
-            break
-        await relay.once()
+    # Earlier tests on this database leave thousands of due events, sent oldest first a batch per pass: pass until both
+    # of these are out or a pass delivers nothing (the outbox is drained), never a fixed number of passes.
+    while not {k for _, k, _, _ in agents.posts} >= set(mine.values()) and await relay.once():
+        pass
     sent = {(t, team): key for _, key, t, team in agents.posts if key in mine.values()}
     assert sent == mine, agents.posts
     assert {p for p, k, _, _ in agents.posts if k in mine.values()} == {"/v1/events"}

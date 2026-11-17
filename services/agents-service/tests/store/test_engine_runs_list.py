@@ -65,5 +65,5 @@ async def test_the_page_and_counts_hold_the_acting_team_when_the_policy_lets_eve
     assert ([r["id"] for r in failed["data"]], failed["pagination"]["total"], failed["facets"]) == (
         [f"run_c_{tenant}", f"run_a_{tenant}"],
         2,
-        {"status": {"failed": 2, "succeeded": 1}},
+        {"status": {"failed": 2, "succeeded": 1}, "workflowId": {"wf_levy": 2}},
     )

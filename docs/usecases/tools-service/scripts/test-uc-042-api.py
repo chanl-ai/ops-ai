@@ -62,7 +62,7 @@ def op(detail: dict[str, Any], name: str) -> dict[str, Any]:
 
 
 settings = {"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}
-with fake_bank() as bank, agents(), tools(settings={**bank.settings, **settings}) as gw:
+with fake_bank() as bank, agents(), tools(settings={**bank.settings, **settings}, approval_rules=True) as gw:
     gw.post("/v1/egress/hosts", json={"value": HOST, "note": "uc-042 fake bank"})
     gw.post("/v1/egress/ranges", json={"value": bank.range, "note": "uc-042 fake bank network"})
     url = f"https://{HOST}/v1"
