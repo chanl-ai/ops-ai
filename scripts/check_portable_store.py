@@ -172,11 +172,16 @@ def _is_page(node: ast.Subscript, defs: dict[str, ast.expr] | None = None) -> bo
 
 def _bounds(low: ast.expr | None, high: ast.expr | None, defs: dict[str, ast.expr]) -> bool:
     """Whether a window's end is counted from its start. A bound that is a name stands for the expression the scope
-    assigned it once (`end = o + n`)."""
+    assigned it once (`end = o + n`); the name and the expression are both tried, because `start = (p - 1) * n`
+    followed by `rows[start : start + n]` counts the end from the name, not from its definition."""
     if low is None or high is None:
         return False
-    low = defs.get(low.id, low) if isinstance(low, ast.Name) else low
-    high = defs.get(high.id, high) if isinstance(high, ast.Name) else high
+    lows = [low, defs[low.id]] if isinstance(low, ast.Name) and low.id in defs else [low]
+    highs = [high, defs[high.id]] if isinstance(high, ast.Name) and high.id in defs else [high]
+    return any(_counted(lo, hi) for lo in lows for hi in highs)
+
+
+def _counted(low: ast.expr, high: ast.expr) -> bool:
     if isinstance(high, ast.BinOp) and isinstance(high.op, ast.Add):
         # The window starts where its end is counted from: `start + size`, also `offset + limit + 1`.
         terms, left = [high.right], high.left

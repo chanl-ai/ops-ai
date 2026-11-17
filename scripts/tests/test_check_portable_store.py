@@ -175,12 +175,16 @@ def page(rows, o, n, size):
 def elsewhere(rows, o):
     end = 5
     return rows[o:end]
+
+def counted(rows, p, n):
+    start = (p - 1) * n
+    return rows[start : start + n]
 """
 
 
 @pytest.mark.parametrize(
     ("code", "lines"),
-    [(PLAIN_CUTS, [2, 3]), (MULTIPLIED_OR_CHAINED_CUTS, [2, 3, 4]), (NAMED_CUTS, [7, 8, 9, 11])],
+    [(PLAIN_CUTS, [2, 3]), (MULTIPLIED_OR_CHAINED_CUTS, [2, 3, 4]), (NAMED_CUTS, [7, 8, 9, 11, 23])],
     ids=["plain", "multiplied-or-chained", "name-islice-two-statements"],
 )
 def test_a_page_cut_in_python_is_found_in_every_form_and_other_slices_are_not(code: str, lines: list[int]) -> None:
