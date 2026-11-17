@@ -326,6 +326,8 @@ export default function ApprovalsPage() {
                       <Select
                         value={overrides[id]?.answer ?? 'team'}
                         onValueChange={(v) => {
+                          // Inside the card's form an untouched select reports an empty value; it is not a choice.
+                          if (!v) return;
                           const next = { ...overrides };
                           if (v === 'team') delete next[id];
                           else next[id] = { answer: v as Entry['answer'], reviewerRole: v === BY_REVIEWER ? (overrides[id]?.reviewerRole ?? (saved.reviewerRole as string | null)) : undefined };
