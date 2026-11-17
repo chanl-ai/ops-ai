@@ -25,6 +25,7 @@ from ops_service_kit.settings import Settings, isolate_from_stack
 from ops_tools.app import create_gateway_app
 from ops_tools.apps import Apps, apps_router
 from ops_tools.auth import Tokens
+from ops_tools.catalog_routes import catalog_router
 from ops_tools.connections.routes import accounts_router
 from ops_tools.connections.service import ConnectionService
 from ops_tools.egress_routes import egress_router
@@ -45,6 +46,7 @@ from ops_tools.secrets import SecretResolver
 from ops_tools.secrets.routes import secrets_router
 from ops_tools.send_policy_routes import send_policy_router
 from ops_tools.store import CallLog
+from ops_tools.store.catalog import ToolCatalog
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.mcp_links import McpLinks
@@ -96,6 +98,7 @@ def build_app() -> FastAPI:
             executions_router(service, directory),
             mailboxes_router(settings, None, None),
             egress_router(EgressStore(engine)),
+            catalog_router(ToolCatalog(engine)),
             expressions_router(),
             secrets_router(secrets),
             send_policy_router(SendPolicies(engine), directory),

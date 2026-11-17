@@ -1166,6 +1166,27 @@ class ToolModule(TypedDict, closed=True):
     workflows: list[ModuleRef]
 
 
+class ToolOperation(TypedDict, closed=True):
+    access: str
+    enabled: NotRequired[bool]
+    id: str
+    name: str
+    requiresApproval: NotRequired[bool]
+
+
+class ToolPublished(TypedDict, closed=True):
+    app: NotRequired[str | None]
+    deleted: NotRequired[bool]
+    id: str
+    kind: NotRequired[Literal["tool.module.published"]]
+    name: str
+    operations: NotRequired[list[ToolOperation]]
+    ownerTeam: NotRequired[str | None]
+    status: NotRequired[str | None]
+    title: NotRequired[str | None]
+    version: NotRequired[str | None]
+
+
 class ToolRunIn(TypedDict, closed=True):
     confirmed: NotRequired[bool]
     environment: NotRequired[Literal["test", "live"] | None]
@@ -1194,6 +1215,16 @@ class ToolRunResult(TypedDict, closed=True):
     testApprovalToken: NotRequired[str | None]
     transformError: NotRequired[str | None]
     wouldPause: bool
+
+
+class ToolTeamStateChanged(TypedDict, closed=True):
+    deleted: NotRequired[bool]
+    expiresAt: NotRequired[str | None]
+    id: str
+    kind: NotRequired[Literal["tool.team_state.changed"]]
+    moduleId: str
+    operations: NotRequired[list[str]]
+    via: Literal["approval"]
 
 
 class ToolUser(TypedDict, closed=True):
@@ -1330,6 +1361,19 @@ class CallResult(TypedDict, closed=True):
     view: NotRequired[JsonValue]
 
 
+class CatalogEvent(TypedDict, closed=True):
+    name: str
+    payload: ToolPublished | ToolTeamStateChanged
+    revision: int
+    teamId: str | None
+    tenantId: str
+
+
+class CatalogPage(TypedDict, closed=True):
+    items: list[CatalogEvent]
+    nextCursor: str | None
+
+
 class CodeOperationIn(TypedDict, closed=True):
     access: NotRequired[Literal["read", "write"]]
     code: CodeSettingsIn
@@ -1431,6 +1475,11 @@ class EnvelopeBulkResult(TypedDict, closed=True):
 
 class EnvelopeCallResult(TypedDict, closed=True):
     data: CallResult
+    success: Literal[True]
+
+
+class EnvelopeCatalogPage(TypedDict, closed=True):
+    data: CatalogPage
     success: Literal[True]
 
 

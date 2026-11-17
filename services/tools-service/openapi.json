@@ -2840,6 +2840,91 @@
         "title": "CardCredential",
         "type": "object"
       },
+      "CatalogEvent": {
+        "additionalProperties": false,
+        "description": "One event of the catalogue as the outbox would carry it; a consumer reads it as an `ops_store.outbox.Event`.\nThe team is null for a workspace-level module.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "payload": {
+            "discriminator": {
+              "mapping": {
+                "tool.module.published": "#/components/schemas/ToolPublished",
+                "tool.team_state.changed": "#/components/schemas/ToolTeamStateChanged"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ToolPublished"
+              },
+              {
+                "$ref": "#/components/schemas/ToolTeamStateChanged"
+              }
+            ],
+            "title": "Payload"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "teamId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teamid"
+          },
+          "tenantId": {
+            "title": "Tenantid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "tenantId",
+          "teamId",
+          "revision",
+          "payload"
+        ],
+        "title": "CatalogEvent",
+        "type": "object"
+      },
+      "CatalogPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogEvent"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "title": "CatalogPage",
+        "type": "object"
+      },
       "Change": {
         "additionalProperties": false,
         "properties": {
@@ -4426,6 +4511,25 @@
           "data"
         ],
         "title": "Envelope[CallResult]",
+        "type": "object"
+      },
+      "Envelope_CatalogPage_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CatalogPage"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[CatalogPage]",
         "type": "object"
       },
       "Envelope_Change_": {
@@ -13379,6 +13483,134 @@
         "title": "ToolModuleDetail",
         "type": "object"
       },
+      "ToolOperation": {
+        "additionalProperties": false,
+        "description": "One operation a module serves, as a tools list shows it. Its input schema is read from tools-service by the\nmodule and this `id` when a screen opens the tool, which keeps an event under the receiver's payload limit.",
+        "properties": {
+          "access": {
+            "title": "Access",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "requiresApproval": {
+            "default": false,
+            "title": "Requiresapproval",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "access"
+        ],
+        "title": "ToolOperation",
+        "type": "object"
+      },
+      "ToolPublished": {
+        "additionalProperties": false,
+        "description": "A tool module created, or a new version of it published, in tools-service.",
+        "properties": {
+          "app": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App"
+          },
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "tool.module.published",
+            "default": "tool.module.published",
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "operations": {
+            "items": {
+              "$ref": "#/components/schemas/ToolOperation"
+            },
+            "title": "Operations",
+            "type": "array"
+          },
+          "ownerTeam": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ownerteam"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "ToolPublished",
+        "type": "object"
+      },
       "ToolRunIn": {
         "additionalProperties": false,
         "description": "One run of one tool from its page: Mock answers from its mock and reaches nothing, Real is the gateway\ncall, with every check, in the environment picked.",
@@ -13596,6 +13828,61 @@
           "mocked"
         ],
         "title": "ToolRunResult",
+        "type": "object"
+      },
+      "ToolTeamStateChanged": {
+        "additionalProperties": false,
+        "description": "One team's grant of a module it does not own, and what the grant is: written when it starts or changes, and\nwith `deleted` when it ends. Keyed by `id` (`<via>:<module id>`), so each kind of grant orders its own events.",
+        "properties": {
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiresat"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "tool.team_state.changed",
+            "default": "tool.team_state.changed",
+            "title": "Kind",
+            "type": "string"
+          },
+          "moduleId": {
+            "title": "Moduleid",
+            "type": "string"
+          },
+          "operations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Operations",
+            "type": "array"
+          },
+          "via": {
+            "const": "approval",
+            "title": "Via",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "moduleId",
+          "via"
+        ],
+        "title": "ToolTeamStateChanged",
         "type": "object"
       },
       "ToolUsedBy": {
@@ -28046,6 +28333,166 @@
           "apps"
         ],
         "x-ops-public": "sdk"
+      }
+    },
+    "/v1/tool-catalog": {
+      "get": {
+        "description": "One page of the token's tenant's modules, every team's, by id past `after`; `nextCursor` is the next\npage's `after`, null on the last.",
+        "operationId": "tool_catalog_tool_catalog",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CatalogPage_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Tool Catalog",
+        "tags": [
+          "tool-catalog"
+        ],
+        "x-ops-public": "internal"
       }
     },
     "/v1/tool-modules": {

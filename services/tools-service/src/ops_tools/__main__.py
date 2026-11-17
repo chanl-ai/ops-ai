@@ -32,6 +32,7 @@ from .app import create_gateway_app
 from .apps import Apps, apps_router
 from .auth import Authenticator, Tokens
 from .auth.discovery import Discovery
+from .catalog_routes import catalog_router
 from .code_runs import CodeExecutor, code_signer
 from .connections.connect_links import ConnectLinks
 from .connections.keepalive import SignInKeepalive, keep_signed_in
@@ -68,6 +69,7 @@ from .secrets.routes import secrets_router
 from .send_check import SendCheck
 from .send_policy_routes import send_policy_router
 from .store import CallLog
+from .store.catalog import ToolCatalog
 from .store.connections import ConnectionStore
 from .store.egress import EgressStore
 from .store.mcp_links import McpLinks
@@ -324,6 +326,7 @@ def main() -> None:
             executions_router(modules, directory),
             mailboxes_router(settings, secrets, policy, graph),
             egress_router(EgressStore(engine)),
+            catalog_router(ToolCatalog(engine)),
             expressions_router(),
             secrets_router(secrets, modules=store, credentials=connection_store),
             send_policy_router(SendPolicies(engine), directory),

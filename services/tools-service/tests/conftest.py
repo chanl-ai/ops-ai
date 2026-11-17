@@ -38,6 +38,7 @@ from ops_tools.app import create_gateway_app
 from ops_tools.apps import Apps, apps_router
 from ops_tools.auth import Authenticator, Tokens
 from ops_tools.auth.discovery import Discovery
+from ops_tools.catalog_routes import catalog_router
 from ops_tools.connections.connect_links import ConnectLinks
 from ops_tools.connections.routes import accounts_router
 from ops_tools.connections.service import ConnectionService
@@ -58,6 +59,7 @@ from ops_tools.secrets import SecretResolver
 from ops_tools.secrets.routes import secrets_router
 from ops_tools.send_policy_routes import send_policy_router
 from ops_tools.store import CallLog
+from ops_tools.store.catalog import ToolCatalog
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.mcp_links import McpLinks
@@ -441,6 +443,7 @@ def build_app(
             modules_router(service, directory),
             executions_router(service, directory),
             egress_router(EgressStore(engine)),
+            catalog_router(ToolCatalog(engine)),
             secrets_router(resolver, modules=ModuleStore(engine), credentials=connections),
             send_policy_router(SendPolicies(engine), directory),
             mcp_links_router(links, registry, directory, settings.tools_public_url),

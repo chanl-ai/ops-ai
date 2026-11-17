@@ -2387,6 +2387,30 @@ export interface components {
              */
             type: "ops_ai" | "own";
         };
+        /**
+         * CatalogEvent
+         * @description One event of the catalogue as the outbox would carry it; a consumer reads it as an `ops_store.outbox.Event`.
+         *     The team is null for a workspace-level module.
+         */
+        CatalogEvent: {
+            /** Name */
+            name: string;
+            /** Payload */
+            payload: components["schemas"]["ToolPublished"] | components["schemas"]["ToolTeamStateChanged"];
+            /** Revision */
+            revision: number;
+            /** Teamid */
+            teamId: string | null;
+            /** Tenantid */
+            tenantId: string;
+        };
+        /** CatalogPage */
+        CatalogPage: {
+            /** Items */
+            items: components["schemas"]["CatalogEvent"][];
+            /** Nextcursor */
+            nextCursor: string | null;
+        };
         /** Change */
         Change: {
             /** Changed */
@@ -2982,6 +3006,15 @@ export interface components {
         /** Envelope[CallResult] */
         Envelope_CallResult_: {
             data: components["schemas"]["CallResult"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[CatalogPage] */
+        Envelope_CatalogPage_: {
+            data: components["schemas"]["CatalogPage"];
             /**
              * Success
              * @constant
@@ -5972,6 +6005,61 @@ export interface components {
             workflows: components["schemas"]["ModuleRef"][];
         };
         /**
+         * ToolOperation
+         * @description One operation a module serves, as a tools list shows it. Its input schema is read from tools-service by the
+         *     module and this `id` when a screen opens the tool, which keeps an event under the receiver's payload limit.
+         */
+        ToolOperation: {
+            /** Access */
+            access: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Requiresapproval
+             * @default false
+             */
+            requiresApproval: boolean;
+        };
+        /**
+         * ToolPublished
+         * @description A tool module created, or a new version of it published, in tools-service.
+         */
+        ToolPublished: {
+            /** App */
+            app?: string | null;
+            /**
+             * Deleted
+             * @default false
+             */
+            deleted: boolean;
+            /** Id */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "tool.module.published";
+            /** Name */
+            name: string;
+            /** Operations */
+            operations?: components["schemas"]["ToolOperation"][];
+            /** Ownerteam */
+            ownerTeam?: string | null;
+            /** Status */
+            status?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Version */
+            version?: string | null;
+        };
+        /**
          * ToolRunIn
          * @description One run of one tool from its page: Mock answers from its mock and reaches nothing, Real is the gateway
          *     call, with every check, in the environment picked.
@@ -6038,6 +6126,36 @@ export interface components {
             transformError?: string | null;
             /** Wouldpause */
             wouldPause: boolean;
+        };
+        /**
+         * ToolTeamStateChanged
+         * @description One team's grant of a module it does not own, and what the grant is: written when it starts or changes, and
+         *     with `deleted` when it ends. Keyed by `id` (`<via>:<module id>`), so each kind of grant orders its own events.
+         */
+        ToolTeamStateChanged: {
+            /**
+             * Deleted
+             * @default false
+             */
+            deleted: boolean;
+            /** Expiresat */
+            expiresAt?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "tool.team_state.changed";
+            /** Moduleid */
+            moduleId: string;
+            /** Operations */
+            operations?: string[];
+            /**
+             * Via
+             * @constant
+             */
+            via: "approval";
         };
         /** ToolUsedBy */
         ToolUsedBy: {
