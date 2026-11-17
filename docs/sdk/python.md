@@ -107,7 +107,7 @@ verb for machine output.
 | `opsai kb push SOURCE --name N --title T --text TEXT` | Put one item into a push source |
 | `opsai kb add-file KB [PATH...] [--file-id ID]` | Upload files, or take ones already in Files, and sync them |
 | `opsai templates list [--kind] [--source]`, `install REF [--kind] [--fields]` | See the offered templates; add one as the team's copy |
-| `opsai secrets list\|create NAME\|rotate NAME\|rename NAME NEW\|delete NAME` | The team's secrets; the value comes from `--value` or standard input |
+| `opsai secrets list [--search]\|create NAME\|rotate NAME\|rename NAME NEW\|delete NAME` | The team's secrets; the value comes from `--value` or standard input |
 | `opsai policies get\|set KEY [VALUE]` | The team's policies |
 | `opsai egress list\|allow-host H\|allow-range R\|remove-host H\|remove-range R` | Hosts and ranges tools may reach |
 | `opsai tools discover SPEC`, `import MODULE SPEC [--operation N]`, `request-review MODULE`, `create NAME --display-name N`, `decide-review REVIEW [--decision]`, `publish MODULE`, `run --module MODULE TOOL` | Take an OpenAPI document to a published module |

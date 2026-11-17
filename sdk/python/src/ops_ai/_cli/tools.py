@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 
 from ops_ai import OpsAI
-from ops_ai._transport import page_items
+from ops_ai._transport import every_page
 
 from .common import client, emit, parser, payload, refuse, table, verb_options
 
@@ -62,7 +62,7 @@ def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
     if ns.verb == "list":
         if ns.app:
             return table(ns, list(ops.tools.list(ns.app)), "name", "title", "access", "added")
-        rows = page_items(ops.raw.tools.tool_modules_list_modules(page_size=50, search=ns.search))[0]
+        rows = every_page(ops.raw.tools.tool_modules_list_modules, search=ns.search)
         return table(ns, rows, "id", "displayName", "type", "status", "operationCount")
     if ns.verb == "show":
         return emit(ns, ops.tools.get(ns.id))

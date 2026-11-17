@@ -13,7 +13,8 @@ def secrets_main(argv: list[str]) -> int:
     ap = parser("opsai secrets", "Secrets: list, create, rotate, rename, delete. A value is never printed.")
     sub = ap.add_subparsers(dest="verb", required=True)
     common = [verb_options()]
-    sub.add_parser("list", parents=common, help="the team's secrets, without values")
+    lst = sub.add_parser("list", parents=common, help="the team's secrets, without values")
+    lst.add_argument("--search", help="only secrets whose name has this text")
     for name in ("create", "rotate"):
         p = sub.add_parser(
             name, parents=common, help=f"{name} a secret; the value comes from --value or standard input"
@@ -28,7 +29,7 @@ def secrets_main(argv: list[str]) -> int:
     try:
         secrets = client(ns).secrets
         if ns.verb == "list":
-            return table(ns, secrets.list(), "name", "teamId", "createdAt")
+            return table(ns, secrets.list(search=ns.search), "name", "teamId", "createdAt")
         if ns.verb in ("create", "rotate"):
             value = ns.value if ns.value is not None else sys.stdin.read().rstrip("\n")
             done = (secrets.create if ns.verb == "create" else secrets.rotate)(ns.name, value)
