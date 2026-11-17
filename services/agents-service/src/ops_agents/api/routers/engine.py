@@ -56,7 +56,7 @@ from ...store.tenancy import current_team, current_tenant
 from ...store.trigger_events import TriggerEvents
 from .. import ai_steps_gate, engine_lifecycle, run_starts, run_story, step_shapes, task_view
 from ..account_names import account_uses_in
-from ..actors import ActorView, actor_reads, actors, named_actors, started_by_of
+from ..actors import ActorView, actor_reads, named_actors, started_by_of
 from ..agent_registry import registry as agent_registry
 from ..auth import (
     Principal,
@@ -72,9 +72,10 @@ from ..auth import (
 )
 from ..deps import Runtime, runtime
 from ..email_trigger import run_again
+from ..engine_reviews import Row
 from ..engine_runs import live_version, start_run
 from ..envelope import ok
-from ..file_names import named
+from ..file_names import named, names_asked_once
 from ..run_story import decisions_in, files_in, steps_view
 from ..schemas import SSE_RESPONSE, DocumentRead, Out, PublishReview  # pyright: ignore[reportPrivateImportUsage]
 from .tool_catalog import known_tools
@@ -1246,37 +1247,52 @@ async def list_engine_runs(
 @runs_router.get("/{run_id}", response_model=Envelope[RunDetail])
 async def get_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     """The run with every step from the journal: per node its input, output, port, attempts and errors.
-    No request transaction: names, the masking policy and file names come from platform-service and files-service."""
+    No request transaction. One transaction reads the run (a run the caller may not see is not found before any other
+    service is asked) and what it is told from; names, the masking policy and file names come from platform-service and
+    files-service with none open; the reply is then built from those answers."""
     store = runs(rt)
-    run = await visible_run(rt, run_id, me)
-    steps = steps_view(await store.steps(run_id))
-    decided = decisions_in(run_id, steps)
-    names = await actors(rt, [d["by"] for d in decided if d["by"]])
-    told = await run_story.story(rt, run, steps, scope=key_scope(me), masking=False)
+    with names_asked_once():
+        async with isolation.request_transaction():
+            run = await visible_run(rt, run_id, me)
+            steps = steps_view(await store.steps(run_id))
+            decided = decisions_in(run_id, steps)
+            reads = await run_story.story_reads(rt, run, steps)
+            ends, versions = await run_story.outcome_reads(rt, [run])
+            children = await started_runs(store, steps)
+            known = await actor_reads(rt, [*reads.raws(run, steps), started_by_of(run)])
+        who = await named_actors(rt, known)
+        masking = await ai_steps_gate.people_see_masked(rt, run.get("team_id") or None)
+        names = getattr(rt, "team_names", None)
+        team = (await names.name(str(run["team_id"])) if names is not None else None) or str(run["team_id"])
+        await run_story.ask_story(rt, run, steps, reads)
+        files = await named(rt, str(run["team_id"]), files_in(run["input"]))
+        told = await run_story.story_view(
+            rt, run, steps, reads, who=who, team_name=team, scope=key_scope(me), masking=False
+        )
     body = run_view(run) | {
-        "outcomeText": (await ended_view(rt, run))["outcomeText"],
+        "outcomeText": run_story.outcome_sentences([run], ends, versions).get(str(run["id"])),
         "workflowName": told.pop("workflowName"),
         "failure": run_failure(run, steps),
         "steps": steps,
-        "children": await started_runs(store, steps),
-        "files": await named(rt, str(run["team_id"]), files_in(run["input"])),
-        "decisions": [d | {"by": names.get(d["by"]) if d["by"] else None} for d in decided],
-        "result": await run_result(rt, run, steps, decided=decided, names=names),
+        "children": children,
+        "files": files,
+        "decisions": [d | {"by": who.get(d["by"]) if d["by"] else None} for d in decided],
+        "result": run_result(run, steps, reads.stored, decided=decided, names=who),
         "canCancel": can_cancel(me, run),
         "canRetry": can_retry(me, run),
-        "startedBy": (await actors(rt, [started_by_of(run)])).get(started_by_of(run)),
+        "startedBy": who.get(started_by_of(run)),
         "story": told,
     }
-    shown = await for_people(rt, run, body)
-    if shown is not body:
-        # Masking is on. The story sits outside the keys for_people masks, so it is masked here; the addresses the
-        # run's email came from and arrived at are where it came from, not a customer's data, and stay shown.
-        shown["story"] = run_story.masked_story(shown["story"])
-        addresses = await run_story.channel_addresses(rt, run)
-        shown = run_story.keep_channel(shown, body, addresses)
-        # The lines are sentences, so the addresses are kept inside them rather than by value.
-        told = cast(dict[str, Any], body["story"])
-        shown["story"]["lines"] = run_story.masked_lines(cast(list[dict[str, Any]], told["lines"]), addresses)
+    if not masking:
+        return ok(body)
+    # Masking is on. The story sits outside the keys for_people masks, so it is masked here; the addresses the
+    # run's email came from and arrived at are where it came from, not a customer's data, and stay shown.
+    shown = _values_masked(body)
+    shown["story"] = run_story.masked_story(shown["story"])
+    shown = run_story.keep_channel(shown, body, reads.addresses)
+    # The lines are sentences, so the addresses are kept inside them rather than by value.
+    said = cast(Row, body["story"])
+    shown["story"]["lines"] = run_story.masked_lines(cast(list[Row], said["lines"]), reads.addresses)
     return ok(shown)
 
 
@@ -1326,10 +1342,10 @@ async def started_runs(store: RunStore, steps: list[dict[str, Any]]) -> list[dic
     ]
 
 
-async def run_result(
-    rt: Runtime,
+def run_result(
     run: dict[str, Any],
     steps: list[dict[str, Any]],
+    stored: Row | None,
     *,
     decided: list[dict[str, Any]] | None = None,
     names: dict[str, dict[str, Any]] | None = None,
@@ -1337,10 +1353,9 @@ async def run_result(
     """The run's result: the End node it finished on, from the pinned definition and the journal, with the outcome and
     output the worker recorded on the run. An output that is the last Human Task's decision reads as people read it:
     the decision in words and who decided by name, since masking is for customer data and a staff address would show
-    as [email]."""
+    as [email]. `stored` is the version the run pinned (definitions.get), read by the caller."""
     if run["status"] == "cancelled" or run["outcome"] is None:
         return None
-    stored = await definitions(rt).get(run["workflow_id"], run["version"])
     nodes = engine_lifecycle.nodes_of(stored["definition"] if stored else None)
     ends = [s for s in steps if nodes.get(s["nodeId"], {}).get("type") == "ops.flow.end" and s["status"] == "ok"]
     end = ends[-1]["nodeId"] if ends else None

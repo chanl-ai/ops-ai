@@ -635,6 +635,11 @@ class RowReads:
         return sorted({str(c["tool"]) for p in self.payloads for c in _calls(p) if c.get("tool")})
 
 
+def tools_of(steps: list[tuple[Row, Row | None]]) -> list[str]:
+    """The tools the calls of these review steps (a run and its decision, None for the one it waits on) name."""
+    return sorted({str(c["tool"]) for run, d in steps for c in _calls(_payload(run, d)) if c.get("tool")})
+
+
 async def ask_policies(rt: Runtime, tools: list[str]) -> None:
     """Each tool's write policy from tools-service, all at once."""
     await asyncio.gather(*(policy_of(rt, t) for t in tools))

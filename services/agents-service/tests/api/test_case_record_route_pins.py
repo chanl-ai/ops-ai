@@ -16,7 +16,7 @@ from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_agents.api import case_page
-from ops_agents.api.actors import actors, named_actors
+from ops_agents.api.actors import named_actors
 from ops_agents.api.routers import case_records
 from tests.api import role_app as role_app_module
 from tests.api.test_reply_pins import FIXTURES, answer, compare
@@ -115,16 +115,12 @@ async def test_each_case_route_holds_one_transaction_and_none_while_people_are_n
     event.listen(sync, "commit", finished)
     event.listen(sync, "rollback", finished)
 
-    async def watched(rt: Any, raws: Any) -> dict[str, dict[str, Any]]:
-        held_while_naming.append(len(begun) - len(ended))
-        return await actors(rt, raws)
-
     async def watched_named(rt: Any, reads: Any) -> dict[str, dict[str, Any]]:
         held_while_naming.append(len(begun) - len(ended))
         return await named_actors(rt, reads)
 
     monkeypatch.setattr(case_records, "named_actors", watched_named)
-    monkeypatch.setattr(case_page, "actors", watched)
+    monkeypatch.setattr(case_page, "named_actors", watched_named)
     other = (await c.post("/v1/cases", json=DISPUTE, headers=VIEWER)).json()["data"]["id"]
     url = f"/v1/cases/{(await c.post('/v1/cases', json=DISPUTE, headers=VIEWER)).json()['data']['id']}"
     steps: list[tuple[str, str, str, object]] = [

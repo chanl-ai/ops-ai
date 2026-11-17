@@ -9,6 +9,7 @@ The run page draws these as they come; it derives nothing."""
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
@@ -25,9 +26,10 @@ from ..store.review_assignments import ReviewAssignments
 from . import engine_reviews
 from .actors import actors, started_by_of
 from .deps import Runtime
+from .engine_reviews import Row
 from .engine_runs import runs_above
 from .file_names import named
-from .review_text import describe_calls, humanize
+from .review_text import describe_calls, humanize, operations
 
 EMAIL_TRIGGER = "ops.trigger.email"
 END = "ops.flow.end"
@@ -164,16 +166,27 @@ def words(value: str) -> str:
     return text[:1].upper() + text[1:]
 
 
-async def outcome_texts(rt: Runtime, rows: list[dict[str, Any]]) -> dict[str, str]:
-    """How each run ended, as a sentence, by run id. The outcome itself is the End's key (`not_found`), which read
-    bare looks like an error; the sentence names the End the run reached by its name in the workflow ("Finished at
-    the Not found end."). A cancelled run's outcome is the reason given, kept as written. Two reads for a whole page:
-    the End steps and the versions they belong to."""
+async def outcome_reads(rt: Runtime, rows: list[Row]) -> tuple[dict[str, str], dict[tuple[str, int], Row]]:
+    """The reads of `outcome_texts`: the End step of each run that ended and the versions they belong to."""
     ended = [r for r in rows if r.get("outcome") and r.get("status") in ("succeeded", "failed")]
     ends = await RunStore(EngineTransactions(rt.db)).ends([str(r["id"]) for r in ended])
     versions = await DefinitionStore(EngineTransactions(rt.db)).pinned(
         {(str(r["workflow_id"]), int(r["version"])) for r in ended if str(r["id"]) in ends}
     )
+    return ends, versions
+
+
+async def outcome_texts(rt: Runtime, rows: list[Row]) -> dict[str, str]:
+    """How each run ended, as a sentence, by run id. The outcome itself is the End's key (`not_found`), which read
+    bare looks like an error; the sentence names the End the run reached by its name in the workflow ("Finished at
+    the Not found end."). A cancelled run's outcome is the reason given, kept as written. Two reads for a whole page:
+    the End steps and the versions they belong to."""
+    ends, versions = await outcome_reads(rt, rows)
+    return outcome_sentences(rows, ends, versions)
+
+
+def outcome_sentences(rows: list[Row], ends: dict[str, str], versions: dict[tuple[str, int], Row]) -> dict[str, str]:
+    """`outcome_texts` from its reads."""
     out: dict[str, str] = {}
     for r in rows:
         if not r.get("outcome"):
@@ -242,10 +255,10 @@ def email_of(run: dict[str, Any], nodes: dict[str, dict[str, Any]]) -> dict[str,
     }
 
 
-async def reads_of(
-    rt: Runtime, team: str, steps: list[dict[str, Any]], nodes: dict[str, dict[str, Any]], run_input: Any = None
-) -> list[dict[str, Any]]:
-    """Each Extract from file step that read something, as the read check draws it, the file named by files-service."""
+def read_files(steps: list[Row], nodes: dict[str, Row], run_input: Any = None) -> tuple[list[Row], list[Row]]:
+    """Each Extract from file step that read something, and the files they read as `named` takes them: the name a file
+    arrived with, as the run's input gives it, which files-service (one file per bytes, so its name is the first
+    upload's) only fills in when the input does not name it."""
     found = [
         s
         for s in steps
@@ -254,11 +267,15 @@ async def reads_of(
         and s.get("port") in READ_PORTS
         and engine_reviews.is_read(s.get("output"))
     ]
-    # The name a file arrived with, as the run's input gives it; files-service keeps one file per bytes, so its name is
-    # the first upload's and only fills in a file the input does not name.
     given = {f["id"]: f["name"] for f in files_in(run_input)}
     wanted = [str(cast(dict[str, Any], s["output"])["fileId"]) for s in found]
-    files = await named(rt, team, [{"id": i, "name": given.get(i)} for i in wanted])
+    return found, [{"id": i, "name": given.get(i)} for i in wanted]
+
+
+async def reads_of(rt: Runtime, team: str, steps: list[Row], nodes: dict[str, Row], run_input: Any = None) -> list[Row]:
+    """Each Extract from file step that read something, as the read check draws it, the file named by files-service."""
+    found, wanted = read_files(steps, nodes, run_input)
+    files = await named(rt, team, wanted)
     return [
         {
             "nodeId": str(s["nodeId"]),
@@ -344,11 +361,30 @@ def _facts(fields: dict[str, Any]) -> list[dict[str, str]]:
     return out
 
 
-async def children_of(
-    rt: Runtime, run: dict[str, Any], steps: list[dict[str, Any]], nodes: dict[str, dict[str, Any]], *, scope: Any
-) -> tuple[list[dict[str, Any]], int]:
-    """The runs this run's steps started, as rows a person reads, and how many more there were. Every read is one
-    query for all of them: their runs, steps, pinned definitions, cases and who their open tasks wait for."""
+@dataclass(frozen=True)
+class ChildReads:
+    """What the runs a run started are told from, read in one pass: `children_view` words them once `people` is
+    asked."""
+
+    started: list[Row]
+    more: int
+    found: dict[str, Row]
+    steps_by_run: dict[str, list[Row]]
+    pinned: dict[tuple[str, int], Row]
+    on_case: dict[str, str]
+    summaries: dict[str, Row]
+    assigned: dict[str, str]
+    decided: dict[str, list[Row]]
+    own_nodes: dict[str, Row]
+
+    def raws(self) -> list[str]:
+        """Who the rows name, raw, for one actors() call: each person who decided a step and each assignee."""
+        return [*(d["by"] for ds in self.decided.values() for d in ds if d["by"]), *self.assigned.values()]
+
+
+async def children_reads(rt: Runtime, run: Row, steps: list[Row], nodes: dict[str, Row]) -> ChildReads:
+    """The runs this run's steps started and everything their rows are told from. Every read is one query for all of
+    them: their runs, steps, pinned definitions, cases and who their open tasks wait for."""
     started, more = started_entries(steps, nodes)
     store = RunStore(EngineTransactions(rt.db))
     found = {str(r["id"]): r for r in await store.many([c["runId"] for c in started])}
@@ -365,11 +401,15 @@ async def children_of(
     open_reviews = [f"{rid}:{w['node']}:{w.get('iteration', 0)}" for rid in ids if (w := found[rid].get("waiting"))]
     assigned = await ReviewAssignments(rt.db).current(open_reviews)
     decided = {rid: decisions_in(rid, steps_by_run.get(rid, [])) for rid in ids}
-    people = await actors(
-        rt,
-        [*(d["by"] for ds in decided.values() for d in ds if d["by"]), *assigned.values()],
-    )
     own_nodes = nodes_of({"definition": {"nodes": list(nodes.values())}})
+    return ChildReads(started, more, found, steps_by_run, pinned, on_case, summaries, assigned, decided, own_nodes)
+
+
+def children_view(reads: ChildReads, people: dict[str, Row], *, scope: Any) -> tuple[list[Row], int]:
+    """The runs this run's steps started, as rows a person reads, and how many more there were."""
+    started, found, pinned, own_nodes = reads.started, reads.found, reads.pinned, reads.own_nodes
+    steps_by_run, decided, assigned = reads.steps_by_run, reads.decided, reads.assigned
+    on_case, summaries, more = reads.on_case, reads.summaries, reads.more
     rows: list[dict[str, Any]] = []
     for c in started:
         child = found[c["runId"]]
@@ -587,17 +627,17 @@ def plural(n: int, word: str) -> str:
 
 
 def lines(
-    run: dict[str, Any],
-    steps: list[dict[str, Any]],
+    run: Row,
+    steps: list[Row],
     nodes: dict[str, dict[str, Any]],
     *,
     workflow: str,
     team: str,
     calls: dict[str, dict[str, Any]],
-    who: dict[str, dict[str, Any]],
+    who: dict[str, Row],
     started: dict[str, str] | None = None,
     started_names: dict[str, str] | None = None,
-) -> list[dict[str, Any]]:
+) -> list[Row]:
     """What a run did, one plain sentence per line, oldest first: `{at, source, actor, text, href}`. Each step is
     worded by its node's executor, the recognition `story()` uses, never by a node id or a workflow's own words; tool
     calls by `calls` (describe_calls) and people by `who` (actors). `started` is the runs its steps started that the
@@ -709,19 +749,55 @@ def lines(
     return [out[0], *sorted(out[1:], key=lambda x: x["at"] or "")]
 
 
-async def story(
-    rt: Runtime, run: dict[str, Any], steps: list[dict[str, Any]], *, scope: Any, masking: bool
-) -> dict[str, Any]:
-    """The run told for people: `email`, `reads` and `children` (with `childrenMore`), from the version it pinned."""
+@dataclass(frozen=True)
+class StoryReads:
+    """A run's story as the database holds it: the version it pinned, the runs it started and its email's addresses."""
+
+    stored: Row | None
+    children: ChildReads
+    addresses: set[str]
+
+    def raws(self, run: Row, steps: list[Row]) -> list[str]:
+        """Every actor the story names, raw, for the one actors() call that answers them all."""
+        return [*actors_in(run, steps), *self.children.raws()]
+
+
+async def story_reads(rt: Runtime, run: Row, steps: list[Row]) -> StoryReads:
+    """The reads of `story`, all local: run it in the route's transaction, then ask outside with none open."""
     stored = await DefinitionStore(EngineTransactions(rt.db)).get(str(run["workflow_id"]), run.get("version"))
+    children = await children_reads(rt, run, steps, nodes_of(stored))
+    return StoryReads(stored, children, await channel_addresses(rt, run))
+
+
+async def ask_story(rt: Runtime, run: Row, steps: list[Row], reads: StoryReads) -> None:
+    """Warms what `story` words the run with, so building it asks no other service: the file names and the tool
+    directory (each kept for the request)."""
+    nodes = nodes_of(reads.stored)
+    await named(rt, str(run["team_id"]), read_files(steps, nodes, run.get("input"))[1])
+    if tool_calls(steps, nodes):
+        await operations(rt)
+
+
+async def story_view(
+    rt: Runtime,
+    run: Row,
+    steps: list[Row],
+    reads: StoryReads,
+    *,
+    who: dict[str, Row],
+    team_name: str,
+    scope: Any,
+    masking: bool,
+) -> Row:
+    """The run told for people: `email`, `reads` and `children` (with `childrenMore`), from the version it pinned.
+    `who` names every actor `reads.raws` listed and `team_name` the run's team: both asked before this builds."""
+    stored = reads.stored
     nodes = nodes_of(stored)
-    children, more = await children_of(rt, run, steps, nodes, scope=scope)
-    team = str(run["team_id"])
-    names = getattr(rt, "team_names", None)
+    children, more = children_view(reads.children, who, scope=scope)
     told = {
         "workflowName": workflow_name(stored),
         "email": email_of(run, nodes),
-        "reads": await reads_of(rt, team, steps, nodes, run.get("input")),
+        "reads": await reads_of(rt, str(run["team_id"]), steps, nodes, run.get("input")),
         "children": children,
         "childrenMore": more,
         "lines": lines(
@@ -729,11 +805,21 @@ async def story(
             steps,
             nodes,
             workflow=workflow_name(stored),
-            team=(await names.name(team) if names is not None else None) or team,
+            team=team_name,
             calls=await describe_calls(rt, tool_calls(steps, nodes)),
-            who=await actors(rt, actors_in(run, steps)),
+            who=who,
             started={str(c["runId"]): str(c["label"]) for c in children},
             started_names={str(c["runId"]): str(c["workflowName"]) for c in children},
         ),
     }
     return masked_story(told) if masking else told
+
+
+async def story(rt: Runtime, run: Row, steps: list[Row], *, scope: Any, masking: bool) -> Row:
+    """`story_view` after its reads and the names it asks for, for a caller that holds no transaction of its own."""
+    reads = await story_reads(rt, run, steps)
+    names = getattr(rt, "team_names", None)
+    team = str(run["team_id"])
+    team_name = (await names.name(team) if names is not None else None) or team
+    who = await actors(rt, reads.raws(run, steps))
+    return await story_view(rt, run, steps, reads, who=who, team_name=team_name, scope=scope, masking=masking)

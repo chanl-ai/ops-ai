@@ -31,10 +31,12 @@ from ...store.engine import EngineTransactions
 from ...store.tenancy import current_team
 from ..actors import actor_reads, named_actors
 from ..auth import Principal, caller_in, caller_of
-from ..case_page import assembled
+from ..case_page import ask_case, assembled, case_reads
 from ..deps import Runtime, runtime
 from ..envelope import ok
+from ..file_names import names_asked_once
 from ..runs import graph_store
+from ..tool_access import one_read_per_tool
 from .engine import StoryLine
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
@@ -403,12 +405,20 @@ async def list_cases(
 async def get_case(rt: Rt, me: Me, case_id: str) -> JSONResponse:
     """The case assembled for its page: its timeline, oldest entry first, and who owns it, its clocks, what
     it waits on and the actions drafted there, its fields in its case type's order, what it links to, its newest
-    activity and what the caller may do."""
+    activity and what the caller may do. Two transactions by design: the first reads the case, its runs and everything
+    the page names (a case the caller may not see is not found before any other service is asked); people's names, the
+    masking policy, file names and the tools-service policy of each Human Task's calls are then asked with none open;
+    the second builds the Human Task views, which need those policies."""
     store = CaseStore(rt.db)
-    async with isolation.request_transaction():
-        row = await _visible(store, me, case_id)
-        timeline = await _detail(store, row)
-    return ok(timeline | await assembled(rt, me, row))
+    with one_read_per_tool(), names_asked_once():
+        async with isolation.request_transaction():
+            row = await _visible(store, me, case_id)
+            timeline = await _detail(store, row)
+            reads = await case_reads(rt, me, row)
+        asked = await ask_case(rt, row, reads)
+        async with isolation.request_transaction():
+            page = await assembled(rt, me, row, reads, asked)
+    return ok(timeline | page)
 
 
 @router.patch("/{case_id}", response_model=Envelope[CaseDetail])

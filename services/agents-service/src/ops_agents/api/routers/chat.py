@@ -462,9 +462,17 @@ async def create_thread(rt: Rt, me: Me, body: ChatThreadInput) -> JSONResponse:
 async def get_thread(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     """The conversation, for whoever may read it. A teammate's conversation that the reader may not read answers
     `{id, readable: false}` and nothing else, so a link to it says it is someone else's instead of failing; a
-    conversation that does not exist, or is another team's, is not found. Off the request transaction: the cards it
-    fills read case pages, which ask other services for their files' names."""
-    row = await chat_row(rt, thread_id, None)
+    conversation that does not exist, or is another team's, is not found. One transaction reads the conversation and
+    its messages; the cards it fills then read their own records, each in its own (case pages ask other services for
+    their files' names, so none is held while they answer)."""
+    messages: list[ChatMessage] = []
+    async with isolation.request_transaction():
+        row = await chat_row(rt, thread_id, None)
+        readable = row is not None and may_read(_meta(row), me)
+        if row is not None and readable:
+            # Text a guardrail kept or took back from the person is shown to whoever the roles grid lets view the audit.
+            audit = ACCESS.may(caller_of(me), "audit", "view", team=me.team_id)
+            messages = (await messages_of(rt, [thread_id], audit=audit, reader=person_of(me)))[thread_id]
     if row is None:
         # A link opened while acting in another team: the conversation may be in one of the reader's other teams. Its
         # own conversation there names that team so the console can switch; anyone else's says only that it is not
@@ -478,11 +486,8 @@ async def get_thread(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
                 name = await rt.team_names.name(team) if rt.team_names is not None else None
                 return ok({"id": thread_id, "readable": False, "teamId": team, "teamName": name or team})
         raise NotFound("Conversation")
-    if not may_read(_meta(row), me):
+    if not readable:
         return ok({"id": thread_id, "readable": False})
-    # Text a guardrail kept or took back from the person is shown to whoever the roles grid lets view the audit.
-    audit = ACCESS.may(caller_of(me), "audit", "view", team=me.team_id)
-    messages = (await messages_of(rt, [thread_id], audit=audit, reader=person_of(me)))[thread_id]
     # An open approval says whether the reader may decide it, so the card offers Approve and Reject only then.
     for w in (w for m in messages for w in m.widgets or [] if isinstance(w, ApprovalWidget)):
         if w.state in ("pending", "awaiting_second"):

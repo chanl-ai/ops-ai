@@ -21,8 +21,6 @@ queries = 8
 
 ["GET /chat/threads/{thread_id}"]
 queries = 3
-transactions = 3
-connections = 3
 
 ["GET /chat/threads/{thread_id}/connectors"]
 queries = 2
@@ -133,10 +131,11 @@ queries = 2
 ["GET /v1/cases"]
 queries = 2
 
+# One transaction reads the case and what its page names, the other services are asked with none open, and the page is
+# built. A case with a waiting Human Task opens a second to build its views, which need tools-service's policy of the
+# calls the first read named; the seed's case waits on none.
 ["GET /v1/cases/{case_id}"]
 queries = 5
-transactions = 7
-connections = 7
 
 ["GET /v1/channels"]
 queries = 7
@@ -161,8 +160,6 @@ queries = 8
 
 ["GET /v1/chat/threads/{thread_id}"]
 queries = 3
-transactions = 3
-connections = 3
 
 ["GET /v1/chat/threads/{thread_id}/connectors"]
 queries = 2
@@ -171,6 +168,8 @@ queries = 2
 queries = 1
 query = { types = "dt_budget" }
 
+# A stream holds no transaction while it is open: each read it makes opens and closes its own, so the count is
+# the reads of one pass with `follow=false`.
 ["GET /v1/events"]
 queries = 2
 transactions = 2
@@ -236,9 +235,9 @@ queries = 5
 
 ["GET /v1/runs/{run_id}"]
 queries = 5
-transactions = 9
-connections = 9
 
+# A stream holds no transaction while it is open: each read it makes opens and closes its own, so the count is
+# the reads of one pass with `follow=false`.
 ["GET /v1/runs/{run_id}/events"]
 queries = 2
 transactions = 2
@@ -281,6 +280,8 @@ queries = 2
 ["GET /v1/threads/{thread_id}/runs"]
 queries = 3
 
+# A stream holds no transaction while it is open: each read it makes opens and closes its own, so the count is
+# the reads of one pass with `follow=false`.
 ["GET /v1/threads/{thread_id}/runs/{run_id}/events"]
 queries = 3
 transactions = 3

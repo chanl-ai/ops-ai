@@ -5,6 +5,7 @@ of review views, whatever the case holds; nothing in here knows a use case."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
 from urllib.parse import quote
@@ -18,14 +19,18 @@ from ..store.case_links import CaseLinks
 from ..store.case_types import CaseTypeNotFound
 from ..store.engine import EngineTransactions
 from . import case_story
-from .actors import actors
+from .actors import ActorReads, actor_reads, named_actors
 from .ai_steps_gate import people_see_masked
 from .auth import Principal, caller_of, key_scope
+from .case_story import FeedReads, OriginReads
 from .case_type_seeds import seeded_case_types
 from .deps import Runtime
-from .engine_reviews import titles_by_run, view
+from .engine_reviews import Row, ask_policies, titles_by_run, tools_of, view
 from .file_names import named
+from .review_sla import sla_hours
+from .review_text import operations
 from .run_story import files_in, masked_story
+from .team_names import deciding_team
 
 # Review views read the operations their calls name, so a case reads at most this many.
 REVIEWS_CAP = 10
@@ -104,9 +109,7 @@ def _end_of(value: Any) -> datetime | None:
     return at if at.tzinfo else at.replace(tzinfo=UTC)
 
 
-def timer(
-    row: dict[str, Any], deadline: tuple[str, str] | None, resolution: dict[str, Any], now: datetime
-) -> dict[str, Any]:
+def timer(row: dict[str, Any], deadline: tuple[str, str] | None, resolution: dict[str, Any], now: datetime) -> Row:
     """The case's one timer: its type's deadline field when it holds a date, labelled as the field is; met once
     the case is resolved or closed, breached past the date, never paused (a court date does not move while the bank
     waits on the customer). Otherwise the resolution clock."""
@@ -129,20 +132,27 @@ def timer(
     }
 
 
-async def _reviews(rt: Runtime, case_id: str, runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The Human Tasks of the case's runs as review views: the waiting ones, then the newest decided, capped."""
-    decisions = await RunStore(EngineTransactions(rt.db)).resumes([str(r["id"]) for r in runs])
-    titles = await titles_by_run(rt, runs)
-    out: list[dict[str, Any]] = []
+def _review_steps(runs: list[Row], decisions: dict[str, list[Row]]) -> list[tuple[Row, Row | None]]:
+    """The Human Tasks of the case's runs a page shows: the waiting ones, then the newest decided, capped; each as the
+    run and its decision (None for the one the run waits on)."""
+    out: list[tuple[Row, Row | None]] = []
     for run in runs:
         if run["status"] == "waiting" and run.get("waiting") and len(out) < REVIEWS_CAP:
-            out.append(await view(rt, run, case_id=case_id, titles=titles[str(run["id"])]))
+            out.append((run, None))
     for run in runs:
         for decided in reversed(decisions.get(str(run["id"]), [])):
             if len(out) >= REVIEWS_CAP:
                 return out
-            out.append(await view(rt, run, decided, case_id=case_id, titles=titles[str(run["id"])]))
+            out.append((run, decided))
     return out
+
+
+async def _reviews(rt: Runtime, case_id: str, reads: CaseReads) -> list[Row]:
+    """The Human Tasks of the case's runs as review views, built from what `case_reads` read."""
+    return [
+        await view(rt, run, decided, case_id=case_id, titles=reads.titles[str(run["id"])])
+        for run, decided in _review_steps(reads.runs, reads.decisions)
+    ]
 
 
 def _href(review: dict[str, Any]) -> str:
@@ -222,7 +232,7 @@ def whats_left(
     team_name: str,
     due: str | None,
     may_edit: bool,
-) -> dict[str, Any]:
+) -> Row:
     """What is left on the case: each open Human Task, who it waits on (its assignee, else the team that
     decides it) and by when (its own due time, else the case's), and each approved action the bank's system refused,
     which waits for a new decision. `resolvable` when nothing is left, no linked run is still working, the case is not
@@ -254,32 +264,101 @@ def whats_left(
     return {"items": items, "resolvable": resolvable}
 
 
-async def assembled(rt: Runtime, me: Principal, row: dict[str, Any]) -> dict[str, Any]:
-    now = datetime.now(UTC)
-    case_id, team = str(row["id"]), str(row["team_id"])
-    links = CaseLinks(rt.db)
-    runs = await links.runs(case_id, team)
-    reviews = await _reviews(rt, case_id, runs)
-    waiting = waiting_of(reviews)
-    case_type, typed, deadline = await _type_fields(rt, row)
-    clock = timer(row, deadline, sla(row, now)["resolution"], now)
-    emails = await links.emails([str(r["id"]) for r in runs])
-    related = await links.related(row)
-    opener = str(row["created_by"]) if str(row["created_by"]).startswith("run:") else ""
-    first = next((r for r in runs if f"run:{r['id']}" == opener), None)
+@dataclass(frozen=True)
+class CaseReads:
+    """Everything a case page is told from the database, read in one transaction: `ask_case` then asks the other
+    services what the page words it with, and `assembled` builds it."""
+
+    runs: list[Row]
+    decisions: dict[str, list[Row]]
+    titles: dict[str, Row]
+    case_type: Row | None
+    typed: list[Row]
+    deadline: tuple[str, str] | None
+    emails: list[Row]
+    related: list[Row]
+    failed: set[str]
+    origin: OriginReads
+    feed: FeedReads
+    known: ActorReads
+
+
+@dataclass(frozen=True)
+class CaseAsked:
+    """What the other services answered: each actor's name, the masking policy and the team's name."""
+
+    who: dict[str, Row]
+    masking: bool
+    team_name: str
+
+
+def _files_of(typed: list[Row], runs: list[Row]) -> list[Row]:
+    """The files the page names, as `named` takes them: those of the type's file fields, then those the runs took in."""
     files: dict[str, str | None] = {f["fileId"]: None for f in typed if f["fileId"]}
     for r in runs:
         for f in files_in(r.get("input")):
             files[f["id"]] = files.get(f["id"]) or f["name"]
-    linked = await named(rt, team, [{"id": i, "name": n} for i, n in files.items()])
+    return [{"id": i, "name": n} for i, n in files.items()]
+
+
+async def case_reads(rt: Runtime, me: Principal, row: Row) -> CaseReads:
+    """The database reads of `assembled`, all local, for the route's transaction. Who the page names is read here too
+    (`actor_reads`), so `ask_case` asks platform-service with none open."""
+    case_id, team = str(row["id"]), str(row["team_id"])
+    links = CaseLinks(rt.db)
+    runs = await links.runs(case_id, team)
+    decisions = await RunStore(EngineTransactions(rt.db)).resumes([str(r["id"]) for r in runs])
+    titles = await titles_by_run(rt, runs)
+    case_type, typed, deadline = await _type_fields(rt, row)
+    emails = await links.emails([str(r["id"]) for r in runs])
+    related = await links.related(row)
+    failed = await failed_calls(rt, runs)
+    origin = await case_story.origin_reads(rt, row)
+    feed = await case_story.feed_reads(rt, row, runs, scope=key_scope(me))
+    raws = [*([str(row["assignee"])] if row["assignee"] else []), *origin.raws(), *feed.raws()]
+    known = await actor_reads(rt, raws)
+    return CaseReads(runs, decisions, titles, case_type, typed, deadline, emails, related, failed, origin, feed, known)
+
+
+async def ask_case(rt: Runtime, row: Row, reads: CaseReads) -> CaseAsked:
+    """Asks the other services what the page words it with, with nothing open: people's names, the masking policy, the
+    team's name, file names, and for each Human Task the tools-service policy of its calls, the review deadline, the
+    tool directory and the deciding team (each kept for the request, so building the views asks none of them)."""
+    team = str(row["team_id"])
+    who = await named_actors(rt, reads.known)
+    masking = await people_see_masked(rt, team)
+    names = getattr(rt, "team_names", None)
+    team_name = (await names.name(team) if names is not None else None) or team
+    await named(rt, team, _files_of(reads.typed, reads.runs))
+    shown = _review_steps(reads.runs, reads.decisions)
+    await ask_policies(rt, tools_of(shown))
+    if shown:
+        await sla_hours(rt)
+        for t in sorted({str(run["team_id"]) for run, _ in shown if run.get("team_id")}):
+            await deciding_team(rt, t)
+    if shown or reads.feed.calls:
+        await operations(rt)
+    return CaseAsked(who, masking, team_name)
+
+
+async def assembled(rt: Runtime, me: Principal, row: Row, reads: CaseReads, asked: CaseAsked) -> Row:
+    """The case page from `reads` and `asked`. Only the Human Task views read the database here (a connect wait's first
+    run), so a caller holds a transaction for this call."""
+    now = datetime.now(UTC)
+    case_id, team = str(row["id"]), str(row["team_id"])
+    runs, case_type, typed, deadline = reads.runs, reads.case_type, reads.typed, reads.deadline
+    reviews = await _reviews(rt, case_id, reads)
+    waiting = waiting_of(reviews)
+    clock = timer(row, deadline, sla(row, now)["resolution"], now)
+    emails, related = reads.emails, reads.related
+    opener = str(row["created_by"]) if str(row["created_by"]).startswith("run:") else ""
+    first = next((r for r in runs if f"run:{r['id']}" == opener), None)
+    linked = await named(rt, team, _files_of(typed, runs))
     file_names = {str(f["id"]): f["name"] for f in linked if f["name"]}
     # A file field reads as the file's name; its id stays in `fileId` for the link.
     typed = [f | {"display": file_names.get(f["fileId"], f["display"])} if f["fileId"] else f for f in typed]
-    who = await actors(rt, [row["assignee"]] if row["assignee"] else [])
-    masking = await people_see_masked(rt, team)
-    names = rt.team_names
-    team_name = (await names.name(team) if names is not None else None) or team
-    drafted = actions_of(reviews, await failed_calls(rt, runs))
+    who, masking, team_name = asked.who, asked.masking, asked.team_name
+    drafted = actions_of(reviews, reads.failed)
     page = {
         "caseType": case_type,
         "owner": {"email": row["assignee"], "name": (who.get(row["assignee"]) or {}).get("name") or row["assignee"]}
@@ -368,8 +447,8 @@ async def assembled(rt: Runtime, me: Principal, row: dict[str, Any]) -> dict[str
             may_edit=_may(me, "edit", team),
         ),
         "timer": clock,
-        "origin": await case_story.origin(rt, row),
-        "feed": await case_story.feed(rt, row, runs, scope=key_scope(me), masking=masking),
+        "origin": case_story.origin_view(reads.origin, who),
+        "feed": await case_story.feed_view(rt, reads.feed, who=who, team_name=team_name, masking=masking),
     }
     if masking:
         # The acting team's setting, which is the case's team; ids, links and enum words stay as they are. The feed
