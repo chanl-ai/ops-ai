@@ -65,7 +65,7 @@ from ..store.modules import (
     grant_views,
 )
 from . import openapi
-from .directory import Directory, Team
+from .directory import Directory, Team, owns_module
 from .executions import call_row
 from .policy import PublishPolicy, RequesterMayDecide, ToolsMode, WriteApprovals, own_request_refusal, tool_mode
 from .review_events import ACCESS_REQUESTED, access_event, policy_changed_event
@@ -777,9 +777,17 @@ class ModuleService:
         the dev header caller acting in one of the dev seed's all-scope teams reads every team's."""
         return self.dir.sees_module(who.team, m) or (not who.verified and who.team.scope == "all")
 
-    async def _changeable(self, who: Caller, module_id: str, action: str = "edit") -> Aggregate:
-        """The module, when the caller may change it: a `system` module is the provisioner's alone."""
+    async def _owned(self, who: Caller, module_id: str) -> Aggregate:
+        """The module, when the caller's team owns it (or it is workspace-level); 404 otherwise, as for one it cannot
+        see. A team that reads a module through its workflow's grant uses it and changes nothing of it."""
         m = await self._find(who, module_id)
+        if not owns_module(who.team, m.get("team_id"), verified=who.verified):
+            raise NotFound("Module")
+        return m
+
+    async def _changeable(self, who: Caller, module_id: str, action: str = "edit") -> Aggregate:
+        """The module, when the caller may change it: its team's, and a `system` module is the provisioner's alone."""
+        m = await self._owned(who, module_id)
         _not_a_plugin(m)
         _can(
             who,
@@ -1480,7 +1488,11 @@ class ModuleService:
         out: dict[str, Any] = {"updated": [], "skipped": []}
         for module_id in ids:
             m = await self.store.get(who.tenant_id, module_id)
-            if m is None or not self._sees(who, m):
+            if (
+                m is None
+                or not self._sees(who, m)
+                or not owns_module(who.team, m.get("team_id"), verified=who.verified)
+            ):
                 out["skipped"].append({"id": module_id, "reason": "Not found"})
                 continue
             try:
@@ -1943,7 +1955,7 @@ class ModuleService:
 
     async def publish(self, who: Caller, module_id: str, note: str) -> dict[str, Any]:
         _can(who, "tools", "publish", what="tools")
-        m = await self._find(who, module_id)
+        m = await self._owned(who, module_id)
         _not_a_plugin(m)
         reviewed_change = _differs_from_published(m)
         if not m["pending"] and not reviewed_change:
@@ -2034,7 +2046,7 @@ class ModuleService:
 
     async def request_review(self, who: Caller, module_id: str, note: str) -> dict[str, Any]:
         _can(who, "tools", "publish", what="tools")
-        m = await self._find(who, module_id)
+        m = await self._owned(who, module_id)
         _not_a_plugin(m)
         if any(v["status"] == "in_review" for v in m["versions"]):
             raise Conflict("A security review is already open for this module.")
@@ -2217,7 +2229,7 @@ class ModuleService:
     async def decide_approval(
         self, who: Caller, module_id: str, approval_id: str, decision: str, reason: str | None
     ) -> dict[str, Any]:
-        m = await self._find(who, module_id)
+        m = await self._owned(who, module_id)
         a = next((x for x in m["approvals"] if x["id"] == approval_id), None)
         if a is None:
             raise NotFound("Approval")
@@ -2241,7 +2253,7 @@ class ModuleService:
 
     async def revoke_approvals(self, who: Caller, module_id: str, ids: list[str], reason: str) -> dict[str, Any]:
         _can(who, "tools", "decide", what="tool approvals")
-        m = await self._find(who, module_id)
+        m = await self._owned(who, module_id)
         if not reason.strip():
             raise ValidationFailed("Give a reason.")
         out: dict[str, Any] = {"updated": [], "skipped": []}

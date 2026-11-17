@@ -24,6 +24,13 @@ class Team:
     scope: str
 
 
+def owns_module(team: Team, owner: str | None, *, verified: bool = True) -> bool:
+    """`team` owns a module whose team is `owner`, or the module is workspace-level (no team): only then may it change
+    it. A workflow's grant lets a team read and use another team's module, never change it. The dev header caller (not
+    `verified`) acting in an all-scope team of the dev seed changes every team's, as it reads every team's."""
+    return owner in (team.id, None) or (not verified and team.scope == "all")
+
+
 @dataclass(frozen=True)
 class Directory:
     """Teams from the dev seed. Workflows are agents-service's (`workflows.WorkflowDirectory`); connections are

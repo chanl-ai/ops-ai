@@ -119,6 +119,47 @@ async def test_a_module_approved_for_a_teams_workflow_is_read_by_that_team(
     assert (await c.get("/v1/tool-modules/mod_payments_hub", headers=who["lending"])).status_code == 404
 
 
+async def test_a_team_holding_only_a_workflow_grant_changes_nothing_of_the_module(
+    people: tuple[httpx.AsyncClient, dict[str, dict[str, str]]], tenant: str
+) -> None:
+    # Lending reads Core Banking through its workflow's grant; every write answers as for a module it cannot see.
+    c, _ = people
+    owner = person(tenant, "Pat Platform", {"team_platform": "admin"})
+    lending = person(tenant, "Lena Lending", {"team_lending": "admin"})
+    base = "/v1/tool-modules/mod_core_banking"
+    before = (await c.get(base, headers=owner)).json()["data"]
+    op = before["operations"][0]["id"]
+    grant = next(a["id"] for a in before["approvals"] if a["status"] == "approved")
+    mock = await c.post(f"{base}/operations/{op}/mocks", json={"name": "Owner's answer"}, headers=owner)
+    assert mock.status_code == 201, mock.text
+    mock_id = mock.json()["data"]["id"]
+    get = await c.get(f"{base}/operations/{op}/mocks", headers=owner)
+    held = (await c.get(base, headers=owner)).json()["data"]
+    http = {"name": "drain", "description": "d", "access": "read", "method": "GET", "url": "https://core.example/x"}
+    for method, path, body in (
+        ("PATCH", base, {"description": "changed by Lending"}),
+        ("DELETE", base, None),
+        ("POST", f"{base}/operations", http),
+        ("PATCH", f"{base}/operations/{op}", {"description": "changed by Lending"}),
+        ("PUT", f"{base}/connection", {"connectionId": None}),
+        ("POST", f"{base}/versions", {"note": "Lending's release"}),
+        ("DELETE", f"{base}/pending-changes", None),
+        ("POST", f"{base}/reviews", {"note": "Lending asks"}),
+        ("POST", f"{base}/approvals/revoke", {"ids": [grant], "reason": "Lending ends it"}),
+        ("POST", f"{base}/approvals/{grant}/decide", {"decision": "rejected"}),
+        ("POST", f"{base}/operations/{op}/mocks", {"name": "Lending's answer"}),
+        ("PATCH", f"{base}/operations/{op}/mocks/{mock_id}", {"name": "Lending's answer"}),
+        ("DELETE", f"{base}/operations/{op}/mocks/{mock_id}", None),
+    ):
+        r = await c.request(method, path, json=body, headers=lending)
+        assert r.status_code == 404, (method, path, r.status_code, r.text)
+    bulk = await c.post("/v1/tool-modules/bulk-delete", json={"ids": ["mod_core_banking"]}, headers=lending)
+    assert bulk.json()["data"] == {"updated": [], "skipped": [{"id": "mod_core_banking", "reason": "Not found"}]}
+    assert (await c.get(base, headers=owner)).json()["data"] == held
+    assert (await c.get(f"{base}/operations/{op}/mocks", headers=owner)).json() == get.json()
+    assert before["approvals"] == held["approvals"]
+
+
 async def test_another_services_grant_list_still_offers_every_teams_operations(
     people: tuple[httpx.AsyncClient, dict[str, dict[str, str]]], tenant: str
 ) -> None:

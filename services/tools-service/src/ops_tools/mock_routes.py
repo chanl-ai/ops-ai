@@ -20,7 +20,7 @@ from ops_service_kit.listing import ListQuery
 
 from .callers import caller_in
 from .mocks import MAX_WAIT_MS
-from .modules.directory import Directory
+from .modules.directory import Directory, owns_module
 from .modules.routes import ERRORS
 from .modules.service import Caller
 from .store.mocks import MockStore
@@ -112,6 +112,9 @@ def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory) -
         return m, op
 
     def _may_edit(who: Caller, m: dict[str, Any]) -> None:
+        # A team that reads the module through a workflow's grant changes none of its answers: 404, as an unseen one.
+        if not owns_module(who.team, m.get("team_id"), verified=who.verified):
+            raise NotFound(f"Module {m['id']}")
         if who.principal is not None:
             Access().can(who.principal, "tools", "edit", what="tools", protection=m.get("protection"))
 
