@@ -24,6 +24,8 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agents.store.agent_registry import publish_requests, registry_agent_versions, registry_agents
+from ops_agents.store.background import background_heartbeats
+from ops_agents.store.cases import case_events, cases
 from ops_agents.store.channels import (
     ChannelStore,
     Deployment,
@@ -36,6 +38,8 @@ from ops_agents.store.graphs import graph_versions
 from ops_agents.store.guardrails import registry_guardrail_versions, registry_guardrails
 from ops_agents.store.skills import registry_skill_versions, registry_skills
 from ops_agents.store.tenancy import OWNER, SYSTEM_ROLE, TENANT_ROLE
+from ops_agents.store.trigger_events import trigger_events
+from ops_agents.store.widget_keys import widget_mint_key_audit
 from ops_agents.store.widgets import WidgetRegistry, registry_widget_versions, registry_widgets
 from ops_agents.store.workflow_registry import registry_validations, registry_workflow_versions, registry_workflows
 from ops_service_kit.errors import Conflict
@@ -250,6 +254,42 @@ async def test_the_system_user_reads_the_agent_pointers_and_is_refused_the_rest(
         with pytest.raises(DBAPIError):
             async with isolation.system_tx(engine, REASON, role=SYSTEM_ROLE) as c:
                 await c.execute(refused.limit(1))
+
+
+# The runtime user the rig impersonates on SQL Server, where it connects as the administrator.
+RUNTIME = "ops_agents_runtime"
+
+
+async def test_a_tenants_transaction_is_refused_what_the_tenant_role_lacks(engine: AsyncEngine) -> None:
+    """An append-only log is never changed or emptied, a case is never deleted, a trigger event is settled but what
+    fired it is never rewritten, and heartbeats are the system user's alone: as ops_runtime_tenant on PostgreSQL and
+    the runtime user on SQL Server (deploy/database/mssql.py RUNTIME_GRANTS)."""
+    tenant = _tag("t_a")
+    statements = {
+        "update case_events": case_events.update().values(kind="x").where(case_events.c.tenant_id == tenant),
+        "delete case_events": case_events.delete().where(case_events.c.tenant_id == tenant),
+        "delete cases": cases.delete().where(cases.c.tenant_id == tenant),
+        "delete widget_mint_key_audit": widget_mint_key_audit.delete().where(
+            widget_mint_key_audit.c.tenant_id == tenant
+        ),
+        "update trigger_events.subject": trigger_events.update()
+        .values(subject="x")
+        .where(trigger_events.c.tenant_id == tenant),
+        "delete trigger_events": trigger_events.delete().where(trigger_events.c.tenant_id == tenant),
+        "delete background_heartbeats": background_heartbeats.delete(),
+    }
+    for name, statement in statements.items():
+        with isolation.scope(tenant, "team_a"):
+            async with isolation.isolated_tx(engine, role=TENANT_ROLE) as c:
+                mssql = c.dialect.name == "mssql"
+                if mssql:
+                    await c.execute(sa.text(f"EXECUTE AS USER = N'{RUNTIME}'"))
+                with pytest.raises(DBAPIError) as e:
+                    async with isolation.attempt(c):
+                        await c.execute(statement)
+                if mssql:
+                    await c.execute(sa.text("REVERT"))
+        assert "permission" in str(e.value).lower() and "denied" in str(e.value).lower(), name
 
 
 def _filtered(url: str) -> set[str]:

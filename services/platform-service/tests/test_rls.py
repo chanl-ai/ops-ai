@@ -314,19 +314,20 @@ async def test_a_row_cannot_point_at_another_tenants_team_or_user(engine: AsyncE
         assert "foreign key" in str(e.value).lower(), where
 
 
-async def test_the_tenant_role_cannot_change_or_remove_an_audit_entry(engine: AsyncEngine) -> None:
+async def test_the_tenant_role_cannot_change_or_remove_an_audit_entry_or_a_policy(engine: AsyncEngine) -> None:
     """As the role the service runs as: `ops_platform_tenant` on PostgreSQL, the runtime user on SQL Server (the rig
-    connects as the administrator, who may do anything, so it is impersonated)."""
+    connects as the administrator, who may do anything, so it is impersonated). A policy is changed, never removed."""
     a, _ = await seed(engine)
     db = TenantDb(engine)
-    for statement in (
-        audit_entries.update().where(audit_entries.c.tenant_id == a).values(action="edited"),
-        audit_entries.delete().where(audit_entries.c.tenant_id == a),
+    for table, statement in (
+        (audit_entries, audit_entries.update().where(audit_entries.c.tenant_id == a).values(action="edited")),
+        (audit_entries, audit_entries.delete().where(audit_entries.c.tenant_id == a)),
+        (policies, policies.delete().where(policies.c.tenant_id == a)),
     ):
         async with as_tenant_role(db, a) as c:
             with pytest.raises(DBAPIError) as e:
                 async with db.attempt(c):
                     await c.execute(statement)
-            left = (await c.execute(sa.select(sa.func.count()).select_from(audit_entries))).scalar_one()
-        assert "permission" in str(e.value).lower() and "denied" in str(e.value).lower()
-        assert left == 1
+            left = (await c.execute(sa.select(sa.func.count()).select_from(table))).scalar_one()
+        assert "permission" in str(e.value).lower() and "denied" in str(e.value).lower(), table.name
+        assert left == 1, table.name

@@ -166,9 +166,78 @@ BASELINE = {
 # signin_group_rules, so the rule key's SET NULL cannot stand there. The store clears a grant's rule before it deletes
 # the rule (ops_platform.store.signin._keep_rules), and a provider's delete takes its grants with its rules.
 NO_SECOND_CASCADE = {("signin_grants", "signin_grants_rule_id_fkey")}
-# Tables a chain's runtime user may read and add to only, as its PostgreSQL tenant role may (platform 0002 revokes
-# UPDATE and DELETE on audit_entries from ops_platform_tenant): the audit log is append-only on both databases.
-APPEND_ONLY = {("platform", "audit_entries")}
+DML = ("SELECT", "INSERT", "UPDATE", "DELETE")
+_SI = ("SELECT", "INSERT")
+_SIU = ("SELECT", "INSERT", "UPDATE")
+_SID = ("SELECT", "INSERT", "DELETE")
+# The tables on which a chain's runtime user holds less than DML, as its PostgreSQL tenant role does at the chain's
+# head: (privileges, columns it may UPDATE alone). On PostgreSQL a transaction switches to the tenant role; SQL Server
+# has one user, so the tenant role's narrowing is that user's. Append-only logs (platform 0002, tools 0044 and 0055,
+# models 0012, agents 0021), no DELETE on a row a run or a person still points at, and agents' heartbeats written by
+# the system user alone. A table a store with no role writes as the login (models' install tables) keeps DML. Held equal
+# to PostgreSQL by test_model_parity.py.
+RUNTIME_GRANTS: dict[str, Grants] = {
+    "agents": {
+        "background_heartbeats": ((), ()),
+        "background_jobs": (_SID, ()),
+        "case_events": (_SI, ()),
+        "case_type_versions": (_SIU, ()),
+        "case_types": (_SIU, ()),
+        "cases": (_SIU, ()),
+        "chat_search": (_SID, ()),
+        "engine_runs": (_SIU, ()),
+        "engine_steps": (_SIU, ()),
+        "engine_waits": (_SID, ()),
+        "engine_work": (_SIU, ()),
+        "eval_cases": (_SID, ()),
+        "eval_runs": (_SI, ()),
+        "form_links": (_SIU, ()),
+        "message_memory_use": (_SI, ()),
+        "ops_checkpoint_fences": (_SIU, ()),
+        "poll_cursors": (_SIU, ()),
+        "review_assignments": (_SI, ()),
+        "run_batch_rows": (_SIU, ()),
+        "run_batches": (_SIU, ()),
+        "service_events": (_SIU, ()),
+        "task_assists": (_SIU, ()),
+        "task_type_versions": (_SIU, ()),
+        "task_types": (_SIU, ()),
+        "team_default_agents": (_SIU, ()),
+        "template_copies": (_SIU, ()),
+        "thread_leases": (_SIU, ()),
+        "timers": (_SIU, ()),
+        # A trigger event is settled in place (agents 0089, 0091); what fired it is never rewritten.
+        "trigger_events": (_SI, ("detail", "item", "outcome", "run_id")),
+        "widget_deployments": (_SIU, ()),
+        "widget_mint_key_audit": (_SI, ()),
+        "widget_mint_keys": (_SIU, ()),
+    },
+    "documents": {"documents_template_copies": (_SIU, ())},
+    "models": {"model_call_log": (_SI, ()), "model_key_tenants": (_SIU, ())},
+    "platform": {"audit_entries": (_SI, ()), "policies": (_SIU, ())},
+    "tools": {"connection_audit": (_SI, ()), "secret_audit": (_SI, ()), "service_outbox": (_SI, ())},
+}
+
+
+def runtime_grants(chain: str, table: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """What `chain`'s runtime user holds on `table`: DML unless RUNTIME_GRANTS narrows it."""
+    return RUNTIME_GRANTS.get(chain, {}).get(table, (DML, ()))
+
+
+def _runtime_table_grants(chain: str, table: str, user: str) -> list[str]:
+    privileges, columns = runtime_grants(chain, table)
+    if privileges == DML and not columns:
+        return [f"GRANT {', '.join(DML)} ON dbo.{table} TO {user};"]
+    # grants.sql runs again on every upgrade, so a database granted DML by an earlier release loses the rest here; a
+    # table-wide REVOKE also takes the column grants, given back after it.
+    out = [f"REVOKE {', '.join(p for p in DML if p not in privileges)} ON dbo.{table} FROM {user};"]
+    if privileges:
+        out.append(f"GRANT {', '.join(privileges)} ON dbo.{table} TO {user};")
+    if columns:
+        out.append(f"GRANT UPDATE ON dbo.{table} ({', '.join(columns)}) TO {user};")
+    return out
+
+
 # Offline SQL holding one of these was written for PostgreSQL (op.execute text passes through unchanged).
 POSTGRES_ONLY = re.compile(
     r"DO \$\$|CREATE POLICY|ROW LEVEL SECURITY|current_setting|::\w|jsonb|SET LOCAL|\bRAISE\b", re.I
@@ -458,8 +527,8 @@ def roles_script(order: list[str]) -> str:
 def grants_script(chains_: list[dict[str, Any]]) -> str:
     out = [
         f"-- Run as {MIGRATOR} in the database after the bundle and after each upgrade; every statement runs again.\n",
-        "-- Each service's user: SELECT, INSERT, UPDATE, DELETE on its own tables (SELECT, INSERT on an append-only\n",
-        "-- one) and SELECT on its version table.\n",
+        "-- Each service's user: SELECT, INSERT, UPDATE, DELETE on its own tables, less where its PostgreSQL tenant\n",
+        "-- role holds less (an append-only log, a row never deleted), and SELECT on its version table.\n",
         "-- No other permission, so it can create, alter or drop nothing, read no other service's tables, and\n",
         "-- every security policy applies to it. A chain's user may also impersonate that chain's system user (no\n",
         "-- login), which reads every tenant's rows of the tables and columns granted to it below, as on PostgreSQL.\n",
@@ -472,11 +541,7 @@ def grants_script(chains_: list[dict[str, Any]]) -> str:
             f"IF USER_ID(N'{user}') IS NULL CREATE USER {user} FOR LOGIN {user} WITH DEFAULT_SCHEMA = dbo;"
         )
         statements.append(
-            "\n".join(
-                f"GRANT {'SELECT, INSERT' if (c['name'], t) in APPEND_ONLY else 'SELECT, INSERT, UPDATE, DELETE'}"
-                f" ON dbo.{t} TO {user};"
-                for t in c["tables"]
-            )
+            "\n".join(s for t in c["tables"] for s in _runtime_table_grants(c["name"], t, user))
             + f"\nGRANT SELECT ON dbo.{c['versionTable']} TO {user};"
         )
         if lookups := LOOKUP_USERS.get(c["name"], (None, ()))[1]:

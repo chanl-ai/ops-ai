@@ -11,18 +11,22 @@ from datetime import UTC, datetime
 
 import pytest
 import sqlalchemy as sa
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.listing import ListParams
 from ops_store import isolation
 from ops_store.schema import isolation_kind
 from ops_store.team_scope import acting_as
-from ops_tools.store.connections import app_credentials
+from ops_tools.store.connections import app_credentials, connection_audit
+from ops_tools.store.modules import service_outbox
 from ops_tools.store.secrets import SecretStore, secret_audit, tool_secrets
 
 from .conftest import setup_tx
 
 ROLE = "ops_tools_tenant"
+# The rig connects to SQL Server as the administrator, so the service's runtime user is impersonated there.
+RUNTIME = "ops_tools_runtime"
 TEAM_A, TEAM_B = "team_cards", "team_ops"
 
 
@@ -99,3 +103,27 @@ async def test_the_store_page_holds_the_acting_team_when_the_policy_lets_every_t
         _, mine = await SecretStore(engine).page(tenant, TEAM_A, ListParams())
         _, theirs = await SecretStore(engine).page(tenant, TEAM_B, ListParams())
     assert ([x.name for x in mine], theirs) == (["DESK_KEY"], [])
+
+
+async def test_the_tenant_role_cannot_rewrite_an_audit_or_outbox_row(engine: AsyncEngine, tenant: str) -> None:
+    """Audit and outbox rows are added, never changed or removed, by a tenant's transaction: as `ops_tools_tenant` on
+    PostgreSQL and the runtime user on SQL Server (the relay and the audit sweep run as the system role)."""
+    statements = {
+        f"{verb} {t.name}": (t.update().values(tenant_id=tenant) if verb == "update" else t.delete()).where(
+            t.c.tenant_id == tenant
+        )
+        for t in (connection_audit, secret_audit, service_outbox)
+        for verb in ("update", "delete")
+    }
+    for name, statement in statements.items():
+        with isolation.scope(tenant, TEAM_A):
+            async with isolation.isolated_tx(engine, role=ROLE) as c:
+                mssql = c.dialect.name == "mssql"
+                if mssql:
+                    await c.execute(sa.text(f"EXECUTE AS USER = N'{RUNTIME}'"))
+                with pytest.raises(DBAPIError) as e:
+                    async with isolation.attempt(c):
+                        await c.execute(statement)
+                if mssql:
+                    await c.execute(sa.text("REVERT"))
+        assert "permission" in str(e.value).lower() and "denied" in str(e.value).lower(), name

@@ -12,9 +12,10 @@ from uuid import uuid4
 import pytest
 import sqlalchemy as sa
 from sqlalchemy import event
+from sqlalchemy.exc import DBAPIError
 
 from ops_models.store import CallLog
-from ops_models.store.tables import model_call_log, model_calls_untenanted
+from ops_models.store.tables import model_call_log, model_calls_untenanted, model_key_tenants
 from ops_service_kit.listing import ListParams
 from ops_store import isolation
 from ops_store.schema import isolation_kind
@@ -23,6 +24,8 @@ from ops_store.team_scope import InstallScopeError
 from .conftest import Models, past_the_call_log_policy
 
 ROLE = "ops_models_tenant"
+# The rig connects to SQL Server as the administrator, so the service's runtime user is impersonated there.
+RUNTIME = "ops_models_runtime"
 
 
 def _row(key_id: str, tenant: str | None) -> dict[str, object]:
@@ -105,3 +108,28 @@ async def test_the_tenants_newest_calls_are_read_from_an_index_that_leads_with_t
     async with models.engine.connect() as c:
         found = await c.run_sync(lambda sc: sa.inspect(sc).get_indexes("model_call_log"))
     assert ["tenant_id", "created_at"] in [i["column_names"] for i in found], found
+
+
+async def test_the_tenant_role_cannot_rewrite_a_call_or_remove_a_keys_share(models: Models) -> None:
+    """A call is recorded once and a key's share is kept: as `ops_models_tenant` on PostgreSQL and the runtime user on
+    SQL Server, a change to a call and the removal of either is refused."""
+    tenant = f"t_{uuid4().hex[:8]}"
+    statements = {
+        "update model_call_log": model_call_log.update()
+        .values(outcome="x")
+        .where(model_call_log.c.tenant_id == tenant),
+        "delete model_call_log": model_call_log.delete().where(model_call_log.c.tenant_id == tenant),
+        "delete model_key_tenants": model_key_tenants.delete().where(model_key_tenants.c.tenant_id == tenant),
+    }
+    for name, statement in statements.items():
+        with isolation.scope(tenant, None):
+            async with isolation.isolated_tx(models.engine, role=ROLE) as c:
+                mssql = c.dialect.name == "mssql"
+                if mssql:
+                    await c.execute(sa.text(f"EXECUTE AS USER = N'{RUNTIME}'"))
+                with pytest.raises(DBAPIError) as e:
+                    async with isolation.attempt(c):
+                        await c.execute(statement)
+                if mssql:
+                    await c.execute(sa.text("REVERT"))
+        assert "permission" in str(e.value).lower() and "denied" in str(e.value).lower(), name
