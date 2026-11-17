@@ -119,7 +119,7 @@ function columns(showTeam: boolean, onHold: ((f: FileRecord) => void) | undefine
 }
 
 /** The columns files-service orders by (`sortBy` name or uploadedAt); the others are not sortable. */
-const SORT_COLUMNS = { name: 'name', uploaded: 'uploadedAt' };
+const SORT_COLUMNS = { name: 'name', uploaded: 'uploadedAt', size: 'size', scan: 'scan', purpose: 'purpose' };
 
 export default function FilesPage() {
   const [view, setView] = React.useState<FileView>('all');

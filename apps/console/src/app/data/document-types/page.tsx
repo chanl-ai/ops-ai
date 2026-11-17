@@ -237,7 +237,7 @@ function NewTypeDialog({
 }
 
 /** The one column the service orders by; the latest version is a number the list row does not sort on. */
-const SORT_COLUMNS = { name: "name" };
+const SORT_COLUMNS = { name: "name", latestVersion: "latestVersion" };
 
 export default function DocumentTypesPage() {
   const router = useRouter();
