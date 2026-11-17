@@ -16,8 +16,10 @@ from sqlalchemy.pool import Pool
 
 from ops_agents.api.agent_registry import SEED_TEAM
 from ops_agents.api.deps import Runtime
+from ops_agents.api.runs import graph_store
 from ops_identity import dev_service_signer, mint_service_token
 from ops_identity.testing import TEST_TOKEN_TTL_S
+from ops_service_kit.ids import now_iso
 
 from .test_graphs import thread
 from .test_hitl_facade import paused_dispute, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
@@ -118,12 +120,15 @@ async def test_the_reviews_list_reads_at_most_its_cap_from_a_source(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The list merges its sources before paging, so an unbounded source would read every review a team ever had; and
-    the cap keeps open reviews, so newer threads waiting on nobody never push one off."""
+    the cap keeps open reviews, so newer threads waiting on nobody (idle, or left `error` by a failed run) never push
+    one off."""
     client, rt = stack
     for _ in range(3):
         await paused_dispute(client)
     for _ in range(2):
         await thread(client, "complex_workflow")
+    for _ in range(3):
+        await graph_store(rt).set_thread_status(await thread(client, "complex_workflow"), "error", now_iso())
     monkeypatch.setattr(rt, "settings", rt.settings.model_copy(update={"review_list_rows_per_source": 2}))
     r = await client.get("/reviews?view=all")
     assert r.status_code == 200, r.text

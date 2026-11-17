@@ -1,7 +1,7 @@
-"""The rows the Reviews list reads from two of its sources, at most `cap` each: open ones first, then newest, then by
-key, so the rows kept at the cap are always the same ones and an open review is the last to be left off. The list
-merges these with the waiting workflow runs in Python before it pages (api/hitl_facade.list_reviews), so each source
-is bounded here rather than by the page."""
+"""The rows the Reviews list reads from two of its sources, at most `cap` each: open ones first (paused on a person,
+then running), then newest, then by key, so the rows kept at the cap are always the same ones and an open review is the
+last to be left off. The list merges these with the waiting workflow runs (already only open ones) in Python before it
+pages (api/hitl_facade.list_reviews), so each source is bounded here rather than by the page."""
 
 from __future__ import annotations
 
@@ -67,15 +67,16 @@ def capped[R: BaseModel](source: str, found: list[R], cap: int) -> list[R]:
 
 class ReviewSources(RuntimeStore):
     async def threads(self, cap: int) -> list[ThreadRow]:
-        """The acting team's graph threads, at most `cap`: those still running or waiting first, so chats and ended
-        threads never push an open review off the list, then most recently changed. Answered most recently changed
-        first, the order the list keeps."""
+        """The acting team's graph threads, at most `cap`: those paused on a person first, then those running, then the
+        rest, each most recently changed first. A failed run leaves its thread `error` for good, so this order keeps
+        newer ended threads from pushing an open review off the list. Answered most recently changed first, the order
+        the list keeps."""
         t = graph_threads
-        ended = sa.case((t.c.status == "idle", 1), else_=0)
+        rank = sa.case((t.c.status == "interrupted", 0), (t.c.status == "busy", 1), else_=2)
         q = (
             sa.select(*(t.c[name] for name in ThreadRow.model_fields))
             .where(mine(t), team_visible(t))
-            .order_by(ended, t.c.updated_at.desc(), t.c.id.desc())
+            .order_by(rank, t.c.updated_at.desc(), t.c.id.desc())
             .limit(cap)
         )
         async with self.tx() as c:
