@@ -94,6 +94,26 @@ def allowed_list(root: Path, base: str, head: str = "HEAD") -> set[str]:
     return baseline_history.maintainers_at(root, head)
 
 
+def local(run: Callable[..., Any] = subprocess.run) -> str:
+    """The status of the pull request open for this branch, read through `gh`: `required` whenever it cannot be read
+    (no pull request yet, no gh, offline), since a rise nobody can show was approved is not approved."""
+    try:
+
+        def out(*cmd: str) -> str:
+            return str(run(list(cmd), cwd=ROOT, capture_output=True, text=True, check=True).stdout).strip()
+
+        pr = json.loads(out("gh", "pr", "view", "--json", "number,baseRefName,headRefOid"))
+        repo = out("gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner")
+        base = out("git", "rev-parse", f"origin/{pr['baseRefName']}")
+        head = pr["headRefOid"]
+        return status(
+            fetch(repo, int(pr["number"])), allowed_list(ROOT, base), head,
+            lambda c: baseline_history.rose_since(ROOT, c, "HEAD"),
+        )  # fmt: skip
+    except (OSError, ValueError, KeyError, subprocess.CalledProcessError):
+        return "required"
+
+
 def self_test() -> int:
     listed = {baseline_history.login_hash("maintainer")}
     cases = [
@@ -110,6 +130,12 @@ def self_test() -> int:
         ),
     ]
     bad = [(r, want) for r, want in cases if status(r, listed) != want]
+
+    def no_gh(*_a: Any, **_k: Any) -> Any:
+        raise FileNotFoundError("gh")
+
+    if local(no_gh) != "required":  # nothing readable must never read as approved
+        bad.append(("local without gh", "required"))
     print("self-test: FAILED" if bad else f"self-test: {len(cases)} cases behave")
     return 1 if bad else 0
 
@@ -120,10 +146,14 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--pr", type=int)
     parser.add_argument("--base", help="the pull request's base sha: its maintainers list is the one that counts")
     parser.add_argument("--head", default="HEAD", help="the pull request's head sha, which a review must be on")
+    parser.add_argument("--local", action="store_true", help="read this branch's pull request through gh")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args(argv)
     if args.self_test:
         return self_test()
+    if args.local:
+        print(local())
+        return 0
     if not (args.repo and args.pr and args.base):
         parser.error("--repo, --pr and --base are required")
     allowed = allowed_list(ROOT, args.base)

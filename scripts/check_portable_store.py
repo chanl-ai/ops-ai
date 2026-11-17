@@ -528,9 +528,7 @@ def main() -> int:
     if "--commits" in sys.argv:
         missing = commit_problems()
         sys.stdout.write(
-            "\n".join(missing) + "\n"
-            if missing
-            else f"Every baseline rise since {BASELINE_BEGAN[:8]} is approved or none was made\n"
+            "\n".join(missing) + "\n" if missing else baseline_history.outcome("check_portable_store") + "\n"
         )
         return 1 if missing else 0
     now, where = current()

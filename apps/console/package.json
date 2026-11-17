@@ -7,11 +7,11 @@
     "dev:runtime": "NEXT_PUBLIC_OPS_CHAT_API_URL=${OPS_CHAT_API_URL:-http://localhost:8700} next dev -p 3017",
     "build": "next build",
     "start": "next start -p 3016",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "sh ../../scripts/ensure-sdk-ts-built.sh && tsc --noEmit",
     "check:standards": "node scripts/check-standards.mjs",
     "test": "node --test 'src/**/*.test.ts'",
     "bake:workflows": "node scripts/bake-workflow-positions.ts",
-    "verify": "tsc --noEmit && tsc --noEmit -p ../embed && node scripts/check-standards.mjs && node scripts/check-standards.mjs --self-test && node --test 'src/**/*.test.ts'"
+    "verify": "sh ../../scripts/ensure-sdk-ts-built.sh && tsc --noEmit && tsc --noEmit -p ../embed && node scripts/check-standards.mjs && node scripts/check-standards.mjs --self-test && node --test 'src/**/*.test.ts'"
   },
   "dependencies": {
     "@chanl-ai/ops-ai": "workspace:*",

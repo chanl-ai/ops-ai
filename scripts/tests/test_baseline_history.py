@@ -65,10 +65,25 @@ def test_a_rise_fails_only_where_the_review_is_required_and_passes_once_approved
     began = _repo(tmp_path)
     (tmp_path / "sites/a.txt").write_text("# header\n9 raw a.py\n")
     _git(tmp_path, "commit", "-qam", "raised\n\nStandards-exception: approved by owner: my own line")
-    for mode, red in (("required", True), ("approved", False), ("", False)):
+    for mode, red in (("required", True), ("approved", False), ("deferred", False), ("", True)):
         monkeypatch.setenv(h.REVIEW_ENV, mode)
         assert bool(h.problems(tmp_path, began, ["sites"])) is red, mode
-    assert "awaiting maintainer review on the pull request" in capsys.readouterr().err
+    assert "not checked here" in capsys.readouterr().err
+    # What a passing run says is true: only an approval says approved.
+    monkeypatch.setenv(h.REVIEW_ENV, "deferred")
+    h.problems(tmp_path, began, ["sites"])
+    assert "NOT CHECKED" in h.outcome("c") and "approved" not in h.outcome("c")
+    monkeypatch.setenv(h.REVIEW_ENV, "approved")
+    h.problems(tmp_path, began, ["sites"])
+    assert "approved by a maintainer" in h.outcome("c")
+    # A bare pytest ratchet with no status skips as not checked; one that judges still fails.
+    monkeypatch.delenv(h.REVIEW_ENV)
+    with pytest.raises(pytest.skip.Exception, match="not checked"):
+        h.judged(h.problems(tmp_path, began, ["sites"]))
+    monkeypatch.setenv(h.REVIEW_ENV, "")  # set but empty (a failed review read) is not absent: it fails
+    assert h.judged(h.problems(tmp_path, began, ["sites"]))
+    monkeypatch.setenv(h.REVIEW_ENV, "required")
+    assert h.judged(h.problems(tmp_path, began, ["sites"]))
     # The pull request's base narrows the history to its own commits.
     monkeypatch.setenv(h.REVIEW_ENV, "required")
     monkeypatch.setenv(h.BASE_ENV, _git(tmp_path, "rev-parse", "HEAD"))
@@ -123,3 +138,18 @@ def test_an_edit_to_the_gate_itself_is_a_rise_whatever_it_says(tmp_path: Path, m
         _git(tmp_path, "add", ".")
         _git(tmp_path, "commit", "-qm", f"edit {path}")
         assert any(path in p for p in h.problems(tmp_path, began, ["sites"])), path
+
+
+def test_a_json_baseline_is_a_ratchet_file_and_a_raised_count_in_it_is_a_rise(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(h.REVIEW_ENV, "required")
+    (tmp_path / "x-baseline.json").write_text('{"k": {"a.ts": 1}, "l": ["b.ts"]}')
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "begin")
+    began = _git(tmp_path, "rev-parse", "HEAD")
+    assert h.RATCHET_PATH.search("apps/console/scripts/x-baseline.json")
+    (tmp_path / "x-baseline.json").write_text('{"k": {"a.ts": 2}, "l": ["b.ts"]}')
+    _git(tmp_path, "commit", "-qam", "raised")
+    assert h.rose_since(tmp_path, began) and h.problems(tmp_path, began, ["x-baseline.json"], h.json_rows)

@@ -567,8 +567,10 @@ def test_a_baseline_only_falls_in_the_history() -> None:
     import baseline_history  # noqa: PLC0415
 
     assert (
-        baseline_history.problems(
-            ROOT, "fe46c615f0a2e3fc501853005e71564d2fc5edd1", ["packages/ops_store/tests/isolation_sites"]
+        baseline_history.judged(
+            baseline_history.problems(
+                ROOT, "fe46c615f0a2e3fc501853005e71564d2fc5edd1", ["packages/ops_store/tests/isolation_sites"]
+            )
         )
         == []
     )

@@ -128,10 +128,12 @@ def test_the_waiting_list_only_falls_in_the_history() -> None:
     sys.path.insert(0, str(root / "scripts"))
     import baseline_history  # noqa: PLC0415
 
-    problems = baseline_history.problems(
-        root,
-        "583fbae33c53c028d7a20873eeb72db811888084",
-        ["deploy/database/tests/test_indexes.py"],
-        baseline_history.waiting_dict("WAITING"),
+    problems = baseline_history.judged(
+        baseline_history.problems(
+            root,
+            "583fbae33c53c028d7a20873eeb72db811888084",
+            ["deploy/database/tests/test_indexes.py"],
+            baseline_history.waiting_dict("WAITING"),
+        )
     )
     assert problems == []

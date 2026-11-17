@@ -637,11 +637,7 @@ def main(argv: list[str]) -> int:
         return self_test()
     if "--commits" in argv:
         missing = commit_problems()
-        print(
-            "\n".join(missing)
-            if missing
-            else f"Every exception line added since {LIST_BEGAN} is approved or none was added"
-        )
+        print("\n".join(missing) if missing else baseline_history.outcome("check_access_exceptions"))
         return 1 if missing else 0
     found = findings()
     if "--list" in argv:

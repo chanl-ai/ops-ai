@@ -324,7 +324,7 @@ def main(root: Path = ROOT) -> int:
     if "--commits" in sys.argv:
         missing = commit_problems(root)
         sys.stdout.write(
-            "\n".join(missing) + "\n" if missing else "check_config_literals: every baseline rise is approved\n"
+            "\n".join(missing) + "\n" if missing else baseline_history.outcome("check_config_literals") + "\n"
         )
         return 1 if missing else 0
     now, where = current(root)

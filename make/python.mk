@@ -51,6 +51,8 @@ python-verify: ## Lint and type-check packages, then verify each service with mo
 	@# The one list of checks (make/checks.mk): the standards ratchets, the files written from code, import directions
 	@# and the SDK drift check. The pull-request checks job and pre-commit run the same list.
 	$(KEEP) $(MAKE) -s checks
+	@# The rises the pull request made need a maintainer's approval, read from GitHub; red until it exists.
+	$(KEEP) $(MAKE) -s checks-history
 	$(KEEP) uv run pytest -q scripts/tests
 	@$(ROOT)/scripts/keep_going.sh --report $(VERIFY_FAILED)
 

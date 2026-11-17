@@ -136,6 +136,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/migration/components.md` | Phase 0: the eight shared components, their files, target interfaces, three builder tracks, checks and branches |
 | `architecture/migration/pilot.md` | Phase 1: documents, files, models and runner on every component; the coverage gap measured and published |
 | `architecture/migration/api-changes.md` | Every API change the migration makes, per service, with what a caller must change; read by the console and SDK steps |
+| `architecture/migration/baseline-rises.md` | Every exception list (baseline) that holds more rows on the migration branch than on develop, with counts; the work list for bringing them down |
 | `architecture/migration/lane-platform.md` | Phase 2: platform-service's store and request layers replaced wholesale; the page shell as one call |
 | `architecture/migration/lane-kb.md` | Phase 2: kb-service's four lists in SQL, typed rows, the `kb.changed` event |
 | `architecture/migration/lane-tools.md` | Phase 2: tools-service's sixteen tables policed, hand filters onto `team_visible()`, the catalogue events |

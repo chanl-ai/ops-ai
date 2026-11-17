@@ -9,6 +9,12 @@
 # The interpreter and tools each check runs on. verify-staged.sh points them at the checkout's own environment, since a
 # `uv run` inside the export of a commit would install every member again.
 PY ?= uv run python
+
+# Who judges a baseline rise (scripts/baseline_history.py). Every run except `make checks-history` only defers: it prints
+# the rise as not checked and passes, because the review is read from GitHub there. A run that sets the variable itself
+# (CI's maintainer-review job) keeps its value. Unset outside make, the history checks fail.
+REVIEW_GIVEN := $(OPS_STANDARDS_REVIEW)
+export OPS_STANDARDS_REVIEW ?= deferred
 PYTEST ?= $(PY) -m pytest -q -p no:cacheprovider
 LINT_IMPORTS ?= uv run lint-imports --no-logo
 PYRIGHT ?= uv run pyright
@@ -18,6 +24,7 @@ CHECKS = \
   portable-store portable-store-commits \
   config-literals config-literals-commits \
   typed-boundaries typed-boundaries-commits \
+  console-baselines console-baselines-commits \
   isolation-markings isolation-sites \
   store-inventory roles-matrix sbom k8s-base \
   ratchet-history lint-imports sdk-drift changelog-entries console-standards \
@@ -50,6 +57,11 @@ check-paths.config-literals-commits = (^|/)config-literals-baseline\.txt$$
 # A dict, gather, bare task, loose body or untyped reply beyond the member's typed-boundaries-baseline.txt; any print.
 check-run.typed-boundaries = $(PY) scripts/check_typed_boundaries.py --strict
 check-paths.typed-boundaries = ^(services|packages)/[^/]+/(src/.*\.py|typed-boundaries-baseline\.txt)$$|^scripts/check_typed_boundaries\.py$$
+# The console's JSON baselines (data, palette, reuse): the history check the .txt ones have, and a self-test that plants a rise.
+check-run.console-baselines = $(PY) scripts/check_console_baselines.py --self-test
+check-paths.console-baselines = ^scripts/(check_console_baselines|baseline_history)\.py$$
+check-run.console-baselines-commits = $(PY) scripts/check_console_baselines.py --commits
+check-paths.console-baselines-commits = ^apps/console/scripts/[\w-]*baseline[\w-]*\.json$$
 check-run.typed-boundaries-commits = $(PY) scripts/check_typed_boundaries.py --commits
 check-paths.typed-boundaries-commits = (^|/)typed-boundaries-baseline\.txt$$
 
@@ -125,8 +137,11 @@ checks: ## Every check on the one list (CHECKS), each run to the end and the fai
 	@$(ROOT)/scripts/keep_going.sh --report $(CHECKS_FAILED)
 
 # The checks that read history, as CI's maintainer-review job runs them after scripts/check_review_approval.py has set
-# OPS_STANDARDS_REVIEW: `required` fails a rise in a baseline, `approved` passes it, unset prints it as awaiting review.
-CHECKS_HISTORY = access-exceptions-commits portable-store-commits config-literals-commits ratchet-history
+# OPS_STANDARDS_REVIEW: `required` fails a rise in a baseline, `approved` passes it, `deferred` prints it as not checked.
+CHECKS_HISTORY = access-exceptions-commits portable-store-commits config-literals-commits typed-boundaries-commits console-baselines-commits ratchet-history
+# The review is the one given, else the one GitHub holds for this branch's pull request (`required` when it cannot be
+# read), so a rise fails here unless a maintainer approved it. `make verify` runs this too.
+checks-history: export OPS_STANDARDS_REVIEW = $(or $(REVIEW_GIVEN),$(shell $(PY) scripts/check_review_approval.py --local))
 checks-history: ## The history checks alone, for the pull request's review job (OPS_STANDARDS_REVIEW=required|approved)
 	@rm -f $(CHECKS_FAILED)
 	@$(foreach c,$(CHECKS_HISTORY),echo "== $(c)"; $(ROOT)/scripts/keep_going.sh $(CHECKS_FAILED) $(check-run.$(c));)
