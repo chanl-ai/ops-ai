@@ -14,11 +14,11 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from ops_ai import OpsAI
-from ops_ai._transport import page_items
+from ops_ai._transport import PAGE_MAX, page_items
 
 from .common import MARK, _seed, dev_client, dev_email, emit, parser, refuse, short, verb_options
 
-PAGE = 100
+THREADS_PAGE = 100  # agents-service's thread list takes pages of up to 100
 
 
 def main(argv: list[str]) -> int:
@@ -50,12 +50,12 @@ def _new(item: dict[str, Any], key: str, since: str | None) -> bool:
 
 
 def _pages(fetch: Callable[[int], Any]) -> list[dict[str, Any]]:
+    """Every row, following `pagination.hasNext`: a page may hold fewer rows than asked for."""
     rows: list[dict[str, Any]] = []
-    for page in range(1, 50):
-        items = page_items(fetch(page))[0]
+    more: dict[str, Any] | None = {"page": 1}
+    while more is not None:
+        items, more = page_items(fetch(more["page"]))
         rows.extend(cast(list[dict[str, Any]], items))
-        if len(items) < PAGE:
-            break
     return rows
 
 
@@ -63,9 +63,9 @@ def found(ops: OpsAI, email: str, since: str | None) -> list[tuple[str, dict[str
     """This person's marked items, by kind: their own conversations and the files they uploaded."""
     out: list[tuple[str, dict[str, Any]]] = []
     for test in (False, True):
-        rows = _pages(lambda p, test=test: ops.chat.threads(page=p, pageSize=PAGE, test=test))
+        rows = _pages(lambda p, test=test: ops.chat.threads(page=p, pageSize=THREADS_PAGE, test=test))
         out += [("chat", t) for t in rows if str(t.get("title") or "").startswith(MARK) and _new(t, "createdAt", since)]
-    files = _pages(lambda p: ops.raw.files.files_list_files(search=MARK.strip(), page=p, page_size=PAGE))
+    files = _pages(lambda p: ops.raw.files.files_list_files(search=MARK.strip(), page=p, page_size=PAGE_MAX))
     out += [
         ("file", f)
         for f in files

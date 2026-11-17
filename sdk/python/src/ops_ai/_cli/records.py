@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from ops_ai import OpsAI
-from ops_ai._transport import page_items
+from ops_ai._transport import every_page, page_items
 
 from .common import client, emit, marked, parser, refuse, table, verb_options
 
@@ -58,7 +58,7 @@ def files_main(argv: list[str]) -> int:
         ops = client(ns)
         files = ops.raw.files
         if ns.verb == "list":
-            rows = page_items(files.files_list_files(search=ns.search, purpose=ns.purpose, page_size=50))[0]
+            rows = every_page(files.files_list_files, search=ns.search, purpose=ns.purpose)
             return table(ns, rows, "id", "name", "purpose", "size", "uploadedBy", "scan.status")
         if ns.verb == "show":
             return emit(ns, files.files_get_file(ns.file))
@@ -85,11 +85,11 @@ def documents_main(argv: list[str]) -> int:
     try:
         docs = client(ns).raw.documents
         if ns.verb == "types":
-            return table(ns, page_items(docs.document_types_list_types())[0], "id", "name", "status", "liveVersion")
+            return table(ns, every_page(docs.document_types_list_types), "id", "name", "status", "liveVersion")
         if ns.verb == "type":
             return emit(ns, docs.document_types_get_type(ns.type))
         if ns.verb == "extractions":
-            rows = page_items(docs.documents_file_extractions(file_id=ns.file, page_size=50))[0]
+            rows = every_page(docs.documents_file_extractions, file_id=ns.file)
             return table(ns, rows, "id", "fileId", "documentType", "status", "createdAt")
         return emit(ns, docs.documents_get_extraction(ns.extraction))
     except Exception as exc:
