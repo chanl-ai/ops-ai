@@ -36,7 +36,6 @@ import { AgentSkillsSection, type AttachFilter } from '@/components/skills/agent
 import { useAgentSkills, useAttachSkill, useDetachSkill } from '@/hooks/skill-queries';
 import { TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTabParam } from '@/hooks/use-tab-param';
-import { useWidgetTemplates } from '@/hooks/widget-queries';
 import { EvalsTab } from './_parts/evals-tab';
 import { useInstructionsAssist } from './_parts/instructions-assist';
 import { WidgetEmbeds } from '@/components/deployments/widget-embed';
@@ -166,7 +165,6 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   const errors = { name: draft.name.trim() ? undefined : 'The agent needs a name.', role: draft.role.trim() ? undefined : 'Describe the job in one line.' };
   const valid = !errors.name && !errors.role;
 
-  const widgetTemplates = useWidgetTemplates();
   // The one draft saves itself: a second after the last valid change, with no dialog and no note per save.
   const [saveError, setSaveError] = React.useState<string | null>(null);
   // The draft a save failed on: autosave does not send it again until it changes or Retry is pressed.

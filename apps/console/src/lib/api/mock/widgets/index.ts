@@ -56,7 +56,6 @@ export function createWidgetsMock(deps: { me: string }): WidgetsApi {
     return row;
   };
   return {
-    list: () => respond(() => latest()),
     get: (id) => respond(() => newest(id)),
     page: (p) => respond((m) => list(latest(), p, { text: (w) => w.name, value: () => '', facetKeys: [] }, m)),
     options: (p, granted) =>
