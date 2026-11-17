@@ -13,6 +13,7 @@ import json
 import math
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -616,27 +617,61 @@ async def team_runs(rt: Runtime) -> list[dict[str, Any]]:
     return sorted(rows, key=lambda r: str(r["created_at"]), reverse=True)
 
 
+# One run, or one decision of it, as the runner's store returns it.
+Row = dict[str, Any]
+
+
+@dataclass(frozen=True)
+class RowReads:
+    """What `all_rows` reads from this service's own tables: the runs, the case each is on, and the review steps they
+    hold, so a route can ask tools-service about `tools` with nothing open before `build_rows`."""
+
+    on_case: dict[str, str]
+    steps: list[tuple[Row, Row | None]]
+    payloads: list[Row]
+
+    @property
+    def tools(self) -> list[str]:
+        return sorted({str(c["tool"]) for p in self.payloads for c in _calls(p) if c.get("tool")})
+
+
+async def ask_policies(rt: Runtime, tools: list[str]) -> None:
+    """Each tool's write policy from tools-service, all at once."""
+    await asyncio.gather(*(policy_of(rt, t) for t in tools))
+
+
+async def read_rows(rt: Runtime) -> RowReads | None:
+    """The local reads of `all_rows`; None when the database is not yet migrated to the runner's tables."""
+    try:
+        runs = await team_runs(rt)
+    except DatabaseError as e:  # A database not yet migrated to the runner's tables lists v1 reviews alone.
+        log.warning("engine_reviews_unavailable", error=type(e).__name__)
+        return None
+    on_case = await CaseStore(rt.db).cases_of_runs([str(r["id"]) for r in runs])
+    decisions = await _runs(rt).resumes([str(r["id"]) for r in runs])
+    steps: list[tuple[Row, Row | None]] = []
+    for run in runs:
+        steps += [(run, d) for d in decisions.get(str(run["id"]), [])]
+        if run["status"] == "waiting" and run.get("waiting"):
+            steps.append((run, None))
+    return RowReads(on_case, steps, [_payload(run, d) for run, d in steps])
+
+
 async def all_rows(rt: Runtime) -> list[dict[str, Any]]:
     """Each review step of the selected team's runs (the one a run waits on as pending, and every decided one) as a
     row holding what the list counts, filters, facets and pages on: id, status, title, risk, workflow, deadline, case
     and when it opened and was decided. No typed task, wording or reply preview is read; `expand` builds the full
     review for the rows a page shows, so a count reads no more than its rows."""
-    try:
-        runs = await team_runs(rt)
-    except DatabaseError as e:  # A database not yet migrated to the runner's tables lists v1 reviews alone.
-        log.warning("engine_reviews_unavailable", error=type(e).__name__)
+    return await build_rows(rt, await read_rows(rt))
+
+
+async def build_rows(rt: Runtime, reads: RowReads | None) -> list[dict[str, Any]]:
+    """`all_rows` from its local reads. Every tool the steps call is asked at once; within one_read_per_tool each is
+    then asked once for the request, so a caller that asked first (`prefetch_policies`) makes this call none."""
+    if reads is None:
         return []
-    on_case = await CaseStore(rt.db).cases_of_runs([str(r["id"]) for r in runs])
-    decisions = await _runs(rt).resumes([str(r["id"]) for r in runs])
-    steps: list[tuple[dict[str, Any], dict[str, Any] | None]] = []
-    for run in runs:
-        steps += [(run, d) for d in decisions.get(str(run["id"]), [])]
-        if run["status"] == "waiting" and run.get("waiting"):
-            steps.append((run, None))
-    payloads = [_payload(run, d) for run, d in steps]
-    # Every tool the steps call, asked at once; within one_read_per_tool each is then asked once for the request.
-    tools = sorted({str(c["tool"]) for p in payloads for c in _calls(p) if c.get("tool")})
-    await asyncio.gather(*(policy_of(rt, t) for t in tools))
+    on_case, steps, payloads = reads.on_case, reads.steps, reads.payloads
+    await ask_policies(rt, reads.tools)
     hours = await sla_hours(rt)
     now = datetime.now(UTC)
     out: list[dict[str, Any]] = []

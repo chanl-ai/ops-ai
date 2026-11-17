@@ -24,6 +24,7 @@ from ops_policy import input_hash
 from ops_policy.approval import Binding, mint_approval
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound
 from ops_service_kit.http import Envelope, In, Out
+from ops_store import isolation
 
 from ...store.review_assignments import ReviewAssignments
 from ...store.reviews import ReviewStore
@@ -40,6 +41,7 @@ from ..auth import (
 )
 from ..deps import Runtime, runtime
 from ..envelope import ok
+from ..review_sla import sla_hours
 from ..runs import config, graph_store, pending, resolve
 from ..schemas import Approval, BulkResult, Review, ReviewList
 from ..tool_access import one_read_per_tool, policy_of
@@ -146,21 +148,26 @@ async def list_reviews(rt: Rt, me: Me, q: Annotated[ReviewsQuery, Query()]) -> J
     pending step is in its checkpoint, not a column), so no one query can sort and count them together, and the counts
     and facets cover every row, not the page. Each source therefore reads at most `review_list_rows_per_source` rows
     (Settings), newest first, logging `review_source_capped` at the cap; the decisions and policies read are those of
-    the rows kept. The route stays off `Tx`: building a review asks tools-service for its write policy."""
+    the rows kept. The route stays off `Tx`: building a review asks tools-service for its write policy, so it holds
+    two transactions, 2 by design: one to read what the reviews name, then, once tools-service has answered with none
+    open, one to build the list."""
     filters = {"risk": q.risk, "workflowId": q.workflowId, "kind": q.kind, "agentSlug": q.agentSlug, "status": q.status}
     with one_read_per_tool():
-        rows = await hitl_facade.list_reviews(
-            rt,
-            view=q.view,
-            filters=filters,
-            search=q.search,
-            page_no=q.page,
-            size=q.pageSize,
-            me=frozenset({me.email, me.name}),
-            group=q.group,
-            teams=reader_teams(me),
-            approver=me,
-        )
+        reads = await hitl_facade.read_then_ask(rt)
+        async with isolation.request_transaction():
+            rows = await hitl_facade.list_reviews(
+                rt,
+                view=q.view,
+                filters=filters,
+                search=q.search,
+                page_no=q.page,
+                size=q.pageSize,
+                me=frozenset({me.email, me.name}),
+                group=q.group,
+                teams=reader_teams(me),
+                approver=me,
+                reads=reads,
+            )
     return ok(rows)
 
 
@@ -198,13 +205,21 @@ async def get_queue_place(rt: Rt, me: Me, review_id: str, view: str = "open", gr
     """Where the review sits in a Human Tasks view (open by default): position, total and the reviews either side;
     `group=case` in the order the queue grouped by case lists them."""
     with one_read_per_tool():
-        return ok(await hitl_facade.queue_place(rt, review_id, view, group))
+        # Only the overdue view builds reviews, so only it asks tools-service (two transactions, as the list holds);
+        # the others word a deadline from the review policy, read first so none is open while platform-service answers.
+        if view != "overdue":
+            await sla_hours(rt)
+            async with isolation.request_transaction():
+                return ok(await hitl_facade.queue_place(rt, review_id, view, group))
+        reads = await hitl_facade.read_then_ask(rt)
+        async with isolation.request_transaction():
+            return ok(await hitl_facade.queue_place(rt, review_id, view, group, reads))
 
 
 @console_router.get("/{thread_id}", response_model=Envelope[Review])
 async def get_review(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
-    review = await hitl_facade.with_assignee(rt, await hitl_facade.get_review(rt, thread_id))
-    return ok(await _with_can_decide(rt, me, review))
+    with one_read_per_tool():
+        return ok(await hitl_facade.review_for(rt, me, thread_id))
 
 
 @console_router.post("/{thread_id}/decision", response_model=Envelope[Review])

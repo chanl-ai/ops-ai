@@ -100,10 +100,15 @@ async def view(
 
 
 async def get(rt: Runtime, request_id: str) -> dict[str, Any]:
-    req = await registry(rt).request(request_id)
-    if not await in_acting_team(rt, req, asked_from=True):
-        raise NotFound(f"Publish request {request_id}")
-    return await view(rt, req)
+    """The request and the check that the acting team may open it come first, so a request of another team is not found
+    before any other service is asked; the deadline policy is then read with nothing open and the view built."""
+    async with isolation.request_transaction():
+        req = await registry(rt).request(request_id)
+        if not await in_acting_team(rt, req, asked_from=True):
+            raise NotFound(f"Publish request {request_id}")
+    await sla_hours(rt)
+    async with isolation.request_transaction():
+        return await view(rt, req)
 
 
 async def in_acting_team(rt: Runtime, req: dict[str, Any], *, asked_from: bool = False) -> bool:

@@ -29,7 +29,7 @@ from ops_store import isolation
 from ...store.cases import CaseNotFound, CaseStore, Priority, Status
 from ...store.engine import EngineTransactions
 from ...store.tenancy import current_team
-from ..actors import actors
+from ..actors import actor_reads, named_actors
 from ..auth import Principal, caller_in, caller_of
 from ..case_page import assembled
 from ..deps import Runtime, runtime
@@ -387,10 +387,11 @@ async def list_cases(
     del status, priority, assignee, customer_id  # read from `q.filters`, which holds each value given
     async with isolation.request_transaction():
         listed = await CaseStore(rt.db).page([_team(me)], q, overdue=overdue)
-    rows = listed["data"]
+        rows = listed["data"]
+        known = await actor_reads(rt, [str(r["assignee"]) for r in rows if r["assignee"]])
     # One batched read of the page's owners, with nothing open; a person platform-service cannot name keeps their email
     # as the name.
-    who = await actors(rt, [str(r["assignee"]) for r in rows if r["assignee"]])
+    who = await named_actors(rt, known)
     shown = [
         _view(r) | {"owner": {"email": r["assignee"], "name": who[r["assignee"]]["name"]} if r["assignee"] else None}
         for r in rows

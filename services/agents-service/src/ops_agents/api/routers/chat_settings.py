@@ -25,6 +25,7 @@ from ops_agents.activities.overrides import limits_for, parse, resolve
 from ops_contracts.chat import BudgetAnswer, ChatOverrides, NamedRef, ThreadLimits, ThreadSettings
 from ops_service_kit.errors import ApiError, NotFound, Unprocessable
 from ops_service_kit.ids import now_iso
+from ops_store import isolation
 
 from ..auth import Principal, principal
 from ..chat_budget import answer as answer_budget
@@ -82,8 +83,10 @@ async def _view(rt: Runtime, row: dict[str, Any], agent: AgentDefinition, limits
 
 @router.get("/threads/{thread_id}/settings")
 async def get_settings(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
-    """Off the request transaction: the reply names the bases from kb-service."""
-    row, agent, limits = await _thread(rt, me, thread_id)
+    """One transaction reads the conversation and its agent; the reply then names the bases from kb-service with none
+    open."""
+    async with isolation.request_transaction():
+        row, agent, limits = await _thread(rt, me, thread_id)
     return ok((await _view(rt, row, agent, limits)).wire())
 
 

@@ -12,8 +12,6 @@ queries = 1
 
 ["GET /chat/connectors"]
 queries = 2
-transactions = 2
-connections = 2
 
 ["GET /chat/default-agent"]
 queries = 2
@@ -28,13 +26,9 @@ connections = 3
 
 ["GET /chat/threads/{thread_id}/connectors"]
 queries = 2
-transactions = 2
-connections = 2
 
 ["GET /chat/threads/{thread_id}/settings"]
 queries = 2
-transactions = 2
-connections = 2
 
 ["GET /embed/v1.js"]
 queries = 0
@@ -45,33 +39,29 @@ queries = 1
 ["GET /health/background"]
 queries = 1
 
+# Two transactions by design: the reads that name the held writes, then (tools-service asked with none open) the build.
 ["GET /reviews"]
 queries = 12
-transactions = 12
-connections = 12
+transactions = 2
+connections = 2
 
 ["GET /reviews/by-run-key/{run_key}"]
 not_budgeted = "needs a run waiting at a review step; the budget seed starts none yet"
 
 ["GET /reviews/{review_id}/place"]
 queries = 9
-transactions = 9
-connections = 9
 
+# Two transactions by design: the reads that name the held writes, then (tools-service asked with none open) the build.
 ["GET /reviews/{thread_id}"]
-queries = 10
-transactions = 10
-connections = 10
+queries = 7
+transactions = 2
+connections = 2
 
 ["GET /runs"]
 queries = 7
-transactions = 7
-connections = 7
 
 ["GET /runs/{thread_id}"]
 queries = 6
-transactions = 5
-connections = 5
 
 ["GET /v1/account-uses"]
 queries = 4
@@ -142,8 +132,6 @@ queries = 2
 
 ["GET /v1/cases"]
 queries = 2
-transactions = 2
-connections = 2
 
 ["GET /v1/cases/{case_id}"]
 queries = 5
@@ -164,8 +152,6 @@ queries = 1
 
 ["GET /v1/chat/connectors"]
 queries = 2
-transactions = 2
-connections = 2
 
 ["GET /v1/chat/default-agent"]
 queries = 2
@@ -180,8 +166,6 @@ connections = 3
 
 ["GET /v1/chat/threads/{thread_id}/connectors"]
 queries = 2
-transactions = 2
-connections = 2
 
 ["GET /v1/document-type-uses"]
 queries = 1
@@ -227,14 +211,17 @@ queries = 3
 ["GET /v1/model-aliases"]
 queries = 0
 
+# Two transactions by design: the reads that name the held writes, then (tools-service asked with none open) the build.
 ["GET /v1/overview"]
 queries = 18
-transactions = 15
-connections = 15
+transactions = 2
+connections = 2
 
 ["GET /v1/prompts/variables"]
 queries = 0
 
+# Two by design: the request and the acting-team check come first (a request of another team is not found before any
+# other service is asked), then the deadline policy is read with nothing open, then the view is built.
 ["GET /v1/publish-requests/{request_id}"]
 queries = 2
 transactions = 2
@@ -246,8 +233,6 @@ not_budgeted = "needs an installed template copy; the budget seed installs none 
 ["GET /v1/runs"]
 # The page, the total, the status and workflow facets, and the facet's workflow names.
 queries = 5
-transactions = 2
-connections = 2
 
 ["GET /v1/runs/{run_id}"]
 queries = 5
@@ -304,8 +289,6 @@ query = { follow = "false" }
 
 ["GET /v1/threads/{thread_id}/state"]
 queries = 5
-transactions = 5
-connections = 5
 
 ["GET /v1/tool-uses"]
 queries = 14

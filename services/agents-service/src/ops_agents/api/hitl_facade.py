@@ -24,6 +24,7 @@ from ops_agents.graphs.definition import WorkflowDefinition, option_declarations
 from ops_service_kit.errors import ApiError, Conflict, NotFound, ValidationFailed
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
+from ops_store import isolation
 
 from ..store.cases import CaseStore
 from ..store.events import EventLog
@@ -48,7 +49,8 @@ from .auth import (
 )
 from .deps import Runtime
 from .option_inputs import apply_inputs, held_calls
-from .review_text import describe_call
+from .review_sla import sla_hours
+from .review_text import describe_call, operations
 from .runs import Graph, config, definition, execute, graph_store, pending, resolve, resolve_rows
 from .team_names import deciding_team
 from .tool_access import policy_of
@@ -616,7 +618,64 @@ class HeldStep:
 Held = dict[str, HeldStep]
 
 
-async def all_reviews(rt: Runtime) -> tuple[list[dict[str, Any]], Held]:
+# A review or a thread row as a dictionary, as the views and the stores hand them on.
+Row = dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ReviewReads:
+    """What the review list reads from this service's own tables before any review is built: the waiting graph
+    threads with their decisions, the workflow versions they pin, and the engine's review steps."""
+
+    threads: list[tuple[Row, Row | None, DecisionOut | None]]
+    versions: dict[tuple[str, int], WorkflowDefinition]
+    engine: engine_reviews.RowReads | None
+
+
+async def read_reviews(rt: Runtime) -> ReviewReads:
+    """The local reads that say which tools and teams the reviews name, for a caller that holds one transaction."""
+    threads, versions = await _thread_reviews(rt)
+    return ReviewReads(threads, versions, await engine_reviews.read_rows(rt))
+
+
+async def ask_outside(rt: Runtime, reads: ReviewReads) -> None:
+    """Asks tools-service for each held write's policy, and warms the deadline policy, the tool directory and the team
+    names the reviews are worded with, so building them makes none of those calls while a transaction is open. Each
+    answer is kept for the request by `one_read_per_tool` and the request-wide directory read; a caller outside the
+    first asks again where it builds."""
+    tools: set[str] = set()
+    teams: set[str] = set()
+    for row, waiting, _ in reads.threads:
+        if not waiting:
+            continue
+        if row.get("team_id"):
+            teams.add(str(row["team_id"]))
+        payload = waiting["payload"]
+        raw_options: list[Any] = list(_get(payload, "options") or [])
+        calls: list[Any] = [_get(payload, "call"), *(_get(o, "call") for o in raw_options)]
+        by_option: Any = _get(payload, "calls") or {}
+        calls += list(by_option.values())
+        tools |= {str(_get(c, "tool")) for c in calls if _get(c, "tool")}
+    if reads.engine is not None:
+        tools |= set(reads.engine.tools)
+        teams |= {str(run["team_id"]) for run, _ in reads.engine.steps if run.get("team_id")}
+    await engine_reviews.ask_policies(rt, sorted(tools))
+    await sla_hours(rt)
+    await operations(rt)
+    for team in sorted(teams):
+        await deciding_team(rt, team)
+
+
+async def read_then_ask(rt: Runtime) -> ReviewReads:
+    """`read_reviews` in its own transaction, then `ask_outside` with none open: the first of the two transactions
+    a review list or the Overview holds, the second building the reviews from these reads."""
+    async with isolation.request_transaction():
+        reads = await read_reviews(rt)
+    await ask_outside(rt, reads)
+    return reads
+
+
+async def build_reviews(rt: Runtime, reads: ReviewReads) -> tuple[list[Row], Held]:
     """Every review the selected team may see, each with who it is assigned to. A workflow step is the row
     engine_reviews.all_rows makes, enough to count, filter and page on; `engine_reviews.expand` builds the full review
     of the rows a caller shows. Also each waiting thread review's thread and step payload, so the list says who may
@@ -624,8 +683,8 @@ async def all_reviews(rt: Runtime) -> tuple[list[dict[str, Any]], Held]:
     now = datetime.now(UTC)
     out: list[dict[str, Any]] = []
     held: Held = {}
-    threads, versions = await _thread_reviews(rt)
-    known = await known_for(rt, [str(row["id"]) for row, waiting, _ in threads if waiting], versions)
+    threads = reads.threads
+    known = await known_for(rt, [str(row["id"]) for row, waiting, _ in threads if waiting], reads.versions)
     for row, waiting, d in threads:
         if waiting:
             out.append(await review_view(rt, row, waiting, now, known))
@@ -633,9 +692,14 @@ async def all_reviews(rt: Runtime) -> tuple[list[dict[str, Any]], Held]:
         elif d is not None:
             out.append(_decided(d))
     # Agent and workflow publish requests are reviews too: one list, counted and filtered with the rest.
-    rows = out + await publish_reviews.all_views(rt) + await engine_reviews.all_rows(rt)
+    rows = out + await publish_reviews.all_views(rt) + await engine_reviews.build_rows(rt, reads.engine)
     assigned = await ReviewAssignments(rt.db).current([str(r["id"]) for r in rows])
     return [r | {"assignee": assigned.get(str(r["id"]), r.get("assignee"))} for r in rows], held
+
+
+async def all_reviews(rt: Runtime) -> tuple[list[Row], Held]:
+    """`build_reviews` after its reads, for a caller that holds no transaction of its own."""
+    return await build_reviews(rt, await read_then_ask(rt))
 
 
 async def _places(rt: Runtime) -> list[dict[str, Any]]:
@@ -754,10 +818,12 @@ async def list_reviews(
     group: str | None = None,
     teams: list[str],
     approver: Principal | None = None,
+    reads: ReviewReads | None = None,
 ) -> dict[str, Any]:
     """`me` is every name the caller is recorded by (email, name); Assigned to me lists open reviews assigned to one.
     `group="case"` orders the view by case and names each row's case from `teams`, the teams the caller reads in.
-    With `approver`, each row of the page says whether they may decide it now (`canDecide`)."""
+    With `approver`, each row of the page says whether they may decide it now (`canDecide`). `reads` (from
+    `read_then_ask`) lets the caller hold one transaction for everything after the outside calls."""
     if view not in REVIEW_VIEWS:
         raise ValidationFailed(f"Unknown view {view}.")
 
@@ -765,7 +831,7 @@ async def list_reviews(
         return REVIEW_VIEWS["open"](r) and r.get("assignee") in me
 
     views = REVIEW_VIEWS | {"mine": mine}
-    rows, held = await all_reviews(rt)
+    rows, held = await build_reviews(rt, reads) if reads is not None else await all_reviews(rt)
     counts = {name: sum(1 for r in rows if match(r)) for name, match in views.items() if name != "all"}
     today = datetime.now(UTC).date()
     decided = [r for r in rows if r.get("decidedAt")]
@@ -822,13 +888,18 @@ async def _may_decide(rt: Runtime, approver: Principal, review_id: str, status: 
     return True
 
 
-async def queue_place(rt: Runtime, review_id: str, view: str = "open", group: str | None = None) -> dict[str, Any]:
+async def queue_place(
+    rt: Runtime, review_id: str, view: str = "open", group: str | None = None, reads: ReviewReads | None = None
+) -> dict[str, Any]:
     """Where a review sits in a view, in the order Human Tasks lists it: its position, the total, and the reviews either
     side, so a task's page says "5 of 24" and steps through the queue without the console fetching it."""
     if view not in REVIEW_VIEWS:
         raise ValidationFailed(f"Unknown view {view}.")
     # Overdue reads each review's deadline, which only a built review has; the other views need the id and status.
-    rows = (await all_reviews(rt))[0] if view == "overdue" else await _places(rt)
+    if view != "overdue":
+        rows = await _places(rt)
+    else:
+        rows = (await build_reviews(rt, reads))[0] if reads is not None else (await all_reviews(rt))[0]
     ids = [str(r["id"]) for r in _grouped([r for r in rows if REVIEW_VIEWS[view](r)], group)]
     # A run's id names the review it waits on (`<run>:<step>:<iteration>`), as GET /reviews/{id} reads it.
     if review_id not in ids:
@@ -851,6 +922,16 @@ async def get_review(rt: Runtime, thread_id: str) -> dict[str, Any]:
         return await publish_reviews.get(rt, thread_id)
     if engine_reviews.is_engine_id(thread_id):
         return await engine_reviews.get(rt, thread_id)
+    row, step, d = await _thread_step(rt, thread_id)
+    if step is not None:
+        return await review_view(rt, row, step, datetime.now(UTC))
+    assert d is not None
+    return _decided(d)
+
+
+async def _thread_step(rt: Runtime, thread_id: str) -> tuple[Row, Row | None, DecisionOut | None]:
+    """A graph thread's row, the step it waits on (None once decided) and its decision; not found when it holds no
+    review."""
     row = await graph_store(rt).thread(thread_id)
     if row is None:
         raise NotFound("Review")
@@ -858,10 +939,30 @@ async def get_review(rt: Runtime, thread_id: str) -> dict[str, Any]:
     waiting = pending(await graph.aget_state(config(thread_id)))
     d = (await _decisions(rt, [thread_id])).get(thread_id)
     if waiting and not (d and d.decision_id == waiting[0]["id"]):
-        return await review_view(rt, row, waiting[0], datetime.now(UTC))
+        return row, waiting[0], d
     if d is not None:
-        return _decided(d)
+        return row, None, d
     raise NotFound("Review")
+
+
+async def review_for(rt: Runtime, approver: Principal, thread_id: str) -> Row:
+    """`get_review` with who it is assigned to and whether `approver` may decide it now (`canDecide`). A graph thread's
+    review takes two transactions: the thread and its step, then, once tools-service has answered with none open, the
+    review built from them."""
+    if publish_reviews.is_request_id(thread_id) or engine_reviews.is_engine_id(thread_id):
+        review = await with_assignee(rt, await get_review(rt, thread_id))
+        waiting = review.get("status") in ("pending", "in_review")
+        return review | {"canDecide": waiting and await can_decide(rt, approver, str(review["id"]))}
+    async with isolation.request_transaction():
+        row, step, d = await _thread_step(rt, thread_id)
+        if step is None:
+            assert d is not None
+            return await with_assignee(rt, _decided(d)) | {"canDecide": False}
+    await ask_outside(rt, ReviewReads([(row, step, d)], {}, None))
+    async with isolation.request_transaction():
+        review = await with_assignee(rt, await review_view(rt, row, step, datetime.now(UTC)))
+        held = {str(row["id"]): HeldStep(ThreadRow.model_validate(row), step["payload"])}
+        return review | {"canDecide": await _may_decide(rt, approver, str(review["id"]), review["status"], held)}
 
 
 async def decide(

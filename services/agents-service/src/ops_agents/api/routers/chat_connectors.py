@@ -26,6 +26,7 @@ from ops_service_kit.errors import Unprocessable
 from ops_service_kit.http import In, Out
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
+from ops_store import isolation
 
 from ...activities.tool_directory import ToolsUnavailable
 from ...domain.accounts import chosen_accounts
@@ -180,8 +181,9 @@ async def new_chat_connectors(
 ) -> JSONResponse:
     """A new chat's connectors before it exists, for the picker on Chat's home: the agent's (the team's default when
     none is named), every one on. The chosen set goes onto the chat as soon as it is made, before its first message."""
-    named = agent_id or await TeamDefaults(rt.db).agent(me.team_id)
-    team = await agent_team(rt, named) if named else None
+    async with isolation.request_transaction():
+        named = agent_id or await TeamDefaults(rt.db).agent(me.team_id)
+        team = await agent_team(rt, named) if named else None
     agent = rt.catalog.agent(named) if named else None
     if named and agent is None:
         raise Unprocessable("That agent is not live, so it cannot be chatted with.")
@@ -199,7 +201,8 @@ async def new_chat_connectors(
 async def get_connectors(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     """The chat's connectors for the composer's picker: each app the agent holds tools of, with its state for the
     person and whether this chat uses it, then the apps the team has off."""
-    row, agent, limits = await _thread(rt, me, thread_id)
+    async with isolation.request_transaction():
+        row, agent, limits = await _thread(rt, me, thread_id)
     apps = await _by_app(rt, me, str(row["team_id"]), agent.id, list(limits.switchable_tool_ids))
     stored = cast(dict[str, Any], row.get("overrides") or {})
     chosen = chosen_accounts(agent=agent.accounts, chat=cast(dict[str, str], stored.get("accounts") or {}))

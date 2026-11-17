@@ -34,6 +34,7 @@ from ops_service_kit.errors import (
 from ops_service_kit.http import Envelope, In, ListResult
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListQuery
+from ops_store import isolation
 
 from ...store.leases import LeaseHeldError
 from ...store.thread_list import threads_page
@@ -59,7 +60,7 @@ from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..event_log import REVIEW_KINDS
 from ..publish_policy import decide
-from ..review_text import describe_call
+from ..review_text import describe_call, operations
 from ..runs import config, definition, execute, graph_store, pending, require_graphs, resolve
 from ..schemas import (
     SSE_RESPONSE,
@@ -286,9 +287,23 @@ async def _worded_failure(rt: Runtime, values: dict[str, Any]) -> dict[str, Any]
 
 @router.get("/{thread_id}/state", response_model=Envelope[ThreadState])
 async def thread_state(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
-    row, graph = await _thread_for(rt, me, thread_id)
-    snap = await graph.aget_state(_config(thread_id))
-    pending = _pending(snap)
+    """One transaction for the thread, its checkpoint, timers and usage. The tool directory is asked after it, with
+    nothing open, for the wording of a refused call and of a step's options; a step with options then reads its
+    workflow version in a second."""
+    async with isolation.request_transaction():
+        row, graph = await _thread_for(rt, me, thread_id)
+        snap = await graph.aget_state(_config(thread_id))
+        pending = _pending(snap)
+        sla = await sla_view(rt, thread_id)
+        cost = totals_view(await rt.usage.totals(thread_id)) if rt.usage else None
+        budget = budget_view(await rt.usage.budget(thread_id)) if rt.usage else None
+    values = with_children(snap.values or {}, row["meta"] or {})
+    if values.get("tool_error") or pending:
+        await operations(rt)
+    interrupt = None
+    if pending:
+        async with isolation.request_transaction():
+            interrupt = await hitl_facade.interrupt_view(rt, row, pending[0])
     return ok(
         {
             "threadId": thread_id,
@@ -296,12 +311,12 @@ async def thread_state(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
             "version": row["version"],
             "digest": row["digest"],
             "status": row["status"],
-            "values": jsonable_encoder(await _worded_failure(rt, with_children(snap.values or {}, row["meta"] or {}))),
+            "values": jsonable_encoder(await _worded_failure(rt, values)),
             "next": list(snap.next),
-            "interrupt": await hitl_facade.interrupt_view(rt, row, pending[0]) if pending else None,
-            "sla": await sla_view(rt, thread_id),
-            "cost": totals_view(await rt.usage.totals(thread_id)) if rt.usage else None,
-            "budget": budget_view(await rt.usage.budget(thread_id)) if rt.usage else None,
+            "interrupt": interrupt,
+            "sla": sla,
+            "cost": cost,
+            "budget": budget,
         }
     )
 

@@ -44,6 +44,7 @@ from ops_service_kit.http import Envelope, In, LabelledListResult, ListResult, p
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
+from ops_store import isolation
 
 from ...store.actor_names import UNNAMED_WORKFLOW
 from ...store.definition_list import definitions_page
@@ -55,7 +56,7 @@ from ...store.tenancy import current_team, current_tenant
 from ...store.trigger_events import TriggerEvents
 from .. import ai_steps_gate, engine_lifecycle, run_starts, run_story, step_shapes, task_view
 from ..account_names import account_uses_in
-from ..actors import ActorView, actors, started_by_of
+from ..actors import ActorView, actor_reads, actors, named_actors, started_by_of
 from ..agent_registry import registry as agent_registry
 from ..auth import (
     Principal,
@@ -1208,7 +1209,8 @@ async def list_engine_runs(
     repeat to keep several; `facets.status` and `facets.workflowId` count the runs per status
     and per workflow under the other filters, and `labels.workflowId` names each counted workflow, so the workflow
     filter is filled from this reply. A scoped API key lists its own workflow's runs only.
-    No request transaction: people's names and the masking policy come from platform-service, with none open."""
+    One transaction for the runs, outcomes and actors read; people's names and the masking policy come from
+    platform-service with none open."""
     # Both reach the store through `q.filters`; declared so the document and the SDKs name them.
     del status
     pinned = None
@@ -1220,10 +1222,13 @@ async def list_engine_runs(
             return ok(nothing)
         # A predicate, not a filter: the workflow facet, which leaves its own filter out, counts this one only.
         pinned = scope[1]
-    listed = await runs(rt).listed(q, workflow_id=pinned)
-    rows = listed["data"]
-    who = await actors(rt, [started_by_of(r) for r in rows])
-    ended = await run_story.outcome_texts(rt, rows)
+    # One transaction for this service's own reads; people's names and the masking policy are asked after it closes.
+    async with isolation.request_transaction():
+        listed = await runs(rt).listed(q, workflow_id=pinned)
+        rows = listed["data"]
+        known = await actor_reads(rt, [started_by_of(r) for r in rows])
+        ended = await run_story.outcome_texts(rt, rows)
+    who = await named_actors(rt, known)
     views = [
         await for_people(rt, r, run_view(r))
         | {
