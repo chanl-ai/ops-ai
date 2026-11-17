@@ -38,8 +38,10 @@ await withUiStack(
     const policy = await fetch(`http://127.0.0.1:${TOOLS_PORT}/v1/send-policy`, { method: 'PUT', headers: P, body: JSON.stringify({ text: POLICY }) });
     if (policy.status !== 200) throw new Error(`setup: saving the sending policy answered ${policy.status}: ${(await policy.text()).slice(0, 300)}`);
     const runOf = async (subject) => {
-      const id = await start(J, ID, { subject }, { mode: 'live' });
-      await settled(J, id);
+      // A policy change refuses every token issued before it (permissions_changed), so James signs in again per run.
+      const fresh = await as(JAMES);
+      const id = await start(fresh, ID, { subject }, { mode: 'live' });
+      await settled(fresh, id);
       return id;
     };
 
