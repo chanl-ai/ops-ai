@@ -1,8 +1,9 @@
 """Keeps the API key copy (store/api_key_copies.py) in step with platform-service.
 
-An `api_key.changed` event, delivered at `POST /v1/platform-events`, applies the one key it names. The resync is what
-keeps the copy right while platform-service sends no such event, and repairs one the relay never delivered: it reads
-`GET /v1/api-key-summaries` for each tenant this service holds agents for and makes that tenant's rows equal to it.
+An `api_key.changed` event, which platform-service writes with every key write, delivered at `POST /v1/platform-events`,
+applies the one key it names. The resync repairs an event the relay never delivered and a key's last use, which is no
+event: it reads `GET /v1/api-key-summaries` for each tenant this service holds agents for and makes that tenant's rows
+equal to it, at each key's revision.
 
 The copy is read before platform-service is asked and reconciled after, each in its own transaction; nothing is held
 while platform-service answers."""

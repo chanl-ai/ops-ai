@@ -410,6 +410,8 @@ class ApiKeySummary(Out):
     last_used_at: str | None
     expires_at: str | None
     created_at: str
+    # Raised by every write and carried by its `api_key.changed` event, so a copy keeps whichever state is newer.
+    revision: int
 
 
 class KeyTargetIn(In):

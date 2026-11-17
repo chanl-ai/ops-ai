@@ -1691,6 +1691,8 @@ export interface components {
             name: string;
             /** Prefix */
             prefix: string;
+            /** Revision */
+            revision: number;
             /**
              * Status
              * @enum {string}

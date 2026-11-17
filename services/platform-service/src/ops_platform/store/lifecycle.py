@@ -31,6 +31,7 @@ from ops_store.dialect import locked
 from ops_store.rows import one
 
 from .audit import record, record_grants_ending
+from .key_events import change_keys
 from .lookups import PURGE_DUE, lookup
 from .roles import bump_version, mirror_membership, team_admins
 from .tables import (
@@ -210,10 +211,8 @@ class LifecycleStore(TenantDb):
                 .where(sessions.c.user_id == user_id, sessions.c.revoked_at.is_(None))
                 .values(revoked_at=at)
             )
-            await c.execute(
-                api_keys.update()
-                .where(api_keys.c.created_by == user_id, api_keys.c.disabled_at.is_(None))
-                .values(disabled_at=at)
+            await change_keys(
+                c, sa.and_(api_keys.c.created_by == user_id, api_keys.c.disabled_at.is_(None)), {"disabled_at": at}
             )
             await bump_version(c, tenant_id)
             await _audit(
@@ -235,7 +234,7 @@ class LifecycleStore(TenantDb):
             await c.execute(
                 sessions.update().where(sessions.c.user_id != by, sessions.c.revoked_at.is_(None)).values(revoked_at=at)
             )
-            await c.execute(api_keys.update().where(api_keys.c.disabled_at.is_(None)).values(disabled_at=at))
+            await change_keys(c, api_keys.c.disabled_at.is_(None), {"disabled_at": at})
             await _audit(
                 c, tenant_id=tenant_id, team_id=None, actor=by, action="workspace.close", target_kind="workspace",
                 target_id=tenant_id, request_id=request_id,
@@ -250,7 +249,7 @@ class LifecycleStore(TenantDb):
             await c.execute(
                 tenants.update().where(tenants.c.id == tenant_id).values(status=ACTIVE, closed_at=None, closed_by=None)
             )
-            await c.execute(api_keys.update().where(api_keys.c.disabled_at == closed_at).values(disabled_at=None))
+            await change_keys(c, api_keys.c.disabled_at == closed_at, {"disabled_at": None})
             await _audit(
                 c, tenant_id=tenant_id, team_id=None, actor=by, action="workspace.restore", target_kind="workspace",
                 target_id=tenant_id, request_id=request_id,
@@ -349,10 +348,8 @@ class LifecycleStore(TenantDb):
                     ),
                 )
             )
-            await c.execute(
-                api_keys.update()
-                .where(api_keys.c.team_id == team_id, api_keys.c.disabled_at.is_(None))
-                .values(disabled_at=at)
+            await change_keys(
+                c, sa.and_(api_keys.c.team_id == team_id, api_keys.c.disabled_at.is_(None)), {"disabled_at": at}
             )
             await bump_version(c, tenant_id)
             await _audit(

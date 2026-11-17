@@ -60,7 +60,10 @@ async def test_the_relay_reads_the_outbox_as_this_service_and_delivers_the_remov
     [row] = await member_rows(platform, h, role="builder")
     await platform.public.post("/v1/settings/members/delete", headers=h, json={"ids": [row["id"]]})
     tools = Client()
-    delivered = await platform_relay(platform.engine, {"tools": tools}).once()
+    # Every due row, not one batch: other tests' events (each API key write is one) can fill the first.
+    relay, delivered = platform_relay(platform.engine, {"tools": tools}), 0
+    while sent := await relay.once():
+        delivered += sent
     assert delivered >= 1 and [s[1]["name"] for s in tools.sent if s[2] == admin.tenant_id] == ["member.removed"]
 
 

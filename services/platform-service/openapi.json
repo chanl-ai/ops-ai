@@ -357,6 +357,10 @@
             "title": "Prefix",
             "type": "string"
           },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
           "status": {
             "enum": [
               "active",
@@ -390,7 +394,8 @@
           "target",
           "lastUsedAt",
           "expiresAt",
-          "createdAt"
+          "createdAt",
+          "revision"
         ],
         "title": "ApiKeySummary",
         "type": "object"

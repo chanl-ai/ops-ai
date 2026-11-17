@@ -26,7 +26,7 @@ from .base import metadata
 from .tenancy import RuntimeStore, current_tenant
 
 API_KEY_CHANGED = ApiKeyChanged.model_fields["kind"].default
-# platform-service sends no revision until it publishes the event, so a resync item is written at this one: a later
+# The revision of a listed key whose summary carries none (a platform-service older than its `revision` field): a later
 # event at any revision above it wins, and the next resync sets the row back to what platform lists.
 LISTED_REVISION = 0
 
@@ -48,7 +48,8 @@ api_key_copies = copies.copy_table(
 sa.Index("ix_api_key_copies_team_name", api_key_copies.c.tenant_id, api_key_copies.c.team_id, api_key_copies.c.name)
 
 RESYNC_KEY = "api_key_copy_resync"
-# A revoked key stays listed until its event or this pass: a minute, since platform-service sends no event yet.
+# The repair pass for an event the relay never delivered and for a key's last use, which is no event. A constant,
+# not a setting, so it stays at a minute.
 RESYNC_EVERY_S = 60.0
 RESYNC = background.register(
     background.Process(
@@ -81,6 +82,8 @@ class KeySummary(Out):
     expires_at: str | None
     created_at: str
     team_id: str
+    # The key's revision, as its `api_key.changed` events carry it, so a resync never sets a row below an event.
+    revision: int = LISTED_REVISION
 
 
 def listed_event(summary: KeySummary, *, tenant_id: str) -> Event:
@@ -99,7 +102,7 @@ def listed_event(summary: KeySummary, *, tenant_id: str) -> Event:
         expires_at=summary.expires_at,
     )
     return Event(
-        name=API_KEY_CHANGED, tenant_id=tenant_id, team_id=summary.team_id, revision=LISTED_REVISION, payload=payload
+        name=API_KEY_CHANGED, tenant_id=tenant_id, team_id=summary.team_id, revision=summary.revision, payload=payload
     )
 
 

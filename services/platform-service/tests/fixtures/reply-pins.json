@@ -55,6 +55,7 @@
       "prefix": "<key>",
       "status": "active",
       "target": null,
+      "revision": 1,
       "teamId": "<team>"
     }
   ],

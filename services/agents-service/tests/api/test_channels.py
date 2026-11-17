@@ -12,18 +12,19 @@ from typing import Any
 from httpx import AsyncClient
 
 from ops_agents.store.agent_registry import registry_agents
-from ops_agents.store.api_key_copies import ApiKeyCopies, KeySummary, listed_event
+from ops_agents.store.api_key_copies import ApiKeyCopies, KeySummary, api_key_copies, listed_event
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.mailboxes import MailboxRow, MailboxStore
 from ops_agents.store.poll_cursors import poll_cursors
 from ops_agents.store.tenancy import tenant_scope
 from ops_agents.store.widget_deployments import WidgetDeployments
 from ops_engine.store import RunStore
+from ops_identity import dev_service_signer, mint_service_token
+from ops_store import copies
 from ops_store.outbox import ApiKeyChanged
 from tests.api.test_action_roles import REVIEWER
 from tests.api.test_activity import email
 from tests.api.test_case_routes import started_run
-from tests.api.test_default_assistant import platform_token
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from tests.engine.test_lifecycle_rights import BUILDER, TENANT, VIEWER, person
 
@@ -501,20 +502,38 @@ async def test_channel_list_pages_filters_and_counts_every_type(stack: Stack) ->
     compare(seen, FIXTURES / "reply-pins-channel-pages.json")
 
 
-async def test_an_api_key_event_from_platform_lists_and_revokes_the_key(stack: Stack) -> None:  # noqa: F811
-    # As platform's relay sends it (`ops_store.outbox.add`); a replay of the older revision changes nothing.
-    c, _ = stack
+async def test_an_api_key_event_from_platform_keeps_the_newest_state_in_its_own_tenant(stack: Stack) -> None:  # noqa: F811
+    # As platform's relay sends it (`ops_store.outbox.add`): a repeat or an older revision changes nothing, a delete
+    # buries the row, and the same key id in another tenant never touches this tenant's copy.
+    c, rt = stack
     made = ApiKeyChanged(id="key_new", name="Billing sync", prefix="key_new", status="active", created_at="n")
 
-    async def send(payload: ApiKeyChanged, revision: int) -> int:
+    async def send(payload: ApiKeyChanged, revision: int, tenant: str = TENANT) -> None:
         body = {"name": "api_key.changed", "key": f"key_new@{revision}", "teamId": "team_ops"}
         body |= {"payload": payload.model_dump(by_alias=True, mode="json") | {"revision": revision}}
-        r = await c.post("/v1/platform-events", json=body, headers=platform_token("team_ops", ["agents:create"]))
+        token = mint_service_token(
+            dev_service_signer(), service="platform", audience="agents", tenant_id=tenant, scopes=["agents:create"],
+            team_id="team_ops",
+        )  # fmt: skip
+        r = await c.post("/v1/platform-events", json=body, headers={"Authorization": f"Bearer {token}"})
         assert r.status_code == 200 and r.json()["data"]["handled"], r.text
-        return int(r.json()["data"]["changed"])
+
+    async def held(tenant: str) -> dict[str, tuple[int, bool, str]]:
+        with tenant_scope(tenant):
+            rows = await ApiKeyCopies(rt.db).held()
+        status = [c.name for c in api_key_copies.c if c.name not in copies.OWN].index("status")
+        return {k[-1]: (h.revision, h.deleted, h.values[status]) for k, h in rows.items()}
 
     await send(made, 1)
     assert [r["name"] for r in (await channels(c, BUILDER, type="api"))["data"]] == ["Billing sync"]
-    await send(made.model_copy(update={"status": "revoked"}), 2)
+    await send(made.model_copy(update={"status": "revoked"}), 3)
+    await send(made.model_copy(update={"name": "Renamed late"}), 2)
     await send(made, 1)
     assert (await channels(c, BUILDER, type="api"))["data"] == []
+    await send(made.model_copy(update={"name": "Other tenant's key"}), 9, tenant="tenant_other")
+    assert await held(TENANT) == {"key_new": (3, False, "revoked")}
+    assert await held("tenant_other") == {"key_new": (9, False, "active")}
+    await send(made.model_copy(update={"status": "revoked", "deleted": True}), 4)
+    await send(made.model_copy(update={"status": "active"}), 4)
+    assert await held(TENANT) == {"key_new": (4, True, "revoked")}
+    assert await held("tenant_other") == {"key_new": (9, False, "active")}

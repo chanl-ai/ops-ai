@@ -15,6 +15,7 @@ from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListParams
 from ops_store.listing import ListPage
 
+from .store.key_events import status_of
 from .store.keys import KeyRow, KeyStore
 from .store.members import Actor
 from .teams import Members
@@ -31,7 +32,7 @@ def target_of(row: KeyRow) -> dict[str, Any] | None:
 
 
 def shown(row: KeyRow) -> dict[str, Any]:
-    status = "revoked" if row.revoked_at else "disabled" if row.disabled_at else "active"
+    status = status_of(row.revoked_at, row.disabled_at)
     out = {
         "id": row.id,
         "name": row.name,
@@ -52,7 +53,8 @@ def summary(row: KeyRow) -> dict[str, Any]:
     """A key as another service lists it: what it serves and whether it works, never its creator or secret."""
     out = shown(row)
     return {k: out[k] for k in ("id", "name", "prefix", "status", "target", "lastUsedAt", "expiresAt", "createdAt")} | {
-        "teamId": row.team_id
+        "teamId": row.team_id,
+        "revision": row.revision,
     }
 
 

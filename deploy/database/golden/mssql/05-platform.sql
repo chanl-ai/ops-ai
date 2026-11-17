@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- platform-service, stamped at 0044_signin_sp_portable_body
+-- platform-service, stamped at 0045_api_key_revision
 CREATE TABLE tenants (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -175,6 +175,7 @@ CREATE TABLE api_keys (
 	target_kind VARCHAR(16) NULL, 
 	target_id VARCHAR(64) NULL, 
 	target_version INTEGER NULL, 
+	revision INTEGER NOT NULL DEFAULT 1, 
 	CONSTRAINT api_keys_pkey PRIMARY KEY (id), 
 	CONSTRAINT fk_api_keys_team FOREIGN KEY(tenant_id, team_id) REFERENCES teams (tenant_id, id), 
 	CONSTRAINT fk_api_keys_creator FOREIGN KEY(tenant_id, created_by) REFERENCES users (tenant_id, id), 
@@ -708,5 +709,5 @@ CREATE TABLE alembic_version_platform (
     CONSTRAINT alembic_version_platform_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_platform (version_num) VALUES ('0044_signin_sp_portable_body');
+INSERT INTO alembic_version_platform (version_num) VALUES ('0045_api_key_revision');
 GO

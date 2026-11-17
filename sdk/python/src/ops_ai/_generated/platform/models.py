@@ -781,6 +781,7 @@ class ApiKeySummary(TypedDict, closed=True):
     lastUsedAt: str | None
     name: str
     prefix: str
+    revision: int
     status: Literal["active", "revoked", "disabled"]
     target: KeyTarget | None
     teamId: str

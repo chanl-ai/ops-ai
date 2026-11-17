@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from ops_access.platform_events import POLICY_CHANGED, TEAM_CREATED
 from ops_store.outbox import Poster, Relay, relay
 
+from .key_events import API_KEY_CHANGED
 from .members import MEMBER_REMOVED
 from .tables import platform_outbox
 from .tenancy import ROLE
@@ -23,6 +24,7 @@ ROUTES: dict[str, tuple[str, ...]] = {
     MEMBER_REMOVED: ("tools",),
     TEAM_CREATED: ("tools", "agents"),
     POLICY_CHANGED: ("agents",),
+    API_KEY_CHANGED: ("agents",),
 }
 # The rights a subscriber checks before acting on each event; the relay's token for that service carries them.
 SCOPES: dict[str, list[str]] = {"tools": ["connections:delete", "tools:create"], "agents": ["agents:create"]}

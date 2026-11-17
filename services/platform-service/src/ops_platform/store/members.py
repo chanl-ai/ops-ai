@@ -29,6 +29,7 @@ from ops_store.outbox import add as add_event
 from ops_store.rows import one, rows
 
 from .audit import record, record_grants_ending
+from .key_events import change_keys
 from .lookups import INVITE, lookup
 from .roles import mirror_membership, team_admins
 from .tables import api_keys, audit_entries, members, platform_outbox, sessions, teams, users
@@ -371,14 +372,14 @@ class TeamStore(TenantDb):
                         .where(sessions.c.user_id == user_id, sessions.c.revoked_at.is_(None))
                         .values(revoked_at=at)
                     )
-                    await c.execute(
-                        api_keys.update()
-                        .where(
+                    await change_keys(
+                        c,
+                        sa.and_(
                             api_keys.c.team_id == actor.team_id,
                             api_keys.c.created_by == user_id,
                             api_keys.c.disabled_at.is_(None),
-                        )
-                        .values(disabled_at=at)
+                        ),
+                        {"disabled_at": at},
                     )
                 await _audit(c, actor, "member.remove", member_id, {"email": row.email})
                 bulk.updated.append(member_id)

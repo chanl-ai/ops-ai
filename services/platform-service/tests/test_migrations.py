@@ -18,7 +18,7 @@ from ops_store.testing import NO_SQL_SERVER, sql_server_schema
 
 from .conftest import alembic_config
 
-HEAD = "0044_signin_sp_portable_body"
+HEAD = "0045_api_key_revision"
 # Where the chain's portable revisions begin: `BASELINE["platform"]` in deploy/database/mssql.py.
 SQL_SERVER_BASELINE = "0026_workspace_owner"
 

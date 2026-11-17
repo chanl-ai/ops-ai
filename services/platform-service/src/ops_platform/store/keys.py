@@ -17,6 +17,7 @@ from ops_store.listing import ListPage, list_page
 from ops_store.rows import Select, one, rows
 
 from .audit import record
+from .key_events import announce, change_keys
 from .members import Actor
 from .tables import api_keys, teams, users
 from .tenancy import TenantDb
@@ -37,6 +38,7 @@ _LISTED = (
     api_keys.c.target_kind,
     api_keys.c.target_id,
     api_keys.c.target_version,
+    api_keys.c.revision,
 )
 
 
@@ -58,6 +60,7 @@ class KeyRow(Out):
     target_kind: str | None
     target_id: str | None
     target_version: int | None
+    revision: int
 
 
 class KeyStore(TenantDb):
@@ -120,8 +123,10 @@ class KeyStore(TenantDb):
                     target_kind=target["kind"] if target else None,
                     target_id=target["id"] if target else None,
                     target_version=target.get("version") if target else None,
+                    revision=1,
                 )
             )
+            await announce(c, [key_id])
             given = dict(target) if target else None
             await _audit(c, actor, "key.create", key_id, {"name": name, "scopes": [*scopes], "target": given})
             made = await one(c, self._listing(actor.team_id).where(api_keys.c.id == key_id), KeyRow)
@@ -131,12 +136,11 @@ class KeyStore(TenantDb):
     async def revoke(self, actor: Actor, key_id: str, *, at: str) -> KeyRow | None:
         """None when the team has no such key; revoking a revoked key changes nothing and writes no entry."""
         async with self.tenant_tx(actor.tenant_id) as c:
-            done = await c.execute(
-                api_keys.update()
-                .where(api_keys.c.id == key_id, api_keys.c.team_id == actor.team_id, api_keys.c.revoked_at.is_(None))
-                .values(revoked_at=at)
+            k = api_keys.c
+            done = await change_keys(
+                c, sa.and_(k.id == key_id, k.team_id == actor.team_id, k.revoked_at.is_(None)), {"revoked_at": at}
             )
-            if done.rowcount == 1:
+            if done:
                 await _audit(c, actor, "key.revoke", key_id, {})
             return await one(c, self._listing(actor.team_id).where(api_keys.c.id == key_id), KeyRow)
 

@@ -139,6 +139,8 @@ api_keys = sa.Table(
     sa.Column("target_kind", sa.String(16), info=LISTED),
     sa.Column("target_id", sa.String(64), info=LISTED),
     sa.Column("target_version", sa.Integer),
+    # Raised by every write (store/key_events.py), so a copy of the key keeps its newest state in any delivery order.
+    sa.Column("revision", sa.Integer, nullable=False, server_default=sa.text("1")),
     sa.ForeignKeyConstraint(["tenant_id", "team_id"], ["teams.tenant_id", "teams.id"], name="fk_api_keys_team"),
     sa.ForeignKeyConstraint(["tenant_id", "created_by"], ["users.tenant_id", "users.id"], name="fk_api_keys_creator"),
     # The keys list keeps the keys made for one target (an MCP link's Keys tab).
