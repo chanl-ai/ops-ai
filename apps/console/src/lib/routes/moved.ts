@@ -7,7 +7,7 @@
 export const MOVED: readonly (readonly [string, string])[] = [
   ['/integrations/my-accounts', '/settings/account/connectors'],
   ['/integrations/credentials', '/data/secrets'],
-  ['/integrations/sources', '/data/knowledge'],
+  ['/integrations/sources', '/data/sources'],
   ['/integrations/apps', '/data/connectors'],
   ['/workflows/batches', '/build/runs/batches'],
   ['/knowledge/changes', '/data/changes'],
@@ -39,7 +39,13 @@ export const MOVED: readonly (readonly [string, string])[] = [
 ];
 
 /** The new address for an old path, or null when the path did not move. */
+// Old addresses whose own page moved apart from the pages under it: the sources list now sits in Knowledge, while a
+// source's page stays at /data/sources/<id>.
+const MOVED_EXACT: Readonly<Record<string, string>> = { '/integrations/sources': '/data/knowledge' };
+
 export function movedTo(pathname: string): string | null {
+  const exact = MOVED_EXACT[pathname];
+  if (exact) return exact;
   for (const [from, to] of MOVED) {
     if (pathname === from || pathname.startsWith(`${from}/`)) return to + pathname.slice(from.length);
   }
