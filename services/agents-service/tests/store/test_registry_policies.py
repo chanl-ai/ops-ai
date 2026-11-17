@@ -23,7 +23,12 @@ from alembic.config import Config
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from ops_agents.store.agent_registry import publish_requests, registry_agent_versions, registry_agents
+from ops_agents.store.agent_registry import (
+    agent_skill_pins,
+    publish_requests,
+    registry_agent_versions,
+    registry_agents,
+)
 from ops_agents.store.background import background_heartbeats
 from ops_agents.store.cases import case_events, cases
 from ops_agents.store.channels import (
@@ -54,7 +59,15 @@ ROOT = Path(__file__).resolve().parents[2]
 CONFIG = str(ROOT / "alembic.ini")
 BEFORE = "0108_registry_tenant_keys"
 REASON = "test: the agents system user reads only what it was granted"
-TEAM = (registry_agents, registry_guardrails, registry_skills, registry_widgets, registry_workflows, deployments)
+TEAM = (
+    registry_agents,
+    registry_guardrails,
+    registry_skills,
+    registry_widgets,
+    registry_workflows,
+    deployments,
+    agent_skill_pins,
+)
 TENANT = (
     publish_requests,
     registry_agent_versions,
@@ -70,6 +83,7 @@ TENANT = (
 CASCADED = (registry_widget_versions, registry_workflow_versions)
 POLICED = frozenset(t.name for t in (*TEAM, *TENANT, *CASCADED))
 PARENTS = {
+    "agent_skill_pins": (registry_agents, "agent_id"),
     "registry_agent_versions": (registry_agents, "agent_id"),
     "registry_guardrail_versions": (registry_guardrails, "guardrail_id"),
     "registry_skill_versions": (registry_skills, "skill_id"),
@@ -305,10 +319,52 @@ def _filtered(url: str) -> set[str]:
     return asyncio.run(read())
 
 
+def _pinned_agent(url: str, tenant: str) -> str:
+    """An agent whose older version pins one skill and whose newest pins two, one of them twice, written with no
+    `agent_skill_pins` rows, as an agent saved before agents 0113 is."""
+    agent = _tag("ag")
+
+    async def write() -> None:
+        e = create_async_engine(url)
+        try:
+            a, v = registry_agents, registry_agent_versions
+            await _as(e, tenant, "team_p", a.insert().values(_row(a, tenant, "team_p", id=agent, version=2)))
+            pins = [
+                {"skillId": "sk_a", "version": 2},
+                {"skillId": "sk_b", "version": 1},
+                {"skillId": "sk_a", "version": 3},
+            ]
+            for n, held in ((1, [{"skillId": "sk_old", "version": 1}]), (2, pins)):
+                row = _row(v, tenant, None, agent_id=agent, version=n, spec={"name": agent, "skillPins": held})
+                await _as(e, tenant, None, v.insert().values(row))
+        finally:
+            await e.dispose()
+
+    asyncio.run(write())
+    return agent
+
+
+def _pins(url: str, tenant: str, agent: str) -> set[tuple[str, int, str, str]]:
+    async def read() -> set[tuple[str, int, str, str]]:
+        e = create_async_engine(url)
+        try:
+            p = agent_skill_pins.c
+            q = sa.select(p.skill_id, p.version, p.team_id, p.tenant_id).where(p.agent_id == agent)
+            return {(str(s), int(n), str(t), str(x)) for s, n, t, x in (await _as(e, tenant, None, q)).all()}
+        finally:
+            await e.dispose()
+
+    return asyncio.run(read())
+
+
 def test_the_policies_come_off_with_the_step_and_back_with_it(url: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Down past agents 0113 and up again also fills `agent_skill_pins` from each agent's newest version."""
     # The chain runs against the database this case is on: env.py reads the address from Settings.
     monkeypatch.setenv("OPS_DATABASE_URL", url)
     assert _filtered(url) == POLICED
+    tenant = _tag("t_pins")
+    agent = _pinned_agent(url, tenant)
+    assert _pins(url, tenant, agent) == set()
     try:
         command.downgrade(Config(CONFIG), BEFORE)
         # Its tenant policy predates the step (agents 0067 on PostgreSQL, the baseline on SQL Server).
@@ -316,3 +372,4 @@ def test_the_policies_come_off_with_the_step_and_back_with_it(url: str, monkeypa
     finally:
         command.upgrade(Config(CONFIG), "head")
     assert _filtered(url) == POLICED
+    assert _pins(url, tenant, agent) == {("sk_a", 2, "team_p", tenant), ("sk_b", 1, "team_p", tenant)}

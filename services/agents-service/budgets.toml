@@ -200,13 +200,15 @@ not_budgeted = "needs an engine run; the budget seed starts none yet"
 not_budgeted = "needs an engine run; the budget seed starts none yet"
 
 ["GET /v1/skills"]
-not_budgeted = "grows with rows: 20 statements at 5, 170 at 50; list being moved to SQL by the store pass; re-measure then"
+queries = 7
 
 ["GET /v1/skills/options"]
-not_budgeted = "grows with rows: 14 statements at 5, 64 at 50; list being moved to SQL by the store pass; re-measure then"
+queries = 6
+transactions = 5
+connections = 5
 
 ["GET /v1/skills/{skill_id}"]
-not_budgeted = "grows with rows: 15 statements at 5, 65 at 50; list being moved to SQL by the store pass; re-measure then"
+queries = 5
 
 ["GET /v1/skills/{skill_id}/eval-cases"]
 queries = 2

@@ -8,7 +8,7 @@ import re
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
-from pydantic import JsonValue
+from pydantic import BaseModel, Field, JsonValue, TypeAdapter
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -69,6 +69,24 @@ registry_agent_versions = sa.Table(
     sa.Column("published_by", sa.String(200)),
     sa.Column("review_id", sa.String(64)),
     info={**TENANT_SCOPED, **team_owned_via("registry_agents", "agent_id")},
+)
+
+# The skills each agent's newest version pins (`spec.skillPins`), one row per agent and skill, written in the
+# transaction that saves the version (agents 0113), so the skills list counts an agent's pins in SQL. Rows go with
+# their agent (the delete and the foreign key); a skill's delete leaves them, as it leaves the specs that pin it.
+agent_skill_pins = sa.Table(
+    "agent_skill_pins",
+    metadata,
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant),
+    sa.Column("agent_id", sa.String(64), sa.ForeignKey("registry_agents.id", ondelete="CASCADE"), primary_key=True),
+    sa.Column("skill_id", sa.String(64), primary_key=True),
+    # The skill version the agent pins.
+    sa.Column("version", sa.Integer, nullable=False),
+    # The agent's team.
+    sa.Column("team_id", sa.String(64), nullable=False),
+    # The skills list counts one team's pins of each skill.
+    sa.Index("ix_agent_skill_pins_team_skill", "tenant_id", "team_id", "skill_id"),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 publish_requests = sa.Table(
@@ -182,6 +200,35 @@ def _mine() -> sa.ColumnElement[bool]:
 async def _name_tenant(c: AsyncConnection) -> None:
     if c.dialect.name == "postgresql":
         await c.execute(sa.text("SELECT set_config('app.tenant_id', :t, true)"), {"t": current_tenant()})
+
+
+class SkillPin(BaseModel):
+    """What the pins table reads of a spec's `skillPins` entry."""
+
+    skill_id: str = Field(alias="skillId")
+    version: int
+
+
+_PINS = TypeAdapter(list[SkillPin])
+
+
+def pins_of(held: JsonValue) -> dict[str, int]:
+    """The skill versions a spec's `skillPins` pins, by skill (the first pin of a skill named twice)."""
+    out: dict[str, int] = {}
+    for p in _PINS.validate_python(held or []):
+        out.setdefault(p.skill_id, p.version)
+    return out
+
+
+async def hold_pins(c: AsyncConnection, agent_id: str, team_id: str, held: JsonValue) -> None:
+    """The agent's `agent_skill_pins` rows made those of `held` (the `skillPins` of the spec the caller's transaction
+    saves as the agent's newest version)."""
+    p = agent_skill_pins
+    await c.execute(p.delete().where(mine(p), p.c.agent_id == agent_id))
+    pins = pins_of(held)
+    if pins:
+        rows = [{"agent_id": agent_id, "skill_id": s, "version": v, "team_id": team_id} for s, v in pins.items()]
+        await c.execute(p.insert(), rows)
 
 
 async def publish_requested(c: AsyncConnection, kind: str, subject_id: str, version: int) -> bool:
@@ -481,6 +528,7 @@ class AgentRegistry(RuntimeStore):
                 published_by=by if published else None,
             )
         )
+        await hold_pins(c, aid, team_id, spec.get("skillPins"))
         return aid
 
     async def save(self, agent_id: str, spec: dict[str, Any], *, by: str, note: str = "") -> int:
@@ -532,6 +580,7 @@ class AgentRegistry(RuntimeStore):
             await c.execute(
                 registry_agents.update().where(registry_agents.c.id == agent_id).values(version=n, updated_at=at)
             )
+            await hold_pins(c, agent_id, str(row["team_id"]), spec.get("skillPins"))
         return n
 
     async def publish(self, agent_id: str, version: int, *, by: str, review_id: str) -> None:
@@ -559,6 +608,9 @@ class AgentRegistry(RuntimeStore):
     async def delete(self, agent_id: str) -> None:
         async with self.tx() as c:
             await self.row(agent_id, c)
+            await c.execute(
+                agent_skill_pins.delete().where(mine(agent_skill_pins), agent_skill_pins.c.agent_id == agent_id)
+            )
             await c.execute(registry_agent_versions.delete().where(registry_agent_versions.c.agent_id == agent_id))
             await c.execute(registry_agents.delete().where(registry_agents.c.id == agent_id))
             await c.execute(

@@ -98,6 +98,7 @@ REVOKE DELETE ON dbo.ops_checkpoint_fences FROM ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE ON dbo.ops_checkpoint_fences TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.graph_runs TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_agent_versions TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.agent_skill_pins TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_guardrail_versions TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_skill_versions TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_widget_versions TO ops_agents_runtime;

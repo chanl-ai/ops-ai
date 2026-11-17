@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0112_definitions_list_indexes
+-- agents-service, stamped at 0113_agent_skill_pins
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -780,6 +780,10 @@ CREATE TABLE registry_skills (
 	CONSTRAINT uq_registry_skills_team_slug UNIQUE (team_id, slug)
 );
 GO
+CREATE INDEX ix_registry_skills_team_origin ON registry_skills (tenant_id, team_id, origin);
+GO
+CREATE INDEX ix_registry_skills_team_owner ON registry_skills (tenant_id, team_id, owner_team);
+GO
 CREATE INDEX ix_registry_skills_tenant_team ON registry_skills (tenant_id, team_id);
 GO
 CREATE TABLE task_assists (
@@ -1035,6 +1039,18 @@ CREATE TABLE registry_agent_versions (
 	CONSTRAINT registry_agent_versions_pkey PRIMARY KEY (agent_id, version), 
 	CONSTRAINT registry_agent_versions_agent_id_fkey FOREIGN KEY(agent_id) REFERENCES registry_agents (id) ON DELETE CASCADE
 );
+GO
+CREATE TABLE agent_skill_pins (
+	tenant_id VARCHAR(64) NOT NULL, 
+	agent_id VARCHAR(64) NOT NULL, 
+	skill_id VARCHAR(64) NOT NULL, 
+	version INTEGER NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	CONSTRAINT agent_skill_pins_pkey PRIMARY KEY (agent_id, skill_id), 
+	CONSTRAINT agent_skill_pins_agent_id_fkey FOREIGN KEY(agent_id) REFERENCES registry_agents (id) ON DELETE CASCADE
+);
+GO
+CREATE INDEX ix_agent_skill_pins_team_skill ON agent_skill_pins (tenant_id, team_id, skill_id);
 GO
 CREATE TABLE registry_guardrail_versions (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -1448,6 +1464,12 @@ CREATE SECURITY POLICY ops_security.registry_agent_versions_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_agent_versions AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.agent_skill_pins_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.agent_skill_pins,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.agent_skill_pins AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.agent_skill_pins AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.registry_guardrail_versions_tenant
     ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.registry_guardrail_versions,
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_guardrail_versions AFTER INSERT,
@@ -1479,5 +1501,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0112_definitions_list_indexes');
+INSERT INTO alembic_version (version_num) VALUES ('0113_agent_skill_pins');
 GO

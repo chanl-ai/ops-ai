@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
+from ops_store.listing import LISTED
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 from ops_store.search import contains
 from ops_store.team_scope import any_team, team_visible
@@ -34,9 +35,9 @@ registry_skills = sa.Table(
     sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("slug", sa.String(64), nullable=False),
-    sa.Column("owner_team", sa.String(200), nullable=False),
+    sa.Column("owner_team", sa.String(200), nullable=False, info=LISTED),
     sa.Column("team_id", sa.String(64), nullable=False),
-    sa.Column("origin", sa.String(16), nullable=False),
+    sa.Column("origin", sa.String(16), nullable=False, info=LISTED),
     # Newest saved version, draft or published.
     sa.Column("version", sa.Integer, nullable=False),
     sa.Column("published_version", sa.Integer),
@@ -53,6 +54,9 @@ registry_skills = sa.Table(
     # A skill's name is unique within its team only, so many teams can hold a copy of the same template.
     sa.UniqueConstraint("team_id", "slug", name="uq_registry_skills_team_slug"),
     sa.Index("ix_registry_skills_tenant_team", "tenant_id", "team_id"),
+    # The skills list filters one team's skills by owner team and by origin (agents 0113).
+    sa.Index("ix_registry_skills_team_owner", "tenant_id", "team_id", "owner_team"),
+    sa.Index("ix_registry_skills_team_origin", "tenant_id", "team_id", "origin"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 

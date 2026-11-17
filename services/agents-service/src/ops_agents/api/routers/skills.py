@@ -19,36 +19,34 @@ from pydantic import Field
 from ops_access import can
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, In, OptionsPage, options_page, options_window, page_window
+from ops_service_kit.http import Envelope, In, OptionsPage, options_page, options_window
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
 from ops_store import isolation
 
+from ...store.skill_list import View, menu_versions, newest_specs, offered_by, skills_page
 from ...store.template_copies import TemplateCopies
 from ..agent_registry import registry as agent_registry
 from ..agent_registry import require_owner_or_admin
 from ..auth import Principal, caller_in, caller_of, principal, reader_of, require_builder
 from ..deps import Runtime, runtime
 from ..envelope import ok
-from ..hitl_facade import page
 from ..publish_policy import decide
 from ..schemas import AgentSkills, SkillDetail, SkillList, SkillOptions, SkillRendered
 from ..skills import (
     LIMITS,
-    _pinning,  # pyright: ignore[reportPrivateUsage]
     agent_skills,
     check_content,
     detail,
+    list_row,
     missing_for,
     pin,
     pinned_by,
     publish,
     render_published,
     require_unpinned,
-    row_view,
     skills,
-    usable,
 )
 from .agents import changeable as agent_changeable
 from .tool_catalog import known_tools
@@ -59,7 +57,6 @@ log = get_logger("ops_agents.skills")
 router = APIRouter(dependencies=[Depends(caller_in("skills"))])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
-VIEWS = ("all", "published", "always", "drafts", "in_review", "deprecated", "unused")
 
 
 class SkillInput(In):
@@ -137,19 +134,6 @@ class AttachInput(In):
     version: int | None = None
 
 
-def _in_view(s: dict[str, Any], view: str) -> bool:
-    return {
-        "all": True,
-        # A published version stays in use while a newer one is in review.
-        "published": s["publishedVersion"] is not None and s["status"] != "deprecated",
-        "always": s["loading"] == "always",
-        "drafts": s["draftVersion"] is not None and s["status"] != "in_review",
-        "in_review": s["status"] == "in_review",
-        "deprecated": s["status"] == "deprecated",
-        "unused": s["usedBy"] == 0,
-    }[view]
-
-
 @router.get("/v1/skills", response_model=Envelope[SkillList])
 async def list_skills(
     *,
@@ -157,62 +141,39 @@ async def list_skills(
     caller: Annotated[Principal, Depends(reader_of("skills"))],
     _: Tx,
     q: ListQuery,
-    view: Literal["all", "published", "always", "drafts", "in_review", "deprecated", "unused"] = "all",
+    view: View = "all",
     usable_by: Annotated[Literal["agent"] | None, Query(alias="usableBy")] = None,
     agent_id: Annotated[str | None, Query(alias="agentId")] = None,
 ) -> JSONResponse:
     """One page of the team's skills on the shared list contract, by name then id: `search` matches the name, use-when
     or slug, `ids` names skills exactly. `view=published` rows describe the published version, its inputs and parts,
     which is what chat and the MCP prompts use; every other view describes the newest version an editor sees. `status`,
-    `ownerTeam`, `origin` and `loading` filter by facet. The view counts and facets cover every matching skill, so the
-    rows are filtered and paged in memory.
+    `ownerTeam`, `origin` and `loading` filter by facet. The view counts and facets cover every skill the search
+    leaves, before the view and the facet filters; the page, its counts and its facets are read in SQL
+    (`store/skill_list.py`).
 
     Every view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.
     With `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing
     a tool or knowledge base the agent lacks as `locked`, naming them in `needs`."""
-    pins = await _pinning(rt)
-    raw = await skills(rt).rows()
     spec: dict[str, Any] | None = None
+    offered = None
     if agent_id is not None:
         agents = agent_registry(rt)
         agent_row = await agents.row(agent_id)
         held: dict[str, Any] = (await agents.version(agent_id, int(agent_row["version"])))["spec"]
         spec = held
         menu = str(held.get("skillMenu") or "team")
-        pinned = [str(p["skillId"]) for p in cast(list[dict[str, Any]], held.get("skillPins") or [])]
         # A chat's skills are its team's: the team the request acts in, else the agent's own.
         team = caller.team_id or str(agent_row.get("team_id") or "")
-        offered = {r["id"] for r, _ in await usable(rt, team=team, menu=menu, pinned=pinned)}
-        raw = [r for r in raw if r["id"] in offered]
-    rows = [await row_view(rt, r, pins) for r in raw]
-    if q.ids is not None:
-        rows = [x for x in rows if x["id"] in q.ids]
-    elif q.search:
-        s = q.search.lower()
-        rows = [x for x in rows if s in x["name"].lower() or s in x["useWhen"].lower() or s in x["slug"]]
-    counts = {v: sum(1 for x in rows if _in_view(x, v)) for v in VIEWS}
-    facet_cols = ("status", "ownerTeam", "origin", "loading")
-    facets: dict[str, dict[str, int]] = {c: {} for c in facet_cols}
-    for x in rows:
-        for c in facet_cols:
-            facets[c][x[c]] = facets[c].get(x[c], 0) + 1
-    rows = [x for x in rows if _in_view(x, view)]
-    if view == "published":
-        by_id = {r["id"]: r for r in raw}
-        rows = [await row_view(rt, by_id[x["id"]], pins, served=True) for x in rows]
-    for c in facet_cols:
-        if wanted := q.filters.get(c):
-            rows = [x for x in rows if x[c] in wanted]
-    rows.sort(key=lambda x: (str(x["name"]).lower(), str(x["id"])))
-    page_no = page_window(len(rows), q.page, q.page_size)[0]
-    body = page(rows, page_no, q.page_size)
+        offered = offered_by(agent_id, team=team, menu=menu)
+    listed, counts = await skills_page(rt.db, q, view=view, offered=offered)
+    body: dict[str, Any] = {**listed, "data": [list_row(r) for r in listed["data"]]}
     if spec is not None:
-        reg = skills(rt)
+        contents = await menu_versions(rt.db, [x["id"] for x in body["data"]])
         for x in body["data"]:
-            v = await reg.version(x["id"], int(x["publishedVersion"] or x["version"]))
-            needs = missing_for(cast(dict[str, Any], (v or {}).get("content") or {}), spec)
+            needs = missing_for(contents.get(x["id"], {}), spec)
             x["locked"], x["needs"] = bool(needs), needs
-    return ok({**body, "facets": facets, "viewCounts": counts})
+    return ok({**body, "viewCounts": counts})
 
 
 @router.get("/v1/skills/options", response_model=Envelope[SkillOptions])
@@ -224,8 +185,7 @@ async def skill_options(rt: Rt, _: Annotated[Principal, Depends(reader_of("skill
         for t in await known_tools(rt)
     ]
     async with isolation.request_transaction():
-        reg = agent_registry(rt)
-        specs = [(await reg.version(r["id"], int(r["version"])))["spec"] for r in await reg.rows()]
+        specs = await newest_specs(rt.db)
         teams = sorted({str(r["owner_team"]) for r in await skills(rt).rows()})
     held: list[Any] = [k for s in specs for k in cast(list[Any], s.get("collections") or [])]
     kbs = sorted({str(k) for k in held})
