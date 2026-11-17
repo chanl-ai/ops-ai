@@ -42,14 +42,13 @@ const PRESETS: { value: RetrievalPreset; label: string; use: string; fills: stri
   },
 ];
 
-const schemaFor = (existing: string[], ownerShown: boolean) =>
+const schemaFor = (ownerShown: boolean) =>
   z.object({
     name: z
       .string()
       .trim()
       .min(2, 'Name it in 2 to 80 characters, e.g. Card disputes.')
-      .max(80, 'Name it in 2 to 80 characters, e.g. Card disputes.')
-      .refine((n) => !existing.some((e) => e.toLowerCase() === n.toLowerCase()), 'A knowledge base with this name already exists.'),
+      .max(80, 'Name it in 2 to 80 characters, e.g. Card disputes.'),
     owner: ownerShown ? z.string().trim().email('Enter the owner’s email, e.g. j.richardson@example.com.') : z.string(),
     description: z.string().max(500, 'Keep the description under 500 characters.'),
     preset: z.enum(['balanced', 'precise', 'raw']),
@@ -64,20 +63,18 @@ type Values = { name: string; owner: string; description: string; preset: Retrie
 export function CreateKbDialog({
   open,
   onOpenChange,
-  existingNames,
   isPending,
   defaultOwner,
   onSubmit,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  existingNames: string[];
   isPending: boolean;
   /** The signed-in person's email. */
   defaultOwner: string;
   onSubmit: (input: KnowledgeBaseInput, fileIds: string[]) => Promise<unknown>;
 }) {
-  const schema = React.useMemo(() => schemaFor(existingNames, !defaultOwner), [existingNames, defaultOwner]);
+  const schema = React.useMemo(() => schemaFor(!defaultOwner), [defaultOwner]);
   const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: { name: '', owner: defaultOwner, description: '', preset: 'balanced' } });
   const { register, control, handleSubmit, reset, watch, formState, setError } = form;
   const [uploads, setUploads] = React.useState<UploadItem[]>([]);
@@ -97,7 +94,9 @@ export function CreateKbDialog({
     try {
       await onSubmit({ name: v.name.trim(), owner: v.owner.trim(), description: v.description.trim(), color: 'teal', sourceIds: [], preset: v.preset, collections: [] }, fileIds);
     } catch (err) {
-      setError('root', { message: (err as Error).message });
+      // The service refuses a name the team already uses (409); it is shown under the name, not in the footer.
+      if ((err as { status?: number }).status === 409) setError('name', { message: 'A knowledge base with this name already exists.' });
+      else setError('root', { message: (err as Error).message });
     }
   });
 
