@@ -85,6 +85,8 @@ const accounts = await ops.me.connectors.accounts();
 current one. Options you pass win over `OPS_BASE_URL`, `OPS_API_KEY` and `OPS_TEAM`, which win over the saved profile; a
 caller who passes its own `apiKey` is not given the saved person's token.
 
+Moving from 0.1.0: see [Upgrading to 1.0.0](upgrading.md).
+
 ## Errors
 
 A refused call rejects with a subclass of `OpsError` carrying `status`, `code`, `message`, `requestId` and `details`, the

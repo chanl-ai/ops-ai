@@ -138,6 +138,8 @@ opsai templates install plugin:opsai.starters:doc-coauthoring
 opsai connectors connect "Person desk"
 ```
 
+Moving from 0.1.0: see [Upgrading to 1.0.0](upgrading.md).
+
 ## Errors
 
 A refused call raises a subclass of `OpsError` with `status`, `code`, `message`, `request_id` and `details`: `BadRequest` (400,

@@ -18,8 +18,6 @@ from ops_ai._transport import PAGE_MAX, page_items
 
 from .common import MARK, _seed, dev_client, dev_email, emit, parser, refuse, short, verb_options
 
-THREADS_PAGE = 100  # agents-service's thread list takes pages of up to 100
-
 
 def main(argv: list[str]) -> int:
     ap = parser("opsai test-data", "Find and remove what test runs made.")
@@ -63,7 +61,7 @@ def found(ops: OpsAI, email: str, since: str | None) -> list[tuple[str, dict[str
     """This person's marked items, by kind: their own conversations and the files they uploaded."""
     out: list[tuple[str, dict[str, Any]]] = []
     for test in (False, True):
-        rows = _pages(lambda p, test=test: ops.chat.threads(page=p, pageSize=THREADS_PAGE, test=test))
+        rows = ops.chat.every_thread(test=test)
         out += [("chat", t) for t in rows if str(t.get("title") or "").startswith(MARK) and _new(t, "createdAt", since)]
     files = _pages(lambda p: ops.raw.files.files_list_files(search=MARK.strip(), page=p, page_size=PAGE_MAX))
     out += [

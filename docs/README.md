@@ -542,6 +542,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `sdk/python.md` | Python SDK: connect with an API key, run workflows and decide their tasks, the client's resources and errors |
 | `sdk/typescript.md` | TypeScript SDK: the same client for Node, typed from the API reference |
 | `sdk/changelog-next-major.md` | Draft changelog of the coming SDK major version: each changed route and the nouns and commands that follow |
+| `sdk/upgrading.md` | Upgrading to SDK 1.0.0: list paging and the 50-row cap, unknown body fields refused, the error format, each with before and after code |
 | `guide/ops-assistant.md` | The Ops Assistant: checklist, Connect card, Think harder, Save read-back, reused reads, suggestion chips, memories |
 | `guide/whats-new.md` | What's new: every change a person would notice, newest first, built from the changelog |
 | `guide/use-cases/card-disputes.md` | Use case: card disputes, from the request to the approved credit, with SDK code |

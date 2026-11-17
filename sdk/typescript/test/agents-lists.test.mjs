@@ -54,3 +54,22 @@ test('an inbox refused to a teammate throws NotFound', async () => {
   const body = { success: false, error: { code: 'not_found', message: 'No such thread' } };
   await assert.rejects(client(() => new Response(JSON.stringify(body), { status: 404 })).threads.inbox('th1'), NotFound);
 });
+
+const cursorPages = (seen) => (url) => {
+  seen.push(url);
+  const n = Number(url.searchParams.get('cursor') ?? 0) + 1;
+  return new Response(JSON.stringify({ success: true, data: { data: [`row${n}`], nextCursor: n < 3 ? String(n) : null } }));
+};
+
+test('toolOptions follows nextCursor and never asks above the maximum', async () => {
+  const seen = [];
+  assert.deepEqual(await client(cursorPages(seen)).agents.toolOptions('x'), ['row1', 'row2', 'row3']);
+  assert.deepEqual(seen.map((u) => u.searchParams.get('cursor')), [null, '1', '2']);
+  assert.deepEqual([...new Set(seen.map((u) => u.searchParams.get('limit')))], ['50']);
+});
+
+test('everyThread follows every page at the maximum size', async () => {
+  const seen = [];
+  assert.deepEqual(await client(threePages(seen)).chat.everyThread({ test: true }), ['row1', 'row2', 'row3']);
+  assert.deepEqual([...new Set(seen.map((u) => u.searchParams.get('pageSize')))], ['50']);
+});

@@ -76,3 +76,27 @@ def test_an_inbox_refused_to_a_teammate_raises_not_found() -> None:
 
     with pytest.raises(NotFound):
         client(handler).threads.inbox("th1")
+
+
+def cursor_pages(seen: list[httpx.Request]) -> Any:
+    def handler(r: httpx.Request) -> httpx.Response:
+        seen.append(r)
+        n = int(r.url.params.get("cursor", "0")) + 1
+        body = {"data": [f"row{n}"], "nextCursor": str(n) if n < 3 else None}
+        return httpx.Response(200, json={"success": True, "data": body})
+
+    return handler
+
+
+def test_tool_options_follows_next_cursor_and_never_asks_above_the_maximum() -> None:
+    seen: list[httpx.Request] = []
+    assert client(cursor_pages(seen)).agents.tool_options("x") == ["row1", "row2", "row3"]
+    assert [r.url.params.get("cursor") for r in seen] == [None, "1", "2"]
+    assert {r.url.params["limit"] for r in seen} == {"50"}
+
+
+def test_every_thread_follows_every_page_at_the_maximum_size() -> None:
+    seen: list[httpx.Request] = []
+    assert client(three_pages(seen)).chat.every_thread(test=True) == ["row1", "row2", "row3"]
+    assert {r.url.params["pageSize"] for r in seen} == {"50"}
+    assert {r.url.params["test"] for r in seen} == {"true"}

@@ -497,6 +497,10 @@ class Usage:
         """This team's tool calls, newest first, each saying whom it ran as."""
         return _rows(self._raw.tools.executions_list_executions(**query))
 
+    def every(self, **query: Any) -> list[dict[str, Any]]:
+        """Every call `list` would show for the filters, page after page."""
+        return _every(self._raw.tools.executions_list_executions, **query)
+
 
 class AsyncApps:
     def __init__(self, raw: Any) -> None:

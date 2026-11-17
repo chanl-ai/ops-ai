@@ -186,3 +186,54 @@ that has not changed still gets the same answer.
 | `GET /v1/apps`, `GET /v1/secrets` | `hasAccount`, `readOnly` filters | the console read page after page and dropped the cards with no account (`connectionOptions`) or the read-only secrets (`secretOptions`) in the browser | `hasAccount=true\|false` keeps the cards with or without a default account; `readOnly=true\|false` keeps the secrets an account or auth config holds or the rest; each narrows the total, the other facets and the tab counts, in SQL, within the caller's team; no facet of its own | Nothing required. Follow: `apps/console/src/hooks/options-queries.ts:85-96` (`connectionOptions`: send `hasAccount=true`, drop the skip-ahead loop) and `:101-117` (`secretOptions`: send `readOnly=false`, drop the loop and the `.filter`) |
 | `GET /v1/executions` | shared list contract, `result` and `assistant` filters | own `page` and `pageSize` (at most 200) and no `facets`; rows ordered by time only, so equal times could repeat or skip between pages; a page past the end answered the last page's number with its rows only by luck; the MCP Calls tab loaded 100 calls and filtered result, assistant and tool in the browser | `page`, `pageSize` (the install's maximum), `search` (matches the tool's name), `result` (`Ran`, `Running`, `Refused`, `Failed`) and `assistant` (the client's name, `Unnamed assistant` when none), each repeatable; both narrow the total and are counted in `facets.result` and `facets.assistant` (each leaving its own choice out); newest first, then id; a page past the end answers the last page; `tool`, `moduleId`, `thread`, `decision`, `key`, `call`, `link`, `since` and `until` unchanged | Console: `apps/console/src/components/channels/mcp/calls-tab.tsx` pages and filters on the server (`useListParams`); `apps/console/src/lib/api/governance-http.ts:42-57` sends `search`, `result`, `assistant` and `sortBy`. No hand-written SDK method or CLI verb reads the route. Callers asked `pageSize=200` and are capped at the install's maximum (50 by default) without an error: use-case scripts `test-uc-042-api.py` (moduleId), `test-uc-567-api.py` and `test-uc-081-api.py` (thread) now page through with `every_page`, and `test-uc-721-ui.mjs` and `test-uc-081-ui.mjs` ask the server for `tool=` instead of filtering a page. Other callers send `tool`, `thread`, `key`, `call`, `link`, `moduleId`, `since`, `until` or `pageSize` of 50 or less, all still accepted with the same meaning (a key the route does not name is ignored, not refused). |
 | `GET /v1/api-key-summaries` | each key's `revision` | not returned; agents-service's copy wrote every listed key at revision 0 | `revision` (integer, required): raised by every write of the key (platform 0045, `store/key_events.py`), the same number its `api_key.changed` event carries, so a resync never sets a copy row below an event | Nothing required; a reader that keeps a copy orders by it. Follow: `services/agents-service/src/ops_agents/store/api_key_copies.py` (`KeySummary.revision`, done); no console screen, hand-written SDK noun or CLI verb reads this route | Yes |
+
+## routes found by the schema comparison (2026-11-17)
+
+Found by comparing every operation's parameters, request body and replies between `origin/develop` and the committed
+`services/*/openapi.json` (script: `sdk/api_changes_gap.py`; it lists any changed route this page does not name). These
+routes changed only in the way the service tables above already describe for the rest of their service: the reply's
+`data` is now a named, typed object (no top-level field removed or renamed) and a body declares its fields and refuses
+others. `/health` routes are left out.
+
+### agents-service
+
+| Route | What changed | Before | After | What a caller must change | Old form works |
+|---|---|---|---|---|---|
+| `GET /reviews`, `GET /reviews/{thread_id}`, `GET /reviews/by-run-key/{run_key}`, `POST /reviews/{thread_id}/decision`, `POST /reviews/{thread_id}/team-account`, `GET /runs`, `GET /runs/{thread_id}`, `GET /v1/runs/{run_id}`, `POST /v1/runs/{run_id}/cancel`, `POST /v1/runs/{run_id}/retry`, `GET /v1/threads/{thread_id}/runs`, `POST /v1/threads/{thread_id}/events`, `GET /v1/tasks/{task_id}` | reply `data` | an untyped object | a named type | Nothing in the JSON; a generated-SDK caller reads the new type | Yes |
+| `GET /v1/skills/{skill_id}`, `PUT /v1/skills/{skill_id}/draft`, `POST /v1/skills/{skill_id}/deprecate`, `GET /v1/case-types/{type_id}`, `PUT /v1/case-types/{type_id}/draft`, `POST /v1/case-types/{type_id}/publish`, `GET /v1/task-types/{type_id}`, `PUT /v1/task-types/{type_id}/draft`, `POST /v1/task-types/{type_id}/publish`, `POST /v1/widgets/{widget_id}/retire` | reply `data` | an untyped object | a named type | Nothing in the JSON | Yes |
+| `POST /v1/agents/{agent_id}/publish-requests`, `POST /v1/skills/{skill_id}/publish-requests`, `POST /v1/widgets/{widget_id}/publish-requests`, `POST /v1/workflows/{workflow_id}/publish-requests`, `POST /v1/workflows/definitions/{workflow_id}/publish-requests`, `GET /v1/publish-requests/{request_id}`, `POST /v1/publish-requests/{request_id}/decision`, `POST /v1/deployments` | reply `data` | an untyped object | a named type | Nothing in the JSON | Yes |
+| `GET /v1/workflows/{workflow_id}`, `PUT /v1/workflows/{workflow_id}/draft`, `GET /v1/workflows/definitions/{workflow_id}`, `POST /v1/workflows/definitions/{workflow_id}/archive`, `POST /v1/workflows/definitions/{workflow_id}/pause`, `POST /v1/workflows/definitions/{workflow_id}/restore`, `POST /v1/workflows/definitions/{workflow_id}/resume`, `GET /v1/workflows/definitions/{workflow_id}/versions/{version}/shapes`, `GET /v1/workflows/node-types` | reply `data` | an untyped object (node types: an array of loose objects) | named types | Nothing in the JSON | Yes |
+| `POST /v1/cases/{case_id}/events`, `POST /v1/cases/{case_id}/links`, `GET /v1/case-types/{type_id}`, `GET /v1/task-types/{type_id}`, `GET /v1/forms/public/{slug}`, `GET /v1/me/memories/export`, `GET /v1/tools`, `GET /v1/tools/options`, `POST /v1/agents/{agent_id}/test`, `POST /v1/ai-steps/{step}` | reply `data` | an untyped object | a named type | Nothing in the JSON | Yes |
+| `GET /v1/tools/options` | cursor paging | `limit` up to 100, the SDK read the first page | `limit` default 25 and at most 100, `nextCursor` to follow | Follow `nextCursor` until it is null; `ops.agents.tool_options` and `toolOptions` do | Yes |
+| `POST /v1/agents/{agent_id}/eval-runs` | body | any object | `{cases}` only | Send only `cases`; another field answers 400 `validation_failed` | No |
+| `POST /v1/workflows/definitions/validate` | body `definition` | any object | the typed workflow definition | Send the fields the definition declares | Partly |
+
+### documents-service
+
+| Route | What changed | Before | After | What a caller must change | Old form works |
+|---|---|---|---|---|---|
+| `GET /v1/document-types/{type_id}`, `POST /v1/document-types/{type_id}/versions`, `GET /v1/document-types/{type_id}/versions/{version}`, `POST /v1/document-types/{type_id}/versions/{version}/test-runs`, `GET /v1/document-types/{type_id}/test-runs/{test_id}`, `POST /v1/document-types/{type_id}/templates/suggest`, `GET /v1/documents/extractions/{extraction_id}`, `PATCH /v1/documents/extractions/{extraction_id}/fields/{key}`, `POST /v1/resources/{resource}/copies`, `POST /v1/resources/{resource}/copies/{copy}/detach` | reply `data` | an untyped object | a named type | Nothing in the JSON | Yes |
+
+### files-service
+
+| Route | What changed | Before | After | What a caller must change | Old form works |
+|---|---|---|---|---|---|
+| `POST /v1/files/{file_id}/references`, `DELETE /v1/files/{file_id}/references/{ref_type}/{ref_id}` | reply `data` | an untyped object | a named type | Nothing in the JSON | Yes |
+
+### kb-service
+
+| Route | What changed | Before | After | What a caller must change | Old form works |
+|---|---|---|---|---|---|
+| `GET /v1/knowledge-bases/{kb_id}`, `POST /v1/knowledge-bases/{kb_id}/refresh`, `POST /v1/knowledge-bases/{kb_id}/retry-failed`, `DELETE /v1/knowledge-bases/{kb_id}/sources/{source_id}`, `POST /v1/sources/{source_id}/pause`, `POST /v1/sources/{source_id}/resume`, `POST /v1/sync-runs/{run_id}/cancel`, `GET /v1/knowledge/source-kinds` | reply `data` | an untyped object | a named type | Nothing in the JSON | Yes |
+| `PATCH /v1/knowledge-bases/{kb_id}` | body | any object | declares `metadataProfile` and `precedence` besides the old fields; refuses others | Send only declared fields | No |
+| `POST /v1/knowledge-bases/{kb_id}/query` | body | `question`, `collection` | also `alsoKbIds`, `overrides`, `runAsId`, `runtime`, `settings`; refuses others | Send only declared fields | No |
+| `POST /v1/sources/{source_id}/sync` | body | no body declared | `{full, retry}` | Send only `full` and `retry` | No |
+| `POST /v1/sources/scopes`, `POST /v1/sources/{source_id}/ai-approval`, `POST /v1/sources/{source_id}/files`, `POST /v1/sources/{source_id}/tombstones/lift` | body | the same fields, others ignored | the same fields; others answer 400 | Send only declared fields | No |
+
+### tools-service
+
+| Route | What changed | Before | After | What a caller must change | Old form works |
+|---|---|---|---|---|---|
+| `GET /v1/app-credentials/{credential_id}`, `PATCH /v1/app-credentials/{credential_id}`, `PUT /v1/app-credentials/{credential_id}/secret`, `PUT /v1/apps/{app_id}/accounts/{account_id}/default`, `PUT /v1/apps/{app_id}/accounts/{account_id}/team-default`, `POST /v1/apps/{app_id}/accounts/{account_id}/sign-out`, `POST /v1/apps/{app_id}/accounts/{account_id}/test`, `POST /v1/expressions/evaluate`, `POST /v1/mailboxes/test`, `POST /v1/mailboxes/wait`, `POST /v1/sign-ins/complete` | reply `data` | an untyped object | a named type | Nothing in the JSON | Yes |
+| `PATCH /v1/tool-modules/{module_id}/operations/{op_id}/mocks/{mock_id}` | reply `data` and body | an untyped object | a named type; body fields as before, others refused | Send only declared fields | Partly |
+| `POST /v1/tool-modules/{module_id}/operations/{operation}/run`, `POST /v1/expressions/evaluate`, `POST /v1/me/accounts/{account_id}/another` | body | fields as before | the same fields, typed more narrowly | Nothing for a valid body | Yes |

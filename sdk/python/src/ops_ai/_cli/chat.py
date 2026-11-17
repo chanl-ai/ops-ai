@@ -124,7 +124,7 @@ def _dispatch(ns: argparse.Namespace) -> int:
     if ns.verb == "transcript":
         return emit(ns, {"thread": ns.thread}, text=_transcript(ops, ns.thread, ns.all_turns))
     if ns.verb == "transcripts":
-        found = [t for test in (False, True) for t in ops.chat.threads(pageSize=100, test=test)]
+        found = [t for test in (False, True) for t in ops.chat.every_thread(test=test)]
         hits = [t for t in found if ns.search.lower() in str(t.get("title") or "").lower()]
         texts = [_transcript(ops, str(t["id"]), ns.all_turns) for t in hits]
         return emit(ns, [t["id"] for t in hits], text="\n\n---\n\n".join(texts) or "(no matching conversations)")
@@ -277,7 +277,7 @@ def turn(ns: argparse.Namespace, ops: OpsAI, thread: str, text: str, **pick: Any
 
 def calls(ops: OpsAI, thread: str) -> list[dict[str, Any]]:
     """The call log rows of the thread, as the Logs tab reads them."""
-    return list(ops.usage.list(thread=thread, page=1, page_size=50))
+    return ops.usage.every(thread=thread)
 
 
 def _log_line(r: dict[str, Any]) -> str:

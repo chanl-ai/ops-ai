@@ -1,7 +1,7 @@
 /** Agent lifecycle, chat and test over the generated agents operations. */
 /* Agents talks to raw.agents only, so this file does not import the client. */
 
-import { eachPage } from './transport.js';
+import { eachPage, pageItems } from './transport.js';
 
 export const PLANNED = 'This command is planned; the public API for it is not shipped.';
 
@@ -33,8 +33,15 @@ export class Agents {
 
   /** The operations an agent may be granted: published ones, as the agent page's picker lists them. */
   async toolOptions(search?: string): Promise<any[]> {
-    const found = await this.raw.agents.agents_tool_options({ query: { search, limit: 100 } });
-    return Array.isArray(found) ? found : (found?.data ?? found?.items ?? []);
+    const rows: any[] = [];
+    let next: Record<string, unknown> | null = {};
+    while (next) {
+      // cursor paged: follow nextCursor, not the first page only
+      const [items, more] = pageItems(await this.raw.agents.agents_tool_options({ query: { search, limit: 50, ...next } }));
+      rows.push(...items);
+      next = more;
+    }
+    return rows;
   }
 
   /** Adds tools (their ids from `toolOptions`) to the agent's draft, keeping the ones it holds. Publish it for the grant to take effect. */
