@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
-from .store.knowledge import SourceRow
+from .store.knowledge import ItemFetched, SourceRow
 
 
 @dataclass(frozen=True)
@@ -15,7 +14,7 @@ class Origin:
 
     path: str
     title: str | None = None
-    extra: dict[str, Any] = field(default_factory=dict[str, Any])
+    extra: ItemFetched = field(default_factory=ItemFetched)
     # The ids the source system lets see this version, kept on the version.
     allowed: list[str] | None = None
 

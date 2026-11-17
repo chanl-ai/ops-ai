@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_kb.service import freshness
-from ops_kb.source_settings import defaults, stored, wire
+from ops_kb.source_settings import defaults, stored
 from ops_kb.store import knowledge
 from ops_kb.store.knowledge import kb_sources
 from ops_store import isolation
@@ -149,5 +149,5 @@ async def test_freshness_is_read_on_the_databases_clock_not_the_services(
 
 
 def test_settings_saved_under_an_old_preset_label_show_the_label_their_steps_match() -> None:
-    saved = wire(defaults("file"))["ingest"] | {"preset": "email_templates"}
+    saved = defaults("file").ingest.model_dump(by_alias=True, mode="json") | {"preset": "email_templates"}
     assert stored("file", {"ingest": saved}).ingest.preset == "documents"

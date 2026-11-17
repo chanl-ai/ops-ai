@@ -12,7 +12,7 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Protocol
 
 import httpx
 
@@ -109,7 +109,7 @@ def ai_run(clients: AiClients | None, tenant: str, *, ceiling: float, fresh: boo
         CURRENT.reset(token)
 
 
-def spent_on(counts: dict[str, Any], log: list[str]) -> None:
+def spent_on(counts: dict[str, int], log: list[str]) -> None:
     """The current run's model spend into its counts, and why its AI step stopped into its log."""
     run = CURRENT.get()
     if run is None:

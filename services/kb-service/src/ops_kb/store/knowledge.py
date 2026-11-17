@@ -928,6 +928,169 @@ class SourceChanges(TypedDict, total=False):
     type: str
 
 
+class ItemFetched(TypedDict, total=False):
+    """The columns a fetched item adds to its row: its change signals, parent, address and the digests of its lines."""
+
+    marker: str | None
+    parent_id: str | None
+    url: str | None
+    folder: str | None
+    fields: dict[str, str] | None
+    tag: str | None
+    lines: list[str] | None
+    gone_count: int
+
+
+class ItemWrite(ItemFetched):
+    """The columns of an item row to insert; a document waiting for its reading is version 0."""
+
+    tenant_id: str
+    id: str
+    source_id: str
+    path: str
+    title: str
+    mime: str
+    size: int
+    file_id: str
+    digest: str
+    version: int
+    status: str
+    chunk_count: int
+    owner: str
+    created_at: datetime
+    error_class: NotRequired[str | None]
+    error: NotRequired[str | None]
+    warning: NotRequired[str | None]
+    page_count: NotRequired[int | None]
+    processed_at: NotRequired[datetime | None]
+    read_with: NotRequired[str | None]
+    indexed_with: NotRequired[str | None]
+    content_digest: NotRequired[str | None]
+    duplicate_of: NotRequired[str | None]
+
+
+class ItemChanges(ItemFetched, total=False):
+    """The columns of an item a change sets; the ones it names only."""
+
+    title: str
+    mime: str
+    size: int
+    file_id: str
+    digest: str
+    status: str
+    error_class: str | None
+    error: str | None
+    warning: str | None
+    page_count: int | None
+    chunk_count: int
+    owner: str
+    verified: bool
+    verified_by: str | None
+    verified_at: datetime | None
+    processed_at: datetime | None
+    read_with: str | None
+    indexed_with: str | None
+    content_digest: str | None
+    duplicate_of: str | None
+
+
+class VersionWrite(TypedDict):
+    """The columns of an item's version row to insert; `allowed` is the ids the source system lets see it."""
+
+    tenant_id: str
+    item_id: str
+    version: int
+    file_id: str
+    digest: str
+    status: str
+    allowed: list[str] | None
+    created_by: str
+    created_at: datetime
+
+
+class DraftWrite(TypedDict):
+    """The columns of a change row to insert but the tenant (the store sets it): a section a sync changed, or a pair
+    drafted for review. A change a sync made applies at once, so it names no origin or status."""
+
+    id: str
+    item_id: str
+    source_id: str
+    title: str
+    section: str
+    from_version: int
+    to_version: int
+    before: str
+    after: str
+    changed_by: str
+    changed_at: datetime
+    origin: NotRequired[str]
+    status: NotRequired[str]
+    detail: NotRequired[dict[str, JsonValue]]
+
+
+class ChangeWrite(DraftWrite):
+    tenant_id: str
+
+
+class ChangeChanges(TypedDict, total=False):
+    """The columns of a change a decision sets."""
+
+    status: str
+    after: str
+    detail: dict[str, JsonValue]
+    decided_by: str
+    decided_at: datetime
+
+
+class FaqUnitWrite(TypedDict):
+    """An approved pair as a unit of the piece holding its quote."""
+
+    id: str
+    chunk_id: str
+    item_id: str
+    kind: str
+    position: int
+    heading: str
+    text: str
+
+
+class RunError(TypedDict, total=False):
+    """One item a run could not settle."""
+
+    itemId: str
+    itemTitle: str | None
+    phase: str
+    errorClass: str | None
+    message: str | None
+
+
+class RunWrite(TypedDict):
+    """The columns of a sync run to insert."""
+
+    tenant_id: str
+    id: str
+    source_id: str
+    trigger: str
+    started_at: datetime
+    duration_sec: float
+    status: str
+    counts: dict[str, int]
+    errors: list[RunError]
+    log: list[str]
+    started_by: str
+
+
+class RunChanges(TypedDict, total=False):
+    """The columns of a run a change sets: its end, or its counts as it goes."""
+
+    duration_sec: float
+    status: str
+    counts: dict[str, int]
+    errors: list[RunError]
+    log: list[str]
+    finished_at: datetime
+
+
 class KnowledgeStore(Store):
     """kb-service's door to its knowledge bases and sources, always inside one tenant. Creating a knowledge base with
     its links, attaching sources and removing a source with its links each land whole."""
@@ -1266,12 +1429,12 @@ class KnowledgeStore(Store):
     async def index_version(
         self,
         tenant: str,
-        item: dict[str, Any],
-        version: dict[str, Any],
+        item: ItemWrite,
+        version: VersionWrite,
         chunks: list[PieceWrite],
         *,
         new: bool,
-        change: dict[str, Any] | None = None,
+        change: ChangeWrite | None = None,
     ) -> int | None:
         """Writes one version of an item with its chunks, and withdraws the previous version's chunks, in one
         transaction: a reader sees the old version or the new one, never both, and the change row lands with the
@@ -1279,32 +1442,29 @@ class KnowledgeStore(Store):
         async with self.tx() as c:
             # The document, its version, chunks and change take its source's team.
             team = await self._team_of(c, kb_sources, tenant, str(item["source_id"]))
-            item = {**item, "team_id": team}
-            version = {**version, "team_id": team}
             stored, units = _with_team(chunks, team)
-            change = {**change, "team_id": team} if change is not None else None
             replaced: int | None = None
             if new:
-                await c.execute(sa.insert(kb_items).values(**item))
+                await c.execute(sa.insert(kb_items).values(**item, team_id=team))
             else:
                 key = (kb_items.c.tenant_id == tenant, kb_items.c.id == item["id"])
                 replaced = (
                     await c.execute(sa.select(kb_items.c.version).where(*key, team_visible(kb_items)))
                 ).scalar_one()
-                await c.execute(sa.update(kb_items).where(*key).values(**item))
+                await c.execute(sa.update(kb_items).where(*key).values(**item, team_id=team))
                 await c.execute(
                     sa.update(kb_item_versions)
                     .where(kb_item_versions.c.tenant_id == tenant, kb_item_versions.c.item_id == item["id"])
                     .values(status="superseded")
                 )
                 stored, units = await _keep_unchanged(c, tenant, str(item["id"]), stored, units)
-            await c.execute(sa.insert(kb_item_versions).values(**version))
+            await c.execute(sa.insert(kb_item_versions).values(**version, team_id=team))
             if stored:
                 await c.execute(sa.insert(kb_chunks), stored)
             if units:
                 await c.execute(sa.insert(kb_units), units)
             if change is not None:
-                await c.execute(sa.insert(kb_changes).values(**change))
+                await c.execute(sa.insert(kb_changes).values(**change, team_id=team))
             return replaced
 
     async def purge_withdrawn(self, tenant: str, *, before: datetime) -> int:
@@ -1328,27 +1488,29 @@ class KnowledgeStore(Store):
         statement. Returns how many runs in a row have now failed."""
         good = status in ("success", "partial")
         src = kb_sources
-        values: dict[str, Any] = {
-            "last_sync_at": db_now(),
-            "last_run_status": status,
-            "last_good_sync_at": db_now() if good else src.c.last_good_sync_at,
-            "failing_since": None if good else sa.func.coalesce(src.c.failing_since, db_now()),
-            "failures_in_row": 0 if good else src.c.failures_in_row + 1,
-        }
-        if activate:
-            values["status"] = sa.case((kb_sources.c.status == "draft", "active"), else_=kb_sources.c.status)
-        async with self.tx() as c:
-            await c.execute(
-                sa.update(kb_sources)
-                .where(kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
-                .values(**values)
+        update = (
+            sa.update(kb_sources)
+            .where(kb_sources.c.tenant_id == tenant, kb_sources.c.id == source_id)
+            .values(
+                last_sync_at=db_now(),
+                last_run_status=status,
+                last_good_sync_at=db_now() if good else src.c.last_good_sync_at,
+                failing_since=None if good else sa.func.coalesce(src.c.failing_since, db_now()),
+                failures_in_row=0 if good else src.c.failures_in_row + 1,
             )
+        )
+        if activate:
+            update = update.values(
+                status=sa.case((kb_sources.c.status == "draft", "active"), else_=kb_sources.c.status)
+            )
+        async with self.tx() as c:
+            await c.execute(update)
             q = sa.select(src.c.failures_in_row).where(
                 src.c.tenant_id == tenant, src.c.id == source_id, team_visible(src)
             )
             return int((await c.execute(q)).scalar_one_or_none() or 0)
 
-    async def record_event(self, tenant: str, source_id: str, *, name: str, payload: dict[str, Any]) -> None:
+    async def record_event(self, tenant: str, source_id: str, *, name: str, payload: dict[str, JsonValue]) -> None:
         """A service event about the source (it keeps failing), relayed to agents-service so a workflow can act."""
         async with self.tx() as c:
             team = await self._team_of(c, kb_sources, tenant, source_id)
@@ -1414,7 +1576,7 @@ class KnowledgeStore(Store):
                 .values(last_refreshed_at=db_now())
             )
 
-    async def reindex(self, tenant: str, item_id: str, values: dict[str, Any], chunks: list[PieceWrite]) -> None:
+    async def reindex(self, tenant: str, item_id: str, values: ItemChanges, chunks: list[PieceWrite]) -> None:
         """Rebuilds an item's chunks from the same content, keeping its version: the old chunks are withdrawn in the
         transaction that inserts the new ones."""
         async with self.tx() as c:
@@ -1429,11 +1591,11 @@ class KnowledgeStore(Store):
             if units:
                 await c.execute(sa.insert(kb_units), units)
 
-    async def add_item(self, tenant: str, item: dict[str, Any]) -> None:
+    async def add_item(self, tenant: str, item: ItemWrite) -> None:
         """An item with no version yet (waiting for its reading, or failed before one), in its source's team."""
         async with self.tx() as c:
             team = await self._team_of(c, kb_sources, tenant, str(item["source_id"]))
-            await c.execute(sa.insert(kb_items).values(**{**item, "team_id": team}))
+            await c.execute(sa.insert(kb_items).values(**item, team_id=team))
 
     async def reading_items(self, tenant: str, *, file_id: str | None = None) -> list[ItemRow]:
         """The visible items waiting for their file's reading, one file's or all of them."""
@@ -1445,7 +1607,7 @@ class KnowledgeStore(Store):
         async with self.tx() as c:
             return await rows(c, q.order_by(kb_items.c.created_at, kb_items.c.id), ItemRow)
 
-    async def update_item(self, tenant: str, item_id: str, values: dict[str, Any]) -> None:
+    async def update_item(self, tenant: str, item_id: str, values: ItemChanges) -> None:
         async with self.tx() as c:
             await c.execute(
                 sa.update(kb_items).where(kb_items.c.tenant_id == tenant, kb_items.c.id == item_id).values(**values)
@@ -1518,7 +1680,7 @@ class KnowledgeStore(Store):
         async with self.tx() as c:
             await c.execute(_released(tenant, source_id, owner))
 
-    async def add_run(self, row: dict[str, Any]) -> None:
+    async def add_run(self, row: RunWrite) -> None:
         async with self.tx() as c:
             team = await self._team_of(c, kb_sources, str(row["tenant_id"]), str(row["source_id"]))
             await c.execute(sa.insert(kb_runs).values(**row, team_id=team))
@@ -1560,7 +1722,7 @@ class KnowledgeStore(Store):
             return await rows(c, q, CopyName)
 
     async def update_run(
-        self, tenant: str, run_id: str, values: dict[str, Any], *, release: tuple[str, str] | None = None
+        self, tenant: str, run_id: str, values: RunChanges, *, release: tuple[str, str] | None = None
     ) -> None:
         """`release` (source id, lease owner) frees the source in the same transaction, so a run seen finished never
         holds its source after."""
@@ -1660,21 +1822,21 @@ class KnowledgeStore(Store):
         async with self.tx() as conn:
             return await rows(conn, q, ChangeRow)
 
-    async def add_drafts(self, tenant: str, rows: list[dict[str, Any]]) -> None:
+    async def add_drafts(self, tenant: str, rows: list[DraftWrite]) -> None:
         if not rows:
             return
         async with self.tx() as conn:
             team = await self._team_of(conn, kb_items, tenant, str(rows[0]["item_id"]))
             await conn.execute(sa.insert(kb_changes), [{**r, "tenant_id": tenant, "team_id": team} for r in rows])
 
-    async def update_change(self, tenant: str, change_id: str, values: dict[str, Any]) -> None:
+    async def update_change(self, tenant: str, change_id: str, values: ChangeChanges) -> None:
         c = kb_changes
         async with self.tx() as conn:
             await conn.execute(
                 sa.update(c).where(c.c.tenant_id == tenant, c.c.id == change_id, team_visible(c)).values(**values)
             )
 
-    async def replace_faq_units(self, tenant: str, item_id: str, units: list[dict[str, Any]]) -> None:
+    async def replace_faq_units(self, tenant: str, item_id: str, units: list[FaqUnitWrite]) -> None:
         """The item's approved FAQ pairs as units of its live pieces, in place of the ones it had."""
         u, ch = kb_units, kb_chunks
         live = sa.select(ch.c.id).where(

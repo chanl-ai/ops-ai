@@ -529,13 +529,13 @@ def create_kb_app(
     async def preview_source(body: PreviewIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """What a plugin source with these settings would take in (a site's pages, each with its outcome), asked of
         the plugin's preview tool. Nothing is stored."""
-        return ok(await service.preview_source(who, body.model_dump(by_alias=True)))
+        return ok((await service.preview_source(who, body)).model_dump(by_alias=True))
 
     @sources.post("/scopes", response_model=Envelope[ScopesPage])
     async def source_scopes(body: ScopesIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """What a plugin source can be pointed at, for Add source's pickers: its plugin's scopes tool searched by name
         (sites, spaces), or what one picked site holds (`parent`). Nothing is stored."""
-        return ok(await service.source_scopes(who, body.model_dump()))
+        return ok((await service.source_scopes(who, body)).model_dump(by_alias=True, exclude_none=True))
 
     @sources.get("/{source_id}/tombstones", response_model=Envelope[list[Tombstone]])
     async def list_tombstones(source_id: str, who: Person, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

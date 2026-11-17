@@ -20,6 +20,7 @@ from ops_kb.agents import StaticAgents
 from ops_kb.app import _tools_service, create_kb_app  # pyright: ignore[reportPrivateUsage]
 from ops_kb.files import KnowledgeFiles
 from ops_kb.tool_sources import Answer
+from ops_service_kit.http import JsonValue
 from ops_service_kit.settings import Settings
 
 from .readings_fake import LocalReadings
@@ -93,7 +94,7 @@ class FakeTools:
             return Answer(True, out)
         item_id = str(args["id"])
         a = self.articles.get(item_id) or self.attachments[item_id]
-        kids = [
+        kids: list[JsonValue] = [
             {"id": c, "title": self.attachments[c]["title"], "updated_at": self.attachments[c]["updated_at"]}
             for c in a.get("children", [])
         ]

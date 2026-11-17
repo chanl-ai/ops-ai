@@ -17,6 +17,7 @@ from ops_kb.agents import StaticAgents
 from ops_kb.app import create_kb_app
 from ops_kb.files import KnowledgeFiles
 from ops_kb.tool_sources import Answer
+from ops_service_kit.http import JsonValue
 from ops_service_kit.settings import Settings
 
 from .readings_fake import LocalReadings
@@ -60,8 +61,8 @@ class Wiki:
             return Answer(True, {"items": [self._row(k) for k in self.pages], "cursor": "c1"})
         if tool == CHANGES:
             assert args.get("cursor") == "c1", args
-            rows = [self._row(k) for k, v in self.pages.items() if v["v"] > 1]
-            rows += [{"id": k, "updated_at": "2026-11-09T00:00:00Z", "deleted": True} for k in self.deleted]
+            rows: list[JsonValue] = [self._row(k) for k, v in self.pages.items() if v["v"] > 1]
+            rows.extend({"id": k, "updated_at": "2026-11-09T00:00:00Z", "deleted": True} for k in self.deleted)
             return Answer(True, {"items": rows, "cursor": "c1"})
         page = self.pages[str(args["id"])]
         etag = f"etag-{args['id']}-{len(page['body'])}"

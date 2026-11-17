@@ -13,8 +13,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol
+from typing import Literal, Protocol, TypedDict
 
+from .query_steps import RerankTrace, RewriteTrace
 from .store.fulltext import KeywordHit
 from .store.vectors import MeaningHit
 
@@ -100,6 +101,19 @@ class Search:
     collection: str | None = None
 
 
+class LaneSkipped(TypedDict):
+    lane: str
+    reason: str
+
+
+class LanesOut(TypedDict):
+    """Which lanes a search asked for, which ran, and why each other one did not."""
+
+    asked: list[str]
+    ran: list[str]
+    skipped: list[LaneSkipped]
+
+
 @dataclass(frozen=True)
 class Found:
     passages: list[Passage]
@@ -111,10 +125,10 @@ class Found:
     # Input tokens the question's embedding cost, charged to kb-service's key at models-service.
     embedding_tokens: int = 0
     # The optional steps around the lanes (query_steps.py), as the answer shows them; None when not asked for.
-    rewrite: dict[str, Any] | None = None
-    rerank: dict[str, Any] | None = None
+    rewrite: RewriteTrace | None = None
+    rerank: RerankTrace | None = None
 
-    def lanes_out(self) -> dict[str, Any]:
+    def lanes_out(self) -> LanesOut:
         return {
             "asked": self.asked,
             "ran": self.ran,

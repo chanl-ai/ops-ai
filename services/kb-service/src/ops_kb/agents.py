@@ -10,12 +10,27 @@ still loads, and the console keeps the delete confirmation that a base in use as
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol, cast
+from typing import Protocol
+
+from pydantic import BaseModel, TypeAdapter
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.logging import get_logger
 
 log = get_logger(__name__)
+
+
+class _AgentName(BaseModel):
+    name: str
+
+
+class _UsageRow(BaseModel):
+    kbId: str  # noqa: N815 - the wire name
+    agents: list[_AgentName]
+    elsewhere: int | None = None
+
+
+USAGE_ROWS = TypeAdapter(list[_UsageRow])
 
 
 @dataclass(frozen=True)
@@ -40,17 +55,13 @@ class AgentsUsage:
         if not kb_ids:
             return {}
         try:
-            rows = cast(
-                list[dict[str, Any]],
-                await self.agents.get("/v1/knowledge-usage", params={"ids": kb_ids}, tenant=tenant_id, team=team_id),
+            rows = USAGE_ROWS.validate_python(
+                await self.agents.get("/v1/knowledge-usage", params={"ids": kb_ids}, tenant=tenant_id, team=team_id)
             )
         except (ServiceCallError, ServiceUnreachable) as e:
             log.warning("agents_usage_unavailable", error=type(e).__name__)
             return None
-        return {
-            str(row["kbId"]): Usage([str(a["name"]) for a in row["agents"]], int(row.get("elsewhere") or 0))
-            for row in rows
-        }
+        return {row.kbId: Usage([a.name for a in row.agents], row.elsewhere or 0) for row in rows}
 
 
 class StaticAgents:
