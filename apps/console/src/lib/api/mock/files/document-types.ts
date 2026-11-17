@@ -14,7 +14,7 @@ import type { FileReference } from "@/lib/types/files";
 
 import { ApiError } from "../../contract";
 import type { FilesApi } from "../../files-contract";
-import { id, notFound, respond } from "../runtime";
+import { id, list, notFound, respond } from "../runtime";
 import { inTeam, teamOwner } from "../teams";
 import { daysAgo, type FileSeed } from "./seed";
 
@@ -353,19 +353,27 @@ export function createDocumentTypesMock(
   };
 
   return {
-    list: () =>
+    list: (p) =>
       respond((m) => ({
-        items:
-          m === "empty"
-            ? []
-            : types
-                .filter((t) => inTeam(t.team))
-                .map((t) => ({
-                  id: t.id,
-                  name: t.name,
-                  description: t.description,
-                  latestVersion: t.versions[0].version,
-                })),
+        ...list(
+          types
+            .filter((t) => inTeam(t.team))
+            .map((t) => ({
+              id: t.id,
+              name: t.name,
+              description: t.description,
+              latestVersion: t.versions[0].version,
+            })),
+          p,
+          {
+            text: (t) => t.name,
+            value: () => "",
+            facetKeys: [],
+            id: (t) => t.id,
+            sort: (t, key) => (key === "name" ? t.name.toLowerCase() : undefined),
+          },
+          m,
+        ),
         canCreate: true,
       })),
 

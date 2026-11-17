@@ -145,6 +145,11 @@ interface DataTableWithViewsProps<TData, TValue> {
    * When enabled, DataTableWithViews uses manual pagination instead of client-side.
    */
   serverPagination?: DataTableWithViewsServerPagination;
+  /**
+   * The server orders the rows: only `columns` sort (by a click on the header), and a change is reported through
+   * `onChange` instead of re-ordering the page held (a page sorted alone is not the order of the whole list).
+   */
+  serverSorting?: { columns: string[]; onChange: (sorting: SortingState) => void };
   /** Date range filter — renders a DateRangePicker in the toolbar */
   dateRange?: DateRangeFilter;
   /** Initial column visibility state (e.g., { toolId: false } to hide a column) */
@@ -232,6 +237,7 @@ export function DataTableWithViews<TData, TValue>({
   initialColumnFilters = [],
   emptyState,
   serverPagination,
+  serverSorting,
   dateRange,
   initialColumnVisibility = {},
   toolbarExtra,
@@ -242,7 +248,12 @@ export function DataTableWithViews<TData, TValue>({
   // A row checkbox only where picking rows does something: a bulk action the person may take, or a page that reads the
   // selection. Without either (a viewer, whose bulk actions are all withheld) the column is left out.
   const selects = bulkActions.length > 0 || !!onSelectionChange;
-  const columns = React.useMemo(() => (selects ? given : given.filter((c) => c.id !== 'select')), [given, selects]);
+  const sortableOnServer = serverSorting?.columns;
+  const columns = React.useMemo(() => {
+    const kept = selects ? given : given.filter((c) => c.id !== 'select');
+    if (!sortableOnServer) return kept;
+    return kept.map((c) => ({ ...c, enableSorting: sortableOnServer.includes(c.id ?? (c as { accessorKey?: string }).accessorKey ?? '') }));
+  }, [given, selects, sortableOnServer]);
   const [rowSelection, setRowSelection] = React.useState({});
   const [columnVisibility, setColumnVisibility] = useRememberedColumns(columns, initialColumnVisibility);
   const [columnFilters, setColumnFilters] =
@@ -294,6 +305,7 @@ export function DataTableWithViews<TData, TValue>({
     },
     // Server-side pagination configuration
     manualPagination: serverPagination?.enabled ?? false,
+    manualSorting: !!serverSorting,
     pageCount: serverPagination?.enabled ? serverTotalPages : undefined,
     enableRowSelection: true,
     enableRowPinning: true,
@@ -323,6 +335,15 @@ export function DataTableWithViews<TData, TValue>({
   const shownRows = isCreated.size ? [...table.getTopRows(), ...table.getCenterRows()] : table.getRowModel().rows;
 
   // The created rows follow the list again once the person moves on: another page, page size, search, filter or sort.
+  const onSortingChange = serverSorting?.onChange;
+  const sortedOnce = React.useRef(false);
+  React.useEffect(() => {
+    if (!sortedOnce.current) {
+      sortedOnce.current = true;
+      return;
+    }
+    onSortingChange?.(sorting);
+  }, [sorting]); // eslint-disable-line react-hooks/exhaustive-deps
   const clearCreated = created?.clear;
   const didMountCreatedRef = React.useRef(false);
   React.useEffect(() => {

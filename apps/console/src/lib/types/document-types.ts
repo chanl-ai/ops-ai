@@ -4,6 +4,8 @@
  * the samples and score every field.
  */
 
+import type { ListResult } from "./query";
+
 export type DocumentFieldType = "text" | "number" | "money" | "date" | "enum";
 
 export interface DocumentField {
@@ -53,8 +55,8 @@ export interface DocumentTypeSummary {
   latestVersion: number;
 }
 
-export interface DocumentTypeList {
-  items: DocumentTypeSummary[];
+/** One page of the team's types on the shared list contract. */
+export interface DocumentTypeList extends ListResult<DocumentTypeSummary> {
   /** Whether the caller may create a document type in this team. */
   canCreate: boolean;
 }

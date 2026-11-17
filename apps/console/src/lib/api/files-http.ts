@@ -25,11 +25,11 @@ export function putToStorage(ticket: { uploadUrl: string; method: 'PUT'; headers
 }
 
 /** `/document-types` on documents-service; `get` and `send` carry the transport's identity and envelope. */
-export function createDocumentTypesHttp(get: Get, send: Send): FilesApi['documentTypes'] {
+export function createDocumentTypesHttp(get: Get, send: Send, qs: (p: ListParams) => string): FilesApi['documentTypes'] {
   const base = '/document-types';
   const one = (id: string) => `${base}/${encodeURIComponent(id)}`;
   return {
-    list: () => get(base),
+    list: (p) => get(`${base}?${qs(p)}`),
     get: (id) => get(one(id)),
     create: (i) => send('POST', base, i),
     addVersion: (id, i) => send('POST', `${one(id)}/versions`, i),
@@ -98,7 +98,7 @@ export function createFilesHttp(get: Get, send: Send, qs: (p: ListParams & { vie
         remove: (name) => send('DELETE', `/settings/storage/credentials/${encodeURIComponent(name)}`),
       },
     },
-    documentTypes: createDocumentTypesHttp(get, send),
+    documentTypes: createDocumentTypesHttp(get, send, qs),
     extractions: createExtractionsRoutes(get, send),
     layouts: createLayoutsRoutes(get, send),
   };

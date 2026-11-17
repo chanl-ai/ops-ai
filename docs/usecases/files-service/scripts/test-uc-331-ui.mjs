@@ -79,7 +79,7 @@ await withUiStack(
         await page.getByTestId('extract-type').click();
         const first = (await page.getByRole('option').first().innerText()).trim();
         const enabled = (await page.getByRole('option').first().getAttribute('aria-disabled')) !== 'true';
-        await page.getByTestId('extract-detect').click();
+        await page.getByTestId('extract-type-option-__detect').click();
         const versionShown = await page.getByTestId('extract-version').count();
         if (file === invoice) {
           // Screen evidence: the dialog with Detect chosen, at 1280 and 400.

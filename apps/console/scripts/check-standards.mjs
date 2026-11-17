@@ -174,6 +174,7 @@ for (const f of files) {
     'src/app/build/guardrails/page.tsx': 'opens the new guardrail',
     'src/app/data/knowledge/page.tsx': 'opens the new knowledge base',
     'src/app/build/widgets/page.tsx': 'opens the new widget',
+    'src/app/data/document-types/page.tsx': 'opens the new document type',
     // Not yet: the invite answers with links, not the invited members' rows (platform-service), so there is no row to show.
     'src/components/access/members-panel.tsx': 'invite returns links, not member rows',
     // Not yet: an upload returns ids, and a file is listed once it has been scanned, so there is no row to show.
