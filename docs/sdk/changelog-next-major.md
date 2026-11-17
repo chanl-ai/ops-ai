@@ -2,7 +2,7 @@
 
 Status: draft, 2026-11-16. The version number is not bumped yet; one bump happens at the end of the standards
 migration. Entries come from `docs/architecture/migration/api-changes.md`, one per changed route, for the services
-whose API work is finished: platform, kb, documents, files, models, runner and tools. Agents-service is not listed yet.
+whose API work is finished: platform, kb, documents, files, models, runner, tools and agents.
 
 Every list route now answers the shared page (`data`, `pagination`, `facets`): the default page is 20 rows and the largest
 is 50. Both SDKs page through `every_page` (Python, `ops_ai._transport`) and `everyPage` (TypeScript, `transport.ts`),
@@ -91,3 +91,33 @@ aliases.
 | `GET /v1/tool-modules` | at most 50 a page (was 200); `sortOrder=asc` for an ascending sort; `templateId` is a list of values |
 | `GET /v1/apps` | `SystemCardList` page, not an array; `search`, `ids` |
 | `POST /v1/fences`, `POST /v1/mailboxes/*`, internal routes | typed bodies and replies; not in the public SDK |
+
+### agents-service
+
+| Route | Change |
+|---|---|
+| `GET /v1/agents` | `pageSize` default 20, largest 50 (was 25 and 200); `ids`; `sortBy` alone sorts descending (send `sortOrder=asc`); `templateId` is no longer an argument of the generated call; search is case-insensitive on name, role and slug |
+| `GET /v1/skills` | `SkillList`: `pageSize` default 20, largest 50 (was 25 and 200); `search`, `ids`; a page past the end answers the last page |
+| `GET /v1/guardrails` | always a page (`data`, `pagination`, `facets`), never a bare array; `pageSize` 20 and 50; `search`, `ids` |
+| `GET /v1/widgets` | always a page, never a bare array; `pageSize` 20 and 50; `search`, `ids` |
+| `GET /v1/workflows/{workflow_id}/forms` | a page, not an array; `search`, `ids` |
+| `GET /v1/cases` | `pageSize` default 20, largest 50 (was 25 and 100); `ids`; `sortBy` and `sortOrder` change nothing |
+| `GET /v1/case-types`, `GET /v1/task-types` | a page, not an array; `search`, `ids` |
+| `GET /v1/runs` | `pageSize` default 20, largest 50 (was 25 and 100); `ids`; newest first, then id descending; the `workflow_id` spelling is gone, send `workflowId` (the generated argument stays `workflow_id`) |
+| `GET /v1/threads` | a page, not an array; `ids`; `sortBy=updatedAt` with `sortOrder`; only threads the caller may read are counted |
+| `GET /v1/threads/{thread_id}/inbox` | a teammate who cannot read the thread gets 404 `not_found` (was 200) |
+| `GET /v1/workflows/definitions` | `pageSize` default 20, largest 50 (was 25 and 200); `ids`; `status` |
+| `GET /v1/workflows`, `GET /v1/workflows/{workflow_id}/runs` | `status` is a declared, repeated parameter |
+| `POST /v1/workflows/{workflow_id}/batches` | an unknown body field answers 400 `validation_failed`; the body is `fileId`, `mode`, `dryRun` |
+| `POST`, `PATCH` form routes (`/v1/workflows/{workflow_id}/forms`, `/v1/forms/{form_id}`, `/v1/forms/public/{slug}/submit`, `/v1/forms/{slug}/members`) | an unknown body field answers 400 `validation_failed`; a link token for another tenant answers 404 |
+
+Hand-written nouns and verbs added or changed for these routes:
+
+| Python | TypeScript | Command line | Change |
+|---|---|---|---|
+| `ops.agents.list`, `ops.cases.list`, `ops.runs.list`, `ops.tasks.list`, `ops.threads.list`, `ops.workflows.list` | same, as async iterators | `opsai agents list [--search]`, `opsai cases list`, `opsai runs list`, `opsai tasks list`, `opsai workflows list [--status]` | every page, 50 rows a page; no first-page-only reads and no page size above 50 |
+| `ops.skills`, `ops.guardrails`, `ops.widgets`, `ops.case_types`, `ops.task_types` | `ops.skills`, `guardrails`, `widgets`, `caseTypes`, `taskTypes` (`list`, `get`) | `opsai skills\|guardrails\|widgets list [--search] [--id]`, `opsai cases types`, `opsai tasks types` | new nouns |
+| `ops.workflows.forms(workflow_id)` | `ops.workflows.forms(workflowId)` | `opsai workflows forms <id>` | new |
+| `ops.workflows.start_batch(workflow_id, file_id, mode, dry_run)` | `ops.workflows.startBatch(workflowId, fileId, {mode, dryRun})` | `opsai workflows batch-start <id> --file-id` | new; sends only the declared fields |
+| `ops.threads.inbox(thread_id)` | `ops.threads.inbox(threadId)` | `opsai threads inbox <id>` | new; 404 for a thread the caller cannot read |
+| `ops.threads.list` | same | `opsai threads list [--graph] [--id]`, `show` | new CLI area |
