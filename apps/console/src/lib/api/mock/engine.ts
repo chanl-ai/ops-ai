@@ -17,7 +17,6 @@ export function createEngineMock(): EngineApi {
     options: unavailable,
     startRun: unavailable,
     startWorkflow: unavailable,
-    runs: unavailable,
     run: unavailable,
     cancelRun: unavailable,
     retryRun: unavailable,

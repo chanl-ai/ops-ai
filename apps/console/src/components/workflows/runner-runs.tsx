@@ -13,14 +13,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { RunStatus } from '@/components/workflows/run-journal/run-status';
 import { StartedBy } from '@/components/workflows/started-by';
-import { useEngineRuns } from '@/hooks/engine-queries';
+import { type EngineRunRow, useEngineRuns } from '@/hooks/engine-queries';
 import { useWorkflows } from '@/hooks/queries';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { relativeTime } from '@/lib/format';
-import type { EngineRun } from '@/lib/types/engine';
 import { serverPagination } from '@/components/shared/server-pagination';
 
-type Row = EngineRun & { onRowClick: (r: EngineRun) => void; rowTestId: string };
+type Row = EngineRunRow & { onRowClick: (r: EngineRunRow) => void; rowTestId: string };
 
 const STATUS_OPTIONS = [
   { label: 'Waiting on a person', value: 'waiting' },
@@ -79,7 +78,7 @@ export function RunnerRuns() {
   const query = useEngineRuns({ workflowId: filters.workflowId?.[0], status: filters.status, page: list.params.page, pageSize: list.params.pageSize });
   const { data: workflows } = useWorkflows({ page: 1, pageSize: 100 });
   const rows: Row[] = React.useMemo(
-    () => (query.data?.data ?? []).map((r) => ({ ...r, onRowClick: (x: EngineRun) => router.push(`/build/runs/${encodeURIComponent(x.id)}`), rowTestId: `runner-run-row-${r.id}` })),
+    () => (query.data?.data ?? []).map((r) => ({ ...r, onRowClick: (x: EngineRunRow) => router.push(`/build/runs/${encodeURIComponent(x.id)}`), rowTestId: `runner-run-row-${r.id}` })),
     [query.data, router],
   );
   const counts = query.data?.facets?.status ?? {};
