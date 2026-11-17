@@ -22,7 +22,9 @@ from .test_review_decisions import signed_in  # noqa: F401  # pyright: ignore[re
 
 async def _events(engine: AsyncEngine, tenant: str) -> list[dict[str, Any]]:
     async with engine.connect() as c:
-        q = sa.select(service_outbox).where(service_outbox.c.tenant_id == tenant).order_by(service_outbox.c.created_at)
+        # The access events only: loading the seed reports each module to the catalogue copy (`tool.` events).
+        o = service_outbox.c
+        q = sa.select(service_outbox).where(o.tenant_id == tenant, o.name.not_like("tool.%")).order_by(o.created_at)
         return [dict(r) for r in (await c.execute(q)).mappings()]
 
 

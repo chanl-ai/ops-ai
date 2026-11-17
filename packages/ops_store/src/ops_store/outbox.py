@@ -77,13 +77,58 @@ class Step(Out):
     input: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
 
 
-class ToolPublished(Out):
-    """A tool module published in tools-service, for the catalogue copy other services list tools from."""
+class ToolOperation(Out):
+    """One operation a module serves, as a tools list shows it. Its input schema is read from tools-service by the
+    module and this `id` when a screen opens the tool, which keeps an event under the receiver's payload limit."""
 
-    kind: Literal["tool.module.published"] = "tool.module.published"
     id: str
     name: str
-    # True when the tool is gone: a copy deletes its row and ignores any older event about it.
+    access: str  # read or write
+    requires_approval: bool = False
+    enabled: bool = True
+
+
+class ToolModule(Out):
+    """What the catalogue copy keeps of a tool module: enough to list its tools without asking tools-service. The
+    module's team is `owner_team` (null for a workspace-level module every team reads); the event's team only routes
+    delivery."""
+
+    id: str
+    name: str
+    title: str | None = None
+    app: str | None = None
+    owner_team: str | None = None
+    status: str | None = None
+    version: str | None = None
+    operations: list[ToolOperation] = Field(default_factory=list[ToolOperation])
+    # True when the module is gone: a copy marks its row deleted and ignores any older event about it.
+    deleted: bool = False
+
+
+class ToolPublished(ToolModule):
+    """A tool module created, or a new version of it published, in tools-service."""
+
+    kind: Literal["tool.module.published"] = "tool.module.published"
+
+
+class ToolChanged(ToolModule):
+    """A tool module changed without a new version (its operations, title, status or approvals), or deleted."""
+
+    kind: Literal["tool.module.changed"] = "tool.module.changed"
+
+
+class ToolTeamStateChanged(Out):
+    """One team's grant of a module it does not own, and what the grant is: written when it starts or changes, and
+    with `deleted` when it ends. Keyed by `id` (`<via>:<module id>`), so each kind of grant orders its own events."""
+
+    kind: Literal["tool.team_state.changed"] = "tool.team_state.changed"
+    id: str
+    module_id: str
+    via: Literal["approval"]
+    # The operations the grant covers, by name.
+    operations: list[str] = Field(default_factory=list[str])
+    # ISO time the grant ends; a reader drops it past then, since an approval expires with no write.
+    expires_at: str | None = None
     deleted: bool = False
 
 
@@ -97,6 +142,9 @@ class KbChanged(Out):
     deleted: bool = False
 
 
+Payload = Step | ToolPublished | ToolChanged | ToolTeamStateChanged | KbChanged
+
+
 class Event(Out):
     """A typed event a service reports through its outbox. Its payload is one of the kinds above, chosen by `kind`;
     a payload other than `Step` is about the event its name says, so the two must agree."""
@@ -105,7 +153,7 @@ class Event(Out):
     tenant_id: TeamId
     team_id: TeamId | None
     revision: int = Field(ge=0)
-    payload: Annotated[Step | ToolPublished | KbChanged, Field(discriminator="kind")]
+    payload: Annotated[Payload, Field(discriminator="kind")]
 
     @model_validator(mode="after")
     def _kind_is_name(self) -> Self:

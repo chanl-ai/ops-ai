@@ -26,8 +26,16 @@ from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListParams
 from ops_store import Guarantee, isolation
 from ops_store.listing import LISTED, ListPage, list_page
+from ops_store.outbox import (
+    Event,
+    ToolChanged,
+    ToolModule,
+    ToolOperation,
+    ToolPublished,
+    ToolTeamStateChanged,
+    outbox_table,
+)
 from ops_store.outbox import add as add_event
-from ops_store.outbox import outbox_table
 from ops_store.schema import TENANT_SCOPED
 from ops_store.store import Store
 from ops_store.team_scope import acting_as, acting_team, any_team, team_visible
@@ -393,6 +401,89 @@ def served_operations(agg: Aggregate) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+def catalog_of(agg: Aggregate, *, deleted: bool = False) -> ToolModule:
+    """What the agents lane's catalogue copy keeps of a module: its served operations only, so a staged edit Security
+    has not approved never reaches another service's list."""
+    ops = [] if deleted else served_operations(agg)
+    return ToolModule(
+        id=str(agg["id"]),
+        name=str(agg["name"]),
+        title=agg.get("display_name"),
+        app=agg.get("system"),
+        owner_team=agg.get("team_id"),
+        status=agg.get("status"),
+        version=agg.get("version"),
+        operations=[
+            ToolOperation(
+                id=str(o["id"]),
+                name=str(o["name"]),
+                access=str(o["access"]),
+                requires_approval=bool(o.get("requires_approval")),
+                enabled=bool(o.get("enabled", True)),
+            )
+            for o in ops
+        ],
+        deleted=deleted,
+    )
+
+
+def _iso(value: object) -> str | None:
+    return value.isoformat() if isinstance(value, datetime) else None if value is None else str(value)
+
+
+def team_grants(agg: Aggregate) -> dict[str, ToolTeamStateChanged]:
+    """Each other team's grant of the module, from its approved workflow approvals: the union of their operations,
+    ending at the latest end (none if any approval has none). A team with only requested, refused or revoked
+    approvals holds no grant."""
+    by_team: dict[str, list[Aggregate]] = {}
+    for a in cast(list[Aggregate], agg.get("approvals") or []):
+        team = a.get("workflow_team_id")
+        if team and team != agg.get("team_id") and a.get("status") == "approved":
+            by_team.setdefault(str(team), []).append(a)
+    out: dict[str, ToolTeamStateChanged] = {}
+    for team, on in by_team.items():
+        ends = [a.get("expires_at") for a in on]
+        out[team] = ToolTeamStateChanged(
+            id=f"approval:{agg['id']}",
+            module_id=str(agg["id"]),
+            via="approval",
+            operations=sorted({str(n) for a in on for n in cast(list[object], a.get("operations") or [])}),
+            expires_at=None if any(e is None for e in ends) else max(_iso(e) or "" for e in ends),
+        )
+    return out
+
+
+async def report_module(
+    c: AsyncConnection, agg: Aggregate, before: Aggregate | None, revision: int, *, deleted: bool = False
+) -> None:
+    """The catalogue events of one module write, on its transaction: `tool.module.published` for a new module or a new
+    version, `tool.module.changed` for any other change the copy holds (or a delete), and `tool.team_state.changed`
+    for each team whose grant changed. A write that changes none of that reports nothing.
+
+    The catalogue event goes out on the module's team, or the acting team for a workspace-level module; with neither
+    (a start-up install of a plugin) it is left to the agents lane's resync, which reads `catalog_events`."""
+    tenant = str(agg["tenant_id"])
+    now = catalog_of(agg, deleted=deleted)
+    was = None if before is None else catalog_of(before)
+    route = agg.get("team_id") or acting_team()
+    if route is not None and now != was:
+        new = was is None or now.version != was.version or (now.status == "published" and was.status != "published")
+        payload = ToolPublished(**now.model_dump()) if new and not deleted else ToolChanged(**now.model_dump())
+        event = Event(name=payload.kind, tenant_id=tenant, team_id=route, revision=revision, payload=payload)
+        await add_event(c, service_outbox, event)
+    grants, held = team_grants(agg), {} if before is None else team_grants(before)
+    for team in sorted(set(grants) | set(held)):
+        state = grants.get(team)
+        if deleted or state is None:
+            # A grant withdrawn whole, or the module gone: the team's row becomes a tombstone.
+            state = (held[team] if team in held else grants[team]).model_copy(update={"deleted": True})
+        if state == held.get(team):
+            continue
+        event = Event(name=state.kind, tenant_id=tenant, team_id=team, revision=revision, payload=state)
+        # Two teams' grants of one module share an id and a revision, so the key names the team.
+        await add_event(c, service_outbox, event, key=f"{team}:{event.key()}")
 
 
 class RetiredAccessError(RuntimeError):
@@ -863,11 +954,13 @@ class ModuleStore(Store):
             missing = [h for h in hosts if h not in listed]
             if missing:
                 raise HostNotAllowedError(missing[0])
+        before: Aggregate | None = None
         if expected_revision is None:
             row["revision"] = 0 if seeded else 1
             await c.execute(tool_modules.insert().values(**row))
         else:
             row["revision"] = 0 if seeded else expected_revision + 1
+            before = await self._held(c, str(row["tenant_id"]), str(row["id"]))
             done = await c.execute(
                 tool_modules.update()
                 .where(
@@ -913,6 +1006,9 @@ class ModuleStore(Store):
             await c.execute(module_egress_hosts.insert(), links)
         for event in events:
             await add_event(c, service_outbox, **event)
+        # A seed refresh keeps revision 0, which no copy would take over its first write; the resync carries it.
+        if not (seeded and before is not None):
+            await report_module(c, {**agg, **row}, before, int(row["revision"]))
         # A built-in app's card and a removed plugin's are built from its team's modules (Apps.cards).
         await forget_cards(c, row["tenant_id"], _team_of(row.get("team_id")))
         return {**agg, "revision": row["revision"]}
@@ -931,13 +1027,23 @@ class ModuleStore(Store):
     async def delete(self, tenant_id: str, module_id: str) -> bool:
         t = tool_modules.c
         async with self.tx() as c:
-            owner = sa.select(t.team_id).where(t.tenant_id == tenant_id, t.id == module_id)
-            found = (await c.execute(owner)).first()
+            found = await self._held(c, tenant_id, module_id)
             if found is None:
                 return False
             done = await c.execute(tool_modules.delete().where(t.tenant_id == tenant_id, t.id == module_id))
-            await forget_cards(c, tenant_id, _team_of(found.team_id))
+            await forget_cards(c, tenant_id, _team_of(found["team_id"]))
+            # One past the last write, as a copy takes a delete only over a lower revision.
+            await report_module(c, found, found, int(found["revision"]) + 1, deleted=True)
             return done.rowcount > 0
+
+    async def _held(self, c: AsyncConnection, tenant_id: str, module_id: str) -> Aggregate | None:
+        """The module as stored, on the writer's transaction: what a write's events are compared against."""
+        t = tool_modules.c
+        q = tool_modules.select().where(t.tenant_id == tenant_id, t.id == module_id)
+        found = (await c.execute(q)).mappings().first()
+        if found is None:
+            return None
+        return {**dict(found), **(await self._children(c, tenant_id, [module_id]))[module_id]}
 
     async def count(self, tenant_id: str) -> int:
         q = (
