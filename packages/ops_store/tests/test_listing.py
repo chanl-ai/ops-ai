@@ -1,7 +1,7 @@
 """`list_page` on each database, by failure mode: a page counted or cut in Python, a page past the end answering
 nothing, a facet that loses its other choices once one is picked, statements that grow with the rows, a search
 narrowing the rows a picker asked for by id, a filter column nobody declared, and rows sharing a sort value that
-repeat or vanish between pages."""
+repeat or vanish between pages, and a list over two sources whose ids repeat across them."""
 
 from __future__ import annotations
 
@@ -73,6 +73,23 @@ run_tags = sa.Table(
     sa.Column("run_id", sa.String(32), primary_key=True),
     sa.Column("tag", sa.String(32), primary_key=True),
 )
+# Two sources of one list, as a channel list's mailboxes and embeds are; their ids repeat across them.
+mailboxes = sa.Table(
+    "store_test_list_mailboxes",
+    meta,
+    sa.Column("id", sa.String(32), primary_key=True),
+    sa.Column("name", sa.String(64), nullable=False),
+)
+embeds = sa.Table(
+    "store_test_list_embeds",
+    meta,
+    sa.Column("id", sa.String(32), primary_key=True),
+    sa.Column("title", sa.String(64), nullable=False),
+)
+CHANNELS = sa.union_all(
+    sa.select(sa.literal("mailbox").label("source"), mailboxes.c.id, mailboxes.c.name),
+    sa.select(sa.literal("embed").label("source"), embeds.c.id, embeds.c.title.label("name")),
+).subquery("channels")
 LIST = sa.select(runs.c.id, runs.c.title, runs.c.status, agents.c.name.label("agent")).join(
     agents, agents.c.id == runs.c.agent_id
 )
@@ -333,3 +350,47 @@ async def test_a_field_of_several_values_filters_and_counts_each_row_once_per_va
             page = await list_page(c, sa.select(runs.c.id), ListParams(filters=filters), **shape)
             assert ([r["id"] for r in page["data"]], page["pagination"]["total"]) == (ids, len(ids)), filters
             assert page["facets"] == facets, filters
+
+
+async def test_a_union_of_two_sources_pages_counts_searches_and_picks_by_its_declared_key(engine: AsyncEngine) -> None:
+    """c02 and c03 are in both sources and four rows share the name Support across a page boundary, so only the
+    source tag in the declared key gives each row one place; `ids` name the key's last column, so c02 answers twice."""
+    async with engine.begin() as c:
+        await c.execute(mailboxes.delete())
+        await c.execute(embeds.delete())
+        await c.execute(mailboxes.insert(), [{"id": "c03", "name": "Support"}, {"id": "c01", "name": "Billing"}])
+        await c.execute(embeds.insert(), [{"id": "c04", "title": "Support"}, {"id": "c02", "title": "Support"}])
+        await c.execute(mailboxes.insert(), [{"id": "c02", "name": "Support"}])
+        await c.execute(embeds.insert(), [{"id": "c03", "title": "Website"}])
+    u = CHANNELS.c
+    shape: dict[str, Any] = {
+        "key": (u.source, u.id),
+        "search": [u.name],
+        "sortable": {"name": u.name},
+        "default_sort": u.name,
+        "filters": {"source": u.source},
+        "facets": {"source": u.source},
+    }
+    every = ["m01", "e02", "e04", "m02", "m03", "e03"]
+    both = {"embed": 3, "mailbox": 3}
+    cases: list[tuple[ListParams, list[str], int, int, dict[str, int]]] = [
+        (ListParams(page=1, page_size=4), every[:4], 1, 6, both),
+        (ListParams(page=2, page_size=4), every[4:], 2, 6, both),
+        (ListParams(page=9, page_size=4), every[4:], 2, 6, both),
+        (ListParams(sort_by="name", sort_order="desc"), every[::-1], 1, 6, both),
+        (ListParams(search="support"), ["e02", "e04", "m02", "m03"], 1, 4, {"embed": 2, "mailbox": 2}),
+        (ListParams(filters={"source": ["embed"]}), ["e02", "e04", "e03"], 1, 3, both),
+        (ListParams(ids=["c02", "gone"], search="billing"), ["e02", "m02"], 1, 2, {"embed": 1, "mailbox": 1}),
+    ]
+    async with engine.connect() as c:
+        for asked, ids, page_no, total, facets in cases:
+            page = await list_page(c, sa.select(CHANNELS), asked, **shape)
+            got = [f"{r['source'][0]}{r['id'][1:]}" for r in page["data"]]
+            assert (got, page["pagination"]["page"], page["pagination"]["total"]) == (ids, page_no, total), asked
+            assert page["facets"] == {"source": facets}, asked
+
+
+async def test_a_union_with_no_declared_key_is_refused() -> None:
+    """Its subquery's key is its first branch's id alone, which the other source repeats."""
+    with pytest.raises(ValueError, match="union channels: pass key"):
+        await list_page(None, sa.select(CHANNELS), ListParams(), default_sort=CHANNELS.c.name)  # pyright: ignore[reportArgumentType]

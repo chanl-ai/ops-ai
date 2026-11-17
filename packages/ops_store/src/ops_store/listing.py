@@ -11,6 +11,20 @@ The statements are the same number whatever the page size: one count, one page, 
 per labelled facet. A facet's counts leave its own filter out, so the other choices of the facet keep their numbers
 while one is picked. A column a list filters or sorts on is declared with `info=LISTED` where its table is defined,
 and `deploy/database/tests/test_indexes.py` fails when a declared column has no index.
+
+A list over several sources is a select from a UNION ALL of one select per source, each with the same column names and
+a source tag, made a subquery; `key` names the result columns that tell its rows apart:
+
+  sources = sa.union_all(
+      sa.select(sa.literal("mailbox").label("source"), mailboxes.c.id, mailboxes.c.name).where(team_visible(mailboxes)),
+      sa.select(sa.literal("embed").label("source"), embeds.c.id, embeds.c.title.label("name"))
+      .where(team_visible(embeds)),
+  ).subquery("channels")
+  page = await list_page(conn, sa.select(sources), q, key=(sources.c.source, sources.c.id),
+                         search=[sources.c.name], default_sort=sources.c.name, facets={"source": sources.c.source})
+
+The helper adds no tenant or team predicate to a union: each branch carries its own, written in the same function as
+the union so `tests/test_team_reads.py` sees the table and its `team_visible` together. No branch has an ORDER BY.
 """
 
 from __future__ import annotations
@@ -72,6 +86,7 @@ async def list_page(
     facets: Mapping[str, sa.ColumnElement[Any]] = _NONE,
     labels: Mapping[str, Rows] = _NONE,
     several: Mapping[str, Several] = _NONE,
+    key: Sequence[sa.ColumnElement[Any]] = (),
 ) -> ListPage:
     """count(*), ORDER BY, LIMIT and OFFSET, one GROUP BY per facet, all on `query`; `labels` maps each facet value to
     its label in the same transaction. default_sort is required: SQL Server's OFFSET needs an ORDER BY.
@@ -87,9 +102,14 @@ async def list_page(
     A `labels` entry is a select of (value, label), read for the values its facet counted. A `several` entry is a
     filter and a facet of a field each row holds several values of (`Several`). A facet may be an expression (a CASE
     of a code's label): it is grouped by name in a subquery, which SQL Server needs when the expression has bound
-    values."""
-    _declared({**sortable, **filters, **{name: f.key for name, f in several.items()}})
-    chosen, wanted = _narrowing(query, params, search, filters, several)
+    values.
+
+    `key` replaces the primary key, for the order's last terms and for `ids`, and is required when `query` selects
+    from a union (see the module docstring): a union's subquery carries its first branch's key, which two sources share.
+    `ids` name the key's last column, so an id two sources share answers both rows; the tenant is not added to it."""
+    key = _key(query, key)
+    _declared({**sortable, **filters, **{name: f.key for name, f in several.items()}}, key)
+    chosen, wanted = _narrowing(query, params, search, filters, several, row_key=key)
     listed = query.where(*chosen, *wanted.values())
 
     # The FROM is kept: a table only the columns named would drop with them and the count would be one row.
@@ -105,7 +125,7 @@ async def list_page(
     else:
         descending = isinstance(default_sort, sa.UnaryExpression) and default_sort.modifier is operators.desc_op
         order = [default_sort]
-    order += _key_order(query, order, descending)
+    order += _key_order(query, order, descending, key)
     rows = await conn.execute(listed.order_by(None).order_by(*order).limit(params.page_size).offset(offset))
 
     counted: dict[str, dict[str, int]] = {}
@@ -140,6 +160,7 @@ def listed_rows(
     search: Sequence[sa.ColumnElement[Any]] = (),
     filters: Mapping[str, sa.ColumnElement[Any]] = _NONE,
     several: Mapping[str, Several] = _NONE,
+    key: Sequence[sa.ColumnElement[Any]] = (),
 ) -> Rows:
     """`query` narrowed exactly as `list_page` narrows it before counting and paging (`ids`, else the search, and the
     filters), for a caller that needs another aggregate over the same rows, such as a count per view:
@@ -147,8 +168,9 @@ def listed_rows(
       rows = listed_rows(sa.select(sa.func.count()).select_from(files).where(*base), q, search=..., filters=FACETS)
       quarantined = (await conn.execute(rows.where(files.c.scan_status == "infected"))).scalar_one()
     """
-    _declared({**filters, **{name: f.key for name, f in several.items()}})
-    chosen, wanted = _narrowing(query, params, search, filters, several)
+    key = _key(query, key)
+    _declared({**filters, **{name: f.key for name, f in several.items()}}, key)
+    chosen, wanted = _narrowing(query, params, search, filters, several, row_key=key)
     return query.where(*chosen, *wanted.values())
 
 
@@ -158,12 +180,14 @@ def _narrowing(
     search: Sequence[sa.ColumnElement[Any]],
     filters: Mapping[str, sa.ColumnElement[Any]],
     several: Mapping[str, Several] = _NONE,
+    *,
+    row_key: Sequence[sa.ColumnElement[Any]] = (),
 ) -> tuple[list[sa.ColumnElement[bool]], dict[str, sa.ColumnElement[bool]]]:
     """The rows asked for (`ids`, else the search) and each filter by its key, kept apart so a facet can leave its
     own filter out."""
     chosen: list[sa.ColumnElement[bool]]
     if params.ids is not None:
-        chosen = _picked(query, params.ids)
+        chosen = [row_key[-1].in_(params.ids)] if row_key else _picked(query, params.ids)
     else:
         words = (params.search or "").strip()
         chosen = [sa.or_(*(contains(c, words) for c in search))] if words and search else []
@@ -197,6 +221,21 @@ def _first_table(query: Rows) -> Any:
     return table
 
 
+def _key(query: Rows, key: Sequence[sa.ColumnElement[Any]]) -> list[sa.ColumnElement[Any]]:
+    """The declared key, refused when absent for a union, whose subquery's key is its first branch's alone."""
+    if isinstance(query, sa.CompoundSelect):
+        raise ValueError("list_page over a union: pass sa.select(<union>.subquery(name)) and key=(source, id)")
+    if key:
+        return list(key)
+    table = _first_table(query)
+    if isinstance(getattr(table, "element", None), sa.CompoundSelect):
+        raise ValueError(
+            f"list_page over the union {table.name}: pass key=(source, id), the result columns that tell its rows "
+            "apart; its own key is its first branch's, which another source's ids repeat"
+        )
+    return []
+
+
 def _picked(query: Rows, ids: list[str]) -> list[sa.ColumnElement[bool]]:
     """The rows `ids` names by the first table's primary key, since some tables are keyed by a name. For a key of
     (tenant_id, id) the caller passes the id part and the tenant is the isolation context's, so the statement names
@@ -214,11 +253,13 @@ def _picked(query: Rows, ids: list[str]) -> list[sa.ColumnElement[bool]]:
     return picked
 
 
-def _key_order(query: Rows, order: list[sa.ColumnElement[Any]], descending: bool) -> list[sa.ColumnElement[Any]]:
-    """The primary key of the query's first table, as the last ORDER BY terms, so every row has one place."""
-    table = _first_table(query)
+def _key_order(
+    query: Rows, order: list[sa.ColumnElement[Any]], descending: bool, declared: list[sa.ColumnElement[Any]]
+) -> list[sa.ColumnElement[Any]]:
+    """The declared key, else the primary key of the query's first table, as the last ORDER BY terms, so every row
+    has one place."""
     named = {_column(term) for term in order}
-    key = list(table.primary_key.columns)
+    key = declared or list(_first_table(query).primary_key.columns)
     # A key column the order already names is left out: SQL Server refuses an ORDER BY that names a column twice.
     return [c.desc() if descending else c.asc() for c in key if c not in named]
 
@@ -230,13 +271,15 @@ def _column(term: sa.ColumnElement[Any]) -> Any:
     return term
 
 
-def _declared(columns: Mapping[str, sa.ColumnElement[Any]]) -> None:
+def _declared(columns: Mapping[str, sa.ColumnElement[Any]], key: Sequence[sa.ColumnElement[Any]] = ()) -> None:
     """A table column a list filters or sorts on says so where it is defined, which is what the index test reads. A
-    primary key column is its key's index's."""
+    primary key column is its key's index's. A column of the keyed result (a union's) has no definition to say it on;
+    naming it in the call declares it."""
+    result = {id(_column(k).table) for k in key if isinstance(_column(k), sa.ColumnClause)}
     missing = sorted(
         f"{c.table.name}.{c.name}"
         for c in columns.values()
-        if isinstance(c, sa.Column) and not c.primary_key and not c.info.get(LISTED_KEY)
+        if isinstance(c, sa.Column) and not c.primary_key and not c.info.get(LISTED_KEY) and id(c.table) not in result
     )
     if missing:
         raise ValueError(f"list_page filters or sorts on {', '.join(missing)}: declare each with info=LISTED")

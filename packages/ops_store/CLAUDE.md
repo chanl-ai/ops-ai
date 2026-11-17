@@ -22,7 +22,7 @@ commands shared by every package: [../CLAUDE.md](../CLAUDE.md); repo-wide rules:
 | `schema` | `TENANT_SCOPED` and the team-owned markers on tables; `differences` and `unowned` compare a migrated database with the metadata |
 | `schema_version` | `require_current_schema`: a service refuses to start when its chain's head is not recorded |
 | `dialect` | `locked`, `claim`, `upsert`, `insert_ignore`, `lock_key`, `db_now`, `db_epoch`, `db_after`, `system_tx`, `full_text` |
-| `listing` | `list_page`: a list's page, total and facet counts in SQL on the caller's transaction, from the kit's `ListQuery`; `LISTED` marks a column a list filters or sorts on |
+| `listing` | `list_page`: a list's page, total and facet counts in SQL on the caller's transaction, from the kit's `ListQuery`; `LISTED` marks a column a list filters or sorts on. A list over several sources selects from a UNION ALL subquery and passes `key=(source, id)`, which a union must have; the helper adds no tenant or team predicate there, so each branch carries its own `team_visible`, written in the same function as the union |
 | `search` | `contains` and `like_pattern`: portable, escaped, case-insensitive text search |
 | `outbox` | `outbox_table`, `add`, `Relay`: an event written in the same transaction as its change, delivered at least once; `relay(routes=, targets=)` and `run_relay` are the one wiring (`tests/test_relay_sites.py`) |
 | `background` | `PROCESSES`, `run`, `Beat`, heartbeats (`MemoryHeartbeats`, `DbHeartbeats`) behind `/health/background`; `retention`, `register` and `run_sweep` for an append-only table's sweep; `give_pass` for a listed process whose pass is the service's own |

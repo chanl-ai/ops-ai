@@ -187,9 +187,25 @@ def joined(engine):
 
 def by_method(engine):
     return engine.execute(registry_agents.select())
+
+def union_scoped(engine):
+    both = sa.union_all(
+        sa.select(registry_agents.c.id).where(team_visible(registry_agents)),
+        sa.select(registry_skills.c.id).where(team_visible(registry_skills)),
+    ).subquery("u")
+    return engine.execute(sa.select(both))
+
+def union_one_branch(engine):
+    both = sa.union_all(
+        sa.select(registry_agents.c.id).where(team_visible(registry_agents)),
+        sa.select(registry_skills.c.id),
+    ).subquery("u")
+    return engine.execute(sa.select(both))
 """
-    assert unscoped_reads(planted, {"registry_agents"}) == [
+    # A list over several sources (ops_store.listing) is scoped in each branch of its union.
+    assert unscoped_reads(planted, {"registry_agents", "registry_skills"}) == [
         "<source>:3 rows registry_agents",
         "<source>:9 joined registry_agents",
         "<source>:12 by_method registry_agents",
+        "<source>:24 union_one_branch registry_skills",
     ]
