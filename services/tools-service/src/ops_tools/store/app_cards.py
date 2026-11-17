@@ -91,6 +91,11 @@ def _tokens() -> sa.Table:
     return metadata.tables["connection_tokens"]
 
 
+def _connections() -> sa.Table:
+    """connections, declared in store/connections.py, which imports this module."""
+    return metadata.tables["connections"]
+
+
 def _current(tenant_id: str, team_id: str, stamp: str, now: datetime) -> sa.ColumnElement[bool]:
     """The team's rows are current: built for `stamp`, and no row's state has lapsed by `now`."""
     t, k = team_defaults, app_cards.c
@@ -146,9 +151,10 @@ class AppCards(Store):
     ) -> tuple[ListPage, dict[str, int]]:
         """One page of the team's cards by name ignoring case, then id, with the facets (appState, category, kind) and
         each tab's count over the searched and filtered cards; `search` matches the name and category, `ids` names
-        cards exactly, `view` (all, connected or available) picks a tab, and the built-in apps are left out unless
-        `builtins`. A card's appState is the caller's: on a card whose `own_account` is set, `person`'s own sign-in
-        there decides it when the app signs in per person, or per person or team and `is_person`."""
+        cards exactly, `view` (all, connected or available) picks a tab, `accountId` keeps the cards of those
+        accounts, `sortBy=connected` puts the connected cards first (then by name), and the built-in apps are left out
+        unless `builtins`. A card's appState is the caller's: on a card whose `own_account` is set, `person`'s own
+        sign-in there decides it when the app signs in per person, or per person or team and `is_person`."""
         k = app_cards.c
         tok = _tokens()
         # The caller's own sign-in on the card's default account, in the card's team: one row at most (its key).
@@ -186,6 +192,13 @@ class AppCards(Store):
             # matched here: every read names one team, so an id is one row.
             q = q.where(k.id.in_(params.ids))
             params = params.model_copy(update={"ids": None, "search": None})
+        if accounts := params.filters.get("accountId"):
+            # The cards those accounts belong to (a connection's app_id is its card's id), in the card's team.
+            a = _connections().c
+            of = sa.select(a.app_id).where(
+                a.tenant_id == tenant_id, a.team_id == team_id, a.id.in_(accounts), team_visible(_connections())
+            )
+            q = q.where(k.id.in_(of))
         filters = {"appState": state, "category": k.category, "kind": k.kind}
         search = [k.name, k.category]
         counting = q.with_only_columns(
@@ -195,7 +208,7 @@ class AppCards(Store):
         async with self.tx() as c:
             page = await list_page(
                 c, q.where(views[view]), params, search=search, default_sort=sa.func.lower(k.name),
-                filters=filters, facets=filters,
+                filters=filters, facets=filters, sortable={"connected": sa.case((is_on, 1), else_=0)},
             )  # fmt: skip
             counted = (await c.execute(listed_rows(counting, params, search=search, filters=filters))).mappings().one()
         return page, {name: int(counted[name] or 0) for name in views}

@@ -20,7 +20,7 @@ import { useChannels } from '@/hooks/channel-queries';
 import { useCan } from '@/hooks/me-queries';
 import { type McpLinkRow, useDeleteMcpLink, useMcpLinks, useSetMcpLinkPaused } from '@/hooks/mcp-link-queries';
 import { useCreatedRows } from '@/hooks/use-created-rows';
-import { useListParams } from '@/hooks/use-list-params';
+import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { useTeam } from '@/hooks/use-team';
 import { serverPagination } from '@/components/shared/server-pagination';
 import { plural, relativeTime } from '@/lib/format';
@@ -34,8 +34,8 @@ type Row = McpLinkRow & { teamName: string; env: string; href: string; onRowClic
 export function McpLinksPage() {
   const router = useRouter();
   const kinds = useChannels({ page: 1, pageSize: 1, search: '' });
-  const list = useListParams<Record<string, never>>('name');
-  const q = useMcpLinks({ page: list.params.page, pageSize: list.params.pageSize, search: list.params.search });
+  const list = useListParams<{ teamId?: string[] }>('name');
+  const q = useMcpLinks({ page: list.params.page, pageSize: list.params.pageSize, search: list.params.search, teamId: list.params.filters?.teamId });
   const [filterResetKey, setFilterResetKey] = React.useState(0);
   const remove = useDeleteMcpLink();
   const setPaused = useSetMcpLinkPaused();
@@ -76,6 +76,8 @@ export function McpLinksPage() {
       ),
     },
     { accessorKey: 'teamName', header: 'Team' },
+    // Holds the team id for the Team filter; the server narrows on it (`teamId`).
+    { accessorKey: 'teamId', header: 'Team id', filterFn: facetFilterFn },
     {
       accessorKey: 'env',
       header: 'Environment',
@@ -149,6 +151,8 @@ export function McpLinksPage() {
             searchColumn="name"
             searchPlaceholder="Search MCP links…"
             hideViewSwitcher
+            initialColumnVisibility={{ teamId: false }}
+            filters={[{ column: 'teamId', title: 'Team', options: Object.entries(q.data?.facets?.teamId ?? {}).map(([value, count]) => ({ value, label: teamName(value), count })) }]}
             onColumnFiltersChange={list.onColumnFiltersChange}
             filterResetKey={filterResetKey}
             created={created}

@@ -24,6 +24,7 @@ from ops_agents.api.deps import Runtime
 from ops_agents.store.base import metadata
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
+from ops_agents.store.tool_copies import ToolCopies
 from ops_engine.definition import parse
 from ops_engine.store import DefinitionStore
 from ops_engine.store import metadata as engine_metadata
@@ -32,6 +33,8 @@ from ops_identity import Auth, Identity, ServiceAuth, dev_service_signer, mint_s
 from ops_identity.testing import TEST_TOKEN_TTL_S
 from ops_policy import mint
 from ops_service_kit.settings import Settings
+from ops_store import isolation
+from ops_store.outbox import Event, ToolChanged, ToolOperation, ToolPublished, add, outbox_table, wire
 from tests.api.test_action_roles import introspect
 from tests.api.test_team_default_agent import Stack, jwks
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
@@ -262,3 +265,48 @@ def runner() -> dict[str, str]:
         "perm_version": PERM_VERSION,
     }
     return {"Authorization": f"Bearer {mint(claims, PLATFORM, ttl_s=TEST_TOKEN_TTL_S)}", "X-Team-Id": "team_ops"}
+
+
+async def _wired(event: Event) -> dict[str, Any]:
+    """The body tools-service's relay posts for `event`: written by `outbox.add`, read back by `outbox.wire`."""
+    engine = create_async_engine("sqlite+aiosqlite://")
+    box = outbox_table(sa.MetaData())
+    async with engine.begin() as c:
+        await c.run_sync(box.metadata.create_all)
+        await add(c, box, event)
+        row = dict((await c.execute(box.select())).mappings().one())
+    await engine.dispose()
+    return wire(row)
+
+
+async def test_tool_catalogue_events_keep_the_copy_by_revision_and_tombstone(stack: Stack) -> None:
+    c, rt = stack
+
+    def module(rev: int, ops: list[str], *, owner: str | None = "team_ops", deleted: bool = False) -> Event:
+        cls = ToolPublished if rev == 0 else ToolChanged
+        payload = cls(
+            id="m_crm" if owner else "m_all",
+            name="crm",
+            owner_team=owner,
+            deleted=deleted,
+            operations=[ToolOperation(id=o, name=o, access="read") for o in ops],
+        )
+        return Event(name=payload.kind, tenant_id=TENANT, team_id="team_ops", revision=rev, payload=payload)
+
+    # (event, the team_ops tools listed after it). A workspace module at revision 0 is taken on first sight; an older
+    # or equal revision changes nothing; a delete leaves no tool, and a late write under it does not bring one back.
+    steps = [
+        (module(0, ["all_read"], owner=None), ["all_read"]),
+        (module(2, ["read_a"]), ["all_read", "read_a"]),
+        (module(1, ["read_a", "read_old"]), ["all_read", "read_a"]),
+        (module(2, ["read_same"]), ["all_read", "read_a"]),
+        (module(3, ["read_a", "read_b"]), ["all_read", "read_a", "read_b"]),
+        (module(4, [], deleted=True), ["all_read"]),
+        (module(3, ["read_a"]), ["all_read"]),
+    ]
+    for event, want in steps:
+        sent = await _wired(event)
+        r = await c.post("/v1/events", json=sent["body"], headers=service(name="tools"))
+        assert r.status_code == 202, r.text
+        with isolation.scope(TENANT, "team_ops"):
+            assert [t.name for t in await ToolCopies(rt.db).visible("team_ops")] == want, event

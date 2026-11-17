@@ -11,7 +11,7 @@ from usecase_harness import AGENTS_PORT, TOOLS_PORT, agents, check, core_bank, d
 
 with ExitStack() as stack:
     bank = stack.enter_context(core_bank())
-    gw = stack.enter_context(tools({**bank["settings"], "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}))
+    gw = stack.enter_context(tools({**bank["settings"], "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}, approval_rules=True))
     stack.enter_context(agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}"))
     BANK_BASE = f"https://{bank['host']}"  # the stand-in's address, which its credentials are bound to
     clean(gw, "uc393")

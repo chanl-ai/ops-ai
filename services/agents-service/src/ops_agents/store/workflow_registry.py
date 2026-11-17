@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.errors import NotFound
@@ -77,8 +78,29 @@ registry_validations = sa.Table(
     sa.Column("target", sa.String(8), nullable=False),
     sa.Column("results", sa.JSON, nullable=False),
     sa.Column("summary", sa.JSON, nullable=False),
+    # What the Evals lists read of `summary`, written in the same insert (agents 0117), so they filter and count in SQL.
+    sa.Column("passed", sa.Integer, nullable=False),
+    sa.Column("total", sa.Integer, nullable=False),
+    sa.Column("regressions", sa.Integer, nullable=False),
+    sa.Column("checks_failing", sa.Integer, nullable=False),
     info=TENANT_SCOPED,
 )
+
+
+def summary_columns(summary: JsonValue) -> dict[str, int]:
+    """The list columns of a test run's summary; a count it does not name is 0."""
+    values = summary if isinstance(summary, dict) else {}
+
+    def count(key: str) -> int:
+        value = values.get(key)
+        return int(value) if isinstance(value, int | float) else 0
+
+    return {
+        "passed": count("passed"),
+        "total": count("total"),
+        "regressions": count("regressions"),
+        "checks_failing": count("checksFailing"),
+    }
 
 
 class WorkflowRegistry(RuntimeStore):
@@ -185,7 +207,7 @@ class WorkflowRegistry(RuntimeStore):
 
     async def save_validation(self, row: dict[str, Any]) -> None:
         async with self.tx() as c:
-            await c.execute(registry_validations.insert().values(**row))
+            await c.execute(registry_validations.insert().values(**row, **summary_columns(row["summary"])))
 
     async def validations(self, workflow_ids: set[str]) -> list[dict[str, Any]]:
         """Every test run of these workflows, newest first. The ids come from `rows()`: the acting team's."""

@@ -162,7 +162,7 @@ function columns(onDelete: (m: ToolModule) => void, canBuild: boolean): ColumnDe
             row={row}
             actions={[
               { label: 'Open', icon: ArrowRight, onClick: (r) => r.original.onRowClick(r.original) },
-              ...(canBuild ? [{ label: 'Delete', icon: Trash2, variant: 'destructive' as const, onClick: (r: { original: Row }) => onDelete(r.original) }] : []),
+              ...(canBuild && row.original.canEdit !== false ? [{ label: 'Delete', icon: Trash2, variant: 'destructive' as const, onClick: (r: { original: Row }) => onDelete(r.original) }] : []),
             ]}
           />
         </StopRowClick>

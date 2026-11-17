@@ -436,15 +436,15 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
         if (p.input.digest && p.input.digest !== digest) throw new ApiError('The stored bytes do not match the file you chose. Upload it again.', 409);
         pending.delete(fileId);
         const same = files.find((f) => f.team === p.input.team && f.digest === digest && f.scan.status !== 'infected');
-        if (same) return { file: row(same), deduplicated: true };
-        const f = makeFile({ name: p.input.name, size: p.input.size, purpose: p.input.purpose, team: p.input.team, by: me, digest, retentionClass: p.input.retentionClass, content: p.text });
+        if (same) return { file: detail(same), deduplicated: true };
+        const f = makeFile({ name: p.input.name, size: p.input.size, purpose: p.input.purpose, team: p.input.team ?? undefined, by: me, digest, retentionClass: p.input.retentionClass ?? undefined, content: p.text });
         f.id = fileId;
         files.unshift(f);
         auditLog(f, 'uploaded', `Uploaded ${f.name}`, [
           { field: 'Purpose', after: f.purpose },
           { field: 'Digest', after: `sha256:${digest.slice(0, 12)}…` },
         ]);
-        return { file: row(f), deduplicated: false };
+        return { file: detail(f), deduplicated: false };
       }),
 
     get: (fid) => respond(() => detail(find(fid))),

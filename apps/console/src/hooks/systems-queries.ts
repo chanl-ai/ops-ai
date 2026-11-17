@@ -36,11 +36,25 @@ const SYSTEMS = ['systems'] as const;
 const ACCOUNTS = ['accounts'] as const;
 const APPS = ['apps'] as const;
 
-/** One page of the team's app cards, searched on the server (GET /v1/apps: name and category). */
-export const useSystems = (p: { page: number; pageSize: number; search?: string; enabled?: boolean }) =>
+/** The Apps page's tabs; the server decides which cards each holds and counts them in `viewCounts`. */
+export type AppView = 'all' | 'connected' | 'available';
+export interface AppFilters {
+  appState?: string[];
+  category?: string[];
+  kind?: string[];
+  [key: string]: string[] | undefined;
+}
+
+/** One page of the team's app cards, searched, filtered and sorted on the server (GET /v1/apps), connected apps first. */
+export const useSystems = (p: { page: number; pageSize: number; search?: string; view?: AppView; filters?: AppFilters; enabled?: boolean }) =>
   usePagedQuery({
-    queryKey: [...SYSTEMS, 'page', p.page, p.pageSize, p.search ?? ''],
-    queryFn: () => sdk((ops) => ops.raw.tools.apps_list_apps({ query: { page: p.page, pageSize: p.pageSize, search: p.search } })),
+    queryKey: [...SYSTEMS, 'page', p.page, p.pageSize, p.search ?? '', p.view ?? 'all', p.filters ?? {}],
+    queryFn: () =>
+      sdk((ops) =>
+        ops.raw.tools.apps_list_apps({
+          query: { page: p.page, pageSize: p.pageSize, search: p.search, view: p.view, sortBy: 'connected', ...p.filters },
+        }),
+      ),
     enabled: p.enabled,
   });
 /** One card by its id (`ids=` on the list route), for a screen that needs a single app's mark, name or plugin. */

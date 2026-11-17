@@ -10,7 +10,7 @@ import { RoleSelect } from '@/components/access/role-select';
 import { rolesWhere } from '@/hooks/me-queries';
 
 /** The workspace's own roles; a built-in role comes with a person's team role. */
-const customRoles = rolesWhere('role-give-options', [], true);
+const customRoles = rolesWhere('role-give-options', [], { builtin: ['false'] });
 
 /**
  * Gives a person one of the workspace's custom roles in the team the console acts in (switch team to give it in

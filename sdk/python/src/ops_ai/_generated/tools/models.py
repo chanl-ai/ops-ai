@@ -1143,6 +1143,7 @@ class ToolModule(TypedDict, closed=True):
     accessClasses: list[Literal["read", "write"]]
     approvalState: Literal["draft", "approved", "needs_approval", "expiring", "expired"]
     calls24h: int
+    canEdit: NotRequired[bool | None]
     connection: ConnectionRef | None
     connectionId: NotRequired[str | None]
     description: str

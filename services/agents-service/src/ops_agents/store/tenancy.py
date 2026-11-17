@@ -48,6 +48,7 @@ ASSISTANT_CATCH_UP = "assistant_catch_up"  # start-up: one tenant's Ops Assistan
 UNIQUE_KEY = "unique_key"  # a chosen id or slug is checked against every team of the tenant before an insert
 TOOL_GRANTS = "tool_grants"  # a service reads every team's workflows to check a tool grant against their own team
 OWNER = "owner_team"  # a registry record's owning team, read across teams only to decide a refusal (`owner_teams`)
+TOOL_CATALOG_RESYNC = "tool_catalog_resync"  # one tenant's tool catalogue copy rebuilt, every team's grants with it
 
 # Why a path reads past the tenant (`isolation.system_tx`): only to find the tenant of what it claimed.
 CLAIM_THREAD = "claim_thread"  # GraphStore.owner_of, for the sweeper and the timer poller
@@ -81,6 +82,7 @@ __all__ = [
     "TESTS",
     "THREAD_LEASES",
     "TIMERS",
+    "TOOL_CATALOG_RESYNC",
     "NoTenantError",
     "RuntimeStore",
     "current_team",

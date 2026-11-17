@@ -655,7 +655,8 @@ export interface paths {
         };
         /**
          * List Gates
-         * @description The publish checks of the team's publish requests: each step's result and whether the request is blocked.
+         * @description The publish checks of the team's publish requests, newest request first: each step's result and whether the
+         *     request is blocked. Filters: `tier`, `result` (blocked, ready, decided).
          */
         get: operations["assurance_list_gates"];
         put?: never;
@@ -675,7 +676,8 @@ export interface paths {
         };
         /**
          * List Runs
-         * @description Every stored run of the team's agents and skills and every test run of its workflows, newest first.
+         * @description Every stored run of the team's agents and skills and every test run of its workflows, newest first, then by
+         *     id. Filters: `kind`, `trigger`.
          */
         get: operations["assurance_list_runs"];
         put?: never;
@@ -696,7 +698,8 @@ export interface paths {
         /**
          * List Suites
          * @description One suite per agent, skill or workflow in the acting team that has saved cases or a run, with the latest
-         *     result of each case. Filters: `kind`, `tier`, `result` (failing, passing, not_run).
+         *     result of each case, by asset name then kind and id. Filters: `kind`, `tier`, `result` (failing, passing,
+         *     not_run); each facet counts under the search and the other filters. A page past the end answers the last page.
          */
         get: operations["assurance_list_suites"];
         put?: never;

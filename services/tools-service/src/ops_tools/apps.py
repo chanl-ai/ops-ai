@@ -2351,16 +2351,20 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
         app_state: Annotated[list[str] | None, Query(alias="appState", description="the cards' appState")] = None,
         category: Annotated[list[str] | None, Query()] = None,
         kind: Annotated[list[str] | None, Query(description="plugin, connection or builtin")] = None,
+        account_id: Annotated[
+            list[str] | None, Query(alias="accountId", description="the card each named account belongs to")
+        ] = None,
     ) -> JSONResponse:
         """One page of the team's apps for the Apps grid on the shared list contract, by name ignoring case, then id:
         its plugins and the apps a person added. `search` matches the name and category, `ids` names cards exactly.
         `view` picks a tab (connected: appState connected, test_failed or removed; available: the rest), `appState`,
         `category` and `kind` filter, each repeatable; `facets` counts each, and `viewCounts` each tab, over the
-        searched and filtered cards. The view and filters are read from the shared list query; they are named
-        here for the document.
+        searched and filtered cards; `accountId` (repeatable) keeps the cards those accounts belong to.
+        `sortBy=connected` puts the connected cards first, then by name. The view and filters are read from the shared
+        list query; they are named here for the document.
         `include=builtin` adds the built-in apps, for the approval policy's app picker. A service asking for a person
         (X-Acting-For) reads each card's state as that person's. The page and its count are queried, not sliced."""
-        del view, app_state, category, kind
+        del view, app_state, category, kind, account_id
         person = acting.sub if acting else None
         page, counts = await apps.page(who, q, builtins=include == "builtin", person=person)
         return ok({**page, "viewCounts": counts})

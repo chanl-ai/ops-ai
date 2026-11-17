@@ -118,8 +118,8 @@ const STATUS_OPTIONS = [
  * platform-service refuses the same writes from anyone else with 403 admin_required, keeps the last admin, and ends a
  * removed member's sessions at once. An invite's link is shown once, in a dialog, because no email is sent.
  */
-/** The columns platform-service orders members by (`sortBy` name, role or status); the others hold one value per page. */
-const SORT_COLUMNS = { name: 'name', role: 'role', status: 'status' };
+/** The columns platform-service orders members by (`sortBy` name, role, status or teamId). */
+const SORT_COLUMNS = { name: 'name', role: 'role', status: 'status', teamId: 'teamId' };
 
 export function MembersPanel({ inviteOpen, onInviteOpenChange }: { inviteOpen: boolean; onInviteOpenChange: (open: boolean) => void }) {
   const { team, teams } = useTeam();

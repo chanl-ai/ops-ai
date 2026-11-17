@@ -12954,6 +12954,17 @@
             "title": "Calls24H",
             "type": "integer"
           },
+          "canEdit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canedit"
+          },
           "connection": {
             "anyOf": [
               {
@@ -15444,7 +15455,7 @@
     },
     "/v1/apps": {
       "get": {
-        "description": "One page of the team's apps for the Apps grid on the shared list contract, by name ignoring case, then id:\nits plugins and the apps a person added. `search` matches the name and category, `ids` names cards exactly.\n`view` picks a tab (connected: appState connected, test_failed or removed; available: the rest), `appState`,\n`category` and `kind` filter, each repeatable; `facets` counts each, and `viewCounts` each tab, over the\nsearched and filtered cards. The view and filters are read from the shared list query; they are named\nhere for the document.\n`include=builtin` adds the built-in apps, for the approval policy's app picker. A service asking for a person\n(X-Acting-For) reads each card's state as that person's. The page and its count are queried, not sliced.",
+        "description": "One page of the team's apps for the Apps grid on the shared list contract, by name ignoring case, then id:\nits plugins and the apps a person added. `search` matches the name and category, `ids` names cards exactly.\n`view` picks a tab (connected: appState connected, test_failed or removed; available: the rest), `appState`,\n`category` and `kind` filter, each repeatable; `facets` counts each, and `viewCounts` each tab, over the\nsearched and filtered cards; `accountId` (repeatable) keeps the cards those accounts belong to.\n`sortBy=connected` puts the connected cards first, then by name. The view and filters are read from the shared\nlist query; they are named here for the document.\n`include=builtin` adds the built-in apps, for the approval policy's app picker. A service asking for a person\n(X-Acting-For) reads each card's state as that person's. The page and its count are queried, not sliced.",
         "operationId": "apps_list_apps",
         "parameters": [
           {
@@ -15535,6 +15546,27 @@
               ],
               "description": "plugin, connection or builtin",
               "title": "Kind"
+            }
+          },
+          {
+            "description": "the card each named account belongs to",
+            "in": "query",
+            "name": "accountId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "the card each named account belongs to",
+              "title": "Accountid"
             }
           },
           {
@@ -24282,9 +24314,30 @@
     },
     "/v1/mcp-links": {
       "get": {
-        "description": "The links of every team the caller may see channels in, by name ignoring case, a page at a time on the\nshared list contract (`search` on the name), each with its newest call. A person reads the team they act in;\nthe dev caller and a service token every team they may see.",
+        "description": "The links of every team the caller may see channels in, by name ignoring case, a page at a time on the\nshared list contract (`search` on the name), each with its newest call; `teamId` (repeatable) keeps those\nteams' links and is counted in `facets`. A person reads the team they act in; the dev caller and a service\ntoken every team they may see, and a `teamId` outside those answers no rows.",
         "operationId": "mcp_links_list_mcp_links",
         "parameters": [
+          {
+            "description": "the links' team",
+            "in": "query",
+            "name": "teamId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "the links' team",
+              "title": "Teamid"
+            }
+          },
           {
             "in": "query",
             "name": "page",

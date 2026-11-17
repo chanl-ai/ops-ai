@@ -31,7 +31,7 @@ from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
 
-from .conftest import build_app, opa_client, team_credential
+from .conftest import build_app, opa_client, service_headers, team_credential
 from .test_plugin_templates import FakeCopies
 from .test_plugin_versions import ID, V1
 from .test_review_decisions import introspect, jwks, person
@@ -80,7 +80,8 @@ async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
 @pytest.fixture
 def seed_team(database_url: str, client: httpx.AsyncClient) -> SeedTeam:
     """A new tenant whose team_ops admin has the plugin on with `n` accounts, and `n` secrets, links, listed hosts,
-    custom apps each with the team's own OAuth client, and calls of the first seeded module's first operation."""
+    custom apps each with the team's own OAuth client, and calls of the first seeded module's first operation; an
+    agents-service token of the tenant calls the service-token routes."""
 
     async def make(n: int) -> Seeded:
         tenant = f"t_{uuid4().hex[:10]}"
@@ -132,7 +133,7 @@ def seed_team(database_url: str, client: httpx.AsyncClient) -> SeedTeam:
             "call_id": calls[0],
             "credential_id": made_credentials[0],
         }
-        return Seeded(headers=admin, ids=ids)
+        return Seeded(headers=admin, ids=ids, service_headers=service_headers(tenant))
 
     return make
 

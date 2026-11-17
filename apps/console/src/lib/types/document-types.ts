@@ -1,13 +1,22 @@
 /**
- * Document types (files-service `/v1/document-types`): a team's named set of fields to read from a document,
+ * Document types (documents-service `/v1/document-types`): a team's named set of fields to read from a document,
  * saved as immutable versions, with sample files and the values each should read, and tests that run a version over
- * the samples and score every field.
+ * the samples and score every field. Types come from the generated SDK, so a field renamed in the API fails the typecheck.
  */
 
-import type { ListResult } from "./query";
+import type { OpsAI } from '@chanl-ai/ops-ai';
 
-export type DocumentFieldType = "text" | "number" | "money" | "date" | "enum";
+type Documents = OpsAI['raw']['documents'];
+type Reply<K extends keyof Documents> = Awaited<ReturnType<Documents[K]>>;
+type Body<K extends keyof Documents> = NonNullable<NonNullable<Parameters<Documents[K]>[0]>['body']>;
 
+/** One record's values by field key. */
+export type ExpectedRecord = Record<string, string | number | null>;
+type Cell = string | number | null;
+
+export type DocumentFieldType = 'text' | 'number' | 'money' | 'date' | 'enum';
+
+/** documents-service types a version's fields as free-form objects; this is the shape the console reads and writes in them. */
 export interface DocumentField {
   /** Lowercase letters, digits and underscores. */
   key: string;
@@ -22,131 +31,39 @@ export interface DocumentField {
   alwaysReview?: boolean;
 }
 
-export interface DocumentTypeVersion {
-  version: number;
-  fields: DocumentField[];
-  /** True when one document holds several records (a notice naming several people). */
-  many: boolean;
-  /** Confidence between 0 and 1 under which a read goes to review. */
-  reviewBelow: number | null;
-  note: string | null;
-  createdBy: string;
-  createdAt: string;
-}
-
-/** One record's values by field key. */
-export type ExpectedRecord = Record<string, string | number | null>;
-
-export interface DocumentTypeSample {
-  id: string;
-  fileId: string;
-  /** The file's name. */
-  name: string;
+export type DocumentTypeVersion = Omit<Reply<'document_types_get_version'>, 'fields'> & { fields: DocumentField[] };
+export type DocumentTypeSample = Omit<Reply<'document_types_add_sample'>, 'expected'> & {
   /** One record for a single-record type, a list of records when the type reads several. */
   expected: ExpectedRecord | ExpectedRecord[];
-  addedBy: string;
-  addedAt: string;
-}
-
-export interface DocumentTypeSummary {
-  id: string;
-  name: string;
-  description: string | null;
-  latestVersion: number;
-}
-
-/** One page of the team's types on the shared list contract. */
-export interface DocumentTypeList extends ListResult<DocumentTypeSummary> {
-  /** Whether the caller may create a document type in this team. */
-  canCreate: boolean;
-}
-
-export interface DocumentType extends DocumentTypeSummary {
-  team: string;
-  createdBy: string;
-  createdAt: string;
+};
+export type DocumentType = Omit<Reply<'document_types_get_type'>, 'versions' | 'samples'> & {
   /** Newest first. */
   versions: DocumentTypeVersion[];
   samples: DocumentTypeSample[];
-  /** Whether the caller may save versions, change samples and run tests. */
-  canEdit: boolean;
-}
+};
+export type DocumentTypeList = Reply<'document_types_list_types'>;
+export type DocumentTypeSummary = DocumentTypeList['data'][number];
 
-export interface DocumentTypeVersionInput {
-  fields: DocumentField[];
-  many?: boolean;
-  reviewBelow?: number | null;
-  note?: string;
-}
-
-export interface DocumentTypeInput extends DocumentTypeVersionInput {
-  /** Generated when left out. */
-  id?: string;
-  name: string;
-  description?: string;
-  /** The file a proposed read was made from, kept as the type's first sample. */
-  sampleFileId?: string;
-}
-
-export interface DocumentTypeSampleInput {
-  fileId: string;
-  expected: ExpectedRecord | ExpectedRecord[];
-}
+// The schema lists `many`, `dateOrder` and `pageImages` as required in a request although documents-service defaults them.
+type VersionBody = Body<'document_types_add_version'>;
+export type DocumentTypeVersionInput = Omit<VersionBody, 'fields' | 'many' | 'dateOrder'> &
+  Partial<Pick<VersionBody, 'many' | 'dateOrder'>> & { fields: DocumentField[] };
+export type DocumentTypeInput = DocumentTypeVersionInput & Pick<Body<'document_types_create_type'>, 'id' | 'name' | 'description' | 'sampleFileId'>;
+export type DocumentTypeSampleInput = { fileId: string; expected: ExpectedRecord | ExpectedRecord[] };
 
 /** What testing a version spends, before it runs. */
-export interface DocumentTypeTestEstimate {
-  /** Samples the test reads, at most `capped`. */
-  samples: number;
-  /** One model call per sample. */
-  calls: number;
-  /** When every sample needs a second ask. */
-  maxCalls: number;
-  alias: string;
-  /** The most samples one test reads. */
-  capped: number;
-  /** Decimal string, or null when the model's price is not known. */
-  estimatedCost: string | null;
-  maxCost?: string;
-}
-
-export type DocumentTypeTestStatus = "queued" | "running" | "done" | "failed";
-
+export type DocumentTypeTestEstimate = Reply<'document_types_test_estimate'>;
 export interface FieldComparison {
-  expected: string | number | null;
-  got: string | number | null;
+  expected: Cell;
+  got: Cell;
   match: boolean;
 }
-
-export interface DocumentTypeTestSampleResult {
-  sampleId: string;
-  name: string;
-  extractionId: string | null;
-  status: string;
+type ServedRun = Reply<'document_types_get_test'>;
+export type DocumentTypeTestStatus = ServedRun['status'];
+export type DocumentTypeTestFieldScore = NonNullable<ServedRun['result']>['fields'][string];
+export type DocumentTypeTestSampleResult = Omit<NonNullable<ServedRun['result']>['samples'][number], 'fields'> & {
   /** Per field, one comparison for each record that names it. */
   fields: Record<string, FieldComparison[]>;
-}
-
-export interface DocumentTypeTestFieldScore {
-  matches: number;
-  misses: number;
-  /** 0..1, or null when no sample names the field. */
-  accuracy: number | null;
-}
-
-export interface DocumentTypeTestResult {
-  samples: DocumentTypeTestSampleResult[];
-  fields: Record<string, DocumentTypeTestFieldScore>;
-  accuracy: number | null;
-}
-
-export interface DocumentTypeTestRun {
-  id: string;
-  typeId: string;
-  version: number;
-  status: DocumentTypeTestStatus;
-  samples: number;
-  askedBy: string;
-  askedAt: string;
-  result?: DocumentTypeTestResult;
-  error?: string;
-}
+};
+export type DocumentTypeTestResult = Omit<NonNullable<ServedRun['result']>, 'samples'> & { samples: DocumentTypeTestSampleResult[] };
+export type DocumentTypeTestRun = Omit<ServedRun, 'result'> & { result?: DocumentTypeTestResult | null };

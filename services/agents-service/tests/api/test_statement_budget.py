@@ -115,10 +115,10 @@ def _id(answer: Any) -> str:
 
 @pytest.fixture
 def seed_team(served: tuple[FastAPI, AsyncClient], swaps: dict[str, str]) -> SeedTeam:
-    """`n` more agents (each holding a tool and an account), skills, guardrails, widgets, cases, workflows of each
-    engine and runs of the registry workflow (each waiting at its review) and queued engine runs on the dev caller's
-    team, beside the seed folder's records; the path ids name the first of each, and the seeded fraud agent and its
-    records otherwise."""
+    """`n` more agents (each holding a tool, an account and a saved eval case, so the Evals suites grow), skills,
+    guardrails, widgets, cases, workflows of each engine and runs of the registry workflow (each waiting at its review)
+    and queued engine runs on the dev caller's team, beside the seed folder's records; the path ids name the first of
+    each, and the seeded fraud agent and its records otherwise."""
     client = served[1]
     ids: dict[str, str] = dict.fromkeys(PATH_IDS, "missing")
     ids.update(
@@ -150,6 +150,9 @@ def seed_team(served: tuple[FastAPI, AsyncClient], swaps: dict[str, str]) -> See
             # A tool and an account on each agent, so the lists of who uses one grow with the agents.
             held = await client.patch(f"/v1/agents/{agent}", json=HOLDS, headers=DEV)
             assert held.status_code == 200, held.text
+            case_set: dict[str, Any] = {"cases": [{"name": f"Case {tag}", "input": "Hello", "checks": []}]}
+            saved = await client.put(f"/v1/agents/{agent}/eval-cases", json=case_set, headers=DEV)
+            assert saved.status_code == 200, saved.text
             skill = _id(await client.post("/v1/skills", json={**SKILL, "name": f"Skill {tag}"}, headers=DEV))
             rule = _id(await client.post("/v1/guardrails", json={**RULE, "name": f"Rule {tag}"}, headers=DEV))
             widget = _id(await client.post("/v1/widgets", json={**LIMIT_CARD, "name": f"Card {tag}"}, headers=DEV))

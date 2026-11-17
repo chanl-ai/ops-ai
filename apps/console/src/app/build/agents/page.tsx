@@ -60,7 +60,7 @@ function columns(open: (a: AgentRow) => void, onDelete: (a: AgentRow) => void, c
               {row.original.name}
               {row.original.id === defaultId && <Badge variant="secondary">Default</Badge>}
             </div>
-            <div className="text-xs text-muted-foreground break-words whitespace-normal">{row.original.role}</div>
+            <div className="text-xs text-muted-foreground">{row.original.role}</div>
           </div>
         </div>
       ),

@@ -277,6 +277,7 @@ export const toolsOperations = {
       "appState",
       "category",
       "kind",
+      "accountId",
       "page",
       "pageSize",
       "search",
@@ -589,6 +590,7 @@ export const toolsOperations = {
     "path": "/v1/mcp-links",
     "pathParams": [],
     "query": [
+      "teamId",
       "page",
       "pageSize",
       "search",

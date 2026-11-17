@@ -138,8 +138,9 @@ export interface paths {
          *     its plugins and the apps a person added. `search` matches the name and category, `ids` names cards exactly.
          *     `view` picks a tab (connected: appState connected, test_failed or removed; available: the rest), `appState`,
          *     `category` and `kind` filter, each repeatable; `facets` counts each, and `viewCounts` each tab, over the
-         *     searched and filtered cards. The view and filters are read from the shared list query; they are named
-         *     here for the document.
+         *     searched and filtered cards; `accountId` (repeatable) keeps the cards those accounts belong to.
+         *     `sortBy=connected` puts the connected cards first, then by name. The view and filters are read from the shared
+         *     list query; they are named here for the document.
          *     `include=builtin` adds the built-in apps, for the approval policy's app picker. A service asking for a person
          *     (X-Acting-For) reads each card's state as that person's. The page and its count are queried, not sliced.
          */
@@ -743,8 +744,9 @@ export interface paths {
         /**
          * List Mcp Links
          * @description The links of every team the caller may see channels in, by name ignoring case, a page at a time on the
-         *     shared list contract (`search` on the name), each with its newest call. A person reads the team they act in;
-         *     the dev caller and a service token every team they may see.
+         *     shared list contract (`search` on the name), each with its newest call; `teamId` (repeatable) keeps those
+         *     teams' links and is counted in `facets`. A person reads the team they act in; the dev caller and a service
+         *     token every team they may see, and a `teamId` outside those answers no rows.
          */
         get: operations["mcp_links_list_mcp_links"];
         put?: never;
@@ -5850,6 +5852,8 @@ export interface components {
             approvalState: "draft" | "approved" | "needs_approval" | "expiring" | "expired";
             /** Calls24H */
             calls24h: number;
+            /** Canedit */
+            canEdit?: boolean | null;
             connection: components["schemas"]["ConnectionRef"] | null;
             /** Connectionid */
             connectionId?: string | null;
@@ -7042,6 +7046,8 @@ export interface operations {
                 category?: string[] | null;
                 /** @description plugin, connection or builtin */
                 kind?: string[] | null;
+                /** @description the card each named account belongs to */
+                accountId?: string[] | null;
                 page?: number;
                 pageSize?: number | null;
                 search?: string | null;
@@ -11186,6 +11192,8 @@ export interface operations {
     mcp_links_list_mcp_links: {
         parameters: {
             query?: {
+                /** @description the links' team */
+                teamId?: string[] | null;
                 page?: number;
                 pageSize?: number | null;
                 search?: string | null;

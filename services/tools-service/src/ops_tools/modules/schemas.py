@@ -117,6 +117,8 @@ class ToolModule(Out):
     # Null on a module no template made.
     template_id: str | None = None
     protection: Literal["system", "managed"] | None = None
+    # Whether the caller may edit it: false for a module another team owns. Absent on a response to a service.
+    can_edit: bool | None = None
 
 
 class SecretNeed(Out):
@@ -298,7 +300,6 @@ class ToolModuleDetail(ToolModule):
     versions: list[ModuleVersion]
     run_contexts: list[RunContextOption]
     # What the caller may do with it; absent on a response to a service.
-    can_edit: bool | None = None
     can_delete: bool | None = None
     can_publish: bool | None = None
 

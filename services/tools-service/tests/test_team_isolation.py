@@ -222,12 +222,18 @@ async def test_a_team_holding_only_a_workflow_grant_changes_nothing_of_the_modul
     seen = await c.get(base, headers=grantee)
     assert seen.status_code == 200, seen.text
     table.update({k: seen.json()["data"][k] for k in ("canEdit", "canDelete", "canPublish")})
+    # The list row follows the detail's flag, and the owning team's row still offers the edit.
+    for who, h in (("list canEdit", grantee), ("owner's list canEdit", owner)):
+        rows = (await c.get("/v1/tool-modules", params={"ids": "mod_core_banking"}, headers=h)).json()["data"]["data"]
+        table[who] = [r["canEdit"] for r in rows]
     assert table == {
         **{f"{m} {p.removeprefix(base) or '/'}": 404 for m, p, _ in tries},
         "POST bulk-delete": {"updated": [], "skipped": [{"id": "mod_core_banking", "reason": "Not found"}]},
         "canEdit": False,
         "canDelete": False,
         "canPublish": False,
+        "list canEdit": [False],
+        "owner's list canEdit": [True],
     }, caller
     assert (await c.get(base, headers=owner)).json()["data"] == held
     assert (await c.get(f"{base}/operations/{op}/mocks", headers=owner)).json() == get.json()

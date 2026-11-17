@@ -111,6 +111,8 @@ async def test_a_plugins_connection_is_part_of_the_plugins_card(client: httpx.As
     # The account the plugin made is the app's default, the live one; the team has made no sandbox account.
     assert plugin["sandboxId"] is None, plugin
     assert not [c for c in cards if c["kind"] == "connection" and c["connectionId"] == conn_id], "shown twice"
+    ids, _ = await _ids(client, tenant, accountId=conn_id)
+    assert ids == [f"plugin:{ID}"], ids
 
 
 async def test_another_teams_connection_never_reaches_this_teams_grid(client: httpx.AsyncClient, tenant: str) -> None:
@@ -279,6 +281,17 @@ async def test_a_passing_test_with_no_token_reads_connected(
     }
     await ConnectionStore(engine).set_health(tenant, conn, health)
     assert (await _app(client, tenant))[0]["state"] == "connected"
+    # `sortBy=connected` puts the connected cards first, then by name: Alpha sorts first by name and is not connected.
+    alpha = await client.post("/v1/apps", json={"name": "Alpha", "authKind": "bearer"}, headers=admin(tenant))
+    assert alpha.status_code == 201, alpha.text
+    orders: dict[str, list[str]] = {}
+    for params in ({}, {"sortBy": "connected"}):
+        got = (await client.get("/v1/apps", params=params, headers=admin(tenant))).json()["data"]["data"]
+        orders[str(params)] = [c["name"] for c in got]
+    assert orders == {
+        "{}": ["Alpha", "Desk", "Header key desk"],
+        "{'sortBy': 'connected'}": ["Desk", "Alpha", "Header key desk"],
+    }
 
 
 async def test_the_approval_pickers_list_keeps_the_built_in_apps(
@@ -321,6 +334,10 @@ async def test_the_apps_list_holds_each_card_once_by_name_ignoring_case(
             {"include": "builtin"},
             [*custom, *plugins, *builtins, "plugin:test.header-key", "builtin:knowledge", "builtin:mailboxes"],
         ),
+        # The card an account belongs to, so the console needs no paging to find it; another team's account none.
+        ({"accountId": made["Alpha desk"]}, [made["Alpha desk"]]),
+        ({"accountId": [made["beta ledger"], made["Another team's"]]}, [made["beta ledger"]]),
+        ({"accountId": made["Another team's"]}, []),
     ):
         got = await client.get("/v1/apps", params=params, headers=admin(tenant))
         assert got.status_code == 200, got.text

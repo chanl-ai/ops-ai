@@ -74,6 +74,7 @@ async def test_every_evals_route_keeps_its_reply_status_and_error_object(client:
     seen["suites.filtered"] = _seen(
         await c.get("/v1/assurance/suites", params={"kind": "skill", "search": "hard"}, headers=OPS)
     )
+    seen["runs.pastEnd"] = _seen(await c.get("/v1/assurance/runs", params={"pageSize": 5, "page": 9}, headers=OPS))
     seen["suites.chatUser"] = _seen(await c.get("/v1/assurance/suites", headers=who("usr_c", "chat_user")))
     compare(seen, FIXTURES / "reply-pins-assurance.json")
 

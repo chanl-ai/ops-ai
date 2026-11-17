@@ -71,7 +71,7 @@ function columns(open: (s: SkillRow) => void, onExport: (s: SkillRow) => void): 
       accessorKey: 'useWhen',
       header: 'Use when',
       cell: ({ row }) => (
-        <p className="w-72 text-xs whitespace-normal text-muted-foreground break-words" title={row.original.useWhen}>
+        <p className="w-72 text-xs text-muted-foreground">
           {row.original.loading === 'always' ? 'Every turn, after the agent’s instructions' : row.original.useWhen}
         </p>
       ),

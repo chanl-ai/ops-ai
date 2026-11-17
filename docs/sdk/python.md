@@ -57,7 +57,22 @@ print(run["status"], run.get("outcome"))
 | `knowledge.search(body)`, `upload(name, content, mime=, purpose=)` | Search knowledge bases; upload a file |
 | `raw.<service>.<operation>()` | Every other public operation, by its name in the API reference |
 
-`list` walks every page. Each call returns the response's data as a dictionary typed from the API reference.
+`list` walks every page, 50 rows at a time, so a loop over it sees every row. Each call returns the response's data as a dictionary typed from the API reference.
+
+## Paging and filters
+
+Every list takes the shared query: `page`, `page_size` (at most 50), `search`, `sort_by`, `sort_order` (`asc` or
+`desc`), `ids` and the list's own filters, which take a list of values. The nouns' `list` passes them on and follows
+every page. A `raw` operation returns one page as a dictionary with `data`, `pagination` and `facets`; read
+`pagination["hasNext"]` to go on. The query and the reply are described in [Lists and errors](../architecture/api.md#lists-and-errors).
+
+```python
+page = ops.raw.agents.agents_list_agents(page=1, page_size=20, sort_by="name", sort_order="asc", search="claims")
+for agent in page["data"]:
+    print(agent["name"])
+if page["pagination"]["hasNext"]:
+    more = ops.raw.agents.agents_list_agents(page=2, page_size=20, sort_by="name", sort_order="asc", search="claims")
+```
 
 The Apps area uses the words on the Apps page. An app is named by its id there (`plugin:<id>`, `builtin:<name>`, or a
 custom app's connection id); an account is a connection id.
@@ -102,6 +117,7 @@ verb for machine output.
 
 | Command | What it does |
 |---|---|
+| `opsai agents list [--search]`, `opsai skills list [--search] [--id ID]`, `opsai guardrails list`, `opsai widgets list`, `opsai kb bases\|sources [--search]`, `kb documents KB [--search]`, `kb items SOURCE [--search]` | List every page of a resource; `--id` (repeatable) names exact rows |
 | `opsai kb create NAME [--owner]`, `set KB [--rerank on\|off] [--query-model] [--rewrite]`, `delete KB` | Make, tune and retire a knowledge base |
 | `opsai kb add-source NAME --kb KB [--plugin P --source S --value NAME=ID]`, `scopes --plugin P --source S` | Add a source; list what its picker offers |
 | `opsai kb push SOURCE --name N --title T --text TEXT` | Put one item into a push source |
@@ -124,10 +140,22 @@ opsai connectors connect "Person desk"
 
 ## Errors
 
-A refused call raises a subclass of `OpsError` with `status`, `code`, `message` and `request_id`: `BadRequest` (400,
+A refused call raises a subclass of `OpsError` with `status`, `code`, `message`, `request_id` and `details`: `BadRequest` (400,
 422), `Unauthorized` (401), `Forbidden` (403), `NotFound` (404), `Conflict` (409), `RateLimited` (429) and
-`ServerError` (5xx). Reads are retried twice on 429 and 5xx; a write is retried only when its route takes an
-idempotency key and the call sends one.
+`ServerError` (5xx). The fields come from the API's one error body, described in [Lists and errors](../architecture/api.md#lists-and-errors). Branch on `code`, and quote
+`request_id` when asking for help.
+
+```python
+from ops_ai import NotFound
+
+try:
+    ops.agents.get("agt_missing")
+except NotFound as e:
+    print(e.status, e.code, e.request_id)
+```
+
+Reads are retried twice on 429 and 5xx; a write is retried only when its route takes an idempotency key and the call
+sends one.
 
 ## Asynchronous use
 

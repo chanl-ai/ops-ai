@@ -34,8 +34,8 @@ const OWN_REQUESTS = 'People can approve their own requests';
 const TEST_ACCOUNTS = 'Test accounts never ask';
 const TEST_RUNS = 'Test runs on live accounts ask first';
 const MAKERS = 'Writes an app or template marks “ask first” wait for approval';
-/** Roles that cannot decide a review. platform-service has no filter for roles that can, so the picker leaves these out of each page. */
-const REVIEWER_ROLES = rolesWhere('role-reviewer-options', ['viewer', 'chat_user', 'owner', 'builder']);
+/** Roles that hold the `reviews.decide` cell; platform-service filters them. */
+const REVIEWER_ROLES = rolesWhere('role-reviewer-options', [], { canDecideReviews: ['true'] });
 
 const teamSchema = z
   .object({ ask: z.boolean(), answer: z.enum(['person', 'reviewer']), reviewerRole: z.string().nullable(), requesterMayDecide: z.boolean(), testAccountsNeverAsk: z.boolean(), testRunsAsk: z.boolean(), makersAsk: z.boolean() })

@@ -251,6 +251,62 @@
     },
     "status": 200
   },
+  "runs.pastEnd": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "asset": {
+              "href": "/build/agents/<ag>",
+              "id": "<ag>",
+              "kind": "agent",
+              "name": "Payee Checker"
+            },
+            "costUsd": 0.0,
+            "durationMs": "<durationMs>",
+            "id": "<evr>",
+            "passRate": 0.5,
+            "passed": 1,
+            "ranAt": "<timeZ>",
+            "regressions": 0,
+            "reviewId": null,
+            "total": 2,
+            "trigger": "manual",
+            "version": 1
+          }
+        ],
+        "facets": {
+          "kind": {
+            "agent": 1
+          },
+          "trigger": {
+            "manual": 1
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 5,
+          "total": 1,
+          "totalPages": 1
+        },
+        "stats": {
+          "failingSuites": 1,
+          "gatesBlocked": 0,
+          "liveUntested": 0,
+          "notRun": 1
+        },
+        "tabCounts": {
+          "gates": 0,
+          "runs": 1,
+          "suites": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
   "skill.missing": {
     "body": {
       "error": {

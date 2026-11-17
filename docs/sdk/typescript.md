@@ -48,6 +48,21 @@ case and take their options as an object: `apps.turnOn(app, fields)`, `apps.addC
 `credentials.set(app, { clientId, clientSecret })`, `accounts.makeDefault(account)`, `accounts.setKey(account, key)`,
 `tools.run(app, tool, input, { real })`. The setup words are camel case too: `tools.importOpenapi(module, specUrl, operations)`, `tools.createModule(name, displayName)`, `tools.decideReview(review, decision)`, `tools.runModule(module, tool, input)`, `secrets.create(name, value)`, `egress.allowHost(host)`, `policies.set(key, value)`, `agents.grantTools(id, toolIds)`, `tasks.approve(task, { password })`.
 
+## Paging and filters
+
+The shared query is `page`, `pageSize` (at most 50), `search`, `sortBy`, `sortOrder` (`asc` or `desc`), `ids` and the
+list's own filters, which take an array. The nouns' `list` passes them on and follows every page. A `raw` operation
+returns one page with `data`, `pagination` and `facets`; read `pagination.hasNext` to go on. The query and the reply
+are described in [Lists and errors](../architecture/api.md#lists-and-errors).
+
+```ts
+const page = await ops.raw.agents.agents_list_agents({ query: { page: 1, pageSize: 20, sortBy: 'name', sortOrder: 'asc', search: 'claims' } });
+for (const agent of page.data) console.log(agent.name);
+if (page.pagination.hasNext) {
+  const more = await ops.raw.agents.agents_list_agents({ query: { page: 2, pageSize: 20, sortBy: 'name', sortOrder: 'asc', search: 'claims' } });
+}
+```
+
 ## Knowledge, templates and connectors
 
 The same words as the [Python SDK](python.md#knowledge-templates-and-connectors), camel case:
@@ -72,9 +87,19 @@ caller who passes its own `apiKey` is not given the saved person's token.
 
 ## Errors
 
-A refused call rejects with a subclass of `OpsError` carrying `status`, `code`, `message` and `requestId`, the same
-classes as the Python SDK. Reads are retried twice on 429 and 5xx; a write only when its route takes an idempotency
-key and the call sends one.
+A refused call rejects with a subclass of `OpsError` carrying `status`, `code`, `message`, `requestId` and `details`, the
+same classes as the [Python SDK](python.md#errors). The fields come from the API's one error body, described in [Lists and errors](../architecture/api.md#lists-and-errors).
+Reads are retried twice on 429 and 5xx; a write only when its route takes an idempotency key and the call sends one.
+
+```ts
+import { NotFound } from '@chanl-ai/ops-ai';
+
+try {
+  await ops.agents.get('agt_missing');
+} catch (e) {
+  if (e instanceof NotFound) console.log(e.status, e.code, e.requestId);
+}
+```
 
 ## Where it lives
 

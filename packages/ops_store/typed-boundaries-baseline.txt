@@ -1,4 +1,4 @@
-# 57 boundaries crossed without a model in packages/ops_store (scripts/check_typed_boundaries.py). A row may only fall.
+# 54 boundaries crossed without a model in packages/ops_store (scripts/check_typed_boundaries.py). A row may only fall.
 1 dict-any packages/ops_store/src/ops_store/audit.py
 3 dict-any packages/ops_store/src/ops_store/background.py
 4 dict-any packages/ops_store/src/ops_store/conformance.py

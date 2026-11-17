@@ -3156,6 +3156,7 @@
        ],
        "approvalState": "expiring",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://payments.harborpine.internal/api",
         "expiresAt": "<datetime>",
@@ -3252,6 +3253,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://scheduler.harborpine.internal/api",
         "expiresAt": "<datetime>",
@@ -3299,6 +3301,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://cards.api.harborpine.internal/v2",
         "expiresAt": "<datetime>",
@@ -3349,6 +3352,7 @@
        ],
        "approvalState": "needs_approval",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://casemgmt.harborpine.internal/mcp",
         "expiresAt": "<datetime>",
@@ -3394,6 +3398,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://fincrime-mcp.harborpine.internal/mcp",
         "expiresAt": "<datetime>",
@@ -3496,6 +3501,7 @@
        ],
        "approvalState": "needs_approval",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://corebanking.api.harborpine.internal/v3",
         "expiresAt": "<datetime>",
@@ -3547,6 +3553,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": null,
        "description": "Tools the Runtime runs in process for its demo agents and workflows.",
        "displayName": "Runtime demo tools",
@@ -3580,6 +3587,7 @@
        ],
        "approvalState": "needs_approval",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://harborpine.my.salesforce.com/services/mcp/v1",
         "expiresAt": "<datetime>",
@@ -3627,6 +3635,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://cards.api.harborpine.internal/v2",
         "expiresAt": "<datetime>",
@@ -3729,6 +3738,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": null,
        "description": "Tools the Runtime runs in process for its demo agents and workflows.",
        "displayName": "Runtime demo tools",
@@ -3762,6 +3772,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://graph.microsoft.com/v1.0",
         "expiresAt": "<datetime>",
@@ -3813,6 +3824,7 @@
        ],
        "approvalState": "expiring",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://payments.harborpine.internal/api",
         "expiresAt": "<datetime>",
@@ -3907,6 +3919,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://api.theworknumber.com/v2",
         "expiresAt": "<datetime>",
@@ -3999,6 +4012,7 @@
        ],
        "approvalState": "needs_approval",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://harborpine.my.salesforce.com/services/mcp/v1",
         "expiresAt": "<datetime>",
@@ -4046,6 +4060,7 @@
        ],
        "approvalState": "needs_approval",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://corebanking.api.harborpine.internal/v3",
         "expiresAt": "<datetime>",
@@ -4141,6 +4156,7 @@
        "accessClasses": [],
        "approvalState": "draft",
        "calls24h": 0,
+       "canEdit": true,
        "connection": null,
        "description": "Fetches signed loan documents for the lending inbox.",
        "displayName": "Document service",
@@ -4173,6 +4189,7 @@
        ],
        "approvalState": "needs_approval",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://casemgmt.harborpine.internal/mcp",
         "expiresAt": "<datetime>",
@@ -4219,6 +4236,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": null,
        "description": "Tools the Runtime runs in process for its demo agents and workflows.",
        "displayName": "Runtime demo tools",
@@ -4251,6 +4269,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": null,
        "description": "Searches the knowledge bases in Data Hub with citations. Served by the platform.",
        "displayName": "Knowledge search",
@@ -4306,6 +4325,7 @@
        ],
        "approvalState": "needs_approval",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://harborpine.my.salesforce.com/services/mcp/v1",
         "expiresAt": "<datetime>",
@@ -4352,6 +4372,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://fincrime-mcp.harborpine.internal/mcp",
         "expiresAt": "<datetime>",
@@ -4402,6 +4423,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://los.harborpine.internal/api/v4",
         "expiresAt": "<datetime>",
@@ -4448,6 +4470,7 @@
        ],
        "approvalState": "expired",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://harborpine.sharepoint.com/_api/mcp",
         "expiresAt": "<datetime>",
@@ -4488,6 +4511,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://api.equifax.ca/credit/v1",
         "expiresAt": "<datetime>",
@@ -4534,6 +4558,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://api.theworknumber.com/v2",
         "expiresAt": "<datetime>",
@@ -4581,6 +4606,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://graph.microsoft.com/v1.0",
         "expiresAt": "<datetime>",
@@ -4631,6 +4657,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://scheduler.harborpine.internal/api",
         "expiresAt": "<datetime>",
@@ -4678,6 +4705,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://cards.api.harborpine.internal/v2",
         "expiresAt": "<datetime>",
@@ -4729,6 +4757,7 @@
        ],
        "approvalState": "expiring",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://payments.harborpine.internal/api",
         "expiresAt": "<datetime>",
@@ -4776,6 +4805,7 @@
        ],
        "approvalState": "needs_approval",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://corebanking.api.harborpine.internal/v3",
         "expiresAt": "<datetime>",
@@ -4878,6 +4908,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://graph.microsoft.com/v1.0",
         "expiresAt": "<datetime>",
@@ -4928,6 +4959,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://scheduler.harborpine.internal/api",
         "expiresAt": "<datetime>",
@@ -4975,6 +5007,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://cards.api.harborpine.internal/v2",
         "expiresAt": "<datetime>",
@@ -5026,6 +5059,7 @@
        ],
        "approvalState": "expiring",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://payments.harborpine.internal/api",
         "expiresAt": "<datetime>",
@@ -5073,6 +5107,7 @@
        ],
        "approvalState": "needs_approval",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://corebanking.api.harborpine.internal/v3",
         "expiresAt": "<datetime>",
@@ -5174,6 +5209,7 @@
        ],
        "approvalState": "needs_approval",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://casemgmt.harborpine.internal/mcp",
         "expiresAt": "<datetime>",
@@ -5220,6 +5256,7 @@
        ],
        "approvalState": "needs_approval",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://harborpine.my.salesforce.com/services/mcp/v1",
         "expiresAt": "<datetime>",
@@ -5267,6 +5304,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://graph.microsoft.com/v1.0",
         "expiresAt": "<datetime>",
@@ -5318,6 +5356,7 @@
        ],
        "approvalState": "needs_approval",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://corebanking.api.harborpine.internal/v3",
         "expiresAt": "<datetime>",
@@ -5536,6 +5575,7 @@
        "accessClasses": [],
        "approvalState": "draft",
        "calls24h": 0,
+       "canEdit": true,
        "connection": null,
        "description": "Fetches signed loan documents for the lending inbox.",
        "displayName": "Document service",
@@ -5568,6 +5608,7 @@
        ],
        "approvalState": "needs_approval",
        "calls24h": 0,
+       "canEdit": true,
        "connection": {
         "baseUrl": "https://casemgmt.harborpine.internal/mcp",
         "expiresAt": "<datetime>",
@@ -5614,6 +5655,7 @@
        ],
        "approvalState": "approved",
        "calls24h": 0,
+       "canEdit": true,
        "connection": null,
        "description": "Tools the Runtime runs in process for its demo agents and workflows.",
        "displayName": "Runtime demo tools",

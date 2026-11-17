@@ -55,18 +55,17 @@ export function useCanInWorkspace(area: string, action: string): boolean | undef
 /** One page of the workspace's roles, one role with its grid, and a person's grants; disabled off platform sign-in. */
 export const useRoles = (p: ListParams) => usePagedQuery({ queryKey: ['access', 'roles', p], queryFn: () => api.teams.roles!(p), enabled: !!api.teams.roles });
 /**
- * Roles for a picker: searched on the server as typed, or named by id; a page number is the cursor. `except` leaves
- * roles out of what the picker offers (a role that cannot hold what the field asks for, or the role being deleted).
- * platform-service has no filter for the first, nor for built-in roles (`customOnly`), so the picker drops them from
- * each page it reads.
+ * Roles for a picker: searched on the server as typed, or named by id; a page number is the cursor. `except` leaves a
+ * role out of what the picker offers (the role being deleted); `filters` are the server's own (`builtin`,
+ * `canDecideReviews`), so each page already holds only what the field offers.
  */
-export const rolesWhere = (key: string, except: string[] = [], customOnly = false): OptionSource => ({
+export const rolesWhere = (key: string, except: string[] = [], filters?: Record<string, string[]>): OptionSource => ({
   key,
   fetch: async ({ search, cursor, limit = 25, ids }) => {
     const page = Number(cursor ?? 1);
-    const res = await api.teams.roles!(ids?.length ? { page: 1, pageSize: Math.min(ids.length, 50), ids } : { page, pageSize: limit, search: search || undefined });
+    const res = await api.teams.roles!(ids?.length ? { page: 1, pageSize: Math.min(ids.length, 50), ids } : { page, pageSize: limit, search: search || undefined, filters });
     return {
-      data: res.data.filter((r) => ids?.includes(r.id) || (!except.includes(r.id) && !(customOnly && r.builtin))).map((r) => ({ id: r.id, label: r.name, hint: r.description })),
+      data: res.data.filter((r) => ids?.includes(r.id) || !except.includes(r.id)).map((r) => ({ id: r.id, label: r.name, hint: r.description })),
       nextCursor: !ids?.length && res.pagination.hasNext ? String(page + 1) : null,
     };
   },

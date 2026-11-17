@@ -16,6 +16,7 @@ from ops_identity import CurrentService
 from ops_service_kit.errors import Forbidden, Unprocessable
 from ops_service_kit.http import Envelope, In, Out
 
+from ...store.tool_copies import COPIED, ToolCopies, wired_event
 from .. import service_events
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -73,6 +74,9 @@ async def emit_event(rt: Rt, caller: CurrentService, body: EventIn) -> JSONRespo
     # The team is the one the reporting service minted its token for, about its own record; the body only repeats it.
     if caller.team_id != body.team_id:
         raise Forbidden("A service event's team is the one its token names.", code="team_mismatch")
+    if body.name in COPIED:
+        # The catalogue copy takes the event first, in its own transaction; a repeat changes nothing there.
+        await ToolCopies(rt.db).apply([wired_event(body.name, body.team_id, body.payload, tenant_id=caller.tenant_id)])
     event = await service_events.emit(
         rt,
         name=body.name,

@@ -41,6 +41,20 @@ async def test_the_list_holds_the_acting_teams_links_only_in_name_order(
     listed = [(x["teamId"], x["name"]) for x in page["data"]]
     assert listed == [("team_cards", "Accounts"), ("team_cards", "billing"), ("team_cards", "Claims")]
     assert (page["pagination"]["total"], page["data"][0]["lastCall"]) == (3, None)
+    # `teamId` narrows within the teams the caller reads and never widens them: Sam acts in team_cards, so team_ops
+    # (where Sam is also an admin) and team_payroll answer no rows, and the facet counts only what was read.
+    narrowed: dict[str, object] = {}
+    for teams in (["team_cards"], ["team_ops"], ["team_payroll"], ["team_cards", "team_ops"]):
+        r = await client.get("/v1/mcp-links", params={"teamId": teams}, headers=sam)
+        assert r.status_code == 200, r.text
+        got = r.json()["data"]
+        narrowed[",".join(teams)] = (got["pagination"]["total"], got["facets"]["teamId"])
+    assert narrowed == {
+        "team_cards": (3, {"team_cards": 3}),
+        "team_ops": (0, {"team_cards": 3}),
+        "team_payroll": (0, {"team_cards": 3}),
+        "team_cards,team_ops": (3, {"team_cards": 3}),
+    }
 
 
 async def test_links_of_one_name_each_appear_once_across_pages_and_past_the_end(

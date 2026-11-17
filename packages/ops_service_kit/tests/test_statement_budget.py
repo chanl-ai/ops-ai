@@ -1,7 +1,8 @@
 """The statement budget fixture on a small app, by failure mode: a route whose statements grow with its rows, one
 over its budget, one that opens a second transaction or checks out a second connection nobody listed, one that calls
 another service while its transaction is open, a GET with no budget row, one that answers other than 200 or than the
-status its row lists, one left out of the budget with no reason, and a route whose row's query never reaches it."""
+status its row lists, one left out of the budget with no reason, a route whose row's query never reaches it, and a
+row called as a service whose route also answers people, whose caller is unknown or whose seed has no service token."""
 
 from __future__ import annotations
 
@@ -10,12 +11,13 @@ from pathlib import Path
 
 import httpx
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
 from ops_service_kit.http import install_error_handlers
+from ops_service_kit.logging import captured_logging
 from ops_service_kit.request_timing import current
-from ops_service_kit.testing import Seeded, SeedTeam, StatementBudget, budget_check
+from ops_service_kit.testing import Seeded, SeedTeam, StatementBudget, budget_check, over_budget
 
 statement_budget = pytest.fixture(budget_check)
 
@@ -61,7 +63,17 @@ first_queries = 5
 not_budgeted = "a sign-in callback: answers only with the provider's code"
 ["GET /v1/no-reason"]
 not_budgeted = " "
+["GET /v1/service-only"]
+queries = 3
+caller = "service"
+["GET /v1/people-too"]
+queries = 3
+caller = "service"
+["GET /v1/odd-caller"]
+queries = 3
+caller = "robot"
 """
+SERVICE = {"x-caller": "service"}
 
 
 def spend(queries: int, transactions: int = 1, *, connections: int = 1, hop: str = "") -> dict[str, int]:
@@ -127,6 +139,16 @@ def app(seeded: dict[str, int]) -> FastAPI:
         spend(2)
         return RedirectResponse("/v1/flat", status_code=303)
 
+    def service_only(request: Request) -> dict[str, int]:
+        # As CurrentService: a person's token is refused before any statement.
+        if request.headers.get("x-caller") != "service":
+            raise HTTPException(401)
+        return spend(3)
+
+    app.get("/v1/service-only")(service_only)
+    app.get("/v1/people-too")(lambda: spend(3))
+    app.get("/v1/odd-caller")(lambda: spend(3))
+
     for path in ("/v1/redirect", "/v1/moved", "/v1/callback", "/v1/no-reason"):
         app.get(path)(redirect)
     return app
@@ -142,7 +164,7 @@ async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
 def seed_team(seeded: dict[str, int]) -> SeedTeam:
     async def seed(n: int) -> Seeded:
         seeded["rows"], seeded["cold"] = n, 3
-        return Seeded(headers={}, ids={"item_id": "itm_1"})
+        return Seeded(headers={}, ids={"item_id": "itm_1"}, service_headers=SERVICE)
 
     return seed
 
@@ -161,10 +183,29 @@ async def test_each_route_outside_its_budget_is_named_and_one_inside_it_is_not(
         "GET /v1/hidden: no row in budgets.toml",
         "GET /v1/hop: 1 service call while a transaction was open, 0 listed",
         "GET /v1/no-reason: not_budgeted needs a reason",
+        "GET /v1/odd-caller: caller 'robot' is not one of person, service",
+        'GET /v1/people-too: answers a person\'s token; budget it as a person, not caller = "service"',
         "GET /v1/per-row: 6 statements at 5 rows, 51 at 50",
         "GET /v1/roomy: budget 5, 2 statements measured; lower it",
         "GET /v1/roomy: 2 transactions listed, 1 measured; lower it",
         "GET /v1/twice: 2 transactions, 1 listed",
         "GET /v1/two-connections: 2 connection checkouts, 1 listed",
         "GET /v1/unlisted: no row in budgets.toml",
+    ]
+
+
+async def test_a_service_row_whose_seed_gives_no_service_token_is_named(
+    app: FastAPI, client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    budgets = tmp_path / "budgets.toml"
+    budgets.write_text(BUDGETS)
+
+    async def person_only(n: int) -> Seeded:
+        return Seeded(headers={}, ids={"item_id": "itm_1"})
+
+    with captured_logging("statement-budget") as stream:
+        problems = await over_budget(app, client, person_only, budgets, stream)
+    assert [p for p in problems if "service_headers" in p] == [
+        'GET /v1/people-too: caller = "service" but seed_team gave no service_headers',
+        'GET /v1/service-only: caller = "service" but seed_team gave no service_headers',
     ]

@@ -43,7 +43,7 @@ import {
 import { PaginationState, PAGINATION_DEFAULTS } from '@/lib/types/pagination';
 import { useBulkSelectionTransport } from '@/components/bulk-selection-context';
 import { useCurrentPerson } from '@/hooks/auth-queries';
-import { type ColumnMeta, kindClass } from '@/components/data-table-column-kinds';
+import { type ColumnMeta, kindClass, revealTruncated } from '@/components/data-table-column-kinds';
 import { idLast } from '@/lib/column-order';
 import { withCreatedRows } from '@/lib/created-rows';
 import type { CreatedRows } from '@/hooks/use-created-rows';
@@ -162,11 +162,12 @@ interface DataTableWithViewsProps<TData, TValue> {
 
 /** How many data columns a list shows before the rest wait under View (five or six; six overflowed
  * Files at 1280). */
-const SHOWN_BY_DEFAULT = 5;
+/** Columns shown at the start: eight on a desktop, where they fit and truncate, five on a phone, which scrolls sideways. */
+const shownByDefault = () => (typeof window !== 'undefined' && window.innerWidth < 640 ? 5 : 8);
 const keyOf = <T, V>(c: ColumnDef<T, V>) => c.id ?? ((c as { accessorKey?: string }).accessorKey ? String((c as { accessorKey?: string }).accessorKey) : undefined);
 
 /**
- * Which columns show: the page's own choice first; otherwise the first five data columns, with the rest under View (a
+ * Which columns show: the page's own choice first; otherwise the first eight data columns (five on a phone), with the rest under View (a
  * column that cannot be hidden always shows). A person's own choice is remembered per list in this browser.
  */
 function useRememberedColumns<T, V>(columns: ColumnDef<T, V>[], initial: VisibilityState) {
@@ -176,13 +177,14 @@ function useRememberedColumns<T, V>(columns: ColumnDef<T, V>[], initial: Visibil
   const storageKey = `ops-columns:${ids[0] ?? 'anyone'}:${pathname}:${keys.join(',')}`;
   const defaults = React.useMemo(() => {
     const out: VisibilityState = { ...initial };
+    const cap = shownByDefault();
     let shown = 0;
     for (const c of columns) {
       const k = keyOf(c);
       if (!k || k === 'select' || k === 'actions' || k in initial) continue;
       // The record id is a detail: under View until the person turns it on, and never counted among the five.
       if ((c.meta as ColumnMeta | undefined)?.kind === 'id') out[k] = false;
-      else if (c.enableHiding === false || shown < SHOWN_BY_DEFAULT) shown++;
+      else if (c.enableHiding === false || shown < cap) shown++;
       else out[k] = false;
     }
     return out;
@@ -599,8 +601,9 @@ export function DataTableWithViews<TData, TValue>({
                           return (
                             <TableCell
                               key={cell.id}
-                              className={kindClass(meta, pinOf(cell.column.id), hasSelect)}
-                              title={meta?.kind === 'name' && typeof value === 'string' ? value : undefined}
+                              className={kindClass(meta, pinOf(cell.column.id), hasSelect, typeof value === 'string')}
+                              onMouseEnter={(e) => revealTruncated(e.currentTarget)}
+                              onFocus={(e) => revealTruncated(e.currentTarget)}
                             >
                               {cell.id === openCellId ? <RowOpen href={rowData.href}>{content}</RowOpen> : content}
                               {isNew && cell.id === firstDataCellId && (

@@ -55,14 +55,17 @@ queries = 8
 ["GET /v1/executions/{call_id}"]
 queries = 7
 
+# agents-service's read, called with its service token; a person's token is refused before any statement.
 ["GET /v1/grantable-operations"]
-not_budgeted = "agents-service's route, called with a service token; a person's token is refused before any statement"
+queries = 21
+caller = "service"
 
 ["GET /v1/knowledge-sources"]
 queries = 4
 
+# The count, the page and the teamId facet.
 ["GET /v1/mcp-links"]
-queries = 2
+queries = 3
 
 ["GET /v1/mcp-links/{link_id}"]
 queries = 1
@@ -85,6 +88,11 @@ queries = 5
 ["GET /v1/send-policy"]
 queries = 1
 
+# agents-service's read to rebuild its catalogue copy, called with its service token.
+["GET /v1/tool-catalog"]
+queries = 6
+caller = "service"
+
 # Chosen, counted and paged in SQL (store/module_list.py: count, page, two facets, totals), then only the page's
 # modules read in full with their traffic, secret names and connections; the count no longer grows with the modules.
 ["GET /v1/tool-modules"]
@@ -102,5 +110,7 @@ queries = 11
 ["GET /v1/tool-modules/{module_id}/operations/{op_id}/mocks"]
 queries = 8
 
+# agents-service's read, called with its service token; a person's token is refused before any statement.
 ["GET /v1/tools/{name}"]
-not_budgeted = "agents-service's route, called with a service token; a person's token is refused before any statement"
+queries = 7
+caller = "service"

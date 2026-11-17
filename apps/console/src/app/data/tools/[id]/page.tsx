@@ -321,8 +321,8 @@ export default function ModulePage() {
                     testId="ops-empty"
                     title="No operations yet"
                     description="Build one request by hand, or import operations from an MCP server or an OpenAPI spec."
-                    action={{ label: 'Add operation', onClick: () => setAddOpOpen(true) }}
-                    secondaryAction={{ label: 'Import', onClick: () => setImportOpen(true) }}
+                    action={canBuild ? { label: 'Add operation', onClick: () => setAddOpOpen(true) } : undefined}
+                    secondaryAction={canBuild ? { label: 'Import', onClick: () => setImportOpen(true) } : undefined}
                   />
                 ))}
               </BuilderFieldset>

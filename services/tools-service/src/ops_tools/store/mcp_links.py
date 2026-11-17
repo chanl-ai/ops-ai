@@ -19,7 +19,7 @@ from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListParams
 from ops_store import Guarantee, isolation
 from ops_store.isolation import attempt
-from ops_store.listing import ListPage, list_page
+from ops_store.listing import LISTED, ListPage, list_page
 from ops_store.rows import one
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.store import Store
@@ -38,7 +38,8 @@ mcp_links = sa.Table(
     metadata,
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("tenant_id", sa.String(64), nullable=False),
-    sa.Column("team_id", sa.String(64), nullable=False),
+    # Filtered and counted by the links list (`teamId`); uq_mcp_links_team_slug leads with it after the tenant.
+    sa.Column("team_id", sa.String(64), nullable=False, info=LISTED),
     # The last part of the link's address; unique in its team, so one address names one link.
     sa.Column("slug", sa.String(64), nullable=False),
     sa.Column("name", sa.String(120), nullable=False),
@@ -130,8 +131,10 @@ class McpLinks(Store):
     role = ROLE
 
     async def listed(self, tenant_id: str, team_ids: list[str], params: ListParams) -> ListPage:
-        """One page of the teams' links by name, ignoring case, each with its newest call (`McpLinkRow`). The acting
-        team alone reads in its own scope; several teams read tenant-wide, held to `team_ids` by the query."""
+        """One page of the teams' links by name, ignoring case, each with its newest call (`McpLinkRow`); `teamId`
+        (repeatable) narrows to some of `team_ids` and is counted in `facets`. The acting team alone reads in its own
+        scope; several teams read tenant-wide, held to `team_ids` by the query, so a `teamId` outside them answers
+        none."""
         own = team_ids == [acting_team()]
         held = (
             isolation.scope(tenant_id, team_ids[0]) if own else isolation.tenant_wide(LINK_TEAMS, tenant_id=tenant_id)
@@ -144,6 +147,8 @@ class McpLinks(Store):
                     params,
                     search=[mcp_links.c.name],
                     default_sort=sa.func.lower(mcp_links.c.name),
+                    filters={"teamId": mcp_links.c.team_id},
+                    facets={"teamId": mcp_links.c.team_id},
                 )
 
     async def one(self, tenant_id: str, team_id: str, link_id: str) -> McpLinkRow | None:

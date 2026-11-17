@@ -83,9 +83,55 @@ narrower shape; "proposed" has no code. Count: 5 in code, 17 partial, 32 propose
 | Errors | 400 `validation_failed`, 401 `unauthorized`, 403 `forbidden`, 404 `not_found`, 409 conflicts by code, 422 `step_up_required` or `approval_token_required`, 429 `key_budget_exhausted`, 500 `internal` | Yes |
 | Conflict codes | `run_active` (with owner, runId, ageSeconds), `run_waiting`, `run_not_waiting`, `not_waiting`, `node_missing`, `deployment_paused`, `nothing_to_approve`, `already_decided` (a different decision on a decided review), `digest_mismatch` (the pinned version's stored digest no longer matches), `no_sla_waiting` (a customer reply to a thread with no SLA step waiting), `not_routable`; tools-service `lease_superseded`, `write_in_progress` | Yes |
 | Idempotency | Every write takes a key kept in our own dedupe table. A repeated `runId` replays the stored events instead of running again; a repeated `externalKey` returns the existing thread; a repeated tool write returns the first result | Run id and external key: yes. A general `Idempotency-Key` header: proposed |
-| Paging | Cursor paging with the usual filters on every list | Proposed; lists return everything |
+| Paging | The shared list contract: every list route takes `page`, `pageSize`, `search`, `sortBy`, `sortOrder`, `ids` and repeatable filters, and answers `{data, pagination, facets}`; see [Lists and errors](#lists-and-errors) | Yes on the services whose migration is finished (`ops_service_kit.listing`, `ops_service_kit.http.ListResult`); the others still return every row. Cursor paging is Planned |
 | Team | From identity, never from a parameter | Not yet: the dev principal reads `X-Team-Id` ([identity-and-tenancy.md](identity-and-tenancy.md)) |
 | Auth on service calls | Bearer service token with `area:action` scopes on the public routes; workload identity in a deployment | Shared token in code |
+
+## Lists and errors
+
+This section is the reference the SDK guides link to.
+
+### List requests
+
+| Query key | Meaning |
+|---|---|
+| `page` | 1-based page number, default 1 |
+| `pageSize` | Rows per page: the install default is 20 (`OPS_PAGE_SIZE_DEFAULT`) and the largest is 50 (`OPS_PAGE_SIZE_MAX`); a larger value is answered at 50 |
+| `search` | Text matched by the list's own search columns |
+| `sortBy`, `sortOrder` | A column the list declares sortable, and `asc` or `desc` (default `desc`); rows with equal values keep a fixed order by id, so a page never repeats or skips a row |
+| `ids` | Repeated; at most 1000. Answers exactly those rows, whatever `search` says; used by pickers and labels |
+| any other key | A filter of that list, repeated once per value: `?status=open&status=held` keeps either |
+
+### List replies
+
+A list answers the envelope with a page in `data`:
+
+```json
+{"success": true, "data": {"data": [{"id": "agt_1"}], "pagination": {"page": 1, "pageSize": 20, "total": 1,
+  "totalPages": 1, "hasNext": false, "hasPrev": false}, "facets": {"status": {"live": 1}}}}
+```
+
+`facets` counts the rows per value of each filter, with the search and the other filters applied. Some lists add a
+field beside the three (`canCreate`, `labels`, `byKey`); each service's OpenAPI document names it. A caller that needs
+every row follows `pagination.hasNext` and asks for 50 a page. Old parameter and reply names are gone, with no aliases:
+[api-changes.md](migration/api-changes.md) lists each route's change.
+
+### Error replies
+
+Every refusal has the same body and the HTTP status of its `error.status`:
+
+```json
+{"success": false, "error": {"code": "validation_failed", "message": "page must be at least 1", "status": 400,
+  "requestId": "req_..."}}
+```
+
+| Field | Meaning |
+|---|---|
+| `code` | Stable text a caller branches on; the codes are in the Errors and Conflict codes rows above |
+| `message` | For a person to read |
+| `status` | The HTTP status |
+| `requestId` | Quote it to support |
+| `details` | Extra data for some codes; absent otherwise |
 
 ## Event schema
 

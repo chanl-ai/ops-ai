@@ -642,19 +642,18 @@ class ModuleService:
     def _rights(self, who: Caller, m: Aggregate) -> dict[str, bool]:
         """What the caller may do with this module, by the check each write route runs: `can` for the action
         with the module's protection, so the console's buttons and the routes never disagree."""
-        out: dict[str, bool] = {}
-        owned = self._team_owns(who, m)
-        for action in ("edit", "delete", "publish"):
-            if not owned:
-                out[f"can{action.capitalize()}"] = False
-                continue
-            try:
-                _can(who, "tools", action, what="it", protection=m.get("protection"))
-            except Forbidden:
-                out[f"can{action.capitalize()}"] = False
-            else:
-                out[f"can{action.capitalize()}"] = True
-        return out
+        return {f"can{a.capitalize()}": self._may(who, m, a) for a in ("edit", "delete", "publish")}
+
+    def _may(self, who: Caller, m: Aggregate, action: str) -> bool:
+        """One of `_rights`' flags: the module is the caller's team's and `can` allows the action on it. Reads only
+        the module, so a list's page sets it on each row without a statement."""
+        if not self._team_owns(who, m):
+            return False
+        try:
+            _can(who, "tools", action, what="it", protection=m.get("protection"))
+        except Forbidden:
+            return False
+        return True
 
     async def _levels(self, tenant_id: str, team: Team) -> Levels:
         """The team's write approval levels from platform-service. A route on the request transaction reads them before
@@ -898,7 +897,8 @@ class ModuleService:
         calls, errors = totals["calls"], totals["errors"]
         return {
             **page,
-            "data": [self._row(m, traffic, have, conns) for m in mods],
+            # The detail's canEdit rule, so a row of another team's module offers no edit its routes would refuse.
+            "data": [{**self._row(m, traffic, have, conns), "canEdit": self._may(who, m, "edit")} for m in mods],
             "stats": {
                 "modules": totals["all"],
                 "operations": totals["operations"],

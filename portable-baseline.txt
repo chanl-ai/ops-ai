@@ -19,7 +19,7 @@
 2 sql services/kb-service/migrations/versions/0002_items_versions_and_chunks.py postgresql_using option
 # services/models-service: 1
 1 sql services/models-service/migrations/versions/0005_one_current_alias_version.py postgresql_where option
-# services/tools-service: 5
+# services/tools-service: 4
 1 sql services/tools-service/migrations/versions/0001_gateway_calls_and_fences.py postgresql_where option
 1 sql services/tools-service/migrations/versions/0016_threadless_write_once.py postgresql_where option
 2 sql services/tools-service/migrations/versions/0017_effect_scope.py postgresql_where option

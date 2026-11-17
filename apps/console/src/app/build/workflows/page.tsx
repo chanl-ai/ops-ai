@@ -46,10 +46,7 @@ const columns: ColumnDef<Row>[] = [
         <div className="flex items-center gap-2">
           <span className="font-medium">{row.original.name}</span>
         </div>
-        {/* A span, not a div: the name column truncates descendant divs to one line, and a trigger is a sentence. */}
-        <span className="whitespace-normal text-xs text-muted-foreground break-words" title={row.original.trigger}>
-          Starts when: {row.original.trigger}
-        </span>
+        <div className="text-xs text-muted-foreground">Starts when: {row.original.trigger}</div>
       </div>
     ),
     enableHiding: false,

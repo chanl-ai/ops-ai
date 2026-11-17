@@ -19,11 +19,11 @@ type Tools = OpsAI['raw']['tools'];
 /** One MCP link as the list answers it, with its newest call. */
 export type McpLinkRow = Awaited<ReturnType<Tools['mcp_links_list_mcp_links']>>['data'][number];
 
-/** One page of the MCP links of the teams the person works in (GET /v1/mcp-links), searched on the name, by name. */
-export const useMcpLinks = (p: { page: number; pageSize: number; search?: string }) =>
+/** One page of the MCP links of the teams the person works in (GET /v1/mcp-links), searched on the name and narrowed to teams (`teamId`), by name. */
+export const useMcpLinks = (p: { page: number; pageSize: number; search?: string; teamId?: string[] }) =>
   usePagedQuery({
-    queryKey: [...mk.list(), p.page, p.pageSize, p.search ?? ''],
-    queryFn: () => sdk((ops) => ops.raw.tools.mcp_links_list_mcp_links({ query: { page: p.page, pageSize: p.pageSize, search: p.search } })),
+    queryKey: [...mk.list(), p.page, p.pageSize, p.search ?? '', p.teamId ?? []],
+    queryFn: () => sdk((ops) => ops.raw.tools.mcp_links_list_mcp_links({ query: { page: p.page, pageSize: p.pageSize, search: p.search, teamId: p.teamId } })),
   });
 
 export const useMcpLink = (id: string) => useTeamQuery({ queryKey: mk.one(id), queryFn: () => api.mcpLinks.get(id), enabled: !!id, retry: false });

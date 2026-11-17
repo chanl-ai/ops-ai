@@ -57,6 +57,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.team_defaults` | `TeamDefaults` | none | `team_default_agents` |
 | agents-service | `ops_agents.store.template_copies` | `TemplateCopies` | none | `template_copies` |
 | agents-service | `ops_agents.store.timers` | `TimerStore` | CAS, CLOCK, LOCK, TRANSACTION | `timers` |
+| agents-service | `ops_agents.store.tool_copies` | `ToolCopies` | CAS, TRANSACTION | `tool_catalog`, `tool_catalog_operations`, `tool_team_state` |
 | agents-service | `ops_agents.store.trigger_events` | `TriggerEvents` | none | `trigger_events` |
 | agents-service | `ops_agents.store.typed_records` | `VersionedRecords` | CAS, TRANSACTION | none |
 | agents-service | `ops_agents.store.usage` | `UsageLedger` | TRANSACTION | `thread_budgets` |

@@ -1,10 +1,14 @@
+import type { OpsAI } from '@chanl-ai/ops-ai';
+
 import type { ListParams } from './query';
 
-/** Where a proposed knowledge edit came from; `generated_faq` is an FAQ draft a source's FAQ step wrote. */
-export type ChangeOrigin = 'curation' | 'agent_fix' | 'source_sync' | 'generated_faq';
-/** A draft is `pending` until decided; `source_changed` when its section changed after it was drafted or approved. */
-export type ChangeStatus = 'pending' | 'approved' | 'rejected' | 'applied' | 'superseded' | 'source_changed';
-export type TrustState = 'verified' | 'changed' | 'unverified' | 'draft' | 'source_changed';
+type Kb = OpsAI['raw']['kb'];
+type Reply<K extends keyof Kb> = Awaited<ReturnType<Kb[K]>>;
+
+type ServedChange = Reply<'changes_get_change'>;
+export type ChangeOrigin = ServedChange['origin'];
+export type ChangeStatus = ServedChange['status'];
+export type TrustState = ServedChange['trust'];
 
 /** An FAQ draft: the pair, the passage it quotes, and the words of its answer the passage never uses. */
 export interface FaqDraft {
@@ -35,45 +39,19 @@ export interface ChangeCitation {
 }
 
 /**
- * A proposed edit to one passage of a knowledge document. Nothing reaches agents until the document's owner
- * approves it.
+ * A proposed edit to one passage of a knowledge document, as kb-service answers it; nothing reaches agents until the
+ * document's owner approves it. kb-service types `citedBy` and `faq` as free-form objects, and does not return `conflict`,
+ * `decisionReason` or `retest` yet; the console reads those three, so they stay here as view-only fields.
  */
-export interface KnowledgeChange {
-  id: string;
-  summary: string;
-  origin: ChangeOrigin;
-  /** Person, agent or source that proposed it. */
-  proposedBy: string;
-  rationale: string;
-  documentId: string;
-  documentTitle: string;
-  sourceId: string;
-  sourceName: string;
-  section: string;
-  kbs: { id: string; name: string }[];
-  fromVersion: string;
-  toVersion: string;
-  before: string;
-  after: string;
-  trust: TrustState;
-  freshness: 'fresh' | 'stale' | 'no_schedule';
-  reviewBy: string;
-  conflict?: ChangeConflict;
+export type KnowledgeChange = Omit<ServedChange, 'citedBy' | 'faq'> & {
   citedBy: ChangeCitation[];
-  /** Owner group or person who may decide. */
-  owner: string;
-  /** Computed for the current user and team. */
-  canDecide: boolean;
-  status: ChangeStatus;
-  createdAt: string;
-  decidedAt?: string;
-  decidedBy?: string;
+  /** Set on an FAQ draft. */
+  faq?: FaqDraft | null;
+  conflict?: ChangeConflict;
   decisionReason?: string;
   /** Set on approval: the citing workflows' tests that were queued. */
   retest?: { tests: number; workflows: string[] };
-  /** Set on an FAQ draft. */
-  faq?: FaqDraft | null;
-}
+};
 
 export type ChangeView = 'open' | 'mine' | 'resolved' | 'all';
 export type ChangeFilters = { origin?: string[]; kbId?: string[]; owner?: string[] };

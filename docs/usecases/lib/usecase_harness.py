@@ -582,7 +582,7 @@ def runner() -> Generator[str]:
 
 
 @contextmanager
-def tools(settings: dict[str, str] | None = None) -> Generator[httpx.Client]:
+def tools(settings: dict[str, str] | None = None, *, approval_rules: bool = False) -> Generator[httpx.Client]:
     """The tools service (tool gateway) on the use-case database, deciding with an OPA of its own: the compose OPA's
     key and policy are rewritten by every other tools-service that starts."""
     migrate = ["uv", "run", "python", "scripts/scripted_server.py", "--port", "0", "--db", DB, "--migrate-only"]
@@ -609,10 +609,22 @@ def tools(settings: dict[str, str] | None = None) -> Generator[httpx.Client]:
     tools_dir = ROOT / "services" / "tools-service"
     _prepare(["uv", "run", "alembic", "upgrade", "head"], cwd=tools_dir, env=env, check=True, capture_output=True)
     argv = ["uv", "run", "python", "-m", "ops_tools"]
-    with opa_server() as opa_url:
-        env["OPS_OPA_URL"] = opa_url
-        with _serve("tools", argv, TOOLS_PORT, env) as base, httpx.Client(base_url=base, timeout=30) as c:
-            yield c
+    with ExitStack() as stack:
+        # Every write is decided by the team's approval rules in platform-service, and without them tools-service
+        # refuses it (503 approval_rules_unavailable): `approval_rules` starts the run's own when the caller names
+        # none. Off by default: platform-service also feeds the new-host, publish and check-before-send readers, and
+        # use cases that make no writes are pinned to their answers without it.
+        if approval_rules and "OPS_PLATFORM_URL" not in env:
+            if not _PLATFORM_UP:
+                stack.enter_context(platform())
+            env["OPS_PLATFORM_URL"] = f"http://127.0.0.1:{PLATFORM_PORT}"
+        env["OPS_OPA_URL"] = stack.enter_context(opa_server())
+        base = stack.enter_context(_serve("tools", argv, TOOLS_PORT, env))
+        yield stack.enter_context(httpx.Client(base_url=base, timeout=30))
+
+
+# Set while this run's platform-service is up, so tools() points at it instead of starting a second one.
+_PLATFORM_UP = False
 
 
 @contextmanager
@@ -644,12 +656,17 @@ def platform(
     )
     argv = ["uv", "run", "python", "-m", "ops_platform"]
     internal = f"http://127.0.0.1:{PLATFORM_INTERNAL_PORT}"
+    global _PLATFORM_UP
     with (
         _serve("platform", argv, PLATFORM_PORT, settings, health="/v1/health", cwd=platform_dir) as base,
         httpx.Client(base_url=base, timeout=30) as public,
         httpx.Client(base_url=internal, timeout=30) as inner,
     ):
-        yield public, inner
+        _PLATFORM_UP = True
+        try:
+            yield public, inner
+        finally:
+            _PLATFORM_UP = False
 
 
 PROXY_PORT = int(os.environ.get("OPS_USECASE_PROXY_PORT", "8890"))
@@ -1105,7 +1122,7 @@ def demo() -> Generator[Demo]:
         models_url = stack.enter_context(models({"OPS_MODELS_FAKE_OPENAI_URL": fake}))
         bank = stack.enter_context(core_bank())
         agents_url = f"http://127.0.0.1:{AGENTS_PORT}"
-        gw = stack.enter_context(tools({**bank["settings"], "OPS_AGENTS_URL": agents_url}))
+        gw = stack.enter_context(tools({**bank["settings"], "OPS_AGENTS_URL": agents_url}, approval_rules=True))
         files = stack.enter_context(tempfile.TemporaryDirectory(prefix="usecase-kb-"))
         kb_client = stack.enter_context(kb(Path(files)))
         kb_url = str(kb_client.base_url).rstrip("/")

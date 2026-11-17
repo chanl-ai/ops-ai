@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0115_workflow_list_columns
+-- agents-service, stamped at 0117_validation_list_columns
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -859,6 +859,52 @@ CREATE TABLE template_copies (
 GO
 CREATE UNIQUE INDEX uq_template_copies_live ON template_copies (tenant_id, team_id, source, template_id) WHERE removed_at IS NULL AND detached_at IS NULL;
 GO
+CREATE TABLE tool_catalog (
+	tenant_id VARCHAR(64) NOT NULL, 
+	id VARCHAR(200) NOT NULL, 
+	revision BIGINT NOT NULL, 
+	deleted BIT NOT NULL, 
+	deleted_at FLOAT NULL, 
+	name VARCHAR(200) NOT NULL, 
+	title VARCHAR(200) NULL, 
+	app VARCHAR(200) NULL, 
+	owner_team VARCHAR(64) NULL, 
+	status VARCHAR(32) NULL, 
+	version VARCHAR(64) NULL, 
+	CONSTRAINT tool_catalog_pkey PRIMARY KEY (tenant_id, id)
+);
+GO
+CREATE INDEX ix_tool_catalog_owner_team ON tool_catalog (tenant_id, owner_team);
+GO
+CREATE TABLE tool_catalog_operations (
+	tenant_id VARCHAR(64) NOT NULL, 
+	module_id VARCHAR(200) NOT NULL, 
+	id VARCHAR(200) NOT NULL, 
+	name VARCHAR(200) NOT NULL, 
+	access VARCHAR(16) NOT NULL, 
+	requires_approval BIT NOT NULL, 
+	enabled BIT NOT NULL, 
+	CONSTRAINT tool_catalog_operations_pkey PRIMARY KEY (tenant_id, module_id, id)
+);
+GO
+CREATE INDEX ix_tool_catalog_operations_name ON tool_catalog_operations (tenant_id, name, module_id, id);
+GO
+CREATE TABLE tool_team_state (
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	id VARCHAR(200) NOT NULL, 
+	revision BIGINT NOT NULL, 
+	deleted BIT NOT NULL, 
+	deleted_at FLOAT NULL, 
+	module_id VARCHAR(200) NOT NULL, 
+	via VARCHAR(32) NOT NULL, 
+	operations NVARCHAR(max) NOT NULL, 
+	expires_at VARCHAR(40) NULL, 
+	CONSTRAINT tool_team_state_pkey PRIMARY KEY (tenant_id, team_id, id)
+);
+GO
+CREATE INDEX ix_tool_team_state_module ON tool_team_state (tenant_id, team_id, module_id);
+GO
 CREATE TABLE thread_budgets (
 	thread_id VARCHAR(64) NOT NULL, 
 	max_calls INTEGER NULL, 
@@ -941,6 +987,10 @@ CREATE TABLE registry_validations (
 	target VARCHAR(8) NOT NULL, 
 	results NVARCHAR(max) NOT NULL, 
 	summary NVARCHAR(max) NOT NULL, 
+	passed INTEGER NOT NULL, 
+	total INTEGER NOT NULL, 
+	regressions INTEGER NOT NULL, 
+	checks_failing INTEGER NOT NULL, 
 	CONSTRAINT registry_validations_pkey PRIMARY KEY (id)
 );
 GO
@@ -1402,6 +1452,24 @@ CREATE SECURITY POLICY ops_security.template_copies_isolation
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.template_copies AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.tool_catalog_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.tool_catalog,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.tool_catalog AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.tool_catalog AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.tool_catalog_operations_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.tool_catalog_operations,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.tool_catalog_operations AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.tool_catalog_operations AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.tool_team_state_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.tool_team_state,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.tool_team_state AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.tool_team_state AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.thread_budgets_tenant
     ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.thread_budgets,
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.thread_budgets AFTER INSERT,
@@ -1505,5 +1573,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0115_workflow_list_columns');
+INSERT INTO alembic_version (version_num) VALUES ('0117_validation_list_columns');
 GO

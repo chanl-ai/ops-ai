@@ -1,9 +1,8 @@
 """/v1/assurance: the Evals page's suites, runs and publish checks, and the saved cases on an agent or a skill.
 
 The saved-case routes answer in one request transaction (`Tx`), so a replace and the cases read back are one moment.
-The three lists take none: each names every asset's team through platform-service (`team_name`) while it builds the
-snapshot, and no connection is held while that answers. They page that snapshot in memory rather than in SQL, because
-each row is computed from several stores (an asset's cases, its latest run and its publish requests).
+The three lists take none: each pages in SQL in its own transaction (`api/assurance.py`), then names the page's teams
+through platform-service (`team_name`) with no connection held.
 """
 
 from __future__ import annotations
@@ -19,16 +18,16 @@ from ops_agents.app.evals import parse_cases
 from ops_agents.domain.evals import ASSET_AGENT, ASSET_SKILL, CASE_ACTIVE
 from ops_identity.fastapi import Tx
 from ops_service_kit.http import Envelope, In, Out
+from ops_service_kit.listing import ListParams
 
 from ...store.evals import EvalStore
 from ...store.skills import SkillRegistry
+from .. import assurance
 from ..agent_registry import registry as agent_registry
-from ..assurance import Snapshot, snapshot
 from ..assurance_schemas import GateList, RunList, SuiteList
 from ..auth import Principal, caller_of, principal, reader_of
 from ..deps import Runtime, runtime
 from ..envelope import ok
-from ..hitl_facade import page
 from .agents import EvalCaseInput
 
 router = APIRouter(dependencies=[Depends(principal)])
@@ -37,56 +36,16 @@ Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 Reader: TypeAlias = Annotated[Principal, Depends(reader_of("evals"))]  # noqa: UP040
 PageNo: TypeAlias = Annotated[int, Query(alias="page", ge=1)]  # noqa: UP040
 PageSize: TypeAlias = Annotated[int, Query(alias="pageSize", ge=1, le=200)]  # noqa: UP040
-# A repeated filter; `_answer` reads them from the request, these declare them in the API document.
+# A repeated filter; `_params` reads them from the request, these declare them in the API document.
 Filter: TypeAlias = Annotated[list[str] | None, Query()]  # noqa: UP040
 
-SUITE_FACETS = ("kind", "tier", "result")
-RUN_FACETS = ("kind", "trigger")
-GATE_FACETS = ("tier", "result")
 
-
-def _suite_result(s: dict[str, Any]) -> str:
-    if s["passRate"] is None:
-        return "not_run"
-    return "failing" if s["failing"] else "passing"
-
-
-def _gate_result(g: dict[str, Any]) -> str:
-    if g["blocked"]:
-        return "blocked"
-    return "ready" if g["reviewStatus"] == "pending" else "decided"
-
-
-def _columns(row: dict[str, Any], tab: str) -> dict[str, str]:
-    if tab == "suites":
-        return {"kind": row["asset"]["kind"], "tier": row["tier"], "result": _suite_result(row)}
-    if tab == "runs":
-        return {"kind": row["asset"]["kind"], "trigger": row["trigger"]}
-    return {"tier": row["tier"], "result": _gate_result(row)}
-
-
-def _answer(
-    request: Request, snap: Snapshot, tab: str, *, columns: tuple[str, ...], page_no: int, size: int, search: str | None
-) -> JSONResponse:
-    rows: list[dict[str, Any]] = getattr(snap, tab)
-    needle = (search or request.query_params.get("q") or "").strip().lower()
-    if needle:
-        rows = [r for r in rows if needle in r["asset"]["name"].lower()]
-    facets: dict[str, dict[str, int]] = {c: {} for c in columns}
-    for r in rows:
-        for c, v in _columns(r, tab).items():
-            facets[c][v] = facets[c].get(v, 0) + 1
-    for c in columns:
-        if wanted := request.query_params.getlist(c):
-            rows = [r for r in rows if _columns(r, tab)[c] in wanted]
-    return ok(
-        {
-            **page(rows, page_no, size),
-            "facets": facets,
-            "stats": snap.stats,
-            "tabCounts": snap.counts,
-        }
-    )
+def _params(request: Request, page_no: int, size: int, search: str | None, facets: tuple[str, ...]) -> ListParams:
+    """The shared list contract's parameters; each of `facets` filters by every value it is given."""
+    wanted = {name: values for name in facets if (values := request.query_params.getlist(name))}
+    params = ListParams(page=page_no, search=search, filters=wanted)
+    # This route's own page size (up to 200), as the Evals page asks for it.
+    return params.model_copy(update={"page_size": size})
 
 
 @router.get("/v1/assurance/suites", response_model=Envelope[SuiteList])
@@ -103,10 +62,10 @@ async def list_suites(
     result: Filter = None,
 ) -> JSONResponse:
     """One suite per agent, skill or workflow in the acting team that has saved cases or a run, with the latest
-    result of each case. Filters: `kind`, `tier`, `result` (failing, passing, not_run)."""
-    return _answer(
-        request, await snapshot(rt), "suites", columns=SUITE_FACETS, page_no=page_no, size=page_size, search=search
-    )
+    result of each case, by asset name then kind and id. Filters: `kind`, `tier`, `result` (failing, passing,
+    not_run); each facet counts under the search and the other filters. A page past the end answers the last page."""
+    params = _params(request, page_no, page_size, search, ("kind", "tier", "result"))
+    return ok(await assurance.suites(rt, params))
 
 
 @router.get("/v1/assurance/runs", response_model=Envelope[RunList])
@@ -121,10 +80,9 @@ async def list_runs(
     kind: Filter = None,
     trigger: Filter = None,
 ) -> JSONResponse:
-    """Every stored run of the team's agents and skills and every test run of its workflows, newest first."""
-    return _answer(
-        request, await snapshot(rt), "runs", columns=RUN_FACETS, page_no=page_no, size=page_size, search=search
-    )
+    """Every stored run of the team's agents and skills and every test run of its workflows, newest first, then by
+    id. Filters: `kind`, `trigger`."""
+    return ok(await assurance.runs(rt, _params(request, page_no, page_size, search, ("kind", "trigger"))))
 
 
 @router.get("/v1/assurance/gates", response_model=Envelope[GateList])
@@ -139,10 +97,9 @@ async def list_gates(
     tier: Filter = None,
     result: Filter = None,
 ) -> JSONResponse:
-    """The publish checks of the team's publish requests: each step's result and whether the request is blocked."""
-    return _answer(
-        request, await snapshot(rt), "gates", columns=GATE_FACETS, page_no=page_no, size=page_size, search=search
-    )
+    """The publish checks of the team's publish requests, newest request first: each step's result and whether the
+    request is blocked. Filters: `tier`, `result` (blocked, ready, decided)."""
+    return ok(await assurance.gates(rt, _params(request, page_no, page_size, search, ("tier", "result"))))
 
 
 class EvalCasesInput(In):

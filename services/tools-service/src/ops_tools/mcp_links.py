@@ -11,7 +11,7 @@ rows with its id, listed by `GET /v1/executions?link=<id>`.
 import re
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
 from pydantic import Field, JsonValue
 
@@ -135,10 +135,18 @@ def mcp_links_router(
         return row
 
     @r.get("", response_model=Envelope[ListResult[McpLinkView]])
-    async def list_mcp_links(who: Annotated[Caller, Depends(caller)], _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def list_mcp_links(  # pyright: ignore[reportUnusedFunction]
+        who: Annotated[Caller, Depends(caller)],
+        _: Tx,
+        q: ListQuery,
+        team_id: Annotated[list[str] | None, Query(alias="teamId", description="the links' team")] = None,
+    ) -> JSONResponse:
         """The links of every team the caller may see channels in, by name ignoring case, a page at a time on the
-        shared list contract (`search` on the name), each with its newest call. A person reads the team they act in;
-        the dev caller and a service token every team they may see."""
+        shared list contract (`search` on the name), each with its newest call; `teamId` (repeatable) keeps those
+        teams' links and is counted in `facets`. A person reads the team they act in; the dev caller and a service
+        token every team they may see, and a `teamId` outside those answers no rows."""
+        # Read from `q.filters`; declared so the document and the SDKs name it.
+        del team_id
         p = _principal(who)
         can(p, "deployments", "view", team=who.team.id, what="this team's MCP links")
         teams = [t for t in dict.fromkeys([who.team.id, *p.team_ids]) if ACCESS.may(p, "deployments", "view", team=t)]

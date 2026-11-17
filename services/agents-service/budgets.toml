@@ -110,19 +110,19 @@ queries = 3
 queries = 3
 
 ["GET /v1/assurance/gates"]
-queries = 9
-transactions = 9
-connections = 9
+queries = 5
+transactions = 1
+connections = 1
 
 ["GET /v1/assurance/runs"]
-queries = 9
-transactions = 9
-connections = 9
+queries = 5
+transactions = 1
+connections = 1
 
 ["GET /v1/assurance/suites"]
 queries = 9
-transactions = 9
-connections = 9
+transactions = 1
+connections = 1
 
 ["GET /v1/background"]
 queries = 2

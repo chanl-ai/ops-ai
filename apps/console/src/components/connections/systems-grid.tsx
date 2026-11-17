@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { CircleCheck, Plug, Plus } from 'lucide-react';
+import { CircleCheck, Plug, Plus, PlugZap } from 'lucide-react';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
@@ -12,14 +12,15 @@ import { PageLayout } from '@/components/page-layout';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
+import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { CardDescription } from '@/components/ui/card';
 import { APP_CARD_GRID, AppCard } from '@/components/connections/app-card';
 import { useCan } from '@/hooks/me-queries';
-import { type SystemCard, useSystems } from '@/hooks/systems-queries';
-import { useListParams } from '@/hooks/use-list-params';
+import { type AppFilters, type AppView, type SystemCard, useSystems } from '@/hooks/systems-queries';
+import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { initials, plural } from '@/lib/format';
 
 import type { ConnectMode } from './connect-system-dialog';
@@ -139,10 +140,11 @@ const columns = (onConnect: (s: SystemCard, mode: ConnectMode) => void): ColumnD
     ),
     enableHiding: false,
   },
-  { accessorKey: 'category', header: ({ column }) => <DataTableColumnHeader column={column} title="Category" />, enableSorting: false, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{row.original.category}</span> },
+  { accessorKey: 'category', header: ({ column }) => <DataTableColumnHeader column={column} title="Category" />, enableSorting: false, filterFn: facetFilterFn, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{row.original.category}</span> },
   {
     accessorKey: 'appState',
     enableSorting: false,
+    filterFn: facetFilterFn,
     header: ({ column }) => <DataTableColumnHeader column={column} title="State" />,
     cell: ({ row }) =>
       row.original.appState === 'connected' ? (
@@ -151,6 +153,8 @@ const columns = (onConnect: (s: SystemCard, mode: ConnectMode) => void): ColumnD
         <AppStateBadge card={row.original} />
       ),
   },
+  // Only the Kind filter reads this column; the server filters on it.
+  { accessorKey: 'kind', enableSorting: false, filterFn: facetFilterFn, header: 'Kind', cell: ({ row }) => <span className="text-muted-foreground">{row.original.kindLabel}</span> },
   { accessorKey: 'toolsCount', enableSorting: false, header: ({ column }) => <DataTableColumnHeader column={column} title="Tools" />, cell: ({ row }) => <span className="tabular-nums">{row.original.toolsCount}</span> },
   {
     id: 'actions',
@@ -163,14 +167,20 @@ const columns = (onConnect: (s: SystemCard, mode: ConnectMode) => void): ColumnD
 /**
  * The apps catalog on the console's standard list: search and a grid of cards or a table. One page of the team's
  * apps is read from GET /v1/apps, each card already joined, searched and paged on the server (by name, then id).
- * That route takes no state, category or Connected filter yet, so the page offers none.
+ * The tabs (All, Connected, Available) and the State, Category and Kind filters are sent to the route, which counts
+ * each tab and facet and lists connected apps first.
  */
 export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, mode: ConnectMode) => void; onNew: () => void }) {
   // Adding an app is managing the team's apps; a person who may not is offered no button, and each card says whom to ask.
   const mayAdd = useCan('connections', 'manage') === true;
   const router = useRouter();
-  const list = useListParams<Record<string, never>>('name', 20);
-  const systems = useSystems({ page: list.params.page, pageSize: list.params.pageSize, search: list.params.search });
+  const list = useListParams<AppFilters>('name', 20);
+  const [view, setView] = React.useState<AppView>('all');
+  const systems = useSystems({ page: list.params.page, pageSize: list.params.pageSize, search: list.params.search, view, filters: list.params.filters });
+  const counts = systems.data?.viewCounts;
+  const facets = systems.data?.facets ?? {};
+  const facetOptions = (key: string, label: (v: string) => string) =>
+    Object.entries(facets[key] ?? {}).map(([value, count]) => ({ value, label: label(value), count }));
   const [filterResetKey, setFilterResetKey] = React.useState(0);
   const cols = React.useMemo(() => columns(onConnect), [onConnect]);
   const rows: Row[] = React.useMemo(
@@ -201,7 +211,26 @@ export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, m
       ) : systems.isPending || !systems.data ? (
         <PageSkeleton statCards={0} tableRows={6} />
       ) : (
-        <div data-testid="systems-grid">
+        <div data-testid="systems-grid" className="flex flex-col gap-4">
+          <SavedViewTabs
+            ariaLabel="App views"
+            presets={[
+              { id: 'all', label: `All · ${counts?.all ?? 0}`, icon: Plug },
+              { id: 'connected', label: `Connected · ${counts?.connected ?? 0}`, icon: CircleCheck },
+              { id: 'available', label: `Available · ${counts?.available ?? 0}`, icon: PlugZap },
+            ]}
+            savedViews={[]}
+            activePresetId={view}
+            activeSavedViewId={null}
+            onSelectPreset={(id) => {
+              setView(id as AppView);
+              list.reset();
+            }}
+            onSelectSavedView={() => undefined}
+            onSaveView={() => undefined}
+            onDeleteView={() => undefined}
+            canSave={false}
+          />
           <DataTableWithViews
             columns={cols}
             data={rows}
@@ -211,6 +240,12 @@ export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, m
             renderGridItem={(s) => <SystemAppCard system={s} onConnect={onConnect} />}
             searchColumn="name"
             searchPlaceholder="Search apps"
+            initialColumnVisibility={{ kind: false }}
+            filters={[
+              { column: 'appState', title: 'State', options: facetOptions('appState', (v) => APP_STATE_LOOK[v as keyof typeof APP_STATE_LOOK]?.label ?? v) },
+              { column: 'category', title: 'Category', options: facetOptions('category', (v) => v) },
+              { column: 'kind', title: 'Kind', options: facetOptions('kind', (v) => v.charAt(0).toUpperCase() + v.slice(1)) },
+            ]}
             onColumnFiltersChange={list.onColumnFiltersChange}
             filterResetKey={filterResetKey}
             serverPagination={{

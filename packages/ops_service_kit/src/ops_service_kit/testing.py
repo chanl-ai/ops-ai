@@ -1,38 +1,21 @@
 """The statement budget every GET route is held to, for a service's tests (data-access standard, DA1 and DA6).
 
-  # services/<x>/tests/budgets.toml
-  ["GET /v1/runs"]
-  queries = 4
+  # services/<x>/budgets.toml (every row key: `over_budget` and the kit's CLAUDE.md)
   ["GET /v1/runs/{run_id}"]
   queries = 3
   transactions = 2          # listed: a stream's own transaction after the request's
-  connections = 2           # listed: the stream's transaction checks out its own connection
-  ["GET /v1/cases/{case_id}"]
-  queries = 4
-  hops_in_transaction = 1   # listed: a call to another service while the request's transaction is open
-  ["GET /v1/access/holders"]
-  queries = 6
-  query = { area = "agents", team = "{team_id}" }   # sent as the query string; `{name}` takes a seeded id
-  ["GET /v1/apps"]
-  queries = 9
-  first_queries = 24        # listed: the first call after a write rebuilds a cache; `queries` is then the next call
-  ["GET /v1/auth/oidc/callback"]
+  ["GET /v1/catalog"]
   queries = 2
-  status = 303              # listed: the status it answers by design, when not 200
+  caller = "service"        # called with the seed's `service_headers`; a person's token must be refused
   ["GET /v1/events"]
   not_budgeted = "a stream that never ends: no request line to read"   # not called; the reason is required
 
   # services/<x>/tests/conftest.py: the kit does not depend on pytest, so the service makes the fixture
   statement_budget = pytest.fixture(budget_check)
 
-  async def test_every_get_stays_in_its_budget(statement_budget: StatementBudget) -> None:
-      assert await statement_budget(Path(__file__).parent / "budgets.toml") == []
-
-The service's conftest gives three fixtures besides: `app`, its FastAPI app on the test database; `client`, an HTTP
-client on that app (a test builds it; no code under `src` may); and `seed_team`, which makes a team with `n` rows in
-each list and answers the headers to call as and the ids its paths need. Each GET is called
-through the real middleware at 5 and at 50 rows, and the numbers are read from the request's own `http.request` line:
-statements, transactions, connection checkouts, and calls to another service made while a transaction was open.
+The service's conftest also gives `app`, `client` (an HTTP client on it; no code under `src` may build one) and
+`seed_team`, which makes a team with `n` rows in each list and answers its headers, ids and a service's headers. Each
+GET is called through the real middleware at 5 and 50 rows and read from its own `http.request` line.
 """
 
 from __future__ import annotations
@@ -59,14 +42,20 @@ MAX_OPEN_MS = 2000.0
 # one database runs and the other does not. A listed transaction, connection or service-call count has none.
 QUERY_SLACK = 2
 SIZES = (5, 50)
+# Who a row's route is called as: a person of the seeded team unless the row says `caller = "service"`.
+CALLERS = ("person", "service")
+# What a person's token must answer on a route budgeted as a service's.
+REFUSED = (401, 403)
 
 
 @dataclass(frozen=True)
 class Seeded:
-    """What `seed_team` answers: the headers a request of that team carries and the ids its path templates name."""
+    """What `seed_team` answers: the headers a request of that team carries, the ids its path templates name and the
+    headers of a service calling for the team's tenant, which a row with `caller = "service"` is called with."""
 
     headers: Mapping[str, str]
     ids: Mapping[str, str] = field(default_factory=dict[str, str])
+    service_headers: Mapping[str, str] | None = None
 
 
 class Answer(Protocol):
@@ -113,25 +102,38 @@ async def over_budget(
     is open (none unless listed) or keeps a transaction open too long. A row's `query` table is sent as the query
     string, each value formatted with the seeded ids. A row with `first_queries` is called twice at each size: the
     first call, right after seeding wrote, is held to `first_queries` and the second to `queries`, so a route that
-    rebuilds a cache after a write is budgeted on both paths. A row with `not_budgeted = "<reason>"` is not called,
-    and needs its reason."""
+    rebuilds a cache after a write is budgeted on both paths. A row with `caller = "service"` is called with the
+    seed's `service_headers`, and named when the seed gives none or the route answers a person's token too (a route
+    people reach is budgeted as theirs). A row with `not_budgeted = "<reason>"` is not called, and needs its
+    reason."""
     rows: dict[str, dict[str, Any]] = tomllib.loads(await asyncio.to_thread(budgets.read_text))
     seen: dict[str, list[RequestLine]] = {}
     first: dict[str, list[RequestLine]] = {}
     problems: list[str] = []
+    no_service: set[str] = set()
+    takes_people: set[str] = set()
     for size in SIZES:
         seeded = await seed_team(size)
         for route in get_routes(app):
             row = rows.get(f"GET {route}")
-            if row is None or "not_budgeted" in row:
+            if row is None or "not_budgeted" in row or row.get("caller", "person") not in CALLERS:
                 continue
             query = urlencode({str(k): str(v).format(**seeded.ids) for k, v in row.get("query", {}).items()})
             url = route.format(**seeded.ids) + (f"?{query}" if query else "")
             expected = int(row.get("status", 200))
+            headers = dict(seeded.headers)
+            if row.get("caller") == "service":
+                if seeded.service_headers is None:
+                    no_service.add(route)
+                    continue
+                if (await client.get(url, headers=headers)).status_code not in REFUSED:
+                    takes_people.add(route)
+                    continue
+                headers = dict(seeded.service_headers)
             for into in (first, seen) if "first_queries" in row else (seen,):
                 stream.seek(0)
                 stream.truncate()
-                answer = await client.get(url, headers=dict(seeded.headers))
+                answer = await client.get(url, headers=headers)
                 lines: list[RequestLine] = [json.loads(line) for line in stream.getvalue().splitlines()]
                 line = next((x for x in lines if x.get("event") == "http.request"), None)
                 if answer.status_code != expected or line is None:
@@ -146,6 +148,16 @@ async def over_budget(
         if "not_budgeted" in row:
             if not str(row["not_budgeted"]).strip():
                 problems.append(f"GET {route}: not_budgeted needs a reason")
+            continue
+        caller = str(row.get("caller", "person"))
+        if caller not in CALLERS:
+            problems.append(f"GET {route}: caller {caller!r} is not one of {', '.join(CALLERS)}")
+            continue
+        if route in no_service:
+            problems.append(f'GET {route}: caller = "service" but seed_team gave no service_headers')
+            continue
+        if route in takes_people:
+            problems.append(f'GET {route}: answers a person\'s token; budget it as a person, not caller = "service"')
             continue
         measured = seen.get(route, [])
         if len(measured) != len(SIZES):
@@ -202,6 +214,7 @@ def budget_check(app: FastAPI, client: Client, seed_team: SeedTeam) -> Iterator[
 
 
 __all__ = [
+    "CALLERS",
     "MAX_OPEN_MS",
     "QUERY_SLACK",
     "SeedTeam",

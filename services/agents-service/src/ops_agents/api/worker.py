@@ -39,6 +39,7 @@ from ..store.graphs import GraphStore
 from ..store.leases import Leases
 from ..store.mailboxes import MailboxRow
 from ..store.tenancy import ENGINE_PASS
+from ..store.tool_copies import RESYNC_KEY
 from .acting_for import CallPeople, acting_for_tokens
 from .ai_steps_gate import RunTeamRules
 from .app import instance_owner, required_client, service_client
@@ -67,6 +68,7 @@ from .review_sla import PlatformReviewSla
 from .service_events import reminders
 from .sweeper import reconcile_forever
 from .task_type_seeds import StoredTaskTypes
+from .tool_catalog_copy import keep_in_step
 
 # This service's own migration chain: it starts only on a database that records the chain's head.
 MIGRATIONS = Path(__file__).resolve().parents[3] / "migrations"
@@ -93,12 +95,13 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
         if settings.kb_url:
             kb_http = httpx.AsyncClient(base_url=settings.kb_url, timeout=10)
             stack.push_async_callback(kb_http.aclose)
+        tools = required_client(settings, http, "tools", timeout=30) if http is not None else None
         # Agent steps run kernel turns here; with no model configured they fail with that reason.
         agents = kernel_agents(
             settings,
             db,
             gateway=gateway,
-            tools=required_client(settings, http, "tools", timeout=30) if http is not None else None,
+            tools=tools,
             kb=required_client(settings, kb_http, "kb") if kb_http is not None else None,
         )
         saver = await stack.enter_async_context(open_checkpointer(settings.database_url))
@@ -192,6 +195,12 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
         # Batches: each tick starts up to 50 of every tenant's pending rows, each in its own tenant and team.
         starting = asyncio.create_task(start_batches_forever(db, stop))
         stack.push_async_callback(lambda: asyncio.wait_for(starting, None))
+        if tools is not None:
+            # The tool catalogue copy's resync: a pass at start, then hourly, on the lifespan's supervisor.
+            await stack.enter_async_context(background.supervisor())
+            await background.start(
+                keep_in_step(db, tools, stop=stop, beats=heartbeats(db)), key=RESYNC_KEY, store=heartbeats(db)
+            )
         listener = email_listener(settings, db, owner, stack)
         if listener is not None:
             listening = asyncio.create_task(keep_mail_listening(listener, stop, settings.email_poll_seconds))
