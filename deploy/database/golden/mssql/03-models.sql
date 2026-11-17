@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- models-service, stamped at models_0012
+-- models-service, stamped at models_0013
 CREATE TABLE provider_connections (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(120) NOT NULL, 
@@ -182,5 +182,5 @@ CREATE TABLE alembic_version_models (
     CONSTRAINT alembic_version_models_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_models (version_num) VALUES ('models_0012');
+INSERT INTO alembic_version_models (version_num) VALUES ('models_0013');
 GO

@@ -126,6 +126,20 @@ def move_sql(source: str, target: str, which: str) -> list[str]:
     ]
 
 
+ALIAS_OUTCOME = {"ix_model_call_log_alias": "alias", "ix_model_call_log_outcome": "outcome"}
+
+
+def _create_if_missing(name: str, column: str) -> None:
+    """SQLAlchemy renders `if_not_exists` as plain CREATE INDEX on SQL Server, so the guard is written out there."""
+    if op.get_context().dialect.name == "mssql":
+        op.execute(
+            f"IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = '{name}' "
+            f"AND object_id = OBJECT_ID('model_call_log')) CREATE INDEX {name} ON model_call_log ({column})"
+        )
+    else:
+        op.create_index(name, "model_call_log", [column], if_not_exists=True)
+
+
 def upgrade() -> None:
     dialect = op.get_context().dialect.name
     # No call lands in the log while the spend is totalled and the tenant-less calls move: the step is one
@@ -149,13 +163,13 @@ def upgrade() -> None:
     )
     # Every read of the log names the tenant (the policy adds it) and the page sorts newest first.
     op.create_index("ix_model_call_log_tenant_created", "model_call_log", ["tenant_id", "created_at"])
-    # The call list is searched and filtered on its alias and outcome.
-    op.create_index("ix_model_call_log_alias", "model_call_log", ["alias"])
-    op.create_index("ix_model_call_log_outcome", "model_call_log", ["outcome"])
+    # The call list is searched and filtered on its alias and outcome. Guarded both ways, as a database that ran this
+    # revision before it held these indexes has neither (models_0013 adds them there).
+    for name, column in ALIAS_OUTCOME.items():
+        _create_if_missing(name, column)
     if dialect not in ("postgresql", "mssql"):
         return
-    if dialect == "postgresql":
-        op.execute("SET LOCAL row_security = off")
+    # model_call_log is policed only at the end of this step, so the backfill reads every tenant's calls as the owner.
     for statement in backfill_sql(dialect):
         op.execute(statement)
     for statement in move_sql("model_call_log", "model_calls_untenanted", "tenant_id IS NULL"):
@@ -179,8 +193,8 @@ def downgrade() -> None:
     if dialect in ("postgresql", "mssql"):
         for statement in move_sql("model_calls_untenanted", "model_call_log", "1 = 1"):
             op.execute(statement)
-    op.drop_index("ix_model_call_log_outcome", table_name="model_call_log")
-    op.drop_index("ix_model_call_log_alias", table_name="model_call_log")
+    for name in ALIAS_OUTCOME:
+        op.drop_index(name, table_name="model_call_log", if_exists=True)
     op.drop_index("ix_model_call_log_tenant_created", table_name="model_call_log")
     op.drop_table("model_key_spend")
     op.drop_index("ix_model_calls_untenanted_created_at", table_name="model_calls_untenanted")

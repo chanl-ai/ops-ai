@@ -167,3 +167,41 @@ def test_a_call_an_old_pod_is_writing_during_the_move_still_counts_toward_the_ca
     finally:
         command.upgrade(cfg, "head")
         asyncio.run(_sql(database_url, [("DELETE FROM model_call_log WHERE key_id = :k", {"k": key})]))
+
+
+ALIAS_OUTCOME = {"ix_model_call_log_alias": "alias", "ix_model_call_log_outcome": "outcome"}
+
+
+async def _alias_outcome_indexes(url: str, *, drop: bool = False) -> set[str]:
+    """The log's alias and outcome indexes that exist, after dropping them first when asked."""
+    log = sa.Table("model_call_log", sa.MetaData(), *(sa.Column(c, sa.String(64)) for c in ALIAS_OUTCOME.values()))
+    engine = create_async_engine(url)
+    async with engine.begin() as c:
+        if drop:
+            for name, column in ALIAS_OUTCOME.items():
+                await c.run_sync(sa.Index(name, log.c[column]).drop, checkfirst=True)
+        found = await c.run_sync(lambda s: {str(i["name"]) for i in sa.inspect(s).get_indexes("model_call_log")})
+    await engine.dispose()
+    return found & set(ALIAS_OUTCOME)
+
+
+def test_a_log_migrated_before_its_alias_and_outcome_indexes_gets_them_and_goes_down(
+    database_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A database that ran models_0012 before it indexed alias and outcome gets both from the next revision, a re-run
+    keeps them, and the way down past models_0012 does not fail on an index that is not there."""
+    monkeypatch.setenv("OPS_DATABASE_URL", database_url)
+    cfg = Config(str(ROOT / "alembic.ini"))
+    command.downgrade(cfg, "models_0012")
+    try:
+        assert asyncio.run(_alias_outcome_indexes(database_url, drop=True)) == set()
+        command.upgrade(cfg, "head")
+        assert asyncio.run(_alias_outcome_indexes(database_url)) == set(ALIAS_OUTCOME)
+        command.downgrade(cfg, "models_0012")
+        command.upgrade(cfg, "head")
+        assert asyncio.run(_alias_outcome_indexes(database_url)) == set(ALIAS_OUTCOME)
+        asyncio.run(_alias_outcome_indexes(database_url, drop=True))
+        command.downgrade(cfg, BEFORE)
+        assert asyncio.run(_alias_outcome_indexes(database_url)) == set()
+    finally:
+        command.upgrade(cfg, "head")
