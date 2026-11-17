@@ -4,8 +4,8 @@ hold the app's tool. A check whose behaviour is not built names the task it wait
 
 from __future__ import annotations
 
-from apps_walk import AUTH, app_path, apps_stack, target
-from usecase_harness import agents, check, data, finish, until
+from apps_walk import AUTH, TEAM_OF, app_path, apps_stack, target
+from usecase_harness import agents, as_role, check, data, finish, until
 
 APP = "plugin:test.header-key"
 KEYED = "plugin:test.person-key"
@@ -52,6 +52,9 @@ with apps_stack() as w, agents(gateway_url=str(w.gw.base_url).rstrip("/"), env=A
     rows = members.get("data") if isinstance(members, dict) else members
     james = next((m for m in rows or [] if m.get("email") == "j.richardson@harborpine.example"), {})
     removed = w.api.post("/v1/settings/members/delete", json={"ids": [james.get("id")]}, headers=admin)
+    # A removal changes the tenant's permissions, so a token issued before it is refused 401 permissions_changed:
+    # Priya signs in again, as the console does on that answer.
+    w.who["admin"] = admin = as_role(w.api, "admin", TEAM_OF["admin"])
     # platform-service's relay carries the removal to tools-service a moment later.
     until(lambda: (data(w.gw.get(app_path(KEYED), headers=admin)) or {}).get("peopleCount") == 0, timeout=30)
     later = (data(w.gw.get(app_path(KEYED), headers=admin)) or {}).get("peopleCount")
