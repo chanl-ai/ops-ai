@@ -53,8 +53,10 @@ Offline SQL cannot check first: a team or record with two tenants writes NULL in
 statement fails; an unmapped team's rows take `local`.
 
 Seeded workflows shared across tenants are copied, in Migration C, per tenant for exactly the (tenant, workflow id) pairs other tenants'
-threads or publish requests point at: the `registry_workflows` row, its versions and its `graph_versions`, with name,
-version and digest unchanged, so the digest check in `api/runs.py:94` still passes.
+threads or publish requests point at: the `registry_workflows` row (without its draft), its versions and its
+`graph_versions`, with name, version and digest unchanged, so the digest check in `api/runs.py:94` still passes. Each
+copy's source is chosen before any copy is made (`local` when it holds the workflow, else the first holder by name),
+and each copied workflow version carries `review_id` `copied`.
 
 Preflight: `make -C services/agents-service registry-tenant-preflight` lists, by the outside-dev rules, each team with
 no tenant, each deployment with no team and no thread, each team and each record with two or more tenants other than `local`, and exits 1 when any exists. It only
@@ -136,8 +138,10 @@ One Alembic chain (`CHAIN="agents"`).
 - Each registry store's `owner_team()` is one call to the shared `Store.owner_teams` with the reason `OWNER`, on the
   connection it is given.
 - Down: A refuses with a count while two tenants hold one agent slug, graph version or digest, and otherwise restores
-  the install-wide keys, recreates `channel_files` empty and drops the columns. C's down drops policies and grants and
-  deletes per-tenant seed copies whose `(name, digest)` matches the `local` row.
+  the install-wide keys, recreates `channel_files` empty and drops the columns. C's down drops policies and grants; 0108's
+  down deletes each workflow copy whose versions all still carry `copied` (one a tenant has published to since is
+  kept, and the down refuses with the count), then each `graph_versions` row another tenant holds with the same name,
+  version and digest, keeping the workflow's holder.
 - Both databases.
 
 ## Tests

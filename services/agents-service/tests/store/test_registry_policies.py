@@ -320,8 +320,9 @@ def _filtered(url: str) -> set[str]:
 
 
 def _pinned_agent(url: str, tenant: str) -> str:
-    """An agent whose older version pins one skill and whose newest pins two, one of them twice, written with no
-    `agent_skill_pins` rows, as an agent saved before agents 0113 is."""
+    """An agent whose older version pins one skill and whose newest pins two, one of them twice (the first at the
+    higher version, which the store keeps), beside entries no pin can come from, written with no `agent_skill_pins`
+    rows, as an agent saved before agents 0113 is."""
     agent = _tag("ag")
 
     async def write() -> None:
@@ -329,10 +330,15 @@ def _pinned_agent(url: str, tenant: str) -> str:
         try:
             a, v = registry_agents, registry_agent_versions
             await _as(e, tenant, "team_p", a.insert().values(_row(a, tenant, "team_p", id=agent, version=2)))
-            pins = [
-                {"skillId": "sk_a", "version": 2},
-                {"skillId": "sk_b", "version": 1},
+            pins: list[Any] = [
                 {"skillId": "sk_a", "version": 3},
+                {"skillId": "sk_b", "version": 1},
+                {"skillId": "sk_a", "version": 2},
+                {"skillId": "sk_c", "version": 1.5},
+                {"skillId": "sk_d", "version": "abc"},
+                {"skillId": "s" * 70, "version": 1},
+                {"skillId": "sk_e"},
+                "sk_f",
             ]
             for n, held in ((1, [{"skillId": "sk_old", "version": 1}]), (2, pins)):
                 row = _row(v, tenant, None, agent_id=agent, version=n, spec={"name": agent, "skillPins": held})
@@ -372,4 +378,4 @@ def test_the_policies_come_off_with_the_step_and_back_with_it(url: str, monkeypa
     finally:
         command.upgrade(Config(CONFIG), "head")
     assert _filtered(url) == POLICED
-    assert _pins(url, tenant, agent) == {("sk_a", 2, "team_p", tenant), ("sk_b", 1, "team_p", tenant)}
+    assert _pins(url, tenant, agent) == {("sk_a", 3, "team_p", tenant), ("sk_b", 1, "team_p", tenant)}

@@ -10,7 +10,8 @@ team), written in the transaction that saves the version (store/agent_registry.p
 team-owned table carries. The list also filters one team's skills by owner team and by origin, which two indexes on
 registry_skills serve.
 
-The rows are filled from each agent's newest version's `spec.skillPins` (the first pin of a skill named twice): listed
+The rows are filled from each agent's newest version's `spec.skillPins` (the first pin of a skill named twice; an
+entry that is not an object with a skillId of at most 64 characters and a whole version is skipped and counted): listed
 once in a session table, inside the migration's transaction, with the source tables' own policies set aside (on SQL
 Server each is dropped and made again before that transaction ends), then written BATCH rows at a time, each batch
 committed alone, so no lock lasts the whole fill. A row already there is skipped, so a fill that stops part way can
@@ -21,6 +22,7 @@ The down path drops the table and its policy. Runs on PostgreSQL and SQL Server.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import sqlalchemy as sa
@@ -55,6 +57,7 @@ SKILL_INDEXES = {
 # Rows per committed batch; under 5000, where SQL Server escalates row locks to a table lock.
 BATCH = 4000
 COLUMNS = ("tenant_id", "team_id", "agent_id", "skill_id", "version")
+log = logging.getLogger("alembic.runtime.migration")
 
 
 def _marked(name: str, *, team: bool) -> sa.Table:
@@ -67,8 +70,45 @@ def _column_type(column: sa.Column[Any]) -> str:
     return column.type.compile(dialect=mssql.dialect())
 
 
+def _entries(dialect: str) -> tuple[str, str, str, str, str]:
+    """(FROM clause of every `skillPins` entry of each agent's newest version, its position, skill id, version, the
+    condition a usable entry meets), as SQL. A usable entry is an object whose skillId is 1 to 64 characters and whose
+    version is a whole number of at most nine digits; anything else (1.5, "abc", a longer id, a bare string) is
+    skipped, so one malformed spec cannot stop the upgrade. Read as text and checked before any cast, since each
+    database refuses a bad cast differently."""
+    newest = (
+        "FROM registry_agents a JOIN registry_agent_versions v "
+        "ON v.agent_id = a.id AND v.version = a.version AND v.tenant_id = a.tenant_id "
+    )
+    if dialect == "mssql":
+        # The default schema gives each entry's position ([key]) and JSON type (5: an object); JSON_VALUE reads an
+        # entry only once CASE has seen it is an object, since it raises on anything that is not JSON text.
+        source = newest + (
+            "CROSS APPLY OPENJSON(CASE WHEN LEFT(JSON_QUERY(v.spec, '$.skillPins'), 1) = '[' "
+            "THEN JSON_QUERY(v.spec, '$.skillPins') END) e "
+        )
+        skill = "CASE WHEN e.type = 5 THEN JSON_VALUE(e.value, '$.skillId') END"
+        version = "CASE WHEN e.type = 5 THEN JSON_VALUE(e.value, '$.version') END"
+        usable = (
+            f"e.type = 5 AND LEN({skill}) BETWEEN 1 AND 64 AND LEN({version}) BETWEEN 1 AND 9 "
+            f"AND {version} NOT LIKE '%[^0-9-]%' AND TRY_CAST({version} AS INT) IS NOT NULL"
+        )
+        return source, "CAST(e.[key] AS INT)", skill, version, usable
+    held = "json_extract_path(v.spec, 'skillPins')"
+    source = newest + (
+        f"CROSS JOIN LATERAL json_array_elements(CASE WHEN json_typeof({held}) = 'array' THEN {held} "
+        "ELSE CAST('[]' AS JSON) END) WITH ORDINALITY AS e(value, n) "
+    )
+    skill, version = "(e.value ->> 'skillId')", "(e.value ->> 'version')"
+    usable = (
+        f"json_typeof(e.value) = 'object' AND char_length({skill}) BETWEEN 1 AND 64 AND {version} ~ '^-?[0-9]{{1,9}}$'"
+    )
+    return source, "e.n", skill, version, usable
+
+
 def _list_pins(dialect: str) -> str:
-    """A session table of every agent's newest pins, one row per agent and skill; returns its name."""
+    """A session table of every agent's newest pins, one row per agent and skill, the first pin of a skill named twice
+    (as store/agent_registry.py pins_of keeps); returns its name. Logs how many entries were skipped as unusable."""
     copy = "#pins_0113" if dialect == "mssql" else "pins_0113"
     op.execute(
         session_table_ddl(
@@ -77,30 +117,20 @@ def _list_pins(dialect: str) -> str:
             [("k", 130), ("tenant_id", 64), ("team_id", 64), ("agent_id", 64), ("skill_id", 64), ("version", 12)],
         )
     )
-    newest = (
-        "FROM registry_agents a JOIN registry_agent_versions v "
-        "ON v.agent_id = a.id AND v.version = a.version AND v.tenant_id = a.tenant_id "
-    )
-    if dialect == "mssql":
-        pins = (
-            "CROSS APPLY OPENJSON(v.spec, '$.skillPins') "
-            "WITH (skill_id NVARCHAR(64) '$.skillId', version INT '$.version') p "
-            "WHERE p.skill_id IS NOT NULL AND p.version IS NOT NULL "
-        )
-        skill, version, key = "p.skill_id", "MIN(p.version)", "a.id + '/' + p.skill_id"
-    else:
-        # json_to_recordset reads each pin's fields as OPENJSON ... WITH does on SQL Server.
-        held = "json_extract_path(v.spec, 'skillPins')"
-        pins = (
-            f"CROSS JOIN LATERAL json_to_recordset(CASE WHEN json_typeof({held}) = 'array' THEN {held} "
-            "ELSE CAST('[]' AS JSON) END) AS p(\"skillId\" VARCHAR(64), version INTEGER) "
-            'WHERE p."skillId" IS NOT NULL AND p.version IS NOT NULL '
-        )
-        skill, version, key = 'p."skillId"', "MIN(p.version)", "a.id || '/' || p.\"skillId\""
+    source, position, skill, version, usable = _entries(dialect)
+    if not op.get_context().as_sql:
+        skipped = op.get_bind().execute(sa.text(f"SELECT COUNT(*) {source}WHERE NOT ({usable})")).scalar_one()
+        if skipped:
+            log.warning(
+                "0113: skipped %d skill pin entries that are not an object with a skillId and a whole version", skipped
+            )
+    key = f"a.id + '/' + {skill}" if dialect == "mssql" else f"a.id || '/' || {skill}"
     op.execute(
         f"INSERT INTO {copy} (k, tenant_id, team_id, agent_id, skill_id, version) "
-        f"SELECT {key}, a.tenant_id, a.team_id, a.id, {skill}, CAST({version} AS VARCHAR(12)) {newest}{pins}"
-        f"GROUP BY a.tenant_id, a.team_id, a.id, {skill}"
+        "SELECT p.k, p.tenant_id, p.team_id, p.agent_id, p.skill_id, p.version FROM ("
+        f"SELECT {key} AS k, a.tenant_id, a.team_id, a.id AS agent_id, {skill} AS skill_id, {version} AS version, "
+        f"ROW_NUMBER() OVER (PARTITION BY a.id, {skill} ORDER BY {position}) AS r "
+        f"{source}WHERE {usable}) p WHERE p.r = 1"
     )
     return copy
 
