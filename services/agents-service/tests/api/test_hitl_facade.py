@@ -215,9 +215,9 @@ async def test_the_runs_list_builds_full_rows_for_its_page_only(
     built: list[str] = []
     full = hitl_facade.run_row
 
-    async def counting(rt: Runtime, row: dict[str, Any], *args: Any) -> dict[str, Any]:
+    async def counting(row: dict[str, Any], *args: Any) -> dict[str, Any]:
         built.append(row["id"])
-        return await full(rt, row, *args)
+        return await full(row, *args)
 
     monkeypatch.setattr(hitl_facade, "run_row", counting)
     page = await data(client, "/runs?view=needs_person&page=1&pageSize=1")

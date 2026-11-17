@@ -27,7 +27,7 @@ from ops_service_kit.logging import get_logger
 
 from ..store.cases import CaseStore
 from ..store.events import EventLog
-from ..store.graphs import ThreadRow
+from ..store.graphs import RunJournal, ThreadRow
 from ..store.leases import LeaseHeldError
 from ..store.review_assignments import ReviewAssignments
 from ..store.review_sources import ReviewSources
@@ -49,7 +49,7 @@ from .auth import (
 from .deps import Runtime
 from .option_inputs import apply_inputs, held_calls
 from .review_text import describe_call
-from .runs import config, definition, execute, graph_store, pending, resolve, resolve_rows
+from .runs import Graph, config, definition, execute, graph_store, pending, resolve, resolve_rows
 from .team_names import deciding_team
 from .tool_access import policy_of
 
@@ -217,23 +217,44 @@ async def _needs_step_up(rt: Runtime, payload: dict[str, Any]) -> bool:
     return bool(payload.get("step_up"))
 
 
-async def run_row(rt: Runtime, summary: dict[str, Any], decision: DecisionOut | None, now: datetime) -> dict[str, Any]:
+@dataclass(frozen=True)
+class PageReads:
+    """What `run_row` reads besides the checkpoint, for a whole page of threads: each thread's graph (or the error
+    resolving it raised), its latest decision and its runs' journals, oldest first."""
+
+    graphs: dict[str, Graph | ApiError]
+    decisions: dict[str, DecisionOut]
+    journals: dict[str, list[RunJournal]]
+
+
+async def page_reads(rt: Runtime, threads: list[ThreadRow]) -> PageReads:
+    """The graphs, decisions and run journals of `threads` in a fixed number of statements, so a page's reads do not
+    grow with its rows."""
+    ids = [t.id for t in threads]
+    journals: dict[str, list[RunJournal]] = {}
+    for run in await graph_store(rt).run_events(ids):
+        journals.setdefault(run.thread_id, []).append(run)
+    return PageReads((await resolve_rows(rt, threads)).graphs, await _decisions(rt, ids), journals)
+
+
+async def run_row(summary: dict[str, Any], reads: PageReads) -> dict[str, Any]:
     """One thread as a Cases RunRow (`RunRow` in apps/console/src/lib/types/cases.ts). State, status, subject, queue
     and SLA come from its summary row (`summary_rows`), as the list's do; this adds what only the checkpoint and the
-    journal hold: the steps, the waiting call, the error and the trigger."""
+    journal hold: the steps, the waiting call, the error and the trigger. Raises the error resolving its graph
+    raised (a version removed, a digest changed)."""
     row: dict[str, Any] = summary["thread"]
-    store = graph_store(rt)
-    _, graph = await resolve(rt, row["id"])
+    graph = reads.graphs[row["id"]]
+    if isinstance(graph, ApiError):
+        raise graph
     snap = await graph.aget_state(config(row["id"]))
     waiting = summary["state"] == "waiting"
     interrupts = pending(snap)
-    work = [r for r in await store.runs(row["id"]) if r["kind"] != "sla"]
+    work = [r for r in reads.journals.get(row["id"], []) if r.kind != "sla"]
+    decision = reads.decisions.get(row["id"])
     values: dict[str, Any] = snap.values or {}
     email: dict[str, Any] = values.get("email") or {}
-    last = work[-1] if work else None
-    error = next(
-        (e.get("data", {}).get("message") for e in (last or {}).get("events", []) if e["event"] == "error"), None
-    )
+    events = work[-1].events if work else []
+    error = next((_get(e.get("data"), "message") for e in events if e.get("event") == "error"), None)
     payload: dict[str, Any] = interrupts[0]["payload"] if waiting and interrupts else {}
     approved = 1 if decision and decision.decision == "approved" and decision.resumed_at else 0
     return {
@@ -248,7 +269,7 @@ async def run_row(rt: Runtime, summary: dict[str, Any], decision: DecisionOut | 
         **({"reviewId": row["id"]} if waiting else {}),
         **({"error": error} if summary["state"] == "failed" and error else {}),
         **_trigger(row["meta"] or {}, email),
-        "steps": _steps(work, list(snap.next)),
+        "steps": _steps([{"kind": r.kind, "events": r.events} for r in work], list(snap.next)),
         "state": summary["state"],
         "waitingOn": "Reviewers" if waiting else None,
         "queue": summary["queue"],
@@ -418,11 +439,11 @@ async def list_runs(
         if wanted:
             in_view = [r for r in in_view if str(r.get(column)) in wanted]
     paged = page(in_view, page_no, size)
-    decisions = await _decisions(rt, [r["id"] for r in paged["data"]])
+    reads = await page_reads(rt, [ThreadRow.model_validate(r["thread"]) for r in paged["data"]])
     full: list[dict[str, Any]] = []
     for r in paged["data"]:
         try:
-            full.append(await run_row(rt, r, decisions.get(r["id"]), now))
+            full.append(await run_row(r, reads))
         except (NotFound, Conflict) as e:
             # Its graph cannot be compiled (a version removed, a digest changed): leave it out, not the whole list.
             log.warning("case_row_skipped", thread=r["id"], graph=r["workflowId"], error=e.code)
@@ -434,7 +455,7 @@ async def get_run(rt: Runtime, thread_id: str) -> dict[str, Any]:
     found = await summary_rows(rt, now, only=thread_id)
     if not found:
         raise NotFound("Run")
-    return await run_row(rt, found[0], (await _decisions(rt, [thread_id])).get(thread_id), now)
+    return await run_row(found[0], await page_reads(rt, [ThreadRow.model_validate(found[0]["thread"])]))
 
 
 # ── Reviews ──

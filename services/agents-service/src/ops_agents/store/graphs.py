@@ -136,9 +136,10 @@ class StoredVersion(BaseModel):
 
 
 class RunJournal(BaseModel):
-    """One run's streamed events, by its thread."""
+    """One run's kind and streamed events, by its thread."""
 
     thread_id: str
+    kind: str
     events: list[dict[str, JsonValue]]
 
 
@@ -380,11 +381,11 @@ class GraphStore(RuntimeStore):
         return found, total, counted
 
     async def run_events(self, thread_ids: Sequence[str]) -> list[RunJournal]:
-        """The named threads' runs' events, oldest run first, in one statement."""
+        """The named threads' runs' kinds and events, oldest run first, in one statement."""
         if not thread_ids:
             return []
         q = (
-            sa.select(graph_runs.c.thread_id, graph_runs.c.events)
+            sa.select(graph_runs.c.thread_id, graph_runs.c.kind, graph_runs.c.events)
             .where(graph_runs.c.thread_id.in_(list(thread_ids)), mine(graph_runs), team_visible(graph_runs))
             .order_by(graph_runs.c.created_at, graph_runs.c.id)
         )
