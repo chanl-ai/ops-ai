@@ -521,7 +521,9 @@ def create_gateway_app(
     @app.get("/v1/tools/{name}", tags=["gateway"], response_model=Envelope[ToolAccess], responses=error_responses())
     async def tool_access(name: str, caller: CurrentService, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Internal (service token): a tool's access class from the gateway's registry, the one the policy decides
-        on. The review service asks here how many approvers a call needs instead of reading the registry itself."""
+        on. The review service asks here how many approvers a call needs instead of reading the registry itself. Read
+        under `tools:view`, as the grantable operations are; a tool of another team answers 404."""
+        can(caller, "tools", "view", what="the tool's access")
         access, policy, output, deadline = await registry.described(name, caller.tenant_id, caller.team_id)
         if access == "unknown":
             return as_response(Refused("", 404, "not_found", [f"tool {name} is not registered with the gateway"]))

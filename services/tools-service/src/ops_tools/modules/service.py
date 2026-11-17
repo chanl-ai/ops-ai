@@ -25,7 +25,7 @@ import httpx
 import yaml
 from pydantic import JsonValue
 
-from ops_access import Access, require_provisioner
+from ops_access import ANY_TEAM, Access, require_provisioner
 from ops_identity import Principal
 from ops_service_kit.errors import (
     ApiError,
@@ -220,6 +220,16 @@ def link_calls_of(who: Caller) -> str | None:
         return None
     scope = Access().can(who.principal, "mcp", "view", what="the link's calls")
     return who.principal.sub if scope == "own" else None
+
+
+def reads_teamless_calls(who: Caller) -> bool:
+    """Whether the caller reads the calls logged with no team (a tool call that named none, refused): activity.view
+    held in every team (`*`), as the account's own audit entries are read in platform-service. A team's own reader,
+    a service token and an API key read their team's calls only."""
+    p = who.principal
+    return p is not None and Access().may(
+        p, "activity", "view", team=ANY_TEAM, from_any_team=True, what="the calls that named no team"
+    )
 
 
 def _not_a_plugin(m: Aggregate) -> None:
@@ -1032,6 +1042,9 @@ class ModuleService:
                 counted=counted,
                 tenant_id=who.tenant_id,
                 team_ids=self._call_teams(who),
+                # The link's calls are its team's; the other reads add the calls that named no team for an
+                # every-team reader.
+                teamless=link_id is None and reads_teamless_calls(who),
                 tools=[tool] if tool else None,
                 module_ids=scope,
                 # A refused call on a tool no module holds is the team's audit evidence too; a moduleId filter asks
@@ -1080,7 +1093,9 @@ class ModuleService:
         team's call, or one on a module the caller's team does not see, is not found, never a different answer."""
         _can(who, "activity", "view", what="the tool-call log")
         async with isolation.request_transaction():
-            row = await self.calls.get(call_id, tenant_id=who.tenant_id, team_ids=self._call_teams(who))
+            row = await self.calls.get(
+                call_id, tenant_id=who.tenant_id, team_ids=self._call_teams(who), teamless=reads_teamless_calls(who)
+            )
             if row is None:
                 raise NotFound("Call")
             mods = {m["id"]: m for m in await self.store.seen(who.tenant_id) if self._sees(who, m)}

@@ -35323,7 +35323,7 @@
     },
     "/v1/tools/{name}": {
       "get": {
-        "description": "Internal (service token): a tool's access class from the gateway's registry, the one the policy decides\non. The review service asks here how many approvers a call needs instead of reading the registry itself.",
+        "description": "Internal (service token): a tool's access class from the gateway's registry, the one the policy decides\non. The review service asks here how many approvers a call needs instead of reading the registry itself. Read\nunder `tools:view`, as the grantable operations are; a tool of another team answers 404.",
         "operationId": "gateway_tool_access",
         "parameters": [
           {

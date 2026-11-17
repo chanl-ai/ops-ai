@@ -365,13 +365,23 @@ class CallLog(Store):
         async with self.tx() as c:
             await c.execute(gateway_calls.update().where(*where).values(outcome="lost", error=error))
 
-    async def get(self, call_id: str, *, tenant_id: str, team_ids: list[str]) -> GatewayCall | None:
-        """One call by its id, as the log recorded it, made in one of `team_ids`; None when there is none there."""
-        q = gateway_calls.select().where(
-            gateway_calls.c.id == call_id, gateway_calls.c.tenant_id == tenant_id, gateway_calls.c.team_id.in_(team_ids)
-        )
+    async def get(
+        self, call_id: str, *, tenant_id: str, team_ids: list[str], teamless: bool = False
+    ) -> GatewayCall | None:
+        """One call by its id, as the log recorded it, made in one of `team_ids` (or in no team, with `teamless`);
+        None when there is none there."""
+        q = gateway_calls.select().where(gateway_calls.c.id == call_id, *self._teams(tenant_id, team_ids, teamless))
         async with self.tx() as c:
             return await one(c, q, GatewayCall)
+
+    @staticmethod
+    def _teams(tenant_id: str, team_ids: list[str], teamless: bool) -> list[sa.ColumnElement[bool]]:
+        """The tenant and the teams a read names; `teamless` adds the calls logged with no team."""
+        teams = gateway_calls.c.team_id.in_(team_ids)
+        return [
+            gateway_calls.c.tenant_id == tenant_id,
+            sa.or_(teams, gateway_calls.c.team_id.is_(None)) if teamless else teams,
+        ]
 
     async def for_thread(self, thread_id: str, *, tenant_id: str) -> list[GatewayCall]:
         q = (
@@ -387,6 +397,7 @@ class CallLog(Store):
         *,
         tenant_id: str,
         team_ids: list[str],
+        teamless: bool = False,
         tools: list[str] | None = None,
         module_ids: list[str] | None = None,
         moduleless: bool = False,
@@ -399,10 +410,7 @@ class CallLog(Store):
         link_id: str | None = None,
         sub: str | None = None,
     ) -> list[sa.ColumnElement[bool]]:
-        where: list[sa.ColumnElement[bool]] = [
-            gateway_calls.c.tenant_id == tenant_id,
-            gateway_calls.c.team_id.in_(team_ids),
-        ]
+        where = CallLog._teams(tenant_id, team_ids, teamless)
         if tools is not None:
             where.append(gateway_calls.c.tool.in_(tools))
         if module_ids is not None:
@@ -477,6 +485,7 @@ class CallLog(Store):
         counted: bool = True,
         tenant_id: str,
         team_ids: list[str],
+        teamless: bool = False,
         tools: list[str] | None = None,
         module_ids: list[str] | None = None,
         moduleless: bool = False,
@@ -491,10 +500,12 @@ class CallLog(Store):
     ) -> ListPage:
         """One page of the same calls on the shared list contract: `search` matches the tool's name, `result` and
         `assistant` (repeatable) narrow to calls of that result or assistant and are counted in `facets`, each not
-        counting its own choice. Newest first, then by id, so pages never repeat or skip a row."""
+        counting its own choice. Newest first, then by id, so pages never repeat or skip a row. `teamless` adds the
+        calls logged with no team, to the page, its total and its facets alike."""
         where = self._where(
             tenant_id=tenant_id,
             team_ids=team_ids,
+            teamless=teamless,
             tools=tools,
             module_ids=module_ids,
             moduleless=moduleless,

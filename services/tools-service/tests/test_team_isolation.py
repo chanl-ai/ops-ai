@@ -20,14 +20,14 @@ import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
+from ops_identity import Auth, Identity, ServiceAuth, dev_service_signer, mint_service_token, service_verifiers
 from ops_identity.testing import TEST_TOKEN_TTL_S
 from ops_policy import mint
 from ops_service_kit.settings import Settings
 from ops_tools.modules.seed import load
 from ops_tools.store.modules import ModuleStore
 
-from .conftest import FakeReviews, build_app, service_headers
+from .conftest import FakeReviews, build_app, opa_client, service_headers
 from .test_review_decisions import HOST, PLATFORM, introspect, jwks, person
 
 # A team made on the Teams page: the dev seed's directory does not hold it.
@@ -251,3 +251,74 @@ async def test_another_services_grant_list_still_offers_every_teams_operations(
     listed = {o.get("moduleId") or o.get("module_id") for o in r.json()["data"]}
     assert "mod_core_banking" in listed and "mod_payments_hub" in listed, listed
     assert made["status"] != "published" or made["id"] in listed
+
+
+@pytest.fixture
+async def gateway(
+    engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]]
+) -> AsyncIterator[httpx.AsyncClient]:
+    """`people`'s app with the gateway's policy engine, so a call is decided and logged as in a run."""
+    await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
+    settings = Settings()
+    auth = Auth(
+        Identity(audience="tools", jwks=jwks, introspect=introspect, key_cache_s=0),
+        ServiceAuth(audience="tools", verifiers=service_verifiers(settings, "tools"), scopes=settings.service_scopes),
+    )
+    async with opa_client() as opa:
+        app = build_app(engine, seed, tenant, auth=auth, opa=opa)
+        async with (
+            app.router.lifespan_context(app),
+            httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tools") as c,
+        ):
+            yield c
+
+
+async def _teamless_call(c: httpx.AsyncClient, tenant: str, key: str, team: str | None = None) -> str:
+    """A call refused on a tool no module holds, from a service token naming `team`: with none, logged with no team."""
+    body = {"tool": "drop_tables", "input": {}, "key": key, "runContext": {"act": "test"}}
+    token = mint_service_token(
+        dev_service_signer(), service="agents", audience="tools", tenant_id=tenant, scopes=["tools:view"], team_id=team
+    )
+    r = await c.post("/v1/calls", json=body, headers={"Authorization": f"Bearer {token}"})
+    call_id = r.json().get("callId") or r.json().get("error", {}).get("details", {}).get("callId")
+    assert r.status_code == 403 and call_id, r.text
+    return str(call_id)
+
+
+async def _page(c: httpx.AsyncClient, who: dict[str, str]) -> dict[str, Any]:
+    r = await c.get("/v1/executions", params={"pageSize": 100}, headers=who)
+    assert r.status_code == 200, r.text
+    return r.json()["data"]
+
+
+# Who reads a call that named no team (a refusal is audit evidence): whoever holds activity.view in every team, the
+# account's reader, as platform-service reads the account's own audit entries; a team's own reader does not.
+TEAMLESS_READERS = {
+    "workspace admin (Admin in every team)": ({"team_platform": ["viewer"], "*": ["admin"]}, True),
+    "admin of the acting team only": ({"team_platform": ["admin"]}, False),
+    "builder of the acting team only": ({"team_platform": ["builder"]}, False),
+}
+
+
+@pytest.mark.parametrize("caller", list(TEAMLESS_READERS))
+async def test_a_call_that_named_no_team_is_read_by_the_every_team_reader_only(
+    gateway: httpx.AsyncClient,
+    tenant: str,
+    caller: str,
+) -> None:
+    client = gateway
+    access, sees = TEAMLESS_READERS[caller]
+    who = _signed(tenant, "Wanda Reader", access, "team_platform")
+    before = await _page(client, who)
+    mine = await _teamless_call(client, tenant, f"teamless-{caller}")
+    other = await _teamless_call(client, f"{tenant}_other", f"teamless-other-{caller}")
+    cards = await _teamless_call(client, tenant, f"teamless-cards-{caller}", team="team_cards")
+    page = await _page(client, who)
+    ids = {row["id"] for row in page["data"]}
+    assert (mine in ids, other in ids, cards in ids) == (sees, False, False), (caller, ids)
+    assert page["pagination"]["total"] == before["pagination"]["total"] + int(sees) == len(page["data"])
+    refused = page["facets"]["result"].get("Refused", 0)
+    assert refused == before["facets"]["result"].get("Refused", 0) + int(sees), page["facets"]
+    assert (await client.get(f"/v1/executions/{mine}", headers=who)).status_code == (200 if sees else 404)
+    for hidden in (other, cards):
+        assert (await client.get(f"/v1/executions/{hidden}", headers=who)).status_code == 404
