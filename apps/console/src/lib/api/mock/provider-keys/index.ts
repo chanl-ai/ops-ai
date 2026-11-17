@@ -1,6 +1,7 @@
 import type { ProviderKey } from '@/lib/types/provider-keys';
 
 import { ApiError } from '../../contract';
+import { list } from '../runtime';
 import type { ProviderKeysApi } from '../../provider-keys-contract';
 
 const DAY = 86_400_000;
@@ -14,7 +15,7 @@ const IN_USE: Record<string, string> = { OPENAI: 'openai' };
 export function createMockProviderKeys(): ProviderKeysApi {
   let rows = structuredClone(SEED);
   return {
-    list: async () => structuredClone(rows),
+    list: async (p) => list(rows, p, { text: (k) => k.name, value: () => '', facetKeys: [], id: (k) => k.name }, 'normal'),
     save: async (name) => {
       const before = rows.find((k) => k.name === name);
       const now = new Date().toISOString();

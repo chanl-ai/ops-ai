@@ -1,6 +1,7 @@
 import type { ProviderConnection } from '@/lib/types/models';
 
 import { ApiError } from '../../contract';
+import { list } from '../runtime';
 import type { ProviderConnectionsApi } from '../../provider-connections-contract';
 
 // Sample connections across an insurer, a retailer and a bank's own OpenAI account.
@@ -15,7 +16,7 @@ const SEED: ProviderConnection[] = [
 export function createMockProviderConnections(): ProviderConnectionsApi {
   let rows = structuredClone(SEED);
   return {
-    list: async () => structuredClone(rows),
+    list: async (p) => list(rows, p, { text: (c) => `${c.name} ${c.type}`, value: () => '', facetKeys: [], id: (c) => c.id }, 'normal'),
     create: async (input) => {
       if (rows.some((r) => r.name === input.name)) throw new ApiError(`A provider connection named ${input.name} exists.`, 409, undefined, 'provider_exists');
       const row: ProviderConnection = { id: `prov_${rows.length + 1}`, apiVersion: null, region: null, observedRegion: null, regionMismatch: null, ...input };

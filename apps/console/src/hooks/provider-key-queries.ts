@@ -2,14 +2,27 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
+import type { OptionSource } from '@/hooks/options-queries';
+import type { ListParams } from '@/lib/types/query';
 import type { ChatModelChoice, KeyWhere } from '@/lib/types/provider-keys';
 import { useTeamQuery } from './team-query';
 
 const KEY = ['provider-keys'] as const;
 
-/** The account's model provider keys by name (account admins only); a value never comes back. */
-export const useProviderKeys = (enabled = true) => useTeamQuery({ queryKey: KEY, queryFn: () => api.providerKeys.list(), retry: false, enabled });
+/** One page of the account's model provider keys by name (account admins only); a value never comes back. */
+export const useProviderKeys = (p: ListParams, enabled = true) => usePagedQuery({ queryKey: [...KEY, p], queryFn: () => api.providerKeys.list(p), retry: false, enabled });
+
+/** Saved keys for a picker: searched on the server as typed, or named by name (a key's name is its id). */
+export const providerKeyOptions: OptionSource = {
+  key: 'provider-key-options',
+  fetch: async ({ search, cursor, limit = 25, ids }) => {
+    const page = Number(cursor ?? 1);
+    const res = await api.providerKeys.list(ids?.length ? { page: 1, pageSize: Math.min(ids.length, 50), ids } : { page, pageSize: limit, search: search || undefined });
+    return { data: res.data.map((k) => ({ id: k.name, label: k.name })), nextCursor: !ids?.length && res.pagination.hasNext ? String(page + 1) : null };
+  },
+};
 
 function useKeyWrite<A, R>(fn: (a: A) => Promise<R>) {
   const qc = useQueryClient();
