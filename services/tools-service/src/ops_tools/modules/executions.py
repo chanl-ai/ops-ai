@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..store.calls import GatewayCall
+from ..store.modules import ModuleColumns
 from .seed import name_in_words
 
 # A replay ran nothing, so it is its own status, not a success; a write refused because the same one was running is a
@@ -38,7 +39,7 @@ def _identity(value: str, kinds: dict[str, str], names: dict[str, str]) -> dict[
 
 
 def call_row(
-    r: GatewayCall, names: dict[str, str], module: dict[str, Any] | None, title: str | None = None
+    r: GatewayCall, names: dict[str, str], module: ModuleColumns | None, title: str | None = None
 ) -> dict[str, Any]:
     """One call as the log shows it. `title` is the tool's display name (a plugin's manifest gives it); the row
     falls back to the tool's own name, so no reader shows a blank."""

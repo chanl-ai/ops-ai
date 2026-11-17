@@ -13,6 +13,8 @@ from ops_access import BY_KEY, Access, effective_answer, publish_mode, team_on
 from ops_identity import ActingForPerson, Principal, ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import Forbidden
 
+from ..store.modules import Module, ModuleColumns, Operation
+
 Mode = Literal["always", "major", "never"]
 MODES: tuple[Mode, ...] = ("always", "major", "never")
 # The identity headers a caller sent; agents-service resolves them exactly as tools-service did.
@@ -80,7 +82,7 @@ class WriteApprovals:
         self,
         tenant_id: str,
         team_id: str | None,
-        module: dict[str, Any] | None,
+        module: Module | None,
         *,
         access: str,
         setting: str | bool | None,
@@ -122,12 +124,12 @@ class WriteApprovals:
         return effective_answer(tool=own, app=app, team=team, channel=channel, test_account=test_account)
 
 
-def maker_asks(module: dict[str, Any] | None, tool: str | None) -> bool:
+def maker_asks(module: Module | None, tool: str | None) -> bool:
     """Whether the tool's reviewer answer is its maker's: a plugin's operation (its row has no editor, so the answer is
     the manifest's) or a seeded one that declared the wait (requires_approval true beside it)."""
     if not module or not tool:
         return False
-    operations: list[dict[str, Any]] = module.get("operations") or []
+    operations = module["operations"]
     op = next((o for o in operations if o.get("name") == tool), None)
     if op is None or op.get("approval_mode") != "reviewer":
         return False
@@ -139,7 +141,7 @@ def tool_key(tool: str) -> str:
     return f"tool:{tool}"
 
 
-def tool_mode(op: dict[str, Any]) -> str | None:
+def tool_mode(op: Operation) -> str | None:
     """The tool's own answer (none, person or reviewer) from its operation row: its approval_mode only. The older
     requires_approval flag is not read: a stored true cannot be told from the old default, so it follows the tool's
     app, then the team."""
@@ -212,7 +214,7 @@ def own_request_refusal(
     return None
 
 
-def app_ids(module: dict[str, Any]) -> set[str]:
+def app_ids(module: ModuleColumns) -> set[str]:
     """The ids a module's app goes by on the Apps page: its plugin's card, its connection, or the module itself."""
     template = str(module.get("template_id") or "")
     ids = {f"module:{module['id']}"}

@@ -24,7 +24,7 @@ from .modules.directory import Directory, owns_module
 from .modules.routes import ERRORS
 from .modules.service import Caller
 from .store.mocks import MOCK_CHANGE, MOCK_ROW, MockRow, MockStore, NewMock
-from .store.modules import ModuleStore
+from .store.modules import Module, ModuleStore, Operation
 
 # What a mock's body may weigh, as an operation's stub may (modules/service.py MAX_STUB_BYTES).
 MAX_BODY_CHARS = 64_000
@@ -101,7 +101,7 @@ def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory) -
     caller = caller_in(directory)
     r = APIRouter(prefix="/v1/tool-modules", tags=["tool-modules"], responses=ERRORS)
 
-    async def _operation(who: Caller, module_id: str, op_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    async def _operation(who: Caller, module_id: str, op_id: str) -> tuple[Module, Operation]:
         """The module, seen from the caller's team (404 otherwise, as every module read), and its operation."""
         m = await modules.get(who.tenant_id, module_id)
         if m is None or not (directory.sees_module(who.team, m) or (not who.verified and who.team.scope == "all")):
@@ -111,16 +111,15 @@ def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory) -
             raise NotFound(f"Operation {op_id}")
         return m, op
 
-    def _may_edit(who: Caller, m: dict[str, Any]) -> None:
+    def _may_edit(who: Caller, m: Module) -> None:
         # A team that reads the module through a workflow's grant changes none of its answers: 404, as an unseen one.
         if not owns_module(who.team, m.get("team_id"), verified=who.verified):
             raise NotFound(f"Module {m['id']}")
         if who.principal is not None:
             Access().can(who.principal, "tools", "edit", what="tools", protection=m.get("protection"))
 
-    def _checked(i: dict[str, Any], op: dict[str, Any]) -> None:
-        fields = cast(list[dict[str, Any]], op.get("input") or [])
-        names = {str(f["name"]) for f in fields}
+    def _checked(i: dict[str, Any], op: Operation) -> None:
+        names = {f["name"] for f in op["input"]}
         unknown = sorted(str(k) for k in cast(dict[str, Any], i.get("match") or {}) if k not in names)
         if unknown:
             raise ValidationFailed(

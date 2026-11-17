@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from ops_access import tool_waits
 from ops_agents.activities.catalog import Catalog
@@ -23,7 +23,7 @@ from .modules.policy import tool_mode
 from .modules.seed import PLATFORM_TOOLS, READ_TOOLS, SENDS, ensure_platform_tools, tool_title
 from .modules.seed import WORKFLOW_TOOLS as PLATFORM_MODULE_TOOLS
 from .store.connections import ConnectionStore
-from .store.modules import Aggregate, ModuleStore, served_operations
+from .store.modules import Aggregate, InputField, Module, ModuleStore, Operation, operation_defaults, served_operations
 from .store.team_defaults import TeamDefaults
 
 if TYPE_CHECKING:
@@ -43,7 +43,7 @@ WORKFLOW_TOOLS: dict[str, tuple[str, bool]] = {name: ("write", waits) for name, 
 SYSTEM_ONLY = frozenset(str(t["name"]) for t in PLATFORM_TOOLS if t.get("system"))
 
 
-def approval_policy(module: Aggregate, op: dict[str, Any]) -> dict[str, Any]:
+def approval_policy(module: Module, op: Operation) -> dict[str, Any]:
     """How a write to `op` is approved, as the gateway, OPA and the review service read it: `approvers` distinct people
     from `approverTeam`, and whether approving asks for a step-up (`stepUp`): set on the operation, or implied by two
     approvers. Whether the person who asked may approve is the tenant's `requesterMayDecide` policy."""
@@ -55,20 +55,20 @@ def approval_policy(module: Aggregate, op: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def input_schema(fields: list[dict[str, Any]]) -> dict[str, Any]:
+def input_schema(fields: list[InputField]) -> dict[str, Any]:
     """An operation's input fields as the JSON Schema a model is handed. Unknown arguments are refused at the gateway
     (`invalid_fields`), so the schema says so too."""
     props: dict[str, Any] = {}
     for f in fields:
         prop: dict[str, Any] = {"type": f["type"] if f["type"] in JSON_TYPES else "string"}
-        if f.get("description"):
-            prop["description"] = f["description"]
-        if f.get("enum"):
-            prop["enum"] = list(f["enum"])
-        if f.get("example") is not None:
-            prop["examples"] = [f["example"]]
-        if f.get("default") is not None:
-            prop["default"] = f["default"]
+        if description := f.get("description"):
+            prop["description"] = description
+        if enum := f.get("enum"):
+            prop["enum"] = list(enum)
+        if (example := f.get("example")) is not None:
+            prop["examples"] = [example]
+        if (default := f.get("default")) is not None:
+            prop["default"] = default
         props[f["name"]] = prop
     required = [f["name"] for f in fields if f.get("required")]
     return {"type": "object", "properties": props, "required": required, "additionalProperties": False}
@@ -84,6 +84,34 @@ def inferred(value: Any) -> dict[str, Any]:
     return {}
 
 
+def platform_operation(
+    name: str, access: Literal["read", "write"], rate_limit_per_min: int, *, draft: bool
+) -> Operation:
+    """An operation of the platform itself (the MCP surface's), which belongs to no module and is granted to no agent:
+    the gateway decides its access class and spends its own rate window."""
+    return {
+        **operation_defaults(),
+        "id": name,
+        "tool_id": name,
+        "name": name,
+        "description": "",
+        "access": access,
+        "enabled": True,
+        "executor": "local",
+        "method": None,
+        "path": None,
+        "headers": [],
+        "body": None,
+        "input": [],
+        "masked_output": [],
+        "binding": None,
+        "rate_limit_per_min": rate_limit_per_min,
+        "requires_approval": None,
+        "amount_max": None,
+        "draft": draft,
+    }
+
+
 @dataclass(frozen=True)
 class Resolved:
     """A tool the gateway may run: its access class, how it runs (`local`, `stub` or `http`), and, from the registry,
@@ -92,7 +120,7 @@ class Resolved:
     access: str
     executor: str
     module: Aggregate | None = None
-    operation: dict[str, Any] | None = None
+    operation: Operation | None = None
 
 
 def _declared(waits: bool | None) -> str | None:
@@ -344,6 +372,8 @@ class ToolRegistry:
             # A system tool is no module's operation, so no agent can be granted it; it resolves as the
             # platform's own, and the gateway runs it only for its system workflow.
             return Resolved(WORKFLOW_TOOLS[tool][0], "local") if tool in SYSTEM_ONLY else None
+        module: Module
+        op: Operation
         module, op = found
         if (
             self.plugins is not None

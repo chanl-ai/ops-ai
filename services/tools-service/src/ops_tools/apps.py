@@ -86,7 +86,7 @@ from .store.connections import (
     plugin_of,
     split_config,
 )
-from .store.modules import ModuleStore
+from .store.modules import CardModule, Module, ModuleStore
 from .store.secrets import SecretMeta
 from .store.team_defaults import TeamDefaults
 
@@ -622,9 +622,9 @@ def setting_offer(s: Setting) -> dict[str, Any]:
     return out
 
 
-def _built_in(app: dict[str, Any], module: dict[str, Any]) -> list[str]:
+def _built_in(app: dict[str, Any], module: Module | CardModule) -> list[str]:
     """The app's operations the module holds: all of them, or the ones the app names."""
-    held = [str(o["name"]) for o in cast(list[dict[str, Any]], module.get("operations") or [])]
+    held = [o["name"] for o in module["operations"]]
     wanted = app.get("operations")
     return [n for n in held if wanted is None or n in wanted]
 
@@ -1935,13 +1935,13 @@ async def app_tools(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
         if module is None:
             continue
         mine_ops = set(_built_in(app, module)) if app else None
-        for op in cast(list[dict[str, Any]], module.get("operations") or []):
-            name = str(op["name"])
+        for op in module["operations"]:
+            name = op["name"]
             if mine_ops is not None and name not in mine_ops:
                 continue
             title = tool_title(module, name, apps.plugins.title_of if apps.plugins else None)
             added = on_ops is None or name in on_ops
-            needs = set(cast(list[str], op.get("scopes") or []))
+            needs = set(op["scopes"])
             asked = on_ops is not None and added and not needs <= granted
             tools.append(
                 {

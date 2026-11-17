@@ -1,0 +1,44 @@
+# Static type errors in this project's test files, as pyright reports them: `<count> <path from the project>`.
+# A row may only fall: scripts/check_tests_typecheck.py --update lowers or drops rows and never adds or raises
+# one. A rise or a new row in a commit needs a maintainer's approving review (scripts/baseline_history.py).
+2 tests/test_account_choice.py
+2 tests/test_acting_for.py
+2 tests/test_app_accounts.py
+2 tests/test_app_off_for_team.py
+1 tests/test_ask_before_changes.py
+3 tests/test_body_encoding.py
+2 tests/test_call_limits.py
+4 tests/test_call_log_rows.py
+3 tests/test_calls.py
+6 tests/test_catalog_events.py
+1 tests/test_catalog_resync.py
+5 tests/test_code_runs.py
+1 tests/test_connections.py
+8 tests/test_egress_cookies.py
+4 tests/test_failure_sides.py
+1 tests/test_grantable_operations.py
+4 tests/test_header_keys.py
+1 tests/test_import.py
+1 tests/test_maker_approvals.py
+2 tests/test_module_sign_in.py
+3 tests/test_operation_example.py
+2 tests/test_package_apps.py
+7 tests/test_person_credentials.py
+2 tests/test_person_sign_in_first.py
+1 tests/test_personal_sign_in.py
+1 tests/test_platform_tools_module.py
+1 tests/test_plugin_credentials.py
+8 tests/test_plugin_environments.py
+1 tests/test_plugin_manifest_fields.py
+5 tests/test_plugin_paging.py
+1 tests/test_plugin_removed.py
+29 tests/test_plugins.py
+6 tests/test_registry_store.py
+2 tests/test_review_handoff.py
+1 tests/test_run_account.py
+3 tests/test_secrets.py
+5 tests/test_secrets_in_url.py
+1 tests/test_self_approval_read_live.py
+1 tests/test_workbench_runs.py
+2 tests/test_write_approval_policy.py
+1 tests/test_write_approvals_and_roles.py

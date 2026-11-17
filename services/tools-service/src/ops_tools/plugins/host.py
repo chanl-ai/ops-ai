@@ -14,7 +14,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 from urllib.parse import urlencode, urlsplit
 
 import httpx
@@ -37,7 +37,20 @@ from ..egress import EgressDenied, EgressPolicy, for_tenant
 from ..environments import LIVE
 from ..modules.seed import blank
 from ..store.connections import PERSON_ORIGIN, ConnectionStore, name_key, plugin_app, plugin_of
-from ..store.modules import Aggregate, ModuleStore, StaleModuleError
+from ..store.modules import (
+    AccountChoice,
+    AccountOption,
+    Aggregate,
+    Header,
+    Module,
+    ModuleColumns,
+    ModuleStore,
+    Operation,
+    StaleModuleError,
+    Version,
+    operation_defaults,
+)
+from ..store.modules import InputField as FieldRow
 from ..store.plugin_bindings import PluginBinding, PluginBindings
 
 log = get_logger("ops_tools.plugins")
@@ -234,7 +247,7 @@ def module_id_of(manifest: Manifest) -> str:
     return f"mod_plugin_{manifest.short}"
 
 
-def plugin_id_of(module: Mapping[str, Any]) -> str | None:
+def plugin_id_of(module: ModuleColumns) -> str | None:
     """The plugin a module is, from its template slot; None for every other module."""
     slot = str(module.get("template_id") or "")
     return slot.removeprefix(TEMPLATE_PREFIX) if slot.startswith(TEMPLATE_PREFIX) else None
@@ -254,14 +267,14 @@ def header_settings(headers: Mapping[str, str], tools: Iterable[Tool]) -> set[st
     return {n for t in texts for n in PLACE.findall(t)}
 
 
-def headers_of(headers: Mapping[str, str], tool: Tool, settings: Mapping[str, Any]) -> list[dict[str, str]]:
+def headers_of(headers: Mapping[str, str], tool: Tool, settings: Mapping[str, Any]) -> list[Header]:
     """A call's headers as a module operation holds them (`{key, value}`): the plugin's, then the tool's over them,
     rendered from the call's settings. A header whose setting is unset is left out. The kit's own rule, so `opsai plugin
     test` sends the same headers."""
     return [{"key": k, "value": v} for k, v in request_headers(headers, tool, settings).items()]
 
 
-CURSOR = {
+CURSOR: FieldRow = {
     "name": "cursor",
     "type": "string",
     "required": False,
@@ -321,10 +334,10 @@ def checked(tool: Tool) -> bool:
     )
 
 
-def input_field(name: str, f: InputField, *, paged: bool = False) -> dict[str, Any]:
+def input_field(name: str, f: InputField, *, paged: bool = False) -> FieldRow:
     """An input as the gateway checks a call against it. A paged tool's inputs are all optional there: its next page
     is asked with the cursor alone, and the plugin executor checks a first page's required inputs."""
-    out: dict[str, Any] = {
+    out: FieldRow = {
         "name": name,
         "type": f.type,
         "required": f.required and not paged,
@@ -333,7 +346,7 @@ def input_field(name: str, f: InputField, *, paged: bool = False) -> dict[str, A
     if f.default is not None:
         out["default"] = f.default
     if f.enum is not None and all(isinstance(v, str) for v in f.enum):
-        out["enum"] = list(f.enum)
+        out["enum"] = [v for v in f.enum if isinstance(v, str)]
     if f.format:
         out["format"] = f.format
     return out
@@ -353,23 +366,36 @@ def first_tools_on(m: Manifest) -> list[str]:
     return sorted(t.name for t in m.tools)
 
 
-def tools_added_view(m: Manifest, binding: PluginBinding | None) -> dict[str, Any]:
+def tools_added_view(m: Manifest, binding: PluginBinding | None) -> ToolsAdded:
     """What a call needs to refuse a tool the team has not added, in plain words: the operations added and their
     titles."""
     on = tools_added(m, binding)
     if on is None:
         return {}
     return {
-        "tools_on": sorted(on),
+        "tools_on": sorted(str(t) for t in on),
         "app_title": m.title,
         "tool_titles": {m.operation(t.name): t.title or t.name for t in m.tools},
     }
 
 
-def operation_of(m: Manifest, t: Tool, op_id: str) -> dict[str, Any]:
+def with_tools_added(module: Module, added: ToolsAdded) -> Module:
+    """The module with the team's added tools and their titles, as `tools_added_view` names them."""
+    out: Module = {**module}
+    if "tools_on" in added:
+        out["tools_on"] = added["tools_on"]
+    if "app_title" in added:
+        out["app_title"] = added["app_title"]
+    if "tool_titles" in added:
+        out["tool_titles"] = added["tool_titles"]
+    return out
+
+
+def operation_of(m: Manifest, t: Tool, op_id: str) -> Operation:
     """One tool as a module operation: on the http executor for a plain data tool, on the plugin executor for one that
     pages, checks its inputs or is Python. Built for the module row and, per call, from the team's version."""
     return {
+        **operation_defaults(),
         "id": op_id,
         "tool_id": f"tl_{m.operation(t.name)}",
         "name": m.operation(t.name),
@@ -400,7 +426,7 @@ def operation_of(m: Manifest, t: Tool, op_id: str) -> dict[str, Any]:
     }
 
 
-def following(m: Manifest, row_ops: Sequence[Mapping[str, Any]], kept: Iterable[Tool] = ()) -> list[dict[str, Any]]:
+def following(m: Manifest, row_ops: Sequence[Operation], kept: Iterable[Tool] = ()) -> list[Operation]:
     """The module row's operations for the installed manifest: each tool keeps the id of the row's operation
     with its name, a new tool takes the next id above the highest, and a tool the manifest dropped stays as its row,
     switched off, so a team whose version still has it keeps calling it and grants naming its id stay true. `kept` are
@@ -420,7 +446,9 @@ def following(m: Manifest, row_ops: Sequence[Mapping[str, Any]], kept: Iterable[
 
     out = [operation_of(m, t, next_id(m.operation(t.name))) for t in m.tools]
     installed = {m.operation(t.name) for t in m.tools}
-    out += [{**dict(o), "enabled": False} for o in row_ops if str(o["name"]) not in installed]
+    for o in row_ops:
+        if o["name"] not in installed:
+            out.append({**o, "enabled": False})
     held = installed | {str(o["name"]) for o in row_ops}
     for t in kept:
         name = m.operation(t.name)
@@ -444,7 +472,7 @@ def module_of(plugin: Plugin, *, tenant_id: str, at: datetime) -> Aggregate:
         input={"displayName": m.title, "name": f"plugin-{m.short}", "type": "http"},
     )
     ops = [operation_of(m, t, f"{module_id_of(m)}_op{i + 1}") for i, t in enumerate(m.tools)]
-    version = {**mod["versions"][0], "id": f"{module_id_of(m)}_v{m.version}", "version": m.version, "major": 1}
+    version: Version = {**mod["versions"][0], "id": f"{module_id_of(m)}_v{m.version}", "version": m.version, "major": 1}
     version.update(status="published", published_at=at, note=f"{m.title} plugin {m.version}")
     return {
         **mod,
@@ -458,6 +486,37 @@ def module_of(plugin: Plugin, *, tenant_id: str, at: datetime) -> Aggregate:
         "operations": ops,
         "versions": [version],
     }
+
+
+class ToolsAdded(TypedDict, total=False):
+    """The tools a team has added from an app's catalog, with the app's and the tools' titles."""
+
+    tools_on: list[str]
+    app_title: str
+    tool_titles: dict[str, str]
+
+
+class TeamVersion(TypedDict, total=False):
+    """A team's own plugin version, attached to the module a call resolves."""
+
+    plugin_tools: object
+    plugin_headers: dict[str, str]
+
+
+class NamedAccount(TypedDict, total=False):
+    """The account a call that names one signs in with (`id`), or why it is refused (`refused`)."""
+
+    id: str
+    refused: Refusal
+
+
+class Refusal(TypedDict, total=False):
+    """Why a call's account is refused or must be chosen, merged into the module the call resolves."""
+
+    account_missing: str
+    account_not_yours: str
+    sandbox_required: str
+    account_choice: AccountChoice
 
 
 @dataclass(frozen=True)
@@ -558,11 +617,11 @@ class PluginHost:
     def plugins(self) -> dict[str, Plugin]:
         return {item.plugin.manifest.id: item.plugin for item in self.loaded if item.plugin is not None}
 
-    def by_module(self, module: Mapping[str, Any]) -> Plugin | None:
+    def by_module(self, module: ModuleColumns) -> Plugin | None:
         pid = plugin_id_of(module)
         return self.plugins.get(pid) if pid else None
 
-    def title_of(self, module: Mapping[str, Any], operation: str) -> str | None:
+    def title_of(self, module: ModuleColumns, operation: str) -> str | None:
         """A plugin tool's title from its manifest, read here because the module row stores no title; None for an
         operation of any other module, or a tool without one."""
         plugin = self.by_module(module)
@@ -577,7 +636,7 @@ class PluginHost:
         plugin = self.plugins.get(pid) if pid else None
         return (plugin.manifest.title, plugin.manifest.display.logo) if plugin else None
 
-    def awaits_sign_in(self, module: Mapping[str, Any], conn: Mapping[str, Any]) -> bool:
+    def awaits_sign_in(self, module: ModuleColumns, conn: Mapping[str, Any]) -> bool:
         """Whether a plugin tool's address waits for its account's sign-in: the endpoint names a setting the token or
         the lookup after sign-in fills (Salesforce's instance), and the account holds none yet. Until then the
         account's address is the sign-in host, where its credentials go, not where its tools run."""
@@ -629,7 +688,7 @@ class PluginHost:
             if b.declarations
             for t in tools_of(b.declarations).values()
         ]
-        ops = following(m, cast(list[dict[str, Any]], row["operations"]), kept)
+        ops = following(m, row["operations"], kept)
         stored = {str(o["id"]): o for o in row["operations"]}
         same = len(ops) == len(stored) and all(
             o["id"] in stored and all(stored[o["id"]].get(k) == v for k, v in o.items()) for o in ops
@@ -739,14 +798,14 @@ class PluginHost:
             made += 1
         return made
 
-    async def visible(self, tenant_id: str, team_id: str | None, module: Mapping[str, Any]) -> bool:
+    async def visible(self, tenant_id: str, team_id: str | None, module: ModuleColumns) -> bool:
         """Whether the team sees the module in its tool lists: every other module yes, a plugin's only while on."""
         plugin = self.by_module(module)
         if plugin_id_of(module) is None:
             return True
         return plugin is not None and await self.off_reason(tenant_id, team_id, plugin) is None
 
-    async def team_connection(self, tenant_id: str, team_id: str, module: Mapping[str, Any]) -> str | None:
+    async def team_connection(self, tenant_id: str, team_id: str, module: ModuleColumns) -> str | None:
         """The connection a plugin's module signs in through for this team: its binding's default account. The
         module row is shared by every team that turned the plugin on, so it holds no connection of its own."""
         plugin = self.by_module(module)
@@ -858,7 +917,7 @@ class PluginHost:
         pick = default_sign_in(await self.connections.own_sign_ins(tenant_id, person, ids))
         return str(pick["connection_id"]) if pick is not None else None
 
-    async def account_choice(self, tenant_id: str, team_id: str, plugin: Plugin, person: str) -> dict[str, Any] | None:
+    async def account_choice(self, tenant_id: str, team_id: str, plugin: Plugin, person: str) -> AccountChoice | None:
         """What a call must ask the person when they hold two or more live accounts of the app and chose no default:
         the app and each account, named as its sign-in named the person; None when there is nothing to choose."""
         if self.connections is None:
@@ -868,7 +927,7 @@ class PluginHost:
         mine = await self.connections.own_sign_ins(tenant_id, person, list(live))
         if not choice_needed(mine):
             return None
-        accounts = [
+        accounts: list[AccountOption] = [
             {
                 "connectionId": str(t["connection_id"]),
                 "name": str(live[str(t["connection_id"])]["name"]),
@@ -885,7 +944,7 @@ class PluginHost:
 
     async def _named(
         self, tenant_id: str, team_id: str, plugin: Plugin, name: str, *, run: str, person: str | None
-    ) -> dict[str, Any]:
+    ) -> NamedAccount:
         """The account a call naming `name` signs in with (`id`), or why it is refused (`refused`). The name is one of
         the team's accounts, never another team's (account_named); an unknown name is refused rather than falling back
         to the default, so a call never acts in an org nobody chose. One person's own account signs only that person's
@@ -921,7 +980,7 @@ class PluginHost:
         account: str | None,
         accounts: Mapping[str, str] | None,
         person: str | None,
-    ) -> Chosen | dict[str, Any]:
+    ) -> Chosen | Refusal:
         """The account a call on `plugin`'s accounts signs in with (the team's binding's, or another the call or the
         person names), or what the call is refused or asked instead (`account_missing`, `account_choice`, ...).
         A package app's call passes the app it runs on, so it chooses among that app's accounts only."""
@@ -932,7 +991,9 @@ class PluginHost:
         if account:
             refused = await self._named(tenant_id, team_id, plugin, account, run=run, person=person)
             if "refused" in refused:
-                return dict(refused["refused"])
+                return refused["refused"]
+            if "id" not in refused:
+                raise KeyError("id")
             return Chosen(refused["id"])
         if person:
             # A call naming no account, for a person signed in to several: the one they pinned as their default;
@@ -975,13 +1036,13 @@ class PluginHost:
         self,
         tenant_id: str,
         team_id: str | None,
-        module: Aggregate,
+        module: Module,
         run: str,
         *,
         account: str | None = None,
         accounts: Mapping[str, str] | None = None,
         person: str | None = None,
-    ) -> Aggregate:
+    ) -> Module:
         """The module as this team's call made in `run` (test or live) sees it: the account it signs in with
         (`connection_id`, from records.account_for, and whether it is a `sandbox`), the endpoint and egress hosts
         rendered with that account's settings, and the merged settings for the transform and a Python tool. A plugin
@@ -998,15 +1059,12 @@ class PluginHost:
             # Off for this team (installed, not turned on): the refusal names the app and team, so chat draws the card
             # that asks an admin to turn it on.
             off = {"app": plugin.manifest.title, "appId": plugin_app(plugin.manifest.id), "teamId": team_id}
-            return {
-                **module,
-                "plugin_off": reason or "No team.",
-                **({"app_off": off} if team_id is not None else {}),
-                "connection_id": None,
-                "egress_hosts": [],
-            }
+            refused: Module = {**module, "plugin_off": reason or "No team.", "connection_id": None, "egress_hosts": []}
+            if team_id is not None:
+                refused["app_off"] = off
+            return refused
         b = await self.bindings.get(tenant_id, team_id, plugin.manifest.id)
-        module = {**module, **tools_added_view(plugin.manifest, b)}
+        module = with_tools_added(module, tools_added_view(plugin.manifest, b))
         runs_on = plugin.manifest.connection.runs_on
         # A package app signs in with an account of the app it runs on (`signs`), chosen as that app's own calls
         # choose one; it has no account of its own.
@@ -1018,7 +1076,11 @@ class PluginHost:
         if signs is not plugin:
             reason = await self.off_reason(tenant_id, team_id, signs)
             if reason is not None:
-                off = {"app": signs.manifest.title, "appId": plugin_app(signs.manifest.id), "teamId": team_id}
+                off: dict[str, str | None] = {
+                    "app": signs.manifest.title,
+                    "appId": plugin_app(signs.manifest.id),
+                    "teamId": team_id,
+                }
                 return {**module, "plugin_off": reason, "app_off": off, "connection_id": None, "egress_hosts": []}
             signs_b = await self.bindings.get(tenant_id, team_id, signs.manifest.id)
             if (accounts or {}).get(plugin_app(plugin.manifest.id)):
@@ -1034,7 +1096,7 @@ class PluginHost:
             return {**module, **chosen, "connection_id": None, "egress_hosts": []}
         # The team's own plugin version, attached before the instance and header checks, so a team that is on
         # but not yet signed in still lists its own version's tools.
-        team: dict[str, Any] = {}
+        team: TeamVersion = {}
         if self.versions and b and b.declarations:
             decl = b.declarations
             team = {"plugin_tools": tools_of(decl), "plugin_headers": declared_headers(decl)}
@@ -1063,9 +1125,7 @@ class PluginHost:
         endpoint = render(plugin.manifest.endpoint, settings)
         hosts = hosts_of(plugin.manifest, settings)
         tools = cast(dict[str, Tool], team.get("plugin_tools") or {t.name: t for t in plugin.manifest.tools})
-        named = header_settings(
-            cast(dict[str, str], team.get("plugin_headers", plugin.manifest.headers)), tools.values()
-        )
+        named = header_settings(team.get("plugin_headers", plugin.manifest.headers), tools.values())
         unsendable = sorted(n for n in named if UNSENDABLE.search(str(settings.get(n) or "")))
         if unsendable:
             return {
@@ -1183,7 +1243,7 @@ class PluginHost:
         # The same answer often names who signed in (Salesforce's userinfo: preferred_username, email).
         return value, person_named(doc)
 
-    def operation(self, module: Mapping[str, Any], op: dict[str, Any]) -> dict[str, Any]:
+    def operation(self, module: Module, op: Operation) -> Operation:
         """The operation as this call runs it, from the loaded manifest rather than the module row, which is written
         once per tenant and holds no team's settings: the tool's amount limit, its headers rendered from the
         call's settings, and a form tool's form. Unchanged for a plugin that is off for the call or not loaded."""
@@ -1205,13 +1265,13 @@ class PluginHost:
                     else f"{m.title} no longer has this tool, and this team's version does not either."
                 )
                 return {**op, "enabled": False, "hidden_reason": why}
-            headers = cast(dict[str, str], module.get("plugin_headers") or {})
+            headers = module.get("plugin_headers") or {}
             op = {**op, **operation_of(m, tool, str(op["id"]))}
         else:
             tool = m.tool(name)
             if tool is None:
                 return op
-        out = {
+        out: Operation = {
             **op,
             "amount_max": tool.amount_max,
             "headers": headers_of(headers, tool, module.get("plugin_settings") or {}),

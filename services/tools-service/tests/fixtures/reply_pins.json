@@ -2277,12 +2277,20 @@
        "workflowName": "dispute_email"
       }
      ],
-     "facets": {},
+     "facets": {
+      "assistant": {
+       "Unnamed assistant": 2
+      },
+      "result": {
+       "Failed": 1,
+       "Ran": 1
+      }
+     },
      "pagination": {
       "hasNext": false,
       "hasPrev": false,
       "page": 1,
-      "pageSize": 50,
+      "pageSize": 20,
       "total": 2,
       "totalPages": 1
      }

@@ -50,6 +50,7 @@ from ..egress import EgressDenied, for_tenant
 from ..executor import Trial, scrubbed_values
 from ..graph_mailbox import CursorRefused, CursorSeal
 from ..secrets import scrub
+from ..store.modules import Module, Operation
 
 if TYPE_CHECKING:
     from ..executor import HttpExecutor
@@ -96,8 +97,8 @@ class PluginExecutor:
 
     async def run(
         self,
-        module: dict[str, Any],
-        op: dict[str, Any],
+        module: Module,
+        op: Operation,
         args: dict[str, Any],
         *,
         actor: str,
@@ -142,8 +143,8 @@ class PluginExecutor:
         plugin: Plugin,
         tool: Tool,
         *,
-        module: dict[str, Any],
-        op: dict[str, Any],
+        module: Module,
+        op: Operation,
         args: dict[str, Any],
         prepared: Prepared | None,
         sites: Sequence[str] = (),
@@ -258,8 +259,8 @@ class PluginExecutor:
     async def _data(
         self,
         tool: Tool,
-        module: dict[str, Any],
-        op: dict[str, Any],
+        module: Module,
+        op: Operation,
         args: dict[str, Any],
         *,
         actor: str,
@@ -290,15 +291,14 @@ class PluginExecutor:
             sent = paged.arguments(tool, given, state)
         except InputRefused as e:
             return _failure("INVALID_INPUT", str(e), 422, OURS)
-        target, call = module, op
+        target: Module = module
+        call: Operation = op
         if state is not None and paging is not None and paging.rule in paged.FOLLOWS_LINK:
-            followed = paged.follow(str(module["endpoint"]), str(state.get("link") or ""))
+            followed = paged.follow(str(module.get("endpoint")), str(state.get("link") or ""))
             if followed is None:
                 return _failure("INVALID_INPUT", "This cursor holds no page address this plugin can follow.", 422, OURS)
-            target, call = (
-                {**module, "endpoint": followed[0]},
-                {**op, "method": "GET", "path": followed[1], "body": None},
-            )
+            target = {**module, "endpoint": followed[0]}
+            call = {**op, "method": "GET", "path": followed[1], "body": None}
             sent = {}
         asked = dict(sent)
         found: dict[str, Any] = {}

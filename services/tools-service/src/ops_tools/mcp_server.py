@@ -43,7 +43,7 @@ from .environments import TEST
 from .gateway_calls import MCP, WRITES, Allowed, CallRequest, GatewayCalls, Outcome, Run
 from .mcp_tools import PLATFORM, PlatformTools
 from .modules.directory import Directory, Sees, Team
-from .registry import Resolved, ToolRegistry
+from .registry import Resolved, ToolRegistry, platform_operation
 from .store.mcp_links import McpLink, McpLinks
 
 # `/mcp/<team>` is the team's whole address; `/mcp/<team>/<link>` one of its MCP links (store/mcp_links.py).
@@ -54,9 +54,7 @@ WORKFLOW_PREFIX = "workflow__"
 # Starting a picked workflow's live version: it makes a run, and the workflow's own review steps are its gate, as
 # agents-service decides for a workflow an agent calls (tool_catalog.py, requiresApproval False), so it does not wait
 # as other MCP writes do.
-WORKFLOW_RUN = Resolved(
-    "write", PLATFORM, operation={"name": "start_workflow", "access": "write", "rate_limit_per_min": 30, "draft": True}
-)
+WORKFLOW_RUN = Resolved("write", PLATFORM, operation=platform_operation("start_workflow", "write", 30, draft=True))
 
 
 @dataclass(frozen=True)

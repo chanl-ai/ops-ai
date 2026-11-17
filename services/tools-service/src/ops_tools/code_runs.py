@@ -25,6 +25,7 @@ from ops_service_kit.errors import Unauthorized, Unprocessable
 from .executor import URL_VAR
 from .registry import Resolved
 from .secrets import SecretMissing, SecretResolver
+from .store.modules import Operation
 from .tools import ToolCaller
 
 PURPOSE = "code-run"
@@ -50,7 +51,7 @@ class CodeExecutor:
 
     def token(
         self,
-        op: dict[str, Any],
+        op: Operation,
         code: dict[str, Any],
         caller: ToolCaller,
         key: str,
@@ -80,7 +81,7 @@ class CodeExecutor:
 
     async def run(
         self,
-        op: dict[str, Any],
+        op: Operation,
         args: dict[str, Any],
         *,
         key: str,

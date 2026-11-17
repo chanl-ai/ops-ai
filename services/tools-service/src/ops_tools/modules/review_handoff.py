@@ -12,7 +12,7 @@ from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.logging import get_logger
 
 from ..store.review_handoffs import ReviewHandoffs
-from .review_events import access_event
+from .review_events import AccessModule, AccessRequest, access_event
 
 log = get_logger("ops_tools.review_handoff")
 # The id the seed gives a version waiting for review until Reviews opens it and names its own.
@@ -51,9 +51,20 @@ async def hand_over(store: ReviewHandoffs, agents: ServiceClient) -> int:
         m = modules.get((a.tenant_id, a.module_id))
         if m is None:
             continue
-        module = {"id": a.module_id, "tenant_id": a.tenant_id, "display_name": m.display_name}
+        module: AccessModule = {"id": a.module_id, "tenant_id": a.tenant_id, "display_name": m.display_name}
         # access_event reads a request as modules/service.py holds one, by its column names.
-        request = {**a.model_dump(), "decider_team": a.decider_team or m.team_id}
+        request: AccessRequest = {
+            "id": a.id,
+            "workflow_id": a.workflow_id,
+            "workflow_name": a.workflow_name,
+            "operations": [str(o) for o in a.operations],
+            "environment": a.environment,
+            "expires_at": a.expires_at,
+            "justification": a.justification,
+            "decider_team": a.decider_team or m.team_id,
+            "requested_by": a.requested_by,
+            "requested_by_email": a.requested_by_email,
+        }
         await store.start_access_run(a, event=access_event(module, request))
         sent += 1
     return sent

@@ -28,7 +28,7 @@ from ops_identity import ACTING_FOR_HEADER, ActingForTokens, Principal, ServiceC
 from ops_policy import Ed25519Signer
 from ops_service_kit.errors import ApiError
 
-from .registry import Resolved
+from .registry import Resolved, platform_operation
 
 TIMEOUT = 15.0
 # How the gateway runs an operation of this file (GatewayCalls.call with `run`); no registry module holds them.
@@ -203,7 +203,9 @@ class PlatformTools:
         return Resolved(
             access,
             PLATFORM,
-            operation={"name": o.name, "access": access, "rate_limit_per_min": o.rate_limit_per_min, "draft": o.draft},
+            operation=platform_operation(
+                o.name, "read" if o.read_only else "write", o.rate_limit_per_min, draft=o.draft
+            ),
         )
 
     async def run(self, name: str, args: dict[str, Any], *, who: Principal, team: str) -> ToolOutcome:

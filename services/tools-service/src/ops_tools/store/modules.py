@@ -15,10 +15,12 @@ from __future__ import annotations
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime, timedelta
-from typing import Any, ClassVar, TypedDict, cast
+from decimal import Decimal
+from typing import Any, ClassVar, Literal, NotRequired, TypedDict
 
 import sqlalchemy as sa
-from pydantic import TypeAdapter
+from pydantic import JsonValue, TypeAdapter
+from sqlalchemy import RowMapping
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 from sqlalchemy.sql.schema import SchemaItem
@@ -240,7 +242,7 @@ operation_mocks = sa.Table(
 # reaching the system.
 EXAMPLE = "example"
 # An operation with no example answers this: what an import writes when the document gives none (registry._output).
-NO_EXAMPLE: dict[str, Any] = {"ok": True}
+NO_EXAMPLE: dict[str, JsonValue] = {"ok": True}
 # Who an example written through an operation is recorded as made by; migration tools_0052 uses the same name.
 EXAMPLE_AUTHOR = "operation example"
 
@@ -341,74 +343,434 @@ REVIEWED = (
     "needs_person",
     *APPROVAL_POLICY,
 )
-OPERATION_DEFAULTS: dict[str, Any] = {
-    "body_encoding": None,
-    "response_transform": None,
-    "timeout_ms": None,
-    "approval_mode": None,
-    "reviewer_role": None,
-    "approvers": 1,
-    "approver_team": None,
-    "step_up": False,
-    "needs_person": False,
-    "scopes": [],
-    "output_shape": None,
-    "response_schema": None,
-    "code": None,
-}
-# Defaults per child table, for rows written before a column existed.
-CHILD_DEFAULTS: dict[str, dict[str, Any]] = {
-    "operations": OPERATION_DEFAULTS,
-    "approvals": {"workflow_team_id": None, "requested_by_email": None, "decider_team": None, "review_id": None},
-    "versions": {"review_id": None, "requested_at": None, "reviewer": None, "finding": None},
-}
+
+
+# The shapes below are a module and its children as stored. A row is checked against them as it leaves the store
+# (MODULE_COLUMNS, OPERATION and the other adapters), which keeps only the keys they name: each names every column and
+# every key the request models (modules/schemas.py) let a writer store, so a save writes back what it read.
+class InputField(TypedDict):
+    """One argument of an operation. A field saved through the request model names every key, unset ones as null."""
+
+    name: str
+    type: str
+    required: bool
+    description: NotRequired[str | None]
+    format: NotRequired[str | None]
+    # In the order the request model writes them: a read writes a field back with the keys in this order.
+    enum: NotRequired[list[str] | None]
+    example: NotRequired[JsonValue]
+    default: NotRequired[JsonValue]
+
+
+class Header(TypedDict):
+    """A header an operation sends: a literal or a {{NAME}} reference to a secret."""
+
+    key: str
+    value: str
+
+
+class Binding(TypedDict):
+    """An input the caller's context fills, which the call may not override."""
+
+    arg: str
+    bindTo: str
+    mode: str
+    required: bool
+
+
+class CodeLimits(TypedDict):
+    memoryMb: int
+    timeS: int | float
+    calls: int
+
+
+class CodeSettings(TypedDict):
+    """A code operation's function: source, entry, the tools it may call, the secrets it may hand them, its limits."""
+
+    source: str
+    entry: str
+    bindings: list[str]
+    secrets: list[str]
+    limits: CodeLimits
+
+
+class Change(TypedDict):
+    """One reviewed edit of a module, waiting for publish or recorded on a version."""
+
+    operation: str
+    kind: str
+    detail: str
+    major: bool
+
+
+class Reachability(TypedDict):
+    environment: str
+    ok: bool
+    checkedAt: str
+
+
+class AccountOption(TypedDict):
+    """One account of an app a person holds, as its sign-in named them."""
+
+    connectionId: str
+    name: str
+    account: str | None
+    identity: list[dict[str, str]]
+
+
+class AccountChoice(TypedDict):
+    """What a call asks a person who holds two or more accounts of an app and chose no default."""
+
+    app: str
+    appId: str
+    accounts: list[AccountOption]
+
+
+class OperationDefaults(TypedDict):
+    """The columns a built operation may leave to their defaults; `operation_defaults` fills them."""
+
+    body_encoding: str | None
+    response_transform: str | None
+    timeout_ms: int | None
+    approval_mode: str | None
+    reviewer_role: str | None
+    approvers: int
+    approver_team: str | None
+    step_up: bool
+    needs_person: bool
+    scopes: list[str]
+    output_shape: str | None
+    response_schema: dict[str, JsonValue] | None
+    code: CodeSettings | None
+
+
+def operation_defaults() -> OperationDefaults:
+    """A fresh copy, since an operation holds its own `scopes` list."""
+    return {
+        "body_encoding": None,
+        "response_transform": None,
+        "timeout_ms": None,
+        "approval_mode": None,
+        "reviewer_role": None,
+        "approvers": 1,
+        "approver_team": None,
+        "step_up": False,
+        "needs_person": False,
+        "scopes": [],
+        "output_shape": None,
+        "response_schema": None,
+        "code": None,
+    }
+
+
+class Operation(OperationDefaults):
+    """An operation as the service reads and builds it. `stub` is the operation's example answer, read from its example
+    mock and written back to it; a built operation names no tenant, module or position, `put` sets them."""
+
+    id: str
+    tool_id: str
+    name: str
+    description: str
+    access: Literal["read", "write"]
+    enabled: bool
+    executor: str
+    method: str | None
+    path: str | None
+    headers: list[Header]
+    body: str | None
+    input: list[InputField]
+    masked_output: list[str]
+    binding: Binding | None
+    rate_limit_per_min: int
+    requires_approval: bool | None
+    amount_max: Decimal | float | None
+    stub: NotRequired[JsonValue]
+    # The rule that reads a failure inside a 200 answer, set by the plugin host when a call resolves the operation.
+    error_when: NotRequired[dict[str, JsonValue] | None]
+    # Why a plugin's tool is hidden from a team, set when a call resolves it.
+    hidden_reason: NotRequired[str]
+    # A route-owned operation says it makes a draft (mcp_tools.py), and a plugin's names the window its calls share.
+    draft: NotRequired[bool]
+    rate_key: NotRequired[str]
+    tenant_id: NotRequired[str]
+    module_id: NotRequired[str]
+    position: NotRequired[int]
+
+
+class StoredOperation(TypedDict, total=False):
+    """An operation inside a module's `baseline` as a reader sees it: a JSON copy taken at publish, so a number is text
+    and a column added since is missing. It names every column, so a reviewed field is compared whenever the copy holds
+    it. Read only (`published`): the module keeps and writes back the copy itself."""
+
+    id: str
+    tool_id: str
+    name: str
+    description: str
+    access: str
+    enabled: bool
+    executor: str
+    method: str | None
+    path: str | None
+    headers: list[Header]
+    body: str | None
+    body_encoding: str | None
+    response_transform: str | None
+    timeout_ms: int | None
+    input: list[InputField]
+    masked_output: list[str]
+    binding: Binding | None
+    rate_limit_per_min: int
+    requires_approval: bool | None
+    approval_mode: str | None
+    reviewer_role: str | None
+    amount_max: Decimal | float | str | None
+    approvers: int
+    approver_team: str | None
+    step_up: bool
+    needs_person: bool
+    scopes: list[str]
+    output_shape: str | None
+    response_schema: dict[str, JsonValue] | None
+    code: CodeSettings | None
+    stub: JsonValue
+    tenant_id: str
+    module_id: str
+    position: int
+
+
+STORED_OPERATIONS = TypeAdapter(list[StoredOperation])
+
+
+def published(baseline: list[dict[str, JsonValue]]) -> list[StoredOperation]:
+    """The published operations a module's baseline holds, with the keys a reader compares."""
+    return STORED_OPERATIONS.validate_python(baseline)
+
+
+class ApprovalDefaults(TypedDict):
+    workflow_team_id: str | None
+    requested_by_email: str | None
+    decider_team: str | None
+    review_id: str | None
+
+
+class Approval(ApprovalDefaults):
+    """A workflow's approval to use some of a module's operations."""
+
+    id: str
+    workflow_id: str
+    workflow_name: str
+    environment: str
+    major: int
+    operations: list[str]
+    constraints: str | None
+    requested_by: str
+    justification: str
+    requested_at: datetime
+    decided_by: str | None
+    decided_at: datetime | None
+    status: str
+    expires_at: datetime | None
+    reason: str | None
+    tenant_id: NotRequired[str]
+    module_id: NotRequired[str]
+    position: NotRequired[int]
+
+
+class PinnedBy(TypedDict):
+    """A workflow that pins a version."""
+
+    id: str
+    name: str
+
+
+class VersionDefaults(TypedDict):
+    review_id: str | None
+    requested_at: datetime | None
+    reviewer: str | None
+    finding: str | None
+
+
+class Version(VersionDefaults):
+    id: str
+    version: str
+    major: int
+    status: str
+    published_at: datetime | None
+    published_by: str
+    note: str
+    changes: list[Change]
+    pinned_by: list[PinnedBy]
+    reachability: list[Reachability]
+    review_required: NotRequired[bool | None]
+    policy: NotRequired[str | None]
+    tenant_id: NotRequired[str]
+    module_id: NotRequired[str]
+    position: NotRequired[int]
+
+
+def version_defaults() -> VersionDefaults:
+    return {"review_id": None, "requested_at": None, "reviewer": None, "finding": None}
+
+
+def approval_defaults() -> ApprovalDefaults:
+    return {"workflow_team_id": None, "requested_by_email": None, "decider_team": None, "review_id": None}
+
+
+class ModuleColumns(TypedDict):
+    """The `tool_modules` columns of a module."""
+
+    tenant_id: str
+    id: str
+    team_id: str | None
+    name: str
+    display_name: str
+    system: str
+    description: str
+    status: str
+    owner_team: str
+    owner_contacts: list[str]
+    auth: dict[str, JsonValue]
+    timeout_ms: int
+    data_classification: str
+    catalog_id: str | None
+    connection_id: str | None
+    sign_in: str
+    template_id: str | None
+    protection: str | None
+    reachable: bool
+    drift: bool
+    version: str
+    pending: list[Change]
+    # A JSON copy of the operations taken at publish, written back as read: `served_operations` reads it.
+    baseline: list[dict[str, JsonValue]] | None
+    revision: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class Module(ModuleColumns):
+    """A module and its children, one aggregate: `egress_hosts` are the tenant allow-list entries it calls."""
+
+    operations: list[Operation]
+    versions: list[Version]
+    approvals: list[Approval]
+    egress_hosts: list[str]
+    # Notes a call adds while it resolves the module, never stored (`put` writes the columns only): the address of
+    # its account, the app's tool list and titles, and the reason a call is refused before it runs.
+    endpoint: NotRequired[str]
+    tools_on: NotRequired[list[str] | None]
+    app_title: NotRequired[str]
+    tool_titles: NotRequired[dict[str, str]]
+    sign_in_needed: NotRequired[str]
+    instance_missing: NotRequired[str]
+    team_sign_in: NotRequired[dict[str, str | None]]
+    app_off: NotRequired[dict[str, str | None]]
+    account_choice: NotRequired[AccountChoice]
+    plugin_settings: NotRequired[dict[str, JsonValue]]
+    plugin_team: NotRequired[str | None]
+    sandbox: NotRequired[bool]
+    # The team's plugin version, read only by the plugin host: its tools (a manifest's `Tool`, by name) and headers.
+    plugin_tools: NotRequired[object]
+    plugin_headers: NotRequired[dict[str, str]]
+    plugin_off: NotRequired[str]
+    account_missing: NotRequired[str]
+    account_not_yours: NotRequired[str]
+    sandbox_required: NotRequired[str]
+    package_missing: NotRequired[str]
+
+
+class ModuleRef(TypedDict):
+    """What an account's sign-in reads of a module: its tenant, team, account and the address its call goes to."""
+
+    tenant_id: str
+    team_id: str | None
+    connection_id: str | None
+    endpoint: NotRequired[str]
+
+
+class OperationName(TypedDict):
+    name: str
+
+
+class CardModule(ModuleColumns):
+    """A module as the Apps grid counts it: each operation's name only."""
+
+    operations: list[OperationName]
+
+
+class ModuleGrants(TypedDict):
+    """What decides whether a team sees a module: its team and its approvals."""
+
+    id: str
+    team_id: str | None
+    approvals: list[Approval]
+
+
+class ChildrenOf(TypedDict):
+    operations: list[Operation]
+    versions: list[Version]
+    approvals: list[Approval]
+    egress_hosts: list[str]
+
+
+class ServiceEvent(TypedDict):
+    """The keywords of `outbox.add`: an event a write reports in its own transaction."""
+
+    tenant_id: str
+    team_id: str | None
+    name: str
+    key: str
+    actor: str | None
+    payload: dict[str, JsonValue]
+
+
+MODULE_COLUMNS = TypeAdapter(ModuleColumns)
+OPERATION = TypeAdapter(Operation)
+VERSION = TypeAdapter(Version)
+APPROVAL = TypeAdapter(Approval)
 
 # Service events this store reports, written in the transaction that makes the change: a workflow's access
 # request and a version's review each start a system workflow.
 service_outbox = outbox_table(metadata)
 
+# The tables of a module's children; the egress hosts are read apart.
 CHILDREN: dict[str, sa.Table] = {
     "operations": module_operations,
     "versions": module_versions,
     "approvals": module_approvals,
 }
 
-Aggregate = dict[str, Any]
-"""A module row's columns plus `operations`, `versions` and `approvals`, each a list of row dicts, and
-`egress_hosts`, the tenant allow-list entries the module calls."""
+Aggregate = Module
 
 # The allow-list's host column, named here without importing store.egress (which imports this module).
 _listed_hosts = sa.table("egress_hosts", sa.column("tenant_id"), sa.column("host"))
 
 
-def served_operations(agg: Aggregate) -> list[dict[str, Any]]:
+def served_operations(agg: Module) -> list[Operation]:
     """The module's operations as calls see them. While edits are staged (a baseline exists), that is the published
     operations: an operation added since is not served, and every reviewed field (and the call shape) comes from the
     published one, so nothing Security has not approved reaches a call, the tools list or an agent's grants."""
-    baseline = cast(list[dict[str, Any]] | None, agg.get("baseline"))
-    ops = cast(list[dict[str, Any]], agg["operations"])
+    baseline, ops = agg["baseline"], agg["operations"]
     if baseline is None:
         return ops
-    published = {o["id"]: o for o in baseline}
-    out: list[dict[str, Any]] = []
+    published = {o["id"]: dict(o) for o in baseline if "id" in o}
+    out: list[Operation] = []
     for op in ops:
         before = published.get(op["id"])
         if before is None:
             continue
-        # A baseline written before a field existed holds none of it and keeps the operation's.
-        out.append(
-            {
-                **op,
-                **{k: before.get(k) for k in CALL_SHAPE},
-                **{k: before[k] for k in REVIEWED if k in before},
-            }
-        )
+        # A baseline written before a field existed holds none of it and keeps the operation's. The copy's numbers
+        # are text, so the merged operation is checked as a stored one is.
+        shape = {k: before.get(k) for k in CALL_SHAPE}
+        # A copy without headers sends none, as a call read a missing list.
+        shape["headers"] = shape["headers"] or []
+        out.append(OPERATION.validate_python({**op, **shape, **{k: before[k] for k in REVIEWED if k in before}}))
     return out
 
 
 # A tool's title as people see it (module, operation name), the grantable list's `tool_title`: the service wires it
 # with the plugin host's manifest titles, which this layer cannot read.
-TitleOf = Callable[[Aggregate, str], str | None]
+TitleOf = Callable[[ModuleColumns, str], str | None]
 
 
 def template_card(agg: Aggregate) -> tuple[TemplateKind, str]:
@@ -465,12 +827,12 @@ def _iso(value: object) -> str | None:
     return value.isoformat() if isinstance(value, datetime) else None if value is None else str(value)
 
 
-def team_grants(agg: Aggregate) -> dict[str, ToolTeamStateChanged]:
+def team_grants(agg: Module) -> dict[str, ToolTeamStateChanged]:
     """Each other team's grant of the module, from its approved workflow approvals: the union of their operations,
     ending at the latest end (none if any approval has none). A team with only requested, refused or revoked
     approvals holds no grant."""
-    by_team: dict[str, list[Aggregate]] = {}
-    for a in cast(list[Aggregate], agg.get("approvals") or []):
+    by_team: dict[str, list[Approval]] = {}
+    for a in agg["approvals"]:
         team = a.get("workflow_team_id")
         if team and team != agg.get("team_id") and a.get("status") == "approved":
             by_team.setdefault(str(team), []).append(a)
@@ -481,7 +843,7 @@ def team_grants(agg: Aggregate) -> dict[str, ToolTeamStateChanged]:
             id=f"approval:{agg['id']}",
             module_id=str(agg["id"]),
             via="approval",
-            operations=sorted({str(n) for a in on for n in cast(list[object], a.get("operations") or [])}),
+            operations=sorted({n for a in on for n in a["operations"]}),
             expires_at=None if any(e is None for e in ends) else max(_iso(e) or "" for e in ends),
         )
     return out
@@ -638,13 +1000,6 @@ def _team_of(team_id: str | None) -> sa.ColumnElement[bool]:
     return _cards_stamp().c.team_id == team_id if team_id else sa.true()
 
 
-class Header(TypedDict):
-    """A header an operation sends: a literal or a {{NAME}} reference to a secret."""
-
-    key: str
-    value: str
-
-
 class HeaderHolder(TypedDict):
     """An operation's headers with its place: tenant, team and module."""
 
@@ -697,43 +1052,54 @@ class ModuleStore(Store):
 
     async def _children(
         self, c: AsyncConnection, tenant_id: str, ids: list[str], within: sa.Select[Any] | None = None
-    ) -> dict[str, dict[str, Any]]:
+    ) -> dict[str, ChildrenOf]:
         """The children of the modules `ids`. A read of every module passes the query that chose them as `within`, which
         the children are matched against in SQL: a list of ids is one parameter each, past SQL Server's 2,100 at about
         2,090 modules."""
-        out: dict[str, dict[str, list[dict[str, Any]]]] = {i: {k: [] for k in CHILDREN} for i in ids}
-        for key, table in CHILDREN.items():
-            q = (
+        chosen = ids if within is None else within
+        examples = await self._examples(c, tenant_id, ids, within)
+        out: dict[str, ChildrenOf] = {
+            i: {"operations": [], "versions": [], "approvals": [], "egress_hosts": []} for i in ids
+        }
+
+        def rows(table: sa.Table) -> sa.Select[Any]:
+            return (
                 table.select()
-                .where(table.c.tenant_id == tenant_id, table.c.module_id.in_(ids if within is None else within))
+                .where(table.c.tenant_id == tenant_id, table.c.module_id.in_(chosen))
                 .order_by(table.c.module_id, table.c.position)
             )
-            for r in (await c.execute(q)).mappings():
-                if key == "operations" and r["access"] not in ACCESS_CLASSES:
-                    raise RetiredAccessError(
-                        f"operation {r['name']} in {r['module_id']} has access {r['access']!r}, which is no longer an "
-                        "access class; rebuild the database with `make up`"
-                    )
-                out[r["module_id"]][key].append(dict(r))
-        examples = await self._examples(c, tenant_id, ids, within)
-        for i in ids:
-            for o in out[i]["operations"]:
-                o["stub"] = examples.get((i, str(o["name"])), NO_EXAMPLE)
-        hosts: dict[str, list[str]] = {i: [] for i in ids}
+
+        for r in (await c.execute(rows(module_operations))).mappings():
+            if r["access"] not in ACCESS_CLASSES:
+                raise RetiredAccessError(
+                    f"operation {r['name']} in {r['module_id']} has access {r['access']!r}, which is no longer an "
+                    "access class; rebuild the database with `make up`"
+                )
+            stub = examples.get((r["module_id"], str(r["name"])), NO_EXAMPLE)
+            out[r["module_id"]]["operations"].append(OPERATION.validate_python({**r, "stub": stub}))
+        for r in (await c.execute(rows(module_versions))).mappings():
+            out[r["module_id"]]["versions"].append(VERSION.validate_python(r))
+        for r in (await c.execute(rows(module_approvals))).mappings():
+            out[r["module_id"]]["approvals"].append(APPROVAL.validate_python(r))
         h = module_egress_hosts.c
         q = (
             sa.select(h.module_id, h.host)
-            .where(h.tenant_id == tenant_id, h.module_id.in_(ids if within is None else within))
+            .where(h.tenant_id == tenant_id, h.module_id.in_(chosen))
             .order_by(module_egress_hosts.c.module_id, module_egress_hosts.c.position)
         )
         for module_id, host in await c.execute(q):
-            hosts[module_id].append(host)
-        return {i: {**out[i], "egress_hosts": hosts[i]} for i in ids}
+            out[module_id]["egress_hosts"].append(host)
+        return out
+
+    @staticmethod
+    def _of(row: RowMapping, kids: ChildrenOf) -> Module:
+        """A module row and its children, checked against the aggregate's shape."""
+        return {**MODULE_COLUMNS.validate_python(dict(row)), **kids}
 
     @staticmethod
     async def _examples(
         c: AsyncConnection, tenant_id: str, ids: list[str], within: sa.Select[Any] | None = None
-    ) -> dict[tuple[str, str], Any]:
+    ) -> dict[tuple[str, str], JsonValue]:
         """Each operation's example answer, by (module, operation name): the body of its example mock."""
         m = operation_mocks.c
         chosen = m.module_id.in_(ids if within is None else within)
@@ -743,14 +1109,14 @@ class ModuleStore(Store):
         return {(str(r.module_id), str(r.operation)): r.body for r in await c.execute(q)}
 
     @staticmethod
-    async def _write_examples(c: AsyncConnection, agg: Aggregate, at: Any) -> None:
+    async def _write_examples(c: AsyncConnection, agg: Module, at: datetime) -> None:
         """An operation's `stub` written as its example mock: the body of the one there, or a new one. An operation with
         no example leaves it as it is."""
-        tenant, module = str(agg["tenant_id"]), str(agg["id"])
+        tenant, module = agg["tenant_id"], agg["id"]
         held = await ModuleStore._examples(c, tenant, [module])
         m = operation_mocks.c
-        for o in cast(list[dict[str, Any]], agg["operations"]):
-            body, name = o.get("stub"), str(o["name"])
+        for o in agg["operations"]:
+            body, name = o.get("stub"), o["name"]
             if body is None or body == NO_EXAMPLE or held.get((module, name), NO_EXAMPLE) == body:
                 continue
             where = (m.tenant_id == tenant, m.module_id == module, m.operation == name, m.environment == EXAMPLE)
@@ -767,19 +1133,19 @@ class ModuleStore(Store):
                 )
             )  # fmt: skip
 
-    async def all(self, tenant_id: str) -> list[Aggregate]:
+    async def all(self, tenant_id: str) -> list[Module]:
         """The modules the acting team reads: its own, workspace-level ones (no team) and those approved for one
         of its workflows, which is the explicit grant across teams. Every module with no acting team."""
         where = sa.and_(tool_modules.c.tenant_id == tenant_id, sa.or_(team_modules(), granted(tenant_id)))
         async with self.tx() as c:
             q = tool_modules.select().where(where).order_by(tool_modules.c.created_at.desc(), tool_modules.c.id.desc())
-            rows = [dict(r) for r in (await c.execute(q)).mappings()]
+            rows = list((await c.execute(q)).mappings())
             kids = await self._children(
                 c, tenant_id, [r["id"] for r in rows], sa.select(tool_modules.c.id).where(where)
             )
-        return [{**r, **kids[r["id"]]} for r in rows]
+        return [self._of(r, kids[r["id"]]) for r in rows]
 
-    async def seen(self, tenant_id: str) -> list[Aggregate]:
+    async def seen(self, tenant_id: str) -> list[ModuleGrants]:
         """The modules `all` reads, each with only its `id`, `team_id` and `approvals`: what decides whether a team
         sees it and which workflow names its grants hold. A list that names the visible modules and loads in full only
         the ones its page shows asks for this, then `chosen`."""
@@ -787,20 +1153,20 @@ class ModuleStore(Store):
         a = module_approvals.c
         async with self.tx() as c:
             q = sa.select(tool_modules.c.id, tool_modules.c.team_id).where(where)
-            rows = [dict(r) for r in (await c.execute(q)).mappings()]
-            held: dict[str, list[Aggregate]] = {r["id"]: [] for r in rows}
+            rows = list((await c.execute(q)).mappings())
+            held: dict[str, list[Approval]] = {r["id"]: [] for r in rows}
             q = (
                 module_approvals.select()
                 .where(a.tenant_id == tenant_id, a.module_id.in_(sa.select(tool_modules.c.id).where(where)))
                 .order_by(a.module_id, a.position)
             )
             for r in (await c.execute(q)).mappings():
-                held[r["module_id"]].append(dict(r))
-        return [{**r, "approvals": held[r["id"]]} for r in rows]
+                held[r["module_id"]].append(APPROVAL.validate_python(r))
+        return [{"id": r["id"], "team_id": r["team_id"], "approvals": held[r["id"]]} for r in rows]
 
     async def card_modules(
         self, tenant_id: str, team_id: str, *, chosen: tuple[Sequence[str], Sequence[str], Sequence[str]] | None = None
-    ) -> list[Aggregate]:
+    ) -> list[CardModule]:
         """The team's own and workspace-level modules (no team) with each operation's name, what the Apps grid's cards
         count and match: every one, or with `chosen` (ids, template ids, names of modules bound to no account) only
         those, for one page of cards. A grant to one of the team's workflows does not put another team's module on its
@@ -820,7 +1186,7 @@ class ModuleStore(Store):
         o = module_operations.c
         async with self.tx() as c:
             q = tool_modules.select().where(where).order_by(t.created_at.desc(), t.id.desc())
-            rows = [dict(r) for r in (await c.execute(q)).mappings()]
+            rows = list((await c.execute(q)).mappings())
             ops = (
                 sa.select(o.module_id, o.name)
                 .where(o.tenant_id == tenant_id, o.module_id.in_(sa.select(t.id).where(where)))
@@ -829,9 +1195,12 @@ class ModuleStore(Store):
             held: dict[str, list[str]] = {}
             for module_id, name in await c.execute(ops):
                 held.setdefault(str(module_id), []).append(str(name))
-        return [{**r, "operations": [{"name": n} for n in held.get(str(r["id"]), [])]} for r in rows]
+        return [
+            {**MODULE_COLUMNS.validate_python(r), "operations": [{"name": n} for n in held.get(str(r["id"]), [])]}
+            for r in rows
+        ]
 
-    async def headers(self, tenant_id: str, ids: Sequence[str]) -> dict[str, Aggregate]:
+    async def headers(self, tenant_id: str, ids: Sequence[str]) -> dict[str, ModuleColumns]:
         """The module rows named by `ids` that the acting team reads, by id, with no operations, versions or
         approvals: what a log row shows of its module (its names and template)."""
         if not ids:
@@ -842,9 +1211,9 @@ class ModuleStore(Store):
                 sa.or_(team_modules(), granted(tenant_id)),
                 tool_modules.c.id.in_(list(ids)),
             )
-            return {r["id"]: dict(r) for r in (await c.execute(q)).mappings()}
+            return {r["id"]: MODULE_COLUMNS.validate_python(r) for r in (await c.execute(q)).mappings()}
 
-    async def chosen(self, tenant_id: str, ids: Sequence[str], *, reviews: bool = False) -> list[Aggregate]:
+    async def chosen(self, tenant_id: str, ids: Sequence[str], *, reviews: bool = False) -> list[Module]:
         """The modules named by `ids` that the acting team reads (as `all`), in `ids`' order: a list's page. With
         `reviews` (a Security reviewer's queue), also those waiting on their security review."""
         if not ids:
@@ -856,9 +1225,9 @@ class ModuleStore(Store):
                 sa.or_(*seen),
                 tool_modules.c.id.in_(list(ids)),
             )
-            rows = {r["id"]: dict(r) for r in (await c.execute(q)).mappings()}
+            rows = {r["id"]: r for r in (await c.execute(q)).mappings()}
             kids = await self._children(c, tenant_id, list(rows))
-        return [{**rows[i], **kids[i]} for i in ids if i in rows]
+        return [self._of(rows[i], kids[i]) for i in ids if i in rows]
 
     async def grants(
         self,
@@ -887,18 +1256,18 @@ class ModuleStore(Store):
             row = (await c.execute(counted)).mappings().one()
         return page, {name: int(row[name] or 0) for name in views}
 
-    async def all_teams(self, tenant_id: str) -> list[Aggregate]:
+    async def all_teams(self, tenant_id: str) -> list[Module]:
         """Every team's modules: for what another service asks on a run's behalf (the operations an agent or workflow
         may be granted, a call's resolution), which the run's grants and its approval token decide, not the caller's
         team."""
         where = sa.and_(tool_modules.c.tenant_id == tenant_id, any_team(tool_modules, RUN_PATHS))
         async with self.tx() as c:
             q = tool_modules.select().where(where).order_by(tool_modules.c.created_at.desc(), tool_modules.c.id.desc())
-            rows = [dict(r) for r in (await c.execute(q)).mappings()]
+            rows = list((await c.execute(q)).mappings())
             kids = await self._children(
                 c, tenant_id, [r["id"] for r in rows], sa.select(tool_modules.c.id).where(where)
             )
-        return [{**r, **kids[r["id"]]} for r in rows]
+        return [self._of(r, kids[r["id"]]) for r in rows]
 
     async def header_holders(self, tenant_id: str | None = None) -> list[HeaderHolder]:
         """Every team module's operation that carries a header, every tenant's or `tenant_id`'s: its tenant, team,
@@ -962,7 +1331,7 @@ class ModuleStore(Store):
                     rows[r["module_id"]]["operations"].append(SECRET_OPERATION.validate_python(r))
         return list(rows.values())
 
-    async def get(self, tenant_id: str, module_id: str, *, reviews: bool = False) -> Aggregate | None:
+    async def get(self, tenant_id: str, module_id: str, *, reviews: bool = False) -> Module | None:
         """The module when the acting team reads it (as `all`), or with `reviews` (a Security reviewer) when it waits on
         its security review; None otherwise, so its routes answer 404."""
         seen = [team_modules(), granted(tenant_id), *([in_security_review(tenant_id)] if reviews else [])]
@@ -975,9 +1344,9 @@ class ModuleStore(Store):
             row = (await c.execute(q)).mappings().first()
             if row is None:
                 return None
-            return {**dict(row), **(await self._children(c, tenant_id, [module_id]))[module_id]}
+            return self._of(row, (await self._children(c, tenant_id, [module_id]))[module_id])
 
-    async def get_any(self, tenant_id: str, module_id: str) -> Aggregate | None:
+    async def get_any(self, tenant_id: str, module_id: str) -> Module | None:
         """The module in any team: for a call's resolution and for a decision agents-service already held to the review
         rules, both authorized by what they carry rather than by the caller's team."""
         async with self.tx() as c:
@@ -987,11 +1356,11 @@ class ModuleStore(Store):
             row = (await c.execute(q)).mappings().first()
             if row is None:
                 return None
-            return {**dict(row), **(await self._children(c, tenant_id, [module_id]))[module_id]}
+            return self._of(row, (await self._children(c, tenant_id, [module_id]))[module_id])
 
     async def operation_named(
         self, tenant_id: str, name: str, team_id: str | None = None
-    ) -> tuple[Aggregate, dict[str, Any]] | None:
+    ) -> tuple[Module, Operation] | None:
         """The module holding operation `name` in the acting team (or `team_id`), and the operation. Another team's
         module of the same name is not seen. A workspace-level module is used when the team has no copy of its own."""
         with _as_team(team_id):
@@ -1055,13 +1424,13 @@ class ModuleStore(Store):
 
     async def put(
         self,
-        agg: Aggregate,
+        agg: Module,
         *,
         expected_revision: int | None,
         seeded: bool = False,
-        events: Sequence[dict[str, Any]] = (),
+        events: Sequence[ServiceEvent] = (),
         conn: AsyncConnection | None = None,
-    ) -> Aggregate:
+    ) -> Module:
         """Writes the whole aggregate. `expected_revision` None inserts a new module; otherwise the update lands only
         when the stored revision still equals it, else StaleModuleError. Returns the aggregate at its new revision.
         `seeded` writes revision 0, the dev seed's mark for a module nobody has edited. HostNotAllowedError when the
@@ -1074,7 +1443,7 @@ class ModuleStore(Store):
         c = conn
         # Only the table's columns: a module as a call reaches it carries its connection's address, never stored.
         row = {k: v for k, v in agg.items() if k in tool_modules.c}
-        hosts: list[str] = list(dict.fromkeys(agg.get("egress_hosts") or []))
+        hosts: list[str] = list(dict.fromkeys(agg["egress_hosts"]))
         if hosts:
             listed_q = sa.select(_listed_hosts.c.host).where(
                 _listed_hosts.c.tenant_id == row["tenant_id"], _listed_hosts.c.host.in_(hosts)
@@ -1083,7 +1452,7 @@ class ModuleStore(Store):
             missing = [h for h in hosts if h not in listed]
             if missing:
                 raise HostNotAllowedError(missing[0])
-        before: Aggregate | None = None
+        before: Module | None = None
         if expected_revision is None:
             row["revision"] = 0 if seeded else 1
             await c.execute(tool_modules.insert().values(**row))
@@ -1105,16 +1474,21 @@ class ModuleStore(Store):
                 await c.execute(
                     table.delete().where(table.c.tenant_id == row["tenant_id"], table.c.module_id == row["id"])
                 )
-        for key, table in CHILDREN.items():
-            # Every row names the same columns (an insert of many rows takes its columns from the first); a
-            # seeded or older operation may predate response_transform and timeout_ms, an approval its team.
-            # Only the table's own columns: a baseline or staged copy written before a column was dropped
-            # (self_approval) still carries it, and a discard writes those copies back.
+        # Every row names the same columns (an insert of many rows takes its columns from the first); a seeded or
+        # older operation may predate response_transform and timeout_ms, an approval its team. Only the table's own
+        # columns: a baseline or staged copy written before a column was dropped (self_approval) still carries it,
+        # and a discard writes those copies back.
+        children: tuple[tuple[sa.Table, Sequence[Mapping[str, object]], Mapping[str, object]], ...] = (
+            (module_operations, agg["operations"], operation_defaults()),
+            (module_versions, agg["versions"], version_defaults()),
+            (module_approvals, agg["approvals"], approval_defaults()),
+        )
+        for table, held, defaults in children:
             rows = [
                 {
                     k: v
                     for k, v in {
-                        **CHILD_DEFAULTS.get(key, {}),
+                        **defaults,
                         **r,
                         "tenant_id": row["tenant_id"],
                         "module_id": row["id"],
@@ -1122,11 +1496,11 @@ class ModuleStore(Store):
                     }.items()
                     if k in table.c
                 }
-                for i, r in enumerate(agg[key])
+                for i, r in enumerate(held)
             ]
             if rows:
                 await c.execute(table.insert(), rows)
-        await self._write_examples(c, agg, row.get("updated_at") or row.get("created_at"))
+        await self._write_examples(c, agg, agg["updated_at"])
         if hosts:
             links = [
                 {"tenant_id": row["tenant_id"], "module_id": row["id"], "host": h, "position": i}
@@ -1137,12 +1511,13 @@ class ModuleStore(Store):
             await add_event(c, service_outbox, **event)
         # A seed refresh keeps revision 0, which no copy would take over its first write; the resync carries it.
         if not (seeded and before is not None):
-            await report_module(c, {**agg, **row}, before, int(row["revision"]), titles=self.titles)
+            revision = int(row["revision"])
+            await report_module(c, {**agg, "revision": revision}, before, revision, titles=self.titles)
         # A built-in app's card and a removed plugin's are built from its team's modules (Apps.cards).
-        await forget_cards(c, row["tenant_id"], _team_of(row.get("team_id")))
+        await forget_cards(c, agg["tenant_id"], _team_of(agg["team_id"]))
         return {**agg, "revision": row["revision"]}
 
-    async def insert_if_missing(self, agg: Aggregate) -> bool:
+    async def insert_if_missing(self, agg: Module) -> bool:
         """Inserts `agg` as a module nobody has edited (revision 0) unless one with its id is already there, as when two
         first calls race to write it. True when this call wrote it."""
         async with self.tx() as c:
@@ -1165,14 +1540,14 @@ class ModuleStore(Store):
             await report_module(c, found, found, int(found["revision"]) + 1, deleted=True, titles=self.titles)
             return done.rowcount > 0
 
-    async def _held(self, c: AsyncConnection, tenant_id: str, module_id: str) -> Aggregate | None:
+    async def _held(self, c: AsyncConnection, tenant_id: str, module_id: str) -> Module | None:
         """The module as stored, on the writer's transaction: what a write's events are compared against."""
         t = tool_modules.c
         q = tool_modules.select().where(t.tenant_id == tenant_id, t.id == module_id)
         found = (await c.execute(q)).mappings().first()
         if found is None:
             return None
-        return {**dict(found), **(await self._children(c, tenant_id, [module_id]))[module_id]}
+        return self._of(found, (await self._children(c, tenant_id, [module_id]))[module_id])
 
     async def count(self, tenant_id: str) -> int:
         q = (

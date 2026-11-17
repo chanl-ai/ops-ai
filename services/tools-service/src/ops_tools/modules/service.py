@@ -12,18 +12,18 @@ operations to a workflow's agent (agents-service owns grants).
 
 from __future__ import annotations
 
-import copy
 import json
 import re
 import time
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 from urllib.parse import urlsplit
 
 import httpx
 import yaml
+from pydantic import JsonValue
 
 from ops_access import Access, require_provisioner
 from ops_identity import Principal
@@ -56,13 +56,34 @@ from ..store.connections import ConnectionStore
 from ..store.mocks import MockStore
 from ..store.module_list import ModuleList, Window
 from ..store.modules import (
+    APPROVAL,
     CALL_SHAPE,
+    OPERATION,
     REVIEWED,
     Aggregate,
+    Approval,
+    Binding,
+    Change,
+    CodeSettings,
     HostNotAllowedError,
+    InputField,
+    Module,
+    ModuleColumns,
+    ModuleGrants,
+    ModuleRef,
     ModuleStore,
+    Operation,
+    ServiceEvent,
     StaleModuleError,
+    StoredOperation,
+    TitleOf,
+    Version,
     grant_views,
+    operation_defaults,
+    version_defaults,
+)
+from ..store.modules import (
+    published as published_operations,
 )
 from . import openapi
 from .directory import Directory, Team, owns_module
@@ -211,10 +232,19 @@ def _not_a_plugin(m: Aggregate) -> None:
         )
 
 
-def _provisioned(who: Caller, i: dict[str, Any]) -> dict[str, Any]:
+class _Provisioned(TypedDict, total=False):
+    template_id: str | None
+    protection: str | None
+
+
+def _provisioned(who: Caller, i: dict[str, Any]) -> _Provisioned:
     """The template fields a create or patch carries, refused with `provisioner_only` unless the caller is a
     service token holding `tools:provision`: a person setting them could take a template's slot or lock others out."""
-    fields = {k: i[k] for k in ("template_id", "protection") if i.get(k) is not None}
+    fields: _Provisioned = {}
+    if i.get("template_id") is not None:
+        fields["template_id"] = i["template_id"]
+    if i.get("protection") is not None:
+        fields["protection"] = i["protection"]
     if fields and who.principal is not None:
         require_provisioner(who.principal, "tools")
     return fields
@@ -224,7 +254,14 @@ def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
 
 
-def _code_settings(c: dict[str, Any]) -> dict[str, Any]:
+def _provision(m: Module, fields: _Provisioned) -> None:
+    if "template_id" in fields:
+        m["template_id"] = fields["template_id"]
+    if "protection" in fields:
+        m["protection"] = fields["protection"]
+
+
+def _code_settings(c: dict[str, Any]) -> CodeSettings:
     """A code operation's settings as stored and sent to runner-service, from CodeSettingsIn's dump."""
     limits = cast(dict[str, Any], c.get("limits") or {})
     return {
@@ -274,11 +311,11 @@ def _not_allowed(host: str) -> Unprocessable:
     )
 
 
-def _sample_field(name: str) -> dict[str, Any]:
+def _sample_field(name: str) -> InputField:
     return {"name": name, "type": "string", "required": True}
 
 
-def _workflow_names(mods: list[Aggregate]) -> dict[str, str]:
+def _workflow_names(mods: Sequence[ModuleGrants]) -> dict[str, str]:
     """Each workflow's name as its approvals recorded it from agents-service, for the call log."""
     return {a["workflow_id"]: a["workflow_name"] for m in mods for a in m["approvals"]}
 
@@ -287,7 +324,7 @@ def _plain(value: Any) -> Any:
     return json.loads(json.dumps(value, default=str))
 
 
-def _reviewed(op: dict[str, Any], key: str) -> Any:
+def _reviewed(op: Operation | StoredOperation, key: str) -> Any:
     """The part of a reviewed field Security reviews. For the input that is each field's name, type, whether it is
     required, its allowed values and its default (a default is sent for the agent on reads, so it changes what a call
     does); a description or example changes nothing a call sends."""
@@ -295,7 +332,7 @@ def _reviewed(op: dict[str, Any], key: str) -> Any:
         return _plain(op.get(key))
     return sorted(
         (f["name"], f["type"], bool(f.get("required")), list(f.get("enum") or []), json.dumps(f.get("default")))
-        for f in cast(list[dict[str, Any]], op.get("input") or [])
+        for f in op.get("input") or []
     )
 
 
@@ -311,10 +348,10 @@ def _differs_from_published(m: Aggregate) -> bool:
     """Whether the operations about to go live differ from the published ones (the baseline) in anything Security
     reviews. Publish decides major from this, never from the edit history alone, so a change reaches calls without
     review by no route: an edit, an import, or a declined version's edits left in place."""
-    baseline = cast(list[dict[str, Any]] | None, m.get("baseline"))
+    baseline = m["baseline"]
     if baseline is None:
         return False
-    published = {o["id"]: o for o in baseline}
+    published = {o.get("id"): o for o in published_operations(baseline)}
     for o in m["operations"]:
         before = published.get(o["id"])
         if before is None:
@@ -361,7 +398,7 @@ def sign_in_fits(module_sign_in: str, conn: dict[str, Any]) -> None:
 
 class ModuleService:
     # A plugin tool's display name, set once the plugin host is up (`PluginHost.title_of`); other modules have none.
-    titles: Callable[[Mapping[str, Any], str], str | None] | None = None
+    titles: TitleOf | None = None
     # agents-service's agents and workflows that use each tool, which name the call log's agent and workflow ids.
     users: ToolUsers | None = None
     # The team's connection for a plugin's module (`PluginHost.team_connection`), set once the plugin host is up.
@@ -426,12 +463,19 @@ class ModuleService:
 
     # ── Derived views ─────────────────────────────────────────────────────
 
-    def _approval_status(self, a: dict[str, Any]) -> str:
+    def _approval_status(self, a: Approval) -> str:
         expired = a["status"] == "approved" and a["expires_at"] is not None and a["expires_at"] < self.clock()
         return "expired" if expired else a["status"]
 
-    def _approvals(self, m: Aggregate) -> list[dict[str, Any]]:
-        return [{**a, "status": self._approval_status(a)} for a in m["approvals"]]
+    def _approvals(self, m: Aggregate) -> list[Approval]:
+        return [self._with_status(a) for a in m["approvals"]]
+
+    @staticmethod
+    def _deprecated(v: Version) -> Version:
+        return {**v, "status": "deprecated"}
+
+    def _with_status(self, a: Approval) -> Approval:
+        return {**a, "status": self._approval_status(a)}
 
     def _owners(self, m: Aggregate) -> list[str | None]:
         """The module's owner group and those of the teams owning the workflows it is approved for, as each approval
@@ -576,8 +620,8 @@ class ModuleService:
     def _operation(
         self,
         m: Aggregate,
-        o: dict[str, Any],
-        approvals: list[dict[str, Any]],
+        o: Operation,
+        approvals: list[Approval],
         t: CallStats,
         have: dict[str | None, set[str]] | None = None,
     ) -> dict[str, Any]:
@@ -738,7 +782,7 @@ class ModuleService:
     def _drop_none(d: dict[str, Any]) -> dict[str, Any]:
         return {k: v for k, v in d.items() if v is not None}
 
-    def _approval_out(self, a: dict[str, Any]) -> dict[str, Any]:
+    def _approval_out(self, a: Approval) -> dict[str, Any]:
         return self._drop_none(
             {
                 "id": a["id"],
@@ -762,7 +806,7 @@ class ModuleService:
             }
         )
 
-    def _version_out(self, v: dict[str, Any]) -> dict[str, Any]:
+    def _version_out(self, v: Version) -> dict[str, Any]:
         return self._drop_none(
             {
                 "version": v["version"],
@@ -791,7 +835,7 @@ class ModuleService:
             raise NotFound("Module")
         return m
 
-    def _sees(self, who: Caller, m: Aggregate) -> bool:
+    def _sees(self, who: Caller, m: ModuleGrants) -> bool:
         """The caller's team reads the module: its own, a workspace-level one, or one approved for its workflows. Only
         the dev header caller acting in one of the dev seed's all-scope teams reads every team's."""
         return self.dir.sees_module(who.team, m) or (not who.verified and who.team.scope == "all")
@@ -822,7 +866,7 @@ class ModuleService:
         )
         return m
 
-    async def _save(self, m: Aggregate, *, touch: bool = True, events: Sequence[dict[str, Any]] = ()) -> Aggregate:
+    async def _save(self, m: Aggregate, *, touch: bool = True, events: Sequence[ServiceEvent] = ()) -> Aggregate:
         """`events` are service events written in the same transaction."""
         if touch:
             m["updated_at"] = self.clock()
@@ -851,7 +895,7 @@ class ModuleService:
         page, counts = await self.store.grants(who.tenant_id, q, view=views[view], views=views)
         page["data"] = [
             {
-                **self._approval_out({**r, "status": self._approval_status(r)}),
+                **self._approval_out(self._with_status(APPROVAL.validate_python(r))),
                 "moduleId": r["module_id"],
                 "moduleName": r["module_name"],
             }
@@ -944,7 +988,7 @@ class ModuleService:
             "recent": [call_row(r, _workflow_names([m]), m, self._title(m, r.tool)) for r in recent],
         }
 
-    def _title(self, module: dict[str, Any] | None, tool: str) -> str | None:
+    def _title(self, module: ModuleColumns | None, tool: str) -> str | None:
         return tool_title(module, tool, self.titles) if module is not None else None
 
     async def executions(
@@ -1155,11 +1199,12 @@ class ModuleService:
         return op, origin
 
     @staticmethod
-    def _added(o: dict[str, Any], *, major: bool) -> dict[str, Any]:
+    def _added(o: Operation | dict[str, Any], *, major: bool) -> Change:
         return {"operation": o["name"], "kind": "added", "detail": f"New {o['access']} operation", "major": major}
 
-    def _new_op(self, module_id: str, index: int, o: dict[str, Any]) -> dict[str, Any]:
+    def _new_op(self, module_id: str, index: int, o: dict[str, Any]) -> Operation:
         return {
+            **operation_defaults(),
             "id": f"{module_id}_op{index}",
             "tool_id": new_id("tl"),
             "name": o["name"],
@@ -1281,7 +1326,7 @@ class ModuleService:
                 "reachability": [{"environment": "test", "ok": True, "checkedAt": now.isoformat()}],
             }
         ]
-        m.update(template)
+        _provision(m, template)
         return await self._detail(await self._create(m), who.team, who)
 
     async def _usable_connection(
@@ -1369,7 +1414,7 @@ class ModuleService:
             raise ValidationFailed(f"{conn['name']} serves {held}; this source is {address}. Pick its own connection.")
 
     async def _address(self, tenant_id: str, m: Aggregate) -> str:
-        conn = await self.connections.get(tenant_id, m["connection_id"]) if m.get("connection_id") else None
+        conn = await self.connections.get(tenant_id, cid) if (cid := m["connection_id"]) else None
         return connection_base(conn) if conn else ""
 
     async def create_blank(self, who: Caller, i: dict[str, Any]) -> dict[str, Any]:
@@ -1404,7 +1449,7 @@ class ModuleService:
                 catalog_id=conn.get("catalog_id"),
                 egress_hosts=[host] if host else [],
             )
-        m.update(template)
+        _provision(m, template)
         return await self._detail(await self._create(m), who.team, who)
 
     # ── Editing ───────────────────────────────────────────────────────────
@@ -1420,15 +1465,15 @@ class ModuleService:
         if patch.get("description") is not None:
             m["description"] = patch["description"].strip()
         if patch.get("sign_in") is not None:
-            conn = await self.connections.get(who.tenant_id, m["connection_id"]) if m["connection_id"] else None
+            conn = await self.connections.get(who.tenant_id, cid) if (cid := m["connection_id"]) else None
             if conn is not None:
                 sign_in_fits(str(patch["sign_in"]), conn)
             m["sign_in"] = sign_in_of(patch["sign_in"])
-        m.update(_provisioned(who, patch))
+        _provision(m, _provisioned(who, patch))
         return await self._detail(await self._save(m), who.team, who, levels=levels)
 
-    def _stage(self, m: Aggregate, changes: list[dict[str, Any]]) -> None:
-        pending: list[dict[str, Any]] = list(m["pending"])
+    def _stage(self, m: Aggregate, changes: list[Change]) -> None:
+        pending: list[Change] = list(m["pending"])
         for c in changes:
             i = next(
                 (n for n, p in enumerate(pending) if p["operation"] == c["operation"] and p["kind"] == c["kind"]), -1
@@ -1471,7 +1516,7 @@ class ModuleService:
     async def add_operation(self, who: Caller, module_id: str, h: dict[str, Any]) -> dict[str, Any]:
         _can(who, "tools", "edit", what="tools")
         m = await self._changeable(who, module_id)
-        conn = await self.connections.get(who.tenant_id, m["connection_id"]) if m.get("connection_id") else None
+        conn = await self.connections.get(who.tenant_id, cid) if (cid := m["connection_id"]) else None
         op, origin = self._http_operation(h, connection_base(conn) if conn else "")
         await self.hold_unless_listed(who, urlsplit(origin).hostname, conn["name"] if conn else m["display_name"])
         if conn is None:
@@ -1615,7 +1660,7 @@ class ModuleService:
         access = patch.get("access")
         answer_before = o.get("approval_mode")
         self._take_baseline(m)
-        changes: list[dict[str, Any]] = self._shape_changes(o, shape)
+        changes: list[Change] = self._shape_changes(o, shape)
         name = o["name"]
         if new_input is not None:
             changes.extend(self._input_changes(o, new_input))
@@ -1749,7 +1794,7 @@ class ModuleService:
         # when the console writes the example through the mock routes.
         if "stub" in fields:
             stub = patch.get("stub")
-            stub = {"ok": True} if stub is None else stub
+            stub: JsonValue = {"ok": True} if stub is None else stub
             if len(json.dumps(stub)) > MAX_STUB_BYTES:
                 raise ValidationFailed(f"Keep the mock response under {MAX_STUB_BYTES // 1000} KB.")
             if stub != o.get("stub"):
@@ -1773,7 +1818,7 @@ class ModuleService:
         return await self._detail(await self._save(m, events=told), who.team, who, levels=levels)
 
     @staticmethod
-    def _code_changes(o: dict[str, Any], code: dict[str, Any]) -> list[dict[str, Any]]:
+    def _code_changes(o: Operation, code: CodeSettings) -> list[Change]:
         """Applies a code operation's new settings. A tool or secret it did not have widens what the function reaches,
         so Security reviews it; an edit to the source or the limits alone is minor."""
         if o["executor"] != "code":
@@ -1801,7 +1846,7 @@ class ModuleService:
         return await self._detail(await self._save(m), who.team, who, levels=levels)
 
     def _checked_shape(
-        self, m: Aggregate, o: dict[str, Any], patch: dict[str, Any], fields: set[str], base: str
+        self, m: Aggregate, o: Operation, patch: dict[str, Any], fields: set[str], base: str
     ) -> dict[str, Any]:
         """The call-shape fields this patch sets, validated as add validates them; nothing is applied here."""
         sent = {k: patch.get(k) for k in CALL_SHAPE if k in fields}
@@ -1845,13 +1890,13 @@ class ModuleService:
         return {k: v for k, v in sent.items() if v != o.get(k)}
 
     @staticmethod
-    def _shape_changes(o: dict[str, Any], shape: dict[str, Any]) -> list[dict[str, Any]]:
+    def _shape_changes(o: Operation, shape: dict[str, Any]) -> list[Change]:
         """Applies a validated call-shape edit to `o` and says what changed. A new method, path or body changes the
         contract a workflow was approved against, so it is major; headers, the transform and the timeout are minor."""
         if not shape:
             return []
         name = o["name"]
-        out: list[dict[str, Any]] = []
+        out: list[Change] = []
         contract = [k for k in ("method", "path", "body", "body_encoding") if k in shape]
         if contract:
             before = f"{o['method']} {o['path']}"
@@ -1870,7 +1915,20 @@ class ModuleService:
             minor.append(f"Timeout {limit / 1000:g} s" if limit else "Timeout back to the module's")
         if minor:
             out.append({"operation": name, "kind": "settings", "detail": "; ".join(minor), "major": False})
-        o.update(shape)
+        if "method" in shape:
+            o["method"] = shape["method"]
+        if "path" in shape:
+            o["path"] = shape["path"]
+        if "headers" in shape:
+            o["headers"] = shape["headers"]
+        if "body" in shape:
+            o["body"] = shape["body"]
+        if "body_encoding" in shape:
+            o["body_encoding"] = shape["body_encoding"]
+        if "response_transform" in shape:
+            o["response_transform"] = shape["response_transform"]
+        if "timeout_ms" in shape:
+            o["timeout_ms"] = shape["timeout_ms"]
         # A placeholder the new path or body names becomes an input; fields nothing names stay, and the console warns.
         named = [*URL_VAR.findall(o["path"] or ""), *BODY_VAR.findall(o.get("body") or "")]
         have = {f["name"] for f in o["input"]}
@@ -1878,11 +1936,11 @@ class ModuleService:
         return out
 
     @staticmethod
-    def _field_list(fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _field_list(fields: list[dict[str, Any]]) -> list[InputField]:
         """The input fields as stored: trimmed text, and unset optional parts left out."""
-        out: list[dict[str, Any]] = []
+        out: list[InputField] = []
         for f in fields:
-            row: dict[str, Any] = {"name": str(f["name"]).strip(), "type": f["type"], "required": bool(f["required"])}
+            row: InputField = {"name": str(f["name"]).strip(), "type": f["type"], "required": bool(f["required"])}
             for k in ("description", "format", "example"):
                 if f.get(k) not in (None, ""):
                     row[k] = str(f[k]).strip()
@@ -1895,12 +1953,12 @@ class ModuleService:
 
     @staticmethod
     def _check_input(
-        o: dict[str, Any],
-        fields: list[dict[str, Any]],
+        o: Operation | dict[str, Any],
+        fields: list[InputField],
         *,
         path: str | None,
         body: str | None,
-        binding: dict[str, Any] | None,
+        binding: Binding | None,
     ) -> None:
         """Refuses an input schema the call could not use, naming the field (details.field `input.<name>`)."""
 
@@ -1949,7 +2007,7 @@ class ModuleService:
             raise refuse("amount", "The amount limit reads the amount input; remove the limit before removing it.")
 
     @staticmethod
-    def _input_changes(o: dict[str, Any], fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _input_changes(o: Operation, fields: list[InputField]) -> list[Change]:
         """What an input edit changes for the agent. A field it must now send, a field taken away, a type change or a
         changed list of allowed values or a changed default changes the contract callers were approved against, so it is
         major; a new optional field without a default, a field made optional, a description or example is minor."""
@@ -1978,7 +2036,7 @@ class ModuleService:
             if any(old.get(k) != f.get(k) for k in ("description", "format", "example")):
                 minor.append(f"{n} edited")
         major.extend(f"{n} removed" for n in before if n not in after)
-        out: list[dict[str, Any]] = []
+        out: list[Change] = []
         if major:
             out.append({"operation": name, "kind": "schema_changed", "detail": "; ".join(major), "major": True})
         elif minor:
@@ -2001,7 +2059,9 @@ class ModuleService:
         # "always" sends every version to a review; "major" and "never" send a major one only, since every major
         # change to a tool module touches what it calls, how a write is approved, or where it reaches.
         mode = (
-            await self.publish_policy.mode(who.tenant_id, m["team_id"]) if self.publish_policy else ToolsMode("major")
+            await self.publish_policy.mode(who.tenant_id, m["team_id"] or "")
+            if self.publish_policy
+            else ToolsMode("major")
         )
         waits = major or mode.mode == "always"
         if not m["pending"]:
@@ -2013,10 +2073,11 @@ class ModuleService:
         version = f"{a + 1}.0.0" if major else f"{a}.{b + 1}.0"
         now = self.clock()
         if not waits:
-            m["versions"] = [{**v, "status": "deprecated"} if v["status"] == "published" else v for v in m["versions"]]
+            m["versions"] = [self._deprecated(v) if v["status"] == "published" else v for v in m["versions"]]
         m["versions"] = [
             *m["versions"],
             {
+                **version_defaults(),
                 "id": f"{m['id']}_v{version}",
                 "version": version,
                 "major": major_of(version),
@@ -2033,9 +2094,7 @@ class ModuleService:
         ]
         if waits:
             # A major change is the Security team's to decide; a minor one waiting under "always" is the module's team.
-            review_id = await self._open_review(
-                who, m, version, cast(list[dict[str, Any]], m["versions"][-1]["changes"]), note, security=major
-            )
+            review_id = await self._open_review(who, m, version, m["versions"][-1]["changes"], note, security=major)
             m["versions"][-1].update(review_id=review_id, requested_at=now)
         # A major version waits for Security: until it approves, calls keep the published call shape and approval policy
         # (the baseline), so a loosened policy or a new path does not run in the meantime.
@@ -2047,7 +2106,7 @@ class ModuleService:
         who: Caller,
         m: Aggregate,
         version: str,
-        changes: list[dict[str, Any]],
+        changes: list[Change],
         note: str,
         *,
         security: bool = True,
@@ -2075,7 +2134,8 @@ class ModuleService:
         _refuse_during_review(m, "discard changes")
         if m["baseline"] is None:
             raise ValidationFailed("There are no changes to discard.")
-        m.update(operations=copy.deepcopy(m["baseline"]), pending=[], baseline=None)
+        restored = [OPERATION.validate_python({**operation_defaults(), **o}) for o in m["baseline"]]
+        m.update(operations=restored, pending=[], baseline=None)
         return await self._detail(await self._save(m), who.team, who, levels=levels)
 
     async def request_review(self, who: Caller, module_id: str, note: str) -> dict[str, Any]:
@@ -2091,9 +2151,16 @@ class ModuleService:
         review_id = await self._open_review(who, m, m["version"], changes, note)
         if m["status"] == "draft":
             m["status"] = "in_review"
-        reviewed = {"review_id": review_id, "requested_at": self.clock(), "finding": None, "reviewer": None}
         status = "in_review" if last["status"] == "draft" else last["status"]
-        m["versions"] = [*m["versions"][:-1], {**last, **reviewed, "status": status}]
+        reviewed: Version = {
+            **last,
+            "review_id": review_id,
+            "requested_at": self.clock(),
+            "finding": None,
+            "reviewer": None,
+            "status": status,
+        }
+        m["versions"] = [*m["versions"][:-1], reviewed]
         return await self._detail(await self._save(m), who.team, who)
 
     async def apply_decision(
@@ -2182,7 +2249,7 @@ class ModuleService:
             raise Conflict(f"{name} already has an open request for this module.")
         now = self.clock()
         approval_id = new_id("apr")
-        a: dict[str, Any] = {
+        a: Approval = {
             "id": approval_id,
             "workflow_id": i["workflow_id"],
             "workflow_name": name,
@@ -2419,7 +2486,7 @@ class ModuleService:
         if "stub" in draft and len(json.dumps(draft["stub"])) > MAX_STUB_BYTES:
             raise ValidationFailed(f"Keep the mock response under {MAX_STUB_BYTES // 1000} KB.")
         template = draft["response_transform"] if "response_transform" in draft else o.get("response_transform")
-        mock = draft["stub"] if "stub" in draft and draft["stub"] is not None else o["stub"]
+        mock = draft["stub"] if "stub" in draft and draft["stub"] is not None else o.get("stub")
         trial = Trial()
         trial.note("Input checked against the operation's schema")
         out: dict[str, Any] = {
@@ -2484,8 +2551,8 @@ class ModuleService:
     async def _real_call(
         self,
         who: Caller,
-        module: dict[str, Any],
-        op: dict[str, Any],
+        module: Module,
+        op: Operation,
         args: dict[str, Any],
         *,
         secret_values: dict[str, str] | None,
@@ -2591,7 +2658,12 @@ class ModuleService:
         if conn is not None and conn["auth_kind"] == "none":
             # A module's own open connection holds only its address: there is nothing to sign in with.
             return {}, None
-        probe = {"tenant_id": who.tenant_id, "connection_id": connection_id, "team_id": who.team.id, "endpoint": url}
+        probe: ModuleRef = {
+            "tenant_id": who.tenant_id,
+            "connection_id": connection_id,
+            "team_id": who.team.id,
+            "endpoint": url,
+        }
         try:
             prepared = await self.auth.prepare(probe, TEST, tool="discovery", actor=who.name)
         except AuthFailed as e:

@@ -58,6 +58,7 @@ from ..store.connections import (
     plugin_of,
     verifier_context,
 )
+from ..store.modules import ModuleRef
 from ..store.secrets import SecretMeta
 from .account_events import connected_event
 from .records import status_of
@@ -1533,7 +1534,12 @@ class ConnectionService:
                 code="test_path_missing",
             )
         url = str(settings["baseUrl"]).rstrip("/") + path
-        probe = {"tenant_id": who.tenant_id, "connection_id": conn["id"], "team_id": conn["team_id"], "endpoint": url}
+        probe: ModuleRef = {
+            "tenant_id": who.tenant_id,
+            "connection_id": conn["id"],
+            "team_id": conn["team_id"],
+            "endpoint": url,
+        }
         person = (
             ActingForPerson(
                 sub=own_key(who),

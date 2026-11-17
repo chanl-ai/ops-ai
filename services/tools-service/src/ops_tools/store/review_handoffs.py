@@ -4,7 +4,6 @@ the versions waiting for a review Reviews has not opened, and open tool access r
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 import sqlalchemy as sa
 from pydantic import JsonValue
@@ -16,7 +15,7 @@ from ops_store.rows import rows
 from ops_store.store import Store
 from ops_store.team_scope import any_team
 
-from .modules import module_approvals, module_versions, service_outbox, tool_modules
+from .modules import ServiceEvent, module_approvals, module_versions, service_outbox, tool_modules
 from .tenancy import ROLE, SYSTEM_ROLE
 
 # Why the hand-over lists every tenant's modules, waiting versions and open requests: it runs once at start, before any
@@ -111,7 +110,7 @@ class ReviewHandoffs(Store):
             )
             return await rows(c, q, OpenAccess)
 
-    async def start_access_run(self, row: OpenAccess, *, event: dict[str, Any]) -> None:
+    async def start_access_run(self, row: OpenAccess, *, event: ServiceEvent) -> None:
         """An open request handed to its system workflow: its event and its run key commit together, so it is asked
         once, and a copy that runs again finds nothing left to hand over."""
         a = module_approvals

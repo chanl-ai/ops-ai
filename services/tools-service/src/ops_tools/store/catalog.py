@@ -54,8 +54,8 @@ class ToolCatalog(ModuleStore):
         where = [t.tenant_id == tenant_id, any_team(tool_modules, RESYNC), *([t.id > after] if after else [])]
         async with self.tx() as c:
             q = tool_modules.select().where(*where).order_by(t.id).limit(limit + 1)
-            rows = [dict(r) for r in (await c.execute(q)).mappings()]
+            rows = list((await c.execute(q)).mappings())
             more, rows = len(rows) > limit, rows[:limit]
             kids = await self._children(c, tenant_id, [str(r["id"]) for r in rows])
-        items = [e for r in rows for e in catalog_events({**r, **kids[str(r["id"])]}, self.titles)]
+        items = [e for r in rows for e in catalog_events(self._of(r, kids[str(r["id"])]), self.titles)]
         return CatalogPage(items=items, next_cursor=str(rows[-1]["id"]) if more else None)

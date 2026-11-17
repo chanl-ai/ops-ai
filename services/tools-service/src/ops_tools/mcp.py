@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import httpx
+from pydantic import TypeAdapter
 
 from ops_service_kit.http import JsonValue
 
@@ -23,6 +24,8 @@ from .modules.seed import fields_of
 
 # A JSON-RPC object an MCP server sent: its content is the server's own, so it is JsonValue all the way down.
 Json = dict[str, JsonValue]
+# An operation's input fields as the JSON the discovery answer carries.
+JSON_LIST = TypeAdapter(list[JsonValue])
 
 PROTOCOL_VERSION = "2025-06-18"
 CLIENT: Json = {"name": "ops-tools-service", "version": "0.1.0"}
@@ -189,7 +192,7 @@ def discovered(tools: list[Json], url: str, server: Json) -> Json:
             "method": None,
             "path": original,
             "group": "tools",
-            "input": [*fields_of(schema if isinstance(schema, dict) else {})],
+            "input": JSON_LIST.validate_python(fields_of(schema if isinstance(schema, dict) else {})),
             "headers": [],
         }
         operations.append(operation)

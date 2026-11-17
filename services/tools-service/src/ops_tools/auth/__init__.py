@@ -29,6 +29,7 @@ from ..connections.records import EXPIRED, REFUSED
 from ..environments import LIVE
 from ..secrets import SecretMissing, SecretResolver
 from ..store.connections import SHARED, ConnectionStore
+from ..store.modules import Module, ModuleRef
 from .assertion import SigningError, read_certificate
 from .kinds import Kind, kind_of, origin
 from .tokens import AuthFailed, ClientProof, Tokens, scope_list
@@ -201,7 +202,7 @@ class Authenticator:
         # Makes the link a call hands back when the person it acts for has not signed in.
         self.links = links
 
-    async def addressed(self, module: dict[str, Any]) -> dict[str, Any]:
+    async def addressed(self, module: Module) -> Module:
         """The module as a call reaches it: its address is its account's, the only home an address has. Empty
         with no account, or one naming none, and `prepare` says why."""
         connection_id = module.get("connection_id")
@@ -211,7 +212,7 @@ class Authenticator:
 
     async def prepare(
         self,
-        module: dict[str, Any],
+        module: ModuleRef,
         run: str,
         *,
         tool: str,
@@ -438,7 +439,7 @@ class Authenticator:
         raise AuthFailed("CONNECTION_NOT_LINKED", message, details=details)
 
     async def refused(
-        self, module: dict[str, Any], prepared: Prepared, acting_for: ActingForPerson, reason: str
+        self, module: ModuleRef, prepared: Prepared, acting_for: ActingForPerson, reason: str
     ) -> AuthFailed:
         """The system refused a person's own key with 401: their row alone is marked, so their next call asks
         for a new key, and this call answers CONNECTION_NOT_LINKED with reason `refused` for the card to ask now. The
