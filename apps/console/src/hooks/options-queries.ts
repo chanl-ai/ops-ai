@@ -82,36 +82,22 @@ export const teamAppOptions = appsWhere('team-app-options', false);
  */
 export const connectionOptions: OptionSource<ConnectionOptionsPage> = {
   key: 'connection-options',
-  // GET /v1/apps has no filter for "has an account" yet (parameter needed: hasAccount), so a page of apps with none is
-  // skipped by reading on to the next page, never returned empty while later pages still match.
   fetch: async ({ search, cursor, limit = 25 }) => {
-    let page = Number(cursor ?? 1);
-    for (let tries = 0; ; tries++) {
-      const res = await sdk((ops) => ops.raw.tools.apps_list_apps({ query: { page, pageSize: limit, search: search || undefined } }));
-      const data = res.data.flatMap((c) => (c.connectionId ? [{ id: c.connectionId, label: c.name, hint: c.category ?? null, status: c.status ?? 'draft' }] : []));
-      const more = res.pagination.hasNext;
-      if (data.length || !more || tries >= 9) return { data, nextCursor: more ? String(page + 1) : null };
-      page += 1;
-    }
+    const page = Number(cursor ?? 1);
+    const res = await sdk((ops) => ops.raw.tools.apps_list_apps({ query: { page, pageSize: limit, search: search || undefined, hasAccount: ['true'] } }));
+    const data = res.data.flatMap((c) => (c.connectionId ? [{ id: c.connectionId, label: c.name, hint: c.category ?? null, status: c.status ?? 'draft' }] : []));
+    return { data, nextCursor: res.pagination.hasNext ? String(page + 1) : null };
   },
 };
-/** The team's secrets by name, searched on the name by the list route; a page number is the cursor. */
+/** The team's secrets by name a header may name (not those held by an account or auth config), searched on the name by the list route; a page number is the cursor. */
 export const secretOptions: OptionSource = {
   key: 'secret-options',
-  // GET /v1/secrets has no filter for secrets a header may name yet (parameter needed: readOnly=false), so a page of
-  // read-only ones is skipped by reading on to the next page, never returned empty while later pages still match.
   fetch: async ({ search, cursor, limit = 25, ids }) => {
-    let page = Number(cursor ?? 1);
-    for (let tries = 0; ; tries++) {
-      const res = await sdk((ops) =>
-        ops.raw.tools.secrets_list_secrets({ query: { page, pageSize: ids?.length ? Math.min(ids.length, 50) : limit, ids: ids?.length ? ids : undefined, search: ids?.length ? undefined : search || undefined } }),
-      );
-      // A secret held by an account or an auth config is not one a header may name, so it is not offered.
-      const data = res.data.filter((s) => !s.readOnly).map((s) => ({ id: s.name, label: s.name }));
-      const more = !ids?.length && res.pagination.hasNext;
-      if (data.length || !more || tries >= 9) return { data, nextCursor: more ? String(page + 1) : null };
-      page += 1;
-    }
+    const page = Number(cursor ?? 1);
+    const res = await sdk((ops) =>
+      ops.raw.tools.secrets_list_secrets({ query: { page, pageSize: ids?.length ? Math.min(ids.length, 50) : limit, ids: ids?.length ? ids : undefined, search: ids?.length ? undefined : search || undefined, readOnly: ['false'] } }),
+    );
+    return { data: res.data.map((s) => ({ id: s.name, label: s.name })), nextCursor: !ids?.length && res.pagination.hasNext ? String(page + 1) : null };
   },
 };
 /** Live, published guardrails an agent may pin, searched on the server; `ids` labels the pins held. */

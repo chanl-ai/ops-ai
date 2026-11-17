@@ -41,7 +41,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToolCall } from '@/hooks/governance-queries';
 import { useCurrentPerson } from '@/hooks/auth-queries';
 import { useCanBuild, useNavAllows } from '@/hooks/me-queries';
-import { useWorkflows } from '@/hooks/queries';
 import {
   useAddOperation,
   useDecideModuleApproval,
@@ -83,8 +82,6 @@ export default function ModulePage() {
   const query = useToolModule(id);
   const activity = useModuleActivity(id, tab === 'activity');
   const me = useCurrentPerson().ids;
-  // The workflows an approval can name are the registry's (agents-service), the same list the Workflows page shows.
-  const { data: approvalWorkflows } = useWorkflows({ page: 1, pageSize: 200 });
   const updateOp = useUpdateOperation();
   const publish = usePublishModuleVersion();
   const discard = useDiscardModuleChanges();
@@ -531,7 +528,6 @@ export default function ModulePage() {
           <RequestApprovalDialog
             open={requestOpen}
             onOpenChange={setRequestOpen}
-            workflows={(approvalWorkflows?.data ?? []).map((w) => ({ id: w.id, name: w.name }))}
             operations={m.operations}
             major={m.major}
             isPending={request.isPending}
