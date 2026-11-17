@@ -118,9 +118,12 @@ function columns(showTeam: boolean, onHold: ((f: FileRecord) => void) | undefine
   ];
 }
 
+/** The columns files-service orders by (`sortBy` name or uploadedAt); the others are not sortable. */
+const SORT_COLUMNS = { name: 'name', uploaded: 'uploadedAt' };
+
 export default function FilesPage() {
   const [view, setView] = React.useState<FileView>('all');
-  const list = useListParams<FileFilters>('name');
+  const list = useListParams<FileFilters>('name', undefined, undefined, SORT_COLUMNS);
   // The uploaded-at range goes to the service with the other filters: from the start of the first day to the end of the last.
   const [uploaded, setUploaded] = React.useState<DateRange | undefined>();
   const dayStart = (d: Date, plus = 0) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + plus).toISOString();
@@ -260,6 +263,7 @@ export default function FilesPage() {
               { label: 'Delete', icon: Trash2, variant: 'destructive', onClick: (rs) => setDeleting(rs) },
             ]}
             serverPagination={serverPagination(list, query)}
+            serverSorting={list.serverSort}
             emptyState={<ListEmpty icon={Files} noun={view === 'all' ? 'files' : 'files in this view'} filtered={list.isFiltered} onClear={() => setFilterResetKey((k) => k + 1)} description={VIEW_EMPTY[view]} />}
           />
         </div>

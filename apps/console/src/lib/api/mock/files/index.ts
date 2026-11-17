@@ -478,7 +478,7 @@ export function createFilesMock(deps: FilesDeps): { api: FilesApi; links: FileLi
           ...list(
             rows.filter((r) => inView(r, p.view)).sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt)),
             { ...p, filters },
-            { text: (r) => `${r.name} ${r.uploadedBy} ${r.team} ${r.digest}`, value: (r, k) => (k === 'scan' ? r.scan.status : k === 'retention' ? r.retention.classId : field(r, k)), facetKeys: ['purpose', 'team', 'sensitivity', 'scan', 'retention'] },
+            { text: (r) => `${r.name} ${r.uploadedBy} ${r.team} ${r.digest}`, value: (r, k) => (k === 'scan' ? r.scan.status : k === 'retention' ? r.retention.classId : field(r, k)), facetKeys: ['purpose', 'team', 'sensitivity', 'scan', 'retention'], id: (r) => r.id, sort: (r, k) => (k === 'name' ? r.name.toLowerCase() : k === 'uploadedAt' ? r.uploadedAt : undefined) },
             m,
           ),
           viewCounts,
