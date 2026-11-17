@@ -10,10 +10,27 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, Protocol
 
 from ops_service_kit.errors import Forbidden
+
+
+class Sees(Protocol):
+    """Whether the caller's team reaches a module, or one operation of it when `operation` is named."""
+
+    def __call__(self, m: Any, operation: str | None = None, /) -> bool: ...
+
+
+def grant_reaches(a: Any, team_id: str, operation: str | None, now: datetime) -> bool:
+    """An approval opens a module to `team_id` while it is approved and not past its end date, and only for the
+    operations it names. `expired` is never stored, so the end date is read here, at each decision."""
+    if a.get("workflow_team_id") != team_id or a.get("status") != "approved":
+        return False
+    ends = a.get("expires_at")
+    if isinstance(ends, datetime) and (ends if ends.tzinfo else ends.replace(tzinfo=UTC)) <= now:
+        return False
+    return operation is None or operation in (a.get("operations") or [])
 
 
 @dataclass(frozen=True)
@@ -73,12 +90,14 @@ class Directory:
             groups.extend(team.owner_groups if team else [])
         return groups
 
-    def sees_module(self, team: Team, m: Mapping[str, Any]) -> bool:
+    def sees_module(self, team: Team, m: Mapping[str, Any], operation: str | None = None) -> bool:
         """A team reads its own modules, workspace-level ones (no team) and those approved for one of its workflows,
-        which is the explicit grant across teams. No scope reaches another team's modules otherwise."""
+        which is the explicit grant across teams. No scope reaches another team's modules otherwise. A grant reaches
+        only the operations it names (`operation`, when one is asked about) and nothing past its end date."""
         if m.get("team_id") in (team.id, None):
             return True
-        return any(a.get("workflow_team_id") == team.id and a.get("status") == "approved" for a in m["approvals"])
+        now = datetime.now(UTC)
+        return any(grant_reaches(a, team.id, operation, now) for a in m["approvals"])
 
     def guard(self, team: Team, owners: list[str | None], what: str) -> None:
         """403 naming the owning team when the record is outside the caller's team."""

@@ -1,5 +1,6 @@
 """The names behind the strings runs and records keep for who did something (api/actors.py): a mailbox's name by its
-address, a run's workflow name, an agent's name. One query per kind for a whole page."""
+address, a run's workflow name, an agent's name, an API key's label from this service's copy of the keys. One query per
+kind for a whole page."""
 
 from __future__ import annotations
 
@@ -12,6 +13,7 @@ from ops_store import Guarantee
 from ops_store.team_scope import team_visible
 
 from .agent_registry import registry_agent_versions, registry_agents
+from .api_key_copies import api_key_copies
 from .form_links import form_links
 from .mailboxes import mailboxes
 from .tenancy import RuntimeStore, current_tenant
@@ -24,8 +26,11 @@ FORM = "form:"
 class ActorNames(RuntimeStore):
     requires: ClassVar[frozenset[Guarantee]] = frozenset()
 
-    async def names(self, *, addresses: set[str], run_ids: set[str], agent_ids: set[str]) -> dict[tuple[str, str], str]:
-        """`{(kind, id): name}` for kinds trigger (by mailbox address), run and agent; what is not found is left out."""
+    async def names(
+        self, *, addresses: set[str], run_ids: set[str], agent_ids: set[str], key_ids: frozenset[str] = frozenset()
+    ) -> dict[tuple[str, str], str]:
+        """`{(kind, id): name}` for kinds trigger (by mailbox address), run, agent and key; what is not found is left
+        out. A revoked key keeps its copy row, so a run a retired key started keeps the key's name."""
         names: dict[tuple[str, str], str] = {}
         async with self.tx() as c:
             if addresses:
@@ -56,6 +61,12 @@ class ActorNames(RuntimeStore):
                     .where(r.c.tenant_id == current_tenant(), r.c.id.in_(run_ids))
                 )
                 names |= {("run", str(i)): str(n) for i, n in (await c.execute(q)).all()}
+            if key_ids:
+                k = api_key_copies
+                q = sa.select(k.c.id, k.c.name).where(
+                    k.c.tenant_id == current_tenant(), k.c.id.in_(key_ids), team_visible(k)
+                )
+                names |= {("key", str(i)): str(n) for i, n in (await c.execute(q)).all()}
         if agent_ids:
             a, v = registry_agents, registry_agent_versions
             q = (

@@ -177,7 +177,6 @@
 2 dict-any services/agents-service/src/ops_agents/api/file_names.py
 14 dict-any services/agents-service/src/ops_agents/api/guardrails.py
 97 dict-any services/agents-service/src/ops_agents/api/hitl_facade.py
-2 dict-any services/agents-service/src/ops_agents/api/key_summaries.py
 23 dict-any services/agents-service/src/ops_agents/api/legacy_tasks.py
 6 dict-any services/agents-service/src/ops_agents/api/mailbox_gateway.py
 21 dict-any services/agents-service/src/ops_agents/api/memory.py

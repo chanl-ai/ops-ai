@@ -6,7 +6,7 @@ module holds is unknown. Without one (the agents-service gateway tests) the agen
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
@@ -18,6 +18,7 @@ from ops_store.team_scope import acting_team
 from .connections.records import account_for
 from .defaults import ensure_defaults
 from .environments import LIVE
+from .modules.directory import Sees
 from .modules.policy import tool_mode
 from .modules.seed import PLATFORM_TOOLS, READ_TOOLS, SENDS, ensure_platform_tools, tool_title
 from .modules.seed import WORKFLOW_TOOLS as PLATFORM_MODULE_TOOLS
@@ -143,7 +144,7 @@ class ToolRegistry:
         definition = self.catalog.tool(tool)
         return definition.access if definition else "unknown"
 
-    async def grantable(self, tenant_id: str, sees: Callable[[Aggregate], bool] | None = None) -> list[dict[str, Any]]:
+    async def grantable(self, tenant_id: str, sees: Sees | None = None) -> list[dict[str, Any]]:
         """The operations an agent may be granted: every enabled operation of a published module that has not drifted,
         the same conditions `/v1/calls` checks before it runs one. Without a module store, the agents catalogue.
         `sees` keeps the modules one team sees (the MCP adapter lists a team's tools)."""
@@ -197,6 +198,9 @@ class ToolRegistry:
             for served in served_operations(module):
                 op = self.plugins.operation(view, served) if view is not module and self.plugins is not None else served
                 if not op["enabled"] or (module["team_id"] is None and op["name"] in own):
+                    continue
+                if sees is not None and not sees(module, str(op["name"])):
+                    # Another team's module is reached through a grant, which names the operations it opens.
                     continue
                 rows.append(
                     {

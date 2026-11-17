@@ -16,6 +16,7 @@ from httpx import AsyncClient, Response
 
 from ops_agents.api.agent_registry import SEED_TEAM
 from ops_agents.store.api_key_copies import ApiKeyCopies, KeySummary, listed_event
+from ops_agents.store.batches import Batches
 from ops_agents.store.mailboxes import MailboxRow, MailboxStore
 from ops_agents.store.tenancy import tenant_scope
 from ops_agents.store.widget_deployments import WidgetDeployments
@@ -26,6 +27,7 @@ from ops_store.database import open_database
 
 from ..conftest import SEED, emptied, started
 from .test_case_record_route_pins import DISPUTE
+from .test_forms import INPUTS, flow
 from .test_guardrails_route_pins import RULE
 from .test_skills_route_pins import SKILL
 from .test_widget_registry import LIMIT_CARD
@@ -43,6 +45,7 @@ PATH_IDS = (
     "batch_id",
     "case_id",
     "copy",
+    "deployment_id",
     "guardrail_id",
     "mailbox_id",
     "name",
@@ -175,6 +178,30 @@ def seed_team(served: tuple[FastAPI, AsyncClient], swaps: dict[str, str]) -> See
             # Dev auto-approve takes the definition live, so runs of it start (and stay queued: no worker runs here).
             live = await client.post(f"/v1/workflows/definitions/{DEFINITION}/publish-requests", json={}, headers=DEV)
             assert live.status_code == 201, live.text
+            ids["request_id"] = str(live.json()["data"]["id"])
+            # The live-workflow route names the engine definition, which the shared `{workflow_id}` cannot carry.
+            swaps[f"/v1/workflows/{REGISTRY_WORKFLOW}/live"] = f"/v1/workflows/{DEFINITION}/live"
+            made = await client.post("/v1/chat/threads", json={"kbIds": []}, headers=DEV)
+            assert made.status_code in (200, 201), made.text
+            chat = str(made.json()["data"]["id"])
+            for path in ("", "/connectors", "/settings"):
+                for prefix in ("/chat", "/v1/chat"):
+                    swaps[f"{prefix}/threads/{ids['thread_id']}{path}"] = f"{prefix}/threads/{chat}{path}"
+            # A live workflow whose trigger has inputs, shared as a link and as a members-only page.
+            made = await client.post(
+                "/v1/workflows/definitions", json={"definition": flow("budget_form", INPUTS)}, headers=DEV
+            )
+            assert made.status_code == 201, made.text
+            live = await client.post("/v1/workflows/definitions/budget_form/publish-requests", json={}, headers=DEV)
+            assert live.status_code == 201, live.text
+            forms: dict[str, dict[str, Any]] = {}
+            for mode in ("link", "members"):
+                body = {"mode": mode, "expiresInDays": 30, "dailyCap": 100, "title": f"Budget {mode}"}
+                shared = await client.post("/v1/workflows/budget_form/forms", json=body, headers=DEV)
+                assert shared.status_code == 201, shared.text
+                forms[mode] = shared.json()["data"]
+            ids.update(slug=str(forms["link"]["slug"]), form_token=str(forms["link"]["token"]))
+            swaps[f"/v1/forms/{ids['slug']}/members"] = f"/v1/forms/{forms['members']['slug']}/members"
         for i in range(n):
             tag = f"{n}-{i:02d}"
             agent = _id(await client.post("/v1/agents", json={"name": f"Agent {tag}", "role": "Answers"}, headers=DEV))
@@ -190,8 +217,8 @@ def seed_team(served: tuple[FastAPI, AsyncClient], swaps: dict[str, str]) -> See
             case = _id(await client.post("/v1/cases", json={**DISPUTE, "subject": f"Dispute {tag}"}, headers=DEV))
             # A workflow of each engine, so the Workflows list grows on both sides of its union.
             _id(await client.post("/v1/workflows", json={"name": f"Flow {tag}"}, headers=DEV))
-            flow = {"yaml": BASIC.read_text().replace("id: refund_check", f"id: budget_flow_{n}_{i:02d}")}
-            assert (await client.post("/v1/workflows/definitions", json=flow, headers=DEV)).status_code == 201
+            engine_flow = {"yaml": BASIC.read_text().replace("id: refund_check", f"id: budget_flow_{n}_{i:02d}")}
+            assert (await client.post("/v1/workflows/definitions", json=engine_flow, headers=DEV)).status_code == 201
             # A run of the registry workflow to its review, so its runs list and each run's journal grow.
             made = await client.post("/v1/threads", json={"graph": REGISTRY_WORKFLOW}, headers=DEV)
             assert made.status_code == 201, made.text
@@ -205,11 +232,26 @@ def seed_team(served: tuple[FastAPI, AsyncClient], swaps: dict[str, str]) -> See
             await _channels(served[0], tag, agent)
             if i == 0 and n == 5:
                 ids.update(agent_id=agent, skill_id=skill, guardrail_id=rule, widget_id=widget, case_id=case)
-                ids.update(run_id=str(queued.json()["data"]["runId"]))
+                ids.update(run_id=str(queued.json()["data"]["runId"]), review_id=waiting)
+                # `_channels` names the first mailbox and embed by the tag, without its dash.
+                ids.update(mailbox_id="mbx_budget500", deployment_id="wd_budget500")
                 # The thread routes keep the seeded thread; a review and a graph run's events read the waiting run.
                 swaps[f"/reviews/{ids['thread_id']}"] = f"/reviews/{waiting}"
                 events = f"/v1/threads/{ids['thread_id']}/runs/{ids['run_id']}/events"
                 swaps[events] = f"/v1/threads/{waiting}/runs/{graph_run}/events"
+        # A batch of `n` rows at each size, so its page and its results file grow with the rows.
+        with tenant_scope(DEV_TENANT):
+            batch = await Batches(served[0].state.runtime.db).create(
+                team_id=SEED_TEAM,
+                workflow_id=DEFINITION,
+                version=1,
+                mode="live",
+                file_id=f"file_budget{n}",
+                file_name="refunds.csv",
+                created_by="b",
+                rows=[{"customerId": f"C-{n}-{i:02d}", "amount": 250} for i in range(n)],
+            )
+        ids["batch_id"] = batch.id
         return Seeded(headers=DEV, ids=ids)
 
     return seed

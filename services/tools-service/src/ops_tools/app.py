@@ -51,7 +51,7 @@ from .gateway_calls import API, WRITES, CallRequest, GatewayCalls, Outcome, Refu
 from .held_hosts import install_held_hosts
 from .mcp_server import McpAdapter
 from .mocks import MockAnswers
-from .modules.directory import Directory
+from .modules.directory import Directory, Sees
 from .modules.policy import RequesterMayDecide, WriteApprovals, approves_own_writes
 from .modules.service import ModuleService
 from .opa import POLICY_FILE, OpaClient, PolicyMismatchError, policy_hash, registered_identities
@@ -64,7 +64,6 @@ from .store import CallLog
 from .store.connections import ConnectionStore, plugin_app
 from .store.mcp_links import McpLinks
 from .store.mocks import MockStore
-from .store.modules import Aggregate
 from .store.rate_windows import RateWindows
 from .tools import ToolRunner
 
@@ -443,14 +442,14 @@ def create_gateway_app(
         """This service's background processes and their state; counts and error types only, no record's data."""
         return {"processes": background_report(await LOCAL_BEATS.read(), "tools", time.time())}
 
-    def team_view(caller: Principal) -> Callable[[Aggregate], bool] | None:
+    def team_view(caller: Principal) -> Sees | None:
         """The modules a run of the caller's team may reach: its own, workspace-level ones, and those approved
         for one of its workflows, a grant that covers the team's agents too. None for a token naming no team, which
         acts for the whole tenant."""
         if not caller.team_id:
             return None
         team = (directory or Directory(teams=())).team(caller.team_id)
-        return lambda m: (directory or Directory(teams=())).sees_module(team, m)
+        return lambda m, operation=None: (directory or Directory(teams=())).sees_module(team, m, operation)
 
     @app.get(
         "/v1/grantable-operations",

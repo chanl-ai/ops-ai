@@ -35,7 +35,6 @@ export type TestTab = (typeof TEST_TABS)[number];
 export function AgentTestPanel({
   agentId,
   agentName,
-  kbNames,
   held,
   tab,
   onTabChange,
@@ -49,7 +48,6 @@ export function AgentTestPanel({
 }: {
   agentId: string;
   agentName: string;
-  kbNames: Record<string, string>;
   /** The tools the draft holds, for Why to name what a reply could have called and which pause. */
   held: HeldTool[];
   tab: TestTab;
@@ -184,7 +182,7 @@ export function AgentTestPanel({
                   </SelectContent>
                 </Select>
               )}
-              <TestWhy message={why} kbNames={kbNames} held={held} />
+              <TestWhy message={why} held={held} />
             </div>
           ) : (
             <p className="py-10 text-center text-sm text-muted-foreground">{streaming ? 'Why appears when the reply finishes.' : 'Send a test message to see what the agent searched, called and loaded to answer it.'}</p>

@@ -26,7 +26,6 @@ import {
 import { MemorySection } from '@/components/agents/memory-section';
 import { RequestAgentPublishDialog } from '@/components/agents/request-agent-publish-dialog';
 import { useSendMessage } from '@/hooks/chat-queries';
-import { useKnowledgeBases } from '@/hooks/knowledge-queries';
 import { AgentTestPanel, TEST_TABS, type TestTab } from '@/components/agents/agent-test-panel';
 import { LivePlacesPanel } from '@/components/channels/hub/live-places';
 import { AgentChatChannel } from '@/components/agents/agent-channels';
@@ -183,8 +182,6 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
     };
   }, [testThreadId, chat]);
   const panelRef = React.useRef<HTMLDivElement>(null);
-  const kbList = useKnowledgeBases({ page: 1, pageSize: 100 });
-  const kbNames = React.useMemo(() => Object.fromEntries((kbList.data?.data ?? []).map((k) => [k.id, k.name])), [kbList.data]);
 
   // Pausing only means something once a version is published; before that no run can use the agent.
   const pausable = agent.publishedVersion !== null;
@@ -442,7 +439,6 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
               <AgentTestPanel
                 agentId={agent.id}
                 agentName={agent.name}
-                kbNames={kbNames}
                 held={(tools.data ?? []).filter((t) => draft.toolIds.includes(t.id)).map((t) => ({ name: t.name, approval: t.requiresApproval ? (t.approval ?? 'a review') : null }))}
                 tab={testTab}
                 onTabChange={setTestTab}

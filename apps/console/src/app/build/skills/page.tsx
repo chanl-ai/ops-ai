@@ -266,7 +266,7 @@ export default function SkillsPage() {
       ) : (
         <div className="flex flex-col gap-4">
           <SavedViewTabs
-            ariaLabel="SkillRow views"
+            ariaLabel="Skill views"
             presets={[
               { id: 'all', label: countLabel('All', counts?.all) },
               { id: 'published', label: countLabel('Published', counts?.published) },

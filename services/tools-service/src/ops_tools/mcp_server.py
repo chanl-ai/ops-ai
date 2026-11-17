@@ -42,10 +42,9 @@ from ops_store import isolation
 from .environments import TEST
 from .gateway_calls import MCP, WRITES, Allowed, CallRequest, GatewayCalls, Outcome, Run
 from .mcp_tools import PLATFORM, PlatformTools
-from .modules.directory import Directory, Team
+from .modules.directory import Directory, Sees, Team
 from .registry import Resolved, ToolRegistry
 from .store.mcp_links import McpLink, McpLinks
-from .store.modules import Aggregate
 
 # `/mcp/<team>` is the team's whole address; `/mcp/<team>/<link>` one of its MCP links (store/mcp_links.py).
 _PATH = re.compile(r"^(?:/mcp)?/(?P<team>[^/]+)(?:/(?P<link>[^/]+))?/?$")
@@ -174,9 +173,9 @@ class McpAdapter:
             )
         return found
 
-    def _sees(self, team: Team) -> Any:
-        def sees(module: Aggregate) -> bool:
-            return self.directory.sees_module(team, module)
+    def _sees(self, team: Team) -> Sees:
+        def sees(module: Any, operation: str | None = None, /) -> bool:
+            return self.directory.sees_module(team, module, operation)
 
         return sees
 

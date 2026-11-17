@@ -113,7 +113,9 @@ class Upgrade:
 
     async def listed(self, team: str) -> set[str]:
         with acting_as(team):
-            rows = await ToolRegistry(self.catalog, self.store, self.host).grantable(self.tenant, sees=lambda _m: True)
+            rows = await ToolRegistry(self.catalog, self.store, self.host).grantable(
+                self.tenant, sees=lambda _m, _op=None: True
+            )
         return {r["name"] for r in rows if r["name"].startswith("fields_")}
 
 

@@ -43,6 +43,10 @@ class PublishPolicy:
             return ToolsMode("always", unreadable=True)
 
 
+# appChanges switches whose off value lets a write run that would otherwise wait.
+LOOSENING = frozenset({"makersAsk", "testRunsAsk"})
+
+
 class WriteApprovals:
     def __init__(self, platform: ServiceClient | None = None) -> None:
         """The team's approval settings for agent changes (`appChanges`, `appChangesByApp`), read live from
@@ -60,7 +64,13 @@ class WriteApprovals:
             by_app = await self.platform.get("/v1/policies/appChangesByApp", tenant=tenant_id)
             held = dict(team.get("value") or {})
             # `*` is the workspace's own value (a new workspace's makersAsk off); a team's saved part wins over it.
-            of_team = {**dict(held.get("*") or {}), **dict(held.get(team_id) or {})} if team_id else None
+            workspace = dict(held.get("*") or {})
+            if team_id:
+                of_team = {**workspace, **dict(held.get(team_id) or {})}
+            else:
+                # A caller naming no team waits where the workspace asks, and keeps every wait it had: the switches
+                # that only let writes through (makers' asks off, test runs not asking) are not taken from `*`.
+                of_team = {k: v for k, v in workspace.items() if not (k in LOOSENING and v is False)}
             apps = dict(by_app.get("value") or {}).get(team_id) if team_id else None
             return (of_team or {}), dict(apps or {})
         except (ServiceCallError, ServiceUnreachable, KeyError, TypeError, ValueError, AttributeError):

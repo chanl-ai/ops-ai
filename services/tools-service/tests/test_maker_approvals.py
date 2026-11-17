@@ -51,3 +51,25 @@ async def test_a_team_added_later_takes_the_workspaces_value() -> None:
     assert team.get("makersAsk") is False, team
     ops, _ = await policy.levels("t", "team_ops")
     assert ops.get("makersAsk") is False and ops.get("ask") is False, ops
+
+
+async def test_a_caller_naming_no_team_takes_the_workspaces_waits_and_none_of_its_loosening() -> None:
+    def rules(star: dict[str, Any] | None) -> WriteApprovals:
+        def handler(request: httpx.Request) -> httpx.Response:
+            key = request.url.path.rsplit("/", 1)[-1]
+            value = ({"*": star} if star is not None else {}) if key == "appChanges" else {}
+            return httpx.Response(200, json={"success": True, "data": {"key": key, "value": value}})
+
+        return WriteApprovals(fake_service(handler, "platform", ["settings:view"]))
+
+    cases: dict[str, dict[str, Any] | None] = {
+        "no workspace value": None,
+        "workspace asks a reviewer": {"ask": True, "answer": "reviewer"},
+        "workspace turned makers' asks off": {"makersAsk": False, "testRunsAsk": False},
+    }
+    seen = {name: (await rules(star).levels("t", None))[0] for name, star in cases.items()}
+    assert seen == {
+        "no workspace value": {},
+        "workspace asks a reviewer": {"ask": True, "answer": "reviewer"},
+        "workspace turned makers' asks off": {},
+    }

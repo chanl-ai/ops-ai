@@ -11,6 +11,11 @@ import type { OptionsPage } from '@/lib/types/query';
 import { cn } from '@/lib/utils';
 
 /**
+ * Not folded into entity-picker.tsx: that one is an add button with chips for the chosen values, which cannot sit in a
+ * form row as a single field. This one is a combobox whose trigger shows the stored choice (the caller holds its
+ * label), with a clear row (`noneLabel`), a custom option row, an error in the trigger and a label-linked id. Eight
+ * form fields rely on those; both read the same `OptionSource` and search on the server.
+ *
  * Pick one entity from an `/options` source: the search runs on the server as the person types and the list pages in
  * as it scrolls, so a team with hundreds of choices never loads them all. The trigger shows the chosen one's label,
  * which the caller already holds (a stored choice is shown by name, not looked up in a list). `noneLabel` adds a

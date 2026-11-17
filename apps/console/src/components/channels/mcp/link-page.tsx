@@ -29,7 +29,7 @@ export function McpLinkPage({ id }: { id: string }) {
   const q = useMcpLink(id);
   const pause = usePauseMcpLink(id);
   const { team } = useTeam();
-  const keys = useApiKeys({ page: 1, pageSize: 100, filters: { mcpLink: [id] } });
+  const keys = useApiKeys({ page: 1, pageSize: 1, filters: { mcpLink: [id] } });
   const [tab, setTab] = useTabParam(TABS, 'connect');
   if (q.isLoading) return <RecordSkeleton />;
   if (q.isError && !q.data)
@@ -44,7 +44,7 @@ export function McpLinkPage({ id }: { id: string }) {
       onSuccess: (l) => toast.success(l.paused ? `Paused ${l.name}` : `Resumed ${l.name}`, { description: l.paused ? 'Its address refuses every request until it is resumed.' : 'Assistants can connect again.' }),
       onError: (e) => toast.error('Couldn’t change the link', { description: e.message }),
     });
-  const keyCount = keys.data?.data.filter((k) => !('status' in k) || (k as { status?: string }).status === 'active').length;
+  const keyCount = keys.data?.pagination.total;
   return (
     <PageTabs value={tab} onValueChange={(v) => setTab(v as (typeof TABS)[number])}>
       <PageLayout

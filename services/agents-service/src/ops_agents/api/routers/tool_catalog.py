@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 
 from ops_service_kit.errors import NotFound
 from ops_service_kit.http import Envelope, options_page, options_window, page_window, paged
+from ops_store import isolation
 
 from ...activities.tool_directory import ToolsUnavailable
 from ...store.tenancy import current_team
@@ -135,14 +136,16 @@ def _status_of(tool: dict[str, Any], card: dict[str, Any] | None) -> str:
 
 async def tool_rows(rt: Runtime, person: str | None, team: str | None) -> list[dict[str, Any]]:
     """Every tool the team may grant, one row each, joined in one read of tools-service's apps (for `person`) and one
-    of this service's own grants and workflow steps."""
+    of this service's own grants and workflow steps. tools-service is asked for the apps and the operations before
+    any statement, so the local reads that follow share one transaction with nothing called while it is open."""
     from .tool_uses import tool_uses  # noqa: PLC0415 - keep the catalog import cycle out of the module top
 
-    # A person's page reads the list fresh: a tool added to the team a moment ago shows at once.
-    tools = await known_tools(rt, fresh=True)
     cards = await rt.app_states.cards(person, team) if rt.app_states is not None else []
     by_module = {str(m): c for c in cards for m in cast(list[str], c.get("moduleIds") or [])}
-    uses = await tool_uses(rt, team or current_team(), [str(t["id"]) for t in tools])
+    async with isolation.request_transaction():
+        # A person's page reads the list fresh: a tool added to the team a moment ago shows at once.
+        tools = await known_tools(rt, fresh=True)
+        uses = await tool_uses(rt, team or current_team(), [str(t["id"]) for t in tools])
     rows: list[dict[str, Any]] = []
     for t in tools:
         module = t.get("moduleId")
@@ -257,17 +260,17 @@ async def tool_options(
     # v2 workflows come scoped to the selected team already; v1 registry workflows carry a team, so another team's
     # are left out here. Operations are tenant-wide, as the grant check offers them.
     team = current_team()
-    others = {
-        f"workflow:{w['id']}"
-        for w in await published_workflows(rt)
-        if team and w.get("team_id") not in (None, "", team)
-    }
-    # The agent and workflow pickers read it fresh, so a tool just added to the team is offered at once.
-    tools = [
-        t
-        for t in await known_tools(rt, fresh=True)
-        if t["id"] not in others and (agents or not str(t["id"]).startswith("agent:"))
-    ]
+    # One transaction for the local reads: `known_tools` asks tools-service before its first statement, so nothing
+    # is called while it is open; the not-added line after it asks tools-service with it closed.
+    async with isolation.request_transaction():
+        # The agent and workflow pickers read it fresh, so a tool just added to the team is offered at once.
+        known = await known_tools(rt, fresh=True)
+        others = {
+            f"workflow:{w['id']}"
+            for w in await published_workflows(rt)
+            if team and w.get("team_id") not in (None, "", team)
+        }
+    tools = [t for t in known if t["id"] not in others and (agents or not str(t["id"]).startswith("agent:"))]
     if ids is not None:
         wanted = set(ids)
         hits = [t for t in tools if t["id"] in wanted]

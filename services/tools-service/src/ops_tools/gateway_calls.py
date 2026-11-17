@@ -25,6 +25,7 @@ from .auth import SIGNED_WITH, Authenticator
 from .environments import TEST
 from .executor import Executor, Trial, invalid_fields
 from .limits import amount_refusal
+from .modules.directory import Sees
 from .modules.policy import WriteApprovals, asker_refusal
 from .modules.review_events import SYSTEM_TOOLS
 from .opa import OpaClient
@@ -32,7 +33,6 @@ from .registry import Resolved, ToolRegistry
 from .secrets import scrub
 from .send_check import NEEDS_REVIEW, SendCheck
 from .store import CallAbandonedError, CallLog, LeaseSupersededError
-from .store.modules import Aggregate
 from .store.rate_windows import RateWindows
 from .tokens import claims_of
 from .tools import ToolCaller
@@ -337,7 +337,7 @@ class GatewayCalls:
         channel: str = API,
         client_name: str | None = None,
         prepare: Prepare | None = None,
-        sees: Callable[[Aggregate], bool] | None = None,
+        sees: Sees | None = None,
         trial: Trial | None = None,
         secret_values: dict[str, str] | None = None,
         operation: tuple[Resolved, Run] | None = None,
@@ -425,7 +425,13 @@ class GatewayCalls:
                 await self.log.record(**row, outcome="refused", latency_ms=elapsed(), error=error)
             return Refused(call_id, 429, "RATE_LIMITED", [reason], {"limit": limit, "resetAt": spent.reset_at})
 
-        if sees is not None and resolved is not None and resolved.module is not None and not sees(resolved.module):
+        named = str(resolved.operation["name"]) if resolved is not None and resolved.operation is not None else None
+        if (
+            sees is not None
+            and resolved is not None
+            and resolved.module is not None
+            and not sees(resolved.module, named)
+        ):
             reason = f"{req.tool} belongs to a module outside this team"
             row.update(decision="deny", reasons=[reason])
             await self.log.record(

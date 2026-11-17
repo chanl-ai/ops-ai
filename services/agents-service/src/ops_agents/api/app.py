@@ -66,7 +66,6 @@ from .envelope import install_error_handlers
 from .fencing import ToolsFence
 from .file_names import FilesServiceNames
 from .file_text import ReadingText
-from .key_summaries import PlatformKeySummaries
 from .memory import MemoryReads
 from .memory_retention import PlatformRetention, expire_forever
 from .metering import CountingModels
@@ -340,7 +339,6 @@ def create_app(
             rt.policies = PlatformPolicies(platform)
             rt.team_names = PlatformTeamNames(platform)
             rt.people_names = PlatformPeopleNames(platform)
-            rt.key_summaries = PlatformKeySummaries(platform)
         rt.gateway = gateway_client is not None
         rt.model_aliases = (
             HttpModelAliases(service_client(settings, models_http, "models"))

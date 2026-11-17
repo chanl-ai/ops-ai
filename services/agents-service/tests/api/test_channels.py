@@ -308,16 +308,6 @@ async def test_latest_chosen_through_a_review_stays_latest_when_approved(stack: 
     assert row["serves"]["version"] == "latest", row["serves"]
 
 
-class FakeKeys:
-    """platform-service's /v1/api-key-summaries, as agents-service reads it."""
-
-    def __init__(self, keys: list[dict[str, Any]]) -> None:
-        self.keys = keys
-
-    async def list(self) -> list[dict[str, Any]]:
-        return self.keys
-
-
 def key(kid: str, *, team: str = "team_ops", status: str = "active", **more: Any) -> dict[str, Any]:
     row = {"id": kid, "name": f"Key {kid}", "prefix": kid, "teamId": team, "status": status, "target": None}
     return row | {"lastUsedAt": None, "expiresAt": None, "createdAt": "2026-10-01T00:00:00.000Z"} | more
@@ -466,7 +456,6 @@ async def test_channel_list_routes_keep_every_reply_and_error(stack: Stack) -> N
 async def give_keys(s: Stack, keys: list[dict[str, Any]]) -> None:
     """platform-service's API keys as this service holds them: its copy, as a resync writes it."""
     _, rt = s
-    rt.key_summaries = FakeKeys(keys)
     with tenant_scope(TENANT):
         copies = ApiKeyCopies(rt.db)
         listed = [listed_event(KeySummary.model_validate(k), tenant_id=TENANT) for k in keys]

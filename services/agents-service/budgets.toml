@@ -1,7 +1,8 @@
 # The statement budget of each agents-service GET at 5 and 50 rows (ops_service_kit.testing.budget_check, data-access
 # standard DA1 and DA6), measured on PostgreSQL by tests/api/test_statement_budget.py. Each row is today's count at 50
 # rows. The seed adds rows to agents (each holding a tool and an account), skills, guardrails, widgets, cases, workflows
-# of each engine and runs of the registry workflow (each waiting at its review) and queued engine runs only;
+# of each engine, runs of the registry workflow (each waiting at its review), queued engine runs and a batch of `n`
+# rows only; a chat thread, a live form workflow with a link and a members form, and a publish request are made once;
 # a row for any other list proves its count, not that it stays flat as rows grow. Rows listing more than one
 # transaction or connection open one per store read and are budgeted as they run until their route is converted. A
 # `not_budgeted` row that grows names its counts.
@@ -10,22 +11,30 @@
 queries = 1
 
 ["GET /chat/connectors"]
-queries = 1
+queries = 2
+transactions = 2
+connections = 2
 
 ["GET /chat/default-agent"]
-queries = 1
+queries = 2
 
 ["GET /chat/threads"]
-queries = 6
+queries = 8
 
 ["GET /chat/threads/{thread_id}"]
-not_budgeted = "needs a chat thread; the budget seed starts none yet (a missing id answers 404 and measures nothing)"
+queries = 3
+transactions = 3
+connections = 3
 
 ["GET /chat/threads/{thread_id}/connectors"]
-not_budgeted = "needs a chat thread; the budget seed starts none yet (a missing id answers 404 and measures nothing)"
+queries = 2
+transactions = 2
+connections = 2
 
 ["GET /chat/threads/{thread_id}/settings"]
-not_budgeted = "needs a chat thread; the budget seed starts none yet (a missing id answers 404 and measures nothing)"
+queries = 2
+transactions = 2
+connections = 2
 
 ["GET /embed/v1.js"]
 queries = 0
@@ -45,9 +54,9 @@ connections = 12
 not_budgeted = "needs a run waiting at a review step; the budget seed starts none yet"
 
 ["GET /reviews/{review_id}/place"]
-not_budgeted = "needs a review; the budget seed raises none yet (on an unknown id it answered 200 with 5 statements)"
-transactions = 5
-connections = 5
+queries = 9
+transactions = 9
+connections = 9
 
 ["GET /reviews/{thread_id}"]
 queries = 10
@@ -65,7 +74,7 @@ transactions = 5
 connections = 5
 
 ["GET /v1/account-uses"]
-queries = 3
+queries = 4
 query = { app = "salesforce", name = "Main" }
 
 ["GET /v1/activity"]
@@ -130,10 +139,10 @@ transactions = 2
 connections = 2
 
 ["GET /v1/batches/{batch_id}"]
-not_budgeted = "needs a batch run; the budget seed starts none yet"
+queries = 2
 
 ["GET /v1/batches/{batch_id}/results.csv"]
-not_budgeted = "needs a batch run; the budget seed starts none yet"
+queries = 2
 
 ["GET /v1/case-types"]
 queries = 2
@@ -158,25 +167,31 @@ queries = 7
 queries = 2
 
 ["GET /v1/channels/mailboxes/{mailbox_id}"]
-not_budgeted = "needs a connected mailbox; the budget seed connects none yet"
+queries = 2
 
 ["GET /v1/chat/agents"]
 queries = 1
 
 ["GET /v1/chat/connectors"]
-queries = 1
+queries = 2
+transactions = 2
+connections = 2
 
 ["GET /v1/chat/default-agent"]
-queries = 1
+queries = 2
 
 ["GET /v1/chat/threads"]
-queries = 6
+queries = 8
 
 ["GET /v1/chat/threads/{thread_id}"]
-not_budgeted = "needs a chat thread; the budget seed starts none yet (a missing id answers 404 and measures nothing)"
+queries = 3
+transactions = 3
+connections = 3
 
 ["GET /v1/chat/threads/{thread_id}/connectors"]
-not_budgeted = "needs a chat thread; the budget seed starts none yet (a missing id answers 404 and measures nothing)"
+queries = 2
+transactions = 2
+connections = 2
 
 ["GET /v1/document-type-uses"]
 queries = 1
@@ -189,10 +204,15 @@ connections = 2
 query = { follow = "false" }
 
 ["GET /v1/forms/public/{slug}"]
-not_budgeted = "needs a published form and its public token; the budget seed publishes none yet"
+queries = 2
+transactions = 2
+connections = 2
+query = { t = "{form_token}" }
 
 ["GET /v1/forms/{slug}/members"]
-not_budgeted = "needs a published form; the budget seed publishes none yet"
+queries = 2
+transactions = 2
+connections = 2
 
 ["GET /v1/graphs"]
 queries = 2
@@ -230,7 +250,9 @@ connections = 15
 queries = 0
 
 ["GET /v1/publish-requests/{request_id}"]
-not_budgeted = "needs a publish request; the budget seed raises none yet"
+queries = 2
+transactions = 2
+connections = 2
 
 ["GET /v1/resources/{resource}/copies/{copy}/update"]
 not_budgeted = "needs an installed template copy; the budget seed installs none yet"
@@ -307,31 +329,25 @@ query = { tools = "lookup_account" }
 
 ["GET /v1/tools"]
 queries = 18
-transactions = 18
-connections = 18
 
 ["GET /v1/tools/options"]
 queries = 5
-transactions = 5
-connections = 5
 
 ["GET /v1/tools/{tool_id}"]
 queries = 18
-transactions = 18
-connections = 18
 
 ["GET /v1/widget-deployments"]
 # The list, its conversations and its keys: 1 was measured while the seed made no deployment.
 queries = 3
 
 ["GET /v1/widget-deployments/{deployment_id}/keys"]
-not_budgeted = "needs a widget deployment; the budget seed makes none yet (a missing id answers 404 and measures nothing)"
+queries = 2
 
 ["GET /v1/widget-deployments/{deployment_id}/keys/audit"]
-not_budgeted = "needs a widget deployment; the budget seed makes none yet (a missing id answers 404 and measures nothing)"
+queries = 2
 
 ["GET /v1/widget/{deployment_id}/config"]
-not_budgeted = "needs a widget deployment; the budget seed makes none yet (a missing id answers 404 and measures nothing)"
+not_budgeted = "needs an embed of a live agent and its listed origin: on the seed's embed it answers 404 (Agent ... was not found)"
 
 ["GET /v1/widget/{deployment_id}/threads/{thread_id}"]
 not_budgeted = "needs a widget deployment and its visitor's thread; the budget seed makes none yet (a missing id answers 404 and measures nothing)"
@@ -351,13 +367,13 @@ connections = 7
 queries = 2
 
 ["GET /v1/workflows"]
-queries = 6
+queries = 8
 
 ["GET /v1/workflows/definitions"]
 queries = 3
 
 ["GET /v1/workflows/definitions/account-uses"]
-queries = 3
+queries = 4
 query = { app = "salesforce", name = "Main" }
 
 ["GET /v1/workflows/definitions/{workflow_id}"]
@@ -385,7 +401,7 @@ connections = 9
 queries = 2
 
 ["GET /v1/workflows/{workflow_id}/live"]
-not_budgeted = "needs a live engine definition; the budget seed publishes none yet"
+queries = 1
 
 ["GET /v1/workflows/{workflow_id}/runs"]
 queries = 6

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar, cast
 
 import sqlalchemy as sa
@@ -566,9 +566,9 @@ def team_modules() -> sa.ColumnElement[bool]:
     """The acting team's modules and the tenant's workspace-level ones (no team); every module with no acting team.
     The team rule for `tool_modules`, which the database holds only to its tenant (tools_0086)."""
     team = acting_team()
-    t = tool_modules.c
     if team is None:
-        return t.team_id.is_(None)
+        return sa.true()
+    t = tool_modules.c
     return sa.or_(t.team_id == team, t.team_id.is_(None))
 
 
@@ -578,8 +578,10 @@ def granted(tenant_id: str, team: str | None = None) -> sa.ColumnElement[bool]:
     if team is None:
         return sa.false()
     a = module_approvals.c
+    # An approval past its end date opens nothing (`expired` is never stored), as `directory.grant_reaches` decides.
+    live = sa.or_(a.expires_at.is_(None), a.expires_at > datetime.now(UTC))
     return tool_modules.c.id.in_(
-        sa.select(a.module_id).where(a.tenant_id == tenant_id, a.workflow_team_id == team, a.status == "approved")
+        sa.select(a.module_id).where(a.tenant_id == tenant_id, a.workflow_team_id == team, a.status == "approved", live)
     )
 
 

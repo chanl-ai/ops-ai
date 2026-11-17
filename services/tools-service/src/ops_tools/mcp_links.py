@@ -163,8 +163,8 @@ def mcp_links_router(
         can(p, "deployments", "create", team=who.team.id, what="an MCP link")
         team = who.team
 
-        def sees(module: Any) -> bool:
-            return directory.sees_module(team, module)
+        def sees(module: Any, operation: str | None = None, /) -> bool:
+            return directory.sees_module(team, module, operation)
 
         grantable = {str(x["name"]): x for x in await registry.grantable(who.tenant_id, sees)}
         picked: list[LinkedTool] = []
