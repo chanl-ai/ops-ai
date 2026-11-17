@@ -21,17 +21,22 @@ GRACE = 3.0
 
 
 def kill_group(pgid: int) -> None:
-    """TERM the command's whole process group, KILL what is left after the grace period."""
+    """TERM the command's whole process group, KILL what is left after the grace period.
+
+    macOS answers EPERM, not ESRCH, for a group whose only members have exited and wait to be reaped, so a refusal
+    means the same as a missing group: nothing is left to stop.
+    """
+    gone = (ProcessLookupError, PermissionError)
     for sig, wait in ((signal.SIGTERM, GRACE), (signal.SIGKILL, 1.0)):
         try:
             os.killpg(pgid, sig)
-        except ProcessLookupError:
+        except gone:
             return
         end = time.time() + wait
         while time.time() < end:
             try:
                 os.killpg(pgid, 0)
-            except ProcessLookupError:
+            except gone:
                 return
             time.sleep(0.05)
 

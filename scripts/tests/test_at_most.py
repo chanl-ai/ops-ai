@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import signal
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+import pytest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "at-most.py"
 
@@ -78,3 +81,17 @@ def test_slot_recorded_for_a_dead_pid_is_reclaimed(tmp_path: Path) -> None:
     slots.mkdir()
     (slots / "t-0.lock").write_text(f"{dead.pid}\n")
     assert _slot_free(tmp_path)
+
+
+def test_a_group_that_already_ended_is_not_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """macOS refuses (EPERM) a signal to a group of exited, unreaped processes; the wrapper must still free its slot."""
+    spec = importlib.util.spec_from_file_location("at_most", Path(__file__).parents[1] / "at-most.py")
+    assert spec and spec.loader
+    at_most = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(at_most)
+
+    def refused(pgid: int, sig: int) -> None:
+        raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(os, "killpg", refused)
+    at_most.kill_group(12345)
