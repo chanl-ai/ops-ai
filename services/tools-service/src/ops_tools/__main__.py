@@ -156,7 +156,8 @@ def main() -> None:
         http=egress_client(policy, ca_file=ca),
         secrets=secrets,
         workflows=AgentsWorkflows(client("agents", agents_url, ["workflows:view"])),
-        reviews=Reviews(client("agents", agents_url)),
+        # tools:publish: agents-service holds the token sent beside a person's credentials to it with can().
+        reviews=Reviews(client("agents", agents_url, ["tools:publish"])),
         # The team's publish-review mode, read from platform-service on each publish so a change applies at once.
         publish_policy=PublishPolicy(client("platform", settings.platform_url, ["settings:view"]))
         if settings.platform_url

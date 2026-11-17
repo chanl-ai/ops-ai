@@ -29,17 +29,18 @@ from .review_sla import sla_hours
 from .team_names import security_team
 
 KIND = "tool_module"
-TOOLS = "service:tools"
 
 
 async def tools_service(request: Request, header: str | None, tenant_id: str) -> Caller:
-    """The tools-service token sent beside the person's credentials; refused unless it is tools-service's, for the same
-    tenant."""
+    """The service token sent beside the person's credentials: it holds `tools:publish`, which only tools-service's
+    scope cap allows (Settings.service_scopes), for the same tenant."""
     if not header:
         raise Unauthorized("Only tools-service opens a tool module review.", code="service_required")
     svc: Caller = await request.app.state.ops_auth.services.principal(header)
-    if svc.sub != TOOLS or (tenant_id and svc.tenant_id != tenant_id):
+    if tenant_id and svc.tenant_id != tenant_id:
         raise Forbidden("Only tools-service opens a tool module review.", code="service_required")
+    # Tenant-wide: the person's own credentials name the team, checked where the review opens.
+    can(svc, "tools", "publish", what="a tool module review")
     return svc
 
 

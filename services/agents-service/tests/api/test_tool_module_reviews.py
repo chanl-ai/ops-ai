@@ -34,9 +34,15 @@ BODY = {
 }
 
 
-def service(name: str, team: str | None = None) -> str:
-    token = mint_service_token(dev_service_signer(), service=name, audience="agents", tenant_id=TENANT, team_id=team)
+def service(name: str, team: str | None = None, scopes: list[str] | None = None) -> str:
+    token = mint_service_token(
+        dev_service_signer(), service=name, audience="agents", tenant_id=TENANT, team_id=team, scopes=scopes
+    )
     return f"Bearer {token}"
+
+
+# The scope tools-service's agents client asks for on the token it sends beside a person's credentials.
+PUBLISH = ["tools:publish"]
 
 
 class WorkspaceTeams:
@@ -100,7 +106,9 @@ async def stack() -> AsyncIterator[tuple[AsyncClient, FakeTools]]:
 
 async def _open(c: AsyncClient, body: dict[str, Any] = BODY) -> Any:
     return await c.post(
-        "/v1/publish-requests", json=body, headers={**BUILDER, "X-Service-Authorization": service("tools")}
+        "/v1/publish-requests",
+        json=body,
+        headers={**BUILDER, "X-Service-Authorization": service("tools", scopes=PUBLISH)},
     )
 
 
@@ -110,10 +118,17 @@ async def test_only_tools_service_opens_a_review_for_the_person_and_their_team(
     c, _ = stack
     bare = await c.post("/v1/publish-requests", json=BODY, headers=BUILDER)
     assert (bare.status_code, bare.json()["error"]["code"]) == (401, "service_required"), bare.text
-    other = await c.post(
-        "/v1/publish-requests", json=BODY, headers={**BUILDER, "X-Service-Authorization": service("kb")}
+    # Who may vouch beside the person: tools-service holding tools:publish (opened below). Another service cannot hold
+    # that scope (the cap refuses its token) and a person's token is no service token.
+    callers: tuple[tuple[str, int, str], ...] = (
+        (service("tools"), 403, "scope_required"),
+        (service("kb"), 403, "scope_required"),
+        (service("kb", scopes=PUBLISH), 401, "unauthorized"),
+        (BUILDER["Authorization"], 401, "unauthorized"),
     )
-    assert (other.status_code, other.json()["error"]["code"]) == (403, "service_required"), other.text
+    for token, status, code in callers:
+        got = await c.post("/v1/publish-requests", json=BODY, headers={**BUILDER, "X-Service-Authorization": token})
+        assert (got.status_code, got.json().get("error", {}).get("code")) == (status, code), got.text
     elsewhere = await _open(c, {**BODY, "teamId": "team_fraud"})
     assert (elsewhere.status_code, elsewhere.json()["error"]["code"]) == (403, "team_forbidden"), elsewhere.text
     opened = await _open(c)
@@ -165,7 +180,9 @@ async def test_tools_service_alone_opens_a_tool_module_review_on_a_persons_behal
     assert review["customer"] == "Requested by james@harborpine.example", review
     assert review["toolModule"].get("openedBy") == "tools-service" or "openedBy" not in review["toolModule"], review
     person = await c.post(
-        "/v1/publish-requests", json=asked, headers={**BUILDER, "X-Service-Authorization": service("tools")}
+        "/v1/publish-requests",
+        json=asked,
+        headers={**BUILDER, "X-Service-Authorization": service("tools", scopes=PUBLISH)},
     )
     assert (person.status_code, person.json()["error"]["code"]) == (400, "requested_by_forbidden"), person.text
     agent = await c.post(
@@ -288,7 +305,7 @@ async def test_publish_requests_answer_their_reviewers_outside_the_owning_team(
     asking team reads it too, and any other team gets not found. A held host opens once: 201, then 200 with the same
     request while it waits."""
     c, _ = stack
-    tools = {**BUILDER, "X-Service-Authorization": service("tools")}
+    tools = {**BUILDER, "X-Service-Authorization": service("tools", scopes=PUBLISH)}
     fraud = person("otto", "team_fraud", "approver")
     module = (await _open(c)).json()["data"]["id"]
     opened = await c.post("/v1/publish-requests/egress-hosts", json=HOST, headers=tools)

@@ -20,7 +20,6 @@ services/agents-service/src/ops_agents/api/engine_reviews.py refusal not_decided
 services/agents-service/src/ops_agents/api/routers/reviews.py refusal forbidden 1 E10  # keep agents: separation of duties on a step's decision
 services/agents-service/src/ops_agents/api/routers/widgets.py conflict seeded_widget 1 E38  # convert agents: the seeded lock goes; a seeded widget is edited through can()
 services/agents-service/src/ops_agents/api/tool_module_reviews.py refusal service_required 1 E08  # delete agents: with the import route
-services/agents-service/src/ops_agents/api/tool_module_reviews.py role-name service-sub 1 E08  # delete agents: with the import route
 services/documents-service/src/ops_documents/app.py refusal role_required 1 E13  # keep pilot: a typed refusal raised from a can() answer computed earlier
 services/documents-service/src/ops_documents/document_types.py refusal role_required 2 E13  # keep pilot: a typed refusal raised from a can() answer computed earlier
 services/files-service/src/ops_files/tenant_files.py refusal forbidden 1 E13  # keep pilot: a typed refusal raised from a can() answer computed earlier
