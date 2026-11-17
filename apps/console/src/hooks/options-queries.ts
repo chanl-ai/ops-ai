@@ -4,7 +4,7 @@ import * as React from 'react';
 import { keepPreviousData } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import { fetchWorkflows } from './queries';
+import { fetchAgents, fetchWorkflows } from './queries';
 import { sdk } from '@/lib/api/ops-sdk';
 import type { AgentFilters, ConnectionOptionsPage, OptionsPage, OptionsParams, ToolOptionsPage, WorkflowFilters } from '@/lib/types/query';
 import type { SkillLoading } from '@/lib/types/skills';
@@ -32,7 +32,7 @@ const agentsWhere = (key: string, filters: AgentFilters = {}): OptionSource => (
   key,
   fetch: async ({ search, cursor, limit = 25, ids }) => {
     const page = Number(cursor ?? 1);
-    const res = await api.agents.list({ page, pageSize: ids?.length ? Math.min(ids.length, 50) : limit, ids: ids?.length ? ids : undefined, search: ids?.length ? undefined : search, filters });
+    const res = await fetchAgents({ page, pageSize: ids?.length ? Math.min(ids.length, 50) : limit, ids, search: ids?.length ? undefined : search, filters });
     return { data: res.data.map((a) => ({ id: a.id, label: a.name, hint: a.role || null })), nextCursor: !ids?.length && res.pagination.hasNext ? String(page + 1) : null };
   },
 });

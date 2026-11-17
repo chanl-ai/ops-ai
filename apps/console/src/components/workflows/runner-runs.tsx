@@ -14,7 +14,6 @@ import { Button } from '@/components/ui/button';
 import { RunStatus } from '@/components/workflows/run-journal/run-status';
 import { StartedBy } from '@/components/workflows/started-by';
 import { type EngineRunRow, useEngineRuns } from '@/hooks/engine-queries';
-import { useWorkflows } from '@/hooks/queries';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { relativeTime } from '@/lib/format';
 import { serverPagination } from '@/components/shared/server-pagination';
@@ -76,13 +75,15 @@ export function RunnerRuns() {
   const list = useListParams<{ workflowId?: string[]; status?: string[] }>();
   const filters = list.params.filters ?? {};
   const query = useEngineRuns({ workflowId: filters.workflowId?.[0], status: filters.status, page: list.params.page, pageSize: list.params.pageSize });
-  const { data: workflows } = useWorkflows({ page: 1, pageSize: 100 });
   const rows: Row[] = React.useMemo(
     () => (query.data?.data ?? []).map((r) => ({ ...r, onRowClick: (x: EngineRunRow) => router.push(`/build/runs/${encodeURIComponent(x.id)}`), rowTestId: `runner-run-row-${r.id}` })),
     [query.data, router],
   );
   const counts = query.data?.facets?.status ?? {};
-  const workflowOptions = (workflows?.data ?? []).map((w) => ({ label: w.name, value: w.id }));
+  // The route counts runs per workflow and names each counted one, so the filter needs no workflow list.
+  const workflowCounts = query.data?.facets?.workflowId ?? {};
+  const workflowNames = query.data?.labels?.workflowId ?? {};
+  const workflowOptions = Object.entries(workflowCounts).map(([id, n]) => ({ label: workflowNames[id] ?? id, value: id, count: n }));
 
   if (query.isPending) return <PageSkeleton statCards={0} tableRows={8} />;
   if (query.isError && !query.data) return <QueryError what="runs" onRetry={() => query.refetch()} error={query.error} retrying={query.isFetching} testId="runner-runs-error" />;

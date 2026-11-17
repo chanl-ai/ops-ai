@@ -33,7 +33,6 @@ import type {
  * draft. Create, generate, publish, deprecate, attach and detach write the audit log.
  */
 export interface SkillsApi {
-  list(params: ListParams<SkillFilters> & { view: SkillView }): Promise<ListResult<Skill> & { viewCounts: SkillViewCounts }>;
   get(id: string): Promise<SkillDetail>;
   create(input: SkillCreateInput): Promise<Skill>;
   /** Edits the newest draft, or opens one on top of the published version. 409 when `baseVersion` is stale. */

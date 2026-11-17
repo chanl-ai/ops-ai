@@ -9,7 +9,6 @@
     "src/components/connections/app-resources.tsx": 1,
     "src/components/deployments/deployments-table.tsx": 1,
     "src/components/deployments/widget-embed.tsx": 1,
-    "src/components/workflows/runner-runs.tsx": 1,
     "src/lib/api/http.ts": 2
   },
   "aggregate": {

@@ -762,7 +762,6 @@ export function createMockApi(): OpsApi {
     },
 
     agents: {
-      list: (p) => respond((m) => list(teamAgents().map(agentRow), p, { text: (a) => `${a.name} ${a.role} ${a.slug}`, value: field, facetKeys: ['availability', 'teamId'] }, m)),
       get: (aid) => respond((m) => (m === 'empty' ? notFound('Agent') : (guardTeam(agentOr404(aid).owner, 'agent'), agentById(aid)))),
       create: (input) =>
         respond(() => {

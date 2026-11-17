@@ -103,7 +103,6 @@ export interface OpsApi {
     get(): Promise<Overview>;
   };
   agents: {
-    list(params: ListParams<AgentFilters>): Promise<ListResult<Agent>>;
     get(id: string): Promise<Agent>;
     create(input: AgentInput): Promise<Agent>;
     /** Saves a new draft version. Workflows keep pinning the published one until it is published and they republish. */

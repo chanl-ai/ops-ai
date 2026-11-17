@@ -27,7 +27,6 @@ async function* events(res: Response): AsyncIterable<SkillGenerateEvent> {
 /** REST routes for skills; generation streams over SSE from POST /skills/generate. */
 export function createSkillsHttp(get: Get, send: Send, qs: (p: ListParams & { view?: string }) => string, baseUrl: string): SkillsApi {
   return {
-    list: (p) => get(`/skills?${qs(p)}`),
     get: (id) => get(`/skills/${id}`),
     create: (i) => send('POST', '/skills', i),
     saveDraft: (id, patch) => send('PUT', `/skills/${id}/draft`, patch),

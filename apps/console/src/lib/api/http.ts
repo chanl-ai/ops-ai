@@ -247,7 +247,6 @@ export function createHttpApi(baseUrl: string): OpsApi {
   return {
     overview: { get: () => get('/overview') },
     agents: {
-      list: (p) => get(`/agents?${qs(p)}`),
       get: (id) => get(`/agents/${id}`),
       create: (i) => send('POST', '/agents', i),
       update: (id, i) => send('PATCH', `/agents/${id}`, i),

@@ -49,7 +49,26 @@ export const useBrand = () => brand;
 
 export const useLookups = () => useTeamQuery({ queryKey: qk.lookups, queryFn: api.lookups.get, staleTime: 5 * 60_000 });
 
-export const useAgents = (p: ListParams<AgentFilters>, opts: { enabled?: boolean } = {}) => usePagedQuery({ queryKey: qk.agents(p), queryFn: () => api.agents.list(p), ...opts });
+/** A row of the agents list, as `GET /v1/agents` answers it. */
+export type AgentRow = Awaited<ReturnType<OpsAI['raw']['agents']['agents_list_agents']>>['data'][number];
+
+/** One page of the team's agents; the filters, search, sort and paging go to the route. `ids` names the agents a stored choice holds. */
+export const fetchAgents = (p: ListParams<AgentFilters> & { ids?: string[] }) =>
+  sdk((ops) =>
+    ops.raw.agents.agents_list_agents({
+      query: {
+        page: p.page,
+        pageSize: p.pageSize,
+        search: p.search || undefined,
+        sortBy: p.sortBy,
+        sortOrder: p.sortOrder,
+        ids: p.ids?.length ? p.ids : undefined,
+        availability: p.filters?.availability?.length ? p.filters.availability : undefined,
+        teamId: p.filters?.teamId?.length ? p.filters.teamId : undefined,
+      },
+    }),
+  );
+export const useAgents = (p: ListParams<AgentFilters>, opts: { enabled?: boolean } = {}) => usePagedQuery({ queryKey: qk.agents(p), queryFn: () => fetchAgents(p), ...opts });
 export const useAgent = (id: string) => useTeamQuery({ queryKey: qk.agent(id), queryFn: () => api.agents.get(id) });
 /** A row of the workflows list, as `GET /v1/workflows` answers it. */
 export type WorkflowRow = Awaited<ReturnType<OpsAI['raw']['agents']['workflows_list_workflows']>>['data'][number] & {
