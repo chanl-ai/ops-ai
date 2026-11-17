@@ -186,7 +186,8 @@ class AppCards(Store):
             else_="connected",
         )
         is_on = state.in_(CONNECTED_STATES)
-        views = {"all": sa.true(), "connected": is_on, "available": sa.not_(is_on)}
+        # `all` is a comparison, not sa.true(): SQL Server takes no bare 1 as a CASE condition.
+        views = {"all": sa.literal(1) == sa.literal(1), "connected": is_on, "available": sa.not_(is_on)}
         view = (params.filters.get("view") or ["all"])[-1]
         q = (
             sa.select(k.id, k.kind, k.name)
