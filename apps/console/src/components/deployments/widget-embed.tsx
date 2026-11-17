@@ -10,18 +10,18 @@ import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { QueryError } from '@/components/shared/query-states';
+import { SearchSelect } from '@/components/shared/search-select';
 import { Section } from '@/components/shared/surface';
 import { TagInput } from '@/components/shared/tag-input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useCanBuild, useMe } from '@/hooks/me-queries';
 import { WidgetPreviewSheet } from './widget-preview';
-import { useAgents } from '@/hooks/queries';
+import { publishedAgentOptions } from '@/hooks/options-queries';
 import { count, relativeTime } from '@/lib/format';
 import { useSticky } from '@/hooks/use-sticky';
 import { useCreateWidgetDeployment, useUpdateWidgetDeployment, useWidgetDeployments } from '@/hooks/widget-deployment-queries';
@@ -32,8 +32,6 @@ import { WidgetMintKeysDialog } from './widget-mint-keys';
 
 // A page origin as the browser sends it: scheme and host, a port when it has one, nothing after.
 const ORIGIN = /^https?:\/\/[a-z0-9.-]+(:\d{1,5})?$/i;
-// The agents an embed can serve: published ones, by name.
-const PUBLISHED = { page: 1, pageSize: 100, filters: { availability: ['published'] } };
 
 function CodeBlock({ text, testId }: { text: string; testId: string }) {
   return (
@@ -75,8 +73,8 @@ function Snippet({ deployment, scriptUrl, id }: { deployment: WidgetDeployment; 
  */
 export function EmbedDialog({ agentId, scriptUrl, open, onOpenChange }: { agentId?: string; scriptUrl: string; open: boolean; onOpenChange: (open: boolean) => void }) {
   const create = useCreateWidgetDeployment();
-  const agents = useAgents(PUBLISHED, { enabled: open && !agentId });
   const [picked, setPicked] = React.useState('');
+  const [pickedLabel, setPickedLabel] = React.useState('');
   const chosen = agentId ?? picked;
   const [name, setName] = React.useState('');
   const [origins, setOrigins] = React.useState<string[]>([]);
@@ -87,6 +85,7 @@ export function EmbedDialog({ agentId, scriptUrl, open, onOpenChange }: { agentI
     if (open) return;
     setName('');
     setPicked('');
+    setPickedLabel('');
     setOrigins([]);
     setErrors({});
     setMade(undefined);
@@ -142,18 +141,18 @@ export function EmbedDialog({ agentId, scriptUrl, open, onOpenChange }: { agentI
         <div className="flex flex-col gap-4">
           {!agentId && (
             <FormField id="widget-agent" label="Agent" error={errors.agent} hint="Only published agents can be embedded; each embed serves the version live now.">
-              <Select value={picked} onValueChange={(v) => (setPicked(v), setErrors({}))}>
-                <SelectTrigger id="widget-agent" className="w-full" aria-invalid={!!errors.agent} data-testid="widget-embed-agent">
-                  <SelectValue placeholder={agents.isPending ? 'Loading agents…' : 'Choose an agent'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {(agents.data?.data ?? []).map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchSelect
+                source={publishedAgentOptions}
+                value={picked ? { id: picked, label: pickedLabel } : null}
+                onChange={(id, o) => (setPicked(id), setPickedLabel(o?.label ?? ''), setErrors({}))}
+                placeholder="Choose an agent"
+                searchPlaceholder="Search agents…"
+                emptyText="No published agent matches."
+                id="widget-agent"
+                ariaLabel="Agent"
+                testId="widget-embed-agent"
+                className="w-full"
+              />
             </FormField>
           )}
           <FormField id="widget-name" label="Name" error={errors.name}>
