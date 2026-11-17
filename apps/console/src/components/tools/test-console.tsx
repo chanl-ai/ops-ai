@@ -180,8 +180,9 @@ export function TestConsole({
   const [opName, setOpName] = React.useState(initialOperation ?? operations[0]?.name ?? '');
   const [contextId, setContextId] = React.useState(contexts[0]?.id ?? NO_CONTEXT);
   const [target, setTarget] = React.useState<ModuleTestInput['target']>('stub');
-  const notOwner = canEdit === false;
-  const cannotRun = useCan('tools', 'run') === false || notOwner;
+  // canEdit is also false for a role that may not edit, so the role's own reason is named first.
+  const roleCannotRun = useCan('tools', 'run') === false;
+  const cannotRun = roleCannotRun || canEdit === false;
   React.useEffect(() => {
     if (initialOperation) setOpName(initialOperation);
   }, [initialOperation]);
@@ -280,7 +281,7 @@ export function TestConsole({
               <LoadingButton isLoading={running} loadingText="Calling…" onClick={() => run()} disabled={cannotRun} className="self-start" data-testid="workbench-run">
                 <Play className="size-4" /> Run
               </LoadingButton>
-              {cannotRun && <p className="text-xs text-muted-foreground" data-testid="workbench-run-why">{notOwner ? 'Only the team that owns these tools can run them here.' : 'Your role can’t run tools; a builder or an admin can.'}</p>}
+              {cannotRun && <p className="text-xs text-muted-foreground" data-testid="workbench-run-why">{!roleCannotRun ? 'Only the team that owns these tools can run them here.' : 'Your role can’t run tools; a builder or an admin can.'}</p>}
             </div>
           )}
         </div>

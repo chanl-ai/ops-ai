@@ -139,9 +139,10 @@ export function RestTool(p: RestToolProps) {
   // Only a known viewer gets Run below the fields; while the role loads it stays with the address, so nothing moves.
   const viewer = useCan('agents', 'edit') === false;
   // Running a tool is its own permission (tools.run); a role without it sees Run off with the reason, not the refusal.
-  const notOwner = p.canEdit === false;
-  const cannotRun = useCan('tools', 'run') === false || notOwner;
-  const noRunWhy = notOwner ? NOT_OWNER : NO_RUN;
+  // canEdit is also false for a role that may not edit, so the role's own reason is named first.
+  const roleCannotRun = useCan('tools', 'run') === false;
+  const cannotRun = roleCannotRun || p.canEdit === false;
+  const noRunWhy = roleCannotRun ? NO_RUN : NOT_OWNER;
   const runControls = (
     <>
       <ToggleGroup type="single" variant="outline" value={mode} onValueChange={(v) => v && setMode(v as Mode)} aria-label="Run in" data-testid="run-mode">

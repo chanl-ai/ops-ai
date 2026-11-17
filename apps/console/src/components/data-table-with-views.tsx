@@ -162,12 +162,11 @@ interface DataTableWithViewsProps<TData, TValue> {
 
 /** How many data columns a list shows before the rest wait under View (five or six; six overflowed
  * Files at 1280). */
-/** Columns shown at the start: eight on a desktop, where they fit and truncate, five on a phone, which scrolls sideways. */
-const shownByDefault = () => (typeof window !== 'undefined' && window.innerWidth < 640 ? 5 : 8);
+const SHOWN_BY_DEFAULT = 5;
 const keyOf = <T, V>(c: ColumnDef<T, V>) => c.id ?? ((c as { accessorKey?: string }).accessorKey ? String((c as { accessorKey?: string }).accessorKey) : undefined);
 
 /**
- * Which columns show: the page's own choice first; otherwise the first eight data columns (five on a phone), with the rest under View (a
+ * Which columns show: the page's own choice first; otherwise the first five data columns, with the rest under View (a
  * column that cannot be hidden always shows). A person's own choice is remembered per list in this browser.
  */
 function useRememberedColumns<T, V>(columns: ColumnDef<T, V>[], initial: VisibilityState) {
@@ -186,7 +185,7 @@ function useRememberedColumns<T, V>(columns: ColumnDef<T, V>[], initial: Visibil
     };
     const always = (c: ColumnDef<T, V>) => c.enableHiding === false || initial[keyOf(c)!] === true;
     const fixed = columns.filter((c) => isData(c) && !(initial[keyOf(c)!] === false) && always(c)).length;
-    let room = Math.max(0, shownByDefault() - fixed);
+    let room = Math.max(0, SHOWN_BY_DEFAULT - fixed);
     for (const c of columns) {
       const k = keyOf(c);
       if (!k || k === 'select' || k === 'actions' || k in initial) continue;

@@ -336,6 +336,10 @@ try {
               return undefined;
             }
           });
+          // The saved query cache (IndexedDB `ops-console`) holds the source step 18 read; within its 30 s it would open
+          // the page with no request to rewrite. Dropping it makes the page ask kb-service; the delete completes as the
+          // page unloads.
+          await admin.evaluate(() => { indexedDB.deleteDatabase('ops-console'); });
           await admin.goto(`${consoleUrl}/integrations/sources/${source.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           const opened = await syncButton().waitFor({ timeout: 60_000 }).then(() => true, () => false);
           await admin.unroute(mine);
