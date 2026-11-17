@@ -37,6 +37,7 @@ async def test_every_guardrails_route_keeps_its_reply_status_and_error_object(cl
     seen["create.viewer"] = answer(await c.post("/v1/guardrails", json={**RULE, "name": "x"}, headers=VIEWER))
     seen["create.noTopic"] = answer(await c.post("/v1/guardrails", json={**RULE, "topics": [" "]}, headers=BUILDER))
     seen["create.unknownField"] = answer(await c.post("/v1/guardrails", json={**RULE, "x": 1}, headers=BUILDER))
+    seen["create.noMessage"] = answer(await c.post("/v1/guardrails", json={**RULE, "message": ""}, headers=BUILDER))
 
     url = f"/v1/guardrails/{gid}"
     seen["read"] = answer(await c.get(url, headers=BUILDER))

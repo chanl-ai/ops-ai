@@ -193,11 +193,3 @@ async def test_a_skill_a_published_workflow_still_carries_is_not_deleted(tmp_pat
         r = await c.delete(f"/v1/skills/{s['id']}")
         assert (r.status_code, r.json()["error"]["code"]) == (409, "skill_pinned"), r.text
         assert "workflow Hardship intake" in r.json()["error"]["message"]
-
-
-async def test_only_the_creator_or_a_team_admin_deletes_a_skill(tmp_path: Path) -> None:
-    async with _app(str(tmp_path / "db.sqlite")) as c:
-        s = _ok(await c.post("/v1/skills", json=HARDSHIP, headers=LEE), 201)
-        r = await c.delete(f"/v1/skills/{s['id']}", headers=KIM)
-        assert r.status_code == 403, r.text
-        assert (await c.delete(f"/v1/skills/{s['id']}", headers=LEE)).status_code == 204

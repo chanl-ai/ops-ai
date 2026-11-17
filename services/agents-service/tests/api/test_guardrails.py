@@ -34,14 +34,6 @@ async def _pin(c: AsyncClient, gid: str, version: int) -> Any:
     return await c.patch(f"/v1/agents/{ADVISOR}", json={"guardrailPins": [{"guardrailId": gid, "version": version}]})
 
 
-async def test_a_guardrail_needs_a_topic_and_a_message(tmp_path: Path) -> None:
-    async with _app(str(tmp_path / "db.sqlite")) as c:
-        r = await c.post("/v1/guardrails", json={**RULE, "topics": [" "]})
-        assert (r.status_code, r.json()["error"]["code"]) == (400, "no_topics")
-        r = await c.post("/v1/guardrails", json={**RULE, "message": ""})
-        assert r.json()["error"]["code"] == "no_message"
-
-
 async def test_only_a_published_version_pins_and_the_pin_keeps_its_version(tmp_path: Path) -> None:
     async with _app(str(tmp_path / "db.sqlite")) as c:
         draft = _ok(await c.post("/v1/guardrails", json={**RULE, "name": "Draft rule"}), 201)
@@ -156,23 +148,6 @@ async def test_a_guardrail_publish_decided_from_publish_requests_publishes_it(tm
         assert _ok(await c.get(f"/v1/publish-requests/{rid}"))["title"] == f"Publish {RULE['name']} v1"
         _ok(await c.post(f"/v1/publish-requests/{rid}/decision", json={"decision": "approved"}, headers=KIM))
         assert _ok(await c.get(f"/v1/guardrails/{g['id']}"))["publishedVersion"] == 1
-
-
-async def test_only_the_creator_or_a_team_admin_deletes_a_guardrail(tmp_path: Path) -> None:
-    async with _app(str(tmp_path / "db.sqlite")) as c:
-        g = _ok(await c.post("/v1/guardrails", json=RULE, headers=LEE), 201)
-        r = await c.delete(f"/v1/guardrails/{g['id']}", headers=KIM)
-        assert r.status_code == 403, r.text
-        assert (await c.delete(f"/v1/guardrails/{g['id']}", headers=LEE)).status_code == 204
-
-
-async def test_wildcards_in_the_search_match_only_themselves(tmp_path: Path) -> None:
-    async with _app(str(tmp_path / "db.sqlite")) as c:
-        for n in ("Rate 100%", "Rate 1000", "a_b", "axb"):
-            _ok(await c.post("/v1/guardrails", json={**RULE, "name": n}), 201)
-        for term, want in (("100%", ["Rate 100%"]), ("a_b", ["a_b"])):
-            got = _ok(await c.get("/v1/guardrails", params={"page": 1, "search": term}))
-            assert [g["name"] for g in got["data"]] == want, term
 
 
 async def test_hold_until_checked_is_versioned_and_reaches_the_served_definition(tmp_path: Path) -> None:

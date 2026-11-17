@@ -61,7 +61,9 @@ async def test_every_case_route_keeps_its_reply_status_and_error_object(client: 
     other = (await c.post("/v1/cases", json={**DISPUTE, "subject": "Late fee"}, headers=VIEWER)).json()["data"]["id"]
     theirs = (await c.post("/v1/cases", json=DISPUTE, headers=OTHER_TEAM)).json()["data"]["id"]
     seen["open"] = answer(opened)
-    seen["openRetry"] = answer(await c.post("/v1/cases", json={**DISPUTE, "producerKey": "run_pin1"}, headers=VIEWER))
+    retried = await c.post("/v1/cases", json={**DISPUTE, "producerKey": "run_pin1"}, headers=VIEWER)
+    assert retried.json()["data"]["id"] == case, "a producer's retry finds the case it opened"
+    seen["openRetry"] = answer(retried)
     seen["openStray"] = answer(await c.post("/v1/cases", json={**DISPUTE, "colour": 1}, headers=VIEWER))
     seen["openBadPriority"] = answer(await c.post("/v1/cases", json={**DISPUTE, "priority": "soon"}, headers=VIEWER))
     seen["list"] = answer(await c.get("/v1/cases", params={"pageSize": 1, "page": 2}, headers=VIEWER))

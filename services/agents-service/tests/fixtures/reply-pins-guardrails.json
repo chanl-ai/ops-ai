@@ -41,6 +41,18 @@
     },
     "status": 201
   },
+  "create.noMessage": {
+    "body": {
+      "error": {
+        "code": "no_message",
+        "message": "Write the message the person reads when the guardrail refuses.",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
   "create.noTopic": {
     "body": {
       "error": {
