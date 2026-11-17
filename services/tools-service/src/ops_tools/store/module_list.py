@@ -26,6 +26,7 @@ from .calls import RAN, gateway_calls
 from .connections import connections
 from .modules import (
     granted,
+    in_security_review,
     module_approvals,
     module_operations,
     module_versions,
@@ -78,9 +79,10 @@ def _count(cond: sa.ColumnElement[bool]) -> sa.ColumnElement[int]:
     return sa.func.sum(sa.case((cond, 1), else_=0))
 
 
-def _derived(tenant_id: str, team_id: str, team: str | None, w: Window) -> sa.Subquery:
+def _derived(tenant_id: str, team_id: str, team: str | None, w: Window, reviews: bool = False) -> sa.Subquery:
     """Every module the acting team (and `team`, when given) sees, one row each, with what the list filters, sorts
-    and counts by. `team_id` is the team whose plugin bindings sign a plugin's module in."""
+    and counts by; with `reviews` (a Security reviewer), also every team's module waiting on its security review.
+    `team_id` is the team whose plugin bindings sign a plugin's module in."""
     t = tool_modules.c
     o = module_operations.c
     ops = (
@@ -206,8 +208,13 @@ def _derived(tenant_id: str, team_id: str, team: str | None, w: Window) -> sa.Su
         .select_from(joined)
         .where(
             t.tenant_id == tenant_id,
-            sa.or_(team_modules(), granted(tenant_id)),
-            seen_by(tenant_id, team) if team is not None else sa.true(),
+            sa.or_(
+                sa.and_(
+                    sa.or_(team_modules(), granted(tenant_id)),
+                    seen_by(tenant_id, team) if team is not None else sa.true(),
+                ),
+                in_security_review(tenant_id) if reviews else sa.false(),
+            ),
         )
         .subquery("d")
     )
@@ -229,17 +236,25 @@ class ModuleList(Store):
     role = ROLE
 
     async def page(
-        self, tenant_id: str, team_id: str, q: ListParams, *, view: str, w: Window, seen_by: str | None
+        self,
+        tenant_id: str,
+        team_id: str,
+        q: ListParams,
+        *,
+        view: str,
+        w: Window,
+        seen_by: str | None,
+        reviews: bool = False,
     ) -> tuple[ListPage, Totals]:
         """One page of `view` (`all` or one of VIEWS) with each row's id and the connection it signs in with; and the
         access facet, every view's count and the totals over every module seen, unsearched and unfiltered. `seen_by`:
         the caller's team, which the list names whatever scope the request reads in; None only for a caller that reads
-        every team's."""
-        d = _derived(tenant_id, team_id, seen_by, w)
+        every team's. `reviews`: the caller decides security reviews, so every team's module waiting on one is seen."""
+        d = _derived(tenant_id, team_id, seen_by, w, reviews)
         t = tool_modules.c
         views = _views(d, w)
         joined = tool_modules.join(d, sa.and_(d.c.tenant_id == t.tenant_id, d.c.id == t.id))
-        seen = sa.or_(team_modules(), granted(tenant_id))
+        seen = sa.or_(team_modules(), granted(tenant_id), in_security_review(tenant_id) if reviews else sa.false())
         base = sa.select(t.id, d.c.connection_id).select_from(joined).where(seen)
         in_view = base.where(views[view]) if view != "all" else base
         wanted = set(q.filters.get("access") or [])

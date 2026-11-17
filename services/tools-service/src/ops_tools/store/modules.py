@@ -454,6 +454,15 @@ def granted(tenant_id: str, team: str | None = None) -> sa.ColumnElement[bool]:
     )
 
 
+def in_security_review(tenant_id: str) -> sa.ColumnElement[bool]:
+    """Modules with a version waiting on its security review, in any team: what the workspace's Security team reads,
+    and changes nothing of, when the service has found the caller decides those reviews (`reviews.decide` there)."""
+    v = module_versions.c
+    return tool_modules.c.id.in_(
+        sa.select(v.module_id).where(v.tenant_id == tenant_id, v.status == "in_review", v.review_id.is_not(None))
+    )
+
+
 def seen_by(tenant_id: str, team: str) -> sa.ColumnElement[bool]:
     """`team`'s own modules, workspace-level ones (no team) and those approved for one of its workflows, named in the
     query for a caller whose request reads tenant-wide (the dev header caller); beside `team_modules`, never instead."""
@@ -620,14 +629,16 @@ class ModuleStore(Store):
                 held.setdefault(str(module_id), []).append(str(name))
         return [{**r, "operations": [{"name": n} for n in held.get(str(r["id"]), [])]} for r in rows]
 
-    async def chosen(self, tenant_id: str, ids: Sequence[str]) -> list[Aggregate]:
-        """The modules named by `ids` that the acting team reads (as `all`), in `ids`' order: a list's page."""
+    async def chosen(self, tenant_id: str, ids: Sequence[str], *, reviews: bool = False) -> list[Aggregate]:
+        """The modules named by `ids` that the acting team reads (as `all`), in `ids`' order: a list's page. With
+        `reviews` (a Security reviewer's queue), also those waiting on their security review."""
         if not ids:
             return []
+        seen = [team_modules(), granted(tenant_id), *([in_security_review(tenant_id)] if reviews else [])]
         async with self.tx() as c:
             q = tool_modules.select().where(
                 tool_modules.c.tenant_id == tenant_id,
-                sa.or_(team_modules(), granted(tenant_id)),
+                sa.or_(*seen),
                 tool_modules.c.id.in_(list(ids)),
             )
             rows = {r["id"]: dict(r) for r in (await c.execute(q)).mappings()}
@@ -731,13 +742,15 @@ class ModuleStore(Store):
                     readers.append(dict(r))
         return list(rows.values())
 
-    async def get(self, tenant_id: str, module_id: str) -> Aggregate | None:
-        """The module when the acting team reads it (as `all`); None otherwise, so its routes answer 404."""
+    async def get(self, tenant_id: str, module_id: str, *, reviews: bool = False) -> Aggregate | None:
+        """The module when the acting team reads it (as `all`), or with `reviews` (a Security reviewer) when it waits on
+        its security review; None otherwise, so its routes answer 404."""
+        seen = [team_modules(), granted(tenant_id), *([in_security_review(tenant_id)] if reviews else [])]
         async with self.tx() as c:
             q = tool_modules.select().where(
                 tool_modules.c.tenant_id == tenant_id,
                 tool_modules.c.id == module_id,
-                sa.or_(team_modules(), granted(tenant_id)),
+                sa.or_(*seen),
             )
             row = (await c.execute(q)).mappings().first()
             if row is None:

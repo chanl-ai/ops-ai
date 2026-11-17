@@ -26,7 +26,7 @@ from ops_tools.modules.seed import load
 from ops_tools.store.modules import ModuleStore
 
 from .conftest import FakeReviews, build_app, service_headers
-from .test_review_decisions import introspect, jwks, person
+from .test_review_decisions import HOST, introspect, jwks, person
 
 # A team made on the Teams page: the dev seed's directory does not hold it.
 NEW_TEAM = "team_d90630bcb0e7"
@@ -84,6 +84,33 @@ async def test_another_teams_module_is_not_listed_even_to_security(
     for outside in ("outsider", "security"):
         listed = _ids(await c.get("/v1/tool-modules", params={"pageSize": 100}, headers=who[outside]))
         assert made["id"] not in listed, outside
+
+
+async def test_security_reads_a_module_waiting_on_its_review_and_changes_nothing(
+    people: tuple[httpx.AsyncClient, dict[str, dict[str, str]]], tenant: str
+) -> None:
+    # The workspace's Security team decides module security reviews, so it reads each team's module waiting on one,
+    # read-only; another team's admin asking for the same view sees none of it.
+    c, who = people
+    owner = person(tenant, "Nora Builder", {NEW_TEAM: "admin"})
+    assert (await c.post("/v1/egress/hosts", json={"value": HOST}, headers=who["security"])).status_code in (200, 201)
+    made = await _made(c, owner, "nf-review")
+    op = {"name": "get_x", "description": "d", "access": "read", "method": "GET", "url": f"https://{HOST}/x"}
+    assert (await c.post(f"/v1/tool-modules/{made['id']}/operations", json=op, headers=owner)).status_code == 200
+    asked = await c.post(f"/v1/tool-modules/{made['id']}/reviews", json={"note": "first"}, headers=owner)
+    assert asked.status_code == 200, asked.text
+    view = {"view": "security_review", "pageSize": 100}
+    for whom, seen in ((who["security"], True), (who["outsider"], False), (who["lending"], False)):
+        got = await c.get(f"/v1/tool-modules/{made['id']}", headers=whom)
+        assert got.status_code == (200 if seen else 404), got.text
+        assert (made["id"] in _ids(await c.get("/v1/tool-modules", params=view, headers=whom))) is seen, whom
+    for method, path, body in (
+        ("PATCH", f"/v1/tool-modules/{made['id']}", {"description": "changed by Security"}),
+        ("DELETE", f"/v1/tool-modules/{made['id']}", None),
+        ("POST", f"/v1/tool-modules/{made['id']}/operations", op),
+    ):
+        r = await c.request(method, path, json=body, headers=who["security"])
+        assert r.status_code == 404, (method, path, r.status_code, r.text)
 
 
 async def test_another_teams_module_answers_404_by_id(

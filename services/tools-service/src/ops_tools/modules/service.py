@@ -178,6 +178,21 @@ def _can(
     Access().can(who.principal, area, action, what=what, code=code, protection=protection, requested_by=requested_by)
 
 
+def decides_security_reviews(who: Caller) -> bool:
+    """Whether the caller acts in the workspace's Security team and may decide its reviews there: they read every
+    team's module waiting on its security review, and change none of it (writes still need the module's team)."""
+    p = who.principal
+    if p is None:
+        return False
+    access = Access()
+    security = access.security_team_of(p)
+    return (
+        security is not None
+        and who.team.id == security
+        and access.may(p, "reviews", "decide", team=security, from_any_team=True, what="security reviews")
+    )
+
+
 def link_calls_of(who: Caller) -> str | None:
     """mcp.view, for a link's calls: None reads everyone's, a subject reads only the calls that caller made."""
     if who.principal is None:
@@ -852,12 +867,20 @@ class ModuleService:
             plugins=self.installed_plugins() if self.installed_plugins is not None else [],
         )
         every = not who.verified and who.team.scope == "all"  # as `_sees`: the dev caller in an all-scope team
+        reviews = view == "security_review" and decides_security_reviews(who)
         page, totals = await self.listing.page(
-            who.tenant_id, who.team.id, q, view=view, w=window, seen_by=None if every else who.team.id
+            who.tenant_id,
+            who.team.id,
+            q,
+            view=view,
+            w=window,
+            seen_by=None if every else who.team.id,
+            # Security's queue only: its other views stay its own team's modules.
+            reviews=reviews,
         )
         # A plugin's module shows the team's own account (`_as_team_sees`), read with the page.
         signs_in = {str(r["id"]): r["connection_id"] for r in page["data"]}
-        chosen = await self.store.chosen(who.tenant_id, list(signs_in))
+        chosen = await self.store.chosen(who.tenant_id, list(signs_in), reviews=reviews)
         mods: list[Aggregate] = [{**m, "connection_id": signs_in[m["id"]]} for m in chosen]
         traffic = await self._traffic(who.tenant_id, teams, mods)
         have = await self._secret_names(who.tenant_id, mods)
@@ -879,7 +902,11 @@ class ModuleService:
 
     async def get(self, who: Caller, module_id: str) -> dict[str, Any]:
         levels = await self._levels(who.tenant_id, who.team)
-        return await self._detail(await self._find(who, module_id), who.team, who, levels=levels)
+        reviews = decides_security_reviews(who)
+        found = await self.store.get(who.tenant_id, module_id, reviews=reviews) if reviews else None
+        # A module waiting on Security's review opens for its reviewer, read only; every other read is the team's.
+        m = found if found is not None and not self._sees(who, found) else await self._find(who, module_id)
+        return await self._detail(m, who.team, who, levels=levels)
 
     async def activity(self, who: Caller, module_id: str) -> dict[str, Any]:
         """Calls per UTC day over the last 14 days from the call log, days without calls at zero, and the latest calls
