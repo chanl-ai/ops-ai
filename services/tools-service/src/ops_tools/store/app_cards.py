@@ -4,7 +4,9 @@ A card is built from the installed plugins' manifests (held in memory), the buil
 bindings and its accounts, so no other table holds the list. Each team's rows are rebuilt from those sources when its
 stamp (team_defaults.cards_stamp) differs from the install's: a write that changes which cards a team has or what one
 is called (an account made, renamed, moved or deleted, a plugin turned on or off) clears the stamp in its own
-transaction, and the next list rebuilds. A card's state, counts and settings are read for the page's cards only.
+transaction, and the next list rebuilds. A rebuild holds the team's team_defaults row locked from before it reads the
+sources until its rows and stamp commit, so one rebuild runs at a time and a write during it, which clears the stamp
+through that row, waits and leaves it cleared. A card's state, counts and settings are read for the page's cards only.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
+from ops_store.dialect import locked
 from ops_store.listing import ListPage, list_page
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.store import Store
@@ -61,22 +64,29 @@ async def forget_cards(c: AsyncConnection, tenant_id: str, team: sa.ColumnElemen
 
 
 class AppCards(Store):
-    # A rebuild writes the stamp only over the one it read.
-    requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS})
+    # A rebuild holds the team's defaults row locked until its rows and stamp commit.
+    requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.LOCK, Guarantee.TRANSACTION})
     role = ROLE
 
     async def stamp(self, tenant_id: str, team_id: str) -> str | None:
-        """The install stamp the team's rows were last built for; None when they need building."""
+        """The install stamp the team's rows were last built for, read without a lock; None when they need building."""
         t = team_defaults
         q = sa.select(t.c.cards_stamp).where(t.c.tenant_id == tenant_id, t.c.team_id == team_id, team_visible(t))
         async with self.tx() as c:
             return (await c.execute(q)).scalar()
 
-    async def rebuild(
-        self, tenant_id: str, team_id: str, cards: Sequence[CardRow], *, stamp: str, seen: str | None
-    ) -> None:
-        """Replaces the team's rows with `cards` (id, kind, name, category) and records `stamp` over `seen`. A write
-        that cleared the stamp meanwhile keeps it cleared, so the next list builds again."""
+    async def claim(self, tenant_id: str, team_id: str, stamp: str) -> bool:
+        """Locks the team's defaults row until the caller's transaction ends and answers whether its rows still need
+        building for `stamp`: False when another rebuild finished while this one waited. The caller reads the sources
+        and calls `rebuild` in the same transaction (the request's)."""
+        t = team_defaults
+        q = sa.select(t.c.cards_stamp).where(t.c.tenant_id == tenant_id, t.c.team_id == team_id, team_visible(t))
+        async with self.tx() as c:
+            return (await c.execute(locked(q, t))).scalar() != stamp
+
+    async def rebuild(self, tenant_id: str, team_id: str, cards: Sequence[CardRow], *, stamp: str) -> None:
+        """Replaces the team's rows with `cards` (id, kind, name, category) and records `stamp`, under the lock `claim`
+        took in the same transaction."""
         k = app_cards.c
         rows = [
             {"tenant_id": tenant_id, "team_id": team_id, "id": c["id"], "kind": c["kind"], "name": c["name"],
@@ -84,13 +94,12 @@ class AppCards(Store):
             for c in cards
         ]  # fmt: skip
         t = team_defaults
-        held = t.c.cards_stamp.is_(None) if seen is None else t.c.cards_stamp == seen
         async with self.tx() as c:
             mine = (k.tenant_id == tenant_id, k.team_id == team_id, team_visible(app_cards))
             await c.execute(app_cards.delete().where(*mine))
             if rows:
                 await c.execute(app_cards.insert(), rows)
-            ours = (t.c.tenant_id == tenant_id, t.c.team_id == team_id, team_visible(t), held)
+            ours = (t.c.tenant_id == tenant_id, t.c.team_id == team_id, team_visible(t))
             await c.execute(t.update().where(*ours).values(cards_stamp=stamp))
 
     async def page(self, tenant_id: str, team_id: str, params: ListParams, *, builtins: bool) -> ListPage:

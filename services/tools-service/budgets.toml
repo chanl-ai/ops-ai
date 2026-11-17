@@ -15,9 +15,10 @@ queries = 23
 ["GET /v1/app-credentials/{credential_id}"]
 queries = 25
 
-# Measured on the first list after a write, which rebuilds the team's card rows (store/app_cards.py) as it answers.
+# Measured on the first list after a write, which locks the team's defaults row and rebuilds its card rows
+# (store/app_cards.py) as it answers.
 ["GET /v1/apps"]
-queries = 23
+queries = 24
 
 ["GET /v1/apps/{app_id}"]
 queries = 52

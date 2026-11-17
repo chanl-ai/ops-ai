@@ -94,7 +94,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | platform-service | `ops_platform.store.tables` | none: no repository class | | `api_keys`, `audit_entries`, `members`, `oauth_address_counts`, `oauth_clients`, `password_credentials`, `password_resets`, `platform_outbox`, `policies`, `role_assignments`, `role_permissions`, `roles`, `sessions`, `signin_break_glass`, `signin_certificates`, `signin_domains`, `signin_email_failures`, `signin_flows`, `signin_grants`, `signin_group_rules`, `signin_identities`, `signin_lockouts`, `signin_providers`, `signin_secrets`, `teams`, `tenants`, `users` |
 | platform-service | `ops_platform.store.teams` | `TeamAdminStore` | RLS, TRANSACTION | none |
 | platform-service | `ops_platform.store.workspace` | `WorkspaceStore` | RLS, TRANSACTION | none |
-| tools-service | `ops_tools.store.app_cards` | `AppCards` | CAS | `app_cards` |
+| tools-service | `ops_tools.store.app_cards` | `AppCards` | LOCK, TRANSACTION | `app_cards` |
 | tools-service | `ops_tools.store.calls` | `CallLog` | CAS, TRANSACTION | `gateway_calls`, `gateway_fences` |
 | tools-service | `ops_tools.store.connections` | `ConnectionStore` | CAS, TRANSACTION | `app_credentials`, `connect_links`, `connection_audit`, `connection_tokens`, `connections`, `oauth_states` |
 | tools-service | `ops_tools.store.egress` | `EgressStore` | TRANSACTION | `egress_audit`, `egress_hosts`, `egress_ranges` |

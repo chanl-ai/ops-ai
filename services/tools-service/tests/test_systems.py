@@ -4,7 +4,8 @@ its accounts' state or its details."""
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import asyncio
+from collections.abc import AsyncIterator, Callable, Coroutine
 from datetime import UTC, datetime
 from typing import Any
 
@@ -374,6 +375,57 @@ async def test_a_write_to_an_app_shows_on_the_next_list(
     assert ids[0] == app, ids
     await store.delete(tenant, app, actor="t", at=datetime.now(UTC))
     assert app not in (await _ids(client, tenant))[0]
+
+
+async def _while_rebuilding(
+    monkeypatch: pytest.MonkeyPatch, other: Callable[[], Coroutine[Any, Any, httpx.Response]], *, before: bool
+) -> list[asyncio.Task[httpx.Response]]:
+    """Runs `other` beside the first card rebuild, before or after its writes and before its transaction ends, and
+    waits up to a second for it: a request the rebuild's lock holds back finishes after the list instead."""
+    started: list[asyncio.Task[httpx.Response]] = []
+    rebuild = AppCards.rebuild
+
+    async def paused(self: AppCards, *args: Any, **kwargs: Any) -> None:
+        if not before:
+            await rebuild(self, *args, **kwargs)
+        if not started:
+            started.append(asyncio.create_task(other()))
+            await asyncio.wait(started, timeout=1)
+        if before:
+            await rebuild(self, *args, **kwargs)
+
+    monkeypatch.setattr(AppCards, "rebuild", paused)
+    return started
+
+
+async def test_an_account_made_while_a_list_rebuilds_is_on_the_next_list(
+    client: httpx.AsyncClient, tenant: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _ids(client, tenant)
+    first = await client.post("/v1/apps", json={"name": "Ledger", "authKind": "none"}, headers=admin(tenant))
+    assert first.status_code == 201, first.text
+    started = await _while_rebuilding(
+        monkeypatch,
+        lambda: client.post("/v1/apps", json={"name": "Payroll", "authKind": "none"}, headers=admin(tenant)),
+        before=True,
+    )
+    await _ids(client, tenant)
+    made = await started[0]
+    assert made.status_code == 201, made.text
+    assert made.json()["data"]["id"] in (await _ids(client, tenant))[0]
+
+
+async def test_two_lists_after_a_write_both_answer(
+    client: httpx.AsyncClient, tenant: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _ids(client, tenant)
+    made = await client.post("/v1/apps", json={"name": "Ledger", "authKind": "none"}, headers=admin(tenant))
+    assert made.status_code == 201, made.text
+    started = await _while_rebuilding(monkeypatch, lambda: client.get("/v1/apps", headers=admin(tenant)), before=False)
+    ids, _ = await _ids(client, tenant)
+    other = await started[0]
+    assert other.status_code == 200, other.text
+    assert [c["id"] for c in other.json()["data"]["data"]] == ids
 
 
 async def test_the_card_rows_hold_the_acting_team_when_the_policy_lets_every_team_through(

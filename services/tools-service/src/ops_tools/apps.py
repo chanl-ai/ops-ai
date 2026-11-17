@@ -880,8 +880,12 @@ class Apps:
         if self.plugins is not None:
             await self.plugins.ensure(who.tenant_id, self.connections.clock())
         stamp = self.cards_stamp()
-        seen = await self.app_cards.stamp(who.tenant_id, who.team.id)
-        stale = seen != stamp
+        # Stale rows are rebuilt in the request's transaction (the route takes Tx), under the lock `claim` holds until
+        # it commits: the rows must be written from sources read under that lock, and a write that clears the stamp
+        # meanwhile waits for it. A steady-state list takes no lock and writes nothing.
+        stale = await self.app_cards.stamp(who.tenant_id, who.team.id) != stamp and await self.app_cards.claim(
+            who.tenant_id, who.team.id, stamp
+        )
         # Built in full once when stale: the rows are written from it and the page's cards are taken from it.
         every = await self.cards(who, listed=True, builtins=True, person=person) if stale else []
         if stale:
@@ -889,7 +893,7 @@ class Apps:
                 CardRow(id=str(c["id"]), kind=str(c["kind"]), name=str(c["name"]), category=c.get("category"))
                 for c in every
             ]
-            await self.app_cards.rebuild(who.tenant_id, who.team.id, rows, stamp=stamp, seen=seen)
+            await self.app_cards.rebuild(who.tenant_id, who.team.id, rows, stamp=stamp)
         page = await self.app_cards.page(who.tenant_id, who.team.id, q, builtins=builtins)
         ids = [str(r["id"]) for r in page["data"]]
         if not stale:
