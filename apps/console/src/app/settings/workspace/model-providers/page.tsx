@@ -47,7 +47,8 @@ function KeyDialog({ open, onOpenChange, replacing, onSaved }: { open: boolean; 
     if (!NAME.test(name)) return setError('Use letters, digits, _, . and -, starting with a letter or digit, up to 120.');
     if (!value.trim()) return setError('Paste the provider’s key.');
     try {
-      onSaved(await save.mutateAsync({ name, value: value.trim() }));
+      const saved = await save.mutateAsync({ name, value: value.trim() });
+      if (!replacing) onSaved(saved);
       // Cleared at once, so the key leaves the page with the dialog.
       setValue('');
       toast.success(replacing ? `Replaced ${name}` : `Saved ${name}`, { description: 'The next model call that signs in with it uses this value.' });
