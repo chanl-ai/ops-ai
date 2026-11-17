@@ -344,13 +344,13 @@ async def test_the_instructions_editor_offers_only_placeholders_a_run_fills(clie
     assert _ok(await client.get("/v1/prompts/variables")) == []
 
 
-# (method, path, body, the outside calls the route makes): tools-service's directory for stale grants (`_offered`),
-# platform-service for the team's name and its publish policy (`decide`), and the model.
+# (method, path, body, the outside calls the route makes): tools-service's directory for stale grants (`_directory`),
+# platform-service for the team's name and its publish policy (`team_document`), and the model.
 ASKS: list[tuple[str, str, Any, set[str]]] = [
-    ("get", "/v1/agents", None, {"_offered"}),
-    ("post", "/v1/agents", {"name": "Held check", "role": "Checks"}, {"_offered"}),
-    ("get", f"/v1/agents/{FRAUD}", None, {"_offered", "team_name"}),
-    ("get", "/v1/agents/{new}/publish-preview?version=1", None, {"decide"}),
+    ("get", "/v1/agents", None, {"_directory"}),
+    ("post", "/v1/agents", {"name": "Held check", "role": "Checks"}, {"_directory"}),
+    ("get", f"/v1/agents/{FRAUD}", None, {"_directory", "team_name"}),
+    ("get", "/v1/agents/{new}/publish-preview?version=1", None, {"team_document"}),
     ("post", f"/v1/agents/{FRAUD}/test", {"message": "What is the payee rule?"}, {"one_test_turn"}),
 ]
 
@@ -368,7 +368,7 @@ async def test_no_connection_is_held_while_an_agent_route_asks_another_party(
     seen: list[tuple[str, int, dict[str, set[int]]]] = []
     with _held_by_request() as held:
         asked: dict[str, set[int]] = {}
-        for name in ("_offered", "team_name", "decide", "one_test_turn"):
+        for name in ("_directory", "team_name", "team_document", "one_test_turn"):
             real = getattr(agents, name)
 
             async def watched(*args: Any, _name: str = name, _real: Any = real, **kwargs: Any) -> Any:

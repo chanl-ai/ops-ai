@@ -79,31 +79,21 @@ query = { app = "salesforce", name = "Main" }
 
 ["GET /v1/activity"]
 queries = 6
-transactions = 5
-connections = 5
 
 ["GET /v1/agents"]
 queries = 15
-transactions = 12
-connections = 12
 
 ["GET /v1/agents/{agent_id}"]
 queries = 17
-transactions = 17
-connections = 17
 
 ["GET /v1/agents/{agent_id}/eval-cases"]
 queries = 2
 
 ["GET /v1/agents/{agent_id}/live"]
 queries = 9
-transactions = 3
-connections = 3
 
 ["GET /v1/agents/{agent_id}/publish-preview"]
 queries = 2
-transactions = 2
-connections = 2
 query = { version = "1" }
 
 ["GET /v1/agents/{agent_id}/runs"]
@@ -205,14 +195,10 @@ query = { follow = "false" }
 
 ["GET /v1/forms/public/{slug}"]
 queries = 2
-transactions = 2
-connections = 2
 query = { t = "{form_token}" }
 
 ["GET /v1/forms/{slug}/members"]
 queries = 2
-transactions = 2
-connections = 2
 
 ["GET /v1/graphs"]
 queries = 2
@@ -279,8 +265,6 @@ queries = 7
 
 ["GET /v1/skills/options"]
 queries = 6
-transactions = 5
-connections = 5
 
 ["GET /v1/skills/{skill_id}"]
 queries = 5
@@ -360,8 +344,6 @@ queries = 1
 
 ["GET /v1/widgets/{widget_id}"]
 queries = 7
-transactions = 7
-connections = 7
 
 ["GET /v1/workflow-refs"]
 queries = 2
@@ -394,8 +376,6 @@ queries = 0
 
 ["GET /v1/workflows/{workflow_id}"]
 queries = 9
-transactions = 9
-connections = 9
 
 ["GET /v1/workflows/{workflow_id}/forms"]
 queries = 2

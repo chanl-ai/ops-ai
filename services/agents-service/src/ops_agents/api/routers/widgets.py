@@ -22,6 +22,7 @@ from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.http import Envelope, In, OptionsPage, options_page, options_window, page_window, paged
 from ops_service_kit.listing import ListQuery
+from ops_store import isolation
 
 from ..agent_registry import registry as agent_registry
 from ..auth import Principal, principal, reader_of, require_builder, teams_of
@@ -159,12 +160,13 @@ async def widget_options(  # noqa: PLR0917 - FastAPI reads each query parameter 
 
 @router.get("/v1/widgets/{widget_id}", response_model=Envelope[WidgetTemplateOut])
 async def get_widget(rt: Rt, me: Reader, widget_id: str) -> JSONResponse:
-    """Off the request transaction: the team's display name is read from platform-service after the rows."""
-    found = await listed_one(rt, teams_of(me), widget_id)
-    if found is None:
-        raise NotFound(f"Widget {widget_id}")
-    words = {"edit": "save", "delete": "retire"}
-    rights_of = await rights(lambda action: _mine(rt, me, widget_id, action), words)
+    """The rows and the caller's rights in one transaction; platform-service names the team after."""
+    async with isolation.request_transaction():
+        found = await listed_one(rt, teams_of(me), widget_id)
+        if found is None:
+            raise NotFound(f"Widget {widget_id}")
+        words = {"edit": "save", "delete": "retire"}
+        rights_of = await rights(lambda action: _mine(rt, me, widget_id, action), words)
     return ok({**found, **await team_name(rt, found.get("teamId")), **rights_of})
 
 

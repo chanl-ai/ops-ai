@@ -30,6 +30,7 @@ from ops_service_kit.errors import Conflict, NotFound, Unprocessable, Validation
 from ops_service_kit.http import Envelope, In, ListResult, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListQuery
+from ops_store import isolation
 
 from ...store.evals import EvalStore
 from ...store.template_copies import TemplateCopies
@@ -55,7 +56,7 @@ from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..guardrails import resolve_pins
 from ..model_aliases import chat_aliases
-from ..publish_policy import Decision, decide
+from ..publish_policy import Decision, Document, decide, team_document
 from ..review_sla import sla_hours
 from ..rights import rights
 from ..runs import graph_store
@@ -75,7 +76,7 @@ from ..team_names import team_name
 from ..timers import arm_job
 from ..widgets import published as published_widget
 from ..workflow_registry import registry as workflow_registry
-from .tool_catalog import known_tools
+from .tool_catalog import ToolRows, directory_tools, known_tools
 
 # The provisioning service reaches list, read, create, change and delete with a team-scoped token; every other
 # route takes a person or an API key (`Me`).
@@ -218,12 +219,20 @@ class JobArmed(Out):
     run_id: str | None = None
 
 
-async def _offered(rt: Runtime) -> set[str] | None:
-    """The tool ids the directory offers now; None when tools-service cannot answer."""
+async def _directory(rt: Runtime) -> ToolRows | None:
+    """What tools-service offers now, asked with nothing open; None when it cannot answer."""
     try:
-        return {t["id"] for t in await known_tools(rt)}
+        return await directory_tools(rt)
     except ToolsUnavailable:
         return None
+
+
+async def _offered(rt: Runtime, directory: ToolRows | None) -> set[str] | None:
+    """The tool ids offered: the directory's rows and the tenant's published workflows and agents (local reads);
+    None when `directory` is None (tools-service could not answer)."""
+    if directory is None:
+        return None
+    return {t["id"] for t in await known_tools(rt, listed=directory)}
 
 
 def _stale(tool_ids: list[str], offered: set[str] | None) -> list[str]:
@@ -303,13 +312,17 @@ async def used_in_all(rt: Runtime) -> dict[str, list[WorkflowUse]]:
     return out
 
 
-async def _view(rt: Runtime, agent_id: str) -> dict[str, Any]:
+async def _view(rt: Runtime, agent_id: str, *, directory: ToolRows | Literal["ask"] | None = "ask") -> dict[str, Any]:
+    """The agent's reply. A read that holds one transaction passes the `directory` it asked tools-service for first;
+    otherwise it is asked here."""
+    if directory == "ask":
+        directory = await _directory(rt)
     reg = registry(rt)
     row = await reg.row(agent_id)
     spec = (await reg.version(agent_id, int(row["version"])))["spec"]
     tasks = (await tasks_24h(rt)).get(agent_id, 0)
     listed = {**row, "spec": spec, "tasks_24h": tasks}
-    return _decorated(listed, await _offered(rt), (await used_in_all(rt)).get(agent_id, []))
+    return _decorated(listed, await _offered(rt, directory), (await used_in_all(rt)).get(agent_id, []))
 
 
 def _decorated(row: dict[str, Any], offered: set[str] | None, uses: list[WorkflowUse]) -> dict[str, Any]:
@@ -381,9 +394,11 @@ async def list_agents(
     `teamId` and `templateId` narrow the page, and the first two are counted in `facets`."""
     # Read from `q.filters`; declared so the document and the SDKs name them.
     del availability, team_id
-    listed = await registry(rt).page(q, since=a_day_ago())
-    offered = await _offered(rt) if listed["data"] else None
-    used = await used_in_all(rt) if listed["data"] else {}
+    directory = await _directory(rt)
+    async with isolation.request_transaction():
+        listed = await registry(rt).page(q, since=a_day_ago())
+        offered = await _offered(rt, directory) if listed["data"] else None
+        used = await used_in_all(rt) if listed["data"] else {}
     views = [_decorated(r, offered, used.get(str(r["id"]), [])) for r in listed["data"]]
     return ok({**listed, "data": views})
 
@@ -432,8 +447,11 @@ async def create_agent(rt: Rt, me: Cl, body: AgentInput) -> JSONResponse:
 
 @router.get("/{agent_id}", response_model=Envelope[Agent])
 async def get_agent(rt: Rt, me: Reader, agent_id: str) -> JSONResponse:
-    view = await _view(rt, agent_id)
-    rights_of = await rights(lambda action: changeable(rt, me, agent_id, action))
+    directory = await _directory(rt)
+    async with isolation.request_transaction():
+        view = await _view(rt, agent_id, directory=directory)
+        rights_of = await rights(lambda action: changeable(rt, me, agent_id, action))
+    # platform-service names the team with nothing open.
     return ok({**view, **await team_name(rt, view.get("teamId")), **rights_of})
 
 
@@ -651,21 +669,33 @@ async def restore_version(rt: Rt, me: Me, agent_id: str, version: int) -> JSONRe
     return ok(await _view(rt, agent_id))
 
 
-async def _publish_decision(rt: Runtime, agent_id: str, row: dict[str, Any], version: int) -> Decision:
+async def _publish_decision(
+    rt: Runtime,
+    agent_id: str,
+    row: dict[str, Any],
+    version: int,
+    document: Document | Literal["read"] | None = "read",
+) -> Decision:
     """What the team's publish policy says about publishing `version`; the preview and the publish both ask here, so
     the dialog never promises what the publish does not do."""
     reg = registry(rt)
     spec = (await reg.version(agent_id, version))["spec"]
     live = await reg.version(agent_id, int(row["published_version"])) if row["published_version"] else None
-    return await decide(rt, area="agents", team_id=row["team_id"], old=live["spec"] if live else None, new=spec)
+    return await decide(
+        rt, area="agents", team_id=row["team_id"], old=live["spec"] if live else None, new=spec, document=document
+    )
 
 
 @router.get("/{agent_id}/publish-preview", response_model=Envelope[PublishDecisionFields])
 async def publish_preview(rt: Rt, me: Me, agent_id: str, version: Annotated[int, Query()]) -> JSONResponse:
     """Whether publishing the newest draft would wait for review, and why; nothing is opened or changed."""
-    row = await changeable(rt, me, agent_id, "publish")
-    require_newest_draft(row, version)
-    return ok((await _publish_decision(rt, agent_id, row, version)).record())
+    # The team's publish policy is read from platform-service first, with nothing open.
+    document = await team_document(rt)
+    async with isolation.request_transaction():
+        row = await changeable(rt, me, agent_id, "publish")
+        require_newest_draft(row, version)
+        decision = await _publish_decision(rt, agent_id, row, version, document)
+    return ok(decision.record())
 
 
 @router.post("/{agent_id}/publish-requests", response_model=Envelope[PublishReview], status_code=201)

@@ -87,7 +87,7 @@ async def test_the_summary_reads_keep_every_key_value_and_error_object(client: A
 CHECKOUTS: list[tuple[str, Caller, int]] = [
     ("/v1/teams/usage", PLATFORM, 1),
     ("/v1/knowledge-usage", KB, 1),
-    ("/v1/activity", PERSON, 3),
+    ("/v1/activity", PERSON, 1),
     ("/v1/model-aliases", PERSON, 0),
     ("/v1/prompts/variables", PERSON, 0),
     ("/health", PERSON, 1),

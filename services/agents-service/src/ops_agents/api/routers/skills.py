@@ -49,7 +49,7 @@ from ..skills import (
     skills,
 )
 from .agents import changeable as agent_changeable
-from .tool_catalog import known_tools
+from .tool_catalog import directory_tools, known_tools
 
 log = get_logger("ops_agents.skills")
 # Reads take a service token holding skills:view (tools-service offers a team's skills as MCP prompts); every change
@@ -187,11 +187,12 @@ async def list_skills(
 async def skill_options(rt: Rt, _: Annotated[Principal, Depends(reader_of("skills"))]) -> JSONResponse:
     """What a skill may name: the tools the directory offers, the knowledge bases agents hold, and owner teams. The
     directory is read from tools-service first, with nothing open, then the rows in one transaction."""
-    tools = [
-        {"toolId": t["id"], "name": t["name"], "module": t["server"], "system": t["server"], "access": t["access"]}
-        for t in await known_tools(rt)
-    ]
+    directory = await directory_tools(rt)
     async with isolation.request_transaction():
+        tools = [
+            {"toolId": t["id"], "name": t["name"], "module": t["server"], "system": t["server"], "access": t["access"]}
+            for t in await known_tools(rt, listed=directory)
+        ]
         specs = await newest_specs(rt.db)
         teams = sorted({str(r["owner_team"]) for r in await skills(rt).rows()})
     held: list[Any] = [k for s in specs for k in cast(list[Any], s.get("collections") or [])]

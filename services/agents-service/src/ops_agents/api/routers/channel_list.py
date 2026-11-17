@@ -23,6 +23,7 @@ from ops_service_kit.errors import Conflict, Forbidden, NotFound, Unprocessable
 from ops_service_kit.http import Envelope, In, ListResult, Out
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListParams
+from ops_store import isolation
 
 from ...store.channel_list import (
     KEY_EXPIRY_WARNING,
@@ -399,13 +400,14 @@ async def agent_live(rt: Rt, me: Me, agent_id: str) -> JSONResponse:
     """Where the agent serves: the chat channels on it, pinned or on Latest, and the live workflow steps that run it."""
     asked = _teams(me, "all")
     teams = tuple(t for t in asked if _may(me, "view", t))
-    latest = await ChannelList(rt.db).published_version(agent_id)
-    if latest is NOT_FOUND:
-        raise NotFound(f"Agent {agent_id}")
     now = datetime.now(UTC)
-    serving = await ChannelList(rt.db).rows(teams, now=now, agent_id=agent_id, types=["chat"])
+    async with isolation.request_transaction():
+        latest = await ChannelList(rt.db).published_version(agent_id)
+        if latest is NOT_FOUND:
+            raise NotFound(f"Agent {agent_id}")
+        serving = await ChannelList(rt.db).rows(teams, now=now, agent_id=agent_id, types=["chat"])
+        live = await ChannelList(rt.db).live_definitions()
     rows = [_place(r) for r in await replies(rt, me, serving, now)]
-    live = await ChannelList(rt.db).live_definitions()
     rows += _steps(live, "ops.ai.agent", "agent", agent_id, cast(int | None, latest))
     return ok({"latestVersion": latest, "versions": _versions(rows, cast(int | None, latest)), "rows": rows})
 

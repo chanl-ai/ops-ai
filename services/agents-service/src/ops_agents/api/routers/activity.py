@@ -1,9 +1,8 @@
 """GET /v1/activity: everything that happened in the caller's teams on one list, filtered by kind, team,
 status and source, with counts per kind and status for the "View activity" buttons on the channel, agent and workflow
 pages. The rows are joined by the store (store/activity.py); this router decides which teams each kind is read in.
-The list takes no request transaction (`Tx`): naming the people and keys on a page asks platform-service and wording
-its tool calls asks tools-service, so each store read opens and closes its own transaction and no connection is held
-while they answer."""
+The list reads this service's rows in one transaction, then names the people and keys (platform-service) and words the
+tool calls (tools-service) with none open."""
 
 from __future__ import annotations
 
@@ -17,6 +16,7 @@ from ops_access import can
 from ops_engine.store import RunStore
 from ops_service_kit.errors import Forbidden, NotFound, Unprocessable
 from ops_service_kit.http import Envelope, ListResult, Out, paged
+from ops_store import isolation
 
 from ...case_wording import entry
 from ...store.activity import KINDS, Activity, Filters, Scope
@@ -24,7 +24,7 @@ from ...store.cases import CaseNotFound, CaseStore
 from ...store.engine import EngineTransactions
 from ...store.tenancy import current_team
 from ...store.trigger_events import SET_ASIDE_AFTER
-from ..actors import ActorView, actors
+from ..actors import ActorView, actor_reads, named_actors
 from ..auth import Principal, caller_in, caller_of
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -214,14 +214,6 @@ def row_view(
     }
 
 
-async def call_titles(rt: Runtime, rows: list[dict[str, Any]]) -> dict[str, str]:
-    """Each tool-call row's title as the run page words the same call: the calls read in two queries and
-    described with one tool directory read, never the tool's own name."""
-    calls = await Activity(rt.db).calls(rows)
-    told = await describe_calls(rt, calls)
-    return {f"tool_call:{k}": str(v["sentence"]) for k, v in told.items()}
-
-
 async def case_titles(rt: Runtime, rows: list[dict[str, Any]]) -> dict[str, str]:
     """Each case row's title in the words the case page's feed uses (case_wording), its events read in one query."""
     ids = [str(r["row_id"]) for r in rows if r["kind"] == "case"]
@@ -254,20 +246,27 @@ async def list_activity(rt: Rt, me: Me, q: Annotated[ActivityQuery, Query()]) ->
     when the kind filter asks for them; their facet still counts them."""
     can(caller_of(me), "activity", "view", team=current_team() or me.team_id, what="the activity list")
     scope = scope_of(me, q.team)
-    case = await _case(rt, scope, q.case) if q.case else None
-    filters = Filters(
-        kinds=tuple(q.kind) or tuple(k for k in KINDS if k != "background"),
-        statuses=tuple(q.status),
-        sources=_sources(q.source),
-        since=q.since,
-        until=q.until,
-        case=case,
-    )
-    found = await Activity(rt.db).page(scope, filters, page=q.page, page_size=q.pageSize)
-    who = await actors(rt, [str(r["actor"] or "") for r in found.rows if r["kind"] not in ("email", "form")])
-    titles = await case_titles(rt, found.rows) | await call_titles(rt, found.rows)
-    details = await Activity(rt.db).email_details(found.rows)
-    runs = [str(r["row_id"]) for r in found.rows if r["kind"] == "workflow_run" and r["outcome"]]
-    ended = await outcome_texts(rt, await RunStore(EngineTransactions(rt.db)).many(runs)) if runs else {}
+    # Every local read in one transaction; platform-service names the people and tools-service words the calls after,
+    # with nothing open.
+    async with isolation.request_transaction():
+        case = await _case(rt, scope, q.case) if q.case else None
+        filters = Filters(
+            kinds=tuple(q.kind) or tuple(k for k in KINDS if k != "background"),
+            statuses=tuple(q.status),
+            sources=_sources(q.source),
+            since=q.since,
+            until=q.until,
+            case=case,
+        )
+        found = await Activity(rt.db).page(scope, filters, page=q.page, page_size=q.pageSize)
+        reads = await actor_reads(rt, [str(r["actor"] or "") for r in found.rows if r["kind"] not in ("email", "form")])
+        case_said = await case_titles(rt, found.rows)
+        calls = await Activity(rt.db).calls(found.rows)
+        details = await Activity(rt.db).email_details(found.rows)
+        runs = [str(r["row_id"]) for r in found.rows if r["kind"] == "workflow_run" and r["outcome"]]
+        ended = await outcome_texts(rt, await RunStore(EngineTransactions(rt.db)).many(runs)) if runs else {}
+    who = await named_actors(rt, reads)
+    told = await describe_calls(rt, calls)
+    titles = case_said | {f"tool_call:{k}": str(v["sentence"]) for k, v in told.items()}
     listed = paged([row_view(r, who, titles, details, ended) for r in found.rows], found.total, q.page, q.pageSize)
     return ok(listed | {"facets": {"kind": found.by_kind, "status": found.by_status}})

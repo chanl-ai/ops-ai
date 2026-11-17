@@ -26,6 +26,7 @@ from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unpro
 from ops_service_kit.http import Envelope, In, ListResult, paged
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListParams
+from ops_store import isolation
 
 from ...store.tenancy import tenant_tx
 from ...store.workflow_list import SORTS, PageExtra, WorkflowRow, page_details, workflows_page
@@ -299,8 +300,10 @@ async def route_fields() -> JSONResponse:
 
 @router.get("/{workflow_id}", response_model=Envelope[WorkflowDetail])
 async def get_workflow(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
-    detail = await _detail(rt, workflow_id)
-    rights_of = await rights(lambda action: changeable(rt, me, workflow_id, action))
+    async with isolation.request_transaction():
+        detail = await _detail(rt, workflow_id)
+        rights_of = await rights(lambda action: changeable(rt, me, workflow_id, action))
+    # platform-service names the team with nothing open.
     return ok({**detail, **await team_name(rt, detail.get("teamId")), **rights_of})
 
 

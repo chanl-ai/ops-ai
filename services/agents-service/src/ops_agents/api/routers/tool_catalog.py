@@ -37,9 +37,12 @@ router = APIRouter(prefix="/v1/tools", dependencies=[Depends(principal)])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 
 
-async def known_tools(rt: Runtime, *, fresh: bool = False) -> list[dict[str, Any]]:
-    """Registry operations, then the tenant's published workflows (from this service's own workflow registry) under
-    `workflow:<id>`: what an agent may be granted, and what search_tools finds among an agent's grants. `fresh` asks
+# Tool rows as the catalogue lists them (`id`, `name`, `server`, `access`, `inputSchema`, ...).
+ToolRows = list[dict[str, Any]]
+
+
+async def directory_tools(rt: Runtime, *, fresh: bool = False) -> ToolRows:
+    """The registry's operations as tool rows: the one call to tools-service, made with nothing open. `fresh` asks
     tools-service again past the 30 s list, for a grant naming a tool the kept list lacks."""
     # Only a directory that keeps a list has one to drop; a fixed catalogue or a test's list has none.
     if fresh and (forget := getattr(rt.directory(), "forget", None)) is not None:
@@ -62,6 +65,14 @@ async def known_tools(rt: Runtime, *, fresh: bool = False) -> list[dict[str, Any
                 "approval": template.title if template else None,
             }
         )
+    return rows
+
+
+async def known_tools(rt: Runtime, *, fresh: bool = False, listed: ToolRows | None = None) -> ToolRows:
+    """Registry operations, then the tenant's published workflows (from this service's own workflow registry) under
+    `workflow:<id>`: what an agent may be granted, and what search_tools finds among an agent's grants. `listed` is
+    the operations a caller already fetched with `directory_tools`, so its local reads can share one transaction."""
+    rows = list(listed) if listed is not None else await directory_tools(rt, fresh=fresh)
     v1 = {w["id"] for w in await published_workflows(rt)}
     for d in await engine_workflows(rt):
         if d["workflow_id"] in v1:

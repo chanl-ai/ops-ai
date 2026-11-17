@@ -137,9 +137,18 @@ async def test_no_transaction_is_open_while_another_service_answers(
     held, open_during = _transactions(), list[tuple[str, int]]()
     tools, policy = tool_catalog.known_tools, publish_policy.team_document
 
-    async def known(rt: Any, *, fresh: bool = False) -> list[dict[str, Any]]:
+    directory = tool_catalog.directory_tools
+
+    async def known(
+        rt: Any, *, fresh: bool = False, listed: list[dict[str, Any]] | None = None
+    ) -> list[dict[str, Any]]:
+        if listed is None:  # rows from a directory the route already asked hold no outside call
+            open_during.append(("tools", held[1]))
+        return await tools(rt, fresh=fresh, listed=listed)
+
+    async def asked_directory(rt: Any, *, fresh: bool = False) -> list[dict[str, Any]]:
         open_during.append(("tools", held[1]))
-        return await tools(rt, fresh=fresh)
+        return await directory(rt, fresh=fresh)
 
     async def document(rt: Any) -> dict[str, Any] | None:
         open_during.append(("policy", held[1]))
@@ -153,6 +162,7 @@ async def test_no_transaction_is_open_while_another_service_answers(
     from ops_agents.api.routers import skills as skills_routes  # noqa: PLC0415
 
     monkeypatch.setattr(skills_routes, "known_tools", known)
+    monkeypatch.setattr(skills_routes, "directory_tools", asked_directory)
     tool = {"toolIds": ["lookup_account"]}
     made = await c.post("/v1/skills", json={**SKILL, **tool}, headers=BUILDER)
     sid = made.json()["data"]["id"]
