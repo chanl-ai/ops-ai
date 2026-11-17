@@ -15,9 +15,10 @@ from __future__ import annotations
 from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime, timedelta
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, TypedDict, cast
 
 import sqlalchemy as sa
+from pydantic import TypeAdapter
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 from sqlalchemy.sql.schema import SchemaItem
@@ -637,6 +638,55 @@ def _team_of(team_id: str | None) -> sa.ColumnElement[bool]:
     return _cards_stamp().c.team_id == team_id if team_id else sa.true()
 
 
+class Header(TypedDict):
+    """A header an operation sends: a literal or a {{NAME}} reference to a secret."""
+
+    key: str
+    value: str
+
+
+class HeaderHolder(TypedDict):
+    """An operation's headers with its place: tenant, team and module."""
+
+    tenant_id: str
+    team_id: str
+    module_id: str
+    headers: list[Header]
+
+
+class SecretOperation(TypedDict):
+    """An operation as the Secrets page reads it: where it is called and the headers it sends."""
+
+    module_id: str
+    id: str
+    name: str
+    path: str | None
+    headers: list[Header]
+
+
+# The keys of a published operation (a module's `baseline`, a JSON copy taken at publish) the Secrets page reads. Read
+# only: the copy is never written back from this shape.
+class PublishedOperation(TypedDict, total=False):
+    id: str
+    name: str
+    path: str | None
+    headers: list[Header]
+
+
+class SecretReader(TypedDict):
+    """A module as the Secrets page reads it: its published operations and each operation's path and headers."""
+
+    id: str
+    display_name: str
+    baseline: list[PublishedOperation] | None
+    operations: list[SecretOperation]
+
+
+HEADER_HOLDER = TypeAdapter(HeaderHolder)
+SECRET_OPERATION = TypeAdapter(SecretOperation)
+PUBLISHED_OPERATIONS = TypeAdapter(list[PublishedOperation])
+
+
 class ModuleStore(Store):
     # A module and its children land together (TRANSACTION); a write lands only against the revision read (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.CAS})
@@ -818,7 +868,7 @@ class ModuleStore(Store):
             )
         return [{**r, **kids[r["id"]]} for r in rows]
 
-    async def header_holders(self, tenant_id: str | None = None) -> list[Aggregate]:
+    async def header_holders(self, tenant_id: str | None = None) -> list[HeaderHolder]:
         """Every team module's operation that carries a header, every tenant's or `tenant_id`'s: its tenant, team,
         module and headers."""
         m, ops = tool_modules.c, module_operations.c
@@ -832,7 +882,7 @@ class ModuleStore(Store):
                 q = sa.select(m.tenant_id).where(team_module).distinct().order_by(m.tenant_id)
                 tenants = [str(t) for t in (await c.execute(q)).scalars()]
         on = sa.and_(ops.tenant_id == m.tenant_id, ops.module_id == m.id)
-        found: list[Aggregate] = []
+        found: list[HeaderHolder] = []
         for tenant in tenants:
             q = (
                 sa.select(m.tenant_id, m.team_id, ops.module_id, ops.headers)
@@ -842,7 +892,7 @@ class ModuleStore(Store):
             )
             with isolation.tenant_wide(HEADER_KEYS, tenant_id=tenant):
                 async with self.tx() as c:
-                    found += [dict(r) for r in (await c.execute(q)).mappings() if r["headers"]]
+                    found += [HEADER_HOLDER.validate_python(r) for r in (await c.execute(q)).mappings() if r["headers"]]
         return found
 
     async def names(self, tenant_id: str, team_id: str | None = None) -> set[str]:
@@ -853,7 +903,7 @@ class ModuleStore(Store):
             async with self.tx() as c:
                 return {str(r[0]) for r in await c.execute(q)}
 
-    async def secret_readers(self, tenant_id: str) -> list[Aggregate]:
+    async def secret_readers(self, tenant_id: str) -> list[SecretReader]:
         """Each module's id, display name and baseline with its operations' id, name, path and headers: what the
         Secrets page needs to say which operations read a secret, in two reads instead of every child table."""
         ops = module_operations.c
@@ -861,8 +911,14 @@ class ModuleStore(Store):
             q = sa.select(tool_modules.c.id, tool_modules.c.display_name, tool_modules.c.baseline).where(
                 tool_modules.c.tenant_id == tenant_id, sa.or_(team_modules(), granted(tenant_id))
             )
-            rows: dict[str, Aggregate] = {
-                r["id"]: {**dict(r), "operations": []} for r in (await c.execute(q)).mappings()
+            rows: dict[str, SecretReader] = {
+                r["id"]: {
+                    "id": r["id"],
+                    "display_name": r["display_name"],
+                    "baseline": None if r["baseline"] is None else PUBLISHED_OPERATIONS.validate_python(r["baseline"]),
+                    "operations": [],
+                }
+                for r in (await c.execute(q)).mappings()
             }
             q = (
                 sa.select(ops.module_id, ops.id, ops.name, ops.path, ops.headers)
@@ -871,8 +927,7 @@ class ModuleStore(Store):
             )
             for r in (await c.execute(q)).mappings():
                 if r["module_id"] in rows:
-                    readers: list[dict[str, Any]] = rows[r["module_id"]]["operations"]
-                    readers.append(dict(r))
+                    rows[r["module_id"]]["operations"].append(SECRET_OPERATION.validate_python(r))
         return list(rows.values())
 
     async def get(self, tenant_id: str, module_id: str, *, reviews: bool = False) -> Aggregate | None:

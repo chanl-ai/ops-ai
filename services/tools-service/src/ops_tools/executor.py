@@ -26,7 +26,7 @@ import json
 import re
 import ssl
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import parse_qsl, quote, quote_plus, urlencode, urlsplit
@@ -48,6 +48,7 @@ from .plugins.host import plugin_id_of
 from .registry import Resolved
 from .secrets import SecretMissing, SecretResolver, scrub
 from .store.mocks import MockRow
+from .store.modules import Header
 from .tools import ToolCaller, ToolRunner
 
 if TYPE_CHECKING:
@@ -226,10 +227,14 @@ class Trial:
         self.log.append((round((time.perf_counter() - self.started) * 1000, 1), message))
 
 
-def secret_names(op: dict[str, Any]) -> list[str]:
+def secret_refs(headers: Sequence[Header], path: str | None) -> list[str]:
     """The secrets an operation's headers and path name, each once."""
-    texts = [h["value"] for h in cast(list[dict[str, str]], op.get("headers") or [])] + [op.get("path") or ""]
+    texts = [h["value"] for h in headers] + [path or ""]
     return sorted({n for t in texts for n in SECRET_REF.findall(t)})
+
+
+def secret_names(op: dict[str, Any]) -> list[str]:
+    return secret_refs(op.get("headers") or [], op.get("path"))
 
 
 def build_request(

@@ -9,7 +9,7 @@ need the same credential each hold their own row under the same name."""
 from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypedDict
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
@@ -25,9 +25,9 @@ from ops_store import isolation
 from ops_store.team_scope import acting_as
 
 from ..callers import Person, person
-from ..executor import secret_names
+from ..executor import secret_refs
 from ..store.connections import ConnectionStore
-from ..store.modules import ModuleStore
+from ..store.modules import ModuleStore, PublishedOperation, SecretOperation, SecretReader
 from ..store.secrets import SecretMeta as StoredSecret
 from . import SecretResolver
 
@@ -100,26 +100,35 @@ class SecretList(ListResult[SecretMeta]):
     """GET /v1/secrets: one page of the secrets' metadata."""
 
 
-def _refs(op: dict[str, Any]) -> set[str]:
-    return set(secret_names(op))
+class SecretUse(TypedDict):
+    """One operation that reads a secret, as the secret's page lists it."""
+
+    moduleId: str
+    moduleName: str
+    operation: str
+    staged: bool
 
 
-def users_of(modules: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+def _refs(op: SecretOperation | PublishedOperation) -> set[str]:
+    return set(secret_refs(op.get("headers") or [], op.get("path")))
+
+
+def users_of(modules: list[SecretReader]) -> dict[str, list[SecretUse]]:
     """Each secret name and the operations that read it: what calls run now (the published operations, or the baseline
     while edits are staged) and what a staged edit would run, so neither a delete nor a publish breaks one."""
-    out: dict[str, list[dict[str, Any]]] = {}
+    out: dict[str, list[SecretUse]] = {}
     for m in modules:
-        ops: list[dict[str, Any]] = m["operations"]
-        baseline: list[dict[str, Any]] = m.get("baseline") or []
-        published = {str(o["id"]): _refs(o) for o in (baseline or ops)}
-        current: dict[str, set[str]] = {str(o["id"]): _refs(o) for o in ops}
-        names: dict[str, str] = {str(o["id"]): str(o["name"]) for o in [*baseline, *ops]}
+        ops = m["operations"]
+        baseline = m["baseline"] or []
+        published = {str(o.get("id")): _refs(o) for o in (baseline or ops)}
+        current: dict[str, set[str]] = {o["id"]: _refs(o) for o in ops}
+        names: dict[str, str] = {str(o.get("id")): str(o.get("name")) for o in [*baseline, *ops]}
         for op_id in sorted({*published, *current}, key=lambda i: names[i]):
             empty: set[str] = set()
             now = current.get(op_id, empty)
             served = published.get(op_id, empty)
             for secret in sorted(now | served):
-                user: dict[str, Any] = {
+                user: SecretUse = {
                     "moduleId": str(m["id"]),
                     "moduleName": str(m["display_name"]),
                     "operation": names[op_id],
@@ -130,7 +139,7 @@ def users_of(modules: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
 
 
 def _meta(
-    row: StoredSecret, users: dict[str, list[dict[str, Any]]] | None = None, configs: dict[str, str] | None = None
+    row: StoredSecret, users: dict[str, list[SecretUse]] | None = None, configs: dict[str, str] | None = None
 ) -> dict[str, Any]:
     config = row.credential_id
     config_name = (configs or {}).get(config, config) if config else None
@@ -204,7 +213,7 @@ def secrets_router(
             raise NotFound(f"Team {requested}")
         return requested
 
-    async def _users(tenant_id: str, owner: str) -> dict[str, list[dict[str, Any]]]:
+    async def _users(tenant_id: str, owner: str) -> dict[str, list[SecretUse]]:
         if modules is None:
             return {}
         # The operations of the secret's own team, the only modules that read it.
