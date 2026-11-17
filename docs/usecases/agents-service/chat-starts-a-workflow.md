@@ -17,15 +17,15 @@ and the registry seeds `dispute_email` published.
 | # | Step | Expected |
 |---|---|---|
 | 1 | Pause `dispute_email`, ask `ag_dispute` in chat to start it | No tool call and no child thread: a paused workflow is not offered |
-| 2 | Set it live again and ask again | The agent calls `workflow__dispute_email`; the reply says the child is waiting for a review and names it |
+| 2 | Set it live again and ask again | The agent calls `workflow__dispute_email`; the reply says the child is waiting for a review, shows no record id, and the tool card's output names the review |
 | 3 | Cases, Needs a person | The child is a row, started by the agent |
-| 4 | Decide the child's review | 200; the conversation then shows the child's outcome |
+| 4 | Decide the child's review | A reviewer from another team is refused (403 or 404); the team's reviewer gets 200, and the conversation then shows the child's outcome |
 
 In the console (ui layer), with chat, Cases and Reviews pointed at the scripted agents service:
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | `/chat?agent=ag_dispute`, "Start workflow dispute_email: …" | A `workflow__dispute_email` tool card; the reply "The workflow is waiting for a review: gth_…" |
+| 1 | `/chat?agent=ag_dispute`, "Start workflow dispute_email: …" | A `workflow__dispute_email` tool card; the reply "The workflow is waiting for a review." with no id; the card names the review |
 | 2 | `/cases` | The child's row, "Started by agent Card Dispute Resolver", waiting on a person |
 | 3 | `/reviews`, the child, Approve | One decision, 200, no step-up (a write) |
 | 4 | Back to the conversation | "The dispute email workflow (gth_…) finished" |
