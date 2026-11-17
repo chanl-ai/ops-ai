@@ -62,7 +62,7 @@ export function MockAnswers({ moduleId, opId }: { moduleId: string; opId: string
   const mocks = useMockAnswers(moduleId, opId);
   const remove = useDeleteMockAnswer(moduleId, opId);
   const [editing, setEditing] = React.useState<{ mock?: MockAnswer } | null>(null);
-  const list = mocks.data?.data ?? [];
+  const list = (mocks.data?.pages ?? []).flatMap((p) => p.data);
 
   return (
     <Section
@@ -120,6 +120,13 @@ export function MockAnswers({ moduleId, opId }: { moduleId: string; opId: string
             />
           ))}
         </Rows>
+      )}
+      {mocks.hasNextPage && (
+        <div className="flex justify-center p-3">
+          <LoadingButton type="button" size="sm" variant="outline" isLoading={mocks.isFetchingNextPage} onClick={() => void mocks.fetchNextPage()} data-testid="mock-more">
+            Show more answers
+          </LoadingButton>
+        </div>
       )}
       {editing && <MockAnswerDialog moduleId={moduleId} opId={opId} mock={editing.mock} onClose={() => setEditing(null)} />}
     </Section>

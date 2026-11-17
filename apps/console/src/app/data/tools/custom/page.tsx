@@ -177,7 +177,7 @@ export default function CustomToolsPage() {
   const router = useRouter();
   // `workflows` lists workflow tools from the tools API; every other view is a module view.
   const [view, setView] = React.useState<ModuleView | 'workflows'>('all');
-  const workflowTools = useTools({ page: 1, pageSize: 100, filters: { type: ['workflow'] } });
+  const workflowTools = useTools({ page: 1, pageSize: 1, filters: { type: ['workflow'] } });
   const list = useListParams<ModuleFilters>('displayName');
   const query = useToolModules({ ...list.params, view: view === 'workflows' ? 'all' : view });
   const discover = useDiscoverModule();
@@ -258,7 +258,7 @@ export default function CustomToolsPage() {
             canSave={false}
           />
           {view === 'workflows' ? (
-            <WorkflowToolsTable tools={workflowTools.data?.data ?? []} total={workflowTools.data?.pagination.total ?? 0} />
+            <WorkflowToolsTable />
           ) : (
           <DataTableWithViews
             columns={cols}

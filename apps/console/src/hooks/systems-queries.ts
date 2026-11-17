@@ -14,7 +14,7 @@ import type { OpsAI } from '@chanl-ai/ops-ai';
 
 import { refreshAppState } from './app-state-refresh';
 import { usePagedQuery } from './paged-query';
-import { useTeamQuery } from './team-query';
+import { useTeamInfiniteQuery, useTeamQuery } from './team-query';
 
 type Tools = OpsAI['raw']['tools'];
 type Args<K extends keyof Tools> = NonNullable<Parameters<Tools[K]>[0]>;
@@ -202,10 +202,13 @@ export function useSaveSendPolicy() {
 }
 
 const mocksKey = (moduleId: string, opId: string) => ['mocks', moduleId, opId] as const;
+/** The operation's mock answers in the order they are tried, 50 a page; the next page is asked for on request. */
 export const useMockAnswers = (moduleId: string, opId: string) =>
-  useTeamQuery({
+  useTeamInfiniteQuery({
     queryKey: mocksKey(moduleId, opId),
-    queryFn: () => sdk((ops) => ops.raw.tools.tool_modules_list_mocks({ path: { module_id: moduleId, op_id: opId } })),
+    queryFn: ({ pageParam }) => sdk((ops) => ops.raw.tools.tool_modules_list_mocks({ path: { module_id: moduleId, op_id: opId }, query: { page: pageParam, pageSize: 50 } })),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.pagination.hasNext ? last.pagination.page + 1 : undefined),
     enabled: Boolean(moduleId && opId),
   });
 function useMockMutation<I, O>(moduleId: string, opId: string, fn: (i: I) => Promise<O>) {
