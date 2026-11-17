@@ -212,6 +212,8 @@ try {
               const appsList = (url) => new URL(url).pathname === '/v1/apps';
               await page.route(appsList, (r) => r.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ success: false, error: { code: 'unavailable', message: 'down' } }) }));
               await page.goto(`${consoleUrl}/agents/${agent.id}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+              // The App picker searches the team's apps when it opens, so a refused read shows in its list.
+              await page.getByTestId('agent-accounts-app').click({ timeout: 90_000 });
               const refused = await page.getByTestId('agent-accounts-app-error').waitFor({ timeout: 90_000 }).then(() => true, () => false);
               await page.getByTestId('agent-accounts-app').scrollIntoViewIfNeeded().catch(() => {});
               await page.screenshot({ path: join(SHOTS, `agent-account-error-${width}.png`) });
