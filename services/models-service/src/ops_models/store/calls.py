@@ -13,6 +13,7 @@ from decimal import Decimal
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.http import ListResult, Out
@@ -141,21 +142,31 @@ class KeySpend(Store):
         )
 
     async def record(
-        self, key_id: str, cost: Decimal, run_id: str | None, now: datetime, *, untenanted: sa.Insert | None
-    ) -> None:
+        self,
+        key_id: str,
+        cost: Decimal,
+        run_id: str | None,
+        now: datetime,
+        *,
+        untenanted: sa.Executable | None,
+        once: bool = False,
+    ) -> bool:
         """Adds one call to its key's second, day and run, and writes the call's row here (`untenanted`) when it named
-        no tenant."""
+        no tenant. With `once` (a replay's row, written if its id is not), False and nothing added when it was not."""
         second = _second(now)
         periods = {f"sec:{int(second.timestamp())}": second, f"day:{now.date().isoformat()}": second}
         if run_id:
             periods[f"run:{run_id}"] = second
         async with self.install_tx(KEY_SPEND, tables=(untenanted_calls, spend)) as c:
             if untenanted is not None:
-                await c.execute(untenanted)
+                written = (await c.execute(untenanted)).rowcount
+                if once and not written:
+                    return False
             for period, starts_at in periods.items():
                 await _add(c, key_id, period, starts_at, cost, at_s=now.timestamp())
             stale = sa.and_(spend.c.key_id == key_id, spend.c.period.like("sec:%"), spend.c.starts_at < now - KEPT)
             await c.execute(spend.delete().where(stale))
+        return True
 
     def sweep_tx(self) -> AbstractAsyncContextManager[AsyncConnection]:
         """The transaction one pass of the spend sweep deletes in: install-wide, as the rows are every tenant's."""
@@ -169,6 +180,20 @@ class KeySpend(Store):
             return self.sweep_tx()
 
         await background.run_sweep(SPEND_SWEEP, tx, stop=stop, every_s=every_s)
+
+
+async def _written(store: Store, c: AsyncConnection, row: sa.Insert, *, once: bool) -> bool:
+    """Writes a tenant's call row; with `once`, in a savepoint, and False when its id is already written (a replay of
+    a call charged before), the request's transaction left usable."""
+    if not once:
+        await c.execute(row)
+        return True
+    try:
+        async with store.attempt(c):
+            await c.execute(row)
+    except IntegrityError:
+        return False
+    return True
 
 
 async def _add(
@@ -210,20 +235,29 @@ class CallLog(Store):
         super().__init__(engine)
         self.spend = KeySpend(engine)
 
-    async def record(self, row: Mapping[str, Any]) -> None:
+    async def record(self, row: Mapping[str, Any], *, at: datetime | None = None, once: bool = False) -> bool:
         """Writes the call's row, in the current tenant's log when it names a tenant, and its key's spend, in one
-        transaction: the request's when one is open, else one of its own, so a row never commits without its spend."""
-        now = datetime.now(UTC)
+        transaction: the request's when one is open, else one of its own, so a row never commits without its spend.
+        A replay passes `at`, when the provider answered, so the spend lands in that call's day, and `once`: False,
+        and nothing written, when the call's id already has its row."""
+        now = at or datetime.now(UTC)
         untenanted = None
         cost, run_id = Decimal(str(row.get("cost") or 0)), row.get("run_id")
         async with isolation.request_transaction():
             if row.get("tenant_id"):
                 async with self.tx() as c:
-                    await c.execute(t.insert().values(**row))
+                    if not await _written(self, c, t.insert().values(**row), once=once):
+                        return False
             else:
-                untenanted = untenanted_calls.insert().values(**{k: v for k, v in row.items() if k != "tenant_id"})
+                values = {k: v for k, v in row.items() if k != "tenant_id"}
+                # A replay's row skips an id already written: an install-wide block takes no savepoint.
+                untenanted = (
+                    insert_ignore(self.engine, untenanted_calls, values, keys=["id"])
+                    if once
+                    else untenanted_calls.insert().values(**values)
+                )
             run = str(run_id) if run_id else None
-            await self.spend.record(str(row["key_id"]), cost, run, now, untenanted=untenanted)
+            return await self.spend.record(str(row["key_id"]), cost, run, now, untenanted=untenanted, once=once)
 
     async def totals(self, key_id: str, now: datetime, *, run_id: str | None = None) -> CapTotals:
         return await self.spend.totals(key_id, now, run_id=run_id)

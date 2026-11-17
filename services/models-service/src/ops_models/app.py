@@ -15,16 +15,15 @@ import secrets
 import time
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Coroutine, Mapping, Sequence
 from contextlib import asynccontextmanager
-from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, Literal, NotRequired, TypedDict, cast
 
 import httpx
 from fastapi import Depends, FastAPI, Header, Path, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from pydantic import Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ops_access import Access
 from ops_identity import Auth, CurrentPrincipal, CurrentTenantCaller, Principal, current_service, install_auth
@@ -348,6 +347,104 @@ def _provider_key_view(r: ProviderKeyRow) -> ProviderKeyOut:
     )
 
 
+# A model call's charge, as the settle writes it and `recovery` replays it from a log line. Each write that names a
+# tenant is made in that tenant's scope here, the one place models-service enters one for a call's spend.
+
+
+class CallLogRow(TypedDict):
+    """One call's row in the call log (`store.tables._call_columns`, with its tenant and images)."""
+
+    id: str
+    key_id: str
+    alias: str
+    sensitivity: str | None
+    tenant_id: str | None
+    # Each sent only by the caller that has it (a chat call's thread, an embedding's none).
+    run_id: NotRequired[str | None]
+    step_id: NotRequired[str | None]
+    thread_id: NotRequired[str | None]
+    request_hash: NotRequired[str | None]
+    images: int
+    input_tokens: int
+    output_tokens: int
+    cost: Decimal
+    latency_ms: int
+    outcome: str
+    reason: str | None
+    # Unset on a call refused before an alias version was chosen.
+    alias_version: NotRequired[int | None]
+    provider_model: NotRequired[str | None]
+
+
+class LostChargeLine(TypedDict):
+    """What a log line of a charge nothing recorded carries: every field a replay needs, and the call, key and tenant
+    to find it by."""
+
+    call_id: str
+    key_id: str
+    tenant_id: str | None
+    cost: Decimal
+    per_tenant: bool
+    at: datetime
+    row: CallLogRow
+
+
+class Charge(BaseModel):
+    """One call's charge: its call-log row (the id is the settle's one id), whether the key spends per tenant, and
+    when the provider answered."""
+
+    model_config = ConfigDict(frozen=True)
+
+    row: CallLogRow
+    per_tenant: bool
+    at: datetime
+
+    def logged(self) -> LostChargeLine:
+        row = self.row
+        return LostChargeLine(
+            call_id=row["id"],
+            key_id=row["key_id"],
+            tenant_id=row["tenant_id"],
+            cost=row["cost"],
+            per_tenant=self.per_tenant,
+            at=self.at,
+            row=row,
+        )
+
+
+async def charge(keys: ModelKeys, calls: CallLog, call: Charge, *, once: bool = False) -> bool:
+    """The call's row, the period totals its caps read, the key's spent total and the tenant's share, in the open
+    transaction: every ledger records the cost together or none does. With `once` (a replay), False and nothing
+    written when the call's id already has its row."""
+    if not once:
+        # A settle takes the key's row first, then the period rows, as every instance of the service does.
+        await _spend(keys, call)
+        await _record(calls, call, once=False)
+        return True
+    # A replay writes the row first, so a call already charged adds no spend; replays are rare and one at a time.
+    if not await _record(calls, call, once=True):
+        return False
+    await _spend(keys, call)
+    return True
+
+
+async def _spend(keys: ModelKeys, call: Charge) -> None:
+    row, tenant = call.row, call.row["tenant_id"]
+    if call.per_tenant and tenant:
+        with isolation.scope(tenant, None):
+            await keys.spend(row["key_id"], row["cost"], tenant_id=tenant)
+    else:
+        await keys.spend(row["key_id"], row["cost"])
+
+
+async def _record(calls: CallLog, call: Charge, *, once: bool) -> bool:
+    tenant = call.row["tenant_id"]
+    if tenant:
+        with isolation.scope(tenant, None):
+            return await calls.record(call.row, at=call.at, once=once)
+    return await calls.record(call.row, at=call.at, once=once)
+
+
 def _key_refusal(key: KeyRow, now: datetime) -> tuple[int, str, str] | None:
     """Why a key may not spend right now: revoked, expired or at its budget. None when it may."""
     if key.status != "active":
@@ -357,18 +454,6 @@ def _key_refusal(key: KeyRow, now: datetime) -> tuple[int, str, str] | None:
     if key.spent >= key.budget:
         return 429, "key_budget_exhausted", f"Model key {key.id} has spent its budget of {key.budget}."
     return None
-
-
-@dataclass(frozen=True)
-class Settling:
-    """A settle in flight: what to log, to recover the spend, if the server stops before it ends."""
-
-    key_id: str
-    tenant_id: str | None
-    alias: object
-    input_tokens: int
-    output_tokens: int
-    cost: str
 
 
 def create_models_app(
@@ -404,8 +489,8 @@ def create_models_app(
         except Exception as e:
             log.warning("models_background_stopped", error=f"{type(e).__name__}: {e}"[:500])
 
-    # Settles still writing what a provider charged, each with the usage to log if the stop cannot wait for it.
-    settling: dict[asyncio.Task[None], Settling] = {}
+    # Settles still writing what a provider charged, each with the charge to log if the stop cannot wait for it.
+    settling: dict[asyncio.Task[None], Charge] = {}
 
     async def drain_settles() -> None:
         """Waits for the settles in flight, at most as long as a request waits for a database connection: a settle
@@ -414,7 +499,7 @@ def create_models_app(
             return
         _, unfinished = await asyncio.wait(set(settling), timeout=settings.db.wait_s)
         for task in unfinished:
-            log.error("model_call_settle_unfinished_at_stop", **asdict(settling[task]))
+            log.error("model_call_settle_unfinished_at_stop", **settling[task].logged())
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
@@ -888,9 +973,8 @@ def create_models_app(
             self.price = Price(Decimal(0))
             self.provider: Any = None
 
-        async def log(self, outcome: str, reason: str | None = None, **values: Any) -> None:
-            """The call's one row: the named tenant's, written as that tenant; a call that named none has no tenant's
-            log to land in (`CallLog.record`)."""
+        def row_of(self, outcome: str, reason: str | None = None, **values: Any) -> CallLogRow:
+            """The call's one row as it is written: a fresh id unless `values` names the settle's."""
             row = {
                 "id": values.pop("id", None) or new_id("mc"),
                 "input_tokens": values.pop("input_tokens", 0),
@@ -902,6 +986,13 @@ def create_models_app(
                 **self.row,
                 **values,
             }
+            # The gate's row and the version name only call-log columns (`CallLogRow`).
+            return cast(CallLogRow, row)
+
+        async def log(self, outcome: str, reason: str | None = None, **values: Any) -> None:
+            """The call's one row: the named tenant's, written as that tenant; a call that named none has no tenant's
+            log to land in (`CallLog.record`)."""
+            row = self.row_of(outcome, reason, **values)
             if self.tenant:
                 with isolation.scope(self.tenant, None):
                     await call_log.record(row)
@@ -917,56 +1008,51 @@ def create_models_app(
 
         async def settle(self, input_tokens: int, output_tokens: int) -> None:
             """Records what the provider charged, in a task of its own: a client gone or a cancel after the answer
-            does not roll it back. When the write fails, the usage is logged at error level, to recover the spend."""
+            does not roll it back. When neither the write nor its fallback lands, the whole charge is logged at error
+            level, for `ops_models.recovery` to replay."""
             spend = cost(Usage(input_tokens=input_tokens, output_tokens=output_tokens), self.price)
-            task = asyncio.ensure_future(self._settle(input_tokens, output_tokens, spend))
+            charged = {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost": spend}
+            # One id for the call's row whichever attempt or replay writes it, so one after a write that committed
+            # fails on the row and adds no spend again.
+            row = self.row_of("error", "settle_failed", id=new_id("mc"), **charged, **self.version)
+            failed = Charge(row=row, per_tenant=self.key.tenant_budget is not None, at=datetime.now(UTC))
+            task = asyncio.ensure_future(self._settle(failed))
             # Held until it ends, so the server's stop waits for it (`drain_settles`).
-            alias = self.row.get("alias")
-            settling[task] = Settling(self.key.id, self.tenant, alias, input_tokens, output_tokens, str(spend))
+            settling[task] = failed
             task.add_done_callback(lambda done: settling.pop(done, None))
             await asyncio.shield(task)
 
-        async def _charge(self, outcome: str, reason: str | None, call_id: str, **values: Any) -> None:
-            """The call's row, the period totals its caps read, the key's spent total and the tenant's share, in the
-            open transaction: every ledger records the cost together or none does. The row's id is the settle's one id,
-            so a second attempt after a first that committed fails on the row and adds no spend again."""
-            spend: Decimal = values["cost"]
-            if self.key.tenant_budget is not None and self.tenant is not None:
-                with isolation.scope(self.tenant, None):
-                    await key_store.spend(self.key.id, spend, tenant_id=self.tenant)
-            else:
-                await key_store.spend(self.key.id, spend)
-            await self.log(outcome, reason, id=call_id, **values, **self.version)
-
-        async def _settle(self, input_tokens: int, output_tokens: int, spend: Decimal) -> None:
-            call_id = new_id("mc")
-            charged = {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost": spend}
+        async def _settle(self, failed: Charge) -> None:
+            # An Azure answer from another region than its connection names is recorded on the row, not refused.
+            provider = self.provider
+            mismatch = provider.region_mismatch if isinstance(provider, AzureOpenAIProvider) else None
+            answered = failed.row.copy()
+            answered["outcome"], answered["reason"] = "ok", mismatch[:64] if mismatch else None
+            done = failed.model_copy(update={"row": answered})
             try:
                 async with isolation.request_transaction():
                     await self.observed()
-                    # An Azure answer from another region than its connection names is recorded on the row, not
-                    # refused.
-                    provider = self.provider
-                    mismatch = provider.region_mismatch if isinstance(provider, AzureOpenAIProvider) else None
-                    await self._charge("ok", mismatch[:64] if mismatch else None, call_id, **charged)
+                    await charge(key_store, call_log, done)
             except Exception:
+                row = failed.row
                 log.exception(
                     "model_call_settle_failed",
+                    call_id=row["id"],
                     key_id=self.key.id,
                     tenant_id=self.tenant,
-                    alias=self.row.get("alias"),
+                    alias=row["alias"],
                     provider_model=self.version.get("provider_model"),
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    cost=str(spend),
+                    input_tokens=row["input_tokens"],
+                    output_tokens=row["output_tokens"],
+                    cost=str(row["cost"]),
                 )
                 # The call keeps its one row, an error with what the provider charged, and every ledger its cost, in a
                 # transaction of its own.
                 try:
                     async with isolation.request_transaction():
-                        await self._charge("error", "settle_failed", call_id, **charged)
+                        await charge(key_store, call_log, failed)
                 except Exception:
-                    log.exception("model_call_row_lost", key_id=self.key.id, tenant_id=self.tenant)
+                    log.exception("model_call_row_lost", **failed.logged())
                 raise
 
         async def broke(self, reason: str) -> None:

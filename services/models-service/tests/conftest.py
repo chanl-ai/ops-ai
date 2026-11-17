@@ -108,7 +108,8 @@ class Models:
 
     async def key(self, budget: str = "1", **extra: Any) -> tuple[str, str]:
         """A fresh key for a unique identity; returns (id, secret)."""
-        key_id = f"workflow:test-{uuid4().hex[:8]}"
+        # After "_", a run of digits is never masked as an account number in the log lines tests read.
+        key_id = f"workflow:test_{uuid4().hex[:8]}"
         body = {"id": key_id, "kind": "workflow", "budget": budget, **extra}
         r = await self.client.post("/v1/models/keys", json=body, headers=SERVICE)
         assert r.status_code == 201, r.text
