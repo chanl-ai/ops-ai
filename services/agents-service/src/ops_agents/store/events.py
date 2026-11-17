@@ -33,7 +33,7 @@ thread_events = sa.Table(
     sa.Column("at", sa.String(32), nullable=False),
     sa.Column("data", sa.JSON),
     sa.Column("team_id", sa.String(64), nullable=False),
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local", index=True),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, index=True),
     sa.UniqueConstraint("thread_id", "seq", name="uq_thread_events_thread_seq"),
     sa.Index("ix_thread_events_run", "thread_id", "run_id", "seq"),
     # The team event poll, by tenant first: a team id is the same in every tenant.

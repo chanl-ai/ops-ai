@@ -49,7 +49,7 @@ graph_threads = sa.Table(
     # (`_owner`), so a list or count by owner reads a column, not each row's JSON (migration 0105).
     sa.Column("owner", sa.String(320)),
     # Set from the request's or loop's tenant (store/tenancy.py), never from a body; PostgreSQL RLS reads it (0021).
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local", index=True),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, index=True),
     # Per tenant, so one tenant's key neither collides with nor reveals another's.
     sa.UniqueConstraint("tenant_id", "external_key", name="uq_graph_threads_tenant_external_key"),
     # A team's thread list, newest first.
@@ -88,7 +88,7 @@ graph_runs = sa.Table(
     sa.Column("input", sa.JSON),
     sa.Column("created_at", sa.String(32), nullable=False),
     sa.Column("finished_at", sa.String(32)),
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local", index=True),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, index=True),
     # The thread's team, copied when the run starts, so the policy holds the run without reading its thread.
     sa.Column("team_id", sa.String(64), nullable=False),
     info={**TENANT_SCOPED, **TEAM_OWNED},

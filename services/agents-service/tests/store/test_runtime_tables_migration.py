@@ -1,8 +1,8 @@
 """Migration 0104 gives each budget and recorded model call its thread's tenant, by failure mode: a row whose thread is
 gone kept the dev tenant `local`, so a caller in a tenant of that name read other tenants' recorded responses; the
-column kept a `local` default, so a write that named no tenant landed there too; a backfill larger than one batch left
-rows unfilled; a run stopped after the column was added could not be run again; the down path left a database 0103
-could not run on."""
+column kept a `local` default, so a write that named no tenant landed there too, and older tables kept the same
+default (0114); a backfill larger than one batch left rows unfilled; a run stopped after the column was added could
+not be run again; the down path left a database 0103 could not run on."""
 
 from __future__ import annotations
 
@@ -63,6 +63,18 @@ def test_rows_take_their_threads_tenant_orphans_go_and_no_default_remains(emptie
     assert calls == [(thread, tenant, MANY)]
     with pytest.raises(IntegrityError):
         asyncio.run(_sql(emptied_database, (BUDGET, {"id": new_id("gth"), "at": at})))
+    # Nor does any older table's tenant_id keep the `local` default (0114).
+    (defaulted,) = asyncio.run(
+        _sql(
+            emptied_database,
+            (
+                "SELECT table_name FROM information_schema.columns WHERE column_name = 'tenant_id' "
+                "AND column_default LIKE '%local%' ORDER BY table_name",
+                {},
+            ),
+        )
+    )
+    assert defaulted == []
     command.downgrade(cfg, BEFORE)
     command.upgrade(cfg, "head")
     # Its own rows, removed after, so no later migration's check reads them.

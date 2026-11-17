@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0113_agent_skill_pins
+-- agents-service, stamped at 0114_drop_local_tenant_defaults
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -151,7 +151,7 @@ CREATE TABLE graph_threads (
 	parent_thread_id VARCHAR(64) NULL, 
 	overrides NVARCHAR(max) NULL, 
 	owner VARCHAR(320) NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	CONSTRAINT graph_threads_pkey PRIMARY KEY (id)
 );
 GO
@@ -318,7 +318,7 @@ CREATE TABLE thread_events (
 	at VARCHAR(32) NOT NULL, 
 	data NVARCHAR(max) NULL, 
 	team_id VARCHAR(64) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	CONSTRAINT thread_events_pkey PRIMARY KEY (position), 
 	CONSTRAINT uq_thread_events_thread_seq UNIQUE (thread_id, seq), 
 	CONSTRAINT thread_events_id_key UNIQUE (id)
@@ -413,7 +413,7 @@ CREATE TABLE review_decisions (
 	attempts INTEGER NOT NULL DEFAULT '0', 
 	run_id VARCHAR(80) NULL, 
 	resumed_at VARCHAR(32) NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
 	step_up_ref VARCHAR(40) NULL, 
 	CONSTRAINT review_decisions_pkey PRIMARY KEY (thread_id, decision_id)
@@ -427,7 +427,7 @@ CREATE TABLE review_approvals (
 	approver VARCHAR(200) NOT NULL, 
 	input_hash VARCHAR(64) NOT NULL, 
 	approved_at VARCHAR(32) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
 	CONSTRAINT review_approvals_pkey PRIMARY KEY (thread_id, step, approver)
 );
@@ -454,7 +454,7 @@ CREATE TABLE service_events (
 GO
 CREATE TABLE widget_deployments (
 	id VARCHAR(64) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
 	agent_id VARCHAR(64) NOT NULL, 
@@ -591,7 +591,7 @@ CREATE TABLE thread_inbox (
 GO
 CREATE TABLE chat_search (
 	thread_id VARCHAR(64) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
 	title VARCHAR(200) NOT NULL, 
 	agent_name VARCHAR(200) NOT NULL, 
@@ -867,7 +867,7 @@ CREATE TABLE thread_budgets (
 GO
 CREATE TABLE widget_mint_keys (
 	id VARCHAR(64) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	deployment_id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
 	secret_hash VARCHAR(64) NOT NULL, 
@@ -885,7 +885,7 @@ CREATE INDEX ix_widget_mint_keys_tenant_id ON widget_mint_keys (tenant_id);
 GO
 CREATE TABLE widget_mint_key_audit (
 	id VARCHAR(64) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	deployment_id VARCHAR(64) NOT NULL, 
 	key_id VARCHAR(64) NOT NULL, 
 	action VARCHAR(16) NOT NULL, 
@@ -1013,7 +1013,7 @@ CREATE TABLE graph_runs (
 	input NVARCHAR(max) NULL, 
 	created_at VARCHAR(32) NOT NULL, 
 	finished_at VARCHAR(32) NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
 	CONSTRAINT graph_runs_pkey PRIMARY KEY (id), 
 	CONSTRAINT graph_runs_thread_id_fkey FOREIGN KEY(thread_id) REFERENCES graph_threads (id)
@@ -1501,5 +1501,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0113_agent_skill_pins');
+INSERT INTO alembic_version (version_num) VALUES ('0114_drop_local_tenant_defaults');
 GO

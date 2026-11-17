@@ -19,7 +19,7 @@ widget_deployments = sa.Table(
     "widget_deployments",
     metadata,
     sa.Column("id", sa.String(64), primary_key=True),
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local", index=True),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, index=True),
     sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("name", sa.String(200), nullable=False),
     sa.Column("agent_id", sa.String(64), nullable=False),

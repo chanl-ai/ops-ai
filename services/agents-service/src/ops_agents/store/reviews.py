@@ -31,7 +31,7 @@ review_decisions = sa.Table(
     sa.Column("attempts", sa.Integer, nullable=False, server_default="0"),
     sa.Column("run_id", sa.String(80)),
     sa.Column("resumed_at", sa.String(32)),
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local", index=True),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, index=True),
     # The thread's team, so the policy holds the decision without reading its thread (migration 0073).
     sa.Column("team_id", sa.String(64), nullable=False),
     # A fingerprint of the step-up the decision was made under (api/auth.py step_up_ref), never the token.
@@ -47,7 +47,7 @@ review_approvals = sa.Table(
     sa.Column("approver", sa.String(200), primary_key=True),
     sa.Column("input_hash", sa.String(64), nullable=False),
     sa.Column("approved_at", sa.String(32), nullable=False),
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local", index=True),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, index=True),
     sa.Column("team_id", sa.String(64), nullable=False),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
