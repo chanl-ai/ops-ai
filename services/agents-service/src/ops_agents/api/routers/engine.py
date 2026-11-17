@@ -40,7 +40,7 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
-from ops_service_kit.http import Envelope, In, LabelledListResult, ListResult, paged
+from ops_service_kit.http import Envelope, In, JsonValue, LabelledListResult, ListResult, paged
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
@@ -118,7 +118,7 @@ class RetryView(Out):
 class OptionalPortView(Out):
     parameter: str
     # The parameter's value as the definition holds it (a string or a boolean); "*" matches any value set.
-    value: Any
+    value: JsonValue
     port: str
 
 
@@ -138,13 +138,13 @@ class NodeTypeView(Out):
     optional_outputs: list[OptionalPortView]
     # A declared out port the instance drops while `parameter` is `value` (Run workflow's `started` when it waits).
     outputs_unless: list[OptionalPortView] = Field(default_factory=list[OptionalPortView])
-    parameters: dict[str, Any]
+    parameters: dict[str, JsonValue]
     effects: str
     retry: RetryView
     executor: str
     timeout_seconds: float
     # The generated form for `parameters`: field order, and per field its label, widget, help and option source.
-    ui: dict[str, Any]
+    ui: dict[str, JsonValue]
     # Why the acting team cannot add this step now (an AI step while its setting is off); None when it can.
     unavailable: str | None = None
 
@@ -170,7 +170,7 @@ class DefinitionInput(In):
     """Exactly one of `yaml` (YAML or JSON text) and `definition` (the parsed object)."""
 
     yaml: str | None = None
-    definition: dict[str, Any] | None = None
+    definition: dict[str, JsonValue] | None = None
 
     @model_validator(mode="after")
     def _one(self) -> DefinitionInput:
@@ -286,7 +286,7 @@ class StartFormView(Out):
     # How a run started this way reads in audit: "test email by <person>".
     via: str
     # The form as JSON Schema; `format: "file"` fields upload or pick files.
-    schema_: dict[str, Any] = Field(alias="schema")
+    schema_: dict[str, JsonValue] = Field(alias="schema")
     takes_files: bool
 
 
@@ -297,7 +297,7 @@ class DefinitionView(Out):
     digest: str
     # The shown version's stage; in_review while a publish request for it is open.
     stage: Stage
-    definition: dict[str, Any]
+    definition: dict[str, JsonValue]
     versions: list[DefinitionVersion]
     # The version live runs start on (live or paused); None before the first approval.
     live_version: int | None
@@ -603,7 +603,7 @@ class DefinitionShapes(Out):
     workflow_id: str
     version: int
     # Each step's output by the port it leaves by, as JSON Schema; `additionalProperties: false` is a closed shape.
-    steps: dict[str, dict[str, dict[str, Any]]]
+    steps: dict[str, dict[str, dict[str, JsonValue]]]
 
 
 @router.get("/definitions/{workflow_id}/versions/{version}/shapes", response_model=Envelope[DefinitionShapes])
@@ -789,7 +789,7 @@ class RunStarted(Out):
 class RunWaiting(Out):
     node: str
     iteration: int
-    payload: dict[str, Any]
+    payload: dict[str, JsonValue]
 
 
 class RunFailure(Out):
@@ -822,8 +822,8 @@ class RunRow(Out):
     # The outcome as people read it ("Documents read"), run_story.words over `outcome`.
     outcome_text: str | None = None
     error: str | None
-    input: dict[str, Any] | None
-    output: Any
+    input: dict[str, JsonValue] | None
+    output: JsonValue
     waiting: RunWaiting | None
     created_by: str
     # Who or what started it, named: a person, a mailbox, another workflow's run, an agent or an API key.
@@ -839,8 +839,8 @@ class StepAttempt(Out):
     effects: str
     key: str
     port: str | None
-    input: Any
-    output: Any
+    input: JsonValue
+    output: JsonValue
     error: str | None
     started_at: str
     finished_at: str | None
@@ -852,8 +852,8 @@ class EngineRunStep(Out):
     # The last attempt's: what the node returned, through which port, or its error.
     status: str
     port: str | None
-    input: Any
-    output: Any
+    input: JsonValue
+    output: JsonValue
     error: str | None
     attempts: list[StepAttempt]
 
@@ -863,7 +863,7 @@ class RunResult(Out):
     node: str | None
     name: str | None
     outcome: str
-    output: Any
+    output: JsonValue
 
 
 class RunChild(Out):

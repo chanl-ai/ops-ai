@@ -8,11 +8,16 @@ from typing import Any
 
 from ops_access import can
 from ops_service_kit.errors import Unprocessable
-from ops_service_kit.http import Out
+from ops_service_kit.http import JsonValue, Out
 
 from ..store.tenancy import current_team
 from ..store.typed_records import SEED, VersionedRecords
 from .auth import Principal, caller_of
+
+
+class CopiedFrom(Out):
+    id: str
+    version: int
 
 
 class RecordTypeView(Out):
@@ -23,14 +28,15 @@ class RecordTypeView(Out):
     team_id: str | None
     version: int
     published_version: int | None
-    copied_from: dict[str, Any] | None
+    copied_from: CopiedFrom | None
     updated_at: str
     updated_by: str
 
 
 class RecordVersionView(Out):
     version: int
-    record: dict[str, Any]
+    # The team-authored definition document; the kind's `check_definition` checks it on save and no model owns it.
+    record: dict[str, JsonValue]
     saved_at: str
     saved_by: str
     published_at: str | None

@@ -106,12 +106,22 @@ class EvalCasesInput(In):
     cases: list[EvalCaseInput] = Field(default_factory=list[EvalCaseInput], max_length=200)
 
 
+class SavedCaseContext(Out):
+    collections: list[str] = Field(default_factory=list[str])
+
+
+class SavedCaseCheck(Out):
+    type: str
+    tool: str | None = None
+    text: str | None = None
+
+
 class SavedCase(Out):
     id: str
     name: str
     input: str
-    context: dict[str, Any] | None
-    checks: list[dict[str, Any]]
+    context: SavedCaseContext | None
+    checks: list[SavedCaseCheck]
     status: str
     source: str
     reason: str

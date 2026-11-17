@@ -12,8 +12,8 @@ from typing import Any, Literal, cast
 
 from pydantic import Field
 
-from ops_contracts.chat import WireModel
 from ops_service_kit.errors import Unprocessable
+from ops_service_kit.http import JsonValue, Out
 
 # What a public widget key may override. Model, temperature and instructions are never in it.
 PublicKeyOverride = Literal["tools", "knowledge", "budget", "outputSchema", "variables"]
@@ -22,20 +22,20 @@ PUBLIC_KEY_DEFAULT: list[PublicKeyOverride] = ["tools", "knowledge", "budget", "
 TEMPERATURE_FLOOR, TEMPERATURE_CEILING = 0.0, 2.0
 
 
-class TemperatureLimits(WireModel):
+class TemperatureLimits(Out):
     min: float
     max: float
     default: float
 
 
-class BudgetLimits(WireModel):
+class BudgetLimits(Out):
     """Per run, in US dollars. A caller may lower the budget, never raise it past the ceiling."""
 
     ceiling_usd: float
     default_usd: float
 
 
-class AgentLimits(WireModel):
+class AgentLimits(Out):
     allowed_models: list[str]
     default_model: str
     # None: callers may not set a temperature; the model's default applies.
@@ -50,6 +50,11 @@ class AgentLimits(WireModel):
     # composing off and may lower the per-answer cap.
     switchable_widget_ids: list[str] = Field(default_factory=list[str])
     public_key_may: list[PublicKeyOverride] = Field(default_factory=lambda: list(PUBLIC_KEY_DEFAULT))
+
+
+def wire(limits: AgentLimits) -> dict[str, JsonValue]:
+    """The JSON a stored version and a review carry: aliases, and optional fields left out rather than sent as null."""
+    return limits.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
 def _pinned_widget_ids(spec: dict[str, Any]) -> list[str]:

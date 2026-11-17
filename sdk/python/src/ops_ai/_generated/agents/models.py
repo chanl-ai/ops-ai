@@ -112,11 +112,6 @@ class AiStepIn(TypedDict, closed=True):
     text: Any
 
 
-class AiStepOut(TypedDict, closed=True):
-    output: dict[str, Any]
-    port: str
-
-
 class AllHrefs(TypedDict, closed=True):
     cases: str | None
     emails: str
@@ -235,17 +230,6 @@ class BatchIn(TypedDict, closed=True):
     mode: NotRequired[Literal["live", "test"]]
 
 
-class BatchRow(TypedDict, closed=True):
-    attempt: int
-    error: NotRequired[str | None]
-    input: dict[str, Any]
-    outcome: NotRequired[str | None]
-    output: NotRequired[Any]
-    row: int
-    runId: NotRequired[str | None]
-    status: str
-
-
 class BatchStarted(TypedDict, closed=True):
     id: str
     total: int
@@ -296,15 +280,6 @@ class CaseCounts(TypedDict, closed=True):
     awaitingApproval: int
     breaching: int
     open: int
-
-
-class CaseEventView(TypedDict, closed=True):
-    at: str
-    by: str
-    detail: dict[str, Any]
-    id: str
-    kind: str
-    ref: str | None
 
 
 class CaseField(TypedDict, closed=True):
@@ -382,49 +357,6 @@ class CaseTypeRef(TypedDict, closed=True):
     version: int
 
 
-class CaseTypeVersionView(TypedDict, closed=True):
-    publishedAt: str | None
-    record: dict[str, Any]
-    savedAt: str
-    savedBy: str
-    version: int
-
-
-class CaseTypeView(TypedDict, closed=True):
-    copiedFrom: dict[str, Any] | None
-    description: str
-    id: str
-    name: str
-    origin: str
-    publishedVersion: int | None
-    teamId: str | None
-    updatedAt: str
-    updatedBy: str
-    version: int
-
-
-class CaseView(TypedDict, closed=True):
-    assignee: str | None
-    createdAt: str
-    createdBy: str
-    customerId: str | None
-    customerName: str | None
-    fields: NotRequired[dict[str, Any] | None]
-    id: str
-    pausedSince: str | None
-    priority: Literal["low", "normal", "high", "urgent"]
-    producerKey: str | None
-    resolutionDueAt: str
-    resolutionLeftS: int | None
-    respondedAt: str | None
-    responseDueAt: str
-    responseLeftS: int | None
-    status: Literal["open", "waiting_on_customer", "waiting_on_us", "resolved", "closed"]
-    subject: str
-    teamId: str
-    updatedAt: str
-
-
 class ChangeWaits(TypedDict, closed=True):
     reviewId: str
 
@@ -466,6 +398,11 @@ class ConnectWait(TypedDict, closed=True):
     connectionId: NotRequired[str | None]
     person: NotRequired[str | None]
     teamAccount: NotRequired[bool]
+
+
+class CopiedFrom(TypedDict, closed=True):
+    id: str
+    version: int
 
 
 class CopyRef(TypedDict, closed=True):
@@ -520,11 +457,6 @@ class DefinitionCheck(TypedDict, closed=True):
     suggestion: NotRequired[str | None]
 
 
-class DefinitionInput(TypedDict, closed=True):
-    definition: NotRequired[dict[str, Any] | None]
-    yaml: NotRequired[str | None]
-
-
 class DefinitionPublishInput(TypedDict, closed=True):
     note: NotRequired[str]
     version: NotRequired[int | None]
@@ -538,12 +470,6 @@ class DefinitionRow(TypedDict, closed=True):
     status: Literal["draft", "in_review", "live", "paused", "archived"]
     updatedAt: str
     updatedBy: str
-    version: int
-    workflowId: str
-
-
-class DefinitionShapes(TypedDict, closed=True):
-    steps: dict[str, dict[str, dict[str, Any]]]
     version: int
     workflowId: str
 
@@ -569,6 +495,12 @@ class DefinitionWarning(TypedDict, closed=True):
     node: str
 
 
+class DeploymentBudget(TypedDict, closed=True):
+    max_calls: NotRequired[int | None]
+    max_cost: NotRequired[str | None]
+    max_tokens: NotRequired[int | None]
+
+
 class DeploymentInput(TypedDict, closed=True):
     budget: NotRequired[BudgetInput | None]
     channel: Literal["widget", "api", "mcp"]
@@ -584,7 +516,7 @@ class DeploymentPaused(TypedDict, closed=True):
 
 
 class DeploymentView(TypedDict, closed=True):
-    budget: NotRequired[dict[str, Any] | None]
+    budget: NotRequired[DeploymentBudget | None]
     channel: Literal["widget", "api", "mcp"]
     graph: str
     id: str
@@ -606,13 +538,6 @@ class DraftedAction(TypedDict, closed=True):
     status: str
     summary: str | None
     taskId: str
-
-
-class DryRun(TypedDict, closed=True):
-    ignored: list[str]
-    mapping: dict[str, str]
-    rows: int
-    sample: list[dict[str, Any]]
 
 
 class EgressHostRef(TypedDict, closed=True):
@@ -663,11 +588,6 @@ class EnvelopeAccountUses(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeAiStepOut(TypedDict, closed=True):
-    data: AiStepOut
-    success: Literal[True]
-
-
 class EnvelopeAppToolsGiven(TypedDict, closed=True):
     data: AppToolsGiven
     success: Literal[True]
@@ -678,11 +598,6 @@ class EnvelopeApproval(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeCaseView(TypedDict, closed=True):
-    data: CaseView
-    success: Literal[True]
-
-
 class EnvelopeChangeWaits(TypedDict, closed=True):
     data: ChangeWaits
     success: Literal[True]
@@ -690,11 +605,6 @@ class EnvelopeChangeWaits(TypedDict, closed=True):
 
 class EnvelopeCopyRef(TypedDict, closed=True):
     data: CopyRef
-    success: Literal[True]
-
-
-class EnvelopeDefinitionShapes(TypedDict, closed=True):
-    data: DefinitionShapes
     success: Literal[True]
 
 
@@ -715,11 +625,6 @@ class EnvelopeDeploymentView(TypedDict, closed=True):
 
 class EnvelopeNoneType(TypedDict, closed=True):
     data: None
-    success: Literal[True]
-
-
-class EnvelopeUnionDryRunBatchStarted(TypedDict, closed=True):
-    data: DryRun | BatchStarted
     success: Literal[True]
 
 
@@ -783,14 +688,6 @@ class Evidence(TypedDict, closed=True):
     label: str
 
 
-class FieldReview(TypedDict, closed=True):
-    field: str
-    label: str
-    outcome: Literal["kept", "taken", "conflict"]
-    template: NotRequired[Any]
-    yours: NotRequired[Any]
-
-
 class FileLink(TypedDict, closed=True):
     fileId: str
     name: str | None
@@ -799,11 +696,6 @@ class FileLink(TypedDict, closed=True):
 
 class Forgotten(TypedDict, closed=True):
     forgotten: int
-
-
-class FormFields(TypedDict, closed=True):
-    schema: dict[str, Any]
-    takesFiles: NotRequired[bool | None]
 
 
 class FormIn(TypedDict, closed=True):
@@ -860,13 +752,6 @@ class GraphInput(TypedDict, closed=True):
     label: str
     name: str
     required: bool
-    type: str
-
-
-class GraphNode(TypedDict):
-    data: dict[str, Any]
-    id: str
-    position: NotRequired[dict[str, float] | None]
     type: str
 
 
@@ -1006,6 +891,12 @@ class InboxPosted(TypedDict, closed=True):
     threadId: str
 
 
+class InjectionTally(TypedDict, closed=True):
+    passed: int
+    regressions: int
+    total: int
+
+
 class InstallInput(TypedDict, closed=True):
     copies: NotRequired[dict[str, str]]
     knowledgeBases: NotRequired[list[str]]
@@ -1043,6 +934,9 @@ class JobInput(TypedDict, closed=True):
     message: NotRequired[str]
 
 
+JsonValue: TypeAlias = Any
+
+
 class KindRow(TypedDict, closed=True):
     active: int
     attention: int
@@ -1077,6 +971,15 @@ class LinkIn(TypedDict, closed=True):
 
 class LiveVersion(TypedDict, closed=True):
     places: int
+    version: int
+
+
+class LoadedSkill(TypedDict, closed=True):
+    inputs: NotRequired[dict[str, str] | None]
+    matched: str
+    name: str
+    part: NotRequired[str | None]
+    skillId: str
     version: int
 
 
@@ -1218,8 +1121,8 @@ class Option(TypedDict, closed=True):
 
 
 class OptionInput(TypedDict, closed=True):
-    default: NotRequired[Any]
-    enum: NotRequired[list[Any] | None]
+    default: NotRequired[JsonValue]
+    enum: NotRequired[list[JsonValue] | None]
     maximum: NotRequired[float | None]
     minimum: NotRequired[float | None]
     name: str
@@ -1236,7 +1139,7 @@ class OptionView(TypedDict, closed=True):
 class OptionalPortView(TypedDict, closed=True):
     parameter: str
     port: str
-    value: Any
+    value: JsonValue
 
 
 class OptionsPage(TypedDict, closed=True):
@@ -1343,13 +1246,6 @@ class PromptVariable(TypedDict, closed=True):
     source: str
 
 
-class PublicForm(TypedDict, closed=True):
-    afterText: str
-    description: str
-    form: FormFields
-    title: str
-
-
 class PublishDecisionFields(TypedDict, closed=True):
     majorChange: NotRequired[bool | None]
     policy: NotRequired[Literal["always", "major", "never"] | None]
@@ -1365,6 +1261,15 @@ class PublishDecisionFields(TypedDict, closed=True):
         | None
     ]
     reviewRequired: NotRequired[bool | None]
+
+
+class PublishEvalSummary(TypedDict, closed=True):
+    injection: InjectionTally
+    passed: int
+    ranAt: str
+    regressions: int
+    runId: str
+    total: int
 
 
 class PublishIn(TypedDict, closed=True):
@@ -1484,7 +1389,7 @@ class ReviewInput(TypedDict, closed=True):
 
 
 class ReviewOption(TypedDict, closed=True):
-    call: NotRequired[dict[str, Any] | None]
+    call: NotRequired[dict[str, JsonValue] | None]
     consequence: NotRequired[str | None]
     fields: NotRequired[list[ActionField]]
     inputs: NotRequired[list[OptionInput]]
@@ -1587,7 +1492,7 @@ class RunInput(TypedDict, closed=True):
 
 class RunJournalEntry(TypedDict, closed=True):
     cost: CostTotals | None
-    crashed: dict[str, Any] | None
+    crashed: dict[str, JsonValue] | None
     createdAt: str
     finishedAt: str | None
     generation: int | None
@@ -1609,7 +1514,7 @@ class RunResult(TypedDict, closed=True):
     name: str | None
     node: str | None
     outcome: str
-    output: Any
+    output: JsonValue
 
 
 class RunStarted(TypedDict, closed=True):
@@ -1633,24 +1538,17 @@ class RunStep(TypedDict, closed=True):
 class RunWaiting(TypedDict, closed=True):
     iteration: int
     node: str
-    payload: dict[str, Any]
+    payload: dict[str, JsonValue]
 
 
-class SavedCase(TypedDict, closed=True):
-    checks: list[dict[str, Any]]
-    context: dict[str, Any] | None
-    createdAt: str
-    createdBy: str
-    id: str
-    input: str
-    name: str
-    reason: str
-    source: str
-    status: str
+class SavedCaseCheck(TypedDict, closed=True):
+    text: NotRequired[str | None]
+    tool: NotRequired[str | None]
+    type: str
 
 
-class SavedCases(TypedDict, closed=True):
-    cases: list[SavedCase]
+class SavedCaseContext(TypedDict, closed=True):
+    collections: NotRequired[list[str]]
 
 
 class Serves(TypedDict, closed=True):
@@ -1674,6 +1572,15 @@ class SettingsInput(TypedDict, closed=True):
     trigger: NotRequired[str | None]
 
 
+class SkillCitation(TypedDict, closed=True):
+    detail: NotRequired[str | None]
+    href: NotRequired[str | None]
+    id: str
+    kind: Literal["document", "case", "run", "chat", "template", "description"]
+    label: str
+    section: str
+
+
 class SkillInput(TypedDict, closed=True):
     description: NotRequired[str]
     name: str
@@ -1686,6 +1593,12 @@ class SkillInputField(TypedDict, closed=True):
     name: str
     required: NotRequired[bool]
     type: NotRequired[Literal["string"]]
+
+
+class SkillLoadsDay(TypedDict, closed=True):
+    counts: dict[str, int]
+    date: str
+    total: int
 
 
 class SkillPart(TypedDict, closed=True):
@@ -1715,6 +1628,20 @@ class SkillPartSummary(TypedDict, closed=True):
     useWhen: str
 
 
+class SkillPendingReview(TypedDict, closed=True):
+    approvals: int
+    editClass: Literal["free", "re_test", "re_approval"]
+    id: str
+    needed: int
+    version: int
+
+
+class SkillProvenance(TypedDict, closed=True):
+    citations: list[SkillCitation]
+    detail: str
+    origin: str
+
+
 class SkillPublishCheck(TypedDict, closed=True):
     approversNeeded: int
     blockers: list[str]
@@ -1737,12 +1664,36 @@ class SkillRendered(TypedDict, closed=True):
     version: int
 
 
+class SkillResource(TypedDict, closed=True):
+    addedAt: str
+    addedBy: str
+    blocked: NotRequired[str | None]
+    body: NotRequired[str | None]
+    description: NotRequired[str | None]
+    fileId: NotRequired[str | None]
+    id: str
+    kind: Literal["file", "template"]
+    name: str
+    size: NotRequired[int | None]
+
+
 class SkillToolRef(TypedDict, closed=True):
     access: str
     module: str
     name: str
     system: str
     toolId: str
+
+
+class SkillTrace(TypedDict, closed=True):
+    agentName: str
+    at: str
+    id: str
+    input: str
+    outcome: Literal["completed", "handed_off", "failed"]
+    tookMs: int
+    toolCalls: list[str]
+    version: int
 
 
 class SkillUsage(TypedDict, closed=True):
@@ -1762,7 +1713,7 @@ class SkillUsage(TypedDict, closed=True):
 
 
 class SlaEvent(TypedDict, closed=True):
-    data: NotRequired[Any]
+    data: NotRequired[JsonValue]
     event: str
 
 
@@ -1790,7 +1741,7 @@ class SsoStepUpInput(TypedDict, closed=True):
 class StartFormView(TypedDict, closed=True):
     action: str
     kind: str
-    schema: dict[str, Any]
+    schema: dict[str, JsonValue]
     takesFiles: bool
     title: str
     via: str
@@ -1812,9 +1763,9 @@ class StepAttempt(TypedDict, closed=True):
     effects: str
     error: str | None
     finishedAt: str | None
-    input: Any
+    input: JsonValue
     key: str
-    output: Any
+    output: JsonValue
     port: str | None
     startedAt: str
     status: str
@@ -1906,7 +1857,7 @@ class TabCounts(TypedDict, closed=True):
 
 class TaskAction(TypedDict, closed=True):
     consequence: str | None
-    inputs: list[dict[str, Any]]
+    inputs: list[dict[str, JsonValue]]
     label: str
     name: str
     port: str
@@ -1923,7 +1874,7 @@ class TaskIn(TypedDict, closed=True):
 
 class TaskRegion(TypedDict, closed=True):
     collapsed: bool
-    data: dict[str, Any]
+    data: dict[str, JsonValue]
     region: Literal[
         "header",
         "why_source",
@@ -1944,7 +1895,7 @@ class TaskState(TypedDict, closed=True):
     id: str
     reason: str | None
     status: str
-    values: dict[str, Any] | None
+    values: dict[str, JsonValue] | None
 
 
 class TaskTypeRef(TypedDict, closed=True):
@@ -1955,14 +1906,14 @@ class TaskTypeRef(TypedDict, closed=True):
 
 class TaskTypeVersionView(TypedDict, closed=True):
     publishedAt: str | None
-    record: dict[str, Any]
+    record: dict[str, JsonValue]
     savedAt: str
     savedBy: str
     version: int
 
 
 class TaskTypeView(TypedDict, closed=True):
-    copiedFrom: dict[str, Any] | None
+    copiedFrom: CopiedFrom | None
     description: str
     id: str
     name: str
@@ -2060,11 +2011,6 @@ class ThreadEvent(TypedDict, closed=True):
     type: Literal["customer_reply"]
 
 
-class ThreadEventResult(TypedDict, closed=True):
-    restarted: list[dict[str, Any]]
-    type: str
-
-
 class ThreadInput(TypedDict, closed=True):
     budget: NotRequired[BudgetInput | None]
     deploymentId: NotRequired[str | None]
@@ -2078,11 +2024,17 @@ class ThreadInput(TypedDict, closed=True):
 class ThreadView(TypedDict, closed=True):
     createdAt: str
     graph: str
-    metadata: dict[str, Any]
+    metadata: dict[str, JsonValue]
     status: str
     threadId: str
     updatedAt: str
     version: int | None
+
+
+class TimerRestart(TypedDict, closed=True):
+    dueAt: str
+    kind: str
+    timerId: str
 
 
 class ToolApp(TypedDict, closed=True):
@@ -2118,7 +2070,7 @@ class ToolOption(TypedDict, closed=True):
     disabled: NotRequired[str | None]
     hint: NotRequired[str | None]
     id: str
-    inputSchema: NotRequired[dict[str, Any] | None]
+    inputSchema: NotRequired[dict[str, JsonValue] | None]
     label: str
 
 
@@ -2151,7 +2103,7 @@ class TypedField(TypedDict, closed=True):
     fileId: str | None
     key: str
     label: str
-    raw: NotRequired[Any]
+    raw: NotRequired[JsonValue]
     required: bool
     type: str
 
@@ -2168,24 +2120,16 @@ class UpdateExpect(TypedDict, closed=True):
     recordDigest: NotRequired[str | None]
 
 
+class UpdateExpectView(TypedDict, closed=True):
+    digest: NotRequired[str | None]
+    recordDigest: NotRequired[str | None]
+
+
 class UpdateInput(TypedDict, closed=True):
     choices: NotRequired[dict[str, Literal["yours", "template"]]]
     confirm: NotRequired[bool]
     expect: NotRequired[UpdateExpect | None]
     mode: NotRequired[Literal["merge", "reset"] | None]
-
-
-class UpdateReview(TypedDict, closed=True):
-    changes: list[str]
-    copy: CopyRef
-    draftOpen: NotRequired[bool]
-    edits: list[str]
-    expect: NotRequired[UpdateExpect]
-    fields: NotRequired[list[FieldReview]]
-    fromVersion: int
-    taken: NotRequired[bool]
-    toVersion: int
-    version: NotRequired[int | None]
 
 
 class UploadedFile(TypedDict, closed=True):
@@ -2274,25 +2218,19 @@ class WidgetTemplateOut(TypedDict, closed=True):
     canDelete: NotRequired[bool | None]
     canEdit: NotRequired[bool | None]
     canPublish: NotRequired[bool | None]
-    dataSchema: dict[str, Any]
+    dataSchema: dict[str, JsonValue]
     name: str
     requiresTools: NotRequired[list[str]]
-    sample: NotRequired[dict[str, Any] | None]
+    sample: NotRequired[dict[str, JsonValue] | None]
     status: NotRequired[Literal["draft", "in_review", "published", "deprecated"]]
     teamId: NotRequired[str | None]
     teamName: NotRequired[str | None]
-    tree: dict[str, Any]
+    tree: dict[str, JsonValue]
     updatedAt: NotRequired[str | None]
     updatedBy: NotRequired[str | None]
     useWhen: str
     version: int
     widgetId: str
-
-
-class WorkflowGraph(TypedDict, closed=True):
-    edges: list[GraphEdge]
-    nodes: list[GraphNode]
-    workflowId: str
 
 
 class WorkflowInput(TypedDict, closed=True):
@@ -2504,7 +2442,7 @@ class AgentPublishRequest(TypedDict, closed=True):
     agentName: str
     approvalsNeeded: Literal[1, 2]
     blockers: list[str]
-    candidate: NotRequired[Any]
+    candidate: NotRequired[PublishEvalSummary | None]
     changes: list[str]
     failing: int
     fromVersion: int | None
@@ -2513,7 +2451,7 @@ class AgentPublishRequest(TypedDict, closed=True):
     majorChange: NotRequired[bool | None]
     note: str
     policy: NotRequired[Literal["always", "major", "never"] | None]
-    published: NotRequired[Any]
+    published: NotRequired[PublishEvalSummary | None]
     requestedBy: str
     reviewReason: NotRequired[
         Literal[
@@ -2548,11 +2486,16 @@ class AgentTestTurn(TypedDict, closed=True):
     model: str
     reply: str
     searched: NotRequired[bool]
-    skills: NotRequired[list[dict[str, Any]]]
+    skills: NotRequired[list[LoadedSkill]]
     tookMs: int
     toolCalls: list[ToolCallView]
     tools: NotRequired[list[HeldTool]]
     wouldPause: NotRequired[WouldPause | None]
+
+
+class AiStepOut(TypedDict, closed=True):
+    output: dict[str, JsonValue]
+    port: str
 
 
 class AssuranceGate(TypedDict, closed=True):
@@ -2596,6 +2539,17 @@ class BackgroundOut(TypedDict, closed=True):
     unreachable: list[str]
 
 
+class BatchRow(TypedDict, closed=True):
+    attempt: int
+    error: NotRequired[str | None]
+    input: dict[str, JsonValue]
+    outcome: NotRequired[str | None]
+    output: NotRequired[JsonValue]
+    row: int
+    runId: NotRequired[str | None]
+    status: str
+
+
 class BatchView(TypedDict, closed=True):
     failed: int
     fileName: str
@@ -2615,27 +2569,13 @@ class BulkResult(TypedDict, closed=True):
     updated: list[str]
 
 
-class CaseDetail(TypedDict, closed=True):
-    assignee: str | None
-    createdAt: str
-    createdBy: str
-    customerId: str | None
-    customerName: str | None
-    events: list[CaseEventView]
-    fields: NotRequired[dict[str, Any] | None]
+class CaseEventView(TypedDict, closed=True):
+    at: str
+    by: str
+    detail: dict[str, JsonValue]
     id: str
-    pausedSince: str | None
-    priority: Literal["low", "normal", "high", "urgent"]
-    producerKey: str | None
-    resolutionDueAt: str
-    resolutionLeftS: int | None
-    respondedAt: str | None
-    responseDueAt: str
-    responseLeftS: int | None
-    status: Literal["open", "waiting_on_customer", "waiting_on_us", "resolved", "closed"]
-    subject: str
-    teamId: str
-    updatedAt: str
+    kind: str
+    ref: str | None
 
 
 class CaseFeed(TypedDict, closed=True):
@@ -2649,7 +2589,7 @@ class CaseRow(TypedDict, closed=True):
     createdBy: str
     customerId: str | None
     customerName: str | None
-    fields: NotRequired[dict[str, Any] | None]
+    fields: NotRequired[dict[str, JsonValue] | None]
     id: str
     owner: PersonRef | None
     pausedSince: str | None
@@ -2671,7 +2611,7 @@ class CaseRun(TypedDict, closed=True):
     actionsPending: int
     assignee: str | None
     caseId: str | None
-    children: NotRequired[list[dict[str, Any]] | None]
+    children: NotRequired[list[dict[str, JsonValue]] | None]
     durationMs: int
     error: NotRequired[str | None]
     id: str
@@ -2699,8 +2639,16 @@ class CaseRunList(TypedDict, closed=True):
     viewCounts: dict[str, int]
 
 
-class CaseTypeDetail(TypedDict, closed=True):
-    copiedFrom: dict[str, Any] | None
+class CaseTypeVersionView(TypedDict, closed=True):
+    publishedAt: str | None
+    record: dict[str, JsonValue]
+    savedAt: str
+    savedBy: str
+    version: int
+
+
+class CaseTypeView(TypedDict, closed=True):
+    copiedFrom: CopiedFrom | None
     description: str
     id: str
     name: str
@@ -2710,7 +2658,28 @@ class CaseTypeDetail(TypedDict, closed=True):
     updatedAt: str
     updatedBy: str
     version: int
-    versions: list[CaseTypeVersionView]
+
+
+class CaseView(TypedDict, closed=True):
+    assignee: str | None
+    createdAt: str
+    createdBy: str
+    customerId: str | None
+    customerName: str | None
+    fields: NotRequired[dict[str, JsonValue] | None]
+    id: str
+    pausedSince: str | None
+    priority: Literal["low", "normal", "high", "urgent"]
+    producerKey: str | None
+    resolutionDueAt: str
+    resolutionLeftS: int | None
+    respondedAt: str | None
+    responseDueAt: str
+    responseLeftS: int | None
+    status: Literal["open", "waiting_on_customer", "waiting_on_us", "resolved", "closed"]
+    subject: str
+    teamId: str
+    updatedAt: str
 
 
 class ChannelPatch(TypedDict, closed=True):
@@ -2739,6 +2708,11 @@ class ChannelRow(TypedDict, closed=True):
     type: Literal["email", "chat", "api"]
 
 
+class DefinitionInput(TypedDict, closed=True):
+    definition: NotRequired[dict[str, JsonValue] | None]
+    yaml: NotRequired[str | None]
+
+
 class DefinitionPublished(TypedDict, closed=True):
     created: bool
     digest: str
@@ -2747,9 +2721,15 @@ class DefinitionPublished(TypedDict, closed=True):
     workflowId: str
 
 
+class DefinitionShapes(TypedDict, closed=True):
+    steps: dict[str, dict[str, dict[str, JsonValue]]]
+    version: int
+    workflowId: str
+
+
 class DefinitionView(TypedDict, closed=True):
     archivedAt: NotRequired[str | None]
-    definition: dict[str, Any]
+    definition: dict[str, JsonValue]
     digest: str
     liveVersion: int | None
     name: str
@@ -2762,13 +2742,20 @@ class DefinitionView(TypedDict, closed=True):
     workflowId: str
 
 
+class DryRun(TypedDict, closed=True):
+    ignored: list[str]
+    mapping: dict[str, str]
+    rows: int
+    sample: list[dict[str, JsonValue]]
+
+
 class EngineRunStep(TypedDict, closed=True):
     attempts: list[StepAttempt]
     error: str | None
-    input: Any
+    input: JsonValue
     iteration: int
     nodeId: str
-    output: Any
+    output: JsonValue
     port: str | None
     status: str
 
@@ -2780,6 +2767,11 @@ class EnvelopeAgentSkills(TypedDict, closed=True):
 
 class EnvelopeAgentTestTurn(TypedDict, closed=True):
     data: AgentTestTurn
+    success: Literal[True]
+
+
+class EnvelopeAiStepOut(TypedDict, closed=True):
+    data: AiStepOut
     success: Literal[True]
 
 
@@ -2798,11 +2790,6 @@ class EnvelopeBulkResult(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeCaseDetail(TypedDict, closed=True):
-    data: CaseDetail
-    success: Literal[True]
-
-
 class EnvelopeCaseRunList(TypedDict, closed=True):
     data: CaseRunList
     success: Literal[True]
@@ -2813,8 +2800,8 @@ class EnvelopeCaseRun(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeCaseTypeDetail(TypedDict, closed=True):
-    data: CaseTypeDetail
+class EnvelopeCaseView(TypedDict, closed=True):
+    data: CaseView
     success: Literal[True]
 
 
@@ -2825,6 +2812,11 @@ class EnvelopeChannelRow(TypedDict, closed=True):
 
 class EnvelopeDefinitionPublished(TypedDict, closed=True):
     data: DefinitionPublished
+    success: Literal[True]
+
+
+class EnvelopeDefinitionShapes(TypedDict, closed=True):
+    data: DefinitionShapes
     success: Literal[True]
 
 
@@ -2898,11 +2890,6 @@ class EnvelopePlatformEventOut(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopePublicForm(TypedDict, closed=True):
-    data: PublicForm
-    success: Literal[True]
-
-
 class EnvelopePublishDecisionFields(TypedDict, closed=True):
     data: PublishDecisionFields
     success: Literal[True]
@@ -2953,11 +2940,6 @@ class EnvelopeRunStarted(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeSavedCases(TypedDict, closed=True):
-    data: SavedCases
-    success: Literal[True]
-
-
 class EnvelopeSkillRendered(TypedDict, closed=True):
     data: SkillRendered
     success: Literal[True]
@@ -2988,13 +2970,8 @@ class EnvelopeThreadCreated(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeThreadEventResult(TypedDict, closed=True):
-    data: ThreadEventResult
-    success: Literal[True]
-
-
-class EnvelopeUpdateReview(TypedDict, closed=True):
-    data: UpdateReview
+class EnvelopeUnionDryRunBatchStarted(TypedDict, closed=True):
+    data: DryRun | BatchStarted
     success: Literal[True]
 
 
@@ -3109,13 +3086,26 @@ class EvalRunInput(TypedDict, closed=True):
 
 class FieldRead(TypedDict, closed=True):
     boxes: NotRequired[list[ReadBox]]
-    bySource: NotRequired[dict[str, Any] | None]
+    bySource: NotRequired[dict[str, JsonValue] | None]
     citation: ReadCitation | None
     confidence: float | None
     conflict: NotRequired[bool]
-    extractedValue: NotRequired[Any]
+    extractedValue: NotRequired[JsonValue]
     needsReview: bool
-    value: NotRequired[Any]
+    value: NotRequired[JsonValue]
+
+
+class FieldReview(TypedDict, closed=True):
+    field: str
+    label: str
+    outcome: Literal["kept", "taken", "conflict"]
+    template: NotRequired[JsonValue]
+    yours: NotRequired[JsonValue]
+
+
+class FormFields(TypedDict, closed=True):
+    schema: dict[str, JsonValue]
+    takesFiles: NotRequired[bool | None]
 
 
 class GateList(TypedDict, closed=True):
@@ -3133,6 +3123,13 @@ class GraphInfo(TypedDict, closed=True):
     latestVersion: int | None
     name: str
     title: str
+
+
+class GraphNode(TypedDict):
+    data: dict[str, JsonValue]
+    id: str
+    position: NotRequired[dict[str, float] | None]
+    type: str
 
 
 class Guardrail(TypedDict, closed=True):
@@ -3219,7 +3216,7 @@ class LivePlace(TypedDict, closed=True):
 
 
 class MemoryExport(TypedDict, closed=True):
-    audit: list[dict[str, Any]]
+    audit: list[dict[str, JsonValue]]
     memories: list[MemoryView]
     person: str
 
@@ -3237,10 +3234,10 @@ class NodeTypeView(TypedDict, closed=True):
     outputs: list[PortView]
     outputsFrom: str | None
     outputsUnless: NotRequired[list[OptionalPortView]]
-    parameters: dict[str, Any]
+    parameters: dict[str, JsonValue]
     retry: RetryView
     timeoutSeconds: float
-    ui: dict[str, Any]
+    ui: dict[str, JsonValue]
     unavailable: NotRequired[str | None]
     version: int
 
@@ -3252,7 +3249,7 @@ class OverviewCounts(TypedDict, closed=True):
     openReviews: int
     overdueReviews: int
     runsInFlight: list[OverviewRunRow]
-    urgentReviews: list[dict[str, Any]]
+    urgentReviews: list[dict[str, JsonValue]]
     waitingForMe: list[OverviewTaskRow]
 
 
@@ -3276,6 +3273,13 @@ class PlanItem(TypedDict, closed=True):
     service: str
     title: str
     tools: list[str]
+
+
+class PublicForm(TypedDict, closed=True):
+    afterText: str
+    description: str
+    form: FormFields
+    title: str
 
 
 class PublishRequestInfo(TypedDict, closed=True):
@@ -3319,7 +3323,7 @@ class PublishReview(TypedDict, closed=True):
     decidedBy: NotRequired[str | None]
     decisionReason: NotRequired[str | None]
     egressHost: NotRequired[EgressHostRef | None]
-    evidence: list[Any]
+    evidence: list[Evidence]
     id: str
     kind: Literal["agent_publish", "publish_request", "egress_host"]
     policy: ReviewPolicy
@@ -3337,7 +3341,7 @@ class PublishReview(TypedDict, closed=True):
 
 class ReadRecord(TypedDict, closed=True):
     fields: dict[str, FieldRead]
-    values: dict[str, Any]
+    values: dict[str, JsonValue]
 
 
 class RunDecision(TypedDict, closed=True):
@@ -3367,11 +3371,11 @@ class RunRow(TypedDict, closed=True):
     error: str | None
     finishedAt: str | None
     id: str
-    input: dict[str, Any] | None
+    input: dict[str, JsonValue] | None
     mode: str
     outcome: str | None
     outcomeText: NotRequired[str | None]
-    output: Any
+    output: JsonValue
     startedBy: NotRequired[ActorView | None]
     status: str
     updatedAt: str
@@ -3379,6 +3383,23 @@ class RunRow(TypedDict, closed=True):
     waiting: RunWaiting | None
     workflowId: str
     workflowName: NotRequired[str | None]
+
+
+class SavedCase(TypedDict, closed=True):
+    checks: list[SavedCaseCheck]
+    context: SavedCaseContext | None
+    createdAt: str
+    createdBy: str
+    id: str
+    input: str
+    name: str
+    reason: str
+    source: str
+    status: str
+
+
+class SavedCases(TypedDict, closed=True):
+    cases: list[SavedCase]
 
 
 class Skill(TypedDict, closed=True):
@@ -3408,6 +3429,14 @@ class Skill(TypedDict, closed=True):
     version: int
 
 
+class SkillActivity(TypedDict, closed=True):
+    agents: list[str]
+    loads30d: int
+    loadsPerDay: list[SkillLoadsDay]
+    samples: list[SkillTrace]
+    successRate: float | None
+
+
 class SkillContent(TypedDict, closed=True):
     guardrails: list[str]
     inputs: NotRequired[list[SkillInputField]]
@@ -3417,7 +3446,7 @@ class SkillContent(TypedDict, closed=True):
     name: str
     parts: NotRequired[list[SkillPart]]
     refusal: NotRequired[str | None]
-    resources: list[dict[str, Any]]
+    resources: list[SkillResource]
     slug: str
     tools: list[SkillToolRef]
     useWhen: str
@@ -3481,7 +3510,7 @@ class SkillVersion(TypedDict, closed=True):
     savedAt: str
     savedBy: str
     state: Literal["draft", "in_review", "published", "superseded", "deprecated", "rejected"]
-    testRun: dict[str, Any] | None
+    testRun: None
     tokens: int
     version: int
 
@@ -3542,7 +3571,7 @@ class TaskCreated(TypedDict, closed=True):
 
 
 class TaskTypeDetail(TypedDict, closed=True):
-    copiedFrom: dict[str, Any] | None
+    copiedFrom: CopiedFrom | None
     description: str
     id: str
     name: str
@@ -3555,17 +3584,22 @@ class TaskTypeDetail(TypedDict, closed=True):
     versions: list[TaskTypeVersionView]
 
 
+class ThreadEventResult(TypedDict, closed=True):
+    restarted: list[TimerRestart]
+    type: str
+
+
 class ThreadState(TypedDict, closed=True):
     budget: BudgetCaps | None
     cost: CostTotals | None
     digest: str | None
     graph: str
-    interrupt: dict[str, Any] | None
+    interrupt: dict[str, JsonValue] | None
     next: list[str]
     sla: OpsAgentsApiSchemasSla | None
     status: str
     threadId: str
-    values: dict[str, Any]
+    values: dict[str, JsonValue]
     version: int | None
 
 
@@ -3599,6 +3633,19 @@ class ToolOptionsPage(TypedDict, closed=True):
 class ToolUsedBy(TypedDict, closed=True):
     agents: list[ToolUserRef]
     workflows: list[ToolUserRef]
+
+
+class UpdateReview(TypedDict, closed=True):
+    changes: list[str]
+    copy: CopyRef
+    draftOpen: NotRequired[bool]
+    edits: list[str]
+    expect: NotRequired[UpdateExpectView]
+    fields: NotRequired[list[FieldReview]]
+    fromVersion: int
+    taken: NotRequired[bool]
+    toVersion: int
+    version: NotRequired[int | None]
 
 
 class ValidationRun(TypedDict, closed=True):
@@ -3638,10 +3685,10 @@ class Workflow(TypedDict, closed=True):
     version: int
 
 
-class WorkflowDraft(TypedDict, closed=True):
-    graph: WorkflowGraph
-    savedAt: str
-    savedBy: str
+class WorkflowGraph(TypedDict, closed=True):
+    edges: list[GraphEdge]
+    nodes: list[GraphNode]
+    workflowId: str
 
 
 class ActivityRow(TypedDict, closed=True):
@@ -3719,6 +3766,29 @@ class AgentEvalRun(TypedDict, closed=True):
     summary: EvalSummary
 
 
+class CaseDetail(TypedDict, closed=True):
+    assignee: str | None
+    createdAt: str
+    createdBy: str
+    customerId: str | None
+    customerName: str | None
+    events: list[CaseEventView]
+    fields: NotRequired[dict[str, JsonValue] | None]
+    id: str
+    pausedSince: str | None
+    priority: Literal["low", "normal", "high", "urgent"]
+    producerKey: str | None
+    resolutionDueAt: str
+    resolutionLeftS: int | None
+    respondedAt: str | None
+    responseDueAt: str
+    responseLeftS: int | None
+    status: Literal["open", "waiting_on_customer", "waiting_on_us", "resolved", "closed"]
+    subject: str
+    teamId: str
+    updatedAt: str
+
+
 class CasePage(TypedDict, closed=True):
     actions: list[DraftedAction]
     assignee: str | None
@@ -3730,7 +3800,7 @@ class CasePage(TypedDict, closed=True):
     customerName: str | None
     events: list[CaseEventView]
     feed: CaseFeed
-    fields: NotRequired[dict[str, Any] | None]
+    fields: NotRequired[dict[str, JsonValue] | None]
     id: str
     links: Links
     nextAction: NextAction | None
@@ -3759,6 +3829,20 @@ class CasePage(TypedDict, closed=True):
     workflow: OpsAgentsApiRoutersCaseRecordsWorkflowRef | None
 
 
+class CaseTypeDetail(TypedDict, closed=True):
+    copiedFrom: CopiedFrom | None
+    description: str
+    id: str
+    name: str
+    origin: str
+    publishedVersion: int | None
+    teamId: str | None
+    updatedAt: str
+    updatedBy: str
+    version: int
+    versions: list[CaseTypeVersionView]
+
+
 class ChannelPage(TypedDict, closed=True):
     data: list[ChannelRow]
     facets: dict[str, dict[str, int]]
@@ -3767,7 +3851,7 @@ class ChannelPage(TypedDict, closed=True):
 
 
 class DocumentRead(TypedDict, closed=True):
-    corrected: list[dict[str, Any]] | None
+    corrected: list[dict[str, JsonValue]] | None
     editable: bool
     fileId: str
     fileName: str | None
@@ -3787,8 +3871,18 @@ class EnvelopeAgent(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeCaseDetail(TypedDict, closed=True):
+    data: CaseDetail
+    success: Literal[True]
+
+
 class EnvelopeCasePage(TypedDict, closed=True):
     data: CasePage
+    success: Literal[True]
+
+
+class EnvelopeCaseTypeDetail(TypedDict, closed=True):
+    data: CaseTypeDetail
     success: Literal[True]
 
 
@@ -3857,6 +3951,11 @@ class EnvelopeOverviewCounts(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopePublicForm(TypedDict, closed=True):
+    data: PublicForm
+    success: Literal[True]
+
+
 class EnvelopePublishReview(TypedDict, closed=True):
     data: PublishReview
     success: Literal[True]
@@ -3869,6 +3968,11 @@ class EnvelopeRunList(TypedDict, closed=True):
 
 class EnvelopeRunRow(TypedDict, closed=True):
     data: RunRow
+    success: Literal[True]
+
+
+class EnvelopeSavedCases(TypedDict, closed=True):
+    data: SavedCases
     success: Literal[True]
 
 
@@ -3897,6 +4001,11 @@ class EnvelopeTaskTypeDetail(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeThreadEventResult(TypedDict, closed=True):
+    data: ThreadEventResult
+    success: Literal[True]
+
+
 class EnvelopeThreadState(TypedDict, closed=True):
     data: ThreadState
     success: Literal[True]
@@ -3912,6 +4021,11 @@ class EnvelopeUnionValidationRunNoneType(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeUpdateReview(TypedDict, closed=True):
+    data: UpdateReview
+    success: Literal[True]
+
+
 class EnvelopeValidationRun(TypedDict, closed=True):
     data: ValidationRun
     success: Literal[True]
@@ -3919,11 +4033,6 @@ class EnvelopeValidationRun(TypedDict, closed=True):
 
 class EnvelopeWidgetTemplateList(TypedDict, closed=True):
     data: WidgetTemplateList
-    success: Literal[True]
-
-
-class EnvelopeWorkflowDraft(TypedDict, closed=True):
-    data: WorkflowDraft
     success: Literal[True]
 
 
@@ -3979,7 +4088,7 @@ class Plan(TypedDict, closed=True):
 
 
 class SkillDetail(TypedDict, closed=True):
-    activity: dict[str, Any]
+    activity: SkillActivity
     content: SkillContent
     draftVersion: int | None
     id: str
@@ -3994,15 +4103,15 @@ class SkillDetail(TypedDict, closed=True):
     origin: Literal["blank", "generated", "imported", "duplicated"]
     ownerTeam: str
     parts: NotRequired[list[SkillPartSummary]]
-    pendingReview: NotRequired[dict[str, Any] | None]
+    pendingReview: NotRequired[SkillPendingReview | None]
     pendingReviewId: NotRequired[str | None]
-    provenance: dict[str, Any]
+    provenance: SkillProvenance
     publishCheck: SkillPublishCheck
     publishedVersion: int | None
-    runs: list[dict[str, Any]]
+    runs: list[JsonValue]
     slug: str
     status: Literal["draft", "in_review", "published", "deprecated"]
-    tests: list[dict[str, Any]]
+    tests: list[JsonValue]
     tokens: int
     toolCount: int
     updatedAt: str
@@ -4027,7 +4136,7 @@ class ThreadReview(TypedDict, closed=True):
     amount: NotRequired[float | None]
     approvals: list[str]
     assignee: NotRequired[str | None]
-    calls: NotRequired[dict[str, Any] | None]
+    calls: NotRequired[dict[str, JsonValue] | None]
     canDecide: NotRequired[bool | None]
     caseId: NotRequired[str | None]
     caseTitle: NotRequired[str | None]
@@ -4042,7 +4151,7 @@ class ThreadReview(TypedDict, closed=True):
     decidingTeam: NotRequired[DecidingTeam | None]
     decisionReason: NotRequired[str | None]
     dueAt: NotRequired[str | None]
-    error: NotRequired[dict[str, Any] | None]
+    error: NotRequired[dict[str, JsonValue] | None]
     evidence: list[Evidence]
     id: str
     kind: Literal["approval", "connect_account"]
@@ -4056,7 +4165,7 @@ class ThreadReview(TypedDict, closed=True):
     read: NotRequired[DocumentRead | None]
     reasoning: list[str]
     reply: NotRequired[ReplyPreview | None]
-    resume: NotRequired[dict[str, Any] | None]
+    resume: NotRequired[dict[str, JsonValue] | None]
     risk: Literal["critical", "high", "medium", "low"]
     runId: NotRequired[str | None]
     slaMinutes: int | None
@@ -4078,7 +4187,7 @@ class ToolRow(TypedDict, closed=True):
     approval: str | None
     description: str
     id: str
-    inputSchema: dict[str, Any]
+    inputSchema: dict[str, JsonValue]
     kind: Literal["app", "custom", "workflow", "agent"]
     moduleId: str | None
     name: str
@@ -4089,32 +4198,10 @@ class ToolRow(TypedDict, closed=True):
     usedBy: ToolUsedBy
 
 
-class WorkflowDetail(TypedDict, closed=True):
-    agentSlugs: list[str]
-    canDelete: NotRequired[bool | None]
-    canEdit: NotRequired[bool | None]
-    canPublish: NotRequired[bool | None]
-    deploymentCount: int
-    description: str
-    draft: NotRequired[WorkflowDraft | None]
-    engine: NotRequired[Literal["v1", "v2"]]
-    gateCount: int
+class WorkflowDraft(TypedDict, closed=True):
     graph: WorkflowGraph
-    id: str
-    kind: Literal["standard", "email_intake"]
-    name: str
-    openReviews: int
-    pendingPublish: NotRequired[PendingPublish | None]
-    reviewed24h: int
-    runs24h: int
-    start: NotRequired[WorkflowStart | None]
-    status: Literal["live", "draft", "paused"]
-    stepCount: int
-    teamId: str | None
-    teamName: NotRequired[str | None]
-    trigger: str
-    updatedAt: str
-    version: int
+    savedAt: str
+    savedBy: str
 
 
 class EnvelopeLabelledListResultRunRow(TypedDict, closed=True):
@@ -4162,8 +4249,8 @@ class EnvelopeUnionThreadReviewPublishReview(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeWorkflowDetail(TypedDict, closed=True):
-    data: WorkflowDetail
+class EnvelopeWorkflowDraft(TypedDict, closed=True):
+    data: WorkflowDraft
     success: Literal[True]
 
 
@@ -4190,6 +4277,34 @@ class ToolList(TypedDict, closed=True):
     pagination: Pagination
 
 
+class WorkflowDetail(TypedDict, closed=True):
+    agentSlugs: list[str]
+    canDelete: NotRequired[bool | None]
+    canEdit: NotRequired[bool | None]
+    canPublish: NotRequired[bool | None]
+    deploymentCount: int
+    description: str
+    draft: NotRequired[WorkflowDraft | None]
+    engine: NotRequired[Literal["v1", "v2"]]
+    gateCount: int
+    graph: WorkflowGraph
+    id: str
+    kind: Literal["standard", "email_intake"]
+    name: str
+    openReviews: int
+    pendingPublish: NotRequired[PendingPublish | None]
+    reviewed24h: int
+    runs24h: int
+    start: NotRequired[WorkflowStart | None]
+    status: Literal["live", "draft", "paused"]
+    stepCount: int
+    teamId: str | None
+    teamName: NotRequired[str | None]
+    trigger: str
+    updatedAt: str
+    version: int
+
+
 class EnvelopeReviewList(TypedDict, closed=True):
     data: ReviewList
     success: Literal[True]
@@ -4197,6 +4312,11 @@ class EnvelopeReviewList(TypedDict, closed=True):
 
 class EnvelopeToolList(TypedDict, closed=True):
     data: ToolList
+    success: Literal[True]
+
+
+class EnvelopeWorkflowDetail(TypedDict, closed=True):
+    data: WorkflowDetail
     success: Literal[True]
 
 
@@ -4213,11 +4333,11 @@ class RunDetail(TypedDict, closed=True):
     files: NotRequired[list[RunFile]]
     finishedAt: str | None
     id: str
-    input: dict[str, Any] | None
+    input: dict[str, JsonValue] | None
     mode: str
     outcome: str | None
     outcomeText: NotRequired[str | None]
-    output: Any
+    output: JsonValue
     result: RunResult | None
     startedBy: NotRequired[ActorView | None]
     status: str

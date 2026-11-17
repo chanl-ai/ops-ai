@@ -22,7 +22,7 @@ from ops_files_client import FileNotFound, FilesClient
 from ops_identity.fastapi import Tx
 from ops_ingest.parsers.spreadsheet import spreadsheet_rows
 from ops_service_kit.errors import NotFound, ServiceUnavailable, Unprocessable
-from ops_service_kit.http import Envelope, In, Out
+from ops_service_kit.http import Envelope, In, JsonValue, Out
 
 from ...store.batches import MAX_ROWS, Batches, BatchOut, BatchRowOut
 from ...store.tenancy import current_tenant
@@ -49,7 +49,7 @@ class DryRun(Out):
     mapping: dict[str, str]
     # Columns that name no input, left out of every run.
     ignored: list[str]
-    sample: list[dict[str, Any]]
+    sample: list[dict[str, JsonValue]]
 
 
 class BatchStarted(Out):
@@ -63,10 +63,10 @@ class BatchRow(Out):
     # pending until its run starts, then the run's own status.
     status: str
     outcome: str | None = None
-    output: Any = None
+    output: JsonValue = None
     error: str | None = None
     run_id: str | None = None
-    input: dict[str, Any]
+    input: dict[str, JsonValue]
 
 
 class Stopped(Out):

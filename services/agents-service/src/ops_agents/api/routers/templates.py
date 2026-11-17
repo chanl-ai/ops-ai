@@ -42,7 +42,7 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
-from ops_service_kit.http import Envelope, In, Out
+from ops_service_kit.http import Envelope, In, JsonValue, Out
 from ops_service_kit.ids import new_id
 from ops_service_kit.template_merge import FieldOutcome, Strictness, apply, merge
 
@@ -928,8 +928,13 @@ class FieldReview(Out):
     label: str
     # kept: only the team changed it; taken: only the template did; conflict: both did, the team's unless chosen.
     outcome: Literal["kept", "taken", "conflict"]
-    yours: Any = None
-    template: Any = None
+    yours: JsonValue = None
+    template: JsonValue = None
+
+
+class UpdateExpectView(Out):
+    digest: str | None = None
+    record_digest: str | None = None
 
 
 class UpdateReview(Out):
@@ -942,7 +947,7 @@ class UpdateReview(Out):
     # The copy's newest version is an unpublished draft, which the update merges into (counted as the team's).
     draft_open: bool = False
     # What the take names back, so a template or copy that moved since this review is refused.
-    expect: UpdateExpect = Field(default_factory=UpdateExpect)
+    expect: UpdateExpectView = Field(default_factory=UpdateExpectView)
     # For older consoles: the fields the template changes, and the fields the team changed since the copy was made.
     changes: list[str]
     edits: list[str]

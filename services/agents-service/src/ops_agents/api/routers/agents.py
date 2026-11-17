@@ -15,13 +15,14 @@ from __future__ import annotations
 import time
 from typing import Annotated, Any, Literal, NotRequired, TypeAlias, TypedDict, cast
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import JSONResponse, Response
 from pydantic import Field
 
 from ops_access import can, require_provisioner
 from ops_agent_kernel.layout import required_tools
 from ops_agents.activities.agent_limits import AgentLimits, check_limits, limits_of
+from ops_agents.activities.agent_limits import wire as wire_limits
 from ops_agents.activities.tool_directory import ToolsUnavailable
 from ops_agents.app.evals import parse_cases, run_eval
 from ops_agents.domain.evals import TRIGGER_MANUAL
@@ -491,7 +492,7 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
         wanted = [p.model_dump(by_alias=True) for p in body.guardrail_pins]
         spec["guardrailPins"] = await resolve_pins(rt, wanted, list(spec.get("guardrailPins") or []))
     if body.limits is not None:
-        spec["limits"] = body.limits.wire()
+        spec["limits"] = wire_limits(body.limits)
     if body.widget_pins is not None:
         spec["widgetPins"] = await _widget_pins(rt, body.widget_pins)
     if body.widget_pins is not None or body.tool_ids is not None:
@@ -764,18 +765,20 @@ async def test_agent(rt: Rt, me: Me, agent_id: str, body: TestInput) -> JSONResp
 
 
 @router.post("/{agent_id}/eval-runs", response_model=Envelope[AgentEvalRun])
-async def create_eval_run(rt: Rt, me: Me, agent_id: str, body: EvalRunInput | None = None) -> JSONResponse:
+async def create_eval_run(
+    rt: Rt, me: Me, agent_id: str, body: Annotated[EvalRunInput, Body(default_factory=EvalRunInput)]
+) -> JSONResponse:
     """Scores cases on the newest version through the same one-turn test path. With no cases in the body it runs the
     agent's saved cases, also on the live version when that is another one, and keeps the run, so repeating it makes a
     second run. With cases in the body it scores them and keeps nothing. Empty cases and an unknown check type are
     422."""
     row = await registry(rt).row(agent_id)
     can(caller_of(me), "evals", "run", team=row["team_id"], what=f"agent {row['slug']}")
-    saved = body is None or body.cases is None
+    saved = body.cases is None
     raw = (
         [x["body"] for x in await EvalStore(rt.db).cases("agent", agent_id) if x["status"] == "active"]
         if saved
-        else [item.model_dump(by_alias=True) for item in cast(list[EvalCaseInput], body.cases if body else [])]
+        else [item.model_dump(by_alias=True) for item in cast(list[EvalCaseInput], body.cases)]
     )
     cases = parse_cases(raw)
 

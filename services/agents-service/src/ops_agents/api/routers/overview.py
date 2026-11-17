@@ -9,13 +9,13 @@ tools-service answers (`tests/api/test_review_routes_hold_nothing.py`)."""
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, TypeAlias
+from typing import Annotated, TypeAlias
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from ops_engine.store import RunStore
-from ops_service_kit.http import Envelope, Out
+from ops_service_kit.http import Envelope, JsonValue, Out
 from ops_store import isolation
 
 from ...store.cases import CaseStore
@@ -83,7 +83,8 @@ class OverviewCounts(Out):
     open_reviews: int
     overdue_reviews: int
     # The open reviews soonest past their SLA, for the Needs a decision table.
-    urgent_reviews: list[dict[str, Any]]
+    # The review rows as the Reviews list serves them; a model here would add every default key to the reply.
+    urgent_reviews: list[dict[str, JsonValue]]
     cases: CaseCounts
     counts: OverviewListCounts
     # Oldest first: the task waiting longest comes first.

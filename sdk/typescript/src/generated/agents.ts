@@ -3856,8 +3856,7 @@ export interface components {
             approvalsNeeded: 1 | 2;
             /** Blockers */
             blockers: string[];
-            /** Candidate */
-            candidate?: unknown;
+            candidate?: components["schemas"]["PublishEvalSummary"] | null;
             /** Changes */
             changes: string[];
             /** Failing */
@@ -3873,8 +3872,7 @@ export interface components {
             note: string;
             /** Policy */
             policy?: ("always" | "major" | "never") | null;
-            /** Published */
-            published?: unknown;
+            published?: components["schemas"]["PublishEvalSummary"] | null;
             /** Requestedby */
             requestedBy: string;
             /** Reviewreason */
@@ -3993,9 +3991,7 @@ export interface components {
              */
             searched: boolean;
             /** Skills */
-            skills?: {
-                [key: string]: unknown;
-            }[];
+            skills?: components["schemas"]["LoadedSkill"][];
             /** Tookms */
             tookMs: number;
             /** Toolcalls */
@@ -4053,7 +4049,7 @@ export interface components {
         AiStepOut: {
             /** Output */
             output: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Port */
             port: string;
@@ -4340,12 +4336,11 @@ export interface components {
             error?: string | null;
             /** Input */
             input: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Outcome */
             outcome?: string | null;
-            /** Output */
-            output?: unknown;
+            output?: components["schemas"]["JsonValue"];
             /** Row */
             row: number;
             /** Runid */
@@ -4486,7 +4481,7 @@ export interface components {
             events: components["schemas"]["CaseEventView"][];
             /** Fields */
             fields?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Id */
             id: string;
@@ -4529,7 +4524,7 @@ export interface components {
             by: string;
             /** Detail */
             detail: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Id */
             id: string;
@@ -4639,7 +4634,7 @@ export interface components {
             feed: components["schemas"]["CaseFeed"];
             /** Fields */
             fields?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Id */
             id: string;
@@ -4736,7 +4731,7 @@ export interface components {
             customerName: string | null;
             /** Fields */
             fields?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Id */
             id: string;
@@ -4787,7 +4782,7 @@ export interface components {
             caseId: string | null;
             /** Children */
             children?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[] | null;
             /** Durationms */
             durationMs: number;
@@ -4876,10 +4871,7 @@ export interface components {
         };
         /** CaseTypeDetail */
         CaseTypeDetail: {
-            /** Copiedfrom */
-            copiedFrom: {
-                [key: string]: unknown;
-            } | null;
+            copiedFrom: components["schemas"]["CopiedFrom"] | null;
             /** Description */
             description: string;
             /** Id */
@@ -4916,7 +4908,7 @@ export interface components {
             publishedAt: string | null;
             /** Record */
             record: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Savedat */
             savedAt: string;
@@ -4927,10 +4919,7 @@ export interface components {
         };
         /** CaseTypeView */
         CaseTypeView: {
-            /** Copiedfrom */
-            copiedFrom: {
-                [key: string]: unknown;
-            } | null;
+            copiedFrom: components["schemas"]["CopiedFrom"] | null;
             /** Description */
             description: string;
             /** Id */
@@ -4964,7 +4953,7 @@ export interface components {
             customerName: string | null;
             /** Fields */
             fields?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Id */
             id: string;
@@ -5139,6 +5128,13 @@ export interface components {
              */
             teamAccount: boolean;
         };
+        /** CopiedFrom */
+        CopiedFrom: {
+            /** Id */
+            id: string;
+            /** Version */
+            version: number;
+        };
         /** CopyRef */
         CopyRef: {
             /** Detachedat */
@@ -5240,7 +5236,7 @@ export interface components {
         DefinitionInput: {
             /** Definition */
             definition?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Yaml */
             yaml?: string | null;
@@ -5298,7 +5294,7 @@ export interface components {
             steps: {
                 [key: string]: {
                     [key: string]: {
-                        [key: string]: unknown;
+                        [key: string]: components["schemas"]["JsonValue"];
                     };
                 };
             };
@@ -5340,7 +5336,7 @@ export interface components {
             archivedAt?: string | null;
             /** Definition */
             definition: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Digest */
             digest: string;
@@ -5372,6 +5368,18 @@ export interface components {
             message: string;
             /** Node */
             node: string;
+        };
+        /**
+         * DeploymentBudget
+         * @description Caps for the thread a deployment starts; stored as the request gave them, so the names stay snake_case.
+         */
+        DeploymentBudget: {
+            /** Max Calls */
+            max_calls?: number | null;
+            /** Max Cost */
+            max_cost?: string | null;
+            /** Max Tokens */
+            max_tokens?: number | null;
         };
         /** DeploymentInput */
         DeploymentInput: {
@@ -5406,10 +5414,7 @@ export interface components {
         };
         /** DeploymentView */
         DeploymentView: {
-            /** Budget */
-            budget?: {
-                [key: string]: unknown;
-            } | null;
+            budget?: components["schemas"]["DeploymentBudget"] | null;
             /**
              * Channel
              * @enum {string}
@@ -5441,7 +5446,7 @@ export interface components {
         DocumentRead: {
             /** Corrected */
             corrected: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[] | null;
             /** Editable */
             editable: boolean;
@@ -5494,7 +5499,7 @@ export interface components {
             rows: number;
             /** Sample */
             sample: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
         };
         /**
@@ -5582,14 +5587,12 @@ export interface components {
             attempts: components["schemas"]["StepAttempt"][];
             /** Error */
             error: string | null;
-            /** Input */
-            input: unknown;
+            input: components["schemas"]["JsonValue"];
             /** Iteration */
             iteration: number;
             /** Nodeid */
             nodeId: string;
-            /** Output */
-            output: unknown;
+            output: components["schemas"]["JsonValue"];
             /** Port */
             port: string | null;
             /** Status */
@@ -6864,7 +6867,7 @@ export interface components {
             boxes?: components["schemas"]["ReadBox"][];
             /** Bysource */
             bySource?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             citation: components["schemas"]["ReadCitation"] | null;
             /** Confidence */
@@ -6874,12 +6877,10 @@ export interface components {
              * @default false
              */
             conflict: boolean;
-            /** Extractedvalue */
-            extractedValue?: unknown;
+            extractedValue?: components["schemas"]["JsonValue"];
             /** Needsreview */
             needsReview: boolean;
-            /** Value */
-            value?: unknown;
+            value?: components["schemas"]["JsonValue"];
         };
         /** FieldReview */
         FieldReview: {
@@ -6892,10 +6893,8 @@ export interface components {
              * @enum {string}
              */
             outcome: "kept" | "taken" | "conflict";
-            /** Template */
-            template?: unknown;
-            /** Yours */
-            yours?: unknown;
+            template?: components["schemas"]["JsonValue"];
+            yours?: components["schemas"]["JsonValue"];
         };
         /** FileLink */
         FileLink: {
@@ -6915,7 +6914,7 @@ export interface components {
         FormFields: {
             /** Schema */
             schema: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Takesfiles */
             takesFiles?: boolean | null;
@@ -7081,7 +7080,7 @@ export interface components {
         GraphNode: {
             /** Data */
             data: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Id */
             id: string;
@@ -7421,6 +7420,15 @@ export interface components {
             /** Threadid */
             threadId: string;
         };
+        /** InjectionTally */
+        InjectionTally: {
+            /** Passed */
+            passed: number;
+            /** Regressions */
+            regressions: number;
+            /** Total */
+            total: number;
+        };
         /** InstallInput */
         InstallInput: {
             /** Copies */
@@ -7495,6 +7503,7 @@ export interface components {
              */
             message: string;
         };
+        JsonValue: unknown;
         /** KindRow */
         KindRow: {
             /** Active */
@@ -7727,6 +7736,27 @@ export interface components {
             /** Version */
             version: number;
         };
+        /**
+         * LoadedSkill
+         * @description A skill a turn loaded, as the kernel journals it (`skills.loaded_entry`); part and inputs are left out when
+         *     there are none.
+         */
+        LoadedSkill: {
+            /** Inputs */
+            inputs?: {
+                [key: string]: string;
+            } | null;
+            /** Matched */
+            matched: string;
+            /** Name */
+            name: string;
+            /** Part */
+            part?: string | null;
+            /** Skillid */
+            skillId: string;
+            /** Version */
+            version: number;
+        };
         /** MailboxIn */
         MailboxIn: {
             /** Address */
@@ -7887,7 +7917,7 @@ export interface components {
         MemoryExport: {
             /** Audit */
             audit: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /** Memories */
             memories: components["schemas"]["MemoryView"][];
@@ -8017,14 +8047,14 @@ export interface components {
             outputsUnless?: components["schemas"]["OptionalPortView"][];
             /** Parameters */
             parameters: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             retry: components["schemas"]["RetryView"];
             /** Timeoutseconds */
             timeoutSeconds: number;
             /** Ui */
             ui: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Unavailable */
             unavailable?: string | null;
@@ -8073,10 +8103,9 @@ export interface components {
          * @description One input a reviewer may set when choosing an option, declared from the operation's input schema.
          */
         OptionInput: {
-            /** Default */
-            default?: unknown;
+            default?: components["schemas"]["JsonValue"];
             /** Enum */
-            enum?: unknown[] | null;
+            enum?: components["schemas"]["JsonValue"][] | null;
             /** Maximum */
             maximum?: number | null;
             /** Minimum */
@@ -8103,8 +8132,7 @@ export interface components {
             parameter: string;
             /** Port */
             port: string;
-            /** Value */
-            value: unknown;
+            value: components["schemas"]["JsonValue"];
         };
         /**
          * OptionsPage
@@ -8144,7 +8172,7 @@ export interface components {
             runsInFlight: components["schemas"]["OverviewRunRow"][];
             /** Urgentreviews */
             urgentReviews: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /** Waitingforme */
             waitingForMe: components["schemas"]["OverviewTaskRow"][];
@@ -8354,6 +8382,23 @@ export interface components {
             /** Reviewrequired */
             reviewRequired?: boolean | null;
         };
+        /**
+         * PublishEvalSummary
+         * @description An eval run against one agent version, as a publish request shows it. Nothing sends one yet: both are null.
+         */
+        PublishEvalSummary: {
+            injection: components["schemas"]["InjectionTally"];
+            /** Passed */
+            passed: number;
+            /** Ranat */
+            ranAt: string;
+            /** Regressions */
+            regressions: number;
+            /** Runid */
+            runId: string;
+            /** Total */
+            total: number;
+        };
         /** PublishIn */
         PublishIn: {
             /** Version */
@@ -8429,7 +8474,7 @@ export interface components {
             decisionReason?: string | null;
             egressHost?: components["schemas"]["EgressHostRef"] | null;
             /** Evidence */
-            evidence: unknown[];
+            evidence: components["schemas"]["Evidence"][];
             /** Id */
             id: string;
             /**
@@ -8524,7 +8569,7 @@ export interface components {
             };
             /** Values */
             values: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /** Received */
@@ -8689,7 +8734,7 @@ export interface components {
         ReviewOption: {
             /** Call */
             call?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Consequence */
             consequence?: string | null;
@@ -8875,7 +8920,7 @@ export interface components {
             id: string;
             /** Input */
             input: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Mode */
             mode: string;
@@ -8883,8 +8928,7 @@ export interface components {
             outcome: string | null;
             /** Outcometext */
             outcomeText?: string | null;
-            /** Output */
-            output: unknown;
+            output: components["schemas"]["JsonValue"];
             result: components["schemas"]["RunResult"] | null;
             startedBy?: components["schemas"]["ActorView"] | null;
             /** Status */
@@ -8946,7 +8990,7 @@ export interface components {
             cost: components["schemas"]["CostTotals"] | null;
             /** Crashed */
             crashed: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Createdat */
             createdAt: string;
@@ -8998,8 +9042,7 @@ export interface components {
             node: string | null;
             /** Outcome */
             outcome: string;
-            /** Output */
-            output: unknown;
+            output: components["schemas"]["JsonValue"];
         };
         /** RunRow */
         RunRow: {
@@ -9021,7 +9064,7 @@ export interface components {
             id: string;
             /** Input */
             input: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Mode */
             mode: string;
@@ -9029,8 +9072,7 @@ export interface components {
             outcome: string | null;
             /** Outcometext */
             outcomeText?: string | null;
-            /** Output */
-            output: unknown;
+            output: components["schemas"]["JsonValue"];
             startedBy?: components["schemas"]["ActorView"] | null;
             /** Status */
             status: string;
@@ -9100,19 +9142,14 @@ export interface components {
             node: string;
             /** Payload */
             payload: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /** SavedCase */
         SavedCase: {
             /** Checks */
-            checks: {
-                [key: string]: unknown;
-            }[];
-            /** Context */
-            context: {
-                [key: string]: unknown;
-            } | null;
+            checks: components["schemas"]["SavedCaseCheck"][];
+            context: components["schemas"]["SavedCaseContext"] | null;
             /** Createdat */
             createdAt: string;
             /** Createdby */
@@ -9129,6 +9166,20 @@ export interface components {
             source: string;
             /** Status */
             status: string;
+        };
+        /** SavedCaseCheck */
+        SavedCaseCheck: {
+            /** Text */
+            text?: string | null;
+            /** Tool */
+            tool?: string | null;
+            /** Type */
+            type: string;
+        };
+        /** SavedCaseContext */
+        SavedCaseContext: {
+            /** Collections */
+            collections?: string[];
         };
         /** SavedCases */
         SavedCases: {
@@ -9234,6 +9285,37 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** SkillActivity */
+        SkillActivity: {
+            /** Agents */
+            agents: string[];
+            /** Loads30D */
+            loads30d: number;
+            /** Loadsperday */
+            loadsPerDay: components["schemas"]["SkillLoadsDay"][];
+            /** Samples */
+            samples: components["schemas"]["SkillTrace"][];
+            /** Successrate */
+            successRate: number | null;
+        };
+        /** SkillCitation */
+        SkillCitation: {
+            /** Detail */
+            detail?: string | null;
+            /** Href */
+            href?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "document" | "case" | "run" | "chat" | "template" | "description";
+            /** Label */
+            label: string;
+            /** Section */
+            section: string;
+        };
         /** SkillContent */
         SkillContent: {
             /** Guardrails */
@@ -9256,9 +9338,7 @@ export interface components {
             /** Refusal */
             refusal?: string | null;
             /** Resources */
-            resources: {
-                [key: string]: unknown;
-            }[];
+            resources: components["schemas"]["SkillResource"][];
             /** Slug */
             slug: string;
             /** Tools */
@@ -9321,10 +9401,7 @@ export interface components {
         };
         /** SkillDetail */
         SkillDetail: {
-            /** Activity */
-            activity: {
-                [key: string]: unknown;
-            };
+            activity: components["schemas"]["SkillActivity"];
             content: components["schemas"]["SkillContent"];
             /** Draftversion */
             draftVersion: number | null;
@@ -9358,23 +9435,15 @@ export interface components {
             ownerTeam: string;
             /** Parts */
             parts?: components["schemas"]["SkillPartSummary"][];
-            /** Pendingreview */
-            pendingReview?: {
-                [key: string]: unknown;
-            } | null;
+            pendingReview?: components["schemas"]["SkillPendingReview"] | null;
             /** Pendingreviewid */
             pendingReviewId?: string | null;
-            /** Provenance */
-            provenance: {
-                [key: string]: unknown;
-            };
+            provenance: components["schemas"]["SkillProvenance"];
             publishCheck: components["schemas"]["SkillPublishCheck"];
             /** Publishedversion */
             publishedVersion: number | null;
             /** Runs */
-            runs: {
-                [key: string]: unknown;
-            }[];
+            runs: components["schemas"]["JsonValue"][];
             /** Slug */
             slug: string;
             /**
@@ -9383,9 +9452,7 @@ export interface components {
              */
             status: "draft" | "in_review" | "published" | "deprecated";
             /** Tests */
-            tests: {
-                [key: string]: unknown;
-            }[];
+            tests: components["schemas"]["JsonValue"][];
             /** Tokens */
             tokens: number;
             /** Toolcount */
@@ -9496,6 +9563,17 @@ export interface components {
                 [key: string]: number;
             };
         };
+        /** SkillLoadsDay */
+        SkillLoadsDay: {
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Date */
+            date: string;
+            /** Total */
+            total: number;
+        };
         /** SkillOptions */
         SkillOptions: {
             /** Knowledgebases */
@@ -9566,6 +9644,31 @@ export interface components {
             /** Usewhen */
             useWhen: string;
         };
+        /** SkillPendingReview */
+        SkillPendingReview: {
+            /** Approvals */
+            approvals: number;
+            /**
+             * Editclass
+             * @enum {string}
+             */
+            editClass: "free" | "re_test" | "re_approval";
+            /** Id */
+            id: string;
+            /** Needed */
+            needed: number;
+            /** Version */
+            version: number;
+        };
+        /** SkillProvenance */
+        SkillProvenance: {
+            /** Citations */
+            citations: components["schemas"]["SkillCitation"][];
+            /** Detail */
+            detail: string;
+            /** Origin */
+            origin: string;
+        };
         /** SkillPublishCheck */
         SkillPublishCheck: {
             /** Approversneeded */
@@ -9609,6 +9712,35 @@ export interface components {
             /** Version */
             version: number;
         };
+        /**
+         * SkillResource
+         * @description A file or a text template kept on a skill version; a file is stored through the Files API.
+         */
+        SkillResource: {
+            /** Addedat */
+            addedAt: string;
+            /** Addedby */
+            addedBy: string;
+            /** Blocked */
+            blocked?: string | null;
+            /** Body */
+            body?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Fileid */
+            fileId?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "file" | "template";
+            /** Name */
+            name: string;
+            /** Size */
+            size?: number | null;
+        };
         /** SkillToolRef */
         SkillToolRef: {
             /** Access */
@@ -9621,6 +9753,28 @@ export interface components {
             system: string;
             /** Toolid */
             toolId: string;
+        };
+        /** SkillTrace */
+        SkillTrace: {
+            /** Agentname */
+            agentName: string;
+            /** At */
+            at: string;
+            /** Id */
+            id: string;
+            /** Input */
+            input: string;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "completed" | "handed_off" | "failed";
+            /** Tookms */
+            tookMs: number;
+            /** Toolcalls */
+            toolCalls: string[];
+            /** Version */
+            version: number;
         };
         /** SkillUsage */
         SkillUsage: {
@@ -9682,9 +9836,7 @@ export interface components {
              */
             state: "draft" | "in_review" | "published" | "superseded" | "deprecated" | "rejected";
             /** Testrun */
-            testRun: {
-                [key: string]: unknown;
-            } | null;
+            testRun: null;
             /** Tokens */
             tokens: number;
             /** Version */
@@ -9692,8 +9844,7 @@ export interface components {
         };
         /** SlaEvent */
         SlaEvent: {
-            /** Data */
-            data?: unknown;
+            data?: components["schemas"]["JsonValue"];
             /** Event */
             event: string;
         };
@@ -9744,7 +9895,7 @@ export interface components {
             kind: string;
             /** Schema */
             schema: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Takesfiles */
             takesFiles: boolean;
@@ -9788,12 +9939,10 @@ export interface components {
             error: string | null;
             /** Finishedat */
             finishedAt: string | null;
-            /** Input */
-            input: unknown;
+            input: components["schemas"]["JsonValue"];
             /** Key */
             key: string;
-            /** Output */
-            output: unknown;
+            output: components["schemas"]["JsonValue"];
             /** Port */
             port: string | null;
             /** Startedat */
@@ -10037,7 +10186,7 @@ export interface components {
             consequence: string | null;
             /** Inputs */
             inputs: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /** Label */
             label: string;
@@ -10093,7 +10242,7 @@ export interface components {
             collapsed: boolean;
             /** Data */
             data: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /**
              * Region
@@ -10117,15 +10266,12 @@ export interface components {
             status: string;
             /** Values */
             values: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
         };
         /** TaskTypeDetail */
         TaskTypeDetail: {
-            /** Copiedfrom */
-            copiedFrom: {
-                [key: string]: unknown;
-            } | null;
+            copiedFrom: components["schemas"]["CopiedFrom"] | null;
             /** Description */
             description: string;
             /** Id */
@@ -10162,7 +10308,7 @@ export interface components {
             publishedAt: string | null;
             /** Record */
             record: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Savedat */
             savedAt: string;
@@ -10173,10 +10319,7 @@ export interface components {
         };
         /** TaskTypeView */
         TaskTypeView: {
-            /** Copiedfrom */
-            copiedFrom: {
-                [key: string]: unknown;
-            } | null;
+            copiedFrom: components["schemas"]["CopiedFrom"] | null;
             /** Description */
             description: string;
             /** Id */
@@ -10346,9 +10489,7 @@ export interface components {
         /** ThreadEventResult */
         ThreadEventResult: {
             /** Restarted */
-            restarted: {
-                [key: string]: unknown;
-            }[];
+            restarted: components["schemas"]["TimerRestart"][];
             /** Type */
             type: string;
         };
@@ -10389,7 +10530,7 @@ export interface components {
             assignee?: string | null;
             /** Calls */
             calls?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Candecide */
             canDecide?: boolean | null;
@@ -10419,7 +10560,7 @@ export interface components {
             dueAt?: string | null;
             /** Error */
             error?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Evidence */
             evidence: components["schemas"]["Evidence"][];
@@ -10448,7 +10589,7 @@ export interface components {
             reply?: components["schemas"]["ReplyPreview"] | null;
             /** Resume */
             resume?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /**
              * Risk
@@ -10492,7 +10633,7 @@ export interface components {
             graph: string;
             /** Interrupt */
             interrupt: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Next */
             next: string[];
@@ -10503,7 +10644,7 @@ export interface components {
             threadId: string;
             /** Values */
             values: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Version */
             version: number | null;
@@ -10516,7 +10657,7 @@ export interface components {
             graph: string;
             /** Metadata */
             metadata: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Status */
             status: string;
@@ -10526,6 +10667,15 @@ export interface components {
             updatedAt: string;
             /** Version */
             version: number | null;
+        };
+        /** TimerRestart */
+        TimerRestart: {
+            /** Dueat */
+            dueAt: string;
+            /** Kind */
+            kind: string;
+            /** Timerid */
+            timerId: string;
         };
         /** ToolApp */
         ToolApp: {
@@ -10659,7 +10809,7 @@ export interface components {
             id: string;
             /** Inputschema */
             inputSchema?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Label */
             label: string;
@@ -10693,7 +10843,7 @@ export interface components {
             id: string;
             /** Inputschema */
             inputSchema: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /**
              * Kind
@@ -10777,8 +10927,7 @@ export interface components {
             key: string;
             /** Label */
             label: string;
-            /** Raw */
-            raw?: unknown;
+            raw?: components["schemas"]["JsonValue"];
             /** Required */
             required: boolean;
             /** Type */
@@ -10800,6 +10949,13 @@ export interface components {
         };
         /** UpdateExpect */
         UpdateExpect: {
+            /** Digest */
+            digest?: string | null;
+            /** Recorddigest */
+            recordDigest?: string | null;
+        };
+        /** UpdateExpectView */
+        UpdateExpectView: {
             /** Digest */
             digest?: string | null;
             /** Recorddigest */
@@ -10832,7 +10988,7 @@ export interface components {
             draftOpen: boolean;
             /** Edits */
             edits: string[];
-            expect?: components["schemas"]["UpdateExpect"];
+            expect?: components["schemas"]["UpdateExpectView"];
             /** Fields */
             fields?: components["schemas"]["FieldReview"][];
             /** Fromversion */
@@ -11044,7 +11200,7 @@ export interface components {
             canPublish?: boolean | null;
             /** Dataschema */
             dataSchema: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Name */
             name: string;
@@ -11052,7 +11208,7 @@ export interface components {
             requiresTools?: string[];
             /** Sample */
             sample?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /**
              * Status
@@ -11066,7 +11222,7 @@ export interface components {
             teamName?: string | null;
             /** Tree */
             tree: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Updatedat */
             updatedAt?: string | null;
@@ -13746,7 +13902,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["EvalRunInput"] | null;
+                "application/json": components["schemas"]["EvalRunInput"];
             };
         };
         responses: {

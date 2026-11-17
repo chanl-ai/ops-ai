@@ -1090,7 +1090,14 @@
             "type": "array"
           },
           "candidate": {
-            "title": "Candidate"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublishEvalSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "changes": {
             "items": {
@@ -1170,7 +1177,14 @@
             "title": "Policy"
           },
           "published": {
-            "title": "Published"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublishEvalSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "requestedBy": {
             "title": "Requestedby",
@@ -1510,8 +1524,7 @@
           },
           "skills": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/LoadedSkill"
             },
             "title": "Skills",
             "type": "array"
@@ -1684,7 +1697,9 @@
         "additionalProperties": false,
         "properties": {
           "output": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Output",
             "type": "object"
           },
@@ -2594,7 +2609,9 @@
             "title": "Error"
           },
           "input": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Input",
             "type": "object"
           },
@@ -2610,7 +2627,7 @@
             "title": "Outcome"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "row": {
             "title": "Row",
@@ -3063,7 +3080,9 @@
           "fields": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -3209,7 +3228,9 @@
             "type": "string"
           },
           "detail": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Detail",
             "type": "object"
           },
@@ -3579,7 +3600,9 @@
           "fields": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -4002,7 +4025,9 @@
           "fields": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -4184,7 +4209,9 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -4489,14 +4516,12 @@
           "copiedFrom": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/CopiedFrom"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Copiedfrom"
+            ]
           },
           "description": {
             "title": "Description",
@@ -4611,7 +4636,9 @@
             "title": "Publishedat"
           },
           "record": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Record",
             "type": "object"
           },
@@ -4644,14 +4671,12 @@
           "copiedFrom": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/CopiedFrom"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Copiedfrom"
+            ]
           },
           "description": {
             "title": "Description",
@@ -4766,7 +4791,9 @@
           "fields": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -5400,6 +5427,25 @@
         "title": "ConnectWait",
         "type": "object"
       },
+      "CopiedFrom": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ],
+        "title": "CopiedFrom",
+        "type": "object"
+      },
       "CopyRef": {
         "additionalProperties": false,
         "properties": {
@@ -5715,7 +5761,9 @@
           "definition": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -5873,7 +5921,9 @@
           "steps": {
             "additionalProperties": {
               "additionalProperties": {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               "type": "object"
@@ -6000,7 +6050,9 @@
             "title": "Archivedat"
           },
           "definition": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Definition",
             "type": "object"
           },
@@ -6113,6 +6165,48 @@
         "title": "DefinitionWarning",
         "type": "object"
       },
+      "DeploymentBudget": {
+        "additionalProperties": false,
+        "description": "Caps for the thread a deployment starts; stored as the request gave them, so the names stay snake_case.",
+        "properties": {
+          "max_calls": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Calls"
+          },
+          "max_cost": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Cost"
+          },
+          "max_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Tokens"
+          }
+        },
+        "title": "DeploymentBudget",
+        "type": "object"
+      },
       "DeploymentInput": {
         "additionalProperties": false,
         "properties": {
@@ -6191,14 +6285,12 @@
           "budget": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/DeploymentBudget"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Budget"
+            ]
           },
           "channel": {
             "enum": [
@@ -6262,7 +6354,9 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -6425,7 +6519,9 @@
           },
           "sample": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "title": "Sample",
@@ -6664,7 +6760,7 @@
             "title": "Error"
           },
           "input": {
-            "title": "Input"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "iteration": {
             "title": "Iteration",
@@ -6675,7 +6771,7 @@
             "type": "string"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "port": {
             "anyOf": [
@@ -9519,7 +9615,9 @@
           "bySource": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -9555,14 +9653,14 @@
             "type": "boolean"
           },
           "extractedValue": {
-            "title": "Extractedvalue"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "needsReview": {
             "title": "Needsreview",
             "type": "boolean"
           },
           "value": {
-            "title": "Value"
+            "$ref": "#/components/schemas/JsonValue"
           }
         },
         "required": [
@@ -9594,10 +9692,10 @@
             "type": "string"
           },
           "template": {
-            "title": "Template"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "yours": {
-            "title": "Yours"
+            "$ref": "#/components/schemas/JsonValue"
           }
         },
         "required": [
@@ -9657,7 +9755,9 @@
         "additionalProperties": false,
         "properties": {
           "schema": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Schema",
             "type": "object"
           },
@@ -10085,7 +10185,9 @@
         "additionalProperties": true,
         "properties": {
           "data": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Data",
             "type": "object"
           },
@@ -11010,6 +11112,30 @@
         "title": "InboxPosted",
         "type": "object"
       },
+      "InjectionTally": {
+        "additionalProperties": false,
+        "properties": {
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "regressions": {
+            "title": "Regressions",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "passed",
+          "total",
+          "regressions"
+        ],
+        "title": "InjectionTally",
+        "type": "object"
+      },
       "InstallInput": {
         "additionalProperties": false,
         "properties": {
@@ -11239,6 +11365,7 @@
         "title": "JobInput",
         "type": "object"
       },
+      "JsonValue": {},
       "KindRow": {
         "additionalProperties": false,
         "properties": {
@@ -11944,6 +12071,61 @@
         "title": "LiveVersion",
         "type": "object"
       },
+      "LoadedSkill": {
+        "additionalProperties": false,
+        "description": "A skill a turn loaded, as the kernel journals it (`skills.loaded_entry`); part and inputs are left out when\nthere are none.",
+        "properties": {
+          "inputs": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inputs"
+          },
+          "matched": {
+            "title": "Matched",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "part": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part"
+          },
+          "skillId": {
+            "title": "Skillid",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "skillId",
+          "name",
+          "version",
+          "matched"
+        ],
+        "title": "LoadedSkill",
+        "type": "object"
+      },
       "MailboxIn": {
         "additionalProperties": false,
         "properties": {
@@ -12591,7 +12773,9 @@
         "properties": {
           "audit": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "title": "Audit",
@@ -12949,7 +13133,9 @@
             "type": "array"
           },
           "parameters": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Parameters",
             "type": "object"
           },
@@ -12961,7 +13147,9 @@
             "type": "number"
           },
           "ui": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Ui",
             "type": "object"
           },
@@ -13118,12 +13306,14 @@
         "description": "One input a reviewer may set when choosing an option, declared from the operation's input schema.",
         "properties": {
           "default": {
-            "title": "Default"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "enum": {
             "anyOf": [
               {
-                "items": {},
+                "items": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "array"
               },
               {
@@ -13211,7 +13401,7 @@
             "type": "string"
           },
           "value": {
-            "title": "Value"
+            "$ref": "#/components/schemas/JsonValue"
           }
         },
         "required": [
@@ -13330,7 +13520,9 @@
           },
           "urgentReviews": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "title": "Urgentreviews",
@@ -13978,6 +14170,45 @@
         "title": "PublishDecisionFields",
         "type": "object"
       },
+      "PublishEvalSummary": {
+        "additionalProperties": false,
+        "description": "An eval run against one agent version, as a publish request shows it. Nothing sends one yet: both are null.",
+        "properties": {
+          "injection": {
+            "$ref": "#/components/schemas/InjectionTally"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "ranAt": {
+            "title": "Ranat",
+            "type": "string"
+          },
+          "regressions": {
+            "title": "Regressions",
+            "type": "integer"
+          },
+          "runId": {
+            "title": "Runid",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "runId",
+          "ranAt",
+          "passed",
+          "total",
+          "regressions",
+          "injection"
+        ],
+        "title": "PublishEvalSummary",
+        "type": "object"
+      },
       "PublishIn": {
         "additionalProperties": false,
         "properties": {
@@ -14249,7 +14480,9 @@
             ]
           },
           "evidence": {
-            "items": {},
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
             "title": "Evidence",
             "type": "array"
           },
@@ -14533,7 +14766,9 @@
             "type": "object"
           },
           "values": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Values",
             "type": "object"
           }
@@ -15002,7 +15237,9 @@
           "call": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -15558,7 +15795,9 @@
           "input": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -15594,7 +15833,7 @@
             "title": "Outcometext"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "result": {
             "anyOf": [
@@ -15867,7 +16106,9 @@
           "crashed": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -16047,7 +16288,7 @@
             "type": "string"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           }
         },
         "required": [
@@ -16125,7 +16366,9 @@
           "input": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -16161,7 +16404,7 @@
             "title": "Outcometext"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "startedBy": {
             "anyOf": [
@@ -16390,7 +16633,9 @@
             "type": "string"
           },
           "payload": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Payload",
             "type": "object"
           }
@@ -16408,8 +16653,7 @@
         "properties": {
           "checks": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SavedCaseCheck"
             },
             "title": "Checks",
             "type": "array"
@@ -16417,14 +16661,12 @@
           "context": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/SavedCaseContext"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Context"
+            ]
           },
           "createdAt": {
             "title": "Createdat",
@@ -16472,6 +16714,56 @@
           "createdAt"
         ],
         "title": "SavedCase",
+        "type": "object"
+      },
+      "SavedCaseCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "SavedCaseCheck",
+        "type": "object"
+      },
+      "SavedCaseContext": {
+        "additionalProperties": false,
+        "properties": {
+          "collections": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Collections",
+            "type": "array"
+          }
+        },
+        "title": "SavedCaseContext",
         "type": "object"
       },
       "SavedCases": {
@@ -16818,6 +17110,115 @@
         "title": "Skill",
         "type": "object"
       },
+      "SkillActivity": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "loads30d": {
+            "title": "Loads30D",
+            "type": "integer"
+          },
+          "loadsPerDay": {
+            "items": {
+              "$ref": "#/components/schemas/SkillLoadsDay"
+            },
+            "title": "Loadsperday",
+            "type": "array"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/SkillTrace"
+            },
+            "title": "Samples",
+            "type": "array"
+          },
+          "successRate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Successrate"
+          }
+        },
+        "required": [
+          "agents",
+          "loadsPerDay",
+          "loads30d",
+          "successRate",
+          "samples"
+        ],
+        "title": "SkillActivity",
+        "type": "object"
+      },
+      "SkillCitation": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "href": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Href"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "document",
+              "case",
+              "run",
+              "chat",
+              "template",
+              "description"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "section"
+        ],
+        "title": "SkillCitation",
+        "type": "object"
+      },
       "SkillContent": {
         "additionalProperties": false,
         "properties": {
@@ -16878,8 +17279,7 @@
           },
           "resources": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SkillResource"
             },
             "title": "Resources",
             "type": "array"
@@ -17032,9 +17432,7 @@
         "additionalProperties": false,
         "properties": {
           "activity": {
-            "additionalProperties": true,
-            "title": "Activity",
-            "type": "object"
+            "$ref": "#/components/schemas/SkillActivity"
           },
           "content": {
             "$ref": "#/components/schemas/SkillContent"
@@ -17141,14 +17539,12 @@
           "pendingReview": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/SkillPendingReview"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Pendingreview"
+            ]
           },
           "pendingReviewId": {
             "anyOf": [
@@ -17162,9 +17558,7 @@
             "title": "Pendingreviewid"
           },
           "provenance": {
-            "additionalProperties": true,
-            "title": "Provenance",
-            "type": "object"
+            "$ref": "#/components/schemas/SkillProvenance"
           },
           "publishCheck": {
             "$ref": "#/components/schemas/SkillPublishCheck"
@@ -17182,8 +17576,7 @@
           },
           "runs": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/JsonValue"
             },
             "title": "Runs",
             "type": "array"
@@ -17204,8 +17597,7 @@
           },
           "tests": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/JsonValue"
             },
             "title": "Tests",
             "type": "array"
@@ -17539,6 +17931,33 @@
         "title": "SkillList",
         "type": "object"
       },
+      "SkillLoadsDay": {
+        "additionalProperties": false,
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "counts",
+          "total"
+        ],
+        "title": "SkillLoadsDay",
+        "type": "object"
+      },
       "SkillOptions": {
         "additionalProperties": false,
         "properties": {
@@ -17728,6 +18147,72 @@
         "title": "SkillPartSummary",
         "type": "object"
       },
+      "SkillPendingReview": {
+        "additionalProperties": false,
+        "properties": {
+          "approvals": {
+            "title": "Approvals",
+            "type": "integer"
+          },
+          "editClass": {
+            "enum": [
+              "free",
+              "re_test",
+              "re_approval"
+            ],
+            "title": "Editclass",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "needed": {
+            "title": "Needed",
+            "type": "integer"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "editClass",
+          "approvals",
+          "needed"
+        ],
+        "title": "SkillPendingReview",
+        "type": "object"
+      },
+      "SkillProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/SkillCitation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "origin": {
+            "title": "Origin",
+            "type": "string"
+          }
+        },
+        "required": [
+          "origin",
+          "detail",
+          "citations"
+        ],
+        "title": "SkillProvenance",
+        "type": "object"
+      },
       "SkillPublishCheck": {
         "additionalProperties": false,
         "properties": {
@@ -17848,6 +18333,100 @@
         "title": "SkillRendered",
         "type": "object"
       },
+      "SkillResource": {
+        "additionalProperties": false,
+        "description": "A file or a text template kept on a skill version; a file is stored through the Files API.",
+        "properties": {
+          "addedAt": {
+            "title": "Addedat",
+            "type": "string"
+          },
+          "addedBy": {
+            "title": "Addedby",
+            "type": "string"
+          },
+          "blocked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "fileId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fileid"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "file",
+              "template"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "addedAt",
+          "addedBy"
+        ],
+        "title": "SkillResource",
+        "type": "object"
+      },
       "SkillToolRef": {
         "additionalProperties": false,
         "properties": {
@@ -17880,6 +18459,63 @@
           "access"
         ],
         "title": "SkillToolRef",
+        "type": "object"
+      },
+      "SkillTrace": {
+        "additionalProperties": false,
+        "properties": {
+          "agentName": {
+            "title": "Agentname",
+            "type": "string"
+          },
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input": {
+            "title": "Input",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "completed",
+              "handed_off",
+              "failed"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "tookMs": {
+            "title": "Tookms",
+            "type": "integer"
+          },
+          "toolCalls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Toolcalls",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "agentName",
+          "version",
+          "input",
+          "outcome",
+          "toolCalls",
+          "tookMs"
+        ],
+        "title": "SkillTrace",
         "type": "object"
       },
       "SkillUsage": {
@@ -18068,16 +18704,8 @@
             "type": "string"
           },
           "testRun": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Testrun"
+            "title": "Testrun",
+            "type": "null"
           },
           "tokens": {
             "title": "Tokens",
@@ -18107,7 +18735,7 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "title": "Data"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "event": {
             "title": "Event",
@@ -18254,7 +18882,9 @@
             "type": "string"
           },
           "schema": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Schema",
             "type": "object"
           },
@@ -18374,14 +19004,14 @@
             "title": "Finishedat"
           },
           "input": {
-            "title": "Input"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "key": {
             "title": "Key",
             "type": "string"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "port": {
             "anyOf": [
@@ -19112,7 +19742,9 @@
           },
           "inputs": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "title": "Inputs",
@@ -19260,7 +19892,9 @@
             "type": "boolean"
           },
           "data": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Data",
             "type": "object"
           },
@@ -19346,7 +19980,9 @@
           "values": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -19374,14 +20010,12 @@
           "copiedFrom": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/CopiedFrom"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Copiedfrom"
+            ]
           },
           "description": {
             "title": "Description",
@@ -19496,7 +20130,9 @@
             "title": "Publishedat"
           },
           "record": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Record",
             "type": "object"
           },
@@ -19529,14 +20165,12 @@
           "copiedFrom": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/CopiedFrom"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Copiedfrom"
+            ]
           },
           "description": {
             "title": "Description",
@@ -20061,8 +20695,7 @@
         "properties": {
           "restarted": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/TimerRestart"
             },
             "title": "Restarted",
             "type": "array"
@@ -20203,7 +20836,9 @@
           "calls": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -20353,7 +20988,9 @@
           "error": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -20468,7 +21105,9 @@
           "resume": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -20658,7 +21297,9 @@
           "interrupt": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -20693,7 +21334,9 @@
             "type": "string"
           },
           "values": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Values",
             "type": "object"
           },
@@ -20737,7 +21380,9 @@
             "type": "string"
           },
           "metadata": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Metadata",
             "type": "object"
           },
@@ -20775,6 +21420,30 @@
           "updatedAt"
         ],
         "title": "ThreadView",
+        "type": "object"
+      },
+      "TimerRestart": {
+        "additionalProperties": false,
+        "properties": {
+          "dueAt": {
+            "title": "Dueat",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "timerId": {
+            "title": "Timerid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timerId",
+          "kind",
+          "dueAt"
+        ],
+        "title": "TimerRestart",
         "type": "object"
       },
       "ToolApp": {
@@ -21128,7 +21797,9 @@
           "inputSchema": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -21227,7 +21898,9 @@
             "type": "string"
           },
           "inputSchema": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Inputschema",
             "type": "object"
           },
@@ -21467,7 +22140,7 @@
             "type": "string"
           },
           "raw": {
-            "title": "Raw"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "required": {
             "title": "Required",
@@ -21558,6 +22231,35 @@
         "title": "UpdateExpect",
         "type": "object"
       },
+      "UpdateExpectView": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
+          "recordDigest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorddigest"
+          }
+        },
+        "title": "UpdateExpectView",
+        "type": "object"
+      },
       "UpdateInput": {
         "additionalProperties": false,
         "properties": {
@@ -21632,7 +22334,7 @@
             "type": "array"
           },
           "expect": {
-            "$ref": "#/components/schemas/UpdateExpect"
+            "$ref": "#/components/schemas/UpdateExpectView"
           },
           "fields": {
             "items": {
@@ -22211,7 +22913,9 @@
             "title": "Canpublish"
           },
           "dataSchema": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Dataschema",
             "type": "object"
           },
@@ -22229,7 +22933,9 @@
           "sample": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -22272,7 +22978,9 @@
             "title": "Teamname"
           },
           "tree": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Tree",
             "type": "object"
           },
@@ -28054,15 +28762,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/EvalRunInput"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Body"
+                "$ref": "#/components/schemas/EvalRunInput"
               }
             }
           }

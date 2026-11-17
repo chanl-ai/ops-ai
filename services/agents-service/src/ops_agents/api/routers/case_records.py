@@ -22,7 +22,7 @@ from ops_access import can
 from ops_engine.store import RunStore
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound, Unprocessable
-from ops_service_kit.http import Envelope, In, ListResult, Out
+from ops_service_kit.http import Envelope, In, JsonValue, ListResult, Out
 from ops_service_kit.listing import ListQuery
 from ops_store import isolation
 
@@ -99,7 +99,7 @@ class CaseView(Out):
     # Set while the case waits on the customer: both deadlines are paused from then.
     paused_since: str | None
     # What its producer read or worked out, by name (a workflow's Open or Add to case fields).
-    fields: dict[str, Any] | None = None
+    fields: dict[str, JsonValue] | None = None
     created_by: str
     created_at: str
     updated_at: str
@@ -112,7 +112,7 @@ class CaseEventView(Out):
     id: str
     kind: str
     ref: str | None
-    detail: dict[str, Any]
+    detail: dict[str, JsonValue]
     by: str
     at: str
 
@@ -173,7 +173,7 @@ class TypedField(Out):
     label: str
     type: str
     display: str
-    raw: Any = None
+    raw: JsonValue = None
     file_id: str | None
     required: bool
     declared: bool

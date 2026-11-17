@@ -18,6 +18,7 @@ from typing import Any, cast
 from ops_access import can
 from ops_agent_kernel.layout import required_tools
 from ops_agents.activities.agent_limits import limits_of
+from ops_agents.activities.agent_limits import wire as wire_limits
 from ops_agents.activities.catalog import AgentDefinition, Catalog, Fragment, GuardrailRule, SkillPinRule, WidgetPinRule
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable
 from ops_service_kit.logging import get_logger
@@ -168,7 +169,7 @@ def agent_review_body(
         "blockers": [],
         "changes": v["changes"],
         # The reviewer approves what callers may change along with the agent itself.
-        "limits": limits_of(spec).wire(),
+        "limits": wire_limits(limits_of(spec)),
         # And sees each pinned guardrail with its switch: one off is not checked once this version is live.
         "guardrailPins": [
             {
@@ -451,7 +452,7 @@ def agent_view(row: dict[str, Any], spec: dict[str, Any], tasks: int) -> dict[st
             for p in cast(list[dict[str, Any]], spec.get("guardrailPins") or [])
         ],
         **({"wrapperWorkflowId": f"agent:{row['id']}"} if published is not None else {}),
-        "limits": limits_of(spec).wire(),
+        "limits": wire_limits(limits_of(spec)),
         "widgetPins": [
             {
                 "widgetId": p["widgetId"],

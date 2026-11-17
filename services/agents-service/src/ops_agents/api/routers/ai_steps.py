@@ -18,7 +18,7 @@ from ops_access import can
 from ops_documents_client import DocumentNotFound, DocumentsClient
 from ops_engine import ai_steps, default_registry
 from ops_service_kit.errors import ServiceUnavailable, TooManyRequests, Unprocessable
-from ops_service_kit.http import Envelope, In, Out
+from ops_service_kit.http import Envelope, In, JsonValue, Out
 from ops_service_kit.ids import new_id
 
 from ...store.tenancy import current_team, current_tenant
@@ -59,7 +59,7 @@ class AiStepIn(In):
 class AiStepOut(Out):
     # The port a workflow step would leave by: a category, otherwise, ok or error.
     port: str
-    output: dict[str, Any]
+    output: dict[str, JsonValue]
 
 
 @router.post("/{step}", response_model=Envelope[AiStepOut])

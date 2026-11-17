@@ -44,7 +44,7 @@ from ops_service_kit.errors import (
     Unauthorized,
     Unprocessable,
 )
-from ops_service_kit.http import Envelope, In, ListResult, Out
+from ops_service_kit.http import Envelope, In, JsonValue, ListResult, Out
 from ops_service_kit.listing import ListQuery
 from ops_store import isolation
 
@@ -114,7 +114,7 @@ class FormView(Out):
 
 
 class FormFields(Out):
-    schema_: dict[str, Any] = Field(alias="schema")
+    schema_: dict[str, JsonValue] = Field(alias="schema")
     takes_files: bool | None = None
 
 

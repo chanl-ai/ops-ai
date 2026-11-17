@@ -9,6 +9,7 @@ fails a test.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any, Literal
 
 from pydantic import ConfigDict, Field
@@ -21,6 +22,8 @@ from ops_service_kit.http import (
     Envelope,  # noqa: F401  # pyright: ignore[reportUnusedImport]
     ErrorBody,  # noqa: F401  # pyright: ignore[reportUnusedImport]
     ErrorEnvelope,  # noqa: F401  # pyright: ignore[reportUnusedImport]
+    ExternalOut,
+    JsonValue,
     ListResult,
     Option,
     OptionsPage,
@@ -108,9 +111,10 @@ class WidgetTemplateOut(Out):
     version: int
     name: str
     use_when: str
-    tree: dict[str, Any]
-    data_schema: dict[str, Any]
-    sample: dict[str, Any] | None = None
+    # Documents the team authors in the widget builder: the layout tree, its JSON Schema and a sample record.
+    tree: dict[str, JsonValue]
+    data_schema: dict[str, JsonValue]
+    sample: dict[str, JsonValue] | None = None
     # Tools the widget's buttons ask the agent to use; an agent pins it only when it holds them all.
     requires_tools: list[str] = Field(default_factory=list[str])
     # draft, in_review, published or deprecated (retired); the seeded library's are published.
@@ -162,7 +166,7 @@ class MemoryView(Out):
 class MemoryExport(Out):
     person: str
     memories: list[MemoryView]
-    audit: list[dict[str, Any]]
+    audit: list[dict[str, JsonValue]]
 
 
 class WidgetSettings(Out):
@@ -323,6 +327,18 @@ class AgentEvalRun(Out):
     results: list[EvalCaseResult]
 
 
+class LoadedSkill(Out):
+    """A skill a turn loaded, as the kernel journals it (`skills.loaded_entry`); part and inputs are left out when
+    there are none."""
+
+    skill_id: str
+    name: str
+    version: int
+    matched: str
+    part: str | None = None
+    inputs: dict[str, str] | None = None
+
+
 class AgentTestTurn(Out):
     reply: str
     tool_calls: list[ToolCallView]
@@ -335,7 +351,7 @@ class AgentTestTurn(Out):
     # guardrails the turn loaded and checked.
     knowledge_bases: list[KnowledgeBaseRef] = Field(default_factory=list[KnowledgeBaseRef])
     tools: list[HeldTool] = Field(default_factory=list[HeldTool])
-    skills: list[dict[str, Any]] = Field(default_factory=list[dict[str, Any]])
+    skills: list[LoadedSkill] = Field(default_factory=list[LoadedSkill])
     guardrails: list[NamedRef] = Field(default_factory=list[NamedRef])
     # The rule that refused the turn, when one did: before (the question, so the model never ran and nothing was
     # searched or loaded) or after (the answer, replaced by the rule's message). Absent on a turn no rule stopped.
@@ -356,7 +372,8 @@ class Tool(Out):
     module_id: str | None
     description: str
     access: Literal["read", "write", "workflow"]
-    input_schema: dict[str, Any]
+    # The tool's JSON Schema, as the app or module declared it.
+    input_schema: dict[str, JsonValue]
     requires_approval: bool
     approval: str | None
 
@@ -408,7 +425,7 @@ class ToolOption(Option):
     """A tool in a picker; an MCP link's picker (`agents=false`) also gets what the tool takes and what it does, which
     the link keeps so an assistant reads a workflow's inputs in tools/list."""
 
-    input_schema: dict[str, Any] | None = None
+    input_schema: dict[str, JsonValue] | None = None
     description: str | None = None
 
 
@@ -470,6 +487,23 @@ class PublishDecisionFields(Out):
     ) = None
 
 
+class InjectionTally(Out):
+    passed: int
+    total: int
+    regressions: int
+
+
+class PublishEvalSummary(Out):
+    """An eval run against one agent version, as a publish request shows it. Nothing sends one yet: both are null."""
+
+    run_id: str
+    ran_at: str
+    passed: int
+    total: int
+    regressions: int
+    injection: InjectionTally
+
+
 class AgentPublishRequest(PublishDecisionFields):
     agent_id: str
     agent_name: str
@@ -481,8 +515,8 @@ class AgentPublishRequest(PublishDecisionFields):
     tier: Literal["critical", "high", "medium", "low"]
     tier_reason: str
     approvals_needed: Literal[1, 2]
-    candidate: Any = None
-    published: Any = None
+    candidate: PublishEvalSummary | None = None
+    published: PublishEvalSummary | None = None
     failing: int
     blockers: list[str]
     changes: list[str]
@@ -552,6 +586,12 @@ class EgressHostRef(Out):
     apply_pending: bool
 
 
+class Evidence(Out):
+    kind: str
+    label: str
+    detail: str
+
+
 class PublishReview(Out):
     """The console's `Review` as a publish request carries it: `agent_publish` or `publish_request`."""
 
@@ -581,7 +621,7 @@ class PublishReview(Out):
     decided_at: str | None = None
     decision_reason: str | None = None
     reasoning: list[str]
-    evidence: list[Any]
+    evidence: list[Evidence]
     agent_publish: AgentPublishRequest | None = None
     publish: PublishRequestInfo | None = None
     tool_module: ToolModuleReviewRef | None = None
@@ -616,7 +656,8 @@ class GraphNode(Out):
 
     id: str
     type: str
-    data: dict[str, Any]
+    # The node's settings, which its node type defines (the engine's node registry).
+    data: dict[str, JsonValue]
     position: dict[str, float] | None = None
 
 
@@ -650,6 +691,15 @@ class WorkflowRef(Out):
     status: str
 
 
+class WorkflowStart(Out):
+    # The start form's kind (email, form), or "source" for a trigger only its source starts (a service event).
+    kind: str
+    # Start run and Files offer it: its trigger declares a start form and other workflows are not its only starters.
+    by_hand: bool
+    # Its start form has a file field, so Files offers to start it with a file.
+    takes_files: bool
+
+
 class Workflow(Out):
     id: str
     name: str
@@ -673,15 +723,6 @@ class Workflow(Out):
     engine: Literal["v1", "v2"] = "v1"
     # How it starts, from its trigger; the list sets it on every row.
     start: WorkflowStart | None = None
-
-
-class WorkflowStart(Out):
-    # The start form's kind (email, form), or "source" for a trigger only its source starts (a service event).
-    kind: str
-    # Start run and Files offer it: its trigger declares a start form and other workflows are not its only starters.
-    by_hand: bool
-    # Its start form has a file field, so Files offers to start it with a file.
-    takes_files: bool
 
 
 class WorkflowDraft(Out):
@@ -800,7 +841,7 @@ class ThreadView(Out):
     thread_id: str
     graph: str
     version: int | None
-    metadata: dict[str, Any]
+    metadata: dict[str, JsonValue]
     status: str
     created_at: str
     updated_at: str
@@ -819,7 +860,7 @@ class SlaTimer(Out):
 
 class SlaEvent(Out):
     event: str
-    data: Any = None
+    data: JsonValue = None
 
 
 class Sla(Out):
@@ -846,9 +887,9 @@ class ThreadState(Out):
     version: int | None
     digest: str | None
     status: str
-    values: dict[str, Any]
+    values: dict[str, JsonValue]
     next: list[str]
-    interrupt: dict[str, Any] | None
+    interrupt: dict[str, JsonValue] | None
     sla: Sla | None
     cost: CostTotals | None
     budget: BudgetCaps | None
@@ -863,7 +904,7 @@ class RunJournalEntry(Out):
     nodes: list[str]
     owner: str | None
     generation: int | None
-    crashed: dict[str, Any] | None
+    crashed: dict[str, JsonValue] | None
     cost: CostTotals | None
 
 
@@ -896,12 +937,6 @@ SSE_RESPONSE: dict[int | str, dict[str, Any]] = {
 # ── reviews and cases (the console's facade) ──
 
 
-class Evidence(Out):
-    kind: str
-    label: str
-    detail: str
-
-
 class ReviewOrigin(Out):
     """Where a review came from: a chat with an agent (the conversation to open), or a workflow run."""
 
@@ -916,10 +951,10 @@ class OptionInput(Out):
     name: str
     type: str
     required: bool
-    default: Any = None
+    default: JsonValue = None
     minimum: float | None = None
     maximum: float | None = None
-    enum: list[Any] | None = None
+    enum: list[JsonValue] | None = None
 
 
 class DecidingTeam(Out):
@@ -943,7 +978,7 @@ class ReviewOption(Out):
 
     name: str
     inputs: list[OptionInput] = Field(default_factory=list[OptionInput])
-    call: dict[str, Any] | None = None
+    call: dict[str, JsonValue] | None = None
     # Choosing this option asks the reviewer for a step-up (its call's policy).
     step_up: bool = False
     # The button's words, what choosing it does, and the values its call sends, in a reviewer's words.
@@ -982,20 +1017,20 @@ class FieldRead(Out):
     """One field of one record as read: the normalised value, what the model said, the confidence from the engine's
     checks, whether a person must check it, and where on the file it came from."""
 
-    value: Any = None
-    extracted_value: Any = None
+    value: JsonValue = None
+    extracted_value: JsonValue = None
     confidence: float | None
     needs_review: bool
     citation: ReadCitation | None
     boxes: list[ReadBox] = Field(default_factory=list[ReadBox])
     # When the step also combined this read with other sources (Combine facts): each source's value for the
     # field, and whether the sources disagree on it.
-    by_source: dict[str, Any] | None = None
+    by_source: dict[str, JsonValue] | None = None
     conflict: bool = False
 
 
 class ReadRecord(Out):
-    values: dict[str, Any]
+    values: dict[str, JsonValue]
     fields: dict[str, FieldRead]
 
 
@@ -1010,7 +1045,7 @@ class DocumentRead(Out):
     schema_: list[ReadField] = Field(alias="schema")
     records: list[ReadRecord]
     editable: bool
-    corrected: list[dict[str, Any]] | None
+    corrected: list[dict[str, JsonValue]] | None
     # The sources a Combine facts step weighed against this read, in order; empty for a read of one source.
     sources: list[str] = Field(default_factory=list[str])
 
@@ -1047,7 +1082,7 @@ class TaskRegion(Out):
     ]
     collapsed: bool
     # Each slot of the region filled from the task's params; the console draws it, it never fills a template.
-    data: dict[str, Any]
+    data: dict[str, JsonValue]
 
 
 class TaskAction(Out):
@@ -1058,7 +1093,7 @@ class TaskAction(Out):
     tone: Literal["primary", "neutral", "destructive"]
     # The step's out port the action leads to; the decision names it as its option.
     port: str
-    inputs: list[dict[str, Any]]
+    inputs: list[dict[str, JsonValue]]
     requires: str | None
 
 
@@ -1138,7 +1173,7 @@ class ThreadReview(Out):
     decided_at: str | None = None
     decision_reason: str | None = None
     # The resume value a decided review was recorded with.
-    resume: dict[str, Any] | None = None
+    resume: dict[str, JsonValue] | None = None
     # What the proposal would move (the call input named amount), the options a step offers and the call behind
     # each, and the last failed call's error (a bank's 422 on a hold) the case waits on.
     amount: float | None = None
@@ -1146,8 +1181,9 @@ class ThreadReview(Out):
     # Why the step's options could not be read (a row paused before declarations existed, on a version that no
     # longer declares them): the review is listed, never dropped or a 500.
     options_error: str | None = None
-    calls: dict[str, Any] | None = None
-    error: dict[str, Any] | None = None
+    # An app's call input and its error body come from the workflow and the outside system, so they stay JSON.
+    calls: dict[str, JsonValue] | None = None
+    error: dict[str, JsonValue] | None = None
     # The option a decided review was decided with; its status stays a ReviewStatus (approved).
     option: str | None = None
     # A fingerprint of the step-up a decided money review was made under; null when none was needed.
@@ -1233,7 +1269,8 @@ class CaseRun(Out):
     case_id: str | None
     # A child case names its parent; a parent lists its children with their current outcome.
     parent_thread_id: str | None = None
-    children: list[dict[str, Any]] | None = None
+    # Each child run's outcome as the workflow recorded it.
+    children: list[dict[str, JsonValue]] | None = None
 
 
 class CaseRunList(ListResult[CaseRun]):
@@ -1255,13 +1292,21 @@ class Approval(Out):
     approval_token: str | None
 
 
+class DeploymentBudget(ExternalOut):
+    """Caps for the thread a deployment starts; stored as the request gave them, so the names stay snake_case."""
+
+    max_calls: int | None = None
+    max_tokens: int | None = None
+    max_cost: Decimal | None = None
+
+
 class DeploymentView(Out):
     id: str
     graph: str
     channel: Literal["widget", "api", "mcp"]
     paused: bool
     multitask: Literal["enqueue", "reject"]
-    budget: dict[str, Any] | None = None
+    budget: DeploymentBudget | None = None
 
 
 class DeploymentPaused(Out):
@@ -1282,9 +1327,15 @@ class InboxItem(Out):
     status: str
 
 
+class TimerRestart(Out):
+    timer_id: str
+    kind: str
+    due_at: str
+
+
 class ThreadEventResult(Out):
     type: str
-    restarted: list[dict[str, Any]]
+    restarted: list[TimerRestart]
 
 
 class Routed(Out):
@@ -1384,6 +1435,22 @@ class SkillPartSummary(Out):
     inputs: list[SkillInputField] = Field(default_factory=list[SkillInputField])
 
 
+class SkillResource(Out):
+    """A file or a text template kept on a skill version; a file is stored through the Files API."""
+
+    id: str
+    kind: Literal["file", "template"]
+    name: str
+    description: str | None = None
+    file_id: str | None = None
+    size: int | None = None
+    # Set while the file is quarantined or unscanned: the skill loads without it.
+    blocked: str | None = None
+    body: str | None = None
+    added_at: str
+    added_by: str
+
+
 class SkillContent(Out):
     name: str
     slug: str
@@ -1393,7 +1460,7 @@ class SkillContent(Out):
     tools: list[SkillToolRef]
     knowledge_bases: list[str]
     guardrails: list[str]
-    resources: list[dict[str, Any]]
+    resources: list[SkillResource]
     # What the agent says when one of the skill's guardrails refuses; absent uses the platform's sentence.
     refusal: str | None = None
     # Absent on a skill that takes no inputs.
@@ -1446,7 +1513,8 @@ class SkillVersion(Out):
     review_id: str | None = None
     published_at: str | None = None
     published_by: str | None = None
-    test_run: dict[str, Any] | None
+    # Always null today: nothing records a test run on a version.
+    test_run: None
 
 
 class SkillUsage(Out):
@@ -1472,15 +1540,67 @@ class SkillPublishCheck(Out):
     approvers_needed: int
 
 
+class SkillLoadsDay(Out):
+    date: str
+    # Loads per agent name.
+    counts: dict[str, int]
+    total: int
+
+
+class SkillTrace(Out):
+    id: str
+    at: str
+    agent_name: str
+    version: int
+    input: str
+    outcome: Literal["completed", "handed_off", "failed"]
+    tool_calls: list[str]
+    took_ms: int
+
+
+class SkillActivity(Out):
+    agents: list[str]
+    # 14 days, oldest first.
+    loads_per_day: list[SkillLoadsDay]
+    loads30d: int = Field(alias="loads30d")
+    # Loaded turns that completed without a hand-off or failure, 0 to 1.
+    success_rate: float | None
+    samples: list[SkillTrace]
+
+
+class SkillCitation(Out):
+    id: str
+    kind: Literal["document", "case", "run", "chat", "template", "description"]
+    label: str
+    detail: str | None = None
+    href: str | None = None
+    section: str
+
+
+class SkillProvenance(Out):
+    origin: str
+    detail: str
+    citations: list[SkillCitation]
+
+
+class SkillPendingReview(Out):
+    id: str
+    version: int
+    edit_class: Literal["free", "re_test", "re_approval"]
+    approvals: int
+    needed: int
+
+
 class SkillDetail(Skill):
     content: SkillContent
     versions: list[SkillVersion]
-    tests: list[dict[str, Any]]
-    runs: list[dict[str, Any]]
+    # Both are empty today: skill tests moved into assurance suites and nothing sends a shape here.
+    tests: list[JsonValue]
+    runs: list[JsonValue]
     usage: list[SkillUsage]
-    activity: dict[str, Any]
-    provenance: dict[str, Any]
-    pending_review: dict[str, Any] | None = None
+    activity: SkillActivity
+    provenance: SkillProvenance
+    pending_review: SkillPendingReview | None = None
     publish_check: SkillPublishCheck
 
 
