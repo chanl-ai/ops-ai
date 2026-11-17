@@ -28,7 +28,6 @@ import { createEvalsHttp } from './evals-http';
 import { createModelRiskHttp } from './model-risk-http';
 import { createToolModulesHttp } from './tool-modules-http';
 import { createEgressHttp } from './egress-http';
-import { createSecretsHttp } from './secrets-http';
 import { createConnectionsHttp } from './connections-http';
 import { createIntegrationsHttp } from './integrations-http';
 import { createFilesHttp } from './files-http';
@@ -52,6 +51,7 @@ function qs(params: ListParams & { view?: string; group?: string }) {
   if (params.search) q.set('search', params.search);
   if (params.sortBy) q.set('sortBy', params.sortBy);
   if (params.sortOrder) q.set('sortOrder', params.sortOrder);
+  for (const id of params.ids ?? []) q.append('ids', id);
   if (params.view) q.set('view', params.view);
   if (params.group) q.set('group', params.group);
   for (const [k, v] of Object.entries(params.filters ?? {})) v?.forEach((x) => q.append(k, x));
@@ -226,13 +226,12 @@ export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' |
   };
 }
 
-/** Tool modules, the egress allow-list, secrets, connections and the gateway's call log (Activity) against tools-service under `/v1`. */
-export function createToolsOnlyHttp(baseUrl: string): Pick<OpsApi, 'toolModules' | 'egress' | 'secrets' | 'connections' | 'mcpLinks'> & { toolCalls: GovernanceApi['toolCalls'] } {
+/** Tool modules, the egress allow-list, connections and the gateway's call log (Activity) against tools-service under `/v1`. */
+export function createToolsOnlyHttp(baseUrl: string): Pick<OpsApi, 'toolModules' | 'egress' | 'connections' | 'mcpLinks'> & { toolCalls: GovernanceApi['toolCalls'] } {
   const t = createTransport(`${baseUrl}/v1`);
   return {
     toolModules: createToolModulesHttp(t.get, t.send, t.qs),
     egress: createEgressHttp(t.get, t.send, t.qs),
-    secrets: createSecretsHttp(t.get, t.send, t.qs),
     connections: createConnectionsHttp(t.get, t.send),
     toolCalls: createExecutionsHttp(t.get),
     mcpLinks: createMcpLinksHttp(t.get, t.send),
@@ -322,7 +321,6 @@ export function createHttpApi(baseUrl: string): OpsApi {
     modelRisk: createModelRiskHttp(get, send, qs),
     toolModules: createToolModulesHttp(get, send, qs),
     egress: createEgressHttp(get, send, qs),
-    secrets: createSecretsHttp(get, send, qs),
     connections: createConnectionsHttp(get, send),
     integrations: createIntegrationsHttp(get),
     files: createFilesHttp(get, send, qs),

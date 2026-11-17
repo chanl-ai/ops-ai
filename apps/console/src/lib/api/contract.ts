@@ -24,7 +24,6 @@ import type { ModelRiskApi } from './model-risk-contract';
 import type { ToolModulesApi } from './tool-modules-contract';
 import type { ToolDirectory, ToolRow, ToolRowFilters } from '@/lib/types/tool-directory';
 import type { EgressApi } from './egress-contract';
-import type { SecretsApi } from './secrets-contract';
 import type { ConnectionsApi } from './connections-contract';
 import type { IntegrationsApi } from './integrations-contract';
 import type { FilesApi } from './files-contract';
@@ -218,7 +217,6 @@ export interface OpsApi {
   /** The tenant's egress allow-list (tools-service). */
   egress: EgressApi;
   /** Credentials tool calls send; values never come back (tools-service). */
-  secrets: SecretsApi;
   /** A connected system's sign-in: whose account, Test connection, and each person's own (tools-service). */
   connections: ConnectionsApi;
   integrations: IntegrationsApi;

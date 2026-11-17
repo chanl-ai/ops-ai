@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useCan } from '@/hooks/me-queries';
-import { useSecrets } from '@/hooks/secrets-queries';
+import { secretOptions, useOptionSearch } from '@/hooks/options-queries';
 
 /**
  * Pick a secret by name, or add one without leaving the page. `onPick` receives the reference as a header or body
@@ -18,7 +18,14 @@ import { useSecrets } from '@/hooks/secrets-queries';
 export function SecretPicker({ onPick, disabled, label = 'Insert a secret' }: { onPick: (reference: string) => void; disabled?: boolean; label?: string }) {
   const [open, setOpen] = React.useState(false);
   const [adding, setAdding] = React.useState(false);
-  const secrets = useSecrets();
+  const [search, setSearch] = React.useState('');
+  // The search runs on the server as the person types; the list pages in as it scrolls.
+  const secrets = useOptionSearch(secretOptions, search, open);
+  const names = (secrets.data?.pages ?? []).flatMap((p) => p.data);
+  const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 48 && secrets.hasNextPage && !secrets.isFetchingNextPage) void secrets.fetchNextPage();
+  };
   const canAdd = useCan('secrets_egress', 'create') === true;
   const pick = (name: string) => (onPick(`{{${name}}}`), setOpen(false));
   return (
@@ -30,14 +37,14 @@ export function SecretPicker({ onPick, disabled, label = 'Insert a secret' }: { 
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-72 p-0" align="end">
-          <Command>
-            <CommandInput placeholder="Search secrets…" />
-            <CommandList>
-              <CommandEmpty>{secrets.isPending ? 'Loading…' : 'No secret found.'}</CommandEmpty>
+          <Command shouldFilter={false}>
+            <CommandInput placeholder="Search secrets…" value={search} onValueChange={setSearch} />
+            <CommandList onScroll={onScroll}>
+              <CommandEmpty>{secrets.isPending ? 'Loading…' : secrets.isError ? 'Couldn’t search. Try again.' : 'No secret found.'}</CommandEmpty>
               <CommandGroup>
-                {(secrets.data ?? []).map((s) => (
-                  <CommandItem key={s.name} value={s.name} onSelect={() => pick(s.name)}>
-                    <span className="font-mono text-xs">{s.name}</span>
+                {names.map((s) => (
+                  <CommandItem key={s.id} value={s.id} onSelect={() => pick(s.id)}>
+                    <span className="font-mono text-xs">{s.label}</span>
                   </CommandItem>
                 ))}
               </CommandGroup>

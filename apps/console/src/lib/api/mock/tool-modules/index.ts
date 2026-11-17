@@ -1,4 +1,3 @@
-import type { SecretUser } from '@/lib/types/secrets';
 import type { Tool, ToolType } from '@/lib/types/domain';
 import type { ToolCallDetail, ToolCallRow } from '@/lib/types/governance';
 import type {
@@ -174,8 +173,6 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
   recentCalls: (moduleId: string, n: number) => ToolCallRow[];
   /** Each endpoint host and the ids of the modules calling it, for the egress allow-list. */
   hostsInUse: () => Record<string, ModuleRef[]>;
-  /** Each secret name and the operations whose headers or path read it. */
-  secretUsers: () => Record<string, SecretUser[]>;
 } {
   const { tools, agents } = deps;
   const me = F.CURRENT_USER.name;
@@ -1025,18 +1022,6 @@ export function createToolModulesMock(deps: { tools: Tool[]; agents: AgentLike[]
   return {
     api,
     using: (connId) => mods.filter((m) => m.connectionId === connId).map(row),
-    secretUsers: () => {
-      const out: Record<string, SecretUser[]> = {};
-      const ref = /\{\{([A-Z][A-Z0-9_]*)\}\}/g;
-      for (const m of mods) {
-        const published = new Set((m.baseline?.ops ?? m.ops).flatMap((o) => [...[o.path ?? '', ...(o.headers ?? []).map((h) => h.value)].join(' ').matchAll(ref)].map((x) => `${o.name}:${x[1]}`)));
-        for (const o of m.ops) {
-          const names = new Set([...[o.path ?? '', ...(o.headers ?? []).map((h) => h.value)].join(' ').matchAll(ref)].map((x) => x[1]));
-          for (const n of names) (out[n] ??= []).push({ moduleId: m.id, moduleName: m.displayName, operation: o.name, staged: !published.has(`${o.name}:${n}`) });
-        }
-      }
-      return out;
-    },
     hostsInUse: () => {
       const out: Record<string, ModuleRef[]> = {};
       for (const m of mods) {

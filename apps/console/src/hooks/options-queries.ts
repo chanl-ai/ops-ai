@@ -85,6 +85,18 @@ export const connectionOptions: OptionSource<ConnectionOptionsPage> = {
     };
   },
 };
+/** The team's secrets by name, searched on the name by the list route; a page number is the cursor. */
+export const secretOptions: OptionSource = {
+  key: 'secret-options',
+  fetch: async ({ search, cursor, limit = 25, ids }) => {
+    const page = Number(cursor ?? 1);
+    const res = await sdk((ops) =>
+      ops.raw.tools.secrets_list_secrets({ query: { page, pageSize: ids?.length ? Math.min(ids.length, 50) : limit, ids: ids?.length ? ids : undefined, search: ids?.length ? undefined : search || undefined } }),
+    );
+    // A secret held by an account or an auth config is not one a header may name, so it is not offered.
+    return { data: res.data.filter((s) => !s.readOnly).map((s) => ({ id: s.name, label: s.name })), nextCursor: !ids?.length && res.pagination.hasNext ? String(page + 1) : null };
+  },
+};
 export const guardrailOptions: OptionSource = { key: 'guardrail-options', fetch: (p) => api.guardrails.options(p) };
 /** Widgets, disabled with the reason when a button needs a tool outside `granted` (the draft's tools). */
 export const widgetOptionsFor = (granted: string[]): OptionSource => ({ key: `widget-options:${[...granted].sort().join(',')}`, fetch: (p) => api.widgets.options(p, granted) });

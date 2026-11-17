@@ -28,6 +28,7 @@ export function SearchSelect<P extends OptionsPage = OptionsPage>({
   disabled,
   className,
   testId,
+  id,
   ariaLabel,
   error,
 }: {
@@ -42,6 +43,8 @@ export function SearchSelect<P extends OptionsPage = OptionsPage>({
   disabled?: boolean;
   className?: string;
   testId?: string;
+  /** The trigger's id, for a label that names it. */
+  id?: string;
   ariaLabel?: string;
   /** Shown in the trigger in place of the choice when the first read failed. */
   error?: string;
@@ -61,7 +64,7 @@ export function SearchSelect<P extends OptionsPage = OptionsPage>({
   return (
     <Popover open={open} onOpenChange={(o) => (setOpen(o), o || setSearch(''))}>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" role="combobox" aria-expanded={open} aria-label={ariaLabel} disabled={disabled} className={cn('justify-between bg-card font-normal', className)} data-testid={testId}>
+        <Button type="button" variant="outline" id={id} role="combobox" aria-expanded={open} aria-label={ariaLabel} disabled={disabled} className={cn('justify-between bg-card font-normal', className)} data-testid={testId}>
           {error ? (
             <span className="truncate text-destructive-text">{error}</span>
           ) : value ? (

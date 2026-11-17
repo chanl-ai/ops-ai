@@ -7,6 +7,8 @@ export interface ListParams<F extends Record<string, string[] | undefined> = Rec
   search?: string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
+  /** Exactly these rows, whatever the search says (at most 1000, the API's limit). */
+  ids?: string[];
   filters?: F;
 }
 

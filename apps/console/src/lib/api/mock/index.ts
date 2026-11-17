@@ -44,7 +44,6 @@ import { createToolModulesMock } from './tool-modules';
 import { createEgressMock } from './egress';
 import { createChannelsMock } from './channels';
 import { createEngineMock } from './engine';
-import { createSecretsMock } from './secrets';
 import { createConnectionsMock } from './connections';
 import { createWidgetsMock } from './widgets';
 import { createIntegrationsMock } from './integrations';
@@ -1176,7 +1175,6 @@ export function createMockApi(): OpsApi {
     providerConnections: createMockProviderConnections(),
     toolModules: toolModules.api,
     egress: createEgressMock({ me: F.CURRENT_USER.name, inUse: toolModules.hostsInUse }),
-    secrets: createSecretsMock({ me: F.CURRENT_USER.name, users: toolModules.secretUsers }),
     connections: createConnectionsMock({ me: F.CURRENT_USER.name }),
     engine: createEngineMock(),
     channels: createChannelsMock(),
