@@ -29,7 +29,7 @@ import { cn } from '@/lib/utils';
 import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = ChatThreadRow & { onRowClick: (t: ChatThreadRow) => void; href: string };
-const ALL = { page: 1, pageSize: 100 };
+const ALL = { page: 1, pageSize: 50 };
 const STATE_LABEL: Record<string, string> = { active: 'Active', pinned: 'Pinned', archived: 'Archived' };
 const stateOf = (t: ChatThreadRow) => (t.archived ? 'archived' : t.pinned ? 'pinned' : 'active');
 

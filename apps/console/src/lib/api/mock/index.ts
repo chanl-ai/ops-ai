@@ -1184,7 +1184,6 @@ export function createMockApi(): OpsApi {
     widgets: createWidgetsMock({ me: F.CURRENT_USER.name }),
     // Cases live in agents-service; the mock lists none and refuses writes.
     caseRecords: {
-      list: ({ page, pageSize }) => respond(() => ({ data: [], pagination: { page, pageSize, total: 0, totalPages: 1, hasNext: false, hasPrev: false }, facets: {} })),
       get: (cid) => respond(() => notFound(`Case ${cid}`)),
       change: () => Promise.reject(new ApiError('Cases need the agents service.', 501)),
       addNote: () => Promise.reject(new ApiError('Cases need the agents service.', 501)),

@@ -49,7 +49,7 @@ import { SOMEONE_ELSES } from '@/lib/api';
 import type { ChatAgent, ChatAttachment, ChatMessage, ChatThread, ChatThreadPatch, ChatThreadRow, MessageFeedback, SendInput, WidgetAction } from '@/lib/types/chat';
 import type { RetrievalTrace } from '@/lib/types/knowledge-retrieval';
 
-const ALL = { page: 1, pageSize: 100 };
+const ALL = { page: 1, pageSize: 50 };
 
 export function ChatWorkspace({ threadId }: { threadId?: string }) {
   const router = useRouter();
