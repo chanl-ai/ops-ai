@@ -41,7 +41,7 @@ from alembic import op
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 
-from ops_store.schema import TENANT_SCOPED, isolation_ddl, isolation_drop_ddl
+from ops_store.schema import TENANT_SCOPED, isolation_drop_ddl
 
 revision = "0034_saml_sign_in"
 down_revision = "0033_agent_changes_approvals"
@@ -161,20 +161,6 @@ def _backfill_groups() -> None:
         )  # fmt: skip
 
 
-def _sql_server_policies(names: tuple[str, ...], *, create: bool) -> None:
-    """SQL Server: the tables' security policies over the chain's predicate functions, which the SQL Server bundle
-    installed, made on the way up and dropped before the tables on the way down (a policy is schema-bound to its
-    table, so DROP TABLE is refused while it stands)."""
-    if op.get_bind().dialect.name != "mssql":
-        return
-    for name in names:
-        table = sa.Table(name, sa.MetaData(), sa.Column("tenant_id", sa.String(64)), info=TENANT_SCOPED)
-        for statement in (
-            isolation_ddl(table, "mssql", chain="platform") if create else isolation_drop_ddl(table, "mssql")
-        ):
-            op.execute(statement)
-
-
 def _provider_key(name: str) -> sa.ForeignKeyConstraint:
     """A row's provider of its own tenant. SQL Server needs the referenced columns in the order of a key it holds
     (signin_providers' is (id, tenant_id) there, as the golden DDL makes it); PostgreSQL takes the original order."""
@@ -183,11 +169,6 @@ def _provider_key(name: str) -> sa.ForeignKeyConstraint:
     else:
         cols, refs = ["tenant_id", "provider_id"], ["signin_providers.tenant_id", "signin_providers.id"]
     return sa.ForeignKeyConstraint(cols, refs, name=name, ondelete="CASCADE")
-
-
-def _mssql_name(name: str) -> str | None:
-    """SQL Server names an unnamed key at random; there it takes PostgreSQL's name, as the golden DDL does."""
-    return name if op.get_bind().dialect.name == "mssql" else None
 
 
 def _rule_key() -> sa.ForeignKey:
@@ -246,11 +227,7 @@ def upgrade() -> None:
         sa.Column("id", sa.String(64), primary_key=True),
         sa.Column("tenant_id", sa.String(64), nullable=False, index=True),
         sa.Column(
-            "member_id",
-            sa.String(64),
-            sa.ForeignKey("members.id", name=_mssql_name("signin_grants_member_id_fkey"), ondelete="CASCADE"),
-            nullable=False,
-            index=True,
+            "member_id", sa.String(64), sa.ForeignKey("members.id", ondelete="CASCADE"), nullable=False, index=True
         ),
         sa.Column("provider_id", sa.String(64), nullable=False),
         sa.Column("rule_id", sa.String(64), _rule_key()),
@@ -275,7 +252,6 @@ def upgrade() -> None:
     op.add_column("signin_flows", sa.Column("test_result", sa.JSON(none_as_null=True)))
     _backfill()
     _backfill_groups()
-    _sql_server_policies(TABLES, create=True)
     if op.get_bind().dialect.name != "postgresql":
         return
     for table in TABLES:
@@ -300,7 +276,13 @@ def downgrade() -> None:
     if op.get_bind().dialect.name == "postgresql":
         for signature in FUNCTIONS:
             op.execute(f"DROP FUNCTION {signature}")
-    _sql_server_policies(TABLES, create=False)
+    if op.get_bind().dialect.name == "mssql":
+        # 0042 makes the tables' SQL Server security policies, which are schema-bound to them: DROP TABLE is refused
+        # while they stand.
+        for name in TABLES:
+            table = sa.Table(name, sa.MetaData(), sa.Column("tenant_id", sa.String(64)), info=TENANT_SCOPED)
+            for statement in isolation_drop_ddl(table, "mssql"):
+                op.execute(statement)
     op.drop_column("signin_flows", "test_result")
     op.drop_table("signin_break_glass")
     op.drop_table("signin_grants")

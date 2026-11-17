@@ -6,8 +6,9 @@ On PostgreSQL the tenant role, with no tenant set, reads rows only through the S
 login that nobody is granted IMPERSONATE on, reissues platform's predicate functions so their reads and writes pass
 it (each is schema-bound to every policy, so the policies are dropped and made again), and makes one table-valued
 function per lookup that runs as it (`ops_platform.store.lookups`). The runtime user's SELECT on the functions is in
-grants.sql. Downgrade drops the functions, reissues the predicates without the user and drops it. Nothing changes on
-PostgreSQL.
+grants.sql. It also gives the two keys 0030 and 0034 leave unnamed their PostgreSQL names, which SQL Server had chosen
+at random and the golden DDL holds; nothing below names them, so the downgrade leaves the names. Downgrade drops the
+functions, reissues the predicates without the user and drops it. Nothing changes on PostgreSQL.
 
 Revision ID: 0042_sql_server_lookups
 Revises: 0041_list_filters
@@ -51,6 +52,28 @@ def _policed(name: str) -> sa.Table:
     return sa.Table(name, sa.MetaData(), column, info=TENANT_SCOPED)
 
 
+# (table, referenced table, the key's PostgreSQL name): the keys 0030 and 0034 create without a name.
+NAMED_KEYS = (
+    ("signin_secrets", "tenants", "signin_secrets_tenant_id_fkey"),
+    ("signin_grants", "members", "signin_grants_member_id_fkey"),
+)
+
+
+def _name_key(table: str, referenced: str, name: str) -> str:
+    """Gives the table's key to `referenced` the name `name`, unless it already holds it. No SET NOCOUNT ON: it
+    outlives the batch on the connection, and alembic's version update then reads a row count of -1 and fails."""
+    return (
+        f"DECLARE @key_{table} sysname = (SELECT TOP 1 name FROM sys.foreign_keys "
+        f"WHERE parent_object_id = OBJECT_ID(N'dbo.{table}') "
+        f"AND referenced_object_id = OBJECT_ID(N'dbo.{referenced}'));\n"
+        f"IF @key_{table} IS NOT NULL AND @key_{table} <> N'{name}'\n"
+        "BEGIN\n"
+        f"    DECLARE @old_{table} nvarchar(300) = N'dbo.' + QUOTENAME(@key_{table});\n"
+        f"    EXEC sp_rename @old_{table}, N'{name}', N'OBJECT';\n"
+        "END"
+    )
+
+
 def _reissue_predicates(system_user: str | None) -> None:
     tables = [_policed(n) for n in POLICED]
     for table in tables:
@@ -69,6 +92,8 @@ def _reissue_predicates(system_user: str | None) -> None:
 def upgrade() -> None:
     if op.get_context().dialect.name != "mssql":
         return
+    for table, referenced, name in NAMED_KEYS:
+        op.execute(_name_key(table, referenced, name))
     op.execute(f"IF USER_ID(N'{SYSTEM_USER}') IS NULL CREATE USER {SYSTEM_USER} WITHOUT LOGIN")
     _reissue_predicates(SYSTEM_USER)
     for fn in LOOKUPS:

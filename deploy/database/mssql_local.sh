@@ -65,6 +65,22 @@ with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
 PY
 }
 
+# Hashes every python file of the copy's list on the host again and checks them inside the volume, so a copy that
+# differs from the host (a failed stream, or a file edited while the copy ran) stops the run before any test does.
+verify_tree() { # <volume> <root>
+  python3 - "$2" <<'PY' | docker run -i --rm -v "$1":/src:ro -w /src "$CLIENT" sh -c 'sha256sum -c --quiet - >&2' \
+    || { echo "mssql test: the client's copy of the tree differs from the host (files above); run the target again" >&2; return 1; }
+import hashlib, os, subprocess, sys
+root = sys.argv[1]
+names = subprocess.run(["git", "-C", root, "ls-files", "-z", "-c", "-o", "--exclude-standard"], capture_output=True, check=True).stdout.split(b"\0")
+for raw in sorted(set(n for n in names if n.endswith(b".py"))):
+    path = os.path.join(root, raw.decode())
+    if os.path.isfile(path) and not os.path.islink(path):
+        with open(path, "rb") as fh:
+            print(f"{hashlib.sha256(fh.read()).hexdigest()}  {raw.decode()}")
+PY
+}
+
 case "${1:-}" in
   sync-self-test)
     # Plants a change after a copy, a file that was deleted and an image, and sees the copy follow the host.
@@ -78,7 +94,10 @@ case "${1:-}" in
     got=$(docker run --rm -v "$v":/src:ro "$CLIENT" sh -c 'cd /src; wc -l < a.py; ls')
     case "$got" in *3*a.py*new.py*) ;; *) echo "sync-self-test: FAILED, the copy did not follow the host: $got" >&2; exit 1 ;; esac
     case "$got" in *gone.py*|*p.png*) echo "sync-self-test: FAILED, a deleted file or an image is in the copy: $got" >&2; exit 1 ;; esac
-    echo "sync-self-test: the copy follows the host" ;;
+    verify_tree "$v" "$t" || { echo "sync-self-test: FAILED, a matching copy did not verify" >&2; exit 1; }
+    printf 'edited after the copy\n' >> "$t/a.py"
+    if verify_tree "$v" "$t" 2>/dev/null; then echo "sync-self-test: FAILED, a copy older than the host verified" >&2; exit 1; fi
+    echo "sync-self-test: the copy follows the host, and a stale copy is refused" ;;
   start)
     if docker ps --format '{{.Names}}' | grep -qx "$SERVER"; then echo "$SERVER: running on 127.0.0.1:$PORT"; exit 0; fi
     # Letters and digits only, so the password cannot hide behind URL encoding in a traceback.
@@ -111,11 +130,16 @@ case "${1:-}" in
     # A worktree's .git names the main checkout's git directory by its host path, so that is mounted at the same path.
     gitdir=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)
     if [ "$gitdir" = "$ROOT/.git" ]; then extra+=(-v "$gitdir:/src/.git:ro"); else extra+=(-v "$gitdir:$gitdir:ro"); fi
-    src=ops-mssql-src-$$
-    trap 'docker rm -f "${cid:-}" >/dev/null 2>&1; docker volume rm -f "$src" >/dev/null 2>&1' EXIT
+    src=ops-mssql-src-$$; run=ops-mssql-run-$$
+    # The run's status is the tests', not the cleanup's: bash ends with the trap's last status otherwise, and a volume
+    # still held by the client container made a green run exit 1 and left the volume behind. The named client is
+    # removed first so the volume is free.
+    trap 'rc=$?; docker rm -f "$run" ${cid:+"$cid"} >/dev/null 2>&1; docker volume rm -f "$src" >/dev/null 2>&1 \
+      || echo "mssql test: could not remove volume $src (docker volume rm $src)" >&2; exit $rc' EXIT
     sync_tree "$src" "$ROOT"
+    verify_tree "$src" "$ROOT"
     # The password goes in by name from this process's environment, so it is not on docker's command line.
-    MSSQL_SA_PASSWORD="$pw" docker run --rm -v "$src":/src -v ops-mssql-venv:/venv -v ops-mssql-uvcache:/root/.cache/uv \
+    MSSQL_SA_PASSWORD="$pw" docker run --rm --name "$run" -v "$src":/src -v ops-mssql-venv:/venv -v ops-mssql-uvcache:/root/.cache/uv \
       -e MSSQL_SA_PASSWORD -e OPS_MSSQL_SERVER="$addr" -e OPS_TEST_HANG_SECONDS ${extra[@]+"${extra[@]}"} \
       -e OPS_DATABASE_URL="postgresql+asyncpg://ops:ops@host.docker.internal:$PG_PORT/$db" \
       -e OPS_TEST_DATABASE_URL="postgresql+asyncpg://ops:ops@host.docker.internal:$PG_PORT/$db" -w "/src/$member" "$CLIENT" \
