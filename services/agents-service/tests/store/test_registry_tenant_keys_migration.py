@@ -143,3 +143,30 @@ def test_the_down_path_removes_the_copies_and_refuses_with_a_count_while_two_ten
     asyncio.run(sql(scratch, ("DELETE FROM deployments WHERE tenant_id = 't-harbor'", {})))
     migrate(scratch, "downgrade", BEFORE)
     assert _rows(scratch, "registry_workflows", "tenant_id", "id") == [("local", "wf_levy")]
+
+
+@pytest.mark.parametrize(("source", "user"), [("local", "t-pine"), ("t-pine", "local")])
+def test_a_copy_carries_its_sources_versions_and_the_down_path_removes_only_the_copy(
+    scratch: URL, source: str, user: str
+) -> None:
+    """Whichever tenant holds the workflow, the copy gets its versions and graph versions; going down deletes the copy
+    and its graph versions, never the source's, and the chain then steps below 0106 without a duplicate."""
+    asyncio.run(
+        sql(
+            scratch,
+            *_workflow(source, "wf_levy"),
+            thread(source, "team_cards", "wf_levy"),
+            thread(user, "team_cards", "wf_levy"),
+        )
+    )
+    migrate(scratch, "upgrade", HEAD)
+    both = sorted([(source, "wf_levy", "1"), (user, "wf_levy", "1")])
+    assert _rows(scratch, "registry_workflow_versions", "tenant_id", "workflow_id", "version") == both
+    assert _rows(scratch, "graph_versions", "tenant_id", "name", "version") == both
+    migrate(scratch, "downgrade", BEFORE)
+    assert _rows(scratch, "registry_workflows", "tenant_id", "id") == [(source, "wf_levy")]
+    assert _rows(scratch, "registry_workflow_versions", "tenant_id", "workflow_id", "version") == [
+        (source, "wf_levy", "1")
+    ]
+    assert _rows(scratch, "graph_versions", "tenant_id", "name", "version") == [(source, "wf_levy", "1")]
+    migrate(scratch, "downgrade", "0105_thread_owner_column")

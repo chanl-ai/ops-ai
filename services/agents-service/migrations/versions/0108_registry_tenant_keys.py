@@ -12,18 +12,20 @@ channel_messages (tenant_id, deployment_id, message_key) and channel_cursors (te
 validation row written under a parent of another tenant takes its parent's tenant first.
 
 A tenant whose threads or publish requests name a workflow held by another tenant (a seeded workflow lives in
-`local`) gets its own copy, for exactly those (tenant, workflow id) pairs: the registry_workflows row, its versions and
-its graph_versions rows, with name, version and digest unchanged, so a thread's pinned digest still matches once the
-policies hold each tenant to its own rows. The source is the `local` row when there is one. Set-based and safe to run
-again: each copy is inserted only where the tenant has none.
+`local`) gets its own copy, for exactly those (tenant, workflow id) pairs: the registry_workflows row (without its
+draft), its versions and its graph_versions rows, with name, version and digest unchanged, so a thread's pinned digest
+still matches once the policies hold each tenant to its own rows. Each copy's source tenant is chosen before any copy
+is inserted: `local` when it holds the workflow, else the first holder by name. Each copied workflow version carries
+review_id COPIED. Set-based; a second run copies nothing, since each copy is made only where the tenant has none.
 
 Stop agents-service before upgrading: the keys change under its upserts, and a running old release would write
 versions and channel rows the step does not see (docs/deploy/database.md).
 
-The down path deletes the workflow copies (a non-`local` row whose id `local` also holds, created at the same time),
+The down path deletes the workflow copies (a row another tenant also holds whose every version carries COPIED; one
+a tenant has published to since is kept), then each graph_versions row another tenant holds with the same name,
+version and digest, keeping the workflow's holder, so the copies leave no duplicate that 0106's down would refuse. It
 then refuses, with a count, while two tenants hold one workflow id, widget id, deployment id, channel message or
-cursor, since the install-wide keys would fail partway; offline SQL cannot count. graph_versions copies stay: 0106
-already keys that table by tenant. Runs on PostgreSQL and SQL Server.
+cursor, since the install-wide keys would fail partway; offline SQL cannot count. Runs on PostgreSQL and SQL Server.
 """
 
 from __future__ import annotations
@@ -33,7 +35,7 @@ from typing import Any
 import sqlalchemy as sa
 from alembic import op
 
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, backfill_ddl
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, backfill_ddl, session_table_ddl
 
 revision = "0108_registry_tenant_keys"
 down_revision = "0107_system_reads_agent_pointers"
@@ -83,6 +85,11 @@ WORKFLOW_VERSION_COLUMNS = (
     "review_id",
 )
 GRAPH_VERSION_COLUMNS = ("name", "version", "digest", "definition", "created_at")
+# A copy starts with no draft.
+DRAFT_COLUMNS = ("draft", "draft_saved_at", "draft_saved_by")
+# The review_id of every workflow version this step copies: the down path removes a copy only while each of its
+# versions still carries it, so a copy a tenant has published to since is kept (and the down path refuses).
+COPIED = "copied"
 
 
 def _t(name: str, *columns: str) -> sa.TableClause:
@@ -166,62 +173,81 @@ def _referenced() -> sa.Subquery:
     ).subquery("referenced")
 
 
-def _copy_workflows() -> None:
-    """The registry_workflows row, its versions and its graph_versions for each (tenant, name) another tenant holds."""
+def _session(dialect: str, what: str) -> sa.TableClause:
+    """A session table of (tenant_id, name, source): each copy to make and the tenant it is made from."""
+    name = f"#{what}_0108" if dialect == "mssql" else f"{what}_0108"
+    op.execute(session_table_ddl(name, dialect, [("k", 330), ("tenant_id", 64), ("name", 255), ("source", 64)]))
+    return _t(name, "k", "tenant_id", "name", "source")
+
+
+def _plan(plan: sa.TableClause, held_by: str, column: str) -> None:
+    """Lists, before any copy is made, each (tenant, name) a tenant points at but does not hold in `held_by`, with the
+    holder it is copied from: `local` when it holds one, else the first tenant by name."""
     ref = _referenced()
+    rows = _t(held_by, "tenant_id", column).alias("holder")
+    mine = _t(held_by, "tenant_id", column).alias("mine")
+    first = sa.func.min(_rank(rows.c.tenant_id))
+    op.execute(
+        sa.insert(plan).from_select(
+            ["k", "tenant_id", "name", "source"],
+            sa.select(
+                ref.c.tenant_id + sa.literal("/") + ref.c.name,
+                ref.c.tenant_id,
+                ref.c.name,
+                sa.case((first == "", LOCAL), else_=first),
+            )
+            .join_from(ref, rows, rows.c[column] == ref.c.name)
+            .where(
+                rows.c.tenant_id != ref.c.tenant_id,
+                ~sa.exists().where(mine.c.tenant_id == ref.c.tenant_id, mine.c[column] == ref.c.name),
+            )
+            .group_by(ref.c.tenant_id, ref.c.name),
+        )
+    )
+
+
+def _copy_workflows(dialect: str) -> None:
+    """The registry_workflows row, its versions and its graph_versions for each (tenant, name) another tenant holds,
+    each from the one source tenant listed before anything is inserted. A copy carries no draft (a person's unsaved
+    work stays in its own tenant), and each version it copies is marked COPIED, which the down path finds it by."""
+    workflows, graphs = _session(dialect, "workflow_copies"), _session(dialect, "graph_copies")
+    _plan(workflows, "registry_workflows", "id")
+    _plan(graphs, "graph_versions", "name")
     rows = _t("registry_workflows", "tenant_id", *WORKFLOW_COLUMNS)
-    other = _t("registry_workflows", "tenant_id", "id").alias("other")
-    source = sa.select(sa.func.min(_rank(other.c.tenant_id))).where(other.c.id == rows.c.id).scalar_subquery()
-    held = sa.exists().where(other.c.tenant_id == ref.c.tenant_id, other.c.id == ref.c.name)
+    kept = [c for c in WORKFLOW_COLUMNS if c not in DRAFT_COLUMNS]
     op.execute(
         sa.insert(rows).from_select(
-            ["tenant_id", *WORKFLOW_COLUMNS],
-            sa.select(ref.c.tenant_id, *(rows.c[c] for c in WORKFLOW_COLUMNS))
-            .join_from(ref, rows, rows.c.id == ref.c.name)
-            .where(rows.c.tenant_id != ref.c.tenant_id, _rank(rows.c.tenant_id) == source, ~held),
+            ["tenant_id", *kept],
+            sa.select(workflows.c.tenant_id, *(rows.c[c] for c in kept)).join_from(
+                workflows, rows, sa.and_(rows.c.id == workflows.c.name, rows.c.tenant_id == workflows.c.source)
+            ),
         )
     )
-    # Every workflow row of a tenant that lacks a version its source holds: the copies just made, and any a stopped
-    # run left without them.
-    copy = _t("registry_workflows", "tenant_id", "id")
     versions = _t("registry_workflow_versions", "tenant_id", *WORKFLOW_VERSION_COLUMNS)
-    have = _t("registry_workflow_versions", "tenant_id", "workflow_id", "version").alias("have")
-    first = sa.select(sa.func.min(_rank(other.c.tenant_id))).where(other.c.id == copy.c.id).scalar_subquery()
+    copied = [c for c in WORKFLOW_VERSION_COLUMNS if c != "review_id"]
     op.execute(
         sa.insert(versions).from_select(
-            ["tenant_id", *WORKFLOW_VERSION_COLUMNS],
-            sa.select(copy.c.tenant_id, *(versions.c[c] for c in WORKFLOW_VERSION_COLUMNS))
-            .join_from(copy, versions, versions.c.workflow_id == copy.c.id)
-            .where(
-                versions.c.tenant_id != copy.c.tenant_id,
-                _rank(versions.c.tenant_id) == first,
-                ~sa.exists().where(
-                    have.c.tenant_id == copy.c.tenant_id,
-                    have.c.workflow_id == copy.c.id,
-                    have.c.version == versions.c.version,
-                ),
+            ["tenant_id", *copied, "review_id"],
+            sa.select(workflows.c.tenant_id, *(versions.c[c] for c in copied), sa.literal(COPIED)).join_from(
+                workflows,
+                versions,
+                sa.and_(versions.c.workflow_id == workflows.c.name, versions.c.tenant_id == workflows.c.source),
             ),
         )
     )
-    graphs = _t("graph_versions", "tenant_id", *GRAPH_VERSION_COLUMNS)
-    peer = _t("graph_versions", "tenant_id", "name").alias("peer")
-    origin = (
-        sa.select(sa.func.min(_rank(peer.c.tenant_id)))
-        .where(peer.c.name == graphs.c.name, peer.c.tenant_id != ref.c.tenant_id)
-        .scalar_subquery()
-    )
+    versions_of = _t("graph_versions", "tenant_id", *GRAPH_VERSION_COLUMNS)
     op.execute(
-        sa.insert(graphs).from_select(
+        sa.insert(versions_of).from_select(
             ["tenant_id", *GRAPH_VERSION_COLUMNS],
-            sa.select(ref.c.tenant_id, *(graphs.c[c] for c in GRAPH_VERSION_COLUMNS))
-            .join_from(ref, graphs, graphs.c.name == ref.c.name)
-            .where(
-                graphs.c.tenant_id != ref.c.tenant_id,
-                _rank(graphs.c.tenant_id) == origin,
-                ~sa.exists().where(peer.c.tenant_id == ref.c.tenant_id, peer.c.name == ref.c.name),
+            sa.select(graphs.c.tenant_id, *(versions_of.c[c] for c in GRAPH_VERSION_COLUMNS)).join_from(
+                graphs,
+                versions_of,
+                sa.and_(versions_of.c.name == graphs.c.name, versions_of.c.tenant_id == graphs.c.source),
             ),
         )
     )
+    for plan in (workflows, graphs):
+        op.execute(f"DROP TABLE {plan.name}")
 
 
 def upgrade() -> None:
@@ -246,7 +272,7 @@ def upgrade() -> None:
     before, after = _every_tenant(dialect)
     for statement in before:
         op.execute(statement)
-    _copy_workflows()
+    _copy_workflows(dialect)
     for statement in after:
         op.execute(statement)
 
@@ -274,18 +300,48 @@ def _refuse_shared_keys() -> None:
         )
 
 
-def downgrade() -> None:
-    rows = _t("registry_workflows", "tenant_id", "id", "created_at")
-    seed = _t("registry_workflows", "tenant_id", "id", "created_at").alias("seed")
-    # The copies the upgrade made: their versions go with them (the foreign key cascades).
+def _remove_copies() -> None:
+    """Deletes the workflow copies the upgrade made (their versions go with them by the foreign key), then each
+    graph_versions row another tenant holds with the same name, version and digest, keeping the holder of the workflow,
+    else the first tenant by name (`local` first)."""
+    rows, others = _t("registry_workflows", "tenant_id", "id"), _t("registry_workflows", "tenant_id", "id").alias("o")
+    versions = _t("registry_workflow_versions", "tenant_id", "workflow_id", "review_id")
+    of_row = sa.and_(versions.c.tenant_id == rows.c.tenant_id, versions.c.workflow_id == rows.c.id)
     op.execute(
         sa.delete(rows).where(
-            rows.c.tenant_id != LOCAL,
-            sa.exists().where(
-                seed.c.tenant_id == LOCAL, seed.c.id == rows.c.id, seed.c.created_at == rows.c.created_at
-            ),
+            sa.exists().where(others.c.id == rows.c.id, others.c.tenant_id != rows.c.tenant_id),
+            sa.exists().where(of_row, versions.c.review_id == COPIED),
+            ~sa.exists().where(of_row, sa.or_(versions.c.review_id.is_(None), versions.c.review_id != COPIED)),
         )
     )
+    graphs = _t("graph_versions", "tenant_id", "name", "version", "digest")
+    twin = _t("graph_versions", "tenant_id", "name", "version", "digest").alias("twin")
+    workflows = _t("registry_workflows", "tenant_id", "id").alias("w")
+
+    def holds(tenant: sa.ColumnElement[Any]) -> sa.Exists:
+        # Two levels below the DELETE, so the deleted table is named for correlation, not added as a FROM.
+        return sa.exists().where(workflows.c.tenant_id == tenant, workflows.c.id == graphs.c.name).correlate(graphs)
+
+    def twin_holds() -> sa.Exists:
+        held = _t("registry_workflows", "tenant_id", "id").alias("tw")
+        return sa.exists().where(held.c.tenant_id == twin.c.tenant_id, held.c.id == twin.c.name)
+
+    op.execute(
+        sa.delete(graphs).where(
+            sa.exists().where(
+                twin.c.name == graphs.c.name,
+                twin.c.version == graphs.c.version,
+                twin.c.digest == graphs.c.digest,
+                twin.c.tenant_id != graphs.c.tenant_id,
+                ~holds(graphs.c.tenant_id),
+                sa.or_(twin_holds(), _rank(twin.c.tenant_id) < _rank(graphs.c.tenant_id)),
+            )
+        )
+    )
+
+
+def downgrade() -> None:
+    _remove_copies()
     if not op.get_context().as_sql:
         _refuse_shared_keys()
     for child, column in PARENTS.values():
