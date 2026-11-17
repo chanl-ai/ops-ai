@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from decimal import Decimal
-from typing import Any, ClassVar
+from typing import Any, ClassVar, NotRequired, TypedDict
 
 import sqlalchemy as sa
 
@@ -32,6 +31,19 @@ def cleared(alias_ceiling: str, data: str) -> bool:
     if alias_ceiling not in SENSITIVITY or data not in SENSITIVITY:
         return False
     return SENSITIVITY.index(data) <= SENSITIVITY.index(alias_ceiling)
+
+
+class AliasFields(TypedDict):
+    """What an alias version names beyond its alias: where its calls go, the data it may carry and its prices. A field
+    left out takes the column's default."""
+
+    provider_id: str
+    model_id: str
+    cleared_sensitivity: str
+    input_per_million: Decimal
+    output_per_million: Decimal
+    reasoning_effort: NotRequired[str | None]
+    images: NotRequired[bool]
 
 
 class AliasRow(Out):
@@ -104,15 +116,15 @@ class Aliases(Store):
                 return None
         return ListResult[AliasRow].model_validate(page)
 
-    async def create(self, name: str, kind: str, fields: Mapping[str, Any]) -> bool:
+    async def create(self, name: str, kind: str, fields: AliasFields) -> bool:
         """Version 1 of a new alias; False, and nothing written, when the alias exists."""
         async with self.install_tx(ALIASES, tables=(t,)) as c:
             if (await c.execute(sa.select(t.c.name).where(t.c.name == name))).first():
                 return False
-            await c.execute(t.insert().values(**_row(name, 1, kind, fields)))
+            await c.execute(t.insert().values(**fields, **_current(name, 1, kind)))
         return True
 
-    async def add_version(self, name: str, fields: Mapping[str, Any]) -> int | None:
+    async def add_version(self, name: str, fields: AliasFields) -> int | None:
         """The next version of `name`, which replaces the one serving; None when there is no such alias."""
         async with self.install_tx(ALIASES, tables=(t,)) as c:
             newest = t.select().where(t.c.name == name).order_by(t.c.version.desc()).limit(1)
@@ -123,7 +135,7 @@ class Aliases(Store):
             # One version of an alias is current at a time (ux_model_aliases_current), so the old one is retired in
             # this transaction.
             await c.execute(t.update().where(t.c.name == name, t.c.status == "current").values(status="retired"))
-            await c.execute(t.insert().values(**_row(name, version, last.kind, fields)))
+            await c.execute(t.insert().values(**fields, **_current(name, version, last.kind)))
         return version
 
 
@@ -138,5 +150,13 @@ def _named(
     return query.where(column.in_(wanted)), params.model_copy(update={"ids": None, "search": None})
 
 
-def _row(name: str, version: int, kind: str, fields: Mapping[str, Any]) -> dict[str, Any]:
-    return {**fields, "name": name, "version": version, "kind": kind, "status": "current", "created_at": now_iso()}
+class _Current(TypedDict):
+    name: str
+    version: int
+    kind: str
+    status: str
+    created_at: str
+
+
+def _current(name: str, version: int, kind: str) -> _Current:
+    return {"name": name, "version": version, "kind": kind, "status": "current", "created_at": now_iso()}

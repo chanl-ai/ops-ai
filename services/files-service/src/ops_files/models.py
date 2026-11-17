@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import ConfigDict, Field
 
-from ops_service_kit.http import In, Out
+from ops_service_kit.http import In, ListResult, Out
 
 FilePurpose = Literal[
     "knowledge_source",
@@ -246,3 +246,50 @@ class PurposeLimitIn(In):
     purpose: FilePurpose
     allowed_types: list[str]
     max_size_mb: int
+
+
+class FileRow(Reply):
+    """A list row: the file record without versions and references."""
+
+    id: str
+    name: str
+    mime: str
+    size: int
+    digest: str
+    purpose: FilePurpose
+    team: str
+    uploaded_by: str
+    uploaded_at: str
+    scan: FileScan
+    sensitivity: str
+    sensitivity_suggested: bool
+    retention: FileRetention
+    immutable: bool
+    reference_count: int
+    version_count: int
+    legal_hold: LegalHold | None = None
+    storage: StorageLocation | None = None
+    # What was read from the file, so the list's "read as" column needs no call per row.
+    data: FileData | None = None
+
+
+class FileList(ListResult[FileRow]):
+    """A page of files, the counts of each view the Files page offers, and facet counts, all from the query."""
+
+    view_counts: dict[str, int]
+
+
+class Skipped(Out):
+    id: str
+    reason: str
+
+
+class BulkResult(Out):
+    # The console names it `updated` (lib/types/domain.ts BulkResult), as every bulk route does.
+    updated: list[str]
+    skipped: list[Skipped]
+
+
+class UploadLimits(Out):
+    per_purpose: list[PurposeLimit]
+    scanning: bool

@@ -1,9 +1,3 @@
-# 27 boundaries crossed without a model in services/files-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 2 boundaries crossed without a model in services/files-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body files_put_content
 1 body files_write_file
-1 dict-any services/files-service/src/ops_files/app.py
-3 dict-any services/files-service/src/ops_files/settings.py
-6 dict-any services/files-service/src/ops_files/store/files.py
-4 dict-any services/files-service/src/ops_files/store/read_requests.py
-2 dict-any services/files-service/src/ops_files/store/settings.py
-9 dict-any services/files-service/src/ops_files/tenant_files.py

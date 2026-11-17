@@ -24,21 +24,17 @@ from pydantic import Field
 
 from ops_access import Access, can
 from ops_files.models import (
+    BulkResult,
     CompletedUpload,
     DownloadLink,
-    FileData,
     FileDataIn,
     FileDetail,
+    FileList,
     FilePurpose,
     FileReferenceType,
-    FileRetention,
-    FileScan,
-    LegalHold,
-    PurposeLimit,
     ReadRequest,
     ReadRequestIn,
-    Reply,
-    StorageLocation,
+    UploadLimits,
     UploadRequest,
     UploadTicket,
 )
@@ -81,7 +77,6 @@ from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, Unpr
 from ops_service_kit.http import (
     Envelope,
     In,
-    ListResult,
     OptionsPage,
     Out,
     error_responses,
@@ -121,37 +116,6 @@ class Health(Out):
     reason: str | None = None
 
 
-class FileRow(Reply):
-    """A list row: the file record without versions and references."""
-
-    id: str
-    name: str
-    mime: str
-    size: int
-    digest: str
-    purpose: FilePurpose
-    team: str
-    uploaded_by: str
-    uploaded_at: str
-    scan: FileScan
-    sensitivity: str
-    sensitivity_suggested: bool
-    retention: FileRetention
-    immutable: bool
-    reference_count: int
-    version_count: int
-    legal_hold: LegalHold | None = None
-    storage: StorageLocation | None = None
-    # What was read from the file, so the list's "read as" column needs no call per row.
-    data: FileData | None = None
-
-
-class FileList(ListResult[FileRow]):
-    """A page of files, the counts of each view the Files page offers, and facet counts, all from the query."""
-
-    view_counts: dict[str, int]
-
-
 class DownloadIn(In):
     ttl_seconds: int | None = None
 
@@ -166,24 +130,8 @@ class LegalHoldIn(In):
     reason: str
 
 
-class Skipped(Out):
-    id: str
-    reason: str
-
-
-class BulkResult(Out):
-    # The console names it `updated` (lib/types/domain.ts BulkResult), as every bulk route does.
-    updated: list[str]
-    skipped: list[Skipped]
-
-
 class BulkDeleteIn(In):
     ids: list[str] = Field(min_length=1, max_length=100)
-
-
-class UploadLimits(Out):
-    per_purpose: list[PurposeLimit]
-    scanning: bool
 
 
 class ReferenceIn(In):
@@ -370,9 +318,11 @@ def create_files_app(
         return Health(status="ok")
 
     @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
-    async def health_background() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+    async def health_background() -> BackgroundHealthOut:  # pyright: ignore[reportUnusedFunction]
         """This service's background processes and their state; counts and error types only, no record's data."""
-        return {"processes": background_report(await LOCAL_BEATS.read(), "files", time.time())}
+        return BackgroundHealthOut.model_validate(
+            {"processes": background_report(await LOCAL_BEATS.read(), "files", time.time())}
+        )
 
     public = APIRouter(prefix="/v1/files", tags=["files"], responses=errors)
 
@@ -430,18 +380,17 @@ def create_files_app(
         matched. The filters are declared here so a bad value is refused; ListQuery reads the same keys as its
         filters."""
         del purpose, scan, sensitivity, read_as, read_path
-        return ok(
-            await files.list(
-                who,
-                q,
-                mine=uploaded_by == "me",
-                ref_type=ref_type,
-                ref_id=ref_id,
-                uploaded_after=uploaded_after,
-                uploaded_before=uploaded_before,
-                view=view,
-            )
+        listed = await files.list(
+            who,
+            q,
+            mine=uploaded_by == "me",
+            ref_type=ref_type,
+            ref_id=ref_id,
+            uploaded_after=uploaded_after,
+            uploaded_before=uploaded_before,
+            view=view,
         )
+        return ok(listed.model_dump(mode="json", by_alias=True))
 
     @public.post("/{file_id}/read-requests", status_code=202, response_model=Envelope[ReadRequest])
     async def request_read(  # pyright: ignore[reportUnusedFunction]
@@ -478,22 +427,27 @@ def create_files_app(
     ) -> JSONResponse:
         """The team's files a picker offers, searched and paged in the query; one not scanned clean is disabled with
         the reason. `ids` labels stored values instead of searching."""
-        return ok(await files.options(who, search=search, cursor=cursor, limit=limit, ids=ids))
+        return ok(
+            (await files.options(who, search=search, cursor=cursor, limit=limit, ids=ids)).model_dump(
+                mode="json", by_alias=True
+            )
+        )
 
     @public.get("/limits", response_model=Envelope[UploadLimits])
     async def upload_limits(who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The purpose limits uploads are checked against; readable by everyone who can upload."""
-        return ok(await files.limits(who))
+        return ok((await files.limits(who)).model_dump(mode="json", by_alias=True))
 
     @public.post("/bulk-delete", response_model=Envelope[BulkResult])
     async def bulk_delete(body: BulkDeleteIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Deletes each file the rules allow; one that is referenced, held or retained is skipped with the reason."""
-        return ok(await files.bulk_delete(who, body.ids))
+        return ok((await files.bulk_delete(who, body.ids)).model_dump(mode="json", by_alias=True))
 
     @public.post("/legal-hold", response_model=Envelope[BulkResult])
     async def set_legal_hold(body: LegalHoldIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Places or releases holds; an admin of the team only, with a reason. Sets the storage-level hold too."""
-        return ok(await files.set_legal_hold(who, body.ids, hold=body.hold, reason=body.reason))
+        done = await files.set_legal_hold(who, body.ids, hold=body.hold, reason=body.reason)
+        return ok(done.model_dump(mode="json", by_alias=True))
 
     @public.get("/{file_id}", response_model=Envelope[FileDetail], dependencies=[service_scope("view")])
     async def get_file(file_id: str, who: Caller, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

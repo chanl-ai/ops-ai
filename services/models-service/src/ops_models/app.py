@@ -17,7 +17,7 @@ from collections.abc import AsyncGenerator, AsyncIterator, Callable, Coroutine, 
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Annotated, Any, Literal, NotRequired, TypedDict, cast
+from typing import Annotated, Any, Literal, TypedDict, cast
 
 import httpx
 from fastapi import Depends, FastAPI, Header, Path, Query
@@ -94,10 +94,11 @@ from .schemas import (
     ToolFunction,
 )
 from .store import SENSITIVITY, Aliases, CallLog, ModelKeys, ProviderKeyStore, Providers, cleared
-from .store.aliases import AliasRow, ServingAlias
-from .store.keys import KeyRow
+from .store.aliases import AliasFields, AliasRow, ServingAlias
+from .store.calls import CallLogRow
+from .store.keys import KeyRow, NewKey
 from .store.provider_keys import ProviderKeyRow
-from .store.providers import ProviderRow
+from .store.providers import NewProvider, ProviderBinding, ProviderRow
 
 
 class _Wire(In):
@@ -351,31 +352,6 @@ def _provider_key_view(r: ProviderKeyRow) -> ProviderKeyOut:
 # tenant is made in that tenant's scope here, the one place models-service enters one for a call's spend.
 
 
-class CallLogRow(TypedDict):
-    """One call's row in the call log (`store.tables._call_columns`, with its tenant and images)."""
-
-    id: str
-    key_id: str
-    alias: str
-    sensitivity: str | None
-    tenant_id: str | None
-    # Each sent only by the caller that has it (a chat call's thread, an embedding's none).
-    run_id: NotRequired[str | None]
-    step_id: NotRequired[str | None]
-    thread_id: NotRequired[str | None]
-    request_hash: NotRequired[str | None]
-    images: int
-    input_tokens: int
-    output_tokens: int
-    cost: Decimal
-    latency_ms: int
-    outcome: str
-    reason: str | None
-    # Unset on a call refused before an alias version was chosen.
-    alias_version: NotRequired[int | None]
-    provider_model: NotRequired[str | None]
-
-
 class LostChargeLine(TypedDict):
     """What a log line of a charge nothing recorded carries: every field a replay needs, and the call, key and tenant
     to find it by."""
@@ -589,7 +565,7 @@ def create_models_app(
         """Adds a connection; 400 naming the field its type refuses (an Azure OpenAI connection needs its endpoint and
         api-version; its region is optional)."""
         pid = new_id("prov")
-        row = {
+        row: NewProvider = {
             "id": pid,
             "name": body.name,
             "type": body.type,
@@ -597,8 +573,9 @@ def create_models_app(
             "key_ref": body.key_ref,
             "api_version": body.api_version,
             "region": body.region,
+            "created_at": now_iso(),
         }
-        if not await providers.create({**row, "created_at": now_iso()}):
+        if not await providers.create(row):
             raise Conflict(f"A provider connection named {body.name} exists.", code="provider_exists")
         return typed(ProviderCreated(id=pid, name=body.name, type=body.type), status=201)
 
@@ -625,7 +602,12 @@ def create_models_app(
         region = body.region if "region" in given else row.region
         if (why := connection_problem(row.type, body.base_url, version, region)) is not None:
             raise ValidationFailed(why)
-        fields = {"base_url": body.base_url, "key_ref": body.key_ref, "api_version": version, "region": region}
+        fields: ProviderBinding = {
+            "base_url": body.base_url,
+            "key_ref": body.key_ref,
+            "api_version": version,
+            "region": region,
+        }
         await providers.rebind(provider_id, fields)
         return typed(_provider_view(row.model_copy(update={**fields, "observed_region": None})))
 
@@ -739,22 +721,31 @@ def create_models_app(
                 base = azure_host(body.endpoint)
             except EndpointRefused as e:
                 raise Unprocessable(str(e), code="endpoint_refused") from e
-            version = body.api_version or "v1"
-            fields = {"type": "azure-openai", "base_url": base, "api_version": version, "key_ref": body.key_name}
+            kind, base_url, api_version = "azure-openai", base, body.api_version or "v1"
         else:
-            fields = {"type": "openai-compatible", "base_url": CHAT_BASES[body.provider], "api_version": None}
-            fields["key_ref"] = body.key_name
+            kind, base_url, api_version = "openai-compatible", CHAT_BASES[body.provider], None
         name = f"{chat_aliases[0]}-{body.provider}"
         held = next(iter((await providers.page(ListParams(), name=name)).data), None)
         pid = new_id("prov") if held is None else held.id
         if held is None and not await providers.create(
-            {"id": pid, "name": name, **fields, "region": None, "created_at": now_iso()}
+            {
+                "id": pid,
+                "name": name,
+                "type": kind,
+                "base_url": base_url,
+                "key_ref": body.key_name,
+                "api_version": api_version,
+                "region": None,
+                "created_at": now_iso(),
+            }
         ):
             held = (await providers.page(ListParams(), name=name)).data[0]
         if held is not None:
             pid = held.id
-            await providers.rebind(pid, {**fields, "region": None})
-        version_fields = {
+            await providers.rebind(
+                pid, {"base_url": base_url, "key_ref": body.key_name, "api_version": api_version, "region": None}
+            )
+        version_fields: AliasFields = {
             "provider_id": pid,
             "model_id": body.model,
             "cleared_sensitivity": "confidential",
@@ -767,9 +758,16 @@ def create_models_app(
             # A new model keeps the alias's prices: zero would let every budget pass. A fresh alias starts at zero
             # until an admin prices it on the Models page.
             held_version = await aliases.current(alias)
-            prices = ("input_per_million", "output_per_million")
-            priced = {k: getattr(held_version, k) for k in prices if held_version is not None}
-            if await aliases.add_version(alias, {**version_fields, **priced}) is None:
+            priced: AliasFields = (
+                version_fields
+                if held_version is None
+                else {
+                    **version_fields,
+                    "input_per_million": held_version.input_per_million,
+                    "output_per_million": held_version.output_per_million,
+                }
+            )
+            if await aliases.add_version(alias, priced) is None:
                 await aliases.create(alias, "chat", version_fields)
         return typed(ChatModelOut(provider_id=pid, model=body.model, aliases=list(chat_aliases)))
 
@@ -873,9 +871,17 @@ def create_models_app(
     )
     async def issue_key(body: KeyIn, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         secret = new_secret()
-        row = {"id": body.id, "kind": body.kind, "budget": body.budget, "spent": Decimal(0), "status": "active"}
-        limits = {"rate_limit_per_minute": body.rate_limit_per_minute, "expires_at": body.expires_at}
-        if not await key_store.issue({**row, **limits, "secret_hash": secret_hash(secret)}):
+        issued: NewKey = {
+            "id": body.id,
+            "kind": body.kind,
+            "budget": body.budget,
+            "spent": Decimal(0),
+            "status": "active",
+            "rate_limit_per_minute": body.rate_limit_per_minute,
+            "expires_at": body.expires_at,
+            "secret_hash": secret_hash(secret),
+        }
+        if not await key_store.issue(issued):
             raise Conflict(f"A key for {body.id} exists; rotate it instead.", code="key_exists")
         # The secret is returned once and stored only as a hash.
         return typed(KeySecret(id=body.id, secret=secret), status=201)
@@ -1350,7 +1356,7 @@ def create_models_app(
     return app
 
 
-def _version_fields(body: AliasVersionIn) -> dict[str, Any]:
+def _version_fields(body: AliasVersionIn) -> AliasFields:
     return {
         "provider_id": body.provider_id,
         "model_id": body.model_id,

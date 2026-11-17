@@ -282,7 +282,7 @@ async def test_two_first_saves_at_once_are_one_save_and_one_409(engine: AsyncEng
 
     async def first() -> object:
         try:
-            return await store.save(base_version=0, document={}, by="sam", at=datetime.now(UTC), detail="first")
+            return await store.save(base_version=0, document="{}", by="sam", at=datetime.now(UTC), detail="first")
         except StaleVersionError as e:
             return e
 

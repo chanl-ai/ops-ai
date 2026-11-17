@@ -14,13 +14,14 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_models.seed import SCRIPTED
 from ops_models.store import Aliases
+from ops_models.store.aliases import AliasFields
 from ops_models.store.tables import model_aliases
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListParams
 
 from .conftest import Models
 
-FIELDS = {
+FIELDS: AliasFields = {
     "provider_id": SCRIPTED,
     "model_id": "scripted-chat",
     "cleared_sensitivity": "internal",

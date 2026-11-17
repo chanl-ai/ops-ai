@@ -6,11 +6,10 @@ opens one when no request has), which is what its caps read."""
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
 from contextlib import AbstractAsyncContextManager
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import Any, ClassVar
+from typing import ClassVar, NotRequired, TypedDict
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
@@ -44,6 +43,33 @@ SPEND_SWEEP = background.register(
 # The rate limit's window, and how long a second's count is kept past it.
 RATE_WINDOW = timedelta(seconds=60)
 KEPT = timedelta(seconds=120)
+
+
+class CallLogRow(TypedDict):
+    """One call's row in the call log (`store.tables._call_columns`, with its tenant and images)."""
+
+    id: str
+    key_id: str
+    alias: str
+    sensitivity: str | None
+    tenant_id: str | None
+    # Each sent only by the caller that has it (a chat call's thread, an embedding's none).
+    run_id: NotRequired[str | None]
+    step_id: NotRequired[str | None]
+    thread_id: NotRequired[str | None]
+    request_hash: NotRequired[str | None]
+    images: int
+    input_tokens: int
+    output_tokens: int
+    cost: Decimal
+    latency_ms: int
+    outcome: str
+    reason: str | None
+    # Unset on a call refused before an alias version was chosen.
+    alias_version: NotRequired[int | None]
+    provider_model: NotRequired[str | None]
+    # Set only by a replay or a test that places a call in the past; the table defaults it to now.
+    created_at: NotRequired[datetime]
 
 
 class CallRow(Out):
@@ -235,7 +261,7 @@ class CallLog(Store):
         super().__init__(engine)
         self.spend = KeySpend(engine)
 
-    async def record(self, row: Mapping[str, Any], *, at: datetime | None = None, once: bool = False) -> bool:
+    async def record(self, row: CallLogRow, *, at: datetime | None = None, once: bool = False) -> bool:
         """Writes the call's row, in the current tenant's log when it names a tenant, and its key's spend, in one
         transaction: the request's when one is open, else one of its own, so a row never commits without its spend.
         A replay passes `at`, when the provider answered, so the spend lands in that call's day, and `once`: False,

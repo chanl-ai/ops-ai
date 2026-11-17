@@ -15,18 +15,19 @@ credential's value. Design: docs/services/files-service/overview.md.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from typing import Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import boto3
 from azure.identity import ClientSecretCredential
 from azure.storage.blob import BlobServiceClient
 from obstore.store import AzureStore, S3Store
-from pydantic import Field, model_validator
+from pydantic import Field, JsonValue, model_validator
 
 from ops_files.models import FilePurpose, PurposeLimit, PurposeLimitIn, Reply
 from ops_files.secrets import FIELDS, CredentialCipher, CredentialKind
@@ -38,6 +39,9 @@ from ops_storage.azure_blob import AzureBlobConfig, AzureBlobObjectStore
 from ops_storage.base import StreamingObjectStore
 from ops_storage.local import LocalObjectStore
 from ops_storage.s3 import S3Config, S3ObjectStore
+
+if TYPE_CHECKING:
+    from obstore.store import S3Config as S3StoreConfig
 
 log = get_logger("ops_files.settings")
 TargetPurpose = FilePurpose | Literal["default"]
@@ -219,22 +223,25 @@ def build_store(files_dir: Any, signing_key: bytes) -> StoreFactory:
             )  # pyright: ignore[reportReturnType]
         assert values is not None
         if target.backend == "s3":
-            kwargs: dict[str, Any] = {
-                "aws_access_key_id": values["accessKeyId"],
-                "aws_secret_access_key": values["secretAccessKey"],
-                "region_name": target.region or None,
-            }
-            if target.endpoint:
-                kwargs["endpoint_url"] = target.endpoint
-            client = boto3.client("s3", **kwargs)  # pyright: ignore[reportUnknownMemberType]
-            store_config: dict[str, Any] = {
+            client = boto3.client(  # pyright: ignore[reportUnknownMemberType]
+                "s3",
+                aws_access_key_id=values["accessKeyId"],
+                aws_secret_access_key=values["secretAccessKey"],
+                region_name=target.region or None,
+                endpoint_url=target.endpoint or None,
+            )
+            store_config: S3StoreConfig = {
                 "access_key_id": values["accessKeyId"],
                 "secret_access_key": values["secretAccessKey"],
                 "region": target.region or "us-east-1",
             }
             if target.endpoint:
-                store_config.update(endpoint=target.endpoint, allow_http=target.endpoint.startswith("http://"))
-            byte_store = S3Store(target.container, config=store_config)  # pyright: ignore[reportArgumentType]
+                store_config["endpoint"] = target.endpoint
+            byte_store = S3Store(
+                target.container,
+                config=store_config,
+                client_options={"allow_http": bool(target.endpoint) and target.endpoint.startswith("http://")},
+            )
             config = S3Config(
                 bucket=target.container,
                 kms_key_id=target.encryption or None,
@@ -292,7 +299,10 @@ def failure(step: str, error: BaseException) -> str:
     code = ""
     response = getattr(error, "response", None)
     if isinstance(response, dict):
-        code = str(cast(dict[str, Any], response).get("Error", {}).get("Code", ""))
+        # botocore's error response is the AWS API's own JSON: only its Error.Code is read.
+        detail = cast(dict[str, JsonValue], response).get("Error")
+        if isinstance(detail, dict):
+            code = str(detail.get("Code", ""))
     code = code or str(getattr(error, "error_code", "") or getattr(error, "status_code", "") or "")
     if isinstance(error, TimeoutError) or "Timeout" in name:
         return TIMED_OUT
@@ -383,7 +393,7 @@ class StorageSettings:
     async def document(self, tenant: str) -> StorageDocument:
         saved = await self.saved(tenant)
         if saved is not None:
-            return StorageDocument.model_validate(saved.document)
+            return StorageDocument.model_validate(json.loads(saved.document))
         return StorageDocument(
             limits=list(self._defaults.limits), download_link_seconds=self._defaults.max_download_url_seconds
         )
@@ -472,7 +482,7 @@ class StorageSettings:
             raise TargetInUseError(f"{stranded[0][0]}/{stranded[0][1]} still holds files; keep a target on it")
         saved = await self._store.save(
             base_version=body.version,
-            document=document.model_dump(mode="json", by_alias=True),
+            document=json.dumps(document.model_dump(mode="json", by_alias=True), sort_keys=True),
             by=by,
             at=self._clock(),
             detail=_changes(before, document),

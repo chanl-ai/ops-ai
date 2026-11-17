@@ -18,14 +18,16 @@ import uuid
 from collections.abc import AsyncIterable, AsyncIterator, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Literal, cast, get_args
+from typing import TYPE_CHECKING, Literal, cast, get_args
 
 from ops_files.models import (
+    BulkResult,
     CompletedUpload,
     DownloadLink,
     FileData,
     FileDataIn,
     FileDetail,
+    FileList,
     FilePurpose,
     FileReference,
     FileReferenceType,
@@ -37,10 +39,15 @@ from ops_files.models import (
     ReadRequest,
     ReadRequestIn,
     ScanStatus,
+    Skipped,
     StorageBackendName,
     StorageLocation,
+    UploadLimits,
     UploadRequest,
     UploadTicket,
+)
+from ops_files.models import (
+    FileRow as FileListRow,
 )
 from ops_files.scanning import Scanner, ScanResult
 from ops_files.service import (
@@ -71,8 +78,24 @@ from ops_files.service import (
     retain_until,
 )
 from ops_files.sniffing import SNIFF_BYTES, prove
-from ops_files.store import AsyncEngine, FileRow, FilesStore, HoldRow, ListedFile, ReadRequestRow, ReadRequestsStore
-from ops_service_kit.http import options_page, options_window
+from ops_files.store import (
+    AsyncEngine,
+    FileDeletedPayload,
+    FileRow,
+    FilesStore,
+    HoldRow,
+    ListedFile,
+    NewReadRequest,
+    NewReference,
+    NewUpload,
+    NewVersion,
+    ReadRequestedPayload,
+    ReadRequestRow,
+    ReadRequestsStore,
+    UploadClaim,
+    UploadCompleted,
+)
+from ops_service_kit.http import OptionsPage, Pagination, options_page, options_window
 from ops_service_kit.listing import ListParams
 from ops_storage.base import ObjectExistsError, StreamingObjectStore
 from ops_store import isolation
@@ -239,7 +262,7 @@ class TenantFiles:
             raise EditNotAllowedError("your role in this team does not change files")
         row = await self._owned(who, file_id)
         self._readable(row)
-        values = {
+        values: NewReadRequest = {
             "tenant_id": who.tenant_id,
             "request_key": f"{file_id}:{key or uuid.uuid4().hex}",
             "file_id": file_id,
@@ -250,7 +273,7 @@ class TenantFiles:
             "type_name": body.type_name,
             "requested_at": self._clock(),
         }
-        payload = {
+        payload: ReadRequestedPayload = {
             "fileId": file_id,
             "fileName": row.file.name,
             "documentTypeId": body.document_type_id,
@@ -279,9 +302,9 @@ class TenantFiles:
         row = await self._owned(who, file_id)
         if row.file.status != "available":
             raise UploadStateError(f"{file_id} is {row.file.status}")
-        before = cast(dict[str, Any] | None, row.file.data)
-        if before and before.get("extractionId") == data.extraction_id:
-            kept = int(before.get("fieldsToCheck") or 0)
+        before = FileData.model_validate(row.file.data) if row.file.data else None
+        if before and before.extraction_id == data.extraction_id:
+            kept = before.fields_to_check
             if kept < data.fields_to_check:
                 data = data.model_copy(update={"fields_to_check": kept})
         stored = data.model_dump(mode="json", by_alias=True)
@@ -355,7 +378,7 @@ class TenantFiles:
             references=references,
         )
 
-    def _row_detail(self, f: ListedFile, who: Who) -> dict[str, Any]:
+    def _row_detail(self, f: ListedFile, who: Who) -> FileListRow:
         """A list row: the record without versions and references, in the console's JSON."""
         hold = (
             HoldRow(id="", placed_by=f.hold_by, placed_at=f.hold_at, reason=f.hold_reason or "")
@@ -368,8 +391,7 @@ class TenantFiles:
             by_alias=True,
             exclude={"versions", "references", "delete_blocked_by", "can_edit", "can_delete", "can_publish"},
         )
-        out["referenceCount"] = f.reference_count
-        return out
+        return FileListRow.model_validate({**out, "referenceCount": f.reference_count})
 
     # ── upload ──
 
@@ -423,7 +445,7 @@ class TenantFiles:
             check_limits(config, request)
             chosen = await self._settings.retention_for(who.tenant_id, request.purpose) if self._settings else None
             retention = config.retention_class(request.retention_class or chosen or default_class(config, request))
-            claim: dict[str, str] | None = None
+            claim: UploadClaim | None = None
             request_hash = ""
             if idempotency_key is not None:
                 if not 0 < len(idempotency_key) <= 255:
@@ -431,7 +453,10 @@ class TenantFiles:
                 # Outside text is indexed only through its hash (database portability D7).
                 scope = "\n".join([who.tenant_id, who.team, who.actor, idempotency_key])
                 request_hash = hashlib.sha256(request.model_dump_json().encode()).hexdigest()
-                claim = {"key_hash": hashlib.sha256(scope.encode()).hexdigest(), "request_hash": request_hash}
+                claim = {
+                    "key_hash": hashlib.sha256(scope.encode()).hexdigest(),
+                    "request_hash": request_hash,
+                }
                 held = await self._files.idempotent_upload(claim["key_hash"])
             now = self._clock()
             file_id = self._new_id()
@@ -440,7 +465,7 @@ class TenantFiles:
         if held is not None:
             return await self._replay(who, held, request_hash)
         ticket = await self._ticket(store, proxy, file_id=file_id, key=key, mime=request.mime, size=request.size)
-        values: dict[str, Any] = {
+        values: NewUpload = {
             "id": file_id,
             "tenant_id": who.tenant_id,
             "team": who.team,
@@ -532,7 +557,7 @@ class TenantFiles:
             )
 
         now = self._clock()
-        values: dict[str, Any] = {
+        values: UploadCompleted = {
             "digest": digest,
             "mime": proven.mime,
             "sniffed_mime": proven.mime if proven.signed else None,
@@ -541,12 +566,18 @@ class TenantFiles:
             "version_count": 1,
         }
         if self._scanning == "off":
-            values.update(scan_status="clean", scan_engine="off", scan_at=now, scan_detail="scanning is off")
+            values["scan_status"] = "clean"
+            values["scan_engine"] = "off"
+            values["scan_at"] = now
+            values["scan_detail"] = "scanning is off"
         elif self._scanning == "inline":
             assert self._scanner is not None
             result = await asyncio.to_thread(self._scanner.scan, store.iter_bytes(key))
-            values.update(scan_status=result.status, scan_engine=result.engine, scan_at=now, scan_detail=result.detail)
-        version = {
+            values["scan_status"] = result.status
+            values["scan_engine"] = result.engine
+            values["scan_at"] = now
+            values["scan_detail"] = result.detail
+        version: NewVersion = {
             "version": 1,
             "digest": digest,
             "size": size,
@@ -597,18 +628,15 @@ class TenantFiles:
         row = await self._owned(who, file_id)
         return self._detail(row, who).model_copy(update={"delete_blocked_by": self.delete_blocked_by(row)})
 
-    async def limits(self, who: Who) -> dict[str, Any]:
+    async def limits(self, who: Who) -> UploadLimits:
         """What the upload component enforces before asking for a ticket: the tenant's purpose limits, the ones
         `create_upload` checks, and whether files are scanned."""
         config = await self._config_for(who.tenant_id)
-        return {
-            "perPurpose": [item.model_dump(mode="json", by_alias=True) for item in config.limits],
-            "scanning": self._scanning != "off",
-        }
+        return UploadLimits(per_purpose=list(config.limits), scanning=self._scanning != "off")
 
     async def options(
         self, who: Who, *, search: str, cursor: str | None, limit: int, ids: list[str] | None
-    ) -> dict[str, Any]:
+    ) -> OptionsPage:
         """The file picker: the team's files labelled by name with size and date as the hint. A file not scanned clean
         is shown but cannot be picked, since nothing may use it yet (files 5.3.4)."""
         offset, window = options_window(None if ids else cursor, limit)
@@ -622,7 +650,7 @@ class TenantFiles:
             }
             for r in rows
         ]
-        return options_page(options, offset, limit)
+        return OptionsPage.model_validate(options_page(options, offset, limit))
 
     async def list(
         self,
@@ -635,7 +663,7 @@ class TenantFiles:
         uploaded_after: datetime | None = None,
         uploaded_before: datetime | None = None,
         view: str = "all",
-    ) -> dict[str, Any]:
+    ) -> FileList:
         page, counts = await self._files.list(
             who.team,
             params,
@@ -649,7 +677,12 @@ class TenantFiles:
             now=self._clock(),
         )
         rows = [self._row_detail(ListedFile.model_validate(r), who) for r in page["data"]]
-        return {**page, "data": rows, "viewCounts": counts}
+        return FileList(
+            data=rows,
+            pagination=Pagination.model_validate(page["pagination"]),
+            facets=page["facets"],
+            view_counts=counts,
+        )
 
     @staticmethod
     def _readable(row: FileRow) -> None:
@@ -718,7 +751,12 @@ class TenantFiles:
         store, _ = await self._placement(row)
         if await asyncio.to_thread(store.head, row.file.storage_key) is not None:
             await asyncio.to_thread(store.delete, row.file.storage_key)
-        payload = {"fileId": file_id, "digest": row.file.digest, "name": row.file.name, "deletedBy": who.actor}
+        payload: FileDeletedPayload = {
+            "fileId": file_id,
+            "digest": row.file.digest,
+            "name": row.file.name,
+            "deletedBy": who.actor,
+        }
         await self._files.remove(file_id, event={"team": row.file.team, "payload": payload})
 
     async def purge_released(self, today: date | None = None) -> int:
@@ -735,26 +773,26 @@ class TenantFiles:
                 deleted += 1
         return deleted
 
-    async def bulk_delete(self, who: Who, ids: list[str]) -> dict[str, Any]:
+    async def bulk_delete(self, who: Who, ids: list[str]) -> BulkResult:
         """Deletes each file the rules allow; one that cannot be deleted is skipped with the reason the sheet shows."""
         done: list[str] = []
-        skipped: list[dict[str, str]] = []
+        skipped: list[Skipped] = []
         for file_id in ids:
             try:
                 row = await self._owned(who, file_id)
             except FileMissingError:
-                skipped.append({"id": file_id, "reason": "not found"})
+                skipped.append(Skipped(id=file_id, reason="not found"))
                 continue
             if (blocked := self.delete_blocked_by(row)) is not None:
-                skipped.append({"id": file_id, "reason": blocked})
+                skipped.append(Skipped(id=file_id, reason=blocked))
                 continue
             await self.delete(who, file_id)
             done.append(file_id)
-        return {"updated": done, "skipped": skipped}
+        return BulkResult(updated=done, skipped=skipped)
 
     # ── legal hold ──
 
-    async def set_legal_hold(self, who: Who, ids: list[str], *, hold: bool, reason: str) -> dict[str, Any]:
+    async def set_legal_hold(self, who: Who, ids: list[str], *, hold: bool, reason: str) -> BulkResult:
         """Places or releases holds on files of the caller's team; a file not found is skipped with its reason. The
         storage-level hold is set too, so a hold holds against a storage administrator (files 5.6.5)."""
         if who.team not in who.admin_teams:
@@ -762,18 +800,18 @@ class TenantFiles:
         if not reason.strip():
             raise ReasonRequiredError("a legal hold needs a reason")
         done: list[str] = []
-        skipped: list[dict[str, str]] = []
+        skipped: list[Skipped] = []
         for file_id in ids:
             try:
                 row = await self._owned(who, file_id)
             except FileMissingError:
-                skipped.append({"id": file_id, "reason": "not found"})
+                skipped.append(Skipped(id=file_id, reason="not found"))
                 continue
             if row.file.status != "available":
-                skipped.append({"id": file_id, "reason": f"file is {row.file.status}"})
+                skipped.append(Skipped(id=file_id, reason=f"file is {row.file.status}"))
                 continue
             if hold == (row.hold is not None):
-                skipped.append({"id": file_id, "reason": "already held" if hold else "not held"})
+                skipped.append(Skipped(id=file_id, reason="already held" if hold else "not held"))
                 continue
             store, _ = await self._placement(row)
             await asyncio.to_thread(store.set_legal_hold, row.file.storage_key, hold)
@@ -785,7 +823,7 @@ class TenantFiles:
                 assert row.hold is not None
                 await self._files.release_hold(row.hold.id, by=who.actor, at=now, reason=reason)
             done.append(file_id)
-        return {"updated": done, "skipped": skipped}
+        return BulkResult(updated=done, skipped=skipped)
 
     # ── for other services ──
 
@@ -820,18 +858,17 @@ class TenantFiles:
             self._readable(row)
         except NotDownloadableError as error:
             raise UploadStateError(f"{file_id} cannot be attached: {error}") from error
-        await self._files.add_reference(
-            {
-                "file_id": file_id,
-                "ref_type": type,
-                "ref_id": ref_id,
-                "owner_service": owner,
-                "name": name[:255],
-                "href": href,
-                "added_at": self._clock(),
-                "blocked": None,
-            },
-        )
+        reference: NewReference = {
+            "file_id": file_id,
+            "ref_type": type,
+            "ref_id": ref_id,
+            "owner_service": owner,
+            "name": name[:255],
+            "href": href,
+            "added_at": self._clock(),
+            "blocked": None,
+        }
+        await self._files.add_reference(reference)
         if (
             self._config.retention_class(row.file.retention_class_id).after_release
             and row.file.delete_after is not None

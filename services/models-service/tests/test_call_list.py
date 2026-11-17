@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from ops_identity import dev_service_signer, mint_service_token
 from ops_models.store import CallLog
+from ops_models.store.calls import CallLogRow
 from ops_store import isolation
 
 from .conftest import Models
@@ -18,25 +19,29 @@ from .conftest import Models
 START = datetime(2026, 11, 1, 9, 0, tzinfo=UTC)
 
 
-def _row(n: int, key_id: str, tenant: str, **extra: Any) -> dict[str, Any]:
+def _row(
+    n: int, key_id: str, tenant: str, *, alias: str = "bank-standard", outcome: str = "ok", at: datetime | None = None
+) -> CallLogRow:
     return {
         "id": f"mc_{uuid4().hex[:12]}",
         "key_id": key_id,
-        "alias": "bank-standard",
+        "alias": alias,
+        "sensitivity": None,
+        "images": 0,
+        "reason": None,
         "alias_version": 1,
         "provider_model": "scripted-standard",
         "input_tokens": 10 + n,
         "output_tokens": 20 + n,
         "cost": Decimal("0.0125") * (n + 1),
         "latency_ms": 5,
-        "outcome": "ok",
+        "outcome": outcome,
         "tenant_id": tenant,
-        "created_at": START + timedelta(minutes=n),
-        **extra,
+        "created_at": at or START + timedelta(minutes=n),
     }
 
 
-async def _seed(models: Models, tenant: str, rows: list[dict[str, Any]]) -> None:
+async def _seed(models: Models, tenant: str, rows: list[CallLogRow]) -> None:
     log = CallLog(models.engine)
     with isolation.scope(tenant, None):
         for row in rows:
@@ -100,8 +105,7 @@ async def test_pages_hold_every_call_once_and_the_key_totals_count_every_page(mo
     run = uuid4().hex[:8]
     key_a, key_b, tenant = f"workflow:page-a-{run}", f"workflow:page-b-{run}", f"t_page_{run}"
     # Three calls in one instant: only the id orders them, so without it a row repeats or vanishes between pages.
-    same = {"created_at": START}
-    seeded = [_row(0, key_a, tenant, **same), _row(1, key_b, tenant, **same), _row(2, key_a, tenant, **same)]
+    seeded = [_row(0, key_a, tenant, at=START), _row(1, key_b, tenant, at=START), _row(2, key_a, tenant, at=START)]
     seeded += [_row(3, key_b, tenant), _row(4, key_a, tenant)]
     await _seed(models, tenant, seeded)
 

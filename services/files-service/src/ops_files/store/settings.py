@@ -8,10 +8,8 @@ names the version it was made from and is refused when another save got there fi
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
@@ -76,7 +74,7 @@ class StaleVersionError(Exception):
 @dataclass(frozen=True)
 class SavedSettings:
     version: int
-    document: dict[str, Any]
+    document: str
     updated_by: str
     updated_at: datetime
 
@@ -90,7 +88,7 @@ class CredentialRow(Out):
 
 
 class SettingsRow(Out):
-    """The saved document as stored: JSON text, decoded into `SavedSettings` here."""
+    """The saved document as stored: JSON text, kept whole in `SavedSettings.document`."""
 
     version: int
     document: str
@@ -110,14 +108,11 @@ class SettingsStore(Store):
             row = await one(c, q, SettingsRow)
         if row is None:
             return None
-        return SavedSettings(row.version, json.loads(row.document), row.updated_by, row.updated_at)
+        return SavedSettings(row.version, row.document, row.updated_by, row.updated_at)
 
-    async def save(
-        self, *, base_version: int, document: dict[str, Any], by: str, at: datetime, detail: str
-    ) -> SavedSettings:
+    async def save(self, *, base_version: int, document: str, by: str, at: datetime, detail: str) -> SavedSettings:
         """Writes version `base_version + 1`; `base_version` 0 is the first save. Refused when it is not current."""
         tenant = isolation.tenant()
-        text = json.dumps(document, sort_keys=True)
         async with self.tx() as c:
             try:
                 async with self.attempt(c):
@@ -131,14 +126,14 @@ class SettingsStore(Store):
                             raise StaleVersionError(f"version {exists[0]} is saved; reload and save again")
                         await c.execute(
                             storage_settings.insert().values(
-                                tenant_id=tenant, version=1, document=text, updated_by=by, updated_at=at
+                                tenant_id=tenant, version=1, document=document, updated_by=by, updated_at=at
                             )
                         )
                     else:
                         done = await c.execute(
                             storage_settings.update()
                             .where(storage_settings.c.tenant_id == tenant, storage_settings.c.version == base_version)
-                            .values(version=base_version + 1, document=text, updated_by=by, updated_at=at)
+                            .values(version=base_version + 1, document=document, updated_by=by, updated_at=at)
                         )
                         if done.rowcount != 1:
                             raise StaleVersionError(

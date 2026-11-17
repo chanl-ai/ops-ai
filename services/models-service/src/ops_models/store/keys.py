@@ -3,10 +3,9 @@ rotation's overlap), and each tenant's share of a key one service spends for man
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, ClassVar
+from typing import ClassVar, NotRequired, TypedDict
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -26,6 +25,19 @@ from .tables import model_keys as t
 # Why keys are read and written with no tenant (`Store.install_tx`): one identity's key, spent for many tenants, found
 # by a completion that authenticates by the key and often names no tenant.
 MODEL_KEYS = "model_keys"
+
+
+class NewKey(TypedDict):
+    """The columns of a key row when it is issued: a secret's hash, never the secret."""
+
+    id: str
+    kind: str
+    budget: Decimal
+    spent: Decimal
+    status: str
+    rate_limit_per_minute: int
+    expires_at: NotRequired[datetime | None]
+    secret_hash: str
 
 
 class KeyRow(Out):
@@ -109,7 +121,7 @@ class ModelKeys(Store):
         async with self.install_tx(MODEL_KEYS, tables=(t,)) as c:
             return await one(c, t.select().where(sa.or_(t.c.secret_hash == digest, previous)), KeyRow)
 
-    async def issue(self, row: Mapping[str, Any]) -> bool:
+    async def issue(self, row: NewKey) -> bool:
         """Adds a key; False, and nothing written, when the identity has one."""
         async with self.install_tx(MODEL_KEYS, tables=(t,)) as c:
             if (await c.execute(sa.select(t.c.id).where(t.c.id == row["id"]))).first():
@@ -149,7 +161,7 @@ class ModelKeys(Store):
         async with self.install_tx(MODEL_KEYS, tables=(t,)) as c:
             await c.execute(t.update().where(t.c.id == key_id).values(spent=t.c.spent + amount))
 
-    async def ensure(self, row: Mapping[str, Any]) -> None:
+    async def ensure(self, row: NewKey) -> None:
         """Adds the key unless the identity has one, which keeps its secret and its spend."""
         async with self.install_tx(MODEL_KEYS, tables=(t,)) as c:
             await c.execute(insert_ignore(c, t, row, keys=["id"]))

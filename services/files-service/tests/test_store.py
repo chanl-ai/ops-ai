@@ -7,10 +7,10 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from typing import Any, get_args
+from typing import get_args
 
 from ops_files.models import FilePurpose
-from ops_files.store import AsyncEngine, FilesStore
+from ops_files.store import AsyncEngine, FilesStore, NewUpload, NewVersion, UploadCompleted
 from ops_service_kit.listing import ListParams
 from ops_store import isolation
 
@@ -20,7 +20,7 @@ DIGEST = "a" * 64
 NOW = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 
-def _upload(file_id: str, tenant: str, team: str = "team_ops") -> dict[str, Any]:
+def _upload(file_id: str, tenant: str, team: str = "team_ops") -> NewUpload:
     return {
         "id": file_id,
         "tenant_id": tenant,
@@ -45,11 +45,18 @@ def _upload(file_id: str, tenant: str, team: str = "team_ops") -> dict[str, Any]
     }
 
 
-def _available() -> dict[str, Any]:
-    return {"digest": DIGEST, "status": "available", "version_count": 1}
+def _available() -> UploadCompleted:
+    return {
+        "digest": DIGEST,
+        "mime": "application/pdf",
+        "sniffed_mime": None,
+        "status": "available",
+        "upload_expires_at": None,
+        "version_count": 1,
+    }
 
 
-def _version(file_id: str, tenant: str) -> dict[str, Any]:
+def _version(file_id: str, tenant: str) -> NewVersion:
     return {
         "version": 1,
         "digest": DIGEST,

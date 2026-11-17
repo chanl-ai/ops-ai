@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Any, Literal, cast
+from typing import Literal, TypedDict
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -46,6 +47,33 @@ read_requests = sa.Table(
 EVENT = "file.read_requested"
 
 
+class NewReadRequest(TypedDict):
+    """The columns of a read request row; its status starts as queued."""
+
+    tenant_id: str
+    request_key: str
+    file_id: str
+    team: str
+    requested_by: str
+    document_type_id: str | None
+    version: int | None
+    type_name: str | None
+    requested_at: datetime
+
+
+class ReadRequestedPayload(TypedDict):
+    """The body of the file.read_requested event, in its wire keys."""
+
+    fileId: str
+    fileName: str
+    documentTypeId: str | None
+    version: int | None
+    typeName: str | None
+    read: Literal["fields", "propose"] | None
+    hint: str | None
+    maxPages: int | None
+
+
 class ReadRequestRow(Out):
     tenant_id: str
     request_key: str
@@ -63,9 +91,9 @@ class ReadRequestRow(Out):
 class ReadRequestsStore(Store):
     role = ROLE
 
-    async def request(self, values: Mapping[str, Any], payload: Mapping[str, object]) -> ReadRequestRow:
+    async def request(self, values: NewReadRequest, payload: ReadRequestedPayload) -> ReadRequestRow:
         """The request, new with its event, or the one already holding its key."""
-        key = str(values["request_key"])
+        key = values["request_key"]
         async with self.tx() as c:
             try:
                 async with self.attempt(c):
@@ -73,12 +101,12 @@ class ReadRequestsStore(Store):
                     await add_event(
                         c,
                         service_outbox,
-                        tenant_id=str(values["tenant_id"]),
-                        team_id=str(values["team"]),
+                        tenant_id=values["tenant_id"],
+                        team_id=values["team"],
                         name=EVENT,
                         key=key,
                         payload=dict(payload),
-                        actor=str(values["requested_by"]),
+                        actor=values["requested_by"],
                     )
             except IntegrityError:
                 pass
@@ -105,11 +133,14 @@ class ReadRequestsStore(Store):
                 .values(status=status, run_id=run_id)
             )
 
-    async def record_run(self, body: Mapping[str, object], service: str, answer: object) -> None:
+    async def record_run(self, body: Mapping[str, JsonValue], service: str, answer: JsonValue) -> None:
         """The relay's `enrich`: a delivered read request's event names the run agents-service started, recorded on
-        the request so the console follows it. Runs inside the event's tenant and team."""
+        the request so the console follows it. Runs inside the event's tenant and team. `answer` is agents-service's
+        reply JSON, which this service does not define."""
         if body["name"] != EVENT or service != "agents" or not isinstance(answer, dict):
             return
-        done = cast(Mapping[str, object], answer)
-        runs = cast(list[str], done.get("runIds") or [])
-        await self.started(str(body["key"]), status=str(done.get("status")), run_id=next(iter(runs), None))
+        runs = answer.get("runIds") or []
+        first = runs[0] if isinstance(runs, list) and runs else None
+        await self.started(
+            str(body["key"]), status=str(answer.get("status")), run_id=None if first is None else str(first)
+        )

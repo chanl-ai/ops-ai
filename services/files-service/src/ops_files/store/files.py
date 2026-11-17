@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime, timedelta
-from typing import Any, ClassVar
+from typing import Any, ClassVar, NotRequired, TypedDict
 
 import sqlalchemy as sa
 from pydantic import JsonValue
@@ -42,18 +42,134 @@ __all__ = [
     "ROLE",
     "SYSTEM_ROLE",
     "AsyncEngine",
+    "FileChange",
+    "FileDeleted",
+    "FileDeletedPayload",
     "FileOut",
     "FileRow",
     "FilesStore",
     "HoldRow",
     "ListedFile",
+    "NewReference",
+    "NewUpload",
+    "NewVersion",
     "OptionRow",
     "ReferenceOut",
+    "UploadClaim",
+    "UploadCompleted",
     "VersionOut",
     "engine_for",
     "metadata",
     "reachable",
 ]
+
+
+class NewUpload(TypedDict):
+    """The columns of a file row inserted when an upload is ticketed."""
+
+    id: str
+    tenant_id: str
+    team: str
+    name: str
+    mime: str
+    size: int
+    purpose: str
+    status: str
+    scan_status: str
+    sensitivity: str
+    sensitivity_suggested: bool
+    retention_class_id: str
+    delete_after: NotRequired[date | None]
+    immutable: bool
+    storage_backend: str
+    storage_container: str
+    storage_key: str
+    declared_size: int
+    declared_digest: NotRequired[str | None]
+    upload_expires_at: NotRequired[datetime | None]
+    uploaded_by: str
+    uploaded_at: datetime
+    version_count: int
+
+
+class UploadClaim(TypedDict):
+    """An Idempotency-Key as indexed: hashes only, never the key or the request."""
+
+    key_hash: str
+    request_hash: str
+
+
+class UploadCompleted(TypedDict):
+    """The columns a completed upload sets: its proven type and digest, and the scan result when scanning ran inline."""
+
+    digest: str
+    mime: str
+    sniffed_mime: str | None
+    status: str
+    upload_expires_at: None
+    version_count: int
+    scan_status: NotRequired[str]
+    scan_engine: NotRequired[str]
+    scan_at: NotRequired[datetime]
+    scan_detail: NotRequired[str | None]
+
+
+class NewVersion(TypedDict):
+    """The first version row written with a completed upload."""
+
+    version: int
+    digest: str
+    size: int
+    storage_key: str
+    uploaded_by: str
+    uploaded_at: datetime
+    current: bool
+
+
+class FileChange(TypedDict, total=False):
+    """The columns `update` may set on a file row."""
+
+    data: JsonValue
+    read_as: str | None
+    read_path: str | None
+    purpose: str
+    immutable: bool
+    status: str
+    delete_after: date | None
+    scan_status: str
+    scan_engine: str
+    scan_at: datetime
+    scan_detail: str | None
+
+
+class NewReference(TypedDict):
+    """A record of another service that uses a file."""
+
+    file_id: str
+    ref_type: str
+    ref_id: str
+    owner_service: str
+    name: str
+    href: str | None
+    added_at: datetime
+    blocked: str | None
+
+
+class FileDeletedPayload(TypedDict):
+    """The body of the file.deleted event, in its wire keys."""
+
+    fileId: str
+    digest: str | None
+    name: str
+    deletedBy: str
+
+
+class FileDeleted(TypedDict):
+    """A deletion's outbox event: the file's team and the file.deleted body."""
+
+    team: str
+    payload: FileDeletedPayload
+
 
 # The role every transaction runs as; row-level security applies to it, not to the owner the service connects as.
 ROLE = "ops_files_tenant"
@@ -509,7 +625,7 @@ class FilesStore(Store):
     # ── writes ──
 
     async def insert_upload(
-        self, values: Mapping[str, Any], *, idempotency: Mapping[str, str] | None = None
+        self, values: NewUpload, *, idempotency: UploadClaim | None = None
     ) -> tuple[str, str] | None:
         """Inserts an upload, and with `idempotency` ({key_hash, request_hash}) claims the key for it in the same
         transaction. When another upload already holds the key, nothing is written and (its file id, its request
@@ -562,12 +678,12 @@ class FilesStore(Store):
                 .values(file_id=to_file)
             )
 
-    async def update(self, file_id: str, values: Mapping[str, Any]) -> None:
+    async def update(self, file_id: str, values: FileChange) -> None:
         tenant = isolation.tenant()
         async with self.tx() as c:
             await c.execute(sa.update(files).where(files.c.tenant_id == tenant, files.c.id == file_id).values(**values))
 
-    async def make_available(self, file_id: str, values: Mapping[str, Any], version: Mapping[str, Any]) -> str | None:
+    async def make_available(self, file_id: str, values: UploadCompleted, version: NewVersion) -> str | None:
         """Marks an upload available and claims its digest for the team in one transaction. When another file of the
         team already holds the digest, nothing is written and that file's id is returned."""
         tenant = isolation.tenant()
@@ -613,8 +729,8 @@ class FilesStore(Store):
         async with isolation.system_tx(self.engine, RETENTION_DUE, role=SYSTEM_ROLE) as c:
             return [(str(r[0]), str(r[1]), str(r[2])) for r in await c.execute(q)]
 
-    async def remove(self, file_id: str, *, event: Mapping[str, Any] | None = None) -> None:
-        """Deletes the file's rows; the digest is free again for its team. Hold history stays. `event` (team, actor,
+    async def remove(self, file_id: str, *, event: FileDeleted | None = None) -> None:
+        """Deletes the file's rows; the digest is free again for its team. Hold history stays. `event` (team and
         payload) is written to the outbox in the same transaction, so the deletion and its file.deleted event commit
         together and a relay delivers it however long agents-service is down."""
         tenant = isolation.tenant()
@@ -624,11 +740,10 @@ class FilesStore(Store):
                     c,
                     service_outbox,
                     tenant_id=tenant,
-                    team_id=str(event["team"]),
+                    team_id=event["team"],
                     name="file.deleted",
                     key=file_id,
                     payload=dict(event["payload"]),
-                    actor=event.get("actor"),
                 )
             await c.execute(
                 sa.delete(file_blobs).where(file_blobs.c.tenant_id == tenant, file_blobs.c.file_id == file_id)
@@ -667,10 +782,10 @@ class FilesStore(Store):
                 .values(released_by=by, released_at=at, release_reason=reason)
             )
 
-    async def add_reference(self, values: Mapping[str, Any]) -> bool:
+    async def add_reference(self, values: NewReference) -> bool:
         """False when the file already has this reference."""
         tenant = isolation.tenant()
-        team = _team_of(str(values["file_id"]))
+        team = _team_of(values["file_id"])
         async with self.tx() as c:
             try:
                 async with self.attempt(c):

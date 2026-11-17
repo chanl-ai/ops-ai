@@ -15,6 +15,7 @@ from sqlalchemy import event
 from sqlalchemy.exc import DBAPIError
 
 from ops_models.store import CallLog
+from ops_models.store.calls import CallLogRow
 from ops_models.store.tables import model_call_log, model_calls_untenanted, model_key_tenants
 from ops_service_kit.listing import ListParams
 from ops_store import isolation
@@ -28,11 +29,14 @@ ROLE = "ops_models_tenant"
 RUNTIME = "ops_models_runtime"
 
 
-def _row(key_id: str, tenant: str | None) -> dict[str, object]:
+def _row(key_id: str, tenant: str | None) -> CallLogRow:
     return {
         "id": f"mc_{uuid4().hex[:12]}",
         "key_id": key_id,
         "alias": "bank-standard",
+        "sensitivity": None,
+        "images": 0,
+        "reason": None,
         "input_tokens": 1,
         "output_tokens": 1,
         "cost": Decimal("0.01"),

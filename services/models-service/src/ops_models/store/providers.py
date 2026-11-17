@@ -3,8 +3,7 @@ credential itself)."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any, ClassVar
+from typing import ClassVar, NotRequired, TypedDict
 
 import sqlalchemy as sa
 
@@ -21,6 +20,34 @@ from .tables import provider_connections as t
 # Why connections are read and written with no tenant (`Store.install_tx`): one install's, used by every tenant's
 # calls, including a completion that authenticates by a model key and names no tenant.
 CONNECTIONS = "provider_connections"
+
+
+class NewProvider(TypedDict):
+    """The columns of a connection row when it is added."""
+
+    id: str
+    name: str
+    type: str
+    base_url: str | None
+    key_ref: str | None
+    api_version: NotRequired[str | None]
+    region: NotRequired[str | None]
+    created_at: str
+
+
+class ProviderBinding(TypedDict):
+    """Where a connection's calls go."""
+
+    base_url: str | None
+    key_ref: str | None
+    api_version: str | None
+    region: str | None
+
+
+class InstallConnection(ProviderBinding):
+    """The install's settings' connection: it also names the type, which wins over the stored one."""
+
+    type: str
 
 
 class ProviderRow(Out):
@@ -57,7 +84,7 @@ class Providers(Store):
         async with self.install_tx(CONNECTIONS, tables=(t,)) as c:
             return await one(c, t.select().where(t.c.id == provider_id), ProviderRow)
 
-    async def create(self, row: Mapping[str, Any]) -> bool:
+    async def create(self, row: NewProvider) -> bool:
         """Adds a connection; False, and nothing written, when one with the same name exists."""
         async with self.install_tx(CONNECTIONS, tables=(t,)) as c:
             if (await c.execute(sa.select(t.c.id).where(t.c.name == row["name"]))).first():
@@ -65,7 +92,7 @@ class Providers(Store):
             await c.execute(t.insert().values(**row))
         return True
 
-    async def rebind(self, provider_id: str, fields: Mapping[str, Any]) -> None:
+    async def rebind(self, provider_id: str, fields: ProviderBinding) -> None:
         """Sets where the connection's calls go (base URL, credential name, api-version, region); a moved endpoint has
         not answered yet, so the observed region is cleared."""
         async with self.install_tx(CONNECTIONS, tables=(t,)) as c:
@@ -80,7 +107,7 @@ class Providers(Store):
                 .values(observed_region=region)
             )
 
-    async def ensure(self, row: Mapping[str, Any]) -> None:
+    async def ensure(self, row: NewProvider) -> None:
         """Adds the connection unless one with its id exists, which is left as it is."""
         async with self.install_tx(CONNECTIONS, tables=(t,)) as c:
             await c.execute(insert_ignore(c, t, row, keys=["id"]))

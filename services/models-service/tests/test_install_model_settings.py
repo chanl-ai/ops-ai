@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from ops_models.connection_settings import ModelConnectionSettings
 from ops_models.seed import OPENAI_LOCAL, install_connection, seed
 from ops_models.store import provider_connections
+from ops_models.store.providers import InstallConnection
 from ops_service_kit.settings import Settings
 
 NAMES = ("OPENAI_API_TYPE", "OPENAI_API_BASE", "OPENAI_BASE_URL", "OPENAI_API_VERSION", "OPENAI_API_REGION")
@@ -32,7 +33,7 @@ def _env(monkeypatch: pytest.MonkeyPatch, env: dict[str, str]) -> None:
         monkeypatch.setenv(name, value)
 
 
-def _connection(monkeypatch: pytest.MonkeyPatch, env: dict[str, str]) -> dict[str, str | None] | None:
+def _connection(monkeypatch: pytest.MonkeyPatch, env: dict[str, str]) -> InstallConnection | None:
     _env(monkeypatch, env)
     return install_connection(ModelConnectionSettings())
 
