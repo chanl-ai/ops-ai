@@ -1047,7 +1047,7 @@ def publish_bank_module(gw: httpx.Client, host: str) -> str:
         )
     )
     hold = next(o for o in made["operations"] if o["name"] == "place_hold")
-    policy = {"approvers": 1, "stepUp": True}
+    policy = {"approvers": 1, "stepUp": True, "approvalMode": "reviewer"}
     data(gw.patch(f"/v1/tool-modules/{made['id']}/operations/{hold['id']}", json=policy))
     # The levy demo's webhook runs at once, as reimport_bank_module.py sets it.
     if hook := next((o for o in made["operations"] if o["name"] == "notify_webhook"), None):
