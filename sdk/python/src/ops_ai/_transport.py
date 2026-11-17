@@ -356,20 +356,31 @@ def page_items(data: Any) -> tuple[list[Any], dict[str, Any] | None]:
 PAGE_MAX = 50
 
 
+def _asked(query: dict[str, Any]) -> dict[str, Any]:
+    """The query with a page size: 50 when none, and never above the maximum (a larger one is answered at 50 anyway)."""
+    return {**query, "page_size": min(int(query.get("page_size") or PAGE_MAX), PAGE_MAX)}
+
+
+def iter_pages(call: Any, **query: Any) -> Iterator[Any]:
+    """The rows of a list operation one by one, asking for the next page only when the last one is used up."""
+    asked, more = _asked(query), {}
+    while more is not None:
+        items, more = page_items(call(**{**asked, **more}))
+        yield from items
+
+
+async def iter_pages_async(call: Any, **query: Any) -> AsyncIterator[Any]:
+    asked, more = _asked(query), {}
+    while more is not None:
+        items, more = page_items(await call(**{**asked, **more}))
+        for item in items:
+            yield item
+
+
 def every_page(call: Any, **query: Any) -> list[Any]:
     """Every row of a list operation, following `pagination.hasNext` page after page (never the first page only)."""
-    rows: list[Any] = []
-    more: dict[str, Any] | None = {}
-    while more is not None:
-        items, more = page_items(call(**{"page_size": PAGE_MAX, **query, **more}))
-        rows += items
-    return rows
+    return list(iter_pages(call, **query))
 
 
 async def every_page_async(call: Any, **query: Any) -> list[Any]:
-    rows: list[Any] = []
-    more: dict[str, Any] | None = {}
-    while more is not None:
-        items, more = page_items(await call(**{"page_size": PAGE_MAX, **query, **more}))
-        rows += items
-    return rows
+    return [row async for row in iter_pages_async(call, **query)]

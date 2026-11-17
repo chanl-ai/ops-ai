@@ -249,17 +249,26 @@ export function pageItems(data: unknown): [unknown[], Record<string, unknown> | 
 /** The install's largest page size; a larger one is answered at this size. */
 export const PAGE_MAX = 50;
 
+/** The rows of a list operation one by one, asking for the next page only when the last one is used up. A page size above the maximum is never asked for. */
+export async function* eachPage(
+  fetchPage: (query: Record<string, unknown>) => Promise<unknown>,
+  query: Record<string, unknown> = {},
+): AsyncGenerator<any> {
+  const asked = { ...query, pageSize: Math.min(Number(query.pageSize ?? PAGE_MAX), PAGE_MAX) };
+  let next: Record<string, unknown> | null = {};
+  while (next) {
+    const [items, more] = pageItems(await fetchPage({ ...asked, ...next }));
+    yield* items;
+    next = more;
+  }
+}
+
 /** Every row of a list operation, following `pagination.hasNext` page after page (never the first page only). */
 export async function everyPage(
   fetchPage: (query: Record<string, unknown>) => Promise<unknown>,
   query: Record<string, unknown> = {},
 ): Promise<any[]> {
-  const rows: unknown[] = [];
-  let next: Record<string, unknown> | null = {};
-  while (next) {
-    const [items, more] = pageItems(await fetchPage({ pageSize: PAGE_MAX, ...query, ...next }));
-    rows.push(...items);
-    next = more;
-  }
+  const rows: any[] = [];
+  for await (const row of eachPage(fetchPage, query)) rows.push(row);
   return rows;
 }
