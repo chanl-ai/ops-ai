@@ -2487,7 +2487,11 @@ export interface paths {
          */
         get: operations["threads_list_threads"];
         put?: never;
-        /** Create Thread */
+        /**
+         * Create Thread
+         * @description A thread and its budget, written in the request transaction, so a failure between the two leaves no thread
+         *     without its budget. Nothing here calls another service: the key admission port answers in this process.
+         */
         post: operations["threads_create_thread"];
         delete?: never;
         options?: never;
@@ -2633,7 +2637,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Stream Run */
+        /**
+         * Stream Run
+         * @description A run of the thread, streamed as it goes. No request transaction: the run calls models and tools while it
+         *     streams, and each step's store call (the run's journal, the lease, the thread's status) commits on its own so a
+         *     frame sent is a frame kept even if the stream breaks.
+         */
         post: operations["threads_stream_run"];
         delete?: never;
         options?: never;

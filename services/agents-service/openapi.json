@@ -52369,6 +52369,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
+        "description": "A thread and its budget, written in the request transaction, so a failure between the two leaves no thread\nwithout its budget. Nothing here calls another service: the key admission port answers in this process.",
         "operationId": "threads_create_thread",
         "parameters": [
           {
@@ -53930,6 +53931,7 @@
     },
     "/v1/threads/{thread_id}/runs/stream": {
       "post": {
+        "description": "A run of the thread, streamed as it goes. No request transaction: the run calls models and tools while it\nstreams, and each step's store call (the run's journal, the lease, the thread's status) commits on its own so a\nframe sent is a frame kept even if the stream breaks.",
         "operationId": "threads_stream_run",
         "parameters": [
           {

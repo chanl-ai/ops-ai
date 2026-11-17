@@ -383,8 +383,10 @@ async def test_local_channel_routes_answer_in_one_transaction(stack: Stack) -> N
         ("PATCH", "/v1/deployments/dep_pin", {"paused": True}, BUILDER),
         ("GET", f"/v1/threads/{tid}/inbox", None, BUILDER),
         ("POST", "/v1/channels/wd_branch/retire", None, BUILDER),
+        ("POST", "/v1/threads", {"graph": "dispute_email"}, BUILDER),
     ]
-    expected = [(m, p, 201 if p == "/v1/deployments" else 200, 1) for m, p, _, _ in requests]
+    made = {"/v1/deployments", "/v1/threads"}
+    expected = [(m, p, 201 if p in made else 200, 1) for m, p, _, _ in requests]
     assert await connections(c, requests) == expected
 
 

@@ -164,7 +164,9 @@ def _thread_view(row: dict[str, Any]) -> dict[str, Any]:
     status_code=201,
     responses={200: {"model": Envelope[ThreadCreated], "description": "An existing thread with that external key"}},
 )
-async def create_thread(rt: Rt, me: Me, body: ThreadInput) -> JSONResponse:
+async def create_thread(rt: Rt, me: Me, _: Tx, body: ThreadInput) -> JSONResponse:
+    """A thread and its budget, written in the request transaction, so a failure between the two leaves no thread
+    without its budget. Nothing here calls another service: the key admission port answers in this process."""
     # A thread is made to run: the run-start rule, in the team it is made in.
     require_runs_start(me, team_id=None, what=f"graph {body.graph}")
     key_pin = require_key_reaches(me, *graph_target(body.graph))
@@ -310,6 +312,9 @@ def _frame(event: dict[str, Any]) -> dict[str, str]:
 
 @router.post("/{thread_id}/runs/stream", response_model=None, responses=SSE_RESPONSE)
 async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSourceResponse:
+    """A run of the thread, streamed as it goes. No request transaction: the run calls models and tools while it
+    streams, and each step's store call (the run's journal, the lease, the thread's status) commits on its own so a
+    frame sent is a frame kept even if the stream breaks."""
     store = _store(rt)
     row, graph = await _thread_for(rt, me, thread_id)
     if (body.input is None) == (body.resume is None):
