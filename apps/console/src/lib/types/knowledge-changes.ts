@@ -40,15 +40,14 @@ export interface ChangeCitation {
 
 /**
  * A proposed edit to one passage of a knowledge document, as kb-service answers it; nothing reaches agents until the
- * document's owner approves it. kb-service types `citedBy` and `faq` as free-form objects, and does not return `conflict`,
- * `decisionReason` or `retest` yet; the console reads those three, so they stay here as view-only fields.
+ * document's owner approves it. kb-service types `citedBy` and `faq` as free-form objects, and does not return `conflict`
+ * or `retest` yet; the console reads those two, so they stay here as view-only fields.
  */
 export type KnowledgeChange = Omit<ServedChange, 'citedBy' | 'faq'> & {
   citedBy: ChangeCitation[];
   /** Set on an FAQ draft. */
   faq?: FaqDraft | null;
   conflict?: ChangeConflict;
-  decisionReason?: string;
   /** Set on approval: the citing workflows' tests that were queued. */
   retest?: { tests: number; workflows: string[] };
 };
@@ -68,4 +67,6 @@ export interface ChangeViewCounts {
 export interface ChangeDecisionInput {
   ids: string[];
   decision: 'approve' | 'reject';
+  /** The reviewer's reason, up to 500 characters; kb-service answers longer ones 400 `validation_failed`. */
+  reason?: string;
 }

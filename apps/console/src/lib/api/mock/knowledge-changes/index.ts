@@ -67,9 +67,10 @@ export function createKnowledgeChangesMock(deps: Deps): KnowledgeChangesApi {
         input.ids.map((id) => {
           const s = find(id);
           const c = row(s);
+          if ((input.reason?.length ?? 0) > 500) throw new ApiError('The reason can be at most 500 characters.', 400, undefined, 'validation_failed');
           if (!isOpen(c)) throw new ApiError(`That draft is ${c.status}; there is nothing to decide.`, 409);
           if (!c.canDecide) throw new ApiError(`Only ${s.owner} can decide changes to ${s.documentTitle}.`, 403);
-          Object.assign(s, { status: input.decision === 'approve' ? 'approved' : 'rejected', decidedAt: new Date().toISOString(), decidedBy: deps.me });
+          Object.assign(s, { status: input.decision === 'approve' ? 'approved' : 'rejected', decidedAt: new Date().toISOString(), decidedBy: deps.me, decisionReason: input.reason?.trim() || null });
           return row(s);
         }),
       ),
