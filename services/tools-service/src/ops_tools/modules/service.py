@@ -2289,7 +2289,9 @@ class ModuleService:
             # A key's tools.run is for the gateway's call path over MCP; the test console is a person's page.
             raise Forbidden("An API key runs tools over MCP, not the test console.", code="role_required")
         _can(who, "tools", "run", what="tools")
-        m = await self._find(who, module_id)
+        # Trying a tool is its owners' authoring page: a team holding only a workflow's grant calls it through the
+        # gateway's /v1/calls, never through the owner context here.
+        m = await self._owned(who, module_id)
         o = next((x for x in m["operations"] if x["name"] == i["operation"]), None)
         if o is None:
             raise NotFound("Operation")
