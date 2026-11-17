@@ -34,7 +34,6 @@ import type { SkillsApi } from './skills-contract';
 import type { WidgetsApi } from './widgets-contract';
 import type { WidgetDeploymentsApi } from './widget-deployments-contract';
 import type { BatchesApi } from './batches-contract';
-import type { FormsApi } from './forms-contract';
 import type { ActivityApi } from './activity-contract';
 import type { CaseRecordsApi } from './case-records-contract';
 import type { AssuranceApi } from './assurance-contract';
@@ -226,8 +225,6 @@ export interface OpsApi {
   skills: SkillsApi;
   widgets: WidgetsApi;
   widgetDeployments: WidgetDeploymentsApi;
-  /** A workflow's start form shared as a page (agents-service /v1/workflows/{id}/forms). */
-  forms: FormsApi;
   /** A workflow started once per row of a file, and the batch's page (agents-service /v1/workflows/{id}/batches). */
   batches: BatchesApi;
   /** The team's customer issues with their deadlines and timelines (agents-service /v1/cases). */

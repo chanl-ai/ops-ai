@@ -1205,16 +1205,6 @@ export function createMockApi(): OpsApi {
       previewSession: () => Promise.reject(new ApiError('Preview needs the agents service.', 501)),
       scriptUrl: () => 'http://localhost:8600/embed/v1.js',
     },
-    // Hosted forms are agents-service's; the mock lists none and refuses writes.
-    forms: {
-      list: () => respond(() => []),
-      create: () => Promise.reject(new ApiError('Hosted forms need the agents service.', 501)),
-      rotate: () => Promise.reject(new ApiError('Hosted forms need the agents service.', 501)),
-      update: () => Promise.reject(new ApiError('Hosted forms need the agents service.', 501)),
-      memberForm: () => Promise.reject(new ApiError('Hosted forms need the agents service.', 501)),
-      submitMember: () => Promise.reject(new ApiError('Hosted forms need the agents service.', 501)),
-      pageUrl: (form) => form.url,
-    },
     // Batches are agents-service's; the mock refuses them rather than pretend to start runs.
     batches: {
       dryRun: () => Promise.reject(new ApiError('Starting from a file needs the agents service.', 501)),

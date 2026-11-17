@@ -65,11 +65,12 @@ export function ShareAsForm({ workflowId, schema: raw, readOnly }: { workflowId:
     try {
       const made = await create.mutateAsync({
         mode: publicFormPage ? mode : 'members',
-        ...(publicFormPage && mode === 'link' ? { expiresInDays: daysN } : {}),
+        // The server's own default of 30 days; a members-only form does not expire.
+        expiresInDays: publicFormPage && mode === 'link' ? daysN : 30,
         dailyCap: capN,
         // The page shows the start form's own title when it has one, else the server uses the workflow's name.
         ...(schema.title ? { title: schema.title } : {}),
-        ...(schema.description ? { description: schema.description } : {}),
+        description: schema.description ?? '',
         afterText: after.trim(),
       });
       setFresh((f) => ({ ...f, [made.id]: made }));
@@ -79,7 +80,7 @@ export function ShareAsForm({ workflowId, schema: raw, readOnly }: { workflowId:
     }
   };
 
-  const list = forms.data ?? [];
+  const list = forms.data?.pages.flatMap((p) => p.data) ?? [];
   return (
     <div data-testid="trigger-share-form">
       <Section
@@ -147,6 +148,11 @@ export function ShareAsForm({ workflowId, schema: raw, readOnly }: { workflowId:
           {list.map((f) => (
             <SharedForm key={f.id} form={fresh[f.id] ?? f} paused={f.paused} readOnly={readOnly} publicFormPage={publicFormPage} onRotated={(r) => setFresh((x) => ({ ...x, [r.id]: r }))} />
           ))}
+          {forms.hasNextPage && (
+            <Button type="button" variant="outline" size="sm" className="self-start" disabled={forms.isFetchingNextPage} onClick={() => void forms.fetchNextPage()} data-testid="forms-more">
+              {forms.isFetchingNextPage ? 'Loading…' : 'Show more'}
+            </Button>
+          )}
         </div>
       </Section>
     </div>
