@@ -10,6 +10,7 @@ route, what changed, what a caller must do.
 
 from __future__ import annotations
 
+import difflib
 import re
 import sys
 from pathlib import Path
@@ -59,7 +60,15 @@ def main() -> int:
     text = TARGET.read_text()
     new = render(text)
     if "--check" in sys.argv:
-        return 0 if new == text else 1
+        if new == text:
+            return 0
+        rel = str(TARGET.relative_to(ROOT))
+        diff = difflib.unified_diff(text.splitlines(True), new.splitlines(True), rel, f"{rel} (generated)")
+        sys.stdout.write("".join(diff))
+        sys.stdout.write(
+            f"{rel} is behind {SOURCE.relative_to(ROOT)}: run uv run python sdk/changelog_from_api_changes.py\n"
+        )
+        return 1
     TARGET.write_text(new)
     sys.stdout.write(f"{sum(1 for line in new.splitlines() if line.startswith('- '))} breaking lines\n")
     return 0

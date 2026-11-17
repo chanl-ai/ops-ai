@@ -8,20 +8,20 @@ from pathlib import Path
 import pytest
 from alembic.config import Config
 
-from ops_service_kit.settings import Settings
 from ops_store.testing import NO_SQL_SERVER, prove_chain, sql_server_schema
 
 CHAIN = "tools"
 ALEMBIC_INI = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 
 
-def test_on_postgresql() -> None:
+@pytest.mark.postgresql_only("revisions before the SQL Server baseline are PostgreSQL history")
+def test_on_postgresql(database_url: str) -> None:
     # tools_0001_gateway has an empty downgrade (scripts/downgrades-waiting.txt); the outbox default is the difference
     # deploy/database/tests/test_model_parity.py holds as LAGGING.
     prove_chain(
         Config(ALEMBIC_INI),
         CHAIN,
-        Settings().database_url,
+        database_url,
         floor="tools_0001_gateway",
         known={"default service_outbox.attempts only in the database"},
     )

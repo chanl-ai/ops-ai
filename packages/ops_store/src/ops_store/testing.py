@@ -40,6 +40,8 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from ops_service_kit.testdb import migration_refusal
+
 from . import background
 from .conformance import sql_server_database
 from .schema import MSSQL_PRECONDITIONS, differences, isolated_tables
@@ -206,7 +208,49 @@ def _shape(c: sa.Connection, tables: Collection[str], version_table: str) -> set
             for x in i.get_foreign_keys(t)
         }
     out |= {("policy", t, kind) for t, kind in isolated_tables(c).items() if t in tables}
-    return out
+    return out | _policy_rules(c, tables)
+
+
+def _policy_rules(c: sa.Connection, tables: Collection[str]) -> set[tuple[object, ...]]:
+    """Each isolation policy's own rule, beside its kind, so a downgrade and re-upgrade that brings a policy back
+    weaker (another predicate, column or function body) changes the shape. PostgreSQL: each policy's command, roles,
+    USING and WITH CHECK as the server deparses them. SQL Server: each security predicate's type, operation and
+    definition (the function and column), and the body of every function a predicate names, spaces collapsed."""
+    if c.dialect.name == "postgresql":
+        rows = c.execute(
+            sa.text(
+                "SELECT tablename, policyname, permissive, cmd, roles::text, qual, with_check FROM pg_policies"
+                " WHERE schemaname = current_schema()"
+            )
+        )
+        return {("rule", *r) for r in rows if r[0] in tables}
+    if c.dialect.name == "mssql":
+        rows = c.execute(
+            sa.text(
+                "SELECT o.name, p.name, sp.predicate_type_desc, sp.operation_desc, sp.predicate_definition"
+                " FROM sys.security_predicates sp JOIN sys.security_policies p ON p.object_id = sp.object_id"
+                " JOIN sys.objects o ON o.object_id = sp.target_object_id"
+                " WHERE p.is_enabled = 1 AND SCHEMA_NAME(o.schema_id) = SCHEMA_NAME()"
+            )
+        ).all()
+        out: set[tuple[object, ...]] = {("rule", *r) for r in rows if r[0] in tables}
+        named = " ".join(str(r[4]) for r in rows if r[0] in tables)
+        functions = c.execute(
+            sa.text(
+                "SELECT SCHEMA_NAME(o.schema_id), o.name, OBJECT_DEFINITION(o.object_id) FROM sys.objects o"
+                " WHERE o.type IN ('IF', 'FN', 'TF')"
+            )
+        )
+        # Predicate functions live in their own schema (ops_security), named in a definition as [schema].[name].
+        # SQL Server keeps a function's text as sent: the golden DDL's ends in `;`, a migration's does not.
+        out |= {
+            ("function", f"{sch}.{n}", " ".join(str(d).split()).removesuffix(";"))
+            for sch, n, d in functions
+            if f"[{sch}].[{n}]" in named
+        }
+        assert not named or any(f[0] == "function" for f in out), "a security predicate names no function read here"
+        return out
+    return set()
 
 
 def _on[T](url: str, check: Callable[[sa.Connection], T]) -> T:
@@ -230,6 +274,10 @@ def _renders_offline(config: Config, start: str, rev: str) -> bool:
         return False
 
 
+class RefusedDatabase(RuntimeError):
+    """prove_chain was pointed at a database that is not a throwaway test database."""
+
+
 def prove_chain(
     config: Config,
     chain: str,
@@ -247,7 +295,11 @@ def prove_chain(
     on SQL Server what `fresh` (a scratch database the golden DDL installed) holds, policies included; on PostgreSQL
     the metadata, less the `known` differences (deploy/database/tests/test_model_parity.py LAGGING). Each online-only
     revision the run crossed is refused as offline SQL, as schema.ONLINE_ONLY documents. Synchronous: Alembic's
-    environment runs its own event loop. Raises AssertionError on the first failure."""
+    environment runs its own event loop. Raises AssertionError on the first failure, and RefusedDatabase before any
+    statement when `url` is not a throwaway test database (ops_service_kit.testdb.migration_refusal): the downgrade
+    drops tables and data."""
+    if (why := migration_refusal(url)) is not None:
+        raise RefusedDatabase(why)
     facts = chain_facts(chain)
     table = version_table or f"alembic_version_{chain}"
     tables = {t for md in facts.metadata for t in md.tables} - facts.excluded

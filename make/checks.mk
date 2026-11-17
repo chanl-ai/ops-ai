@@ -28,7 +28,7 @@ CHECKS = \
   tests-typecheck-self-test tests-typecheck-commits \
   isolation-markings isolation-sites \
   store-inventory roles-matrix sbom k8s-base \
-  ratchet-history lint-imports sdk-drift changelog-entries console-standards \
+  ratchet-history lint-imports sdk-drift api-changelog api-changes-gap changelog-entries console-standards \
   downgrades token-lifetime cross-service standards service-standards service-standards-self-test
 
 # Access decided outside can(), the exceptions each lane may still hold, and the trailer a new line needs.
@@ -92,6 +92,11 @@ check-run.k8s-base = $(PY) deploy/k8s/generate.py --check
 check-paths.k8s-base = ^deploy/compose/app\.yaml$$|^deploy/k8s/|^(services|packages)/[^/]+/src/[^/]+/settings\.py$$
 check-run.sdk-drift = $(PY) sdk/generate.py --check
 check-paths.sdk-drift = ^sdk/|^services/[^/]+/openapi\.json$$
+# The SDK's next-major changelog lists every breaking row of the API changes page, and the page names every changed route.
+check-run.api-changelog = $(PY) sdk/changelog_from_api_changes.py --check
+check-paths.api-changelog = ^docs/architecture/migration/api-changes\.md$$|^docs/sdk/changelog-next-major\.md$$|^sdk/changelog_from_api_changes\.py$$
+check-run.api-changes-gap = $(PY) sdk/api_changes_gap.py
+check-paths.api-changes-gap = ^services/[^/]+/openapi\.json$$|^docs/architecture/migration/api-changes\.md$$|^sdk/api_changes_gap\.py$$
 
 # Layer directions and database drivers only in stores (.importlinter).
 check-run.lint-imports = $(LINT_IMPORTS)

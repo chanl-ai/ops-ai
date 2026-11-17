@@ -8,16 +8,16 @@ from pathlib import Path
 import pytest
 from alembic.config import Config
 
-from ops_service_kit.settings import Settings
 from ops_store.testing import NO_SQL_SERVER, prove_chain, sql_server_schema
 
 CHAIN = "files"
 ALEMBIC_INI = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 
 
-def test_on_postgresql() -> None:
+@pytest.mark.postgresql_only("revisions before the SQL Server baseline are PostgreSQL history")
+def test_on_postgresql(database_url: str) -> None:
     # files_0008 and the revisions before it have empty downgrades (scripts/downgrades-waiting.txt).
-    prove_chain(Config(ALEMBIC_INI), CHAIN, Settings().database_url, floor="files_0008")
+    prove_chain(Config(ALEMBIC_INI), CHAIN, database_url, floor="files_0008")
 
 
 def test_on_sql_server_from_the_baseline(monkeypatch: pytest.MonkeyPatch) -> None:

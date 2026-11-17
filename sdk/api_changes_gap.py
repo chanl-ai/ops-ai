@@ -53,7 +53,14 @@ def shape(path: str) -> str:
 
 
 def main() -> int:
-    base = sys.argv[1] if len(sys.argv) > 1 else "origin/develop"
+    ref = sys.argv[1] if len(sys.argv) > 1 else "origin/develop"
+    # From where this branch left `ref`, so routes `ref` changed since are not counted; a missing ref (a shallow clone)
+    # would make every route look new, so it is reported instead.
+    found = subprocess.run(["git", "merge-base", ref, "HEAD"], cwd=ROOT, capture_output=True, text=True, check=False)
+    if found.returncode != 0:
+        sys.stdout.write(f"base {ref} is not in this clone: fetch it (git fetch origin develop) or pass a ref\n")
+        return 1
+    base = found.stdout.strip()
     named = {
         shape(m) for m in re.findall(r"(/v1/[\w{}\-./*]*|/reviews[\w{}\-./*]*|/runs[\w{}\-./*]*)", PAGE.read_text())
     }

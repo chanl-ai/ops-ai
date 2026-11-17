@@ -796,6 +796,12 @@ def unanswered_endpoints(*names: str) -> None:
 LIVE_DATABASE = "ops_runtime"
 
 
+def migration_test_urls() -> tuple[str | None, str | None]:
+    """OPS_TEST_DATABASE_URL, which make test sets to the throwaway database, and OPS_DATABASE_URL, which a service's
+    Alembic env.py migrates whatever URL its caller holds (testdb.migration_refusal compares the two)."""
+    return os.environ.get("OPS_TEST_DATABASE_URL"), os.environ.get("OPS_DATABASE_URL")
+
+
 def worker_url(test_url: str | None, database_url: str | None, worker: str | None) -> str | None:
     """The pytest-xdist worker's copy of the test database, `<name>_<worker>` (scripts/test_db.py --workers), or None to
     change nothing: outside a worker, on SQLite, on the live database, or when the two URLs name different databases,

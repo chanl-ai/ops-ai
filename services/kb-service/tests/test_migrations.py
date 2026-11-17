@@ -8,15 +8,15 @@ from pathlib import Path
 import pytest
 from alembic.config import Config
 
-from ops_service_kit.settings import Settings
 from ops_store.testing import NO_SQL_SERVER, prove_chain, sql_server_schema
 
 CHAIN = "kb"
 ALEMBIC_INI = str(Path(__file__).resolve().parents[1] / "alembic.ini")
 
 
-def test_on_postgresql_from_base() -> None:
-    prove_chain(Config(ALEMBIC_INI), CHAIN, Settings().database_url)
+@pytest.mark.postgresql_only("revisions before the SQL Server baseline are PostgreSQL history")
+def test_on_postgresql_from_base(database_url: str) -> None:
+    prove_chain(Config(ALEMBIC_INI), CHAIN, database_url)
 
 
 def test_on_sql_server_from_the_baseline(monkeypatch: pytest.MonkeyPatch) -> None:

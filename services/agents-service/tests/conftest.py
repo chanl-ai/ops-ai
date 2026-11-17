@@ -319,6 +319,8 @@ def _no_dev_stack_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def database_url() -> str:
     """The PostgreSQL test database, migrated to head once per session."""
     url = Settings().database_url
+    if (why := refusal(url, os.environ.get("OPS_TEST_DATABASE_URL"))) is not None:
+        pytest.fail(why)
     command.upgrade(Config(str(ROOT / "alembic.ini")), "head")
     return url
 
