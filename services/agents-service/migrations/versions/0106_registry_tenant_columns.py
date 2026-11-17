@@ -116,7 +116,9 @@ def _drop_key(name: str, *, kind: str, column: str | None, pg_name: str) -> None
         op.execute(
             f"DECLARE @n sysname = (SELECT k.name FROM sys.key_constraints k {by_column}"
             f"WHERE k.type = '{kind}' AND k.parent_object_id = OBJECT_ID(N'{name}'){where}); "
-            f"IF @n IS NOT NULL EXEC (N'ALTER TABLE {name} DROP CONSTRAINT ' + QUOTENAME(@n))"
+            # EXEC takes a variable or literals, not a function call, so the statement is built first.
+            f"IF @n IS NOT NULL BEGIN DECLARE @s nvarchar(max) = N'ALTER TABLE {name} DROP CONSTRAINT ' "
+            f"+ QUOTENAME(@n); EXEC (@s); END"
         )
     else:
         op.execute(f"ALTER TABLE {name} DROP CONSTRAINT IF EXISTS {pg_name}")

@@ -121,7 +121,9 @@ def _drop_pk(name: str) -> None:
         op.execute(
             f"DECLARE @n sysname = (SELECT k.name FROM sys.key_constraints k "
             f"WHERE k.type = 'PK' AND k.parent_object_id = OBJECT_ID(N'{name}')); "
-            f"IF @n IS NOT NULL EXEC (N'ALTER TABLE {name} DROP CONSTRAINT ' + QUOTENAME(@n))"
+            # EXEC takes a variable or literals, not a function call, so the statement is built first.
+            f"IF @n IS NOT NULL BEGIN DECLARE @s nvarchar(max) = N'ALTER TABLE {name} DROP CONSTRAINT ' "
+            f"+ QUOTENAME(@n); EXEC (@s); END"
         )
     else:
         op.execute(f"ALTER TABLE {name} DROP CONSTRAINT IF EXISTS {name}_pkey")
@@ -131,12 +133,12 @@ def _drop_fks(child: str, parent: str) -> None:
     """Drops every foreign key from `child` to `parent`, found by the tables it joins on SQL Server."""
     if op.get_bind().dialect.name == "mssql":
         op.execute(
-            f"DECLARE @n sysname; "
+            f"DECLARE @n sysname, @s nvarchar(max); "
             f"WHILE 1 = 1 BEGIN "
             f"SET @n = (SELECT TOP 1 f.name FROM sys.foreign_keys f WHERE f.parent_object_id = OBJECT_ID(N'{child}') "
             f"AND f.referenced_object_id = OBJECT_ID(N'{parent}')); "
             f"IF @n IS NULL BREAK; "
-            f"EXEC (N'ALTER TABLE {child} DROP CONSTRAINT ' + QUOTENAME(@n)); END"
+            f"SET @s = N'ALTER TABLE {child} DROP CONSTRAINT ' + QUOTENAME(@n); EXEC (@s); END"
         )
     else:
         column = PARENTS[parent][1]
