@@ -20,6 +20,7 @@ from ops_service_kit.ids import now_iso
 from ...store.channels import ChannelStore, Deployment
 from ..auth import Principal, principal, require_builder
 from ..channels.inbox import deliver
+from ..chat_threads import may_read_thread
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..runs import resolve
@@ -112,9 +113,12 @@ async def post_inbox(rt: Rt, me: Me, thread_id: str, body: InboxInput) -> JSONRe
 
 
 @inbox_router.get("/{thread_id}/inbox", response_model=Envelope[list[InboxItem]])
-async def get_inbox(rt: Rt, thread_id: str, _: Tx) -> JSONResponse:
-    """The thread's channel messages; another team's or tenant's thread is not found (the store never returns it)."""
-    await resolve(rt, thread_id)
+async def get_inbox(rt: Rt, me: Me, thread_id: str, _: Tx) -> JSONResponse:
+    """The thread's channel messages, to a caller who may read the thread (`may_read_thread`, as the thread's own
+    routes): a teammate's chat, a scoped key's other target, and another team's or tenant's thread are not found."""
+    row, _graph = await resolve(rt, thread_id)
+    if not may_read_thread(row, me):
+        raise NotFound("Thread")
     rows = await _channels(rt).inbox(thread_id)
     return ok(
         [{"seq": r["seq"], "messageKey": r["message_key"], "kind": r["kind"], "status": r["status"]} for r in rows]

@@ -347,6 +347,9 @@ async def test_deployment_and_inbox_routes_keep_every_reply_and_error(stack: Sta
     c, _ = stack
     made = await c.post("/v1/threads", json={"graph": "dispute_email"}, headers=BUILDER)
     tid = made.json()["data"]["threadId"]
+    # James's own chat: Vera, in his team, may not read its channel messages, as she may not read the thread.
+    chat = await c.post("/v1/threads", json={"graph": "agent_wrapper", "metadata": {"chat": True}}, headers=BUILDER)
+    mine = chat.json()["data"]["threadId"]
     rows: list[tuple[str, str, str, dict[str, Any] | None, dict[str, str]]] = [
         ("dep.create", "POST", "/v1/deployments", DEPLOYMENT, BUILDER),
         ("dep.change", "POST", "/v1/deployments", {**DEPLOYMENT, "paused": True, "multitask": "reject"}, BUILDER),
@@ -363,6 +366,8 @@ async def test_deployment_and_inbox_routes_keep_every_reply_and_error(stack: Sta
         ("inbox.read", "GET", f"/v1/threads/{tid}/inbox", None, BUILDER),
         ("inbox.readOtherTeam", "GET", f"/v1/threads/{tid}/inbox", None, FRAUD_BUILDER),
         ("inbox.readMissing", "GET", "/v1/threads/th_missing1/inbox", None, BUILDER),
+        ("inbox.readOwnChat", "GET", f"/v1/threads/{mine}/inbox", None, BUILDER),
+        ("inbox.readTeammatesChat", "GET", f"/v1/threads/{mine}/inbox", None, VIEWER),
     ]
     seen = {name: answer(await c.request(m, path, json=body, headers=who)) for name, m, path, body, who in rows}
     compare(seen, FIXTURES / "reply-pins-deployments.json")

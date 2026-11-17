@@ -52962,7 +52962,7 @@
     },
     "/v1/threads/{thread_id}/inbox": {
       "get": {
-        "description": "The thread's channel messages; another team's or tenant's thread is not found (the store never returns it).",
+        "description": "The thread's channel messages, to a caller who may read the thread (`may_read_thread`, as the thread's own\nroutes): a teammate's chat, a scoped key's other target, and another team's or tenant's thread are not found.",
         "operationId": "threads_get_inbox",
         "parameters": [
           {
@@ -62884,7 +62884,7 @@
     },
     "/v1/workflows/{workflow_id}/runs": {
       "get": {
-        "description": "The workflow's runs, most recently changed first, a page at a time.",
+        "description": "The workflow's runs, most recently changed first then by id, a page at a time; `status` keeps those\nstatuses, and the status counts are over every run.",
         "operationId": "workflows_list_runs",
         "parameters": [
           {

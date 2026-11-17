@@ -166,6 +166,25 @@
     },
     "status": 404
   },
+  "inbox.readOwnChat": {
+    "body": {
+      "data": [],
+      "success": true
+    },
+    "status": 200
+  },
+  "inbox.readTeammatesChat": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Thread was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
   "pause": {
     "body": {
       "data": {

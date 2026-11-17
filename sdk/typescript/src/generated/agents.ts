@@ -2544,7 +2544,8 @@ export interface paths {
         };
         /**
          * Get Inbox
-         * @description The thread's channel messages; another team's or tenant's thread is not found (the store never returns it).
+         * @description The thread's channel messages, to a caller who may read the thread (`may_read_thread`, as the thread's own
+         *     routes): a teammate's chat, a scoped key's other target, and another team's or tenant's thread are not found.
          */
         get: operations["threads_get_inbox"];
         put?: never;
@@ -3401,7 +3402,8 @@ export interface paths {
         };
         /**
          * List Runs
-         * @description The workflow's runs, most recently changed first, a page at a time.
+         * @description The workflow's runs, most recently changed first then by id, a page at a time; `status` keeps those
+         *     statuses, and the status counts are over every run.
          */
         get: operations["workflows_list_runs"];
         put?: never;
