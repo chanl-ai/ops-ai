@@ -34,6 +34,7 @@ from ops_store.schema import (
     isolation_drop_ddl,
     mssql_drop_default_ddl,
     mssql_predicates_ddl,
+    mssql_quiet_batch,
     session_table_ddl,
     system,
 )
@@ -158,7 +159,7 @@ def _copy(dialect: str) -> tuple[str, list[str]]:
 def _fill(dialect: str, copy: str, name: str, key: str) -> str:
     """Fills `name` from the copy BATCH rows at a time, each batch committed on its own."""
     if dialect == "mssql":
-        return (
+        return mssql_quiet_batch(
             f"WHILE 1 = 1\nBEGIN\n"
             f"    UPDATE TOP ({BATCH}) r SET tenant_id = s.tenant_id FROM {name} r JOIN {copy} s ON s.id = r.thread_id "
             f"WHERE r.tenant_id IS NULL;\n"
@@ -183,7 +184,7 @@ def _move(dialect: str, copy: str, name: str, key: str) -> str:
     )
     moved = f"r.tenant_id IS NULL AND EXISTS (SELECT 1 FROM {side} s WHERE s.{key} = r.{key})"
     if dialect == "mssql":
-        return (
+        return mssql_quiet_batch(
             f"DECLARE @n int = 1;\nWHILE @n > 0\nBEGIN\n"
             f"    INSERT INTO {side} ({cols}) SELECT TOP ({BATCH}) {cols} FROM {name} x WHERE {pick};\n"
             f"    SET @n = @@ROWCOUNT;\n"

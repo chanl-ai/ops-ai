@@ -361,9 +361,11 @@ def chain_tables(chain: str, metadatas: Iterable[sa.MetaData]) -> Chain:
             if ix.unique:
                 # SQL Server lets one NULL into a unique index, PostgreSQL any number: filtering out rows where a key
                 # column is NULL enforces exactly the rows PostgreSQL enforces.
-                where = [*_not_null(ix.columns)]
+                twin = ix.dialect_options["mssql"]["where"]
+                # A column the twin already filters is not filtered twice, so the index matches the migration's.
+                said = re.sub(r'["\[\]]', "", str(twin)).lower() if twin is not None else ""
+                where = [w for w in _not_null(ix.columns) if f"{w.left.name.lower()} is not null" not in said]
                 if where:
-                    twin = ix.dialect_options["mssql"]["where"]
                     ix.dialect_options["mssql"]["where"] = sa.and_(*([twin] if twin is not None else []), *where)
         for con in list(t.constraints):
             columns = [c.name for c in con.columns] if isinstance(con, ColumnCollectionConstraint) else []

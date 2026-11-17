@@ -188,9 +188,19 @@ def _mssql_query(query: sa.Select[Any]) -> str:
     return str(query.compile(dialect=mssql_dialect.dialect(), compile_kwargs={"literal_binds": True}))
 
 
+def mssql_quiet_batch(script: str) -> str:
+    """SQL Server: `script`, a batch of several statements (a migration's batched backfill loop), run to its end.
+    Each statement's row count is a result, and the ODBC driver reads only the first, which cancels the rest of the
+    batch: the later batches, the policies put back and the COMMIT never run. NOCOUNT is set back at the end since it
+    outlives the batch on the connection, and Alembic's version update reads a row count of -1 otherwise."""
+    return f"SET NOCOUNT ON;\n{script}\nSET NOCOUNT OFF;"
+
+
 def mssql_drop_default_ddl(table: str, column: str) -> str:
     """SQL Server: drops the default constraint on `table`.`column`, if one is there; SQL Server refuses to drop or
     retype a column that holds one."""
+    # A Column's name is a quoted_name, which has no literal renderer; the plain string renders.
+    table, column = str(table), str(column)
     d = sa.table(
         "default_constraints",
         sa.column("name"),

@@ -35,7 +35,14 @@ from typing import Any
 import sqlalchemy as sa
 from alembic import op
 
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, backfill_ddl, mssql_drop_key_ddl, session_table_ddl
+from ops_store.schema import (
+    TEAM_OWNED,
+    TENANT_SCOPED,
+    backfill_ddl,
+    mssql_drop_key_ddl,
+    mssql_quiet_batch,
+    session_table_ddl,
+)
 
 revision = "0108_registry_tenant_keys"
 down_revision = "0107_system_reads_agent_pointers"
@@ -165,12 +172,15 @@ def _drop_fks(child: str, parent: str) -> None:
     """Drops every foreign key from `child` to `parent`, found by the tables it joins on SQL Server."""
     if op.get_bind().dialect.name == "mssql":
         op.execute(
-            f"DECLARE @n sysname, @s nvarchar(max); "
-            f"WHILE 1 = 1 BEGIN "
-            f"SET @n = (SELECT TOP 1 f.name FROM sys.foreign_keys f WHERE f.parent_object_id = OBJECT_ID(N'{child}') "
-            f"AND f.referenced_object_id = OBJECT_ID(N'{parent}')); "
-            f"IF @n IS NULL BREAK; "
-            f"SET @s = N'ALTER TABLE {child} DROP CONSTRAINT ' + QUOTENAME(@n); EXEC (@s); END"
+            mssql_quiet_batch(
+                f"DECLARE @n sysname, @s nvarchar(max); "
+                f"WHILE 1 = 1 BEGIN "
+                f"SET @n = (SELECT TOP 1 f.name FROM sys.foreign_keys f "
+                f"WHERE f.parent_object_id = OBJECT_ID(N'{child}') "
+                f"AND f.referenced_object_id = OBJECT_ID(N'{parent}')); "
+                f"IF @n IS NULL BREAK; "
+                f"SET @s = N'ALTER TABLE {child} DROP CONSTRAINT ' + QUOTENAME(@n); EXEC (@s); END"
+            )
         )
     else:
         column = PARENTS[parent][1]
@@ -304,7 +314,7 @@ def _agent_refs() -> sa.Subquery:
     agents = _t("registry_agents", "id").alias("named")
     threads = _t("graph_threads", "tenant_id", "team_id", "graph")
     deployments = _t("deployments", "tenant_id", "team_id", "graph")
-    selects: list[sa.Select[Any]] = [
+    selects: list[sa.Select[Any, Any, Any]] = [
         sa.select(t.c.tenant_id, t.c.team_id, agents.c.id.label("agent_id")).join_from(
             agents, t, t.c.graph == sa.literal(GRAPH) + agents.c.id
         )
@@ -377,7 +387,7 @@ def _repoint(dialect: str, plan: str, before: list[str], after: list[str]) -> st
                 "        COMMIT;\n        EXIT WHEN n = 0;\n    END LOOP;"
             )
     if dialect == "mssql":
-        return "DECLARE @n int;\n" + "\n".join(loops)
+        return mssql_quiet_batch("DECLARE @n int;\n" + "\n".join(loops))
     return "DO $$\nDECLARE n integer;\nBEGIN\n" + "\n".join(loops) + "\nEND $$"
 
 

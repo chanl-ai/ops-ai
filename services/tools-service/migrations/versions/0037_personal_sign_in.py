@@ -17,6 +17,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import mssql_drop_default_ddl
+
 revision = "tools_0037_personal_sign_in"
 down_revision = "tools_0036_call_acting_for"
 branch_labels = None
@@ -27,6 +29,8 @@ def upgrade() -> None:
     op.add_column("connections", sa.Column("sign_in", sa.String(16), nullable=False, server_default="team"))
     op.add_column("connections", sa.Column("team_backup", sa.Boolean, nullable=False, server_default=sa.false()))
     op.add_column("oauth_states", sa.Column("token_for", sa.String(200), nullable=False, server_default=""))
+    # SQL Server names an unnamed key at random; it gets the name PostgreSQL gives it, the one the golden DDL holds.
+    key = "connect_links_tenant_id_connection_id_fkey" if op.get_context().dialect.name == "mssql" else None
     op.create_table(
         "connect_links",
         sa.Column("tenant_id", sa.String(64), primary_key=True),
@@ -42,12 +46,20 @@ def upgrade() -> None:
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("used_at", sa.DateTime(timezone=True)),
         sa.ForeignKeyConstraint(
-            ["tenant_id", "connection_id"], ["connections.tenant_id", "connections.id"], ondelete="CASCADE"
+            ["tenant_id", "connection_id"], ["connections.tenant_id", "connections.id"], ondelete="CASCADE", name=key
         ),
     )
 
 
 def downgrade() -> None:
+    # SQL Server refuses to drop a column that holds a default; the helper drops one only if it is there.
+    if op.get_context().dialect.name == "mssql":
+        for table, column in (
+            ("oauth_states", "token_for"),
+            ("connections", "team_backup"),
+            ("connections", "sign_in"),
+        ):
+            op.execute(mssql_drop_default_ddl(table, column))
     op.drop_table("connect_links")
     op.drop_column("oauth_states", "token_for")
     op.drop_column("connections", "team_backup")

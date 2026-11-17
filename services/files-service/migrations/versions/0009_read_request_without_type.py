@@ -17,3 +17,8 @@ depends_on = None
 
 def upgrade() -> None:
     op.alter_column("file_read_requests", "document_type_id", existing_type=sa.String(length=64), nullable=True)
+
+
+def downgrade() -> None:
+    # The old schema holds no request without a type, so one made since stops the downgrade here rather than losing it.
+    op.alter_column("file_read_requests", "document_type_id", existing_type=sa.String(length=64), nullable=False)

@@ -96,7 +96,7 @@ CREATE INDEX ix_tool_modules_template_id ON tool_modules (template_id);
 GO
 CREATE INDEX ix_tool_modules_updated_at ON tool_modules (updated_at);
 GO
-CREATE UNIQUE INDEX ux_tool_modules_name ON tool_modules (tenant_id, team_id, name) WHERE team_id IS NOT NULL AND team_id IS NOT NULL;
+CREATE UNIQUE INDEX ux_tool_modules_name ON tool_modules (tenant_id, team_id, name) WHERE team_id IS NOT NULL;
 GO
 CREATE UNIQUE INDEX ux_tool_modules_shared_name ON tool_modules (tenant_id, name) WHERE team_id IS NULL;
 GO
@@ -211,7 +211,7 @@ CREATE INDEX ix_connections_app ON connections (tenant_id, team_id, app_id);
 GO
 CREATE INDEX ix_connections_team ON connections (tenant_id, team_id);
 GO
-CREATE UNIQUE INDEX uq_connections_account_key ON connections (tenant_id, team_id, app_id, owner_key, account_key) WHERE account_key IS NOT NULL AND account_key IS NOT NULL;
+CREATE UNIQUE INDEX uq_connections_account_key ON connections (tenant_id, team_id, app_id, owner_key, account_key) WHERE account_key IS NOT NULL;
 GO
 CREATE TABLE app_credentials (
 	tenant_id VARCHAR(64) NOT NULL, 

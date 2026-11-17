@@ -24,3 +24,8 @@ def upgrade() -> None:
     op.create_index(
         "ix_extractions_type_reads", "extractions", ["tenant_id", "team", "type_id", "status", "finished_at"]
     )
+
+
+def downgrade() -> None:
+    op.drop_index("ix_extractions_type_reads", table_name="extractions")
+    op.drop_column("extractions", "layout_fingerprint")

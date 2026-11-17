@@ -19,7 +19,14 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import mssql
 
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, isolation_ddl, mssql_predicates_ddl
+from ops_store.schema import (
+    TEAM_OWNED,
+    TENANT_SCOPED,
+    isolation_ddl,
+    isolation_drop_ddl,
+    mssql_drop_default_ddl,
+    mssql_predicates_ddl,
+)
 
 revision = "0083_memory_history"
 down_revision = "0082_engine_waits"
@@ -120,8 +127,15 @@ def downgrade() -> None:
     if dialect in ("postgresql", "mssql"):
         for statement in isolation_ddl(_marked("memory_audit"), dialect, kind="tenant", chain=CHAIN):
             op.execute(statement)
+    # SQL Server refuses to drop a table its security policy still names.
+    if dialect == "mssql":
+        for statement in isolation_drop_ddl(_marked(), dialect):
+            op.execute(statement)
     op.drop_table("message_memory_use")
     op.drop_column("memory_audit", "team_id")
     op.drop_index("ux_agent_memories_in_use", table_name="agent_memories")
     for column in reversed(_columns()):
-        op.drop_column("agent_memories", column.name, mssql_drop_default=True)
+        # SQL Server refuses to drop a column that holds a default; the helper drops one only if it is there.
+        if op.get_context().dialect.name == "mssql":
+            op.execute(mssql_drop_default_ddl("agent_memories", column.name))
+        op.drop_column("agent_memories", column.name)

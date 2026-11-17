@@ -23,7 +23,7 @@ import sqlalchemy as sa
 from alembic import op
 
 from ops_store.dialect import json_text
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, backfill_ddl, session_table_ddl
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, backfill_ddl, mssql_quiet_batch, session_table_ddl
 
 revision = "0105_thread_owner_column"
 down_revision = "0104_runtime_tables_isolated"
@@ -65,7 +65,7 @@ def _fill(dialect: str, copy: str, before: list[str], after: list[str]) -> str:
     if dialect == "mssql":
         aside = "\n".join(f"    EXEC (N'{s.replace(chr(39), chr(39) * 2)}');" for s in before)
         back = "\n".join(f"    EXEC (N'{s.replace(chr(39), chr(39) * 2)}');" for s in after)
-        return (
+        return mssql_quiet_batch(
             f"DECLARE @n int;\nWHILE 1 = 1\nBEGIN\n    BEGIN TRANSACTION;\n{aside}\n"
             f"    UPDATE TOP ({BATCH}) g SET owner = s.v FROM graph_threads g JOIN {copy} s ON s.k = g.id "
             f"WHERE g.owner IS NULL;\n    SET @n = @@ROWCOUNT;\n{back}\n    COMMIT;\n    IF @n = 0 BREAK;\nEND"

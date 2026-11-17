@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import mssql
 
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, isolation_ddl, mssql_predicates_ddl
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, isolation_ddl, isolation_drop_ddl, mssql_predicates_ddl
 
 revision = "0082_engine_waits"
 down_revision = "0081_background_jobs_at_text"
@@ -71,5 +71,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # SQL Server refuses to drop a table its security policy still names.
+    if op.get_bind().dialect.name == "mssql":
+        for statement in isolation_drop_ddl(_marked(), "mssql"):
+            op.execute(statement)
     op.drop_index("ix_engine_waits_event", table_name="engine_waits")
     op.drop_table("engine_waits")

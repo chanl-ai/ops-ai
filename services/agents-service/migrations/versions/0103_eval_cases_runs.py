@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import mssql
 
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, isolation_ddl, mssql_predicates_ddl
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, isolation_ddl, isolation_drop_ddl, mssql_predicates_ddl
 
 revision = "0103_eval_cases_runs"
 down_revision = "0102_guardrail_names_per_team"
@@ -101,5 +101,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    dialect = op.get_bind().dialect.name
     for name in reversed(TABLES):
+        # SQL Server refuses to drop a table its security policy still names.
+        if dialect == "mssql":
+            for statement in isolation_drop_ddl(_marked(name), dialect):
+                op.execute(statement)
         op.drop_table(name)

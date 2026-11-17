@@ -27,7 +27,7 @@ import sqlalchemy as sa
 from alembic import op
 
 from ops_store.dialect import json_whole_number
-from ops_store.schema import TENANT_SCOPED, backfill_ddl, mssql_drop_default_ddl
+from ops_store.schema import TENANT_SCOPED, backfill_ddl, mssql_drop_default_ddl, mssql_quiet_batch
 
 revision = "0117_validation_list_columns"
 down_revision = "0116_tool_catalog_copies"
@@ -72,7 +72,7 @@ def _fill(t: sa.Table, dialect: str) -> None:
     update = t.update().where(t.c.id.in_(batch)).values(counts)
     # One script line for both runs, so the offline render is the statement an online run executes.
     sql = update.compile(dialect=op.get_context().dialect, compile_kwargs={"literal_binds": True})
-    op.execute(f"WHILE 1 = 1 BEGIN {sql}; IF @@ROWCOUNT = 0 BREAK; END")
+    op.execute(mssql_quiet_batch(f"WHILE 1 = 1 BEGIN {sql}; IF @@ROWCOUNT = 0 BREAK; END"))
 
 
 def upgrade() -> None:

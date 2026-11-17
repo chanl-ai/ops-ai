@@ -18,7 +18,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import mssql
 
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, isolation_ddl, mssql_predicates_ddl
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, isolation_ddl, isolation_drop_ddl, mssql_predicates_ddl
 
 revision = "0091_form_links"
 down_revision = "0090_checkpointer_portable"
@@ -82,5 +82,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     if op.get_bind().dialect.name == "postgresql":
         op.execute(f"REVOKE UPDATE (run_id, outcome, detail) ON trigger_events FROM {TENANT_ROLE}")
+    # SQL Server refuses to drop a table its security policy still names.
+    if op.get_bind().dialect.name == "mssql":
+        for statement in isolation_drop_ddl(_marked(), "mssql"):
+            op.execute(statement)
     op.drop_index("ix_form_links_workflow", table_name="form_links")
     op.drop_table("form_links")

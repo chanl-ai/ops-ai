@@ -23,16 +23,26 @@ A test that needs a PostgreSQL feature carries `@pytest.mark.postgresql_only("<w
 from __future__ import annotations
 
 import asyncio
+import importlib
+import io
 import math
 import re
-from collections.abc import Callable, Generator, Iterable
-from contextlib import contextmanager
+import sys
+from collections.abc import Callable, Collection, Generator, Iterable
+from contextlib import contextmanager, redirect_stdout
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, cast
 
+import sqlalchemy as sa
+from alembic import command
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+from sqlalchemy.ext.asyncio import create_async_engine
+
 from . import background
 from .conformance import sql_server_database
-from .schema import MSSQL_PRECONDITIONS
+from .schema import MSSQL_PRECONDITIONS, differences, isolated_tables
 
 # The databases a store test runs on; the SQL Server case skips unless OPS_MSSQL_SERVER and MSSQL_SA_PASSWORD are set.
 DATABASES = ("postgresql", "mssql")
@@ -134,6 +144,162 @@ def sql_server_schema(
     batches = golden_bundle(chain, golden) if server and password else None
     with sql_server_database(f"ops_{chain}_test", server, password, batches=batches) as url:
         yield url
+
+
+# Migration chains ------------------------------------------------------------------------------------------------
+
+DEPLOY_DATABASE = GOLDEN.parents[1]
+
+
+@dataclass(frozen=True)
+class ChainFacts:
+    """What deploy/database holds about one chain: where its SQL Server revisions begin, which revisions are online
+    only, its metadata (every MetaData its store packages define) and the tables no metadata defines yet."""
+
+    baseline: str | None
+    online_only: frozenset[str]
+    metadata: tuple[sa.MetaData, ...]
+    excluded: frozenset[str]
+
+
+def chain_facts(chain: str) -> ChainFacts:
+    """Read from deploy/database's own modules (mssql.BASELINE, schema.ONLINE_ONLY, models.chain_metadata), so a
+    service's migration test keeps no copy of them."""
+    if str(DEPLOY_DATABASE) not in sys.path:
+        sys.path.insert(0, str(DEPLOY_DATABASE))
+    mssql, models, schema = (importlib.import_module(m) for m in ("mssql", "models", "schema"))
+    return ChainFacts(
+        baseline=mssql.BASELINE.get(chain),
+        online_only=frozenset(schema.ONLINE_ONLY.get(chain, ())),
+        metadata=tuple(models.chain_metadata(chain)),
+        excluded=frozenset(models.EXCLUDED.get(chain, ())),
+    )
+
+
+def _shape(c: sa.Connection, tables: Collection[str], version_table: str) -> set[tuple[object, ...]]:
+    """What a schema holds, as the database reflects it, one tuple per fact: each of the chain's tables' columns,
+    indexes (a unique constraint's among them), keys and isolation, and the chain's version. schema.differences needs
+    CHECK and unique-constraint reflection, which SQLAlchemy's SQL Server dialect lacks, so SQL Server compares this."""
+    i = sa.inspect(c)
+    present = set(i.get_table_names())
+    version = (
+        c.execute(sa.select(sa.column("version_num", sa.String)).select_from(sa.table(version_table))).scalar()
+        if version_table in present
+        else None
+    )
+    out: set[tuple[object, ...]] = {("version", version)}
+    for t in sorted(present & set(tables)):
+        out |= {(t, x["name"], str(x["type"]), x["nullable"], x.get("default") is not None) for x in i.get_columns(t)}
+        out |= {
+            (t, "index", x["name"], tuple(x["column_names"]), bool(x["unique"]), str(x.get("dialect_options", {})))
+            for x in i.get_indexes(t)
+        }
+        out |= {
+            (
+                t,
+                "key",
+                x["name"],
+                tuple(x["constrained_columns"]),
+                tuple(x["referred_columns"]),
+                x.get("options", {}).get("ondelete"),
+            )
+            for x in i.get_foreign_keys(t)
+        }
+    out |= {("policy", t, kind) for t, kind in isolated_tables(c).items() if t in tables}
+    return out
+
+
+def _on[T](url: str, check: Callable[[sa.Connection], T]) -> T:
+    async def go() -> T:
+        engine = create_async_engine(url)
+        try:
+            async with engine.connect() as c:
+                return await c.run_sync(check)
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(go())
+
+
+def _renders_offline(config: Config, start: str, rev: str) -> bool:
+    try:
+        with redirect_stdout(io.StringIO()):
+            command.upgrade(config, f"{start}:{rev}", sql=True)
+        return True
+    except Exception:  # any failure to render is the finding
+        return False
+
+
+def prove_chain(
+    config: Config,
+    chain: str,
+    url: str,
+    *,
+    version_table: str | None = None,
+    floor: str = "base",
+    fresh: str | None = None,
+    known: Collection[str] = (),
+) -> None:
+    """A service's migration chain, run online on the database at `url` (which `config`'s env.py must already read):
+    up to head, down to its floor (`base` on PostgreSQL; on SQL Server its baseline, before which revisions are
+    PostgreSQL history), up to head, a second upgrade that changes nothing, down one and up again. Then the schema is
+    what the chain claims:
+    on SQL Server what `fresh` (a scratch database the golden DDL installed) holds, policies included; on PostgreSQL
+    the metadata, less the `known` differences (deploy/database/tests/test_model_parity.py LAGGING). Each online-only
+    revision the run crossed is refused as offline SQL, as schema.ONLINE_ONLY documents. Synchronous: Alembic's
+    environment runs its own event loop. Raises AssertionError on the first failure."""
+    facts = chain_facts(chain)
+    table = version_table or f"alembic_version_{chain}"
+    tables = {t for md in facts.metadata for t in md.tables} - facts.excluded
+    script = ScriptDirectory.from_config(config)
+    head = script.get_current_head()
+    assert head is not None, f"{chain}: the chain has no single head"
+    on_sql_server = url.startswith("mssql")
+    if on_sql_server and fresh is None:
+        raise ValueError("on SQL Server the head is compared with a fresh golden install: pass `fresh`")
+    floor = (facts.baseline or "base") if on_sql_server else floor
+
+    def shape() -> set[tuple[object, ...]]:
+        return _on(url, lambda c: _shape(c, tables, table))
+
+    # From head, so the downgrade runs every revision above the floor whatever state the database started in.
+    command.upgrade(config, "head")
+    command.downgrade(config, floor)
+    at_floor = shape()
+    assert ("version", None if floor == "base" else floor) in at_floor, f"{chain}: not at {floor} after the downgrade"
+    if floor == "base":
+        left = {f[0] for f in at_floor if f[0] in tables}
+        assert not left, f"{chain}: tables left at base: {sorted(left, key=str)}"
+    command.upgrade(config, "head")
+    at_head = shape()
+    assert ("version", head) in at_head, f"{chain}: not at {head} after the upgrade"
+    command.upgrade(config, "head")
+    assert shape() == at_head, f"{chain}: a second upgrade changed the schema"
+    previous = script.get_revision(head).down_revision
+    command.downgrade(config, "-1")
+    assert ("version", previous) in shape(), f"{chain}: not at {previous} after down one"
+    command.upgrade(config, "head")
+    moved = shape()
+    changed = (sorted(moved - at_head, key=str), sorted(at_head - moved, key=str))
+    assert changed == ([], []), f"{chain}: down one and up again changed the schema: {changed}"
+
+    if on_sql_server:
+        assert fresh is not None
+        installed = _on(fresh, lambda c: _shape(c, tables, table))
+        assert ("version", head) in installed, f"{chain}: the golden DDL is not at {head}; run make db-ddl-golden"
+        extra, missing = sorted(moved - installed, key=str), sorted(installed - moved, key=str)
+        assert (extra, missing) == ([], []), (
+            f"{chain}: migrated but not in the golden DDL {extra}; the reverse {missing}"
+        )
+    else:
+        found = set(_on(url, lambda c: differences(c, facts.metadata, facts.excluded)))
+        assert found == set(known), f"{chain}: migrated schema and metadata differ: {sorted(found ^ set(known))}"
+
+    crossed = {r.revision for r in script.iterate_revisions(head, floor)}
+    for rev in sorted(facts.online_only & crossed):
+        down = script.get_revision(rev).down_revision
+        assert isinstance(down, str), f"{chain} {rev}: an online-only merge revision"
+        assert not _renders_offline(config, down, rev), f"{chain} {rev}: online only, yet it renders as offline SQL"
 
 
 class _Item(Protocol):

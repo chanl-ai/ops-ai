@@ -38,6 +38,7 @@ from ops_store.schema import (
     isolation_ddl,
     isolation_drop_ddl,
     mssql_predicates_ddl,
+    mssql_quiet_batch,
     session_table_ddl,
 )
 
@@ -143,7 +144,7 @@ def _fill(dialect: str, copy: str) -> str:
     picked = "s.tenant_id, s.team_id, s.agent_id, s.skill_id, CAST(s.version AS INTEGER)"
     absent = f"NOT EXISTS (SELECT 1 FROM {TABLE} t WHERE t.agent_id = s.agent_id AND t.skill_id = s.skill_id)"
     if dialect == "mssql":
-        return (
+        return mssql_quiet_batch(
             f"WHILE 1 = 1\nBEGIN\n"
             f"    INSERT INTO {TABLE} ({names}) SELECT TOP ({BATCH}) {picked} FROM {copy} s WHERE {absent};\n"
             f"    IF @@ROWCOUNT = 0 BREAK;\nEND"
@@ -163,7 +164,8 @@ def upgrade() -> None:
         sa.Column(
             "agent_id",
             sa.String(64),
-            sa.ForeignKey("registry_agents.id", ondelete="CASCADE"),
+            # Named as PostgreSQL names it, so both databases (and the golden DDL) hold the same key.
+            sa.ForeignKey("registry_agents.id", ondelete="CASCADE", name="agent_skill_pins_agent_id_fkey"),
             primary_key=True,
         ),
         sa.Column("skill_id", sa.String(64), primary_key=True),

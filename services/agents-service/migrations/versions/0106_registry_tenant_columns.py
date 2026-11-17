@@ -53,7 +53,15 @@ from ops_agents.store.registry_tenants import (
     tenant_of,
 )
 from ops_service_kit.settings import Settings
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, backfill_ddl, mssql_drop_key_ddl, session_table_ddl
+from ops_store.schema import (
+    TEAM_OWNED,
+    TENANT_SCOPED,
+    backfill_ddl,
+    mssql_drop_default_ddl,
+    mssql_drop_key_ddl,
+    mssql_quiet_batch,
+    session_table_ddl,
+)
 
 revision = "0106_registry_tenant_columns"
 down_revision = "0105_thread_owner_column"
@@ -183,7 +191,7 @@ def _fills() -> list[tuple[str, str, str, str]]:
 def _fill(dialect: str, name: str, column: str, key: str, copy: str) -> str:
     """Fills `column` of `name` from the copy BATCH rows at a time, each batch committed on its own."""
     if dialect == "mssql":
-        return (
+        return mssql_quiet_batch(
             f"WHILE 1 = 1\nBEGIN\n"
             f"    UPDATE TOP ({BATCH}) r SET {column} = s.v FROM {name} r JOIN {copy} s ON s.k = r.{key} "
             f"WHERE r.{column} IS NULL;\n"
@@ -355,6 +363,12 @@ def downgrade() -> None:
     op.create_unique_constraint("graph_versions_digest_key", "graph_versions", ["digest"])
     op.drop_constraint(AGENT_SLUG, "registry_agents", type_="unique")
     op.create_unique_constraint("registry_agents_slug_key", "registry_agents", ["slug"])
-    op.drop_column(REQUESTS, "team_id", mssql_drop_default=True)
+    # SQL Server refuses to drop a column that holds a default; the helper drops one only if it is there.
+    if op.get_context().dialect.name == "mssql":
+        op.execute(mssql_drop_default_ddl(REQUESTS, "team_id"))
+    op.drop_column(REQUESTS, "team_id")
     for name in TENANTED:
-        op.drop_column(name, "tenant_id", mssql_drop_default=True)
+        # SQL Server refuses to drop a column that holds a default; the helper drops one only if it is there.
+        if op.get_context().dialect.name == "mssql":
+            op.execute(mssql_drop_default_ddl(name, "tenant_id"))
+        op.drop_column(name, "tenant_id")

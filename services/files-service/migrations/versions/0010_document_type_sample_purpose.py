@@ -47,3 +47,8 @@ RELABEL = (
 
 def upgrade() -> None:
     op.execute(RELABEL)
+
+
+def downgrade() -> None:
+    # The purpose before this revision is not kept; the seed uploaded every sample as a case attachment.
+    op.execute(sa.update(files).where(files.c.purpose == "document_type_sample").values(purpose="case_attachment"))

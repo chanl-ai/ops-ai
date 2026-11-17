@@ -180,7 +180,8 @@ def test_every_unique_key_in_the_golden_files_admits_postgresql_s_rows(compiled:
                 where = ix.dialect_options["mssql"]["where"]
                 for c in list[sa.Column[Any]](ix.columns) if ix.unique else []:
                     if c.nullable:
-                        assert where is not None and f"{c.name} IS NOT NULL" in str(where), f"{t.name}.{ix.name}"
+                        said = re.sub(r'["\[\]]', "", str(where)).lower() if where is not None else ""
+                        assert f"{c.name.lower()} is not null" in said, f"{t.name}.{ix.name}"
 
 
 def test_no_postgresql_type_or_function_reaches_the_ddl(compiled: mssql.Compiled) -> None:
@@ -279,7 +280,7 @@ def test_a_statement_sql_server_runs_outside_a_transaction_stays_outside_one(tmp
     mssql.write_upgrade(_At("agents", "0084_memory_audit_team_required"), to, tmp_path)
     up = (tmp_path / "upgrade.sql").read_text()
     step = up[up.index("-> 0085_memory_full_text") : up.index("-- step agents 0085_memory_full_text")]
-    open_transactions, at_full_text = 0, []
+    open_transactions, at_full_text = 0, list[int]()
     for line in step.splitlines():
         open_transactions += line.startswith("BEGIN TRANSACTION;") - line.startswith("COMMIT;")
         if "CREATE FULLTEXT CATALOG" in line:

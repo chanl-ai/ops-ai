@@ -817,7 +817,7 @@ CREATE INDEX ix_agent_memories_owner ON agent_memories (tenant_id, person, agent
 GO
 CREATE INDEX ix_agent_memories_tenant_id ON agent_memories (tenant_id);
 GO
-CREATE UNIQUE INDEX ux_agent_memories_in_use ON agent_memories (tenant_id, team_id, person, agent_id, [key]) WHERE status = 'active' AND "key" IS NOT NULL AND [key] IS NOT NULL;
+CREATE UNIQUE INDEX ux_agent_memories_in_use ON agent_memories (tenant_id, team_id, person, agent_id, [key]) WHERE status = 'active' AND "key" IS NOT NULL;
 GO
 CREATE TABLE memory_audit (
 	id VARCHAR(64) NOT NULL, 

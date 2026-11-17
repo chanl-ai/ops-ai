@@ -64,6 +64,7 @@ from ops_store.schema import (
     isolation_ddl,
     isolation_drop_ddl,
     mssql_predicates_ddl,
+    mssql_quiet_batch,
     session_table_ddl,
 )
 
@@ -200,7 +201,7 @@ def _fills(copies: dict[str, str]) -> list[tuple[str, str, str, Extra]]:
 def _fill(dialect: str, name: str, key: str, source: str, extra: Extra) -> str:
     """Moves `name`'s `local` rows to the source's tenant BATCH rows at a time, each batch committed on its own."""
     if dialect == "mssql":
-        return (
+        return mssql_quiet_batch(
             f"WHILE 1 = 1\nBEGIN\n"
             f"    UPDATE TOP ({BATCH}) r SET tenant_id = s.v FROM {name} r JOIN {source} s ON s.k = r.{key} "
             f"WHERE r.tenant_id = '{LOCAL}'{extra('r', 's')};\n"

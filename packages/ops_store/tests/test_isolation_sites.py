@@ -429,6 +429,8 @@ OWNED: dict[str, int] = {
     "caught packages/ops_store/src/ops_store/conformance.py": 1,
     # /health's probe: one statement naming no table, False on any failure (`database.reachable`).
     "raw packages/ops_store/src/ops_store/database.py": 1,
+    # prove_chain's schema read in a migration test: reflection of a test database the chain just migrated.
+    "raw packages/ops_store/src/ops_store/testing.py": 1,
     "broad packages/ops_store/src/ops_store/database.py": 1,
     # The system transaction, which runs as a role before any tenant is known.
     "raw packages/ops_store/src/ops_store/dialect.py": 2,
