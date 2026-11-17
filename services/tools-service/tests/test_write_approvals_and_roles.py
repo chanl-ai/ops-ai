@@ -2,8 +2,8 @@
 
 - a write nobody turned approval on for runs without a token;
 - an app set to ask a reviewer (appChangesByApp) holds its writes for a token;
-- an app set to don't ask runs its write where the team asks a reviewer, and a team policy that cannot be read makes
-  the write wait;
+- an app set to don't ask runs its write where the team asks a reviewer, and a team policy that cannot be read refuses
+  the write (approval_rules_unavailable);
 - a person who decides the team's reviews approves their own write only while requesterMayDecide is on (off by
   default), and one who does not is never let through (an imported write starts waiting, test_import).
 
@@ -103,9 +103,9 @@ async def test_an_app_set_to_dont_ask_runs_its_write_where_the_team_asks_a_revie
     assert r.status_code == 200 and r.json()["data"]["decision"] == "allow", r.text
 
 
-async def test_an_unreadable_team_policy_makes_a_write_with_no_setting_wait(unreadable: Call) -> None:
+async def test_an_unreadable_team_policy_refuses_a_write(unreadable: Call) -> None:
     r = await unreadable("open_case", CASE, "quiet-2")
-    assert (r.status_code, reasons(r)) == (403, ["write needs an approval token"]), r.text
+    assert (r.status_code, r.json()["error"]["code"]) == (503, "approval_rules_unavailable"), r.text
 
 
 class TeamAsksPerson(WriteApprovals):

@@ -47,6 +47,7 @@ from ops_tools.egress_routes import egress_router
 from ops_tools.mcp_links import mcp_links_router
 from ops_tools.mock_routes import mocks_router
 from ops_tools.modules.directory import Directory
+from ops_tools.modules.policy import WriteApprovals
 from ops_tools.modules.routes import executions_router, modules_router
 from ops_tools.modules.seed import load
 from ops_tools.modules.service import ModuleService
@@ -72,6 +73,7 @@ from ops_tools.tools import LocalToolRunner
 
 from .fake_mcp import tools as fake_tools
 from .fake_upstream import fake_bank
+from .service_clients import fake_service
 
 # agents-service's fixture catalogue, which these tests run the gateway on; the services read their own seed/.
 AGENTS_FIXTURES = Path(__file__).resolve().parents[2] / "agents-service" / "tests" / "fixtures" / "seed"
@@ -348,6 +350,17 @@ async def grant(engine: AsyncEngine, tenant: str, module_id: str, approval_id: s
     await store.put(m, expected_revision=m["revision"])
 
 
+def nothing_saved() -> WriteApprovals:
+    """The approval settings of a team that saved none, as platform-service answers them: every write without its own
+    answer runs. Without a reader the rules cannot be read and the gateway refuses every write."""
+
+    def empty(request: httpx.Request) -> httpx.Response:
+        key = request.url.path.rsplit("/", 1)[-1]
+        return httpx.Response(200, json={"success": True, "data": {"key": key, "value": {}}})
+
+    return WriteApprovals(fake_service(empty, "platform", ["settings:view"]))
+
+
 def build_app(
     engine: AsyncEngine,
     seed: dict[str, Any],
@@ -455,7 +468,7 @@ def build_app(
         http_client=upstream,
         egress=policy,
         secret_resolver=resolver,
-        write_approvals=write_approvals,
+        write_approvals=write_approvals or nothing_saved(),
         send_check=send_check,
         authenticator=authenticator,
         directory=directory if mcp else None,

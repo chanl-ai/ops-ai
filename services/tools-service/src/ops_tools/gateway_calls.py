@@ -42,6 +42,8 @@ log = get_logger("ops_tools.gateway_calls")
 API, MCP = "api", "mcp"
 # A person's Real run from a tool page: the same checks as any call, logged under that person.
 CONSOLE = "console"
+# A write refused because the team's approval rules (appChanges, appChangesByApp) could not be read.
+RULES_UNAVAILABLE = "approval_rules_unavailable"
 
 # Turns a call's input into what is sent, and names the values to scrub from its answer (code runs).
 Prepare = Callable[[Resolved | None, dict[str, Any]], Awaitable[tuple[dict[str, Any], list[str]]]]
@@ -464,11 +466,21 @@ class GatewayCalls:
         # An answer of "person" is the asker's own confirmation in chat, so the four-eyes check below does not apply.
         confirmed_by_asker = False
         if access in WRITES:
+            levels = await self.approvals.levels(caller.tenant_id, caller.team_id)
+            if levels[0] is None:
+                # Whether this write needs an approval cannot be known, so it never runs; reads are unaffected.
+                reason = "The team's approval rules could not be read, so this write was not run. Try again shortly."
+                row.update(decision="deny", reasons=[reason])
+                await self.log.record(
+                    **row, outcome="refused", latency_ms=elapsed(), error={"code": RULES_UNAVAILABLE, "message": reason}
+                )
+                return Refused(call_id, 503, RULES_UNAVAILABLE, [reason])
             setting, setting_role = await self.registry.approval_setting(req.tool, caller.tenant_id, caller.team_id)
             answer = await self.approvals.answer(
                 caller.tenant_id,
                 caller.team_id,
                 module,
+                levels=levels,
                 access=access,
                 setting=setting,
                 reviewer_role=setting_role,

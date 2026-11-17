@@ -871,7 +871,7 @@
      {
       "access": "write",
       "added": true,
-      "answer": "none",
+      "answer": "reviewer",
       "approvers": 1,
       "description": "Book a branch or advisor appointment",
       "inputSchema": {
@@ -899,7 +899,7 @@
       "outputShape": null,
       "requiresApproval": true,
       "reviewerRole": null,
-      "source": "team",
+      "source": "tool",
       "stepUp": false,
       "testAccount": false,
       "title": "Book appointment"
@@ -943,7 +943,7 @@
      {
       "access": "write",
       "added": true,
-      "answer": "none",
+      "answer": "reviewer",
       "approvers": 2,
       "description": "Post a provisional credit to a card account",
       "inputSchema": {
@@ -973,7 +973,7 @@
       "outputShape": null,
       "requiresApproval": true,
       "reviewerRole": null,
-      "source": "team",
+      "source": "tool",
       "stepUp": true,
       "testAccount": false,
       "title": "Issue provisional credit"
@@ -981,7 +981,7 @@
      {
       "access": "write",
       "added": true,
-      "answer": "none",
+      "answer": "reviewer",
       "approvers": 1,
       "description": "Reverse a card fee",
       "inputSchema": {
@@ -1011,7 +1011,7 @@
       "outputShape": null,
       "requiresApproval": true,
       "reviewerRole": null,
-      "source": "team",
+      "source": "tool",
       "stepUp": false,
       "testAccount": false,
       "title": "Waive fee"
@@ -1087,7 +1087,7 @@
      {
       "access": "write",
       "added": true,
-      "answer": "none",
+      "answer": "reviewer",
       "approvers": 1,
       "description": "Defer one or more loan payments under the hardship program",
       "inputSchema": {
@@ -1123,7 +1123,7 @@
       "outputShape": null,
       "requiresApproval": true,
       "reviewerRole": null,
-      "source": "team",
+      "source": "tool",
       "stepUp": false,
       "testAccount": false,
       "title": "Apply payment deferral"
@@ -1235,7 +1235,7 @@
      {
       "access": "write",
       "added": true,
-      "answer": "none",
+      "answer": "reviewer",
       "approvers": 1,
       "description": "Change a customer\u2019s mailing address",
       "inputSchema": {
@@ -1289,7 +1289,7 @@
       "outputShape": null,
       "requiresApproval": true,
       "reviewerRole": null,
-      "source": "team",
+      "source": "tool",
       "stepUp": false,
       "testAccount": false,
       "title": "Update address"
@@ -1368,7 +1368,7 @@
      {
       "access": "write",
       "added": true,
-      "answer": "none",
+      "answer": "reviewer",
       "approvers": 1,
       "description": "Create a pre-approval in the loan system",
       "inputSchema": {
@@ -1399,7 +1399,7 @@
       "outputShape": null,
       "requiresApproval": true,
       "reviewerRole": null,
-      "source": "team",
+      "source": "tool",
       "stepUp": false,
       "testAccount": false,
       "title": "Issue preapproval"
@@ -1440,7 +1440,7 @@
      {
       "access": "write",
       "added": true,
-      "answer": "none",
+      "answer": "reviewer",
       "approvers": 1,
       "description": "Reply to the customer on the case thread",
       "inputSchema": {
@@ -1472,7 +1472,7 @@
       "outputShape": null,
       "requiresApproval": true,
       "reviewerRole": null,
-      "source": "team",
+      "source": "tool",
       "stepUp": false,
       "testAccount": false,
       "title": "Send reply"
@@ -1513,7 +1513,7 @@
      {
       "access": "write",
       "added": true,
-      "answer": "none",
+      "answer": "reviewer",
       "approvers": 2,
       "description": "Place or release a hold on an outbound wire",
       "inputSchema": {
@@ -1543,7 +1543,7 @@
       "outputShape": null,
       "requiresApproval": true,
       "reviewerRole": null,
-      "source": "team",
+      "source": "tool",
       "stepUp": true,
       "testAccount": false,
       "title": "Place wire hold"
@@ -1648,7 +1648,7 @@
       "outputShape": null,
       "requiresApproval": false,
       "reviewerRole": null,
-      "source": "team",
+      "source": "tool",
       "stepUp": false,
       "testAccount": false,
       "title": "Send an acknowledgement"
@@ -1762,7 +1762,7 @@
      {
       "access": "write",
       "added": true,
-      "answer": "none",
+      "answer": "reviewer",
       "approvers": 1,
       "description": "Ask a customer to provide a document (receipt, statement, proof of address, ID). Writes to the customer: each request is reviewed before it is sent.",
       "inputSchema": {
@@ -1791,7 +1791,7 @@
       "outputShape": null,
       "requiresApproval": true,
       "reviewerRole": null,
-      "source": "team",
+      "source": "tool",
       "stepUp": false,
       "testAccount": false,
       "title": "Request document"

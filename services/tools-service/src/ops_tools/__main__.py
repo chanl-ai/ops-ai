@@ -101,7 +101,10 @@ async def _seed(settings: Settings, seed: dict[str, Any], catalog: list[dict[str
 def main() -> None:
     settings = Settings()
     # agents-service says who uses a tool; files-service and documents-service are read by the file tools.
-    settings.require("agents", "documents", "files", *settings.identity_endpoints)
+    # platform-service holds the team rules every write is decided by: outside dev it must be named, and in dev
+    # without it every write is refused (approval_rules_unavailable).
+    policies = ("platform",) if settings.environment != "dev" else ()
+    settings.require("agents", "documents", "files", *policies, *settings.identity_endpoints)
     require_keys(settings, "review_key", "secrets_key")
     require_current_schema(settings.database_url, MIGRATIONS)
     configure_logging(service="tools-service")
@@ -225,10 +228,10 @@ def main() -> None:
         client("kb", settings.kb_url, ["knowledge:view"]) if settings.kb_url else None,
     )
     apps = Apps(connection_service, store, plugins, modules, tool_users)
-    # The team's toolWritesNeedApproval and appWritesNeedApproval, read from platform-service on each call so a change
-    # applies at once; the gateway's calls and the connectors' Reviewed marks read the same.
-    write_approvals = (
-        WriteApprovals(client("platform", settings.platform_url, ["settings:view"])) if settings.platform_url else None
+    # The team's appChanges and appChangesByApp, read from platform-service on each call so a change applies at once;
+    # the gateway's calls and the connectors' Reviewed marks read the same. Without platform-service none can be read.
+    write_approvals = WriteApprovals(
+        client("platform", settings.platform_url, ["settings:view"]) if settings.platform_url else None
     )
     apps.write_approvals = write_approvals
     registry = ToolRegistry(catalog, store, plugins, connection_store)

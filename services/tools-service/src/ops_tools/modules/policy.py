@@ -47,14 +47,14 @@ class WriteApprovals:
     def __init__(self, platform: ServiceClient | None = None) -> None:
         """The team's approval settings for agent changes (`appChanges`, `appChangesByApp`), read live from
         platform-service on each call with this service's `settings:view` token for the tenant, as PublishPolicy
-        reads publishReview. Without `platform` no team has set anything."""
+        reads publishReview. Without `platform` the settings cannot be read, which is answered as a failed read."""
         self.platform = platform
 
     async def levels(self, tenant_id: str, team_id: str | None) -> tuple[Any, dict[str, Any]]:
-        """(team level, per-app levels) for `team_id`. The team level is None when the policy cannot be read, which
-        `effective_answer` counts as waiting, so a failed read never lets a write through unapproved."""
+        """(team level, per-app levels) for `team_id`. The team level is None when the policy cannot be read: the
+        gateway then refuses the write (approval_rules_unavailable) and `effective_answer` shows it as waiting."""
         if self.platform is None:
-            return {}, {}
+            return None, {}
         try:
             team = await self.platform.get("/v1/policies/appChanges", tenant=tenant_id)
             by_app = await self.platform.get("/v1/policies/appChangesByApp", tenant=tenant_id)

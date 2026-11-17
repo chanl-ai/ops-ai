@@ -375,7 +375,8 @@ class ModuleService:
     # checks, never a path of its own.
     real_runs: Callable[..., Awaitable[dict[str, Any]]] | None = None
     # The gateway's own reader of the team's approval settings, set by create_gateway_app: a test run waits exactly
-    # when the same call from chat would. Left as is, no team has saved a setting.
+    # when the same call from chat would. Left as is, the settings cannot be read and every write without its own
+    # answer waits.
     approvals: WriteApprovals = WriteApprovals()
 
     def __init__(

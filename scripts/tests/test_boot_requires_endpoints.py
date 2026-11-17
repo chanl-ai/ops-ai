@@ -28,9 +28,18 @@ PROCESSES: dict[str, tuple[dict[str, str], list[str]]] = {
 }
 
 
-@pytest.mark.parametrize("module", sorted(PROCESSES))
-def test_a_process_missing_a_required_address_exits_naming_it(module: str) -> None:
-    given, named = PROCESSES[module]
+# Required outside dev only: a dev stack may run without it, and its writes are refused instead.
+PRODUCTION = {"OPS_ENVIRONMENT": "production", "OPS_AUTH_MODE": "platform"}
+OUTSIDE_DEV: dict[str, tuple[dict[str, str], list[str]]] = {
+    "ops_tools": (PRODUCTION, ["OPS_PLATFORM_URL"]),
+}
+
+
+@pytest.mark.parametrize(("module", "case"), [*((m, PROCESSES[m]) for m in sorted(PROCESSES)), *OUTSIDE_DEV.items()])
+def test_a_process_missing_a_required_address_exits_naming_it(
+    module: str, case: tuple[dict[str, str], list[str]]
+) -> None:
+    given, named = case
     # Nothing of the caller's stack: no address, and a database nothing listens on, so a process that got past the
     # check would fail on something else and not name the setting.
     env = {k: v for k, v in os.environ.items() if not k.startswith("OPS_")}
