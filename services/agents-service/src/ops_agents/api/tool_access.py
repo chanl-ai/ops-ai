@@ -17,6 +17,8 @@ from ops_identity import ServiceCallError, ServiceUnreachable
 from ops_service_kit.errors import ApiError
 
 from .deps import Runtime
+from .review_sla import review_hours_asked_once
+from .team_names import team_names_asked_once
 
 WORKFLOW_TOOLS = {"send_reply": "write", "send_acknowledgement": "write"}
 
@@ -46,10 +48,12 @@ _READ: ContextVar[dict[str, WritePolicy] | None] = ContextVar("tool_policies_rea
 def one_read_per_tool() -> Generator[None]:
     """Within the block, tools-service is asked once per tool: a list of Human Tasks names a few tools many times, and
     asking per review made the list one call per waiting write. Held for one request only, so a policy changed in
-    tools-service applies from the next request."""
+    tools-service applies from the next request. The same block keeps what platform-service answered (team names, the
+    review deadline), failures included, so a platform-service that is down is waited on once."""
     token = _READ.set({})
     try:
-        yield
+        with team_names_asked_once(), review_hours_asked_once():
+            yield
     finally:
         _READ.reset(token)
 

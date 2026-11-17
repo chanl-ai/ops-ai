@@ -5,7 +5,9 @@ The Security team decides security reviews, so one that cannot be read refuses t
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, cast
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
@@ -20,6 +22,21 @@ log = get_logger("ops_agents.team_names")
 CACHE_SECONDS = 60.0
 
 
+# The names this request already asked platform-service for, by (tenant, team id), misses and failures included; None
+# outside `team_names_asked_once`, where every call may ask. Keeps a down or slow platform-service to one wait per
+# request, and the warm made with no transaction open holds for the builders that run inside one.
+_ASKED: ContextVar[dict[tuple[str, str], str | None] | None] = ContextVar("team_names_asked", default=None)
+
+
+@contextmanager
+def team_names_asked_once() -> Generator[None]:
+    token = _ASKED.set({})
+    try:
+        yield
+    finally:
+        _ASKED.reset(token)
+
+
 class PlatformTeamNames:
     def __init__(self, platform: ServiceClient | None, clock: Callable[[], float] = time.monotonic) -> None:
         self.platform, self.clock = platform, clock
@@ -27,6 +44,16 @@ class PlatformTeamNames:
         self.security: dict[str, tuple[str | None, float]] = {}
 
     async def name(self, team_id: str) -> str | None:
+        asked = _ASKED.get()
+        key = (current_tenant(), team_id)
+        if asked is not None and key in asked:
+            return asked[key]
+        found = await self.read(team_id)
+        if asked is not None:
+            asked[key] = found
+        return found
+
+    async def read(self, team_id: str) -> str | None:
         if self.platform is None:
             return None
         tenant = current_tenant()
