@@ -2577,7 +2577,7 @@
     },
     "/v1/files": {
       "get": {
-        "description": "Available files of the caller's team on the shared list contract, newest first (`sortBy` name or\nuploadedAt); `uploadedBy=me` keeps the caller's own. Search, the uploaded dates, the view and the purpose,\nscan, sensitivity, read-as type and read path filters run in the query, which also answers each view's count\nand the facet counts; `readPath=model` keeps files no template matched. The filters are declared here so a\nbad value is refused; ListQuery reads the same keys as its filters.",
+        "description": "Available files of the caller's team on the shared list contract, newest first (`sortBy` name, uploadedAt,\nsize, scan or purpose; equal values stay newest first); `uploadedBy=me` keeps the caller's own. Search, the\nuploaded dates, the view and the purpose, scan, sensitivity, read-as type and read path filters run in the\nquery, which also answers each view's count and the facet counts; `readPath=model` keeps files no template\nmatched. The filters are declared here so a bad value is refused; ListQuery reads the same keys as its\nfilters.",
         "operationId": "files_list_files",
         "parameters": [
           {

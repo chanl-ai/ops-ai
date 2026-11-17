@@ -72,7 +72,7 @@ files = sa.Table(
     sa.Column("name", sa.String(255), nullable=False, info=LISTED),
     sa.Column("mime", sa.String(127), nullable=False),
     sa.Column("sniffed_mime", sa.String(127)),
-    sa.Column("size", sa.BigInteger, nullable=False),
+    sa.Column("size", sa.BigInteger, nullable=False, info=LISTED),
     sa.Column("digest", sa.String(64)),
     sa.Column("purpose", sa.String(32), nullable=False, info=LISTED),
     sa.Column("status", sa.String(16), nullable=False),  # uploading | available | rejected
@@ -109,6 +109,7 @@ files = sa.Table(
     sa.Index("ix_files_sensitivity", "tenant_id", "sensitivity"),
     sa.Index("ix_files_uploaded_at", "tenant_id", "uploaded_at"),
     sa.Index("ix_files_read_path", "tenant_id", "read_path"),
+    sa.Index("ix_files_size", "tenant_id", "size"),
     info={**TENANT_SCOPED, **team_owned("team")},
 )
 
@@ -422,7 +423,13 @@ class FilesStore(Store):
                 query.where(self._in_view(view, tenant, at)),
                 params,
                 search=search,
-                sortable={"name": files.c.name, "uploadedAt": files.c.uploaded_at},
+                sortable={
+                    "name": files.c.name,
+                    "uploadedAt": files.c.uploaded_at,
+                    "size": files.c.size,
+                    "scan": files.c.scan_status,
+                    "purpose": files.c.purpose,
+                },
                 default_sort=files.c.uploaded_at.desc(),
                 filters=FACETS,
                 facets=FACETS,

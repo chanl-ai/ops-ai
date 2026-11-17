@@ -422,11 +422,12 @@ def create_files_app(
         uploaded_before: Annotated[datetime | None, Query(alias="uploadedBefore")] = None,
         view: Literal["all", "quarantined", "legal_hold", "unreferenced", "expiring"] = "all",
     ) -> JSONResponse:
-        """Available files of the caller's team on the shared list contract, newest first (`sortBy` name or
-        uploadedAt); `uploadedBy=me` keeps the caller's own. Search, the uploaded dates, the view and the purpose,
-        scan, sensitivity, read-as type and read path filters run in the query, which also answers each view's count
-        and the facet counts; `readPath=model` keeps files no template matched. The filters are declared here so a
-        bad value is refused; ListQuery reads the same keys as its filters."""
+        """Available files of the caller's team on the shared list contract, newest first (`sortBy` name, uploadedAt,
+        size, scan or purpose; equal values stay newest first); `uploadedBy=me` keeps the caller's own. Search, the
+        uploaded dates, the view and the purpose, scan, sensitivity, read-as type and read path filters run in the
+        query, which also answers each view's count and the facet counts; `readPath=model` keeps files no template
+        matched. The filters are declared here so a bad value is refused; ListQuery reads the same keys as its
+        filters."""
         del purpose, scan, sensitivity, read_as, read_path
         return ok(
             await files.list(

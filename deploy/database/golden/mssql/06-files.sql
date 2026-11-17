@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- files-service, stamped at files_0015
+-- files-service, stamped at files_0016
 CREATE TABLE files (
 	id VARCHAR(64) NOT NULL, 
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -50,6 +50,8 @@ GO
 CREATE INDEX ix_files_scan_status ON files (tenant_id, scan_status);
 GO
 CREATE INDEX ix_files_sensitivity ON files (tenant_id, sensitivity);
+GO
+CREATE INDEX ix_files_size ON files (tenant_id, size);
 GO
 CREATE INDEX ix_files_team_status ON files (tenant_id, team, status, uploaded_at);
 GO
@@ -276,5 +278,5 @@ CREATE TABLE alembic_version_files (
     CONSTRAINT alembic_version_files_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_files (version_num) VALUES ('files_0015');
+INSERT INTO alembic_version_files (version_num) VALUES ('files_0016');
 GO

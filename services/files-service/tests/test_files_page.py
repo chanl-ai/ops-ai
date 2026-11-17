@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
+import pytest
 import sqlalchemy as sa
 
 from ops_files.store import AsyncEngine
@@ -165,3 +166,39 @@ async def test_files_uploaded_at_the_same_moment_page_without_repeats_or_gaps(
                 for row in _data(await _list(c, page=page, sortBy="uploadedAt", sortOrder=order))["data"]
             ]
             assert seen == sorted(ids, reverse=order == "desc"), order
+
+
+@pytest.mark.parametrize(
+    ("sort_by", "column", "low", "high"),
+    [
+        ("size", "size", 100, 300),
+        ("scan", "scan_status", "clean", "infected"),
+        ("purpose", "purpose", "chat_attachment", "knowledge_source"),
+    ],
+)
+async def test_the_list_sorts_by_size_scan_and_purpose_in_the_query(
+    client: Client,  # noqa: F811
+    engine: AsyncEngine,
+    *,
+    sort_by: str,
+    column: str,
+    low: object,
+    high: object,
+) -> None:
+    """The Files table sorts these columns on the server: each order runs over every page, and rows with the same
+    value stay newest first, so a page never repeats or skips one."""
+    async with client() as c:
+        ids = [await _stored(c, f"sorted-{i}.pdf", PDF + bytes([90 + i])) for i in range(3)]
+        start = datetime(2026, 11, 2, 9, 0, tzinfo=UTC)
+        async with engine.begin() as conn:
+            for i, value in enumerate((high, low, high)):
+                at = start + timedelta(minutes=i)
+                stmt = sa.update(files_table).where(files_table.c.id == ids[i])
+                await conn.execute(stmt.values({column: value, "uploaded_at": at}))
+        for order, expected in (("asc", [ids[1], ids[2], ids[0]]), ("desc", [ids[2], ids[0], ids[1]])):
+            seen = [
+                row["id"]
+                for page in (1, 2)
+                for row in _data(await _list(c, page=page, sortBy=sort_by, sortOrder=order))["data"]
+            ]
+            assert seen == expected, (sort_by, order)

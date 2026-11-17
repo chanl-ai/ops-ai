@@ -50,11 +50,12 @@ export interface paths {
         };
         /**
          * List Files
-         * @description Available files of the caller's team on the shared list contract, newest first (`sortBy` name or
-         *     uploadedAt); `uploadedBy=me` keeps the caller's own. Search, the uploaded dates, the view and the purpose,
-         *     scan, sensitivity, read-as type and read path filters run in the query, which also answers each view's count
-         *     and the facet counts; `readPath=model` keeps files no template matched. The filters are declared here so a
-         *     bad value is refused; ListQuery reads the same keys as its filters.
+         * @description Available files of the caller's team on the shared list contract, newest first (`sortBy` name, uploadedAt,
+         *     size, scan or purpose; equal values stay newest first); `uploadedBy=me` keeps the caller's own. Search, the
+         *     uploaded dates, the view and the purpose, scan, sensitivity, read-as type and read path filters run in the
+         *     query, which also answers each view's count and the facet counts; `readPath=model` keeps files no template
+         *     matched. The filters are declared here so a bad value is refused; ListQuery reads the same keys as its
+         *     filters.
          */
         get: operations["files_list_files"];
         put?: never;
