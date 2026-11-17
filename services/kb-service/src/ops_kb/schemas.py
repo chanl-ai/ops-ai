@@ -886,6 +886,7 @@ class FaqDraft(Out):
 class DecideIn(In):
     ids: list[str] = Field(min_length=1, max_length=200)
     decision: Literal["approve", "reject"]
+    reason: str | None = Field(default=None, max_length=500)
 
 
 class DraftEdit(In):
@@ -928,6 +929,8 @@ class KnowledgeChange(Out):
     created_at: str
     decided_at: str | None = None
     decided_by: str | None = None
+    # The reviewer's reason given when the change was approved or rejected; null when none was given.
+    decision_reason: str | None = None
     # An FAQ draft's pair and the passage it quotes; absent for a sync's change.
     faq: FaqDraft | None = None
 

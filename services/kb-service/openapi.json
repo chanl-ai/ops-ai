@@ -438,6 +438,18 @@
             "minItems": 1,
             "title": "Ids",
             "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           }
         },
         "required": [
@@ -3965,6 +3977,17 @@
               }
             ],
             "title": "Decidedby"
+          },
+          "decisionReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decisionreason"
           },
           "documentId": {
             "title": "Documentid",

@@ -1587,7 +1587,7 @@ class KnowledgeService:
         return len(units)
 
     async def decide_drafts(
-        self, who: Who, ids: list[str], *, decision: str, edit: dict[str, str] | None = None
+        self, who: Who, ids: list[str], *, decision: str, edit: dict[str, str] | None = None, reason: str | None = None
     ) -> list[dict[str, Any]]:
         """Approve, reject or edit FAQ drafts, each by the knowledge owner of its source. An approved pair is
         searchable at once (embedded with the rest of the tenant's units); an edit keeps it waiting for review."""
@@ -1605,6 +1605,8 @@ class KnowledgeService:
             if d.status not in DECIDABLE:
                 raise Conflict(f"That draft is {d.status}; there is nothing to decide.", code="draft_decided")
             values: ChangeChanges = {"decided_by": who.email, "decided_at": datetime.now(UTC)}
+            if decision != "edit":
+                values["decision_reason"] = reason.strip() or None if reason else None
             if d.origin == "sync":
                 # A version a sync held for review: approving indexes it; it cannot be edited.
                 if decision == "edit":
@@ -2480,6 +2482,7 @@ class KnowledgeService:
                 {
                     "decidedAt": _iso(ch.decided_at or ch.changed_at),
                     "decidedBy": ch.decided_by or ch.changed_by,
+                    "decisionReason": ch.decision_reason,
                 }
                 if not waiting
                 else {}
@@ -3182,6 +3185,7 @@ def _draft_out(ch: ChangeRow, s: SourceRow | None, kbs: list[dict[str, Any]]) ->
         "createdAt": _iso(ch.changed_at),
         "decidedAt": _iso(ch.decided_at) if ch.decided_at else None,
         "decidedBy": ch.decided_by,
+        "decisionReason": ch.decision_reason,
         "faq": {
             "question": str(detail.get("question") or ""),
             "answer": str(detail.get("answer") or ""),

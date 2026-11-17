@@ -358,6 +358,8 @@ kb_changes = sa.Table(
     sa.Column("detail", sa.JSON),
     sa.Column("decided_by", sa.String(200)),
     sa.Column("decided_at", sa.DateTime(timezone=True)),
+    # The reviewer's reason given with an approval or rejection; null when none was given.
+    sa.Column("decision_reason", sa.String(500)),
     # No foreign key to the item: the record of who changed what outlives the document's removal.
     sa.Index("ix_kb_changes_at", "tenant_id", "changed_at"),
     sa.Index("ix_kb_changes_item_origin", "tenant_id", "item_id", "origin"),
@@ -623,6 +625,7 @@ class ChangeRow(Out):
     detail: dict[str, JsonValue] | None
     decided_by: str | None
     decided_at: datetime | None
+    decision_reason: str | None
 
 
 def _whole_counts(value: object) -> object:
@@ -1040,6 +1043,7 @@ class ChangeChanges(TypedDict, total=False):
     detail: dict[str, JsonValue]
     decided_by: str
     decided_at: datetime
+    decision_reason: str | None
 
 
 class FaqUnitWrite(TypedDict):

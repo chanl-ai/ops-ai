@@ -918,6 +918,8 @@ export interface components {
             decision: "approve" | "reject";
             /** Ids */
             ids: string[];
+            /** Reason */
+            reason?: string | null;
         };
         /** DocumentRow */
         DocumentRow: {
@@ -2111,6 +2113,8 @@ export interface components {
             decidedAt?: string | null;
             /** Decidedby */
             decidedBy?: string | null;
+            /** Decisionreason */
+            decisionReason?: string | null;
             /** Documentid */
             documentId: string;
             /** Documenttitle */

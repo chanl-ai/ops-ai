@@ -65,6 +65,7 @@ class ChangeViewCounts(TypedDict, closed=True):
 class DecideIn(TypedDict, closed=True):
     decision: Literal["approve", "reject"]
     ids: list[str]
+    reason: NotRequired[str | None]
 
 
 class DraftEdit(TypedDict, closed=True):
@@ -1002,6 +1003,7 @@ class KnowledgeChange(TypedDict, closed=True):
     createdAt: str
     decidedAt: NotRequired[str | None]
     decidedBy: NotRequired[str | None]
+    decisionReason: NotRequired[str | None]
     documentId: str
     documentTitle: str
     faq: NotRequired[FaqDraft | None]

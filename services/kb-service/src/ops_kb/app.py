@@ -641,7 +641,7 @@ def create_kb_app(
     @changes.post("/decide", response_model=Envelope[list[KnowledgeChange]])
     async def decide_changes(body: DecideIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Approves or rejects FAQ drafts, one or many; an approved pair is searchable at once and cites its passage."""
-        return ok(await service.decide_drafts(who, body.ids, decision=body.decision))
+        return ok(await service.decide_drafts(who, body.ids, decision=body.decision, reason=body.reason))
 
     @changes.patch("/{change_id}", response_model=Envelope[KnowledgeChange])
     async def edit_change(change_id: str, body: DraftEdit, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
