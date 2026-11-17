@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from ._io import Definition, load_definition
-from ._transport import iter_pages, iter_pages_async, page_items
+from ._transport import iter_pages, iter_pages_async, iter_rows, iter_rows_async
 from .errors import NotFound, OpsError
 
 _BACKGROUND: set[asyncio.Task[None]] = set()
@@ -111,12 +111,7 @@ class Agents:
 
     def tool_options(self, search: str | None = None) -> list[dict[str, Any]]:
         """The operations an agent may be granted: published ones, as the agent page's picker lists them."""
-        rows: list[dict[str, Any]] = []
-        more: dict[str, Any] | None = {}
-        while more is not None:  # cursor paged: follow nextCursor, not the first page only
-            items, more = page_items(self._raw.agents.agents_tool_options(search=search, limit=50, **more))
-            rows += items
-        return rows
+        return list(iter_rows(self._raw.agents.agents_tool_options, search=search, limit=50))
 
     def grant_tools(self, id: str, tools: list[str]) -> Any:
         """Adds tools (their ids from `tool_options`) to the agent's draft, keeping the ones it holds. Publish it
@@ -256,12 +251,7 @@ class AsyncAgents:
 
     async def tool_options(self, search: str | None = None) -> list[dict[str, Any]]:
         """The operations an agent may be granted: published ones, as the agent page's picker lists them."""
-        rows: list[dict[str, Any]] = []
-        more: dict[str, Any] | None = {}
-        while more is not None:  # cursor paged: follow nextCursor, not the first page only
-            items, more = page_items(await self._raw.agents.agents_tool_options(search=search, limit=50, **more))
-            rows += items
-        return rows
+        return [row async for row in iter_rows_async(self._raw.agents.agents_tool_options, search=search, limit=50)]
 
     async def grant_tools(self, id: str, tools: list[str]) -> Any:
         """Adds tools (their ids from `tool_options`) to the agent's draft, keeping the ones it holds. Publish it

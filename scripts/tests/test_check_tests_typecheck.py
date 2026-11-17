@@ -99,3 +99,9 @@ def test_a_commit_that_adds_or_raises_a_row_is_a_rise(tmp_path: Path, monkeypatc
     f.write_text(c.HEADER + "3 tests/test_a.py\n")
     git("commit", "-qam", "raise")
     assert any("raises" in r for r in h.problems(tmp_path, began, c.PATHSPECS))
+
+
+def test_only_a_tests_folder_directly_under_the_project_is_a_test_file(tmp_path: Path) -> None:
+    p = project(tmp_path)
+    assert c.test_key(p / "tests/sub/test_b.py") == (p, "tests/sub/test_b.py")
+    assert c.test_key(p / "src/pkg/tests/helper.py") is None

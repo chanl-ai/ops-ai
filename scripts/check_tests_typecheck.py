@@ -71,7 +71,8 @@ def test_key(file: Path) -> tuple[Path, str] | None:
     """The project and the path from it for a test file; None for every other file."""
     project = project_of(file)
     rel = file.relative_to(project)
-    return (project, rel.as_posix()) if "tests" in rel.parts[:-1] else None
+    # Only a `tests` folder directly under the project counts; `src/<pkg>/tests/` holds package code.
+    return (project, rel.as_posix()) if rel.parts[0] == "tests" and len(rel.parts) > 1 else None
 
 
 def read_baseline(path: Path) -> Counter[str] | None:

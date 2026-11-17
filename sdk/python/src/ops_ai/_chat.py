@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Iterator
 from typing import Any, cast
 
-from ._transport import PAGE_MAX, Operation, page_items
+from ._transport import PAGE_MAX, Operation, iter_rows, iter_rows_async, page_items
 
 SERVICE = "agents"
 LINKED = "CONNECTION_NOT_LINKED"
@@ -136,12 +136,7 @@ class Chat:
 
     def every_thread(self, **query: Any) -> list[dict[str, Any]]:
         """Every conversation `threads` would list, page after page (50 rows a page)."""
-        rows: list[dict[str, Any]] = []
-        more: dict[str, Any] | None = {}
-        while more is not None:
-            items, more = page_items(self._call("threads", **{"pageSize": PAGE_MAX, **query, **more}))
-            rows += items
-        return rows
+        return list(iter_rows(lambda **q: self._call("threads", **q), **{"pageSize": PAGE_MAX, **query}))
 
     def start(
         self, agent: str | None = None, *, kb_ids: list[str] | None = None, test: bool = False, title: str | None = None
@@ -206,12 +201,9 @@ class AsyncChat:
         return page_items(await self._call("threads", **query))[0]
 
     async def every_thread(self, **query: Any) -> list[dict[str, Any]]:
-        rows: list[dict[str, Any]] = []
-        more: dict[str, Any] | None = {}
-        while more is not None:
-            items, more = page_items(await self._call("threads", **{"pageSize": PAGE_MAX, **query, **more}))
-            rows += items
-        return rows
+        return [
+            row async for row in iter_rows_async(lambda **q: self._call("threads", **q), pageSize=PAGE_MAX, **query)
+        ]
 
     async def start(
         self, agent: str | None = None, *, kb_ids: list[str] | None = None, test: bool = False, title: str | None = None

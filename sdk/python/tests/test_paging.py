@@ -7,7 +7,8 @@ import asyncio
 from typing import Any
 
 import pytest
-from ops_ai._transport import PAGE_MAX, every_page, every_page_async
+from ops_ai._transport import PAGE_MAX, every_page, every_page_async, iter_rows
+from ops_ai.errors import ServerError
 
 
 def pages(rows_per_page: list[list[str]]) -> tuple[Any, list[dict[str, Any]]]:
@@ -50,3 +51,15 @@ def test_every_page_async_follows_every_page() -> None:
         return call(**query)
 
     assert asyncio.run(every_page_async(acall)) == ["a", "b", "c"]
+
+
+def test_a_repeated_cursor_stops_with_a_paging_error() -> None:
+    calls: list[dict[str, Any]] = []
+
+    def call(**query: Any) -> dict[str, Any]:
+        calls.append(query)
+        return {"items": ["a"], "nextCursor": "same"}
+
+    with pytest.raises(ServerError, match="paging_loop"):
+        list(iter_rows(call, limit=50))
+    assert len(calls) == 2

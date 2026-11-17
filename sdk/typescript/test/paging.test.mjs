@@ -33,3 +33,10 @@ for (const row of rows) {
     assert.ok(asked.every((q) => q.search === row.query.search));
   });
 }
+
+test('eachRow: a repeated cursor stops with a paging error', async () => {
+  let calls = 0;
+  const fetchPage = async () => (calls++, { items: ['a'], nextCursor: 'same' });
+  await assert.rejects(everyPage(fetchPage), { code: 'paging_loop' });
+  assert.equal(calls, 2);
+});

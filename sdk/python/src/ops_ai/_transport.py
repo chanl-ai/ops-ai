@@ -14,7 +14,7 @@ from urllib.parse import quote
 import httpx
 
 from ._config import Config
-from .errors import error_for
+from .errors import ServerError, error_for
 
 # Every service is reached through one origin under its own prefix (deploy/fly/Caddyfile); a local stack without the
 # proxy is reached by port through Config.services.
@@ -361,20 +361,40 @@ def _asked(query: dict[str, Any]) -> dict[str, Any]:
     return {**query, "page_size": min(int(query.get("page_size") or PAGE_MAX), PAGE_MAX)}
 
 
-def iter_pages(call: Any, **query: Any) -> Iterator[Any]:
-    """The rows of a list operation one by one, asking for the next page only when the last one is used up."""
-    asked, more = _asked(query), {}
+def _advance(asked: dict[str, Any], more: dict[str, Any], items: list[Any], nxt: dict[str, Any] | None) -> None:
+    """Refuses a next page that would repeat the request just made, or that follows a page with no rows: a server that
+    does either would otherwise keep the caller looping forever."""
+    if nxt is not None and (nxt == more or not items):
+        raise ServerError(502, "paging_loop", f"the server repeated or emptied a page while claiming more: {nxt}")
+
+
+def iter_rows(call: Any, **asked: Any) -> Iterator[Any]:
+    """The rows of a list operation page after page, with the query exactly as given plus each page's own cursor."""
+    more: dict[str, Any] | None = {}
     while more is not None:
-        items, more = page_items(call(**{**asked, **more}))
+        items, nxt = page_items(call(**{**asked, **more}))
+        _advance(asked, more, items, nxt)
         yield from items
+        more = nxt
 
 
-async def iter_pages_async(call: Any, **query: Any) -> AsyncIterator[Any]:
-    asked, more = _asked(query), {}
+async def iter_rows_async(call: Any, **asked: Any) -> AsyncIterator[Any]:
+    more: dict[str, Any] | None = {}
     while more is not None:
-        items, more = page_items(await call(**{**asked, **more}))
+        items, nxt = page_items(await call(**{**asked, **more}))
+        _advance(asked, more, items, nxt)
         for item in items:
             yield item
+        more = nxt
+
+
+def iter_pages(call: Any, **query: Any) -> Iterator[Any]:
+    """The rows of a list operation one by one, asking for the next page only when the last one is used up."""
+    return iter_rows(call, **_asked(query))
+
+
+def iter_pages_async(call: Any, **query: Any) -> AsyncIterator[Any]:
+    return iter_rows_async(call, **_asked(query))
 
 
 def every_page(call: Any, **query: Any) -> list[Any]:
