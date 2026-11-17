@@ -30,6 +30,11 @@ export interface OptionsPage {
   nextCursor: string | null;
 }
 
+/** The app picker's page for a module's connection: each choice also says how healthy the connection is. */
+export interface ConnectionOptionsPage extends OptionsPage {
+  data: (OptionsPage['data'][number] & { status: string })[];
+}
+
 /** The tools picker's page: also the apps whose catalog holds tools the team has not added, and how many. */
 export interface ToolOptionsPage extends OptionsPage {
   /** An MCP link's picker (`agents: false`) also gets what each tool takes and does. */

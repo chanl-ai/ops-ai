@@ -39,7 +39,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useToolCall } from '@/hooks/governance-queries';
-import { useConnectionOptions } from '@/hooks/systems-queries';
 import { useCurrentPerson } from '@/hooks/auth-queries';
 import { useCanBuild, useNavAllows } from '@/hooks/me-queries';
 import { useWorkflows } from '@/hooks/queries';
@@ -63,7 +62,6 @@ import {
 import { useTabParam } from '@/hooks/use-tab-param';
 import { plural, shortDate } from '@/lib/format';
 import { TOOL_CALL_LOG } from '@/lib/nav';
-import type { IntegrationStatus } from '@/lib/types/integrations';
 import type { ModuleApproval, OperationPatch } from '@/lib/types/tool-modules';
 import { appPageHref } from '@/lib/app-links';
 
@@ -113,7 +111,6 @@ export default function ModulePage() {
   const importOps = useImportOperations();
   const discover = useDiscoverModule();
   const setConnection = useSetModuleConnection();
-  const connections = useConnectionOptions(tab === 'connection');
 
   if (query.isPending)
     return (
@@ -379,8 +376,6 @@ export default function ModulePage() {
                   </p>
                   <ConnectionSelect
                     value={m.connection}
-                    options={connections.data?.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
-                    loading={connections.isPending}
                     disabled={setConnection.isPending}
                     onChange={(v) =>
                       setConnection.mutate(

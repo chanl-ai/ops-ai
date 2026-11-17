@@ -5,7 +5,7 @@ import { keepPreviousData } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import { sdk } from '@/lib/api/ops-sdk';
-import type { OptionsPage, OptionsParams, ToolOptionsPage, WorkflowFilters } from '@/lib/types/query';
+import type { ConnectionOptionsPage, OptionsPage, OptionsParams, ToolOptionsPage, WorkflowFilters } from '@/lib/types/query';
 import type { SkillLoading } from '@/lib/types/skills';
 import { useTeamInfiniteQuery, useTeamQuery } from './team-query';
 
@@ -53,17 +53,36 @@ export const startableWorkflowOptions = workflowsWhere('workflow-options:startab
 /** Workflows a file can start: an email trigger, or a form with a file field; never one only other workflows start. */
 export const fileWorkflowOptions = workflowsWhere('workflow-options:files', { startable: ['true'], takesFiles: ['true'] });
 /**
- * The team's apps by the id the Apps page shows (plugin:<id>, a connection's id, module:<id>), from GET /v1/apps.
- * That route lists every card at once and takes no search, so the search narrows the one list it returns.
+ * The team's apps by the id the Apps page shows (plugin:<id>, a connection's id, builtin:<id>), from GET /v1/apps,
+ * which searches by name and category and names cards with `ids`; a page number is the cursor.
  */
-export const appOptions: OptionSource = {
-  key: 'app-options',
-  fetch: async ({ search, ids }) => {
-    // The built-in apps stay pickable here (a mailbox reply is the write teams most often approve), off the Apps grid.
-    const cards = await sdk((ops) => ops.raw.tools.apps_list_apps({ query: { include: 'builtin' } }));
-    const words = (search ?? '').trim().toLowerCase();
-    const rows = ids?.length ? cards.filter((c) => ids.includes(c.id)) : cards.filter((c) => !words || `${c.name} ${c.category ?? ''}`.toLowerCase().includes(words));
-    return { data: rows.map((c) => ({ id: c.id, label: c.name, hint: c.category ?? null })), nextCursor: null };
+const appsWhere = (key: string, builtin: boolean): OptionSource => ({
+  key,
+  fetch: async ({ search, cursor, limit = 25, ids }) => {
+    const page = Number(cursor ?? 1);
+    const res = await sdk((ops) =>
+      ops.raw.tools.apps_list_apps({ query: { page, pageSize: ids?.length ? Math.min(ids.length, 50) : limit, ids: ids?.length ? ids : undefined, search: ids?.length ? undefined : search || undefined, include: builtin ? 'builtin' : undefined } }),
+    );
+    return { data: res.data.map((c) => ({ id: c.id, label: c.name, hint: c.category ?? null })), nextCursor: !ids?.length && res.pagination.hasNext ? String(page + 1) : null };
+  },
+});
+/** The built-in apps stay pickable here (a mailbox reply is the write teams most often approve), off the Apps grid. */
+export const appOptions = appsWhere('app-options', true);
+/** The team's plugin apps and the apps a person added, without the built-in ones: where a step names an app's account. */
+export const teamAppOptions = appsWhere('team-app-options', false);
+/**
+ * The apps a module may sign in through, by the id a module is bound to (the card's default account); an app with
+ * none is left out of the page. `status` draws the badge a picker shows beside a name that is not healthy.
+ */
+export const connectionOptions: OptionSource<ConnectionOptionsPage> = {
+  key: 'connection-options',
+  fetch: async ({ search, cursor, limit = 25 }) => {
+    const page = Number(cursor ?? 1);
+    const res = await sdk((ops) => ops.raw.tools.apps_list_apps({ query: { page, pageSize: limit, search: search || undefined } }));
+    return {
+      data: res.data.flatMap((c) => (c.connectionId ? [{ id: c.connectionId, label: c.name, hint: c.category ?? null, status: c.status ?? 'draft' }] : [])),
+      nextCursor: res.pagination.hasNext ? String(page + 1) : null,
+    };
   },
 };
 export const guardrailOptions: OptionSource = { key: 'guardrail-options', fetch: (p) => api.guardrails.options(p) };

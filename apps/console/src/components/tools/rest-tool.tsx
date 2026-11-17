@@ -10,7 +10,7 @@ import { SignInHeaderNotice } from '@/components/shared/sign-in-header-notice';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Row, Rows, Section } from '@/components/shared/surface';
-import { ConnectionSelect, type ConnectionOption } from '@/components/tools/connection-select';
+import { ConnectionSelect } from '@/components/tools/connection-select';
 import { BodyEditor, hasBody, HeadersEditor, RequestLine } from '@/components/tools/http-operation-builder';
 import { InputSchemaEditor, schemaOf } from '@/components/tools/input-schema-editor';
 import { MockAnswers } from '@/components/tools/mock-answers';
@@ -72,8 +72,6 @@ export interface RestToolProps extends ToolRunProps {
   /** Every problem the last save was refused for, listed together. */
   saveProblems?: string[];
   connection: ConnectionRef | null;
-  connections?: ConnectionOption[];
-  connectionsLoading: boolean;
   onConnectionChange: (connectionId: string) => void;
   settingConnection: boolean;
   extraActions?: React.ReactNode;
@@ -217,7 +215,7 @@ export function RestTool(p: RestToolProps) {
                 label="App"
                 hint={p.connection ? `Signs every Real request in to ${host}. The key stays on the app and never shows here.` : 'An app holds the address and the sign-in once, for every tool that calls it. Mock works without one.'}
               >
-                <ConnectionSelect value={p.connection} options={p.connections} loading={p.connectionsLoading} disabled={p.settingConnection} onChange={p.onConnectionChange} className="w-full sm:w-80" />
+                <ConnectionSelect value={p.connection} disabled={p.settingConnection} onChange={p.onConnectionChange} className="w-full sm:w-80" />
               </FormField>
               <RequestLine
                 value={d.http}

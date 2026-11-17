@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Form } from '@/components/ui/form';
 import { Skeleton } from '@/components/ui/skeleton';
-import { type AppCredentialChange, useAppCredential, useChangeAppCredential, useSetCredentialSecret, useSystems } from '@/hooks/systems-queries';
+import { type AppCredentialChange, useAppCredential, useChangeAppCredential, useSetCredentialSecret, useSystemCard } from '@/hooks/systems-queries';
 import { configSchema } from '@/lib/field-schema';
 import { plural } from '@/lib/format';
 
@@ -35,11 +35,10 @@ export function CredentialEditDialog({ credentialId, onClose }: { credentialId: 
 
 function EditForm({ id, onClose }: { id: string; onClose: () => void }) {
   const q = useAppCredential(id);
-  const systems = useSystems();
   const change = useChangeAppCredential();
   const setSecret = useSetCredentialSecret();
   const c = q.data;
-  const plugin = (systems.data ?? []).find((s) => s.id === c?.app)?.plugin;
+  const plugin = useSystemCard(c?.app).data?.plugin;
   const form = useForm<Record<string, string>>();
   const [scopes, setScopes] = React.useState<string[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);

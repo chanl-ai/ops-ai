@@ -15,9 +15,7 @@ import { Input } from '@/components/ui/input';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { plural } from '@/lib/format';
 import type { ToolAccess } from '@/lib/types/domain';
-import type { IntegrationStatus } from '@/lib/types/integrations';
 import type { DiscoveredOperation, DiscoveryResult, HttpOperationInput, ImportOperationsInput, ModuleInput, ModuleSource } from '@/lib/types/tool-modules';
-import { useConnectionOptions } from '@/hooks/systems-queries';
 import { cn } from '@/lib/utils';
 
 import { ConnectionSelect } from './connection-select';
@@ -95,8 +93,7 @@ export function AddModuleDialog({
   /** Errors that belong to one field render under it, not in the banner. */
   const [fieldErr, setFieldErr] = React.useState<Partial<Record<'url' | 'spec' | 'display' | 'name', string>>>({});
   const [touched, setTouched] = React.useState(false);
-  const [connectionId, setConnectionId] = React.useState<string | null>(null);
-  const connections = useConnectionOptions(open && mode === 'create');
+  const [connectionId, setConnectionId] = React.useState<{ id: string; name: string } | null>(null);
   const bodyRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -206,13 +203,13 @@ export function AddModuleDialog({
         }
       })();
       // With an app picked, the module is named after it; the request is a path on the app's address.
-      const app = connections.data?.find((c) => c.id === connectionId)?.name;
+      const app = connectionId?.name;
       const label = kind === 'http' ? (app ?? host.charAt(0).toUpperCase() + host.slice(1)) : (found?.system ?? '');
       await onCreate({
         name: kind === 'http' ? kebab(app ?? host) : (found?.suggestedName ?? kebab(label)),
         displayName: label,
         system: label,
-        ...(connectionId && kind !== 'mcp' ? { connectionId } : {}),
+        ...(connectionId && kind !== 'mcp' ? { connectionId: connectionId.id } : {}),
         operations: kind === 'http' ? undefined : chosen,
         source: kind === 'http' ? undefined : source,
         http: kind === 'http' ? http : undefined,
@@ -273,10 +270,8 @@ export function AddModuleDialog({
           {!append && kind !== 'mcp' && (
             <FormField id="import-app" label="App" optional hint="Its address and sign-in come from the app, so an HTTP request is a path on it. Add a custom app for one not listed.">
               <ConnectionSelect
-                value={connectionId ? { id: connectionId, name: connections.data?.find((c) => c.id === connectionId)?.name ?? '' } : null}
-                options={connections.data?.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
-                loading={connections.isPending}
-                onChange={setConnectionId}
+                value={connectionId}
+                onChange={(id, name) => setConnectionId({ id, name: name ?? '' })}
               />
             </FormField>
           )}
