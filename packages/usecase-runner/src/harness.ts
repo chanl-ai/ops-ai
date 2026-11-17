@@ -73,12 +73,31 @@ const LOG_DIR = join(process.env.OPS_LOG_DIR ?? join(ROOT, '.logs'), 'usecase');
 let checked = 0;
 let failed = 0;
 
+/**
+ * What the watched browsers were refused or threw since the last report: a failed check or a crashed script prints
+ * these, so a timeout names the request behind it. A passing check does not clear them, since the run's own closing
+ * checks pass after a script has crashed. The latest 12 are kept: a page that polls a failing route repeats itself.
+ */
+const browserTrouble: string[] = [];
+function noteTrouble(line: string): void {
+  if (browserTrouble.includes(line)) return;
+  browserTrouble.push(line);
+  if (browserTrouble.length > 12) browserTrouble.shift();
+}
+function reportTrouble(): void {
+  for (const line of browserTrouble.splice(0)) console.log(`  browser: ${line}`);
+}
+process.once('exit', (code) => {
+  if (code !== 0) reportTrouble();
+});
+
 export function check(name: string, ok: boolean, detail: unknown = ''): boolean {
   checked++;
   if (ok) console.log(`PASS ${name}`);
   else {
     failed++;
     console.log(`FAIL ${name}: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+    reportTrouble();
   }
   return ok;
 }
@@ -294,6 +313,15 @@ function watchContext(context: BrowserContext): BrowserContext {
     sampleReported.add(key);
     check(`the page draws no sample data: ${hit[2]}`, false, `${hit[1]} was answered by the console's mock; call expectSampleData('${hit[2]}') if the use case means it`);
   });
+  context.on('response', (response) => {
+    const url = new URL(response.url());
+    if (response.status() < 400 || !url.pathname.includes('/v1/')) return;
+    void response
+      .text()
+      .catch(() => '')
+      .then((body) => noteTrouble(`${response.status()} ${response.request().method()} ${url.pathname} ${refusalText(body).slice(0, 160)}`));
+  });
+  context.on('weberror', (error) => noteTrouble(`page error: ${error.error().message.slice(0, 200)}`));
   return context;
 }
 
