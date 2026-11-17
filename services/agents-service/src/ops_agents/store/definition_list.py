@@ -48,9 +48,13 @@ def definition_columns(*, since: str | None = None) -> tuple[sa.Select[Any], dic
         newer.c.workflow_id == t.c.workflow_id,
         newer.c.version > t.c.version,
     ]
+    # The serving version is one the team may see too, with the same terms as `seen`; the statement alone holds the
+    # team here, so without them a row shows another team's live version of the same workflow.
+    live: list[sa.ColumnElement[bool]] = [t.c.tenant_id == tenant, t.c.stage.in_(SERVING)]
     if team is not None:
         seen.append(sa.or_(t.c.team_id == team, t.c.team_id.is_(None)))
         later.append(sa.or_(newer.c.team_id == team, newer.c.team_id.is_(None)))
+        live.append(sa.or_(t.c.team_id == team, t.c.team_id.is_(None)))
     latest = ~sa.exists().where(*later)
     serving = (
         sa.select(
@@ -58,7 +62,7 @@ def definition_columns(*, since: str | None = None) -> tuple[sa.Select[Any], dic
             sa.func.max(t.c.version).label("live_version"),
             sa.func.max(t.c.stage).label("stage"),
         )
-        .where(t.c.tenant_id == tenant, t.c.stage.in_(SERVING))
+        .where(*live)
         .group_by(t.c.workflow_id)
         .subquery("serving")
     )

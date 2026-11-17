@@ -88,6 +88,8 @@ async def test_the_page_and_counts_hold_the_acting_team_when_the_policy_lets_eve
         await _version(engine, "wf_shared", 1, team=None)
     with isolation.scope(tenant, OTHER):
         await _version(engine, "wf_theirs", 1, team=OTHER, stage="live")
+        # Another team's live version of a workflow this team sees is not this team's serving version.
+        await _version(engine, "wf_mine", 2, team=OTHER, stage="live")
     # Tenant-wide with a team acting, so the database policy lets every team through and the query alone holds them.
     with (
         isolation.tenant_wide("a test reads the workflows list with every team let through", tenant_id=tenant),
