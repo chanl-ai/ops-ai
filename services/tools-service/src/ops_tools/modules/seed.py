@@ -23,7 +23,6 @@ from ..connections.records import auth_of, connection_base, seed_rows
 from ..store.connections import ConnectionStore
 from ..store.egress import EgressStore
 from ..store.modules import (
-    OPERATION,
     Aggregate,
     Approval,
     InputField,
@@ -37,6 +36,7 @@ from ..store.modules import (
     Version,
     approval_defaults,
     operation_defaults,
+    restored_operation,
     version_defaults,
 )
 
@@ -480,7 +480,7 @@ def _local_fields(module_id: str, n: int, name: str) -> StoredOperation:
 
 def _local_op(fields: StoredOperation) -> Operation:
     """An operation of the platform's tools from the fields the seed gives it, checked as a stored one is."""
-    return OPERATION.validate_python({**operation_defaults(), **fields})
+    return restored_operation(fields)
 
 
 def built_in_module(app: dict[str, Any], names: list[str], *, tenant_id: str, team_id: str, at: datetime) -> Aggregate:

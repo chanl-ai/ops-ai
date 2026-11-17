@@ -23,6 +23,8 @@ from ops_tools.store.modules import (
     tool_modules,
 )
 
+from .conftest import Api
+
 TEAM = "team_a"
 # The operation as a publish before the typed aggregate copied it: no `headers`, `body_encoding`, `response_transform`,
 # `timeout_ms`, `approval_mode`, `needs_person`, `step_up`, `approver_team` or `scopes`, and the limit as text.
@@ -155,3 +157,37 @@ async def test_an_input_field_saved_with_null_optional_keys_loads_and_is_written
                 await c.execute(sa.select(o.input).where(o.tenant_id == tenant, o.module_id == "mod_old"))
             ).scalar_one()
         assert json.dumps(stored) == json.dumps([SAVED_FIELD])
+
+
+# The keys a publish before the typed aggregate could leave out of its copy; the table's defaults restore them.
+UNNAMED = ("headers", "executor", "binding", "input", "masked_output")
+
+
+async def test_discard_restores_an_old_copy_with_the_tables_defaults(api: Api, store: ModuleStore, tenant: str) -> None:
+    assert api.tenant == tenant
+    detail = (await api.call("GET", "/mod_core_banking")).json()["data"]
+    op = next(o for o in detail["operations"] if o["name"] == "transfer_funds")
+    r = await api.call("PATCH", f"/mod_core_banking/operations/{op['id']}", json={"description": "Staged"})
+    assert r.status_code == 200, r.text
+    m = tool_modules.c
+    async with store.tx() as c:
+        where = (m.tenant_id == tenant, m.id == "mod_core_banking")
+        published = (await c.execute(sa.select(m.baseline).where(*where))).scalar_one()
+        copy = [{k: v for k, v in o.items() if k not in UNNAMED} for o in published]
+        await c.execute(tool_modules.update().where(*where).values(baseline=copy))
+    held = await store.get(tenant, "mod_core_banking")
+    assert held is not None
+    # Served from the copy while staged: the live operation's executor, and no headers since the copy names none.
+    served = next(o for o in served_operations(held) if o["name"] == "transfer_funds")
+    live = next(o for o in held["operations"] if o["name"] == "transfer_funds")
+    assert (served["executor"], served["headers"], served["description"]) == (live["executor"], [], "Staged")
+    r = await api.call("DELETE", "/mod_core_banking/pending-changes")
+    assert r.status_code == 200, r.text
+    o = module_operations.c
+    async with store.tx() as c:
+        q = sa.select(o.name, o.description, o.executor, o.headers, o.binding, o.input, o.masked_output)
+        rows = (await c.execute(q.where(o.tenant_id == tenant, o.module_id == "mod_core_banking"))).all()
+    restored = next(row for row in rows if row.name == "transfer_funds")
+    # The columns' defaults as an insert without the key wrote them; input and masked_output, which have none, empty.
+    assert tuple(restored)[1:] == (op["description"], "http", [], None, [], [])
+    assert len(rows) == len(copy)

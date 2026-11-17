@@ -726,6 +726,48 @@ class ServiceEvent(TypedDict):
 
 MODULE_COLUMNS = TypeAdapter(ModuleColumns)
 OPERATION = TypeAdapter(Operation)
+
+
+class ColumnDefaults(OperationDefaults):
+    """What `module_operations` stores for a key a row leaves out: a column's default (`executor`, `headers`), null for
+    a nullable column, and an empty list for `input` and `masked_output`. A published copy taken before a key existed
+    in it restores with these, as an insert without the key wrote them."""
+
+    executor: str
+    method: str | None
+    path: str | None
+    headers: list[Header]
+    body: str | None
+    input: list[InputField]
+    masked_output: list[str]
+    binding: Binding | None
+    requires_approval: bool | None
+    amount_max: Decimal | float | None
+
+
+def column_defaults() -> ColumnDefaults:
+    """A fresh copy, since the lists are the operation's own."""
+    return {
+        **operation_defaults(),
+        "executor": "http",
+        "method": None,
+        "path": None,
+        "headers": [],
+        "body": None,
+        "input": [],
+        "masked_output": [],
+        "binding": None,
+        "requires_approval": None,
+        "amount_max": None,
+    }
+
+
+def restored_operation(copy: StoredOperation) -> Operation:
+    """An operation from a stored JSON copy of one (a module's `baseline`, the seed's fields), with every key the copy
+    leaves out filled as the table fills it; its numbers may be text."""
+    return OPERATION.validate_python({**column_defaults(), **copy})
+
+
 VERSION = TypeAdapter(Version)
 APPROVAL = TypeAdapter(Approval)
 
@@ -762,7 +804,7 @@ def served_operations(agg: Module) -> list[Operation]:
         # A baseline written before a field existed holds none of it and keeps the operation's. The copy's numbers
         # are text, so the merged operation is checked as a stored one is.
         shape = {k: before.get(k) for k in CALL_SHAPE}
-        # A copy without headers sends none, as a call read a missing list.
+        # A copy without headers sends none: the table's default (column_defaults), as a call read a missing list.
         shape["headers"] = shape["headers"] or []
         out.append(OPERATION.validate_python({**op, **shape, **{k: before[k] for k in REVIEWED if k in before}}))
     return out
@@ -1479,7 +1521,7 @@ class ModuleStore(Store):
         # columns: a baseline or staged copy written before a column was dropped (self_approval) still carries it,
         # and a discard writes those copies back.
         children: tuple[tuple[sa.Table, Sequence[Mapping[str, object]], Mapping[str, object]], ...] = (
-            (module_operations, agg["operations"], operation_defaults()),
+            (module_operations, agg["operations"], column_defaults()),
             (module_versions, agg["versions"], version_defaults()),
             (module_approvals, agg["approvals"], approval_defaults()),
         )

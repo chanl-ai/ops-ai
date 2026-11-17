@@ -58,7 +58,6 @@ from ..store.module_list import ModuleList, Window
 from ..store.modules import (
     APPROVAL,
     CALL_SHAPE,
-    OPERATION,
     REVIEWED,
     Aggregate,
     Approval,
@@ -80,6 +79,7 @@ from ..store.modules import (
     Version,
     grant_views,
     operation_defaults,
+    restored_operation,
     version_defaults,
 )
 from ..store.modules import (
@@ -2149,7 +2149,7 @@ class ModuleService:
         _refuse_during_review(m, "discard changes")
         if m["baseline"] is None:
             raise ValidationFailed("There are no changes to discard.")
-        restored = [OPERATION.validate_python({**operation_defaults(), **o}) for o in m["baseline"]]
+        restored = [restored_operation(o) for o in published_operations(m["baseline"])]
         m.update(operations=restored, pending=[], baseline=None)
         return await self._detail(await self._save(m), who.team, who, levels=levels)
 
