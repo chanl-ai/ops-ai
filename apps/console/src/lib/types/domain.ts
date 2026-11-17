@@ -85,36 +85,6 @@ export interface GuardrailPin {
   enabled?: boolean;
 }
 
-/** A guardrail an agent pins by version (agents-service `/v1/guardrails`); kind `blocked_topics` today. */
-export interface Guardrail {
-  id: string;
-  name: string;
-  kind: 'blocked_topics';
-  owner: string;
-  status: 'live' | 'deprecated';
-  version: number;
-  publishedVersion: number | null;
-  /** `scopes`: topic to what it covers and what it does not, listed beside the topic for the classifier. */
-  config: { topics: string[]; message: string; scopes?: Record<string, string>; holdUntilChecked?: boolean };
-  usedBy: string[];
-  /** The open publish request, decided in Reviews. */
-  pendingRequestId: string | null;
-  /** Every saved version, newest first; agents pin any published one. Absent from the mock, which keeps no guardrails. */
-  versions?: GuardrailVersion[];
-  updatedAt: string;
-}
-
-export interface GuardrailVersion {
-  version: number;
-  config: Guardrail['config'];
-  state: 'draft' | 'published';
-  note: string;
-  savedBy: string;
-  savedAt: string;
-  publishedAt: string | null;
-  publishedBy: string | null;
-}
-
 /**
  * What callers may override on this agent (agents-service `limits`, decision "the agent sets limits; callers
  * override within them"). Saved on the version and published through its review; a value outside them is refused.

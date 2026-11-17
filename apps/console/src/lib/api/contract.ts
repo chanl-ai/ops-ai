@@ -1,4 +1,3 @@
-import type { KnowledgeUsage } from '@/lib/types/knowledge-usage';
 import type { PublishPreview } from '@/lib/types/publish-preview';
 import type { CasesApi } from './cases-contract';
 import type { ChannelsApi } from './channels-contract';
@@ -29,7 +28,6 @@ import type { IntegrationsApi } from './integrations-contract';
 import type { FilesApi } from './files-contract';
 import type { TemplatesApi } from './templates-contract';
 import type { PromptsApi } from './prompts-contract';
-import type { GuardrailsApi } from './guardrails-contract';
 import type { SkillsApi } from './skills-contract';
 import type { WidgetsApi } from './widgets-contract';
 import type { WidgetDeploymentsApi } from './widget-deployments-contract';
@@ -135,8 +133,6 @@ export interface OpsApi {
     modelAliases(): Promise<ModelAlias[]>;
     /** One kernel turn on the agent's newest version, nothing kept; a write tool stops at its gate. */
     test(id: string, message: string): Promise<AgentTestTurn>;
-    /** For each knowledge base, the caller's team's agents citing it. */
-    knowledgeUsage(): Promise<KnowledgeUsage[]>;
     /** Absent when the backend has no bulk route (the agents-service registry); the list then offers no bulk actions. */
     bulkUpdate?(ids: string[], patch: { paused?: boolean; owner?: string }): Promise<BulkResult>;
     bulkRemove?(ids: string[]): Promise<BulkResult>;
@@ -230,7 +226,6 @@ export interface OpsApi {
   /** The team's customer issues with their deadlines and timelines (agents-service /v1/cases). */
   caseRecords: CaseRecordsApi;
   activity: ActivityApi;
-  guardrails: GuardrailsApi;
   assurance: AssuranceApi;
   /** The team's MCP links (tools-service): a named address for a chosen set of its tools. */
   mcpLinks: McpLinksApi;

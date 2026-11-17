@@ -5,7 +5,7 @@ import { keepPreviousData } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import { sdk } from '@/lib/api/ops-sdk';
-import type { ConnectionOptionsPage, OptionsPage, OptionsParams, ToolOptionsPage, WorkflowFilters } from '@/lib/types/query';
+import type { AgentFilters, ConnectionOptionsPage, OptionsPage, OptionsParams, ToolOptionsPage, WorkflowFilters } from '@/lib/types/query';
 import type { SkillLoading } from '@/lib/types/skills';
 import { useTeamInfiniteQuery, useTeamQuery } from './team-query';
 
@@ -23,16 +23,21 @@ export const linkToolOptions: OptionSource<ToolOptionsPage> = { key: 'link-tool-
 export const fileOptions: OptionSource = { key: 'file-options', fetch: (p) => api.files.options(p) };
 /** The team's active people, by email: who a task is sent to. */
 export const peopleOptions: OptionSource = { key: 'people-options', fetch: (p) => api.settings.members.options(p) };
-/** The team's agents, searched and paged by the agents list route; a page number is the cursor. */
-export const agentOptions: OptionSource = {
-  key: 'agent-options',
+/**
+ * The team's agents under `filters`, searched and paged by the agents list route (`ids` names the ones a stored choice
+ * holds); a page number is the cursor.
+ */
+const agentsWhere = (key: string, filters: AgentFilters = {}): OptionSource => ({
+  key,
   fetch: async ({ search, cursor, limit = 25, ids }) => {
     const page = Number(cursor ?? 1);
-    const res = await api.agents.list({ page, pageSize: limit, search: ids?.length ? undefined : search, filters: {} });
-    const rows = ids?.length ? res.data.filter((a) => ids.includes(a.id)) : res.data;
-    return { data: rows.map((a) => ({ id: a.id, label: a.name, hint: a.role || null })), nextCursor: !ids?.length && res.pagination.hasNext ? String(page + 1) : null };
+    const res = await api.agents.list({ page, pageSize: ids?.length ? Math.min(ids.length, 50) : limit, ids: ids?.length ? ids : undefined, search: ids?.length ? undefined : search, filters });
+    return { data: res.data.map((a) => ({ id: a.id, label: a.name, hint: a.role || null })), nextCursor: !ids?.length && res.pagination.hasNext ? String(page + 1) : null };
   },
-};
+});
+export const agentOptions = agentsWhere('agent-options');
+/** The agents an embed can serve: published ones. */
+export const publishedAgentOptions = agentsWhere('published-agent-options', { availability: ['published'] });
 /** The team's workflows (both engines) under `filters`, searched and paged by the workflows list route; a page number is the cursor. */
 const workflowsWhere = (key: string, filters: WorkflowFilters = {}): OptionSource => ({
   key,
@@ -97,7 +102,14 @@ export const secretOptions: OptionSource = {
     return { data: res.data.filter((s) => !s.readOnly).map((s) => ({ id: s.name, label: s.name })), nextCursor: !ids?.length && res.pagination.hasNext ? String(page + 1) : null };
   },
 };
-export const guardrailOptions: OptionSource = { key: 'guardrail-options', fetch: (p) => api.guardrails.options(p) };
+/** Live, published guardrails an agent may pin, searched on the server; `ids` labels the pins held. */
+export const guardrailOptions: OptionSource = {
+  key: 'guardrail-options',
+  fetch: async ({ search, cursor, limit = 25, ids }) => {
+    const res = await sdk((ops) => ops.raw.agents.agents_guardrail_options({ query: { search: ids?.length ? undefined : search || undefined, cursor: ids?.length ? undefined : cursor ?? undefined, limit: ids?.length ? Math.min(ids.length, 50) : limit, ids: ids?.length ? ids : undefined } }));
+    return { data: res.data.map((o) => ({ id: o.id, label: o.label, hint: o.hint ?? null, disabled: o.disabled ?? null })), nextCursor: res.nextCursor ?? null };
+  },
+};
 /** Widgets, disabled with the reason when a button needs a tool outside `granted` (the draft's tools). */
 export const widgetOptionsFor = (granted: string[]): OptionSource => ({ key: `widget-options:${[...granted].sort().join(',')}`, fetch: (p) => api.widgets.options(p, granted) });
 /** Skills the agent may attach; `loading` keeps always-on or on-match ones. */

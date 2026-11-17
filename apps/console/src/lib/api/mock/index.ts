@@ -836,7 +836,6 @@ export function createMockApi(): OpsApi {
       toolOptions: (p) => respond(() => ({ ...pageOptions(tools.filter((t) => t.enabled && !t.workflow).map((t) => ({ id: t.id, label: t.name, hint: t.module ?? t.system })), p), notAdded: [] })),
       modelAliases: () => respond(() => F.MODEL_ALIASES.map((a) => ({ ...a }))),
       test: (aid, message) => respond(() => ({ reply: `${agents.find((a) => a.id === aid)?.name ?? 'The agent'} would answer “${message}” here.`, tookMs: 0, citations: [], toolCalls: [] })),
-      knowledgeUsage: () => respond(() => []),
       bulkUpdate: (ids, patch) =>
         respond(() =>
           bulk(ids, (aid) => {
@@ -1211,18 +1210,6 @@ export function createMockApi(): OpsApi {
       get: () => Promise.reject(new ApiError('Batches need the agents service.', 501)),
       retryFailed: () => Promise.reject(new ApiError('Batches need the agents service.', 501)),
       resultsCsv: () => Promise.reject(new ApiError('Batches need the agents service.', 501)),
-    },
-    // Guardrails live in agents-service only; the mock lists none and refuses writes rather than pretend to keep them.
-    guardrails: {
-      list: () => respond(() => []),
-      page: (p) => respond((m) => list([], p, { text: () => '', value: () => '', facetKeys: [] }, m)),
-      options: () => respond(() => ({ data: [], nextCursor: null })),
-      get: () => Promise.reject(new ApiError('Guardrails need the agents service.', 501)),
-      create: () => Promise.reject(new ApiError('Guardrails need the agents service.', 501)),
-      update: () => Promise.reject(new ApiError('Guardrails need the agents service.', 501)),
-      requestPublish: () => Promise.reject(new ApiError('Guardrails need the agents service.', 501)),
-      setStatus: () => Promise.reject(new ApiError('Guardrails need the agents service.', 501)),
-      remove: () => Promise.reject(new ApiError('Guardrails need the agents service.', 501)),
     },
     templates: templates.api,
     prompts: prompts.api,

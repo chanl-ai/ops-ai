@@ -23,12 +23,10 @@ import { selectColumn } from '@/components/shared/select-column';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useCreateGuardrail, useDeleteGuardrail, useRequestGuardrailPublish, useSetGuardrailStatus } from '@/hooks/guardrail-queries';
+import { useCreateGuardrail, useDeleteGuardrail, useGuardrailsPage, useRequestGuardrailPublish, useSetGuardrailStatus, type Guardrail } from '@/hooks/guardrail-queries';
 import { useCanBuild } from '@/hooks/me-queries';
-import { useGuardrailsPage } from '@/hooks/queries';
 import { useListParams } from '@/hooks/use-list-params';
 import { relativeTime } from '@/lib/format';
-import type { Guardrail } from '@/lib/types/domain';
 import { serverPagination } from '@/components/shared/server-pagination';
 import { TemplatesGallery } from '@/components/templates/templates-gallery';
 
@@ -137,7 +135,7 @@ function GuardrailDialog({ open, onOpenChange, onCreated }: { open: boolean; onO
     setErrors(e);
     if (e.name || e.topics || e.message) return;
     try {
-      const saved = await create.mutateAsync({ name: name.trim(), owner: owner.trim() || 'Compliance', topics: draft.topics, scopes: keptScopes(draft), message: draft.message.trim(), holdUntilChecked: draft.holdUntilChecked });
+      const saved = await create.mutateAsync({ kind: 'blocked_topics', name: name.trim(), owner: owner.trim() || 'Compliance', topics: draft.topics, scopes: keptScopes(draft), message: draft.message.trim(), holdUntilChecked: draft.holdUntilChecked });
       toast.success(`Created ${saved.name}`, { description: 'Publish it to let agents pin this version.' });
       onOpenChange(false);
       onCreated(saved);

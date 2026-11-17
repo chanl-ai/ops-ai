@@ -114,10 +114,6 @@ export const useAgentPaused = (id: string) => useWrite((paused: boolean) => api.
  */
 export const useModelAliases = (enabled = true) =>
   useTeamQuery({ queryKey: ['agent-model-aliases'], queryFn: () => api.agents.modelAliases(), staleTime: 5 * 60_000, enabled, meta: { side: true } });
-export const useGuardrails = () => useTeamQuery({ queryKey: ['agent-guardrails'], queryFn: () => api.guardrails.list(), staleTime: 60_000 });
-// Under the same key as the whole list, so the guardrail writes' invalidation refreshes the page too.
-export const useGuardrailsPage = (p: ListParams) => usePagedQuery({ queryKey: ['agent-guardrails', 'page', p], queryFn: () => api.guardrails.page(p) });
-export const useGuardrail = (id: string) => useTeamQuery({ queryKey: ['agent-guardrails', 'one', id], queryFn: () => api.guardrails.get(id) });
 export const useGrantableTools = () => useTeamQuery({ queryKey: ['agent-grantable-tools'], queryFn: () => api.agents.grantableTools(), staleTime: 5 * 60_000 });
 export const useBulkUpdateAgents = () =>
   useWrite(({ ids, patch }: { ids: string[]; patch: { paused?: boolean; owner?: string } }) => api.agents.bulkUpdate!(ids, patch), ['agents', 'agent', 'overview']);

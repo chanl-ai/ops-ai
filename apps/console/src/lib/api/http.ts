@@ -33,7 +33,6 @@ import { createIntegrationsHttp } from './integrations-http';
 import { createFilesHttp } from './files-http';
 import { createTemplatesHttp } from './templates-http';
 import { createPromptsHttp } from './prompts-http';
-import { createGuardrailsHttp } from './guardrails-http';
 import { createSkillsHttp } from './skills-http';
 import { createWidgetDeploymentsHttp } from './widget-deployments-http';
 import { createBatchesHttp } from './batches-http';
@@ -179,8 +178,8 @@ export function createRegistryToolsDirectory(baseUrl: string): Pick<OpsApi['tool
   };
 }
 
-export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'skills' | 'guardrails' | 'widgets' | 'widgetDeployments' | 'batches' | 'caseRecords' | 'activity' | 'overview' | 'assurance'> {
-  const { agents, workflows, engine, channels, skills, guardrails, widgets, widgetDeployments, batches, caseRecords, activity, overview, assurance } = createHttpApi(`${baseUrl}/v1`);
+export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'skills' | 'widgets' | 'widgetDeployments' | 'batches' | 'caseRecords' | 'activity' | 'overview' | 'assurance'> {
+  const { agents, workflows, engine, channels, skills, widgets, widgetDeployments, batches, caseRecords, activity, overview, assurance } = createHttpApi(`${baseUrl}/v1`);
   const { bulkUpdate: _au, bulkRemove: _ar, ...agentCalls } = agents;
   const { bulkUpdate: _wu, ...workflowCalls } = workflows;
   const notServed = (what: string) => () => Promise.reject(new ApiError(`${what} is not available on this backend yet.`, 501));
@@ -189,7 +188,6 @@ export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' |
     workflows: workflowCalls,
     engine,
     channels,
-    guardrails,
     widgets,
     widgetDeployments,
     batches,
@@ -266,7 +264,6 @@ export function createHttpApi(baseUrl: string): OpsApi {
       toolOptions: (p) => get(`/tools/options?${optionsQs(p)}${p.agents === false ? '&agents=false' : ''}`),
       modelAliases: () => get('/model-aliases'),
       test: (id, message) => send('POST', `/agents/${id}/test`, { message }),
-      knowledgeUsage: () => get('/knowledge-usage'),
       bulkUpdate: (ids, patch) => send('POST', '/agents/bulk-update', { ids, patch }),
       bulkRemove: (ids) => send('POST', '/agents/bulk-delete', { ids }),
     },
@@ -332,7 +329,6 @@ export function createHttpApi(baseUrl: string): OpsApi {
     batches: createBatchesHttp(get, send, baseUrl),
     caseRecords: createCaseRecordsHttp(get, send),
     activity: createActivityHttp(get),
-    guardrails: createGuardrailsHttp(get, send, qs),
     assurance: createAssuranceHttp(get, send, qs),
     mcpLinks: createMcpLinksHttp(get, send),
     wiki: createWikiHttp(get, send, qs),
