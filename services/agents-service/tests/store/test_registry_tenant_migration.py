@@ -246,17 +246,27 @@ def test_outside_dev_it_stops_on_a_team_or_record_with_no_one_tenant_and_names_e
             thread("t-harbor", "team_lending", "agent:ag_shared"),
             thread("t-pine", "team_lending", "agent:ag_shared"),
             agent("ag_shared", "team_lending"),
+            # No team and no thread: outside dev `local` would hold it, where no tenant's poller looks.
+            insert("deployments", id="dep_idle", graph="g", channel="email", created_at=AT, team_id=""),
         )
     )
     done = alembic(scratch, "upgrade", HEAD, **outside_dev("test"))
     assert done.returncode != 0
     assert (
         "no tenant: team team_payroll holds 1 row(s) in registry_agents\n"
+        "no tenant: deployment dep_idle has no team and no thread\n"
         "two tenants: team team_lending is in 2 tenants: t-harbor, t-pine\n"
         "two tenants: registry_agents ag_shared is referenced from 2 tenants: t-harbor, t-pine"
     ) in done.stderr
     (rows,) = asyncio.run(sql(scratch, ("SELECT version_num FROM alembic_version", {})))
     assert rows == [(BEFORE,)]
+    # The operator step in docs/deploy/database.md: declare a tenant for each team and deployment nothing places.
+    asyncio.run(sql(scratch, ("DELETE FROM registry_agents WHERE id IN ('ag_two', 'ag_shared')", {})))
+    declared = {"OPS_REGISTRY_TEAM_TENANTS": "team_payroll=t-harbor, deployment:dep_idle=t-pine"}
+    done = alembic(scratch, "upgrade", HEAD, **outside_dev("test"), **declared)
+    assert done.returncode == 0, done.stderr[-3000:]
+    assert tenants(scratch, "registry_agents", "id") == {"ag_unmapped": "t-harbor"}
+    assert tenants(scratch, "deployments", "id") == {"dep_idle": "t-pine"}
 
 
 def test_outside_dev_local_beside_one_other_tenant_gives_way_to_it(scratch: URL) -> None:
@@ -280,6 +290,61 @@ def test_outside_dev_a_record_referenced_only_from_local_takes_its_teams_one_ten
     )
     migrate(scratch, "upgrade", HEAD, environment="test")
     assert tenants(scratch, "registry_agents", "id") == {"ag_cards": "t-pine", "ag_dev": "local"}
+
+
+def _seed_workflow(workflow_id: str, by: str) -> list[sa.Insert]:
+    return [
+        insert(
+            "registry_workflows",
+            id=workflow_id,
+            team_id="team_ops",
+            name="Levy",
+            description="",
+            trigger="manual",
+            status="live",
+            published_version=1,
+            created_at=AT,
+            updated_at=AT,
+        ),
+        insert(
+            "registry_workflow_versions",
+            workflow_id=workflow_id,
+            version=1,
+            graph="{}",
+            note="",
+            changes="[]",
+            published_at=AT,
+            published_by=by,
+        ),
+    ]
+
+
+def _saved_by(agent_id: str, by: str) -> sa.Insert:
+    return version_of(agent_id).values(saved_by=by)
+
+
+@pytest.mark.parametrize("environment", ["dev", "test"])
+def test_the_seeds_records_stay_in_local_where_other_tenants_use_them(scratch: URL, environment: str) -> None:
+    """The start-up seed finds its agents in `local` by their fixed ids, so a seed agent another tenant uses, or whose
+    team that tenant also has, stays there; a seeded workflow two tenants run stays there (0108 copies it), instead of
+    stopping the upgrade outside dev. A person's agent in the same team still moves."""
+    asyncio.run(
+        sql(
+            scratch,
+            thread("t-pine", "team_ops"),
+            agent("ag_seed", "team_ops"),
+            _saved_by("ag_seed", "seed"),
+            thread("t-pine", "team_cards", "agent:ag_seed"),
+            agent("ag_person", "team_ops"),
+            _saved_by("ag_person", "maya@x.example"),
+            *_seed_workflow("wf_seed", "seed"),
+            thread("t-pine", "team_cards", "wf_seed"),
+            thread("t-harbor", "team_claims", "wf_seed"),
+        )
+    )
+    migrate(scratch, "upgrade", HEAD, environment=environment)
+    assert tenants(scratch, "registry_agents", "id") == {"ag_seed": "local", "ag_person": "t-pine"}
+    assert tenants(scratch, "registry_workflows", "id") == {"wf_seed": "local"}
 
 
 def test_the_down_path_refuses_with_a_count_while_two_tenants_hold_one_slug(scratch: URL) -> None:

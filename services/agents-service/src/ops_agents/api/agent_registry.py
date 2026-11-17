@@ -342,14 +342,16 @@ async def follow_seed(rt: Runtime, a: AgentDefinition, row: dict[str, Any]) -> N
 
 async def load(rt: Runtime, seed: Catalog) -> None:
     """At start, inside the seed's tenant: seeds a row for each catalogue agent that has none and brings a seeded agent
-    the seed still owns up to its seed file (`follow_seed`; one a person has published is left alone). Serving is
-    `serve_published`, for every tenant."""
+    the seed still owns up to its seed file (`follow_seed`; one a person has published is left alone). A seed id or
+    slug already held outside the seed's tenant is skipped with a warning, and the service starts without it. Serving
+    is `serve_published`, for every tenant."""
     reg = registry(rt)
     have = {r["id"]: r for r in await reg.rows()}
     for a in list(seed.agents):
         if a.id not in have:
             spec = spec_from_seed(a, rt.settings.model_alias)
-            await reg.create(spec, by="seed", team_id=SEED_TEAM, agent_id=a.id, version=a.version, published=True)
+            if not await reg.create_if_absent(spec, by=SEED_BY, team_id=SEED_TEAM, agent_id=a.id, version=a.version):
+                log.warning("seed_agent_held_elsewhere", agent=a.id)
         else:
             await follow_seed(rt, a, have[a.id])
 

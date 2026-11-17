@@ -22,14 +22,18 @@ with the tree.
 
 ## Where an existing row's tenant comes from
 
-Agents database only, no service call. Precedence:
+Agents database only, no service call. A seed's record (team `team_ops`, with a version saved or published by
+`seed`) stays in `local`, ahead of every rule below, because the start-up seed looks for it there by its fixed id; it
+is never counted as a gap. Another tenant's thread on a seeded agent does not resolve it once the policies hold; a
+seeded workflow is copied into each tenant that runs it (Migration C). Otherwise, in order:
 
 1. A direct reference: `template_copies(kind, record_id)`, `team_default_agents.agent_id`,
    `widget_deployments.agent_id`, `registry_publish_requests(kind, subject_id)`, `graph_threads.graph` naming
    `agent:<id>` or a workflow id.
 2. A team-to-tenant map built from the distinct `(team_id, tenant_id)` pairs in agents tables that hold both
    (`graph_threads`, `graph_runs`, cases, mailboxes, `team_default_agents`, `template_copies`, `widget_deployments`,
-   `eval_*`, `form_links`, memories, reviews).
+   `eval_*`, `form_links`, memories, reviews), plus the `team=tenant` pairs an operator names in
+   `OPS_REGISTRY_TEAM_TENANTS` for a team nothing else places (`deployment:<id>=tenant` places a deployment).
 3. `'local'`.
 
 Version tables and validations take their parent's tenant. The statements are in
@@ -40,6 +44,7 @@ When a reference or a team names more than one tenant:
 | Case | Outside dev | Dev |
 |---|---|---|
 | A team seen in no tenant | The migration stops with the list | The rows take `local` |
+| A deployment with no team that no thread names | The migration stops with the list | `local` |
 | `local` and exactly one other tenant | The other tenant: outside dev `local` holds only rows nothing could place | `local` |
 | A record referenced only from `local` | Its team's tenant by the rows above (a team in one real tenant gives that tenant) | `local` |
 | Two or more tenants other than `local`, for a team or for a record's references (any kind) | The migration stops with the list | `local` |
@@ -52,7 +57,7 @@ threads or publish requests point at: the `registry_workflows` row, its versions
 version and digest unchanged, so the digest check in `api/runs.py:94` still passes.
 
 Preflight: `make -C services/agents-service registry-tenant-preflight` lists, by the outside-dev rules, each team with
-no tenant, each team and each record with two or more tenants other than `local`, and exits 1 when any exists. It only
+no tenant, each deployment with no team and no thread, each team and each record with two or more tenants other than `local`, and exits 1 when any exists. It only
 reads, through a `system_tx` past the tenant as the connecting login (row security off, which PostgreSQL refuses for a
 login that does not bypass it). It never drops or alters a policy. On SQL Server no login can read every tenant without
 changing a policy, so the preflight exits 2 and says to run the upgrade, which makes the same check before it changes a
@@ -73,7 +78,8 @@ row.
   `ag_ops_<team>` id: `assistant_id` looks the team's assistant up in the caller's tenant by either id with that team
   as owner first and derives the new id only to create one; the start-up catch-up accepts either. Seeded agents keep
   their seed-file ids, because seeds load only into `local` and no other path creates an agent with a chosen id
-  (creates take random `ag_` ids). The catalogue stays keyed by id; the two-tenant test is in
+  (creates take random `ag_` ids). A seed agent whose id or slug a row outside `local` already holds is skipped with
+  a `seed_agent_held_elsewhere` warning, and the service starts without it. The catalogue stays keyed by id; the two-tenant test is in
   `tests/api/test_registry_tenant_catalogue.py`.
 - Lookups before a tenant is known: widgets are safe (the mint key or session names the tenant and deployment); public
   forms use `form_links`, which has a tenant; channel deployments have no unauthenticated address;

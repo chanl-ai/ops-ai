@@ -34,21 +34,23 @@ install-wide keys would fail partway; offline SQL cannot count. Runs on PostgreS
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import sqlalchemy as sa
 from alembic import op
 
 from ops_agents.store.registry_tenants import (
+    DECLARED,
     LOCAL,
     TABLES,
     TEAM_TENANT_SOURCES,
+    Declared,
+    declared_of,
+    gap_queries,
     gaps_of,
-    shared_records,
-    shared_teams,
     table,
     tenant_of,
-    unmapped_teams,
 )
 from ops_service_kit.settings import Settings
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, backfill_ddl, session_table_ddl
@@ -120,9 +122,10 @@ def _drop_key(name: str, *, kind: str, column: str | None, pg_name: str) -> None
         op.execute(f"ALTER TABLE {name} DROP CONSTRAINT IF EXISTS {pg_name}")
 
 
-def _refuse_gaps() -> None:
+def _refuse_gaps(declared: Declared) -> None:
     bind = op.get_bind()
-    found = gaps_of((bind.execute(unmapped_teams()), bind.execute(shared_teams()), bind.execute(shared_records())))
+    unmapped, deployments, teams, records = (bind.execute(q) for q in gap_queries(declared))
+    found = gaps_of((unmapped, deployments, teams, records))
     if lines := found.lines():
         raise RuntimeError(
             "0106: these registry or deployment rows have no one tenant to take; give each team and record one "
@@ -158,12 +161,12 @@ def _copy_name(dialect: str, what: str) -> str:
     return f"#{what}_0106" if dialect == "mssql" else f"{what}_0106"
 
 
-def _sources(dev: bool) -> dict[str, sa.Select[Any, Any]]:
+def _sources(dev: bool, declared: Declared) -> dict[str, sa.Select[Any, Any]]:
     """Each session copy and the (k, v) rows that fill it: a key and the tenant (for requests, the team) it gives."""
     out: dict[str, sa.Select[Any, Any]] = {}
     for kind, name in TABLES.items():
         row = table(name, "id", "team_id")
-        out[kind] = sa.select(row.c.id, tenant_of(kind, row, dev=dev))
+        out[kind] = sa.select(row.c.id, tenant_of(kind, row, dev=dev, declared=declared))
     threads = table("graph_threads", "id", "tenant_id")
     out["thread"] = sa.select(threads.c.id, threads.c.tenant_id)
     requests = table(REQUESTS, "id", "kind", "subject_id")
@@ -207,12 +210,13 @@ def _fill(dialect: str, name: str, column: str, key: str, copy: str) -> str:
     )
 
 
-def _settle(dev: bool) -> None:
+def _settle(dev: bool, declared: Declared) -> None:
     """Places the rows written while the batches ran, by the same rules in one statement each; gives what nothing
     placed its fallback. A registry row with no one tenant outside dev stays NULL, so the NOT NULL below fails."""
     for kind, name in TABLES.items():
         row = table(name, "id", "team_id", "tenant_id")
-        op.execute(sa.update(row).where(row.c.tenant_id.is_(None)).values(tenant_id=tenant_of(kind, row, dev=dev)))
+        placed = tenant_of(kind, row, dev=dev, declared=declared)
+        op.execute(sa.update(row).where(row.c.tenant_id.is_(None)).values(tenant_id=placed))
     for name, (parent_name, key) in CHILDREN.items():
         child, parent = table(name, key, "tenant_id"), table(parent_name, "id", "tenant_id")
         found = sa.select(parent.c.tenant_id).where(parent.c.id == child.c[key])
@@ -257,6 +261,8 @@ def upgrade() -> None:
     offline = op.get_context().as_sql
     # Offline SQL is a DBA script for a real install, never dev: it takes the outside-dev rules.
     dev = not offline and Settings().environment == "dev"
+    # Teams and deployments an operator placed by hand (docs/deploy/database.md); an offline script writes them in.
+    declared = declared_of(os.environ.get(DECLARED, ""))
     columns = [(name, "tenant_id") for name in TENANTED] + [(REQUESTS, "team_id")]
     for name, column in columns:
         if not _has_column(name, column):
@@ -265,11 +271,11 @@ def upgrade() -> None:
     for statement in before:
         op.execute(statement)
     if not dev and not offline:
-        _refuse_gaps()
+        _refuse_gaps(declared)
     _team_from_threads()
     copies: dict[str, str] = {}
     if dialect in ("postgresql", "mssql"):
-        sources = _sources(dev)
+        sources = _sources(dev, declared)
         copies = {what: _copy_name(dialect, what) for what in sources}
         for what, source in sources.items():
             # NOT NULL: outside dev a row with no one tenant fails here, before any row changes.
@@ -286,7 +292,7 @@ def upgrade() -> None:
             op.execute(f"DROP TABLE {copy}")
     for statement in before:
         op.execute(statement)
-    _settle(dev)
+    _settle(dev, declared)
     for statement in after:
         op.execute(statement)
     for name, column in columns:

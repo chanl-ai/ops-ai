@@ -1,7 +1,7 @@
 """The registry tenant preflight script (`make registry-tenant-preflight`), on a scratch database of its own, by failure
 mode: it passes a database where every row has one tenant to take; it names a team no tenant holds, a team two
 tenants hold and a record two tenants reference; `local` beside one other tenant, a row with a direct reference and a
-deployment with no team are not counted against it."""
+deployment with no team that a thread names are not counted against it, and one no thread names is."""
 
 from __future__ import annotations
 
@@ -130,7 +130,12 @@ def test_a_database_where_every_row_has_one_tenant_passes(scratch: URL) -> None:
             thread("local", "team_cards"),
             thread("t-pine", "team_cards"),
             agent(new_id("ag"), "team_cards"),
-            (DEPLOYMENT, {"id": new_id("dep"), "at": now_iso()}),
+            (DEPLOYMENT, {"id": "dep_mail", "at": now_iso()}),
+            (
+                "UPDATE graph_threads SET deployment_id = 'dep_mail' WHERE id = "
+                "(SELECT MIN(id) FROM graph_threads WHERE tenant_id = 't-harbor')",
+                {},
+            ),
         )
     )
     done = _preflight(scratch)
@@ -161,12 +166,14 @@ def test_it_names_a_team_no_tenant_holds_a_team_two_tenants_hold_and_a_record_tw
             agent(shared, "team_wires"),
             thread("t-harbor", "team_wires", f"agent:{shared}"),
             thread("t-pine", "team_wires", f"agent:{shared}"),
+            (DEPLOYMENT, {"id": "dep_idle", "at": now_iso()}),
         )
     )
     done = _preflight(scratch)
     assert done.returncode != 0, done.stderr
     assert done.stdout.splitlines() == [
         "no tenant: team team_payroll holds 2 row(s) in registry_agents",
+        "no tenant: deployment dep_idle has no team and no thread",
         "two tenants: team team_lending is in 2 tenants: t-harbor, t-pine",
         "two tenants: registry_agents ag_shared is referenced from 2 tenants: t-harbor, t-pine",
     ], done.stderr

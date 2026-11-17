@@ -91,6 +91,23 @@ with the name and columns the revision gives, for example
 `CREATE INDEX CONCURRENTLY ix_engine_runs_workflow_created ON engine_runs (tenant_id, workflow_id, created_at)`;
 the upgrade then finds it and goes on.
 
+### agents 0106: rows with no one tenant
+
+Outside dev, agents 0106 stops before it changes a row when a registry or deployment row has no one tenant to take.
+Before the upgrade, list them on PostgreSQL with `make -C services/agents-service registry-tenant-preflight` (exit 1
+names each). On SQL Server that command cannot read every tenant and exits 2; the online upgrade (`make migrate`)
+prints the same list when it stops. For each line:
+
+| Line | Step |
+|---|---|
+| `no tenant: team <team> holds ...` (a team with a registry row but no thread, run, case or other row with a tenant yet) | Name its tenant for the upgrade: `OPS_REGISTRY_TEAM_TENANTS="<team>=<tenant>" make migrate` |
+| `no tenant: deployment <id> has no team and no thread` | The same variable, `deployment:<id>=<tenant>`; several pairs are separated by commas |
+| `two tenants: ...` | Remove or move the record or team so one tenant other than `local` holds it, then run again |
+
+Set the same variable when running the preflight, so it checks what the upgrade will do, and when rendering an
+offline `upgrade.sql`, which writes the pairs into its statements. The seed's records (team
+`team_ops`, saved by `seed`) stay in `local` and never appear here.
+
 ### A revision that moves rows: stop the service first
 
 Some revisions move or total rows that the running release still writes. Stop that service, run the upgrade, then

@@ -37,6 +37,7 @@ SQL Server.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from typing import Any
 
@@ -44,7 +45,17 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import mssql
 
-from ops_agents.store.registry_tenants import LOCAL, TABLES, TEAM_TENANT_SOURCES, Placed, table, tenant_of
+from ops_agents.store.registry_tenants import (
+    DECLARED,
+    LOCAL,
+    TABLES,
+    TEAM_TENANT_SOURCES,
+    Declared,
+    Placed,
+    declared_of,
+    table,
+    tenant_of,
+)
 from ops_service_kit.settings import Settings
 from ops_store.schema import (
     TEAM_OWNED,
@@ -112,7 +123,7 @@ def _copy(dialect: str, what: str) -> str:
     return f"#{what}_0109" if dialect == "mssql" else f"{what}_0109"
 
 
-def _list_moves(dialect: str, dev: bool) -> dict[str, str]:
+def _list_moves(dialect: str, dev: bool, declared: Declared) -> dict[str, str]:
     """A session table per kind (and for threads) of (k, v): each `local` row's id and the tenant it moves to. Only
     rows that move are listed, so each batch below makes progress and the fill ends."""
     copies = {what: _copy(dialect, what) for what in (*TABLES, "thread")}
@@ -120,7 +131,7 @@ def _list_moves(dialect: str, dev: bool) -> dict[str, str]:
         op.execute(session_table_ddl(name, dialect, [("k", 255), ("v", 64)]))
     for kind, name in TABLES.items():
         row = table(name, "id", "team_id", "tenant_id")
-        found = sa.select(row.c.id.label("k"), tenant_of(kind, row, dev=dev).label("v"))
+        found = sa.select(row.c.id.label("k"), tenant_of(kind, row, dev=dev, declared=declared).label("v"))
         found = found.where(row.c.tenant_id == LOCAL).subquery("found")
         copy = sa.table(copies[kind], sa.column("k"), sa.column("v"))
         op.execute(
@@ -215,7 +226,8 @@ def upgrade() -> None:
         before, after = _every_tenant(dialect)
         for statement in before:
             op.execute(statement)
-        copies = _list_moves(dialect, dev)
+        # The teams an operator placed by hand for 0106 (docs/deploy/database.md) are placed the same way here.
+        copies = _list_moves(dialect, dev, declared_of(os.environ.get(DECLARED, "")))
         for statement in after:
             op.execute(statement)
         with op.get_context().autocommit_block():

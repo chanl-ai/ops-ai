@@ -182,3 +182,27 @@ async def test_the_dev_seed_loads_into_the_local_tenant(database_url: str) -> No
             assert list(agents) == [LOCAL_TENANT]
             flows = (await c.execute(sa.select(sa.func.count()).select_from(registry_workflows))).scalar_one()
             assert flows > 0
+
+
+async def test_a_seed_agent_id_another_tenant_holds_does_not_stop_the_start(emptied_database: str) -> None:
+    """A seed agent placed in another tenant by an earlier upgrade: the start-up seed finds no row of that id in its own
+    tenant, and creating one hits the key the other tenant's row holds."""
+    other = f"t_{new_id('held')}"
+    async with started(emptied_database) as (_client, _rt):
+        pass
+    engine = create_async_engine(emptied_database)
+    try:
+        async with engine.begin() as c:
+            for table in ("registry_agent_versions", "agent_skill_pins"):
+                key = sa.table(table, sa.column("agent_id"), sa.column("tenant_id"))
+                await c.execute(sa.update(key).where(key.c.agent_id == "ag_fraud").values(tenant_id=other))
+            await c.execute(
+                sa.update(registry_agents).where(registry_agents.c.id == "ag_fraud").values(tenant_id=other)
+            )
+    finally:
+        await engine.dispose()
+    async with started(emptied_database) as (_client, rt), rt.db.connect() as c:
+        held = (
+            await c.execute(sa.select(registry_agents.c.tenant_id).where(registry_agents.c.id == "ag_fraud"))
+        ).scalars()
+        assert list(held) == [other]

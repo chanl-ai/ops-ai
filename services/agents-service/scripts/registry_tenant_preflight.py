@@ -5,24 +5,26 @@ and a record referenced from two or more tenants other than `local`; this lists 
 (`ops_agents.store.registry_tenants`). Exits 1 when any exists, 0 when none does, 2 when the database cannot be read
 across tenants without changing a security policy (SQL Server), with what to run instead. It writes nothing.
 
-  make -C services/agents-service registry-tenant-preflight     (the database is OPS_DATABASE_URL, as for migrations)
+  make -C services/agents-service registry-tenant-preflight     (the database is OPS_DATABASE_URL, as for migrations;
+  OPS_REGISTRY_TEAM_TENANTS as the upgrade will take it, docs/deploy/database.md)
 """
 
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from ops_agents.store.registry_tenants import PreflightRefused, gaps
+from ops_agents.store.registry_tenants import DECLARED, PreflightRefused, declared_of, gaps
 from ops_service_kit.settings import Settings
 
 
 async def main() -> int:
     engine = create_async_engine(Settings().database_url)
     try:
-        found = await gaps(engine)
+        found = await gaps(engine, declared_of(os.environ.get(DECLARED, "")))
     except PreflightRefused as e:
         print(e, file=sys.stderr)
         return 2

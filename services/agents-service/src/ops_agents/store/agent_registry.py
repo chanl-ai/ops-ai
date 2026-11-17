@@ -148,6 +148,9 @@ SPEC_FIELDS = (
 
 # (agent, version) pairs per statement of published_specs: two parameters each, under SQL Server's 2100.
 PAIRS_PER_QUERY = 500
+# Ids tenant_owners names in its statement; past this it reads the tenant's agents and keeps those asked for, as SQL
+# Server takes at most 2100 parameters a statement and a caller may ask with the whole serving catalogue.
+OWNER_IDS_PER_QUERY = 1000
 # A JSON boolean as text: 'true' on PostgreSQL and SQL Server, '1' on SQLite.
 _TRUE = ("true", "1")
 
@@ -306,14 +309,14 @@ class AgentRegistry(RuntimeStore):
         only for deciding a refusal, never for showing the agent."""
         if not ids:
             return {}
+        named = registry_agents.c.id.in_(sorted(ids)) if len(ids) <= OWNER_IDS_PER_QUERY else sa.true()
         q = sa.select(registry_agents.c.id, registry_agents.c.team_id).where(
-            registry_agents.c.tenant_id == current_tenant(),
-            registry_agents.c.id.in_(sorted(ids)),
-            any_team(registry_agents, OWNER),
+            registry_agents.c.tenant_id == current_tenant(), named, any_team(registry_agents, OWNER)
         )
         with isolation.tenant_wide(OWNER):
             async with self.tx() as c:
-                return {str(i): str(team or "") for i, team in (await c.execute(q)).all()}
+                found = (await c.execute(q)).all()
+        return {str(i): str(team or "") for i, team in found if str(i) in ids}
 
     async def row(self, agent_id: str, c: AsyncConnection | None = None, *, lock: bool = False) -> dict[str, Any]:
         """The agent, when the acting team owns it; another team's agent is NotFound, so its routes answer 404."""
@@ -460,12 +463,17 @@ class AgentRegistry(RuntimeStore):
             slug, n = f"{base}-{n}", n + 1
         return slug
 
-    async def create_if_absent(self, spec: dict[str, Any], *, by: str, team_id: str, agent_id: str) -> bool:
-        """`create` for an agent whose id is fixed (a team's Ops Assistant): False when a row of that id, or one
-        racing it for the same slug, is already there, so two first chats at once leave one agent."""
+    async def create_if_absent(
+        self, spec: dict[str, Any], *, by: str, team_id: str, agent_id: str, version: int = 1
+    ) -> bool:
+        """`create` for an agent whose id is fixed (a team's Ops Assistant, a seed agent): False when a row of that id,
+        in any tenant, or one racing it for the same slug, is already there, so two first chats at once leave one
+        agent and a seed id another tenant holds does not stop the start."""
         try:
             async with self.tx() as c, self.attempt(c):
-                await self.create(spec, by=by, team_id=team_id, agent_id=agent_id, published=True, conn=c)
+                await self.create(
+                    spec, by=by, team_id=team_id, agent_id=agent_id, version=version, published=True, conn=c
+                )
         except IntegrityError:
             return False
         return True
