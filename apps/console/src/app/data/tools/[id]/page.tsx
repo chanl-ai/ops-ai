@@ -376,7 +376,7 @@ export default function ModulePage() {
                   </p>
                   <ConnectionSelect
                     value={m.connection}
-                    disabled={setConnection.isPending}
+                    disabled={setConnection.isPending || !canBuild}
                     onChange={(v) =>
                       setConnection.mutate(
                         { id: m.id, connectionId: v },

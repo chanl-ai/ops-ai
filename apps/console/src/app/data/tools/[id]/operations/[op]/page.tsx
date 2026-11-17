@@ -122,7 +122,8 @@ export default function OperationWorkbenchPage() {
           }
           stagedCall={stagedCall}
           inputErrors={inputErrors}
-          extraActions={policy}
+          canEdit={m.canEdit}
+          extraActions={m.canEdit === false ? undefined : policy}
           {...run}
         />
       ) : (
@@ -145,7 +146,8 @@ export default function OperationWorkbenchPage() {
         {...run}
         stagedCall={stagedCall}
         inputErrors={inputErrors}
-        extraActions={policy}
+        canEdit={m.canEdit}
+        extraActions={m.canEdit === false ? undefined : policy}
       />
       )}
       <OperationSheet policyOnly op={policyOpen ? op : null} base={base} stagedCall={stagedCall} onOpenChange={setPolicyOpen} saving={update.isPending} onSave={(p) => stage(p, `Staged changes to ${op.name}`)} />
