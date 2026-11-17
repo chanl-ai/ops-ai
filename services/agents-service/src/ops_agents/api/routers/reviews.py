@@ -159,8 +159,8 @@ async def list_reviews(rt: Rt, me: Me, q: Annotated[ReviewsQuery, Query()]) -> J
             me=frozenset({me.email, me.name}),
             group=q.group,
             teams=reader_teams(me),
+            approver=me,
         )
-        rows["data"] = [await _with_can_decide(rt, me, r) for r in rows["data"]]
     return ok(rows)
 
 

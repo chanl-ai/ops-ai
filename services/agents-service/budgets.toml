@@ -37,7 +37,9 @@ queries = 1
 queries = 1
 
 ["GET /reviews"]
-not_budgeted = "grows with waiting reviews: 46 statements, transactions and checkouts at 5, 356 at 50 (about 7 per review)"
+queries = 12
+transactions = 12
+connections = 12
 
 ["GET /reviews/by-run-key/{run_key}"]
 not_budgeted = "needs a run waiting at a review step; the budget seed starts none yet"
@@ -48,9 +50,9 @@ transactions = 5
 connections = 5
 
 ["GET /reviews/{thread_id}"]
-queries = 11
-transactions = 11
-connections = 11
+queries = 10
+transactions = 10
+connections = 10
 
 ["GET /runs"]
 not_budgeted = "grows with runs: 20 statements, transactions and checkouts at 5 runs, 80 at 50"
@@ -216,7 +218,9 @@ queries = 3
 queries = 0
 
 ["GET /v1/overview"]
-not_budgeted = "grows with runs: 37 statements at 5 runs, 287 at 50; 284 transactions and checkouts at 50"
+queries = 18
+transactions = 15
+connections = 15
 
 ["GET /v1/prompts/variables"]
 queries = 0

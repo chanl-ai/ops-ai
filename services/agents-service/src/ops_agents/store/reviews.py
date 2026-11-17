@@ -92,6 +92,12 @@ DECISION_COLUMNS = (
 )
 
 
+class ApproverRow(Out):
+    thread_id: str
+    step: str
+    approver: str
+
+
 class ReviewStore(RuntimeStore):
     # A decision is one insert keyed by its interrupt (a second decision of the same interrupt is refused), and an
     # approval replaces the approver's row and reads the step's approvers in one transaction.
@@ -199,6 +205,23 @@ class ReviewStore(RuntimeStore):
         )
         async with self.tx() as c:
             return [str(r[0]) for r in await c.execute(q)]
+
+    async def approvers_of(self, thread_ids: list[str]) -> dict[tuple[str, str], list[str]]:
+        """Each named thread's approvers by (thread, step), earliest first, in one statement; `thread_ids` is bounded
+        by the caller (a list's rows per source)."""
+        if not thread_ids:
+            return {}
+        a = review_approvals.c
+        q = (
+            sa.select(a.thread_id, a.step, a.approver)
+            .where(a.thread_id.in_(thread_ids), a.tenant_id == current_tenant(), team_visible(review_approvals))
+            .order_by(a.approved_at)
+        )
+        found: dict[tuple[str, str], list[str]] = {}
+        async with self.tx() as c:
+            for r in await rows(c, q, ApproverRow):
+                found.setdefault((r.thread_id, r.step), []).append(r.approver)
+        return found
 
     async def approvals_by_step(self, thread_id: str) -> dict[str, list[str]]:
         q = (

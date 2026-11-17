@@ -95,7 +95,7 @@ class OverviewCounts(Out):
 @router.get("", response_model=Envelope[OverviewCounts])
 async def overview(rt: Rt, me: Me) -> JSONResponse:
     with one_read_per_tool():
-        rows = await hitl_facade.all_reviews(rt)
+        rows, _ = await hitl_facade.all_reviews(rt)
         open_rows = [r for r in rows if hitl_facade.REVIEW_VIEWS["open"](r)]
         overdue = [r for r in rows if hitl_facade.REVIEW_VIEWS["overdue"](r)]
         # A review with no SLA sorts last: nothing makes it urgent.

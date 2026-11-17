@@ -13,30 +13,10 @@ from ops_store.rows import rows
 from ops_store.team_scope import team_visible
 
 from .agent_registry import publish_requests
-from .graphs import graph_threads, mine
+from .graphs import ThreadRow, graph_threads, mine
 from .tenancy import RuntimeStore, current_tenant
 
 log = get_logger(__name__)
-
-
-class ThreadRow(BaseModel):
-    """A `graph_threads` row, every column."""
-
-    id: str
-    graph: str
-    meta: dict[str, JsonValue]
-    team_id: str
-    created_at: str
-    updated_at: str
-    status: str
-    version: int | None
-    digest: str | None
-    external_key: str | None
-    deployment_id: str | None
-    parent_thread_id: str | None
-    overrides: dict[str, JsonValue] | None
-    owner: str | None
-    tenant_id: str
 
 
 class PublishRequestRow(BaseModel):

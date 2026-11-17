@@ -34,14 +34,14 @@ async def test_the_queue_reads_only_threads_that_can_hold_a_review(
         assert said.status_code == 200, said.text
     held = (await drafted(dev_platform, james)).split("/")[3]
     resolved: list[str] = []
-    real = hitl_facade.resolve  # pyright: ignore[reportPrivateImportUsage]
+    real = hitl_facade.resolve_rows  # pyright: ignore[reportPrivateImportUsage]
 
-    async def counting(rt: Any, thread_id: str) -> Any:
-        resolved.append(thread_id)
-        return await real(rt, thread_id)
+    async def counting(rt: Any, rows: Any) -> Any:
+        resolved.extend(r.id for r in rows)
+        return await real(rt, rows)
 
-    monkeypatch.setattr(hitl_facade, "resolve", counting)
+    monkeypatch.setattr(hitl_facade, "resolve_rows", counting)
     listed = (await dev_platform.get("/reviews", params={"view": "open", "pageSize": 100}, headers=james)).json()
     assert held in {r["id"] for r in listed["data"]["data"]}, listed
-    # The held thread is resolved to list it and again to draw its review; no idle thread is resolved at all.
+    # The held thread is resolved to list it; no idle thread is resolved at all.
     assert set(resolved) == {held}, resolved

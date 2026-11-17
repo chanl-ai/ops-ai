@@ -6,7 +6,7 @@ Column types are the portable ones (JSON, not JSONB) so the API tests run on SQL
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
@@ -104,6 +104,35 @@ class RunThread(BaseModel):
     meta: dict[str, JsonValue]
     created_at: str
     updated_at: str
+
+
+class ThreadRow(BaseModel):
+    """A `graph_threads` row, every column."""
+
+    id: str
+    graph: str
+    meta: dict[str, JsonValue]
+    team_id: str
+    created_at: str
+    updated_at: str
+    status: str
+    version: int | None
+    digest: str | None
+    external_key: str | None
+    deployment_id: str | None
+    parent_thread_id: str | None
+    overrides: dict[str, JsonValue] | None
+    owner: str | None
+    tenant_id: str
+
+
+class StoredVersion(BaseModel):
+    """A stored workflow version's definition and digest."""
+
+    name: str
+    version: int
+    digest: str
+    definition: dict[str, JsonValue]
 
 
 class RunJournal(BaseModel):
@@ -246,6 +275,21 @@ class GraphStore(RuntimeStore):
         async with self.tx() as c:
             row = (await c.execute(q)).mappings().first()
         return dict(row) if row else None
+
+    async def versions_at(self, pairs: Collection[tuple[str, int]]) -> dict[tuple[str, int], StoredVersion]:
+        """The named workflow versions in one statement, by (name, version); a pair with no stored version is left
+        out. Read by the names and versions asked for, then matched in pairs, so no tuple IN is needed."""
+        if not pairs:
+            return {}
+        v = graph_versions.c
+        q = sa.select(v.name, v.version, v.digest, v.definition).where(
+            mine(graph_versions),
+            v.name.in_(sorted({n for n, _ in pairs})),
+            v.version.in_(sorted({n for _, n in pairs})),
+        )
+        async with self.tx() as c:
+            found = await rows(c, q, StoredVersion)
+        return {(r.name, r.version): r for r in found if (r.name, r.version) in pairs}
 
     async def publish(self, name: str, definition: dict[str, Any], digest: str, now: str) -> int:
         """Stores the next version of a workflow; a definition already stored under its digest returns that version."""
