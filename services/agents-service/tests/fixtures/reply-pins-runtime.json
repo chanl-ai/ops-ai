@@ -944,7 +944,11 @@
       "data": {
         "data": [],
         "facets": {
-          "status": {}
+          "status": {},
+          "workflowId": {}
+        },
+        "labels": {
+          "workflowId": {}
         },
         "pagination": {
           "hasNext": false,

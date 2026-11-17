@@ -3941,6 +3941,13 @@ class EnvelopeListNodeTypeView(TypedDict, closed=True):
     success: Literal[True]
 
 
+class LabelledListResultRunRow(TypedDict, closed=True):
+    data: list[RunRow]
+    facets: dict[str, dict[str, int]]
+    labels: dict[str, dict[str, str]]
+    pagination: Pagination
+
+
 class ListResultActivityRow(TypedDict, closed=True):
     data: list[ActivityRow]
     facets: dict[str, dict[str, int]]
@@ -3949,12 +3956,6 @@ class ListResultActivityRow(TypedDict, closed=True):
 
 class ListResultAgent(TypedDict, closed=True):
     data: list[Agent]
-    facets: dict[str, dict[str, int]]
-    pagination: Pagination
-
-
-class ListResultRunRow(TypedDict, closed=True):
-    data: list[RunRow]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
 
@@ -4115,6 +4116,11 @@ class WorkflowDetail(TypedDict, closed=True):
     version: int
 
 
+class EnvelopeLabelledListResultRunRow(TypedDict, closed=True):
+    data: LabelledListResultRunRow
+    success: Literal[True]
+
+
 class EnvelopeListResultActivityRow(TypedDict, closed=True):
     data: ListResultActivityRow
     success: Literal[True]
@@ -4122,11 +4128,6 @@ class EnvelopeListResultActivityRow(TypedDict, closed=True):
 
 class EnvelopeListResultAgent(TypedDict, closed=True):
     data: ListResultAgent
-    success: Literal[True]
-
-
-class EnvelopeListResultRunRow(TypedDict, closed=True):
-    data: ListResultRunRow
     success: Literal[True]
 
 

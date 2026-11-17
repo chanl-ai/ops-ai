@@ -7447,6 +7447,25 @@
         "title": "Envelope[JobArmed]",
         "type": "object"
       },
+      "Envelope_LabelledListResult_RunRow__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/LabelledListResult_RunRow_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[LabelledListResult[RunRow]]",
+        "type": "object"
+      },
       "Envelope_ListResult_ActivityRow__": {
         "additionalProperties": false,
         "properties": {
@@ -7559,25 +7578,6 @@
           "data"
         ],
         "title": "Envelope[ListResult[FormView]]",
-        "type": "object"
-      },
-      "Envelope_ListResult_RunRow__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/ListResult_RunRow_"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[ListResult[RunRow]]",
         "type": "object"
       },
       "Envelope_ListResult_TaskTypeView__": {
@@ -11332,6 +11332,49 @@
         "title": "KnowledgeUsage",
         "type": "object"
       },
+      "LabelledListResult_RunRow_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/RunRow"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "labels": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Labels",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets",
+          "labels"
+        ],
+        "title": "LabelledListResult[RunRow]",
+        "type": "object"
+      },
       "LeftItem": {
         "additionalProperties": false,
         "properties": {
@@ -11624,38 +11667,6 @@
           "facets"
         ],
         "title": "ListResult[FormView]",
-        "type": "object"
-      },
-      "ListResult_RunRow_": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/RunRow"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "facets": {
-            "additionalProperties": {
-              "additionalProperties": {
-                "type": "integer"
-              },
-              "type": "object"
-            },
-            "title": "Facets",
-            "type": "object"
-          },
-          "pagination": {
-            "$ref": "#/components/schemas/Pagination"
-          }
-        },
-        "required": [
-          "data",
-          "pagination",
-          "facets"
-        ],
-        "title": "ListResult[RunRow]",
         "type": "object"
       },
       "ListResult_TaskTypeView_": {
@@ -46020,7 +46031,7 @@
     },
     "/v1/runs": {
       "get": {
-        "description": "The selected team's runs on the shared list contract, newest first, then by id; `workflowId` keeps one\nworkflow's, `status` repeats to keep several, and `facets.status` counts the runs per status under the other\nfilters. A scoped API key lists its own workflow's runs only.\nNo request transaction: people's names and the masking policy come from platform-service, with none open.",
+        "description": "The selected team's runs on the shared list contract, newest first, then by id; `workflowId` keeps one\nworkflow's, `status` repeats to keep several; `facets.status` and `facets.workflowId` count the runs per status\nand per workflow under the other filters, and `labels.workflowId` names each counted workflow, so the workflow\nfilter is filled from this reply. A scoped API key lists its own workflow's runs only.\nNo request transaction: people's names and the masking policy come from platform-service, with none open.",
         "operationId": "workflows_list_engine_runs",
         "parameters": [
           {
@@ -46222,7 +46233,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_ListResult_RunRow__"
+                  "$ref": "#/components/schemas/Envelope_LabelledListResult_RunRow__"
                 }
               }
             },

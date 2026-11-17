@@ -40,7 +40,7 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
-from ops_service_kit.http import Envelope, In, ListResult, paged
+from ops_service_kit.http import Envelope, In, LabelledListResult, ListResult, paged
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
@@ -1195,7 +1195,7 @@ async def start_engine_run(rt: Rt, me: Starter, body: EngineRunInput) -> JSONRes
     return ok(started_view(run, created), status=202 if created else 200)
 
 
-@runs_router.get("", response_model=Envelope[ListResult[RunRow]])
+@runs_router.get("", response_model=Envelope[LabelledListResult[RunRow]])
 async def list_engine_runs(
     *,
     rt: Rt,
@@ -1205,17 +1205,22 @@ async def list_engine_runs(
     status: Annotated[list[str] | None, Query()] = None,
 ) -> JSONResponse:
     """The selected team's runs on the shared list contract, newest first, then by id; `workflowId` keeps one
-    workflow's, `status` repeats to keep several, and `facets.status` counts the runs per status under the other
-    filters. A scoped API key lists its own workflow's runs only.
+    workflow's, `status` repeats to keep several; `facets.status` and `facets.workflowId` count the runs per status
+    and per workflow under the other filters, and `labels.workflowId` names each counted workflow, so the workflow
+    filter is filled from this reply. A scoped API key lists its own workflow's runs only.
     No request transaction: people's names and the masking policy come from platform-service, with none open."""
-    # `status` reaches the store through `q.filters`; both are declared so the document and the SDKs name them.
+    # Both reach the store through `q.filters`; declared so the document and the SDKs name them.
     del status
-    wanted = workflow_id
+    pinned = None
     if (scope := key_scope(me)) is not None:
-        if scope[0] != "workflow" or wanted not in (None, scope[1]):
-            return ok(paged([], 0, q.page, q.page_size) | {"facets": {"status": {}}})
-        wanted = scope[1]
-    listed = await runs(rt).listed(q, workflow_id=wanted)
+        if scope[0] != "workflow" or workflow_id not in (None, scope[1]):
+            nothing = paged(
+                [], 0, q.page, q.page_size, facets={"status": {}, "workflowId": {}}, labels={"workflowId": {}}
+            )
+            return ok(nothing)
+        # A predicate, not a filter: the workflow facet, which leaves its own filter out, counts this one only.
+        pinned = scope[1]
+    listed = await runs(rt).listed(q, workflow_id=pinned)
     rows = listed["data"]
     who = await actors(rt, [started_by_of(r) for r in rows])
     ended = await run_story.outcome_texts(rt, rows)

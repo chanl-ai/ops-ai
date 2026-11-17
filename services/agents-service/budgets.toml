@@ -236,7 +236,8 @@ not_budgeted = "needs a publish request; the budget seed raises none yet"
 not_budgeted = "needs an installed template copy; the budget seed installs none yet"
 
 ["GET /v1/runs"]
-queries = 3
+# The page, the total, the status and workflow facets, and the facet's workflow names.
+queries = 5
 transactions = 2
 connections = 2
 

@@ -11,7 +11,7 @@ from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
 from ops_store.dialect import locked
 from ops_store.listing import ListPage, list_page
-from ops_store.team_scope import team_visible
+from ops_store.team_scope import acting_team, team_visible
 
 from .clock import db_now, now_iso
 from .tables import ENGINE_BUILD, engine_definitions, engine_runs, engine_steps, engine_waits, engine_work
@@ -180,11 +180,13 @@ class RunStore:
         return rows, total, by_status
 
     async def listed(self, params: ListParams, *, workflow_id: str | None = None) -> ListPage:
-        """The runs list on the shared contract: the acting team's runs (of one workflow when given), newest first,
-        then by id, each with `workflow_name`; `status` filters, given once per value, and `facets.status` counts the
-        runs per status under the other filters."""
+        """The runs list on the shared contract: the acting team's runs (only `workflow_id`'s when given, for a key
+        scoped to one workflow), newest first, then by id, each with `workflow_name`; `status` and `workflowId`
+        filter, given once per value; `facets` counts the runs per status and per workflow under the other filters,
+        and `labels.workflowId` names each counted workflow."""
         r = engine_runs
-        where = [r.c.tenant_id == self.tx.tenant(), team_visible(r)]
+        tenant = self.tx.tenant()
+        where = [r.c.tenant_id == tenant, team_visible(r)]
         if workflow_id:
             where.append(r.c.workflow_id == workflow_id)
         q = sa.select(*r.c, engine_definitions.c.name.label("workflow_name")).select_from(_named(r)).where(*where)
@@ -194,8 +196,9 @@ class RunStore:
                 q,
                 params,
                 default_sort=r.c.created_at.desc(),
-                filters={"status": r.c.status},
-                facets={"status": r.c.status},
+                filters={"status": r.c.status, "workflowId": r.c.workflow_id},
+                facets={"status": r.c.status, "workflowId": r.c.workflow_id},
+                labels={"workflowId": _workflow_names(tenant)},
             )
 
     async def update(self, run_id: str, *, generation: int | None = None, **values: Any) -> None:
@@ -530,6 +533,23 @@ class RunStore:
             for run_id, payload in (await c.execute(q)).all():
                 out.setdefault(str(run_id), []).append(dict(payload or {}))
         return out
+
+
+def _workflow_names(tenant: str) -> sa.Select[str, str]:
+    """(workflow id, name) of each workflow's newest version the acting team may see, as the workflows list names it
+    (`store/definition_list.py` in agents-service): each version carries its own team."""
+    d, newer = engine_definitions, engine_definitions.alias("newer")
+    team = acting_team()
+    seen: list[sa.ColumnElement[bool]] = [d.c.tenant_id == tenant]
+    later: list[sa.ColumnElement[bool]] = [
+        newer.c.tenant_id == d.c.tenant_id,
+        newer.c.workflow_id == d.c.workflow_id,
+        newer.c.version > d.c.version,
+    ]
+    if team is not None:
+        seen.append(sa.or_(d.c.team_id == team, d.c.team_id.is_(None)))
+        later.append(sa.or_(newer.c.team_id == team, newer.c.team_id.is_(None)))
+    return sa.select(d.c.workflow_id, d.c.name).where(*seen, ~sa.exists().where(*later))
 
 
 def _named(runs: sa.Table) -> sa.Join:

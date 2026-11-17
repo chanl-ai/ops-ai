@@ -1920,8 +1920,9 @@ export interface paths {
         /**
          * List Engine Runs
          * @description The selected team's runs on the shared list contract, newest first, then by id; `workflowId` keeps one
-         *     workflow's, `status` repeats to keep several, and `facets.status` counts the runs per status under the other
-         *     filters. A scoped API key lists its own workflow's runs only.
+         *     workflow's, `status` repeats to keep several; `facets.status` and `facets.workflowId` count the runs per status
+         *     and per workflow under the other filters, and `labels.workflowId` names each counted workflow, so the workflow
+         *     filter is filled from this reply. A scoped API key lists its own workflow's runs only.
          *     No request transaction: people's names and the masking policy come from platform-service, with none open.
          */
         get: operations["workflows_list_engine_runs"];
@@ -5927,6 +5928,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[LabelledListResult[RunRow]] */
+        Envelope_LabelledListResult_RunRow__: {
+            data: components["schemas"]["LabelledListResult_RunRow_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ListResult[ActivityRow]] */
         Envelope_ListResult_ActivityRow__: {
             data: components["schemas"]["ListResult_ActivityRow_"];
@@ -5975,15 +5985,6 @@ export interface components {
         /** Envelope[ListResult[FormView]] */
         Envelope_ListResult_FormView__: {
             data: components["schemas"]["ListResult_FormView_"];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[ListResult[RunRow]] */
-        Envelope_ListResult_RunRow__: {
-            data: components["schemas"]["ListResult_RunRow_"];
             /**
              * Success
              * @constant
@@ -7505,6 +7506,24 @@ export interface components {
             /** Kbid */
             kbId: string;
         };
+        /** LabelledListResult[RunRow] */
+        LabelledListResult_RunRow_: {
+            /** Data */
+            data: components["schemas"]["RunRow"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            /** Labels */
+            labels: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
         /** LeftItem */
         LeftItem: {
             /** Dueat */
@@ -7599,18 +7618,6 @@ export interface components {
         ListResult_FormView_: {
             /** Data */
             data: components["schemas"]["FormView"][];
-            /** Facets */
-            facets: {
-                [key: string]: {
-                    [key: string]: number;
-                };
-            };
-            pagination: components["schemas"]["Pagination"];
-        };
-        /** ListResult[RunRow] */
-        ListResult_RunRow_: {
-            /** Data */
-            data: components["schemas"]["RunRow"][];
             /** Facets */
             facets: {
                 [key: string]: {
@@ -23114,7 +23121,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_ListResult_RunRow__"];
+                    "application/json": components["schemas"]["Envelope_LabelledListResult_RunRow__"];
                 };
             };
             /** @description Invalid request */

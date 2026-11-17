@@ -65,7 +65,8 @@ engine_runs = sa.Table(
     # workflow index let the planner read a tenant's runs and sort them instead of the team's index in order.
     sa.Column("tenant_id", sa.String(64), nullable=False),
     sa.Column("team_id", sa.String(64), nullable=False),
-    sa.Column("workflow_id", sa.String(64), nullable=False),
+    # The runs list filters and counts by it (ix_engine_runs_workflow_created).
+    sa.Column("workflow_id", sa.String(64), nullable=False, info=LISTED),
     sa.Column("version", sa.Integer, nullable=False),
     sa.Column("digest", sa.String(64), nullable=False),
     # The caller's key for what started the run; a repeated key returns the first run.

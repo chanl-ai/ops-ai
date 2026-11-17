@@ -11,7 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_agents.store.graphs import GraphStore
 from ops_agents.store.tenancy import tenant_scope
-from tests.api.test_action_roles import live_run, refused, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
+from tests.api.test_action_roles import (
+    OUTSIDER,
+    live_run,
+    refused,
+    stack,  # noqa: F401  # pyright: ignore[reportUnusedImport]
+)
 from tests.engine.test_lifecycle_rights import BUILDER, TENANT, unowned_live
 
 WF, PIN, AGENT = ({"X-API-Key": f"ok_ops.{k}", "X-Team-Id": "team_ops"} for k in ("wf", "pin", "agent"))
@@ -70,6 +75,20 @@ async def test_a_scoped_key_reads_only_its_targets_runs_and_threads(stack: Stack
     other_run = theirs.json()["data"]["runId"]
     listed = (await c.get("/v1/runs", headers=WF)).json()["data"]["data"]
     assert [r["id"] for r in listed] == [mine], listed
+    # The workflow facet and its labels: the key counts its own workflow only, the team every workflow under the
+    # workflow filter, which the facet leaves out, and another team none of them.
+    name = listed[0]["workflowName"]
+    for headers, query, ids, counted in (
+        (WF, {}, [mine], {"refunds": 1}),
+        (BUILDER, {"workflowId": "refunds"}, [mine], {"refunds": 1, "payouts": 1}),
+        (OUTSIDER, {}, [], {}),
+        (OUTSIDER, {"workflowId": "refunds"}, [], {}),
+    ):
+        page = (await c.get("/v1/runs", params=query, headers=headers)).json()["data"]
+        assert [r["id"] for r in page["data"]] == ids, (headers, query)
+        assert page["facets"]["workflowId"] == counted, (headers, query)
+        assert sorted(page["labels"]["workflowId"]) == sorted(counted), (headers, query)
+        assert page["labels"]["workflowId"].get("refunds", name) == name, (headers, query)
     assert (await c.get(f"/v1/runs/{other_run}", headers=WF)).status_code == 404
     thread = await c.post("/v1/threads", json={"graph": "complex_workflow", "metadata": {}}, headers=BUILDER)
     tid = thread.json()["data"]["threadId"]
