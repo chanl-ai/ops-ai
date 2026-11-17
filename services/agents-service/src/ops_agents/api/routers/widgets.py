@@ -67,7 +67,9 @@ class RetireInput(In):
 
 async def _mine(rt: Runtime, me: Principal, widget_id: str, what: str) -> dict[str, Any]:
     """The registry row when the caller may change it; another team's widget answers 404, as if it did not exist, and a
-    member of the owning team outside the builder and admin roles gets 403."""
+    member of the owning team outside the builder and admin roles gets 403. A seeded library widget answers 409
+    `seeded_widget`: it is not a permission (no role may change one, so `can()` has no cell to ask) but a record with
+    no registry row that every team's list shows, and a 404 would deny a widget the caller was just shown."""
     row = await widgets(rt).find(widget_id)
     teams = teams_of(me)
     if row is None or row["team_id"] not in teams:
