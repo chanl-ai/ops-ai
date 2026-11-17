@@ -50,6 +50,10 @@ A tool module on a mock upstream has a read (balance) and a write (a hold) whose
 |---|---|---|
 | api | `tools-service/scripts/test-uc-753-api.py` | passing |
 
+## Open
+
+After fail-closed lands, tools-service without platform-service refuses every write, so this stack needs platform-service (people_stack style) before it is rebased.
+
 ## Non-vacuous check
 
 Step 3 pairs with step 4: the upstream saw no hold while the card was pending, so the one hold is the approval's doing.
