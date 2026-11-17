@@ -27,6 +27,7 @@ from usecase_harness import (
     check,
     core_bank,
     data,
+    every_page,
     finish,
     pg_url,
     publish_bank_module,
@@ -138,7 +139,7 @@ def start_run(api: httpx.Client, key: str) -> str:
 
 
 def tool_calls(gw: httpx.Client, run_id: str) -> list[dict[str, Any]]:
-    rows = data(gw.get("/v1/executions", params={"thread": run_id, "pageSize": 200}))["data"]
+    rows = every_page(gw, "/v1/executions", thread=run_id)
     return [r for r in rows if r["target"] == "get_customer"]
 
 

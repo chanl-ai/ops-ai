@@ -51,7 +51,7 @@ from ..limits import amount_refusal
 from ..mocks import MockAnswers
 from ..registry import approval_policy
 from ..secrets import SecretResolver, scrub
-from ..store.calls import CallLog, CallStats, DayStats
+from ..store.calls import CallLog, CallStats, DayStats, GatewayCall
 from ..store.connections import ConnectionStore
 from ..store.mocks import MockStore
 from ..store.module_list import ModuleList, Window
@@ -950,13 +950,13 @@ class ModuleService:
     async def executions(
         self,
         who: Caller,
+        params: ListParams,
         *,
-        page: int,
-        page_size: int,
-        tool: str | None,
-        module_ids: list[str] | None,
-        thread_id: str | None,
-        decision: str | None,
+        counted: bool = True,
+        tool: str | None = None,
+        module_ids: list[str] | None = None,
+        thread_id: str | None = None,
+        decision: str | None = None,
         key: str | None = None,
         call_id: str | None = None,
         link_id: str | None = None,
@@ -983,7 +983,9 @@ class ModuleService:
             if key is not None:
                 # A lookup by key shows a claim as it stands: one still running past its expiry reads as lost.
                 await self.calls.expire_running(tenant_id=who.tenant_id, key=key)
-            rows, total = await self.calls.search(
+            page = await self.calls.listed(
+                params,
+                counted=counted,
                 tenant_id=who.tenant_id,
                 team_ids=self._call_teams(who),
                 tools=[tool] if tool else None,
@@ -999,31 +1001,18 @@ class ModuleService:
                 sub=mine,
                 since=since,
                 until=until,
-                offset=(page - 1) * page_size,
-                limit=page_size,
             )
+            rows = [GatewayCall.model_validate(r) for r in page["data"]]
             # Only the modules the page's rows name are read, as rows.
             shown = await self.store.headers(
                 who.tenant_id, sorted({r.module_id for r in rows if r.module_id is not None and r.module_id in mods})
             )
-        pages = max(1, -(-total // page_size))
         names = _workflow_names(list(mods.values()))
         listed = [
             call_row(r, names, shown.get(r.module_id or ""), self._title(shown.get(r.module_id or ""), r.tool))
             for r in rows
         ]
-        return {
-            "data": await self._named(who, listed),
-            "pagination": {
-                "page": page,
-                "pageSize": page_size,
-                "total": total,
-                "totalPages": pages,
-                "hasNext": page < pages,
-                "hasPrev": page > 1,
-            },
-            "facets": {},
-        }
+        return {**page, "data": await self._named(who, listed)}
 
     async def _named(self, who: Caller, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """The rows with each agent and workflow named as agents-service names them, read once for the tools on the

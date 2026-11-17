@@ -50,7 +50,7 @@ queries = 3
 queries = 3
 
 ["GET /v1/executions"]
-queries = 5
+queries = 7
 
 ["GET /v1/executions/{call_id}"]
 queries = 4

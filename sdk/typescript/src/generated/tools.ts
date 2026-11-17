@@ -641,8 +641,9 @@ export interface paths {
         };
         /**
          * List Executions
-         * @description Off the request transaction: the service reads in one and asks agents-service to name the agents and
-         *     workflows after it.
+         * @description The log on the shared list contract: `search` matches the tool's name, `result` and `assistant` narrow and
+         *     are counted in `facets`, and the order is newest first, then by id. Off the request transaction: the
+         *     service reads in one and asks agents-service to name the agents and workflows after it.
          */
         get: operations["executions_list_executions"];
         put?: never;
@@ -10606,8 +10607,6 @@ export interface operations {
     executions_list_executions: {
         parameters: {
             query?: {
-                page?: number;
-                pageSize?: number;
                 tool?: string | null;
                 moduleId?: string[] | null;
                 thread?: string | null;
@@ -10617,6 +10616,16 @@ export interface operations {
                 link?: string | null;
                 since?: string | null;
                 until?: string | null;
+                /** @description Keeps the calls with these results; counted in `facets.result` */
+                result?: ("Ran" | "Running" | "Refused" | "Failed")[] | null;
+                /** @description Keeps the calls made by these assistants; counted in `facets.assistant` */
+                assistant?: string[] | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;

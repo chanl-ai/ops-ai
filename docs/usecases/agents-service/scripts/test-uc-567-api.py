@@ -37,6 +37,7 @@ from usecase_harness import (
     check,
     core_bank,
     data,
+    every_page,
     finish,
     pg_url,
     tools,
@@ -173,7 +174,7 @@ def start(api: httpx.Client, which: str, payload: dict[str, Any], *, mode: str =
 
 
 def calls(gw: httpx.Client, run_id: str, target: str) -> list[dict[str, Any]]:
-    rows = data(gw.get("/v1/executions", params={"thread": run_id, "pageSize": 200}))["data"]
+    rows = every_page(gw, "/v1/executions", thread=run_id)
     return [r for r in rows if r["target"] == target]
 
 

@@ -29,7 +29,7 @@ from ops_plugin_sdk.manifest import Setting
 from ops_plugin_sdk.versions import tools_of
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Envelope, In, JsonValue, ListResult, Out, ok
-from ops_service_kit.listing import ListQuery
+from ops_service_kit.listing import ListParams, ListQuery
 from ops_store import isolation
 from ops_store.listing import ListPage
 
@@ -1985,8 +1985,8 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
             try:
                 ran = await apps.calls.executions(
                     who,
-                    page=1,
-                    page_size=20,
+                    ListParams(page_size=20),
+                    counted=False,
                     tool=None,
                     module_ids=list(card["moduleIds"]),
                     thread_id=None,

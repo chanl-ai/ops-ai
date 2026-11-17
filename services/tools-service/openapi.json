@@ -22808,32 +22808,9 @@
     },
     "/v1/executions": {
       "get": {
-        "description": "Off the request transaction: the service reads in one and asks agents-service to name the agents and\nworkflows after it.",
+        "description": "The log on the shared list contract: `search` matches the tool's name, `result` and `assistant` narrow and\nare counted in `facets`, and the order is newest first, then by id. Off the request transaction: the\nservice reads in one and asks agents-service to name the agents and workflows after it.",
         "operationId": "executions_list_executions",
         "parameters": [
-          {
-            "in": "query",
-            "name": "page",
-            "required": false,
-            "schema": {
-              "default": 1,
-              "minimum": 1,
-              "title": "Page",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
-            }
-          },
           {
             "in": "query",
             "name": "tool",
@@ -22986,6 +22963,148 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "description": "Keeps the calls with these results; counted in `facets.result`",
+            "in": "query",
+            "name": "result",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "Ran",
+                      "Running",
+                      "Refused",
+                      "Failed"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Keeps the calls with these results; counted in `facets.result`",
+              "title": "Result"
+            }
+          },
+          {
+            "description": "Keeps the calls made by these assistants; counted in `facets.assistant`",
+            "in": "query",
+            "name": "assistant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Keeps the calls made by these assistants; counted in `facets.assistant`",
+              "title": "Assistant"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {

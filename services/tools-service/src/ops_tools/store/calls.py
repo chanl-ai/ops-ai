@@ -12,8 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
 from ops_store.dialect import dialect_of, insert_ignore, lock_key
+from ops_store.listing import ListPage, list_page
 from ops_store.rows import one, rows
 from ops_store.schema import TENANT_SCOPED
 from ops_store.store import Store
@@ -89,6 +91,17 @@ gateway_calls = sa.Table(
     # call on a module every team shares is logged in the calling team.
     info=TENANT_SCOPED,
 )
+
+
+# What the console's Calls tabs call a call's result and assistant, as columns the list counts and filters on. The
+# labels follow `modules.executions.STATUS` and the tab's wording; an assistant that gave no name is one unnamed group.
+RESULT = sa.case(
+    (gateway_calls.c.outcome.in_(("ok", "replayed")), "Ran"),
+    (gateway_calls.c.outcome == "running", "Running"),
+    (gateway_calls.c.outcome.in_(("refused", "in_progress", "abandoned")), "Refused"),
+    else_="Failed",
+)
+ASSISTANT = sa.func.coalesce(gateway_calls.c.client_name, "Unnamed assistant")
 
 
 class GatewayCall(Out):
@@ -369,8 +382,8 @@ class CallLog(Store):
         async with self.tx() as c:
             return await rows(c, q, GatewayCall)
 
-    async def search(
-        self,
+    @staticmethod
+    def _where(
         *,
         tenant_id: str,
         team_ids: list[str],
@@ -385,13 +398,7 @@ class CallLog(Store):
         call_id: str | None = None,
         link_id: str | None = None,
         sub: str | None = None,
-        offset: int = 0,
-        limit: int = 50,
-    ) -> tuple[list[GatewayCall], int]:
-        """Calls made in `team_ids` (the caller's team), newest first, with the total that match; `since` is an ISO
-        time, compared as text like created_at. The team is the one the call acted in, not the module's: a module every
-        team shares holds each team's calls, and each team reads only its own. `moduleless` also keeps the team's calls
-        on no module (a tool no module holds, refused) beside `module_ids`."""
+    ) -> list[sa.ColumnElement[bool]]:
         where: list[sa.ColumnElement[bool]] = [
             gateway_calls.c.tenant_id == tenant_id,
             gateway_calls.c.team_id.in_(team_ids),
@@ -417,11 +424,100 @@ class CallLog(Store):
             where.append(gateway_calls.c.created_at >= since)
         if until:
             where.append(gateway_calls.c.created_at < until)
+        return where
+
+    async def search(
+        self,
+        *,
+        tenant_id: str,
+        team_ids: list[str],
+        tools: list[str] | None = None,
+        module_ids: list[str] | None = None,
+        moduleless: bool = False,
+        thread_id: str | None = None,
+        decision: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        key: str | None = None,
+        call_id: str | None = None,
+        link_id: str | None = None,
+        sub: str | None = None,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[GatewayCall], int]:
+        """Calls made in `team_ids` (the caller's team), newest first, with the total that match; `since` is an ISO
+        time, compared as text like created_at. The team is the one the call acted in, not the module's: a module every
+        team shares holds each team's calls, and each team reads only its own. `moduleless` also keeps the team's calls
+        on no module (a tool no module holds, refused) beside `module_ids`."""
+        where = self._where(
+            tenant_id=tenant_id,
+            team_ids=team_ids,
+            tools=tools,
+            module_ids=module_ids,
+            moduleless=moduleless,
+            thread_id=thread_id,
+            decision=decision,
+            since=since,
+            until=until,
+            key=key,
+            call_id=call_id,
+            link_id=link_id,
+            sub=sub,
+        )
         q = gateway_calls.select().where(*where).order_by(gateway_calls.c.created_at.desc()).offset(offset).limit(limit)
         total = sa.select(sa.func.count()).select_from(gateway_calls).where(*where)
         async with self.tx() as c:
             found = await rows(c, q, GatewayCall)
             return found, int((await c.execute(total)).scalar_one())
+
+    async def listed(
+        self,
+        params: ListParams,
+        *,
+        counted: bool = True,
+        tenant_id: str,
+        team_ids: list[str],
+        tools: list[str] | None = None,
+        module_ids: list[str] | None = None,
+        moduleless: bool = False,
+        thread_id: str | None = None,
+        decision: str | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        key: str | None = None,
+        call_id: str | None = None,
+        link_id: str | None = None,
+        sub: str | None = None,
+    ) -> ListPage:
+        """One page of the same calls on the shared list contract: `search` matches the tool's name, `result` and
+        `assistant` (repeatable) narrow to calls of that result or assistant and are counted in `facets`, each not
+        counting its own choice. Newest first, then by id, so pages never repeat or skip a row."""
+        where = self._where(
+            tenant_id=tenant_id,
+            team_ids=team_ids,
+            tools=tools,
+            module_ids=module_ids,
+            moduleless=moduleless,
+            thread_id=thread_id,
+            decision=decision,
+            since=since,
+            until=until,
+            key=key,
+            call_id=call_id,
+            link_id=link_id,
+            sub=sub,
+        )
+        q = gateway_calls.select().where(*where)
+        async with self.tx() as c:
+            return await list_page(
+                c,
+                q,
+                params,
+                search=[gateway_calls.c.tool],
+                default_sort=gateway_calls.c.created_at.desc(),
+                filters={"result": RESULT, "assistant": ASSISTANT},
+                facets={"result": RESULT, "assistant": ASSISTANT} if counted else {},
+            )
 
     async def made_for(
         self, person: str, module_ids: list[str], since: str, *, tenant_id: str, team_id: str

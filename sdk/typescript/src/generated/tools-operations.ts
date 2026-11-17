@@ -512,8 +512,6 @@ export const toolsOperations = {
     "path": "/v1/executions",
     "pathParams": [],
     "query": [
-      "page",
-      "pageSize",
       "tool",
       "moduleId",
       "thread",
@@ -522,7 +520,15 @@ export const toolsOperations = {
       "call",
       "link",
       "since",
-      "until"
+      "until",
+      "result",
+      "assistant",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },

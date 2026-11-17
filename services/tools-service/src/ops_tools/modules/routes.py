@@ -4,7 +4,7 @@ per `ToolModulesApi` method, each documented with its response model in openapi.
 # No `from __future__ import annotations`: the routes' `caller` dependency is a local of modules_router, and FastAPI
 # resolves string annotations against module globals, where it does not exist.
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
@@ -65,8 +65,7 @@ def executions_router(service: ModuleService, directory: Directory) -> APIRouter
     async def list_executions(  # pyright: ignore[reportUnusedFunction]
         *,
         who: Annotated[Caller, Depends(caller)],
-        page: Annotated[int, Query(ge=1)] = 1,
-        page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 50,
+        q: ListQuery,
         tool: str | None = None,
         # Repeatable: an app with several tool sets lists the calls of all of them in one page.
         module_ids: Annotated[list[str] | None, Query(alias="moduleId", max_length=50)] = None,
@@ -79,13 +78,22 @@ def executions_router(service: ModuleService, directory: Directory) -> APIRouter
         # A date range, ISO times compared as the log stores them: from `since`, before `until`.
         since: Annotated[str | None, Query(max_length=40)] = None,
         until: Annotated[str | None, Query(max_length=40)] = None,
+        result: Annotated[
+            list[Literal["Ran", "Running", "Refused", "Failed"]] | None,
+            Query(description="Keeps the calls with these results; counted in `facets.result`"),
+        ] = None,
+        assistant: Annotated[
+            list[str] | None,
+            Query(description="Keeps the calls made by these assistants; counted in `facets.assistant`"),
+        ] = None,
     ) -> JSONResponse:
-        """Off the request transaction: the service reads in one and asks agents-service to name the agents and
-        workflows after it."""
+        """The log on the shared list contract: `search` matches the tool's name, `result` and `assistant` narrow and
+        are counted in `facets`, and the order is newest first, then by id. Off the request transaction: the
+        service reads in one and asks agents-service to name the agents and workflows after it."""
+        del result, assistant
         data = await service.executions(
             who,
-            page=page,
-            page_size=page_size,
+            q,
             tool=tool,
             module_ids=module_ids,
             thread_id=thread,
