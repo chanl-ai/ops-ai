@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Callable, Coroutine
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -490,5 +490,108 @@ async def test_the_card_rows_hold_the_acting_team_when_the_policy_lets_every_tea
     # Tenant-wide with a team acting, so the database policy lets every team through and the query alone holds them.
     wide = isolation.tenant_wide("a test reads the app cards with every team let through", tenant_id=tenant)
     with wide, acting_as(TEAM):
-        page = await AppCards(engine).page(tenant, TEAM, ListParams(page_size=50), builtins=True)
+        page, _ = await AppCards(engine).page(
+            tenant, TEAM, ListParams(page_size=50), builtins=True, person="someone", is_person=True
+        )
     assert [r["name"] for r in page["data"] if r["kind"] == "connection"] == [f"Desk of {TEAM}"], page["data"]
+
+
+# The states the Connected tab holds (store/app_cards.CONNECTED_STATES): an app that works or one that was removed.
+CONNECTED_TAB = {"connected", "test_failed", "removed", "not_installed"}
+
+
+async def _tab(client: httpx.AsyncClient, headers: dict[str, str], app: str) -> tuple[str, str]:
+    """The app's appState as its card is built, and the tab its card row puts it under for the same caller."""
+    every = (await client.get("/v1/apps", params={"pageSize": 50}, headers=headers)).json()["data"]
+    state = next(c["appState"] for c in every["data"] if c["id"] == app)
+    tabs: list[str] = []
+    for view in ("connected", "available"):
+        got = (await client.get("/v1/apps", params={"pageSize": 50, "view": view}, headers=headers)).json()["data"]
+        assert got["viewCounts"] == every["viewCounts"], got
+        assert got["viewCounts"][view] == got["pagination"]["total"], got
+        tabs += [view] * (app in {c["id"] for c in got["data"]})
+    assert len(tabs) == 1, tabs
+    return state, tabs[0]
+
+
+async def test_the_connected_tab_follows_every_write_that_changes_an_apps_state(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    # Each write lands after a list built the rows, so only its clearing of the stamp (or the row's due time) can move
+    # the card to the tab its state belongs in.
+    conn = await _turned_on(client, tenant)
+    store, app, now = ConnectionStore(engine), f"plugin:{ID}", datetime.now(UTC)
+    bindings = PluginBindings(engine)
+    _passed = {"status": "ok", "account": "team", "at": "2026-11-01T00:00:00Z", "by": "Priya Shah"}
+    steps: list[tuple[str, Callable[[], Coroutine[Any, Any, object]], str]] = [
+        ("turned on", lambda: asyncio.sleep(0), "needs_sign_in"),
+        ("team signs in", lambda: store.replace_token(tenant, conn, _token()), "connected"),
+        ("test fails", lambda: store.set_token_test(tenant, conn, "", {"status": "failed"}), "test_failed"),
+        ("refused", lambda: store.mark_refused(tenant, conn, "", reason="invalid_grant", at=now), "needs_sign_in"),
+        ("signs in again", lambda: store.replace_token(tenant, conn, _token()), "connected"),
+        ("revoked", lambda: store.set_status(tenant, conn, "revoked", None), "needs_sign_in"),
+        ("reconnected", lambda: store.set_status(tenant, conn, "draft", None), "connected"),
+        (
+            "token ends unrenewed",
+            lambda: store.replace_token(tenant, conn, _token(expires_at=datetime.now(UTC) + timedelta(seconds=2))),
+            "connected",
+        ),
+        ("its end passes", lambda: asyncio.sleep(2.2), "needs_sign_in"),
+        ("signed out", lambda: store.forget_token(tenant, conn), "needs_sign_in"),
+        ("test passes with no token", lambda: store.set_health(tenant, conn, _passed), "connected"),
+        (
+            "plugin off",
+            lambda: bindings.put(tenant, TEAM, ID, enabled=False, connection_id=conn, settings={}, by="t"),
+            "off",
+        ),
+    ]
+    for step, write, state in steps:
+        await write()
+        got = await _tab(client, admin(tenant), app)
+        assert got == (state, "connected" if state in CONNECTED_TAB else "available"), (step, got)
+
+
+async def test_each_person_sees_their_own_sign_in_in_the_connected_tab(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    conn = await _turned_on(client, tenant)
+    store, app = ConnectionStore(engine), f"plugin:{ID}"
+    row = await store.get(tenant, conn)
+    assert row is not None
+    await store.change(tenant, conn, int(row["revision"]), {"sign_in": "person"}, actor="t", at=datetime.now(UTC))
+    priya, maya = admin(tenant), person(tenant, "Maya Lee", {TEAM: "admin"})
+    await store.replace_token(tenant, conn, _token(), person="usr_priya")
+    assert await _tab(client, priya, app) == ("connected", "connected")
+    assert await _tab(client, maya, app) == ("needs_sign_in", "available")
+    await store.set_token_test(tenant, conn, "usr_priya", {"status": "failed"})
+    assert await _tab(client, priya, app) == ("test_failed", "connected")
+
+
+async def test_the_apps_list_filters_by_category_kind_and_state_and_counts_each(
+    client: httpx.AsyncClient, tenant: str
+) -> None:
+    made: dict[str, str] = {}
+    for name, category in (("Ledger", "Finance"), ("Claims core", "Insurance"), ("Payroll", "Finance")):
+        r = await client.post(
+            "/v1/apps", json={"name": name, "authKind": "none", "category": category}, headers=admin(tenant)
+        )
+        assert r.status_code == 201, r.text
+        made[name] = r.json()["data"]["id"]
+    await _turned_on(client, tenant)
+    page = (await client.get("/v1/apps", params={"pageSize": 50}, headers=admin(tenant))).json()["data"]
+    cards = {c["id"]: c for c in page["data"]}
+    assert {k: page["facets"]["category"].get(k) for k in ("Finance", "Insurance")} == {"Finance": 2, "Insurance": 1}
+    assert page["facets"]["kind"] == {"connection": 3, "plugin": len(cards) - 3}, page["facets"]
+    states: dict[str, int] = {}
+    for c in cards.values():
+        states[c["appState"]] = states.get(c["appState"], 0) + 1
+    assert page["facets"]["appState"] == states, page["facets"]
+    ids, _ = await _ids(client, tenant, category="Finance", pageSize=50)
+    assert ids == [made["Ledger"], made["Payroll"]], ids
+    ids, _ = await _ids(client, tenant, category=["Finance", "Insurance"], kind="connection", pageSize=50)
+    assert sorted(ids) == sorted(made.values()), ids
+    one = next(iter(states))
+    ids, _ = await _ids(client, tenant, appState=one, pageSize=50)
+    assert sorted(ids) == sorted(i for i, c in cards.items() if c["appState"] == one), ids
+    wrong = await client.get("/v1/apps", params={"view": "mine"}, headers=admin(tenant))
+    assert wrong.status_code == 400, wrong.text

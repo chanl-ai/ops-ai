@@ -136,6 +136,10 @@ export interface paths {
          * List Apps
          * @description One page of the team's apps for the Apps grid on the shared list contract, by name ignoring case, then id:
          *     its plugins and the apps a person added. `search` matches the name and category, `ids` names cards exactly.
+         *     `view` picks a tab (connected: appState connected, test_failed or removed; available: the rest), `appState`,
+         *     `category` and `kind` filter, each repeatable; `facets` counts each, and `viewCounts` each tab, over the
+         *     searched and filtered cards. The view and filters are read from the shared list query; they are named
+         *     here for the document.
          *     `include=builtin` adds the built-in apps, for the approval policy's app picker. A service asking for a person
          *     (X-Acting-For) reads each card's state as that person's. The page and its count are queried, not sliced.
          */
@@ -2169,6 +2173,18 @@ export interface components {
             agents: components["schemas"]["AppUser"][];
             /** Workflows */
             workflows: components["schemas"]["AppUser"][];
+        };
+        /**
+         * AppViewCounts
+         * @description How many of the searched and filtered cards each Apps tab holds.
+         */
+        AppViewCounts: {
+            /** All */
+            all: number;
+            /** Available */
+            available: number;
+            /** Connected */
+            connected: number;
         };
         /** ApprovalRequestIn */
         ApprovalRequestIn: {
@@ -5470,7 +5486,7 @@ export interface components {
         };
         /**
          * SystemCardList
-         * @description A page of the team's app cards.
+         * @description A page of the team's app cards, with each tab's count.
          */
         SystemCardList: {
             /** Data */
@@ -5482,6 +5498,7 @@ export interface components {
                 };
             };
             pagination: components["schemas"]["Pagination"];
+            viewCounts: components["schemas"]["AppViewCounts"];
         };
         /** SystemPlugin */
         SystemPlugin: {
@@ -7018,6 +7035,13 @@ export interface operations {
         parameters: {
             query?: {
                 include?: "builtin" | null;
+                /** @description all, connected or available: the Apps page's tabs */
+                view?: string;
+                /** @description the cards' appState */
+                appState?: string[] | null;
+                category?: string[] | null;
+                /** @description plugin, connection or builtin */
+                kind?: string[] | null;
                 page?: number;
                 pageSize?: number | null;
                 search?: string | null;

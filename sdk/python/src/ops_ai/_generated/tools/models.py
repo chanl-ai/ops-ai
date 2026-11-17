@@ -129,6 +129,12 @@ class AppUsers(TypedDict, closed=True):
     workflows: list[AppUser]
 
 
+class AppViewCounts(TypedDict, closed=True):
+    all: int
+    available: int
+    connected: int
+
+
 class ApprovalRequestIn(TypedDict, closed=True):
     environment: Literal["dev", "test", "production"]
     expiresInDays: int
@@ -2336,6 +2342,7 @@ class SystemCardList(TypedDict, closed=True):
     data: list[SystemCard]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
+    viewCounts: AppViewCounts
 
 
 class AppPage(TypedDict, closed=True):

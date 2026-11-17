@@ -41,11 +41,12 @@ from .tenancy import ROLE
 
 _TS = sa.DateTime(timezone=True)
 SHARED = ""
+# A team token's columns that change its account's state on a renewal (records.account_state, team_test); a token
+# with no refresh token lapses at its expiry, so any write of one changes its card's `due_at`.
+_STATE_FIELDS = frozenset({"refused_at", "test"})
 # An account a person added for a second login of their own (add_own_account): listed to them, not to the rest of the
 # team, signing only that person's calls, and removed when its sign-in turns out to be an identity they already linked.
 PERSON_ORIGIN = "person"
-# The account columns an Apps card is listed and named by: a change to one rebuilds the cards (store/app_cards.py).
-CARD_FIELDS = frozenset({"name", "category", "app_id", "origin", "team_id"})
 
 connections = sa.Table(
     "connections",
@@ -377,6 +378,21 @@ _CREDENTIAL_OF = sa.and_(
 )
 
 
+async def _forget_account_cards(c: AsyncConnection, tenant_id: str, connection_id: str) -> None:
+    """Clears the card stamp of the team holding the account: its status, test, settings or team token decide its
+    card's state (store/app_cards.py)."""
+    k = connections.c
+    owner = sa.select(k.team_id).where(k.tenant_id == tenant_id, k.id == connection_id, team_visible(connections))
+    await forget_cards(c, tenant_id, team_defaults.c.team_id.in_(owner))
+
+
+async def _forget_credential_cards(c: AsyncConnection, tenant_id: str, credential_id: str) -> None:
+    """Clears the card stamp of the team holding the auth config: whether its app has a usable one decides the state."""
+    a = app_credentials.c
+    owner = sa.select(a.team_id).where(a.tenant_id == tenant_id, a.id == credential_id, team_visible(app_credentials))
+    await forget_cards(c, tenant_id, team_defaults.c.team_id.in_(owner))
+
+
 class ConnectionStore(Store):
     # A change and its audit row land together (TRANSACTION) against the revision read (CAS); a
     # token is stored against the rotation it replaced (CAS).
@@ -426,6 +442,7 @@ class ConnectionStore(Store):
         """A new app credential: tenant, id, team, app, name, client id, scopes, secret name, who and when."""
         async with self.tx() as c:
             await c.execute(app_credentials.insert().values(**row))
+            await forget_cards(c, row["tenant_id"], team_defaults.c.team_id == row["team_id"])
 
     async def change_credential(
         self, tenant_id: str, credential_id: str, values: Row, *, actor: str, at: datetime
@@ -438,11 +455,13 @@ class ConnectionStore(Store):
                 .where(t.tenant_id == tenant_id, t.id == credential_id, team_visible(app_credentials))
                 .values(**values, updated_by=actor, updated_at=at)
             )
+            await _forget_credential_cards(c, tenant_id, credential_id)
 
     async def delete_credential(self, tenant_id: str, credential_id: str) -> bool:
         """Deletes the team's app credential; False when there is none. Accounts are moved off it first."""
         t = app_credentials.c
         async with self.tx() as c:
+            await _forget_credential_cards(c, tenant_id, credential_id)
             gone = await c.execute(
                 app_credentials.delete().where(
                     t.tenant_id == tenant_id, t.id == credential_id, team_visible(app_credentials)
@@ -465,6 +484,8 @@ class ConnectionStore(Store):
                 .where(t.tenant_id == tenant_id, t.id == credential_id, team_visible(app_credentials))
                 .values(**values)
             )
+            if secret_name is not None:
+                await _forget_credential_cards(c, tenant_id, credential_id)
 
     async def credential_accounts(self, tenant_id: str, credential_ids: list[str]) -> list[Row]:
         """The accounts signing in with each named credential, oldest first."""
@@ -716,14 +737,13 @@ class ConnectionStore(Store):
                 raise AccountNameTaken(str(values.get("account_name"))) from e
             if changed != 1:
                 raise StaleConnection(connection_id)
-            if CARD_FIELDS & values.keys():
-                # A move changes two teams' cards; only a tenant-wide caller moves one, and it clears every team's.
-                k = connections.c
-                owner = sa.select(k.team_id).where(
-                    k.tenant_id == tenant_id, k.id == connection_id, team_visible(connections)
-                )
-                moved = sa.true() if "team_id" in values else team_defaults.c.team_id.in_(owner)
-                await forget_cards(c, tenant_id, moved)
+            # Any edit may change the card: its name or category, or its settings, sign-in or auth config, which
+            # decide its state. A move changes two teams' cards; only a tenant-wide caller moves one, and it clears
+            # every team's.
+            if "team_id" in values:
+                await forget_cards(c, tenant_id, sa.true())
+            else:
+                await _forget_account_cards(c, tenant_id, connection_id)
             if "team_id" in values:
                 # A connection moved to another team takes its sign-in rows; only a tenant-wide caller may move one,
                 # since the policy refuses writing a row into a team the caller does not act in.
@@ -758,6 +778,7 @@ class ConnectionStore(Store):
                 .where(*mine)
                 .values(settings={**dict(held or {}), "baseUrl": base}, updated_by=actor, updated_at=at)
             )
+            await _forget_account_cards(c, tenant_id, connection_id)
             event = {"action": "changed", "actor": actor, "at": at, "detail": {"baseUrl": base}}
             await self._audit(c, tenant_id, connection_id, event)
 
@@ -864,6 +885,7 @@ class ConnectionStore(Store):
         )
         async with self.tx() as c:
             await c.execute(q)
+            await _forget_account_cards(c, tenant_id, connection_id)
 
     async def needs_reconnect(self, tenant_id: str, connection_id: str, detail: str | None, event: Row) -> None:
         """The gateway's finding that the team account stopped working: with `detail`, what the system
@@ -881,6 +903,7 @@ class ConnectionStore(Store):
                     .where(connections.c.tenant_id == tenant_id, connections.c.id == connection_id)
                     .values(status="needs_reconnect", status_detail=detail)
                 )
+                await _forget_account_cards(c, tenant_id, connection_id)
             if (await c.execute(seen)).first() is None:
                 await add_event(c, service_outbox, **event)
 
@@ -898,6 +921,7 @@ class ConnectionStore(Store):
                 .where(connections.c.tenant_id == tenant_id, connections.c.id == connection_id)
                 .values(**values)
             )
+            await _forget_account_cards(c, tenant_id, connection_id)
 
     async def set_plugin_settings(self, tenant_id: str, connection_id: str, values: Row) -> bool:
         """Merges `values` into the account's plugin settings (a sign-in's instance); False when there is no such
@@ -966,7 +990,12 @@ class ConnectionStore(Store):
         async with self.tx() as c:
             if expected_rotations is not None:
                 q = connection_tokens.update().where(*key, connection_tokens.c.rotations == expected_rotations)
-                return (await c.execute(q.values(**values))).rowcount == 1
+                stored = (await c.execute(q.values(**values))).rowcount == 1
+                # A renewal that keeps a refresh token leaves the team account's state as it was; any other change
+                # to the team's token may change its card's.
+                if stored and person == SHARED and (_STATE_FIELDS & values.keys() or not values.get("refresh_ct")):
+                    await _forget_account_cards(c, tenant_id, connection_id)
+                return stored
             try:
                 async with self.attempt(c):
                     await c.execute(
@@ -980,6 +1009,8 @@ class ConnectionStore(Store):
                     )
             except IntegrityError:
                 return False
+            if person == SHARED:
+                await _forget_account_cards(c, tenant_id, connection_id)
             return True
 
     async def replace_token(self, tenant_id: str, connection_id: str, values: Row, person: str = SHARED) -> None:
@@ -998,12 +1029,17 @@ class ConnectionStore(Store):
                         **values,
                     )
                 )
+            if person == SHARED:
+                await _forget_account_cards(c, tenant_id, connection_id)
 
     async def mark_refused(self, tenant_id: str, connection_id: str, person: str, *, reason: str, at: datetime) -> bool:
         """Marks a person's own row refused by the system; False when they hold none."""
         q = connection_tokens.update().where(*self._token_key(tenant_id, connection_id, person))
         async with self.tx() as c:
-            return (await c.execute(q.values(refused_at=at, refused_reason=reason[:300]))).rowcount > 0
+            marked = (await c.execute(q.values(refused_at=at, refused_reason=reason[:300]))).rowcount > 0
+            if marked and person == SHARED:
+                await _forget_account_cards(c, tenant_id, connection_id)
+            return marked
 
     async def name_token(self, tenant_id: str, connection_id: str, person: str, account: str) -> bool:
         """Who a sign-in signed in as, kept on its row when the token answer did not say; False when the row holds a
@@ -1024,7 +1060,10 @@ class ConnectionStore(Store):
         """The account's last test on its own row, the team's (SHARED) or a person's; False when it holds none."""
         q = connection_tokens.update().where(*self._token_key(tenant_id, connection_id, person))
         async with self.tx() as c:
-            return (await c.execute(q.values(test=test))).rowcount > 0
+            tested = (await c.execute(q.values(test=test))).rowcount > 0
+            if tested and person == SHARED:
+                await _forget_account_cards(c, tenant_id, connection_id)
+            return tested
 
     async def forget_person(self, tenant_id: str, team_id: str, person: str) -> list[Row]:
         """Deletes every sign-in of `person`'s own on `team_id`'s connections (S14: they
@@ -1043,7 +1082,10 @@ class ConnectionStore(Store):
         """The token row deleted, empty when there was none (`held_of`)."""
         q = connection_tokens.delete().where(*self._token_key(tenant_id, connection_id, person))
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q.returning(*_HELD_TOKEN))).mappings()]
+            gone = [dict(r) for r in (await c.execute(q.returning(*_HELD_TOKEN))).mappings()]
+            if gone and person == SHARED:
+                await _forget_account_cards(c, tenant_id, connection_id)
+            return gone
 
     async def idle_sign_ins(self, tenant_id: str, refreshed_before: datetime, *, limit: int = 500) -> list[Row]:
         """The acting team's sign-ins, the team's and each person's, that hold a refresh token, were last refreshed

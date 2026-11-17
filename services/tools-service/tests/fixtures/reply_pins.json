@@ -146,7 +146,11 @@
    "body": {
     "data": {
      "data": [],
-     "facets": {},
+     "facets": {
+      "appState": {},
+      "category": {},
+      "kind": {}
+     },
      "pagination": {
       "hasNext": false,
       "hasPrev": false,
@@ -154,6 +158,130 @@
       "pageSize": 20,
       "total": 0,
       "totalPages": 1
+     },
+     "viewCounts": {
+      "all": 0,
+      "available": 0,
+      "connected": 0
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "list available": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "accountsCount": 1,
+       "appGroup": "needs_admin",
+       "appState": "off",
+       "appStateReason": null,
+       "authKind": "api_key",
+       "category": null,
+       "connectionId": "<id:con>",
+       "credential": null,
+       "description": null,
+       "docsUrl": null,
+       "href": null,
+       "id": "<id:con>",
+       "kind": "connection",
+       "kindLabel": "API key",
+       "logo": null,
+       "managedClient": false,
+       "mayManage": true,
+       "moduleIds": [],
+       "name": "Ledger",
+       "ownSignIn": null,
+       "plugin": null,
+       "pluginId": null,
+       "sandboxId": null,
+       "signIn": "team",
+       "state": "not_signed_in",
+       "status": "draft",
+       "toolsAdded": null,
+       "toolsCount": 0
+      },
+      {
+       "accountsCount": 1,
+       "appGroup": "needs_admin",
+       "appState": "off",
+       "appStateReason": null,
+       "authKind": "api_key",
+       "category": null,
+       "connectionId": "<id:con>",
+       "credential": null,
+       "description": null,
+       "docsUrl": null,
+       "href": null,
+       "id": "<id:con>",
+       "kind": "connection",
+       "kindLabel": "API key",
+       "logo": null,
+       "managedClient": false,
+       "mayManage": true,
+       "moduleIds": [],
+       "name": "Ledger",
+       "ownSignIn": null,
+       "plugin": null,
+       "pluginId": null,
+       "sandboxId": null,
+       "signIn": "team",
+       "state": "not_signed_in",
+       "status": "draft",
+       "toolsAdded": null,
+       "toolsCount": 0
+      }
+     ],
+     "facets": {
+      "appState": {
+       "off": 2
+      },
+      "category": {},
+      "kind": {
+       "connection": 2
+      }
+     },
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 2,
+      "totalPages": 1
+     },
+     "viewCounts": {
+      "all": 2,
+      "available": 2,
+      "connected": 0
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "list connected": {
+   "body": {
+    "data": {
+     "data": [],
+     "facets": {
+      "appState": {},
+      "category": {},
+      "kind": {}
+     },
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 0,
+      "totalPages": 1
+     },
+     "viewCounts": {
+      "all": 2,
+      "available": 2,
+      "connected": 0
      }
     },
     "success": true

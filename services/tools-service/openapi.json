@@ -2159,6 +2159,31 @@
         "title": "AppUsers",
         "type": "object"
       },
+      "AppViewCounts": {
+        "additionalProperties": false,
+        "description": "How many of the searched and filtered cards each Apps tab holds.",
+        "properties": {
+          "all": {
+            "title": "All",
+            "type": "integer"
+          },
+          "available": {
+            "title": "Available",
+            "type": "integer"
+          },
+          "connected": {
+            "title": "Connected",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "all",
+          "connected",
+          "available"
+        ],
+        "title": "AppViewCounts",
+        "type": "object"
+      },
       "ApprovalRequestIn": {
         "additionalProperties": false,
         "properties": {
@@ -11765,7 +11790,7 @@
       },
       "SystemCardList": {
         "additionalProperties": false,
-        "description": "A page of the team's app cards.",
+        "description": "A page of the team's app cards, with each tab's count.",
         "properties": {
           "data": {
             "items": {
@@ -11786,12 +11811,16 @@
           },
           "pagination": {
             "$ref": "#/components/schemas/Pagination"
+          },
+          "viewCounts": {
+            "$ref": "#/components/schemas/AppViewCounts"
           }
         },
         "required": [
           "data",
           "pagination",
-          "facets"
+          "facets",
+          "viewCounts"
         ],
         "title": "SystemCardList",
         "type": "object"
@@ -15415,7 +15444,7 @@
     },
     "/v1/apps": {
       "get": {
-        "description": "One page of the team's apps for the Apps grid on the shared list contract, by name ignoring case, then id:\nits plugins and the apps a person added. `search` matches the name and category, `ids` names cards exactly.\n`include=builtin` adds the built-in apps, for the approval policy's app picker. A service asking for a person\n(X-Acting-For) reads each card's state as that person's. The page and its count are queried, not sliced.",
+        "description": "One page of the team's apps for the Apps grid on the shared list contract, by name ignoring case, then id:\nits plugins and the apps a person added. `search` matches the name and category, `ids` names cards exactly.\n`view` picks a tab (connected: appState connected, test_failed or removed; available: the rest), `appState`,\n`category` and `kind` filter, each repeatable; `facets` counts each, and `viewCounts` each tab, over the\nsearched and filtered cards. The view and filters are read from the shared list query; they are named\nhere for the document.\n`include=builtin` adds the built-in apps, for the approval policy's app picker. A service asking for a person\n(X-Acting-For) reads each card's state as that person's. The page and its count are queried, not sliced.",
         "operationId": "apps_list_apps",
         "parameters": [
           {
@@ -15433,6 +15462,79 @@
                 }
               ],
               "title": "Include"
+            }
+          },
+          {
+            "description": "all, connected or available: the Apps page's tabs",
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "description": "all, connected or available: the Apps page's tabs",
+              "title": "View",
+              "type": "string"
+            }
+          },
+          {
+            "description": "the cards' appState",
+            "in": "query",
+            "name": "appState",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "the cards' appState",
+              "title": "Appstate"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "description": "plugin, connection or builtin",
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "plugin, connection or builtin",
+              "title": "Kind"
             }
           },
           {

@@ -273,6 +273,10 @@ export const toolsOperations = {
     "pathParams": [],
     "query": [
       "include",
+      "view",
+      "appState",
+      "category",
+      "kind",
       "page",
       "pageSize",
       "search",

@@ -22,10 +22,13 @@ from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.store import Store
 from ops_store.team_scope import team_visible
 
-from .modules import metadata
+from .modules import forget_cards, metadata
 from .tenancy import ROLE, SYSTEM_ROLE
 
 _TS = sa.DateTime(timezone=True)
+
+# The changes that make a name held or not held, which the team's app cards read.
+NAMES_CHANGED = frozenset({"created", "renamed", "deleted"})
 
 tool_secrets = sa.Table(
     "tool_secrets",
@@ -158,6 +161,9 @@ class SecretStore(Store):
 
     async def _audit(self, c: AsyncConnection, tenant_id: str, team_id: str, change: dict[str, Any]) -> None:
         await c.execute(secret_audit.insert().values(tenant_id=tenant_id, team_id=team_id, **change))
+        if change["action"] in NAMES_CHANGED:
+            # Whether an auth config's client secret is held decides its app's card state (store/app_cards.py).
+            await forget_cards(c, tenant_id, metadata.tables["team_defaults"].c.team_id == team_id)
 
     async def listed(self, tenant_id: str, team_id: str) -> list[SecretMeta]:
         """The team's secrets' metadata; the ciphertext is not selected."""

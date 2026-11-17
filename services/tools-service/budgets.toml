@@ -16,10 +16,11 @@ queries = 16
 queries = 18
 
 # A list whose card rows are fresh reads the page's cards only; the first list after a write locks the team's
-# defaults row and rebuilds its card rows (store/app_cards.py) as it answers.
+# defaults row and rebuilds its card rows (store/app_cards.py) as it answers. One GROUP BY per facet (appState,
+# category, kind) and one count of the tabs.
 ["GET /v1/apps"]
-queries = 11
-first_queries = 16
+queries = 15
+first_queries = 21
 
 ["GET /v1/apps/{app_id}"]
 queries = 45

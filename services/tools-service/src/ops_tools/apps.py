@@ -15,7 +15,7 @@ import uuid
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, Literal, TypedDict, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -75,7 +75,7 @@ from .plugins.host import (
 )
 from .plugins.routes import PluginAccounts, TeamPluginIn, not_offered
 from .plugins.templates import view_of
-from .store.app_cards import AppCards, CardRow
+from .store.app_cards import VIEWS, AppCards, CardRow
 from .store.connections import (
     DEFAULT_VALUE,
     FIXED_VALUE,
@@ -226,8 +226,18 @@ CredentialStatus = Literal["working", "not_tested", "failing"]
 CHECKED = "credential_checked"
 
 
+class AppViewCounts(Out):
+    """How many of the searched and filtered cards each Apps tab holds."""
+
+    all: int
+    connected: int
+    available: int
+
+
 class SystemCardList(ListResult[SystemCard]):
-    """A page of the team's app cards."""
+    """A page of the team's app cards, with each tab's count."""
+
+    view_counts: AppViewCounts
 
 
 class AppCredential(Out):
@@ -619,6 +629,19 @@ def _built_in(app: dict[str, Any], module: dict[str, Any]) -> list[str]:
     return [n for n in held if wanted is None or n in wanted]
 
 
+# The card rows' shape (store/app_cards.py), in the stamp: rows built before a column was added are rebuilt.
+CARD_ROWS = 2
+
+
+class CardFacts(TypedDict):
+    """What a card row holds of a card's state beyond its name (store/app_cards.py), the same for every caller."""
+
+    state: str
+    sign_in: str | None
+    own_account: str | None
+    due_at: datetime | None
+
+
 class Apps:
     def __init__(
         self,
@@ -666,6 +689,7 @@ class Apps:
         person: str | None = None,
         only: set[str] | None = None,
         ensured: bool = False,
+        facts: dict[str, CardFacts] | None = None,
     ) -> list[dict[str, Any]]:
         """Every app the team has; `listed`: only the Apps grid's (owner, 2026-11-01), the plugins and the apps a person
         added. A built-in app has its own menu, and an account made to hold a custom tool's address (origin "tool") or
@@ -673,7 +697,7 @@ class Apps:
         the built-in apps in a listed answer, for a picker where they belong (approvals: a mailbox reply). `only` keeps
         the cards it names, and reads just the accounts of the apps it names and the modules their cards count, so a
         page of the grid costs the same at any size. `ensured`: the caller wrote the team's defaults and the plugins'
-        modules already."""
+        modules already. `facts` is filled with each card's team-level state facts, for its card row."""
         if (builtins or not listed) and not ensured:
             # A team made before team.created reached this service has no defaults row, so the start-up catch-up never
             # finds it: listing its built-in apps provisions them, as a first tool lookup does.
@@ -885,24 +909,33 @@ class Apps:
             )
         if only is not None:
             cards = [c for c in cards if c["id"] in only]
-        await self._app_states(who, cards, by_id, person)
+        await self._app_states(who, cards, by_id, person, facts)
         return sorted(cards, key=lambda c: str(c["name"]).lower())
 
     def cards_stamp(self) -> str:
         """What the team's card rows depend on beyond its own writes: the installed plugins' names and categories, the
-        built-in apps and the defaults version. A new install or release with another set rebuilds every team's rows."""
+        built-in apps, the defaults version, Ops AI's OAuth clients and the rows' shape. A new install or release with
+        another set rebuilds every team's rows."""
         plugins = (
             [(pid, p.manifest.title, p.manifest.display.category) for pid, p in sorted(self.plugins.plugins.items())]
             if self.plugins is not None
             else []
         )
         built = [(a["id"], a["name"]) for a in BUILT_IN]
-        held = json.dumps([plugins, built, DEFAULTS_VERSION], sort_keys=True, default=str)
+        # Ops AI's own OAuth clients decide whether a plugin's app has an auth config (`_configured`), so a new set
+        # changes states. CARD_ROWS names the rows' shape: a release that adds to it rebuilds every team's rows.
+        clients = sorted(self.connections.store.install_clients)
+        held = json.dumps([plugins, built, DEFAULTS_VERSION, clients, CARD_ROWS], sort_keys=True, default=str)
         return hashlib.sha256(held.encode()).hexdigest()
 
-    async def page(self, who: Caller, q: ListQuery, *, builtins: bool, person: str | None) -> ListPage:
-        """One page of the team's cards, chosen, searched and counted in SQL over its card rows (rebuilt first when
-        stale), then each card on the page built in full."""
+    async def page(
+        self, who: Caller, q: ListQuery, *, builtins: bool, person: str | None
+    ) -> tuple[ListPage, dict[str, int]]:
+        """One page of the team's cards, chosen, searched, filtered and counted in SQL over its card rows (rebuilt
+        first when stale), then each card on the page built in full; and each tab's count (`viewCounts`)."""
+        view = (q.filters.get("view") or ["all"])[-1]
+        if view not in VIEWS:
+            raise ValidationFailed(f"There is no view {view!r}: ask for one of {', '.join(VIEWS)}.")
         await ensure_defaults(
             self.modules, TeamDefaults(self.modules.engine), tenant_id=who.tenant_id, team_id=who.team.id,
             at=datetime.now(UTC),
@@ -911,22 +944,38 @@ class Apps:
             await self.plugins.ensure(who.tenant_id, self.connections.clock())
         stamp = self.cards_stamp()
         tenant, team = who.tenant_id, who.team.id
+        now = self.connections.clock()
+        # The page reads each card's state for the caller: their own sign-in where each person signs in (_app_states).
+        mine = person or own_key(who)
+        is_person = person is not None or who.principal is None or who.principal.kind == "person"
         # Stale rows are rebuilt in the request's transaction (the route takes Tx), under the lock `claim` holds until
         # it commits: the rows must be written from sources read under that lock, and a write that clears the stamp
         # meanwhile waits for it. A steady-state list takes no lock and writes nothing. A page naming a card that is
         # gone (a source changed by a write that does not clear the stamp) is rebuilt and read again, so the page's
         # rows and its total always agree.
-        stale = await self.app_cards.stamp(tenant, team) != stamp and await self.app_cards.claim(tenant, team, stamp)
+        stale = not await self.app_cards.current(tenant, team, stamp, now) and await self.app_cards.claim(
+            tenant, team, stamp, now
+        )
         while True:
             # Built in full once when stale: the rows are written from it and the page's cards are taken from it.
-            every = await self.cards(who, listed=True, builtins=True, person=person, ensured=True) if stale else []
+            facts: dict[str, CardFacts] = {}
+            every = (
+                await self.cards(who, listed=True, builtins=True, person=person, ensured=True, facts=facts)
+                if stale
+                else []
+            )
             if stale:
                 rows = [
-                    CardRow(id=str(c["id"]), kind=str(c["kind"]), name=str(c["name"]), category=c.get("category"))
+                    CardRow(
+                        id=str(c["id"]), kind=str(c["kind"]), name=str(c["name"]), category=c.get("category"),
+                        **facts[str(c["id"])],
+                    )
                     for c in every
-                ]
+                ]  # fmt: skip
                 await self.app_cards.rebuild(tenant, team, rows, stamp=stamp)
-            page = await self.app_cards.page(tenant, team, q, builtins=builtins)
+            page, counts = await self.app_cards.page(
+                tenant, team, q, builtins=builtins, person=mine, is_person=is_person
+            )
             ids = [str(r["id"]) for r in page["data"]]
             if not stale:
                 every = await self.cards(
@@ -935,12 +984,18 @@ class Apps:
             built = {c["id"]: c for c in every}
             if stale or all(i in built for i in ids):
                 break
-            await self.app_cards.claim(tenant, team, stamp)
+            await self.app_cards.claim(tenant, team, stamp, now)
             stale = True
-        return {**page, "data": [SystemCard(**built[i]).model_dump(by_alias=True) for i in ids]}
+        data = [SystemCard(**built[i]).model_dump(by_alias=True) for i in ids]
+        return {**page, "data": data}, counts
 
     async def _app_states(
-        self, who: Caller, cards: list[dict[str, Any]], by_id: dict[str, dict[str, Any]], person: str | None
+        self,
+        who: Caller,
+        cards: list[dict[str, Any]],
+        by_id: dict[str, dict[str, Any]],
+        person: str | None,
+        facts: dict[str, CardFacts] | None = None,
     ) -> None:
         """Each card's appState, appStateReason and credential, from the default account's team token and the own
         sign-ins of the caller, or of `person` when a service asks for one (acting for them), read once for every
@@ -967,6 +1022,7 @@ class Apps:
             {**c, "holds_secret": bool(c.get("secret_name")) and str(c["secret_name"]) in held}
             for c in (await store.team_credentials(who.tenant_id, who.team.id) if wanted else [])
         ]
+        now = self.connections.clock()
         mine = person or own_key(who)
         # A person's card is their own state; a service asking for nobody reads the team's.
         is_person = person is not None or who.principal is None or who.principal.kind == "person"
@@ -981,9 +1037,23 @@ class Apps:
             token = team_tokens.get(str(conn["id"])) if conn else None
             mine_row = own.get(str(conn["id"])) if conn else None
             configured = self._configured(c, conn, creds)
+            pack = self._is_pack(c)
             c["appState"], c["appStateReason"] = app_state(
-                c, conn, token, mine_row, configured=configured, person=is_person, pack=self._is_pack(c)
+                c, conn, token, mine_row, configured=configured, person=is_person, pack=pack
             )
+            if facts is not None:
+                # The state as the team sees it, and the account whose own sign-in decides it for a person: the one
+                # app_state waits on for a person with none (store/app_cards.py reads theirs in the page's query).
+                waits = app_state(c, conn, token, None, configured=configured, person=True, pack=pack)
+                ends = (token or {}).get("expires_at")
+                # A team token that ends with no refresh token turns the state to expired then, with no write.
+                lapses = token is not None and token.get("refused_at") is None and not token.get("refresh_ct")
+                facts[str(c["id"])] = CardFacts(
+                    state=app_state(c, conn, token, None, configured=configured, pack=pack)[0],
+                    sign_in=(conn.get("sign_in") or "team") if conn else None,
+                    own_account=str(conn["id"]) if conn and waits == ("needs_sign_in", CONNECT_OWN) else None,
+                    due_at=ends if lapses and ends is not None and ends > now else None,
+                )
             sign_in = (conn.get("sign_in") or "team") if conn else "team"
             theirs = sign_in == "person" or (sign_in == "person_or_team" and is_person)
             c["appGroup"] = app_group(str(c["appState"]), own_sign_in=theirs)
@@ -1210,6 +1280,10 @@ def _oauth_kind(name: object) -> Kind | None:
     return None if kind is None or kind.field("clientId") is None else kind
 
 
+# The reason a card gives when the caller's own sign-in is all it waits for: nothing before it stops the app.
+CONNECT_OWN = "Connect your own account."
+
+
 def app_state(
     card: dict[str, Any],
     conn: dict[str, Any] | None,
@@ -1245,7 +1319,7 @@ def app_state(
     sign_in = conn.get("sign_in") or "team"
     if sign_in == "person" or (sign_in == "person_or_team" and person):
         if own is None:
-            return "needs_sign_in", "Connect your own account."
+            return "needs_sign_in", CONNECT_OWN
         if own.get("refused_at") is not None:
             return "needs_sign_in", "Your sign-in ended. Sign in again."
         test = cast(dict[str, Any] | None, own.get("test"))
@@ -2267,18 +2341,29 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
 
     @r.get("/v1/apps", response_model=Envelope[SystemCardList])
     async def list_apps(  # pyright: ignore[reportUnusedFunction]
+        *,
         who: Annotated[Caller, Depends(caller)],
         acting: ActingPerson,
         _: Tx,
         q: ListQuery,
         include: Annotated[Literal["builtin"] | None, Query()] = None,
+        view: Annotated[str, Query(description="all, connected or available: the Apps page's tabs")] = "all",
+        app_state: Annotated[list[str] | None, Query(alias="appState", description="the cards' appState")] = None,
+        category: Annotated[list[str] | None, Query()] = None,
+        kind: Annotated[list[str] | None, Query(description="plugin, connection or builtin")] = None,
     ) -> JSONResponse:
         """One page of the team's apps for the Apps grid on the shared list contract, by name ignoring case, then id:
         its plugins and the apps a person added. `search` matches the name and category, `ids` names cards exactly.
+        `view` picks a tab (connected: appState connected, test_failed or removed; available: the rest), `appState`,
+        `category` and `kind` filter, each repeatable; `facets` counts each, and `viewCounts` each tab, over the
+        searched and filtered cards. The view and filters are read from the shared list query; they are named
+        here for the document.
         `include=builtin` adds the built-in apps, for the approval policy's app picker. A service asking for a person
         (X-Acting-For) reads each card's state as that person's. The page and its count are queried, not sliced."""
+        del view, app_state, category, kind
         person = acting.sub if acting else None
-        return ok(await apps.page(who, q, builtins=include == "builtin", person=person))
+        page, counts = await apps.page(who, q, builtins=include == "builtin", person=person)
+        return ok({**page, "viewCounts": counts})
 
     @r.get("/v1/me/connections", response_model=Envelope[list[MyConnector]])
     async def my_connections(who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

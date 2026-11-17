@@ -221,6 +221,8 @@ async def test_app_and_account_replies(bank: Bank) -> None:
     app = made["data"]["id"]
     pins.reply("create same name", await api.client.post("/v1/apps", json=body), sent=body)
     pins.reply("one", await api.client.get(f"/v1/apps/{app}"))
+    pins.reply("list available", await api.client.get("/v1/apps", params={"view": "available"}))
+    pins.reply("list connected", await api.client.get("/v1/apps", params={"view": "connected", "kind": "connection"}))
     pins.reply("missing", await api.client.get("/v1/apps/app_nobody"))
     pins.reply("accounts", await api.client.get(f"/v1/apps/{app}/accounts"))
     pins.reply("my connections", await api.client.get("/v1/me/connections"))
