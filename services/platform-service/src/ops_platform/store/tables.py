@@ -68,7 +68,8 @@ teams = sa.Table(
     sa.Column("status", sa.String(16), nullable=False, server_default="active"),
     sa.Column("archived_at", sa.String(40)),
     # The lower-case name: two teams of one workspace never share a name in any case, on every database.
-    sa.Column("name_key", sa.String(200), nullable=False, default=_name_key),
+    # The members list sorts by it (`sortBy=teamId`); uq_teams_tenant_name leads with it after the tenant.
+    sa.Column("name_key", sa.String(200), nullable=False, default=_name_key, info=LISTED),
     sa.Column("template_id", sa.String(64)),  # the provisioning template's id for a team it made
     sa.Column("protection", sa.String(16), nullable=False, server_default="none"),  # none | managed | system
     sa.UniqueConstraint("tenant_id", "id", name="uq_teams_tenant_id"),
@@ -200,9 +201,11 @@ roles = sa.Table(
     sa.Column("tenant_id", sa.String(64), sa.ForeignKey("tenants.id"), primary_key=True),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("name", sa.String(200), nullable=False),
-    sa.Column("builtin", sa.Boolean, nullable=False),
+    sa.Column("builtin", sa.Boolean, nullable=False, info=LISTED),
     sa.Column("description", sa.String(500), nullable=False),
     sa.Column("created_at", sa.String(40), nullable=False),
+    # The roles list filters on built-in or custom (`builtin`).
+    sa.Index("ix_roles_builtin", "tenant_id", "builtin"),
     info=TENANT_SCOPED,
 )
 

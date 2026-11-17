@@ -560,6 +560,8 @@ export const platformOperations = {
     "path": "/v1/roles",
     "pathParams": [],
     "query": [
+      "builtin",
+      "canDecideReviews",
       "page",
       "pageSize",
       "search",

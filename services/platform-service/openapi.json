@@ -12693,9 +12693,49 @@
     },
     "/v1/roles": {
       "get": {
-        "description": "The tenant's roles on the shared list contract, built-in first in their fixed order, then by name, searched\non name, with how many permissions each grants and how many hold it. Needs access.view in the acting team:\n403 `admin_required`.",
+        "description": "The tenant's roles on the shared list contract, built-in first in their fixed order, then by name, searched\non name, with how many permissions each grants and how many hold it. `builtin` keeps built-in or custom roles,\n`canDecideReviews` the roles that do or do not grant reviews.decide. Needs access.view in the acting team:\n403 `admin_required`. The filters are declared here so a bad value is refused; ListQuery reads the same keys\nas its filters.",
         "operationId": "roles_list_roles",
         "parameters": [
+          {
+            "in": "query",
+            "name": "builtin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "true",
+                    "false"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Builtin"
+            }
+          },
+          {
+            "in": "query",
+            "name": "canDecideReviews",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "true",
+                    "false"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Candecidereviews"
+            }
+          },
           {
             "in": "query",
             "name": "page",
@@ -14055,7 +14095,7 @@
     },
     "/v1/settings/members": {
       "get": {
-        "description": "The team's people and invites on the shared list contract: `role` and `status` filter and are counted,\n`search` matches name and email, oldest first (`sortBy` name, role or status). Every built-in role but Chat\nuser reads the team's people. The filters are declared here so a bad value is refused; ListQuery reads the\nsame keys as its filters.",
+        "description": "The team's people and invites on the shared list contract: `role` and `status` filter and are counted,\n`search` matches name and email, oldest first (`sortBy` name, role, status, or teamId for the team's name).\nEvery built-in role but Chat user reads the team's people. The filters are declared here so a bad value is\nrefused; ListQuery reads the same keys as its filters.",
         "operationId": "members_list_members",
         "parameters": [
           {

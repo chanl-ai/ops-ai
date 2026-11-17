@@ -498,7 +498,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/roles",
         "pathParams": [],
-        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
+        "query": ["builtin", "canDecideReviews", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "roles_read_role": {
@@ -1107,6 +1107,8 @@ class Operations:
     def roles_list_roles(
         self,
         *,
+        builtin: str | None = None,
+        can_decide_reviews: str | None = None,
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
@@ -1120,6 +1122,8 @@ class Operations:
             OPERATIONS["roles_list_roles"],
             {},
             {
+                "builtin": builtin,
+                "canDecideReviews": can_decide_reviews,
                 "page": page,
                 "pageSize": page_size,
                 "search": search,
@@ -1699,6 +1703,8 @@ class AsyncOperations:
     async def roles_list_roles(
         self,
         *,
+        builtin: str | None = None,
+        can_decide_reviews: str | None = None,
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
@@ -1712,6 +1718,8 @@ class AsyncOperations:
             OPERATIONS["roles_list_roles"],
             {},
             {
+                "builtin": builtin,
+                "canDecideReviews": can_decide_reviews,
                 "page": page,
                 "pageSize": page_size,
                 "search": search,

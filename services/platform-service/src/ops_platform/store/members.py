@@ -244,7 +244,8 @@ class TeamStore(TenantDb):
                 q,
                 params,
                 search=[name, members.c.email],
-                sortable={"name": name, **by},
+                # teamId sorts by the team's name as shown, in any case; the key ends the order.
+                sortable={"name": name, "teamId": teams.c.name_key, **by},
                 default_sort=members.c.created_at.asc(),
                 filters=by,
                 facets=by,

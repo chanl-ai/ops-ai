@@ -175,3 +175,29 @@ async def test_role_lists_never_show_another_persons_or_tenants_rows(platform: P
         assert r.status_code == 200, r.text
         listed = {x["id"] for x in r.json()["data"]["data"]}
         assert made["mine"][0] in listed and made["outside"][0] not in listed, (params, listed)
+
+
+async def test_the_roles_list_keeps_built_in_or_custom_roles_and_those_that_decide_reviews(platform: Platform) -> None:
+    _, ah = await _admin(platform)
+    decides = [{"area": "reviews", "action": "decide", "scope": "own"}]
+    for name, cells in (("Case desk", CASE_DESK), ("Review desk", decides)):
+        made = await platform.public.post("/v1/roles", headers=ah, json={"name": name, "permissions": cells})
+        assert made.status_code == 201, made.text
+    # Another tenant's deciding role never reaches this tenant's list, whatever the filter.
+    _, other = await _admin(platform)
+    await platform.public.post("/v1/roles", headers=other, json={"name": "Elsewhere", "permissions": decides})
+    builtin = {r.name for r in BUILTIN_ROLES}
+    deciding = {r.name for r in BUILTIN_ROLES if any(g[:2] == ("reviews", "decide") for g in r.grants)}
+    for params, expected in (
+        ({}, builtin | {"Case desk", "Review desk"}),
+        ({"builtin": "true"}, builtin),
+        ({"builtin": "false"}, {"Case desk", "Review desk"}),
+        ({"canDecideReviews": "true"}, deciding | {"Review desk"}),
+        ({"canDecideReviews": "false"}, (builtin - deciding) | {"Case desk"}),
+        ({"builtin": "false", "canDecideReviews": "true"}, {"Review desk"}),
+    ):
+        r = await platform.public.get("/v1/roles", headers=ah, params={**params, "pageSize": 100})
+        assert r.status_code == 200, r.text
+        names = [row["name"] for row in r.json()["data"]["data"]]
+        assert set(names) == expected and r.json()["data"]["pagination"]["total"] == len(expected), (params, names)
+    assert (await platform.public.get("/v1/roles", headers=ah, params={"builtin": "yes"})).status_code == 400

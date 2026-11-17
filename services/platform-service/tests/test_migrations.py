@@ -18,7 +18,7 @@ from ops_store.testing import NO_SQL_SERVER, sql_server_schema
 
 from .conftest import alembic_config
 
-HEAD = "0042_sql_server_lookups"
+HEAD = "0043_roles_by_builtin"
 # Where the chain's portable revisions begin: `BASELINE["platform"]` in deploy/database/mssql.py.
 SQL_SERVER_BASELINE = "0026_workspace_owner"
 

@@ -404,3 +404,16 @@ async def test_member_pages_follow_one_another_with_no_row_twice(platform: Platf
         seen += [m["id"] for m in r.json()["data"]["data"]]
     assert len(seen) == 5 == len(set(seen)), seen
     assert r.json()["data"]["pagination"]["total"] == 5
+
+
+async def test_members_sort_by_team_name_then_by_key(platform: Platform) -> None:
+    # `sortBy=teamId` is the team's name; the people of one team share it, so the key orders them in its direction.
+    admin, h = await as_admin(platform)
+    for _ in range(3):
+        await join(platform, admin, "builder")
+    for order in ("asc", "desc"):
+        params = {"sortBy": "teamId", "sortOrder": order}
+        r = await platform.public.get("/v1/settings/members", headers=h, params=params)
+        assert r.status_code == 200, r.text
+        joined = [m["id"] for m in r.json()["data"]["data"] if m["email"] != admin.email]
+        assert joined == sorted(joined, reverse=order == "desc"), (order, joined)

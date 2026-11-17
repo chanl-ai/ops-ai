@@ -138,7 +138,8 @@ class RoleStore(TenantDb):
 
     async def roles(self, tenant_id: str, params: ListParams) -> ListPage:
         """The roles on the shared list contract, with their permission and assignment counts: built-in roles first in
-        their fixed order, then custom roles by name, then by id; searched on name."""
+        their fixed order, then custom roles by name, then by id; searched on name; `builtin` and `canDecideReviews`
+        ("true" or "false") keep built-in or custom roles and roles that do or do not grant reviews.decide."""
         perms = (
             sa.select(role_permissions.c.role_id, sa.func.count().label("n"))
             .group_by(role_permissions.c.role_id)
@@ -165,8 +166,24 @@ class RoleStore(TenantDb):
             value=roles.c.id,
             else_=sa.literal("1") + sa.func.lower(roles.c.name),
         )
+        # The filters compare query text, so each is the "true" or "false" its condition reads as. A role decides
+        # reviews when it holds the reviews.decide cell at any scope; the cells' primary key serves the lookup.
+        decides = (
+            sa.select(role_permissions.c.role_id)
+            .where(
+                role_permissions.c.tenant_id == roles.c.tenant_id,
+                role_permissions.c.role_id == roles.c.id,
+                role_permissions.c.area == "reviews",
+                role_permissions.c.action == "decide",
+            )
+            .exists()
+        )
+        flags = {
+            "builtin": sa.case((roles.c.builtin == sa.true(), "true"), else_="false"),
+            "canDecideReviews": sa.case((decides, "true"), else_="false"),
+        }
         async with self.tenant_tx(tenant_id) as c:
-            page = await list_page(c, q, params, search=[roles.c.name], default_sort=place.asc())
+            page = await list_page(c, q, params, search=[roles.c.name], default_sort=place.asc(), filters=flags)
         page["data"] = [RoleSummary.model_validate(r).model_dump(by_alias=True) for r in page["data"]]
         return page
 

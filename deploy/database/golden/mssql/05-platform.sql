@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- platform-service, stamped at 0042_sql_server_lookups
+-- platform-service, stamped at 0043_roles_by_builtin
 CREATE TABLE tenants (
 	id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -104,6 +104,8 @@ CREATE TABLE roles (
 	CONSTRAINT roles_pkey PRIMARY KEY (tenant_id, id), 
 	CONSTRAINT roles_tenant_id_fkey FOREIGN KEY(tenant_id) REFERENCES tenants (id)
 );
+GO
+CREATE INDEX ix_roles_builtin ON roles (tenant_id, builtin);
 GO
 CREATE TABLE signin_secrets (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -706,5 +708,5 @@ CREATE TABLE alembic_version_platform (
     CONSTRAINT alembic_version_platform_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_platform (version_num) VALUES ('0042_sql_server_lookups');
+INSERT INTO alembic_version_platform (version_num) VALUES ('0043_roles_by_builtin');
 GO

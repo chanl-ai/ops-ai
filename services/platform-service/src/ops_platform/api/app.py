@@ -584,9 +584,9 @@ def create_public_app(
         status: Annotated[list[Literal["active", "invited"]] | None, Query()] = None,
     ) -> Any:
         """The team's people and invites on the shared list contract: `role` and `status` filter and are counted,
-        `search` matches name and email, oldest first (`sortBy` name, role or status). Every built-in role but Chat
-        user reads the team's people. The filters are declared here so a bad value is refused; ListQuery reads the
-        same keys as its filters."""
+        `search` matches name and email, oldest first (`sortBy` name, role, status, or teamId for the team's name).
+        Every built-in role but Chat user reads the team's people. The filters are declared here so a bad value is
+        refused; ListQuery reads the same keys as its filters."""
         del role, status
         await people.require_admin(actor, "access", "view")
         page = await team_store.member_page(actor.tenant_id, actor.team_id, q)
@@ -642,10 +642,19 @@ def create_public_app(
     roles = Roles(RoleStore(store.db))
 
     @app.get("/v1/roles", tags=["roles"], response_model=Envelope[ListResult[RoleOut]], responses=ERRORS)
-    async def list_roles(_: Tx, q: ListQuery, actor: Annotated[Actor, Depends(reading)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def list_roles(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
+        q: ListQuery,
+        actor: Annotated[Actor, Depends(reading)],
+        builtin: Annotated[Literal["true", "false"] | None, Query()] = None,
+        can_decide_reviews: Annotated[Literal["true", "false"] | None, Query(alias="canDecideReviews")] = None,
+    ) -> Any:
         """The tenant's roles on the shared list contract, built-in first in their fixed order, then by name, searched
-        on name, with how many permissions each grants and how many hold it. Needs access.view in the acting team:
-        403 `admin_required`."""
+        on name, with how many permissions each grants and how many hold it. `builtin` keeps built-in or custom roles,
+        `canDecideReviews` the roles that do or do not grant reviews.decide. Needs access.view in the acting team:
+        403 `admin_required`. The filters are declared here so a bad value is refused; ListQuery reads the same keys
+        as its filters."""
+        del builtin, can_decide_reviews
         await people.require_admin(actor, "access", "view")
         return ok(await roles.list(actor.tenant_id, q))
 

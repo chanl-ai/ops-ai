@@ -826,8 +826,10 @@ export interface paths {
         /**
          * List Roles
          * @description The tenant's roles on the shared list contract, built-in first in their fixed order, then by name, searched
-         *     on name, with how many permissions each grants and how many hold it. Needs access.view in the acting team:
-         *     403 `admin_required`.
+         *     on name, with how many permissions each grants and how many hold it. `builtin` keeps built-in or custom roles,
+         *     `canDecideReviews` the roles that do or do not grant reviews.decide. Needs access.view in the acting team:
+         *     403 `admin_required`. The filters are declared here so a bad value is refused; ListQuery reads the same keys
+         *     as its filters.
          */
         get: operations["roles_list_roles"];
         put?: never;
@@ -947,9 +949,9 @@ export interface paths {
         /**
          * List Members
          * @description The team's people and invites on the shared list contract: `role` and `status` filter and are counted,
-         *     `search` matches name and email, oldest first (`sortBy` name, role or status). Every built-in role but Chat
-         *     user reads the team's people. The filters are declared here so a bad value is refused; ListQuery reads the
-         *     same keys as its filters.
+         *     `search` matches name and email, oldest first (`sortBy` name, role, status, or teamId for the team's name).
+         *     Every built-in role but Chat user reads the team's people. The filters are declared here so a bad value is
+         *     refused; ListQuery reads the same keys as its filters.
          */
         get: operations["members_list_members"];
         put?: never;
@@ -8025,6 +8027,8 @@ export interface operations {
     roles_list_roles: {
         parameters: {
             query?: {
+                builtin?: ("true" | "false") | null;
+                canDecideReviews?: ("true" | "false") | null;
                 page?: number;
                 pageSize?: number | null;
                 search?: string | null;
