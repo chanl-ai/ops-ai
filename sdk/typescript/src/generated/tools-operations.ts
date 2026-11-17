@@ -278,6 +278,7 @@ export const toolsOperations = {
       "category",
       "kind",
       "accountId",
+      "hasAccount",
       "page",
       "pageSize",
       "search",
@@ -663,6 +664,7 @@ export const toolsOperations = {
     "pathParams": [],
     "query": [
       "teamId",
+      "readOnly",
       "page",
       "pageSize",
       "search",

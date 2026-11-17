@@ -973,7 +973,7 @@ class ModuleService:
             _can(who, "activity", "view", what="the tool-call log")
         # One transaction for the reads; the agents and workflows are named by agents-service after it ends.
         async with isolation.request_transaction():
-            mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
+            mods = {m["id"]: m for m in await self.store.seen(who.tenant_id) if self._sees(who, m)}
             scope = None if not who.verified and who.team.scope == "all" else list(mods)
             if module_ids is not None:
                 scope = [m for m in module_ids if scope is None or m in scope]
@@ -1002,10 +1002,14 @@ class ModuleService:
                 offset=(page - 1) * page_size,
                 limit=page_size,
             )
+            # Only the modules the page's rows name are read, as rows.
+            shown = await self.store.headers(
+                who.tenant_id, sorted({r.module_id for r in rows if r.module_id is not None and r.module_id in mods})
+            )
         pages = max(1, -(-total // page_size))
         names = _workflow_names(list(mods.values()))
         listed = [
-            call_row(r, names, mods.get(r.module_id or ""), self._title(mods.get(r.module_id or ""), r.tool))
+            call_row(r, names, shown.get(r.module_id or ""), self._title(shown.get(r.module_id or ""), r.tool))
             for r in rows
         ]
         return {
@@ -1042,13 +1046,18 @@ class ModuleService:
         """One call from the gateway's log, so an Activity row opens to its call. The same scope as the list: another
         team's call, or one on a module the caller's team does not see, is not found, never a different answer."""
         _can(who, "activity", "view", what="the tool-call log")
-        row = await self.calls.get(call_id, tenant_id=who.tenant_id, team_ids=self._call_teams(who))
-        if row is None:
-            raise NotFound("Call")
-        mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
-        if (who.verified or who.team.scope != "all") and row.module_id is not None and row.module_id not in mods:
-            raise NotFound("Call")
-        module = mods.get(row.module_id or "")
+        async with isolation.request_transaction():
+            row = await self.calls.get(call_id, tenant_id=who.tenant_id, team_ids=self._call_teams(who))
+            if row is None:
+                raise NotFound("Call")
+            mods = {m["id"]: m for m in await self.store.seen(who.tenant_id) if self._sees(who, m)}
+            if (who.verified or who.team.scope != "all") and row.module_id is not None and row.module_id not in mods:
+                raise NotFound("Call")
+            module = (
+                await self.store.headers(
+                    who.tenant_id, [row.module_id] if row.module_id is not None and row.module_id in mods else []
+                )
+            ).get(row.module_id or "")
         return call_row(row, _workflow_names(list(mods.values())), module, self._title(module, row.tool))
 
     # ── Creating modules ──────────────────────────────────────────────────

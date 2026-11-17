@@ -138,7 +138,8 @@ export interface paths {
          *     its plugins and the apps a person added. `search` matches the name and category, `ids` names cards exactly.
          *     `view` picks a tab (connected: appState connected, test_failed or removed; available: the rest), `appState`,
          *     `category` and `kind` filter, each repeatable; `facets` counts each, and `viewCounts` each tab, over the
-         *     searched and filtered cards; `accountId` (repeatable) keeps the cards those accounts belong to.
+         *     searched and filtered cards; `accountId` (repeatable) keeps the cards those accounts belong to; `hasAccount`
+         *     keeps the cards with (true) or without (false) a default account.
          *     `sortBy=connected` puts the connected cards first, then by name. The view and filters are read from the shared
          *     list query; they are named here for the document.
          *     `include=builtin` adds the built-in apps, for the approval policy's app picker. A service asking for a person
@@ -931,7 +932,8 @@ export interface paths {
         /**
          * List Secrets
          * @description One page of the team's secrets' metadata on the shared list contract, by name: `search` matches the name,
-         *     `ids` names secrets, and the filter `templateId` keeps those filling a template slot. Pickers search or name
+         *     `ids` names secrets, the filter `templateId` keeps those filling a template slot and `readOnly` (true or false)
+         *     those an account or auth config holds. Pickers search or name
          *     what they need rather than loading every secret. The page and its count are queried, not sliced.
          */
         get: operations["secrets_list_secrets"];
@@ -7057,6 +7059,8 @@ export interface operations {
                 kind?: string[] | null;
                 /** @description the card each named account belongs to */
                 accountId?: string[] | null;
+                /** @description true keeps the cards with a default account, false those without */
+                hasAccount?: ("true" | "false")[] | null;
                 page?: number;
                 pageSize?: number | null;
                 search?: string | null;
@@ -12476,6 +12480,8 @@ export interface operations {
         parameters: {
             query?: {
                 teamId?: string | null;
+                /** @description false keeps the secrets a header may name */
+                readOnly?: ("true" | "false")[] | null;
                 page?: number;
                 pageSize?: number | null;
                 search?: string | null;

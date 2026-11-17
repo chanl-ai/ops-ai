@@ -612,3 +612,24 @@ async def test_the_apps_list_filters_by_category_kind_and_state_and_counts_each(
     assert sorted(ids) == sorted(i for i, c in cards.items() if c["appState"] == one), ids
     wrong = await client.get("/v1/apps", params={"view": "mine"}, headers=admin(tenant))
     assert wrong.status_code == 400, wrong.text
+
+
+async def test_the_apps_list_filters_on_having_an_account_and_counts_it(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    """hasAccount keeps the cards with a default account (a custom app, a plugin turned on) or without (a plugin
+    left off); the total and the facet count the filtered set; another team's custom app never shows."""
+    await _turned_on(client, tenant)
+    for team in (TEAM, "team_ops"):
+        r = await client.post(
+            "/v1/apps", json={"name": f"Ledger {team}", "authKind": "none"}, headers=admin(tenant, team)
+        )
+        assert r.status_code == 201, r.text
+    seen: dict[str, list[str]] = {}
+    for want in ("true", "false"):
+        r = await client.get("/v1/apps", params={"hasAccount": want, "pageSize": 50}, headers=admin(tenant))
+        assert r.status_code == 200, r.text
+        body = r.json()["data"]
+        seen[want] = sorted(c["name"] for c in body["data"])
+        assert body["pagination"]["total"] == len(seen[want]), body["pagination"]
+    assert seen == {"true": ["Desk", f"Ledger {TEAM}"], "false": ["Header key desk"]}, seen

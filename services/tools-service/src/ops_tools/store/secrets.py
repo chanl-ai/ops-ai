@@ -179,8 +179,15 @@ class SecretStore(Store):
 
     async def page(self, tenant_id: str, team_id: str, params: ListParams) -> tuple[ListPage, list[SecretMeta]]:
         """One page of the team's secrets' metadata by name ignoring case, then the key; `search` matches the name,
-        `ids` names secrets exactly, and the filter `templateId` keeps those filling a template slot. An account's
+        `ids` names secrets exactly, the filter `templateId` keeps those filling a template slot and `readOnly`
+        (true or false) those an account or auth config holds. An account's
         secret parts and an auth config's client secret are listed too, read only; the ciphertext is not selected."""
+        # The route's `readOnly`: an account's part or an auth config's client secret, changed only there. As text, as
+        # list filters are.
+        held = sa.case(
+            (sa.or_(tool_secrets.c.credential_id.is_not(None), tool_secrets.c.connection_id.is_not(None)), "true"),
+            else_="false",
+        )
         q = sa.select(*_META).where(_of(tenant_id, team_id), team_visible(tool_secrets))
         if params.ids is not None:
             # The table is keyed by (tenant, team, name) and list_page's `ids` needs a one-column key, so the names
@@ -194,7 +201,7 @@ class SecretStore(Store):
                 params,
                 search=[tool_secrets.c.name],
                 default_sort=sa.func.lower(tool_secrets.c.name),
-                filters={"templateId": tool_secrets.c.template_id},
+                filters={"templateId": tool_secrets.c.template_id, "readOnly": held},
             )
         return page, [SecretMeta.model_validate(r) for r in page["data"]]
 

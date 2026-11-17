@@ -23,7 +23,7 @@ queries = 15
 first_queries = 21
 
 ["GET /v1/apps/{app_id}"]
-queries = 45
+queries = 42
 
 ["GET /v1/apps/{app_id}/accounts"]
 queries = 5
@@ -50,10 +50,10 @@ queries = 3
 queries = 3
 
 ["GET /v1/executions"]
-queries = 8
+queries = 5
 
 ["GET /v1/executions/{call_id}"]
-queries = 7
+queries = 4
 
 # agents-service's read, called with its service token; a person's token is refused before any statement.
 ["GET /v1/grantable-operations"]

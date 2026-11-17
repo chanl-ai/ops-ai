@@ -55,6 +55,8 @@ app_cards = sa.Table(
     sa.Column("sign_in", sa.String(16)),
     # The default account a person's own sign-in decides the state on: set once nothing before that sign-in stops it.
     sa.Column("own_account", sa.String(64)),
+    # The card's default account (its `connectionId`), none when it has none: what `hasAccount` filters on.
+    sa.Column("connection_id", sa.String(64)),
     # When the team token's state lapses with no write (it ends with no refresh token); the row is stale from then.
     sa.Column("due_at", sa.DateTime(timezone=True)),
     sa.Index("ix_app_cards_name", "tenant_id", "team_id", "name"),
@@ -75,6 +77,7 @@ class CardRow(TypedDict):
     state: str
     sign_in: str | None
     own_account: str | None
+    connection_id: str | None
     due_at: datetime | None
 
 
@@ -134,7 +137,7 @@ class AppCards(Store):
         rows = [
             {"tenant_id": tenant_id, "team_id": team_id, "id": c["id"], "kind": c["kind"], "name": c["name"],
              "category": c["category"], "state": c["state"], "sign_in": c["sign_in"],
-             "own_account": c["own_account"], "due_at": c["due_at"]}
+             "own_account": c["own_account"], "connection_id": c["connection_id"], "due_at": c["due_at"]}
             for c in cards
         ]  # fmt: skip
         t = team_defaults
@@ -152,7 +155,8 @@ class AppCards(Store):
         """One page of the team's cards by name ignoring case, then id, with the facets (appState, category, kind) and
         each tab's count over the searched and filtered cards; `search` matches the name and category, `ids` names
         cards exactly, `view` (all, connected or available) picks a tab, `accountId` keeps the cards of those
-        accounts, `sortBy=connected` puts the connected cards first (then by name), and the built-in apps are left out
+        accounts, `hasAccount` (true or false) those with or without a default account,
+        `sortBy=connected` puts the connected cards first (then by name), and the built-in apps are left out
         unless `builtins`. A card's appState is the caller's: on a card whose `own_account` is set, `person`'s own
         sign-in there decides it when the app signs in per person, or per person or team and `is_person`."""
         k = app_cards.c
@@ -199,7 +203,12 @@ class AppCards(Store):
                 a.tenant_id == tenant_id, a.team_id == team_id, a.id.in_(accounts), team_visible(_connections())
             )
             q = q.where(k.id.in_(of))
-        filters = {"appState": state, "category": k.category, "kind": k.kind}
+        # A boolean filter is its text, as list filters are: the facet counts "true" and "false".
+        has_account = sa.case((k.connection_id.is_not(None), "true"), else_="false")
+        facets = {"appState": state, "category": k.category, "kind": k.kind}
+        # Narrows the total, the facets and the tab counts; it has no facet of its own (one more statement for two
+        # values the filter already names).
+        filters = {**facets, "hasAccount": has_account}
         search = [k.name, k.category]
         counting = q.with_only_columns(
             *(sa.func.sum(sa.case((cond, 1), else_=0)).label(name) for name, cond in views.items()),
@@ -208,7 +217,7 @@ class AppCards(Store):
         async with self.tx() as c:
             page = await list_page(
                 c, q.where(views[view]), params, search=search, default_sort=sa.func.lower(k.name),
-                filters=filters, facets=filters, sortable={"connected": sa.case((is_on, 1), else_=0)},
+                filters=filters, facets=facets, sortable={"connected": sa.case((is_on, 1), else_=0)},
             )  # fmt: skip
             counted = (await c.execute(listed_rows(counting, params, search=search, filters=filters))).mappings().one()
         return page, {name: int(counted[name] or 0) for name in views}

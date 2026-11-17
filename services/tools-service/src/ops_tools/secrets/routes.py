@@ -270,11 +270,20 @@ def secrets_router(
 
     @r.get("", response_model=Envelope[SecretList], dependencies=[Depends(reader_of("secrets_egress"))])
     async def list_secrets(  # pyright: ignore[reportUnusedFunction]
-        who: Annotated[Person, Depends(caller)], _: Tx, q: ListQuery, team_id: TeamQuery = None
+        who: Annotated[Person, Depends(caller)],
+        _: Tx,
+        q: ListQuery,
+        team_id: TeamQuery = None,
+        read_only: Annotated[
+            list[Literal["true", "false"]] | None,
+            Query(alias="readOnly", description="false keeps the secrets a header may name"),
+        ] = None,
     ) -> JSONResponse:
         """One page of the team's secrets' metadata on the shared list contract, by name: `search` matches the name,
-        `ids` names secrets, and the filter `templateId` keeps those filling a template slot. Pickers search or name
+        `ids` names secrets, the filter `templateId` keeps those filling a template slot and `readOnly` (true or false)
+        those an account or auth config holds. Pickers search or name
         what they need rather than loading every secret. The page and its count are queried, not sliced."""
+        del read_only
         owner = _team(who, team_id)
         with _in(who, owner):
             users = await _users(who.tenant_id, owner)

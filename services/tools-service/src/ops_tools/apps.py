@@ -630,7 +630,7 @@ def _built_in(app: dict[str, Any], module: dict[str, Any]) -> list[str]:
 
 
 # The card rows' shape (store/app_cards.py), in the stamp: rows built before a column was added are rebuilt.
-CARD_ROWS = 2
+CARD_ROWS = 3
 
 
 class CardFacts(TypedDict):
@@ -639,6 +639,7 @@ class CardFacts(TypedDict):
     state: str
     sign_in: str | None
     own_account: str | None
+    connection_id: str | None
     due_at: datetime | None
 
 
@@ -1052,6 +1053,7 @@ class Apps:
                     state=app_state(c, conn, token, None, configured=configured, pack=pack)[0],
                     sign_in=(conn.get("sign_in") or "team") if conn else None,
                     own_account=str(conn["id"]) if conn and waits == ("needs_sign_in", CONNECT_OWN) else None,
+                    connection_id=str(c["connectionId"]) if c.get("connectionId") else None,
                     due_at=ends if lapses and ends is not None and ends > now else None,
                 )
             sign_in = (conn.get("sign_in") or "team") if conn else "team"
@@ -2354,17 +2356,22 @@ def apps_router(apps: Apps, directory: Directory) -> APIRouter:
         account_id: Annotated[
             list[str] | None, Query(alias="accountId", description="the card each named account belongs to")
         ] = None,
+        has_account: Annotated[
+            list[Literal["true", "false"]] | None,
+            Query(alias="hasAccount", description="true keeps the cards with a default account, false those without"),
+        ] = None,
     ) -> JSONResponse:
         """One page of the team's apps for the Apps grid on the shared list contract, by name ignoring case, then id:
         its plugins and the apps a person added. `search` matches the name and category, `ids` names cards exactly.
         `view` picks a tab (connected: appState connected, test_failed or removed; available: the rest), `appState`,
         `category` and `kind` filter, each repeatable; `facets` counts each, and `viewCounts` each tab, over the
-        searched and filtered cards; `accountId` (repeatable) keeps the cards those accounts belong to.
+        searched and filtered cards; `accountId` (repeatable) keeps the cards those accounts belong to; `hasAccount`
+        keeps the cards with (true) or without (false) a default account.
         `sortBy=connected` puts the connected cards first, then by name. The view and filters are read from the shared
         list query; they are named here for the document.
         `include=builtin` adds the built-in apps, for the approval policy's app picker. A service asking for a person
         (X-Acting-For) reads each card's state as that person's. The page and its count are queried, not sliced."""
-        del view, app_state, category, kind, account_id
+        del view, app_state, category, kind, account_id, has_account
         person = acting.sub if acting else None
         page, counts = await apps.page(who, q, builtins=include == "builtin", person=person)
         return ok({**page, "viewCounts": counts})

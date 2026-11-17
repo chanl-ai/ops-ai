@@ -779,6 +779,25 @@ class ModuleStore(Store):
             )
         return [{**r, **kids[r["id"]]} for r in rows]
 
+    async def seen(self, tenant_id: str) -> list[Aggregate]:
+        """The modules `all` reads, each with only its `id`, `team_id` and `approvals`: what decides whether a team
+        sees it and which workflow names its grants hold. A list that names the visible modules and loads in full only
+        the ones its page shows asks for this, then `chosen`."""
+        where = sa.and_(tool_modules.c.tenant_id == tenant_id, sa.or_(team_modules(), granted(tenant_id)))
+        a = module_approvals.c
+        async with self.tx() as c:
+            q = sa.select(tool_modules.c.id, tool_modules.c.team_id).where(where)
+            rows = [dict(r) for r in (await c.execute(q)).mappings()]
+            held: dict[str, list[Aggregate]] = {r["id"]: [] for r in rows}
+            q = (
+                module_approvals.select()
+                .where(a.tenant_id == tenant_id, a.module_id.in_(sa.select(tool_modules.c.id).where(where)))
+                .order_by(a.module_id, a.position)
+            )
+            for r in (await c.execute(q)).mappings():
+                held[r["module_id"]].append(dict(r))
+        return [{**r, "approvals": held[r["id"]]} for r in rows]
+
     async def card_modules(
         self, tenant_id: str, team_id: str, *, chosen: tuple[Sequence[str], Sequence[str], Sequence[str]] | None = None
     ) -> list[Aggregate]:
@@ -811,6 +830,19 @@ class ModuleStore(Store):
             for module_id, name in await c.execute(ops):
                 held.setdefault(str(module_id), []).append(str(name))
         return [{**r, "operations": [{"name": n} for n in held.get(str(r["id"]), [])]} for r in rows]
+
+    async def headers(self, tenant_id: str, ids: Sequence[str]) -> dict[str, Aggregate]:
+        """The module rows named by `ids` that the acting team reads, by id, with no operations, versions or
+        approvals: what a log row shows of its module (its names and template)."""
+        if not ids:
+            return {}
+        async with self.tx() as c:
+            q = tool_modules.select().where(
+                tool_modules.c.tenant_id == tenant_id,
+                sa.or_(team_modules(), granted(tenant_id)),
+                tool_modules.c.id.in_(list(ids)),
+            )
+            return {r["id"]: dict(r) for r in (await c.execute(q)).mappings()}
 
     async def chosen(self, tenant_id: str, ids: Sequence[str], *, reviews: bool = False) -> list[Aggregate]:
         """The modules named by `ids` that the acting team reads (as `all`), in `ids`' order: a list's page. With
