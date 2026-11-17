@@ -18,6 +18,7 @@ from ops_agents.api.agent_registry import registry, spec_from_seed
 from ops_agents.api.app import create_app
 from ops_agents.store.base import metadata
 from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
+from ops_engine.store import metadata as engine_metadata
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, scripted_model, sse_events
@@ -30,6 +31,7 @@ async def no_kb() -> AsyncIterator[tuple[AsyncClient, Any]]:
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     app = create_app(
         settings, model=scripted_model(), engine=engine, checkpointer=InMemorySaver(), graph_models=FakeGraphModels()
     )

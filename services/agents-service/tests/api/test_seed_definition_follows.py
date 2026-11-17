@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from ops_agents.api.app import create_app
 from ops_agents.store.base import metadata
 from ops_agents.store.workflow_registry import registry_workflow_versions, registry_workflows
+from ops_engine.store import metadata as engine_metadata
 from ops_identity import Auth
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model
@@ -47,6 +48,7 @@ async def stack(db: str, seed: Path, *, environment: str = "dev") -> AsyncGenera
     engine = create_async_engine(db)
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     dev = Settings(database_url=db, seed_dir=seed)
     settings = dev if environment == "dev" else dev.model_copy(update={"environment": environment})
     app = create_app(

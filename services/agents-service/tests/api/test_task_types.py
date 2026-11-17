@@ -20,6 +20,7 @@ from ops_agents.api.task_view import worded
 from ops_agents.store.base import metadata
 from ops_agents.store.task_types import TaskTypeStore
 from ops_agents.store.tenancy import tenant_scope
+from ops_engine.store import metadata as engine_metadata
 from tests.engine.test_lifecycle_rights import ADMIN, BUILDER, VIEWER, person
 
 from .role_app import ok, role_app
@@ -139,6 +140,7 @@ async def test_a_newer_seed_version_reaches_a_tenant_that_has_the_old_one() -> N
     db = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with db.begin() as conn:
         await conn.run_sync(metadata.create_all)
+        await conn.run_sync(engine_metadata.create_all)
     seed = next(s for s in tt.seeds() if s["id"] == "generic_decision")
     with tenant_scope("t1"):
         store = TaskTypeStore(db, "team_ops")

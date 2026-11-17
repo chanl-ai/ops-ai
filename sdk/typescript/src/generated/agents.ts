@@ -57,7 +57,9 @@ export interface paths {
          *     pending step is in its checkpoint, not a column), so no one query can sort and count them together, and the counts
          *     and facets cover every row, not the page. Each source therefore reads at most `review_list_rows_per_source` rows
          *     (Settings), newest first, logging `review_source_capped` at the cap; the decisions and policies read are those of
-         *     the rows kept. The route stays off `Tx`: building a review asks tools-service for its write policy.
+         *     the rows kept. The route stays off `Tx`: building a review asks tools-service for its write policy, so it holds
+         *     two transactions, 2 by design: one to read what the reviews name, then, once tools-service has answered with none
+         *     open, one to build the list.
          */
         get: operations["reviews_list_reviews"];
         put?: never;
@@ -955,7 +957,10 @@ export interface paths {
          * Get Case
          * @description The case assembled for its page: its timeline, oldest entry first, and who owns it, its clocks, what
          *     it waits on and the actions drafted there, its fields in its case type's order, what it links to, its newest
-         *     activity and what the caller may do.
+         *     activity and what the caller may do. Two transactions by design: the first reads the case, its runs and everything
+         *     the page names (a case the caller may not see is not found before any other service is asked); people's names, the
+         *     masking policy, file names and the tools-service policy of each Human Task's calls are then asked with none open;
+         *     the second builds the Human Task views, which need those policies.
          */
         get: operations["cases_get_case"];
         put?: never;
@@ -1928,7 +1933,8 @@ export interface paths {
          *     repeat to keep several; `facets.status` and `facets.workflowId` count the runs per status
          *     and per workflow under the other filters, and `labels.workflowId` names each counted workflow, so the workflow
          *     filter is filled from this reply. A scoped API key lists its own workflow's runs only.
-         *     No request transaction: people's names and the masking policy come from platform-service, with none open.
+         *     One transaction for the runs, outcomes and actors read; people's names and the masking policy come from
+         *     platform-service with none open.
          */
         get: operations["workflows_list_engine_runs"];
         put?: never;
@@ -2006,7 +2012,9 @@ export interface paths {
         /**
          * Get Engine Run
          * @description The run with every step from the journal: per node its input, output, port, attempts and errors.
-         *     No request transaction: names, the masking policy and file names come from platform-service and files-service.
+         *     No request transaction. One transaction reads the run (a run the caller may not see is not found before any other
+         *     service is asked) and what it is told from; names, the masking policy and file names come from platform-service and
+         *     files-service with none open; the reply is then built from those answers.
          */
         get: operations["workflows_get_engine_run"];
         put?: never;
@@ -2685,7 +2693,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Thread State */
+        /**
+         * Thread State
+         * @description One transaction for the thread, its checkpoint, timers and usage. The tool directory is asked after it, with
+         *     nothing open, for the wording of a refused call and of a step's options; a step with options then reads its
+         *     workflow version in a second.
+         */
         get: operations["threads_thread_state"];
         put?: never;
         post?: never;
@@ -2857,7 +2870,7 @@ export interface paths {
         };
         /**
          * Get Widget
-         * @description Off the request transaction: the team's display name is read from platform-service after the rows.
+         * @description The rows and the caller's rights in one transaction; platform-service names the team after.
          */
         get: operations["agents_get_widget"];
         put?: never;

@@ -28,6 +28,7 @@ from ops_agents.api.model_ledger import LedgerSource
 from ops_agents.store.base import metadata
 from ops_agents.store.model_calls import ModelCallLedger
 from ops_agents.store.usage import UsageLedger
+from ops_engine.store import metadata as engine_metadata
 from ops_identity.fastapi import DEV_TENANT
 from ops_metering import PriceTable
 from ops_service_kit.settings import Settings
@@ -93,6 +94,7 @@ async def stack(tmp_path: Path) -> AsyncIterator[tuple[AsyncClient, Runtime, Fak
     engine = create_async_engine(url)
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     models = FakeModelsService()
     settings = Settings(
         database_url=url,
@@ -238,6 +240,7 @@ async def test_a_rerun_of_the_same_task_is_answered_from_the_record_not_models_s
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'db.sqlite'}")
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     models = FakeModelsService()
     source = LedgerSource(
         ModelsServiceModels("http://models", KEY, http_client=models.client()),
@@ -263,6 +266,7 @@ async def test_without_a_models_key_turns_stay_on_the_direct_model(tmp_path: Pat
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'db.sqlite'}")
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     models = FakeModelsService()
     # models_url alone serves the alias list (publish-time checks); turns need the key too.
     app = create_app(

@@ -17,6 +17,7 @@ from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
 from ops_agents.store.base import metadata
 from ops_agents.store.events import thread_events
+from ops_engine.store import metadata as engine_metadata
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, step_up
 
@@ -40,6 +41,7 @@ async def client_for(**settings: Any) -> AsyncIterator[AsyncClient]:
     app, engine = app_for(**settings)
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     async with (
         app.router.lifespan_context(app),
         AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,

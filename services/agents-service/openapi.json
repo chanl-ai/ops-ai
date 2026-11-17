@@ -23896,7 +23896,7 @@
     },
     "/reviews": {
       "get": {
-        "description": "Human Tasks: one page of every review the team may see, with counts per view, facets and stats. The page is cut\nafter merging three sources in Python (hitl_facade.list_reviews): graph threads waiting on a person, agent and\nworkflow publish requests, and workflow runs waiting on a review step. They live in different tables (a thread's\npending step is in its checkpoint, not a column), so no one query can sort and count them together, and the counts\nand facets cover every row, not the page. Each source therefore reads at most `review_list_rows_per_source` rows\n(Settings), newest first, logging `review_source_capped` at the cap; the decisions and policies read are those of\nthe rows kept. The route stays off `Tx`: building a review asks tools-service for its write policy.",
+        "description": "Human Tasks: one page of every review the team may see, with counts per view, facets and stats. The page is cut\nafter merging three sources in Python (hitl_facade.list_reviews): graph threads waiting on a person, agent and\nworkflow publish requests, and workflow runs waiting on a review step. They live in different tables (a thread's\npending step is in its checkpoint, not a column), so no one query can sort and count them together, and the counts\nand facets cover every row, not the page. Each source therefore reads at most `review_list_rows_per_source` rows\n(Settings), newest first, logging `review_source_capped` at the cap; the decisions and policies read are those of\nthe rows kept. The route stays off `Tx`: building a review asks tools-service for its write policy, so it holds\ntwo transactions, 2 by design: one to read what the reviews name, then, once tools-service has answered with none\nopen, one to build the list.",
         "operationId": "reviews_list_reviews",
         "parameters": [
           {
@@ -34503,7 +34503,7 @@
     },
     "/v1/cases/{case_id}": {
       "get": {
-        "description": "The case assembled for its page: its timeline, oldest entry first, and who owns it, its clocks, what\nit waits on and the actions drafted there, its fields in its case type's order, what it links to, its newest\nactivity and what the caller may do.",
+        "description": "The case assembled for its page: its timeline, oldest entry first, and who owns it, its clocks, what\nit waits on and the actions drafted there, its fields in its case type's order, what it links to, its newest\nactivity and what the caller may do. Two transactions by design: the first reads the case, its runs and everything\nthe page names (a case the caller may not see is not found before any other service is asked); people's names, the\nmasking policy, file names and the tools-service policy of each Human Task's calls are then asked with none open;\nthe second builds the Human Task views, which need those policies.",
         "operationId": "cases_get_case",
         "parameters": [
           {
@@ -46036,7 +46036,7 @@
     },
     "/v1/runs": {
       "get": {
-        "description": "The selected team's runs on the shared list contract, newest first, then by id; `workflowId` and `status`\nrepeat to keep several; `facets.status` and `facets.workflowId` count the runs per status\nand per workflow under the other filters, and `labels.workflowId` names each counted workflow, so the workflow\nfilter is filled from this reply. A scoped API key lists its own workflow's runs only.\nNo request transaction: people's names and the masking policy come from platform-service, with none open.",
+        "description": "The selected team's runs on the shared list contract, newest first, then by id; `workflowId` and `status`\nrepeat to keep several; `facets.status` and `facets.workflowId` count the runs per status\nand per workflow under the other filters, and `labels.workflowId` names each counted workflow, so the workflow\nfilter is filled from this reply. A scoped API key lists its own workflow's runs only.\nOne transaction for the runs, outcomes and actors read; people's names and the masking policy come from\nplatform-service with none open.",
         "operationId": "workflows_list_engine_runs",
         "parameters": [
           {
@@ -46947,7 +46947,7 @@
     },
     "/v1/runs/{run_id}": {
       "get": {
-        "description": "The run with every step from the journal: per node its input, output, port, attempts and errors.\nNo request transaction: names, the masking policy and file names come from platform-service and files-service.",
+        "description": "The run with every step from the journal: per node its input, output, port, attempts and errors.\nNo request transaction. One transaction reads the run (a run the caller may not see is not found before any other\nservice is asked) and what it is told from; names, the masking policy and file names come from platform-service and\nfiles-service with none open; the reply is then built from those answers.",
         "operationId": "workflows_get_engine_run",
         "parameters": [
           {
@@ -54504,6 +54504,7 @@
     },
     "/v1/threads/{thread_id}/state": {
       "get": {
+        "description": "One transaction for the thread, its checkpoint, timers and usage. The tool directory is asked after it, with\nnothing open, for the wording of a refused call and of a step's options; a step with options then reads its\nworkflow version in a second.",
         "operationId": "threads_thread_state",
         "parameters": [
           {
@@ -56431,7 +56432,7 @@
     },
     "/v1/widgets/{widget_id}": {
       "get": {
-        "description": "Off the request transaction: the team's display name is read from platform-service after the rows.",
+        "description": "The rows and the caller's rights in one transaction; platform-service names the team after.",
         "operationId": "agents_get_widget",
         "parameters": [
           {

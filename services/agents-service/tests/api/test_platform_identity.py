@@ -16,6 +16,7 @@ from sqlalchemy.pool import StaticPool
 
 from ops_agents.api.app import create_app
 from ops_agents.store.base import metadata
+from ops_engine.store import metadata as engine_metadata
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
 from ops_identity.testing import TEST_TOKEN_TTL_S
 from ops_policy import Ed25519Signer, mint
@@ -53,6 +54,7 @@ async def client() -> AsyncIterator[AsyncClient]:
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     settings = Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED)
     app = create_app(
         settings,
