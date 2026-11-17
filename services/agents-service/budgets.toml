@@ -5,6 +5,30 @@
 # transaction or connection open one per store read and are budgeted as they run until their route is converted. A
 # `not_budgeted` row that grows names its counts.
 
+["GET /chat/agents"]
+queries = 1
+
+["GET /chat/connectors"]
+queries = 1
+
+["GET /chat/default-agent"]
+queries = 1
+
+["GET /chat/threads"]
+queries = 6
+
+["GET /chat/threads/{thread_id}"]
+not_budgeted = "needs a chat thread; the budget seed starts none yet (a missing id answers 404 and measures nothing)"
+
+["GET /chat/threads/{thread_id}/connectors"]
+not_budgeted = "needs a chat thread; the budget seed starts none yet (a missing id answers 404 and measures nothing)"
+
+["GET /chat/threads/{thread_id}/settings"]
+not_budgeted = "needs a chat thread; the budget seed starts none yet (a missing id answers 404 and measures nothing)"
+
+["GET /embed/v1.js"]
+queries = 0
+
 ["GET /health"]
 queries = 1
 
@@ -132,6 +156,24 @@ queries = 2
 
 ["GET /v1/channels/mailboxes/{mailbox_id}"]
 not_budgeted = "needs a connected mailbox; the budget seed connects none yet"
+
+["GET /v1/chat/agents"]
+queries = 1
+
+["GET /v1/chat/connectors"]
+queries = 1
+
+["GET /v1/chat/default-agent"]
+queries = 1
+
+["GET /v1/chat/threads"]
+queries = 6
+
+["GET /v1/chat/threads/{thread_id}"]
+not_budgeted = "needs a chat thread; the budget seed starts none yet (a missing id answers 404 and measures nothing)"
+
+["GET /v1/chat/threads/{thread_id}/connectors"]
+not_budgeted = "needs a chat thread; the budget seed starts none yet (a missing id answers 404 and measures nothing)"
 
 ["GET /v1/document-type-uses"]
 queries = 1
@@ -264,6 +306,21 @@ queries = 18
 transactions = 18
 connections = 18
 
+["GET /v1/widget-deployments"]
+queries = 1
+
+["GET /v1/widget-deployments/{deployment_id}/keys"]
+not_budgeted = "needs a widget deployment; the budget seed makes none yet (a missing id answers 404 and measures nothing)"
+
+["GET /v1/widget-deployments/{deployment_id}/keys/audit"]
+not_budgeted = "needs a widget deployment; the budget seed makes none yet (a missing id answers 404 and measures nothing)"
+
+["GET /v1/widget/{deployment_id}/config"]
+not_budgeted = "needs a widget deployment; the budget seed makes none yet (a missing id answers 404 and measures nothing)"
+
+["GET /v1/widget/{deployment_id}/threads/{thread_id}"]
+not_budgeted = "needs a widget deployment and its visitor's thread; the budget seed makes none yet (a missing id answers 404 and measures nothing)"
+
 ["GET /v1/widgets"]
 queries = 2
 
@@ -323,3 +380,7 @@ queries = 2
 
 ["GET /v1/workflows/{workflow_id}/versions"]
 queries = 2
+
+["GET /widget/v1.js"]
+queries = 0
+status = 410       # listed: the retired loader answers Gone by design
