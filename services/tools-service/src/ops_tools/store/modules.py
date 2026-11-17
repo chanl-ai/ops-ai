@@ -30,7 +30,7 @@ from ops_store.outbox import add as add_event
 from ops_store.outbox import outbox_table
 from ops_store.schema import TENANT_SCOPED
 from ops_store.store import Store
-from ops_store.team_scope import acting_as, acting_team, any_team
+from ops_store.team_scope import acting_as, acting_team, any_team, team_visible
 
 from .tenancy import ROLE, SYSTEM_ROLE
 
@@ -478,6 +478,25 @@ def grant_views(now: datetime, expiring: timedelta) -> dict[str, sa.ColumnElemen
     }
 
 
+def _cards_stamp() -> sa.Table:
+    """team_defaults, declared in store/team_defaults.py on this module's metadata (which that module imports, so it
+    cannot be imported here); the package imports it before any store runs."""
+    return metadata.tables["team_defaults"]
+
+
+async def forget_cards(c: AsyncConnection, tenant_id: str, team: sa.ColumnElement[bool]) -> None:
+    """Clears the app card stamp (store/app_cards.py) of the teams `team` names, in the caller's transaction, so their
+    next list rebuilds."""
+    t = _cards_stamp()
+    await c.execute(t.update().where(t.c.tenant_id == tenant_id, team, team_visible(t)).values(cards_stamp=None))
+
+
+def _team_of(team_id: str | None) -> sa.ColumnElement[bool]:
+    """The teams whose app cards a module of `team_id` is part of: its own, or every team the caller acts in for a
+    workspace-level module (no team)."""
+    return _cards_stamp().c.team_id == team_id if team_id else sa.true()
+
+
 class ModuleStore(Store):
     # A module and its children land together (TRANSACTION); a write lands only against the revision read (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.CAS})
@@ -841,6 +860,8 @@ class ModuleStore(Store):
             await c.execute(module_egress_hosts.insert(), links)
         for event in events:
             await add_event(c, service_outbox, **event)
+        # A built-in app's card and a removed plugin's are built from its team's modules (Apps.cards).
+        await forget_cards(c, row["tenant_id"], _team_of(row.get("team_id")))
         return {**agg, "revision": row["revision"]}
 
     async def insert_if_missing(self, agg: Aggregate) -> bool:
@@ -855,10 +876,14 @@ class ModuleStore(Store):
         return True
 
     async def delete(self, tenant_id: str, module_id: str) -> bool:
+        t = tool_modules.c
         async with self.tx() as c:
-            done = await c.execute(
-                tool_modules.delete().where(tool_modules.c.tenant_id == tenant_id, tool_modules.c.id == module_id)
-            )
+            owner = sa.select(t.team_id).where(t.tenant_id == tenant_id, t.id == module_id)
+            found = (await c.execute(owner)).first()
+            if found is None:
+                return False
+            done = await c.execute(tool_modules.delete().where(t.tenant_id == tenant_id, t.id == module_id))
+            await forget_cards(c, tenant_id, _team_of(found.team_id))
             return done.rowcount > 0
 
     async def count(self, tenant_id: str) -> int:

@@ -15,7 +15,6 @@ from collections.abc import Sequence
 from typing import ClassVar, TypedDict
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
@@ -25,7 +24,7 @@ from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.store import Store
 from ops_store.team_scope import team_visible
 
-from .modules import metadata
+from .modules import forget_cards, metadata
 from .team_defaults import team_defaults
 from .tenancy import ROLE
 
@@ -55,12 +54,6 @@ class CardRow(TypedDict):
     kind: str
     name: str
     category: str | None
-
-
-async def forget_cards(c: AsyncConnection, tenant_id: str, team: sa.ColumnElement[bool]) -> None:
-    """Clears the stamp of the teams `team` names, in the caller's transaction, so their next list rebuilds."""
-    t = team_defaults
-    await c.execute(t.update().where(t.c.tenant_id == tenant_id, team, team_visible(t)).values(cards_stamp=None))
 
 
 class AppCards(Store):
@@ -118,3 +111,8 @@ class AppCards(Store):
             params = params.model_copy(update={"ids": None, "search": None})
         async with self.tx() as c:
             return await list_page(c, q, params, search=[k.name, k.category], default_sort=sa.func.lower(k.name))
+
+
+# forget_cards is defined beside the modules (a module write clears the stamp too); account and binding writes import
+# it from here.
+__all__ = ["BUILTIN", "AppCards", "CardRow", "app_cards", "forget_cards"]

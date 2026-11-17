@@ -377,6 +377,26 @@ async def test_a_write_to_an_app_shows_on_the_next_list(
     assert app not in (await _ids(client, tenant))[0]
 
 
+async def test_a_module_write_changes_the_built_in_cards_on_the_next_list(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    # A built-in app's card is built from the team's module of it: deleting and adding the module back clear the stamp.
+    every = {"include": "builtin", "pageSize": 50}
+    got = await client.get("/v1/apps", params=every, headers=admin(tenant))
+    files = next(c for c in got.json()["data"]["data"] if c["id"] == "builtin:files")
+    store = ModuleStore(engine)
+    held = [await store.get(tenant, m) for m in files["moduleIds"]]
+    for m in files["moduleIds"]:
+        assert await store.delete(tenant, m)
+    ids, pagination = await _ids(client, tenant, **every)
+    assert "builtin:files" not in ids and pagination["total"] == len(ids), (ids, pagination)
+    for m in held:
+        assert m is not None
+        await store.put(m, expected_revision=None)
+    ids, pagination = await _ids(client, tenant, **every)
+    assert "builtin:files" in ids and pagination["total"] == len(ids), (ids, pagination)
+
+
 async def _while_rebuilding(
     monkeypatch: pytest.MonkeyPatch, other: Callable[[], Coroutine[Any, Any, httpx.Response]], *, before: bool
 ) -> list[asyncio.Task[httpx.Response]]:
