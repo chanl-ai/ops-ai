@@ -5,7 +5,7 @@ signed in as their dev role the way `make api` signs in (task L1: the opsai comm
 
 from __future__ import annotations
 
-from apps_walk import apps_stack, ops_cli, target
+from apps_walk import apps_stack, ops_cli, signed_sdk, target
 from usecase_harness import check, finish
 
 APP = "plugin:test.header-key"
@@ -36,5 +36,21 @@ with apps_stack() as w:
         code not in (0, 2) and "403" in str(out),
         (target("L1"), code, out),
     )
+
+    # 26b. The command line lists every row of a list, not its first page: each command prints as many rows as the
+    # list's own total says.
+    ops = signed_sdk("admin")
+    totals = {
+        ("secrets", "list"): ops.raw.tools.secrets_list_secrets(page_size=1),
+        ("people", "list"): ops.raw.platform.members_list_members(page_size=1),
+    }
+    for command, first in totals.items():
+        code, rows = ops_cli("admin", *command)
+        total = (first.get("pagination") or {}).get("total")
+        check(
+            f"26b `opsai {' '.join(command)}` prints all {total} rows the list holds",
+            code == 0 and isinstance(rows, list) and isinstance(total, int) and len(rows) == total,
+            (command, code, total, len(rows) if isinstance(rows, list) else rows),
+        )
 
 finish()
