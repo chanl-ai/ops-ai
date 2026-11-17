@@ -245,3 +245,21 @@ export function pageItems(data: unknown): [unknown[], Record<string, unknown> | 
   if (d.nextCursor) return [items, { cursor: d.nextCursor }];
   return [items, null];
 }
+
+/** The install's largest page size; a larger one is answered at this size. */
+export const PAGE_MAX = 50;
+
+/** Every row of a list operation, following `pagination.hasNext` page after page (never the first page only). */
+export async function everyPage(
+  fetchPage: (query: Record<string, unknown>) => Promise<unknown>,
+  query: Record<string, unknown> = {},
+): Promise<any[]> {
+  const rows: unknown[] = [];
+  let next: Record<string, unknown> | null = {};
+  while (next) {
+    const [items, more] = pageItems(await fetchPage({ pageSize: PAGE_MAX, ...query, ...next }));
+    rows.push(...items);
+    next = more;
+  }
+  return rows;
+}

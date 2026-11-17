@@ -350,3 +350,26 @@ def page_items(data: Any) -> tuple[list[Any], dict[str, Any] | None]:
     if data.get("nextCursor"):
         return items, {"cursor": data["nextCursor"]}
     return items, None
+
+
+# The install's largest page size; a larger one is answered at this size.
+PAGE_MAX = 50
+
+
+def every_page(call: Any, **query: Any) -> list[Any]:
+    """Every row of a list operation, following `pagination.hasNext` page after page (never the first page only)."""
+    rows: list[Any] = []
+    more: dict[str, Any] | None = {}
+    while more is not None:
+        items, more = page_items(call(**{"page_size": PAGE_MAX, **query, **more}))
+        rows += items
+    return rows
+
+
+async def every_page_async(call: Any, **query: Any) -> list[Any]:
+    rows: list[Any] = []
+    more: dict[str, Any] | None = {}
+    while more is not None:
+        items, more = page_items(await call(**{"page_size": PAGE_MAX, **query, **more}))
+        rows += items
+    return rows

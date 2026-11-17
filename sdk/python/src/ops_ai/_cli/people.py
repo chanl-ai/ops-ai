@@ -8,7 +8,7 @@ import argparse
 import sys
 
 from ops_ai import OpsAI
-from ops_ai._transport import page_items
+from ops_ai._transport import every_page
 
 from .chat import start_thread, turn
 from .common import client, emit, parser, refuse, table, verb_options
@@ -38,7 +38,7 @@ def people_main(argv: list[str]) -> int:
 def _people(ns: argparse.Namespace, ops: OpsAI) -> int:
     platform = ops.raw.platform
     if ns.verb == "list":
-        rows = page_items(platform.members_list_members(role=ns.role, status=ns.status))[0]
+        rows = every_page(platform.members_list_members, role=ns.role, status=ns.status)
         return table(ns, rows, "name", "email", "role", "team", "status")
     if ns.verb == "invite":
         body = invite_body(ns.emails, ns.role)
@@ -46,7 +46,7 @@ def _people(ns: argparse.Namespace, ops: OpsAI) -> int:
             return emit(ns, {"wouldSend": body}, text=f"Would invite {', '.join(ns.emails)} as {ns.role}; add --send")
         return emit(ns, platform.members_invite_members(body))
     if ns.verb == "roles":
-        return table(ns, platform.roles_list_roles(), "id", "name", "assignmentCount", "permissionCount")
+        return table(ns, every_page(platform.roles_list_roles), "id", "name", "assignmentCount", "permissionCount")
     if ns.verb == "role":
         return emit(ns, platform.roles_read_role(ns.role))
     return emit(ns, platform.me_me())
