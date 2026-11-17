@@ -176,9 +176,10 @@ class KbChanged(Out):
 
 
 class ApiKeyChanged(Out):
-    """An API key created, changed (its status, expiry or last use) or revoked in platform-service, for the copy the
-    Channels list reads. Never the secret or its hash: `prefix` is the key's public id part. The key's team is the
-    event's team; a revoked key keeps its row with that status, and `deleted` only when the record is gone."""
+    """An API key created, changed (its status or expiry), revoked or deleted by a workspace purge in platform-service,
+    for the copy the Channels list reads. Its last use is not an event; it reaches the copy through the key list. Never
+    the secret or its hash: `prefix` is the key's public id part. The key's team is the event's team; a revoked key
+    keeps its row with that status, and `deleted` only when the record is gone."""
 
     kind: Literal["api_key.changed"] = "api_key.changed"
     id: str

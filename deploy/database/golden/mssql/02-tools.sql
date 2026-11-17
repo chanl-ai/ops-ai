@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0087_app_card_states
+-- tools-service, stamped at tools_0088_app_card_account
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -161,6 +161,7 @@ CREATE TABLE app_cards (
 	state VARCHAR(24) NULL, 
 	sign_in VARCHAR(16) NULL, 
 	own_account VARCHAR(64) NULL, 
+	connection_id VARCHAR(64) NULL, 
 	due_at DATETIMEOFFSET NULL, 
 	CONSTRAINT app_cards_pkey PRIMARY KEY (tenant_id, team_id, id)
 );
@@ -727,5 +728,5 @@ CREATE TABLE alembic_version_tools (
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0087_app_card_states');
+INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0088_app_card_account');
 GO

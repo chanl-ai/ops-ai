@@ -31,7 +31,7 @@ from ops_store.dialect import locked
 from ops_store.rows import one
 
 from .audit import record, record_grants_ending
-from .key_events import change_keys
+from .key_events import change_keys, delete_keys
 from .lookups import PURGE_DUE, lookup
 from .roles import bump_version, mirror_membership, team_admins
 from .tables import (
@@ -271,8 +271,9 @@ class LifecycleStore(TenantDb):
                 return False
             await c.execute(tenants.update().where(tenants.c.id == tenant_id).values(status=PURGING))
         async with self.tenant_tx(tenant_id) as c:
+            await delete_keys(c, api_keys.c.tenant_id == tenant_id)
             for table in (
-                sessions, api_keys, role_assignments, members, signin_flows, signin_identities,
+                sessions, role_assignments, members, signin_flows, signin_identities,
                 signin_domains, signin_providers, password_resets, password_credentials, signin_lockouts,
             ):  # fmt: skip
                 await c.execute(table.delete().where(table.c.tenant_id == tenant_id))

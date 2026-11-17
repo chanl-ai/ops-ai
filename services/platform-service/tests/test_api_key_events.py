@@ -103,3 +103,33 @@ async def test_a_key_write_that_rolls_back_reports_nothing(platform: Platform) -
             assert await change_keys(c, api_keys.c.id == made, {"disabled_at": AT}) == [made]
             raise RuntimeError("the change it belongs to failed")
     assert await events(platform, admin.tenant_id) == before == [(made, 1, "active", h["X-Team-Id"])]
+
+
+async def test_purge_reports_each_of_the_workspaces_keys_deleted(platform: Platform) -> None:
+    """A purge deletes the workspace's keys; without a deleted event the copy lists them (disabled) until a resync."""
+    admin, h = await as_admin(platform)
+    tenant, team = admin.tenant_id, h["X-Team-Id"]
+    keys = sorted([str((await create(platform, h))["key"]["id"]), str((await create(platform, h))["key"]["id"])])  # type: ignore[index]
+    other, oh = await as_admin(platform)
+    kept = str((await create(platform, oh))["key"]["id"])  # type: ignore[index]
+    async with platform.engine.begin() as c:
+        await c.execute(
+            role_assignments.insert().values(
+                id=new_id("ras"), tenant_id=tenant, subject_kind="person", subject_id=admin.user_id, role_id="owner",
+                team_id=ANY_TEAM, granted_by="test", reason="owner", source="grant", created_at=AT,
+            )
+        )  # fmt: skip
+    store = LifecycleStore(TenantDb(platform.engine))
+    await store.close(tenant, by=admin.user_id, at=AT, request_id="req_close")
+    others_before = await events(platform, other.tenant_id)
+    assert await store.purge(tenant, at=AT, request_id="req_purge")
+    async with platform.engine.connect() as c:
+        q = sa.select(platform_outbox.c.tenant_id, platform_outbox.c.team_id, platform_outbox.c.payload).where(
+            platform_outbox.c.name == "api_key.changed"
+        )
+        rows = (await c.execute(q)).all()
+        gone = sorted((str(p["id"]), int(p["revision"]), str(t), str(tm)) for t, tm, p in rows if p["deleted"])
+        left = (await c.execute(sa.select(api_keys.c.id).where(api_keys.c.tenant_id == tenant))).all()
+    # Created at 1, disabled by the close at 2, deleted at 3; the other workspace's key is untouched.
+    assert gone == [(k, 3, tenant, team) for k in keys] and left == []
+    assert await events(platform, other.tenant_id) == others_before == [(kept, 1, "active", oh["X-Team-Id"])]
