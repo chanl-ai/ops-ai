@@ -1,6 +1,6 @@
 # A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it
 
-Status: draft. The scripts are written but have not passed: the grant is decided in Human Tasks by a system workflow run, so the stack needs a workflow worker (lib/usecase_harness.py engine_worker) and a decision through /reviews/by-run-key, which the scripts do not do yet. Id: `uc-755`. Service: `tools-service`. Layers: api, ui. Mock mode only (no model, no real upstream).
+Status: works in mock mode. Id: `uc-755`. Service: `tools-service`. Layers: api, ui. Mock mode only (no model, no real upstream).
 
 Short title: A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it
 

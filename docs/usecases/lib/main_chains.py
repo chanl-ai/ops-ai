@@ -111,16 +111,17 @@ def agent_with(api: Any, run: int, tools: list[str], headers: dict[str, str] | N
 
 
 from collections.abc import Generator  # noqa: E402
-from contextlib import contextmanager  # noqa: E402
+from contextlib import ExitStack, contextmanager  # noqa: E402
 from types import SimpleNamespace  # noqa: E402
 
 
 @contextmanager
-def bank_stack() -> Generator[SimpleNamespace]:
+def bank_stack(*, worker: str | None = None) -> Generator[SimpleNamespace]:
     """platform-service with the dev seed's people, tools-service and agents-service both verifying their tokens, and the
     mock upstream: the stack the sdk and cli layers of uc-753 sign in to. Yields `bank`, `gw` (tools), `api` (agents),
     `accounts` (platform) and `who`, the headers of each seeded role. Writes need platform-service (approval rules are
-    read from it), so every layer of a write case runs on this stack or the UI runner's."""
+    read from it), so every layer of a write case runs on this stack or the UI runner's. `worker` names a workflow worker
+    to start on the same stack, with a knowledge service seeded with the fixture passages for its knowledge steps."""
     from apps_walk import AUTH
     from usecase_harness import AGENTS_PORT as agents_port
     from usecase_harness import TOOLS_PORT as tools_port
@@ -136,7 +137,25 @@ def bank_stack() -> Generator[SimpleNamespace]:
         check("setup: the admin turns write approvals on for the team", on.status_code == 200, on.text[:200])
         who = {role: as_role(accounts, role) for role in ("builder", "approver", "security")}
         team_settings = {**bank.settings, **AUTH, "OPS_AGENTS_URL": f"http://127.0.0.1:{agents_port}"}
-        with agents(gateway_url=f"http://127.0.0.1:{tools_port}", env=AUTH) as api, tools(settings=team_settings) as gw:
+        with ExitStack() as extra:
+            kb_url: str | None = None
+            if worker:
+                import tempfile
+                from pathlib import Path
+
+                from usecase_harness import kb, seed_fixture_knowledge
+
+                files = extra.enter_context(tempfile.TemporaryDirectory(prefix="usecase-kb-"))
+                kb_client = extra.enter_context(kb(Path(files)))
+                seed_fixture_knowledge(str(kb_client.base_url), kb_client.files_url)
+                kb_url = str(kb_client.base_url).rstrip("/")
+            api = extra.enter_context(agents(gateway_url=f"http://127.0.0.1:{tools_port}", env=AUTH, kb_url=kb_url))
+            gw = extra.enter_context(tools(settings=team_settings))
+            if worker:
+                from usecase_harness import engine_worker
+
+                env = {"OPS_GATEWAY_URL": f"http://127.0.0.1:{tools_port}", "OPS_KB_URL": str(kb_url), **AUTH}
+                extra.enter_context(engine_worker(worker, env))
             for path, value in (("hosts", HOST), ("ranges", bank.range)):
                 gw.post(f"/v1/egress/{path}", json={"value": value, "note": "main chains mock upstream"}, headers=who["security"])
             yield SimpleNamespace(bank=bank, gw=gw, api=api, accounts=accounts, who=who)

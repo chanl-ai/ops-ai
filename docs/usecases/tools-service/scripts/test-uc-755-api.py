@@ -10,14 +10,27 @@ import json
 import secrets
 import time
 
+from apps_walk import AUTH
 from main_chains import bank_stack, publish_bank_module
-from usecase_harness import INVITED_PASSWORD, as_role, bearer, check, data, finish, invited, signed_in
+from usecase_harness import (
+    INVITED_PASSWORD,
+    TOOLS_PORT,
+    as_role,
+    bearer,
+    check,
+    data,
+    engine_worker,
+    finish,
+    invited,
+    signed_in,
+    until,
+)
 
 RUN = int(time.time())
 WANJIRU = "w.kamau@harborpine.example"
 PRIYA = "p.shah@harborpine.example"
 
-with bank_stack() as s:
+with bank_stack() as s, engine_worker("uc755", {"OPS_GATEWAY_URL": f"http://127.0.0.1:{TOOLS_PORT}", **AUTH}):
     owner, security = s.who["builder"], s.who["security"]
     module, read, _write = publish_bank_module(s.gw, RUN, approval=False, team=owner, security=security)
     base = f"/v1/tool-modules/{module}"
@@ -34,6 +47,9 @@ with bank_stack() as s:
     priya = signed_in(s.accounts, PRIYA)
     invited(s.accounts, bearer(priya, desk), email, "builder")
     member = bearer(signed_in(s.accounts, email, INVITED_PASSWORD), desk)
+    # Accepting an invitation changes permissions too, so the seeded people sign in once more.
+    s.who.update({role: as_role(s.accounts, role) for role in ("builder", "approver", "security")})
+    owner = s.who["builder"]
 
     made_wf = s.api.post("/v1/workflows", json={"name": f"Desk intake {RUN}", "trigger": "manual"}, headers=member)
     check("setup: the Desk member makes a workflow of Desk's", made_wf.status_code in (200, 201), made_wf.text[:200])
@@ -45,8 +61,24 @@ with bank_stack() as s:
         headers=owner,
     )
     grant = str((data(asked) or {}).get("id", "apr_x"))
-    decided = s.gw.post(f"{base}/approvals/{grant}/decide", json={"decision": "approved"}, headers=s.who["approver"])
-    check("setup: the owner's approver approves Desk's workflow for the read", asked.status_code == 201 and decided.status_code == 200, (asked.text[:200], decided.text[:200]))
+    # A cross-team grant is a system workflow run waiting in Human Tasks for the module's team: a person of that team
+    # decides it there, and the run's apply step grants it once the worker resumes the run.
+    key = f"tool_access.requested:{grant}"
+    found: dict = {}
+
+    def waiting() -> dict | None:
+        for who in (s.who["approver"], owner):
+            r = s.api.get(f"/reviews/by-run-key/{key}", headers=who)
+            if r.status_code == 200 and (data(r) or {}).get("canDecide"):
+                found["by"] = who
+                return data(r)
+        return None
+
+    review = until(waiting, timeout=90) or {}
+    check("setup: the grant waits in Human Tasks for a person of the owning team", bool(review), key)
+    decided = s.api.post(f"/reviews/{review.get('id', 'rev_x')}/decision", json={"decision": "approve"}, headers=found.get("by", owner))
+    state = until(lambda: next((a for a in (data(s.gw.get(base, headers=owner)) or {}).get("approvals", []) if a.get("id") == grant and a.get("status") == "approved"), None), timeout=90)
+    check("setup: the owner's team approves Desk's workflow for the read", asked.status_code == 201 and decided.status_code == 200 and bool(state), (asked.text[:200], decided.status_code, decided.text[:200]))
 
     seen = s.gw.get(base, headers=member)
     detail = data(seen) or {}

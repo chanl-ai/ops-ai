@@ -3,7 +3,7 @@
 // the operations but no control that edits, publishes, requests a review or deletes it, and a direct edit through
 // the page's own API call is refused 404. Platform sign-in, the fake bank on https; no model call.
 import { PLATFORM_PORT, TOOLS_PORT, AGENTS_PORT, approveToolReview, check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { JAMES, MAYA, as, until } from '../../lib/workflow_ui.mjs';
+import { JAMES, MAYA, PASSWORD, as, until } from '../../lib/workflow_ui.mjs';
 
 const NADIA = 'n.petrov@harborpine.example';
 const SAM = 's.adeyemi@harborpine.example';
@@ -22,6 +22,8 @@ const call = async (method, url, headers, body) => {
 
 await withUiStack(
   async (consoleUrl, stack) => {
+    // The cross-team grant is a system workflow run decided in Human Tasks, so a worker runs it.
+    await stack.startWorker();
     const S = await as(SAM, 'team_security');
     await call('POST', `${tools}/v1/egress/hosts`, S, { value: stack.bank.host, note: 'uc-755' });
     await call('POST', `${tools}/v1/egress/ranges`, S, { value: stack.bank.range, note: 'uc-755' });
@@ -48,8 +50,27 @@ await withUiStack(
     // Making a team changes permissions, which refuses tokens issued before it: James and Maya sign in again.
     const J2 = await as(JAMES);
     const asked = await call('POST', `${tools}/v1/tool-modules/${moduleId}/approvals`, J2, { workflowId: flow.data?.id, environment: 'production', operations: [READ], expiresInDays: 30, justification: 'Desk intake reads accounts' });
-    const decided = await call('POST', `${tools}/v1/tool-modules/${moduleId}/approvals/${asked.data?.id}/decide`, await as(MAYA), { decision: 'approved' });
-    check('setup: the owner approves Desk\'s workflow for the read', asked.status === 201 && decided.status === 200, { asked: asked.status, decided: decided.status });
+    // A person of the owning team decides it in Human Tasks; the run's apply step grants it once the worker resumes the run.
+    const key = `tool_access.requested:${asked.data?.id}`;
+    let review;
+    let decider;
+    await until(async () => {
+      for (const who of [await as(MAYA), J2]) {
+        const r = await call('GET', `${agents}/reviews/by-run-key/${encodeURIComponent(key)}`, who);
+        if (r.status === 200 && r.data?.canDecide) {
+          review = r.data;
+          decider = who;
+          return true;
+        }
+      }
+      return false;
+    }, 90);
+    const decided = review ? await call('POST', `${agents}/reviews/${review.id}/decision`, decider, { decision: 'approve' }) : { status: 0 };
+    const granted = await until(async () => {
+      const m = (await call('GET', `${tools}/v1/tool-modules/${moduleId}`, J2)).data;
+      return m?.approvals?.some((a) => a.id === asked.data?.id && a.status === 'approved');
+    }, 90);
+    check('setup: the owner\'s team approves Desk\'s workflow for the read in Human Tasks', asked.status === 201 && decided.status === 200 && Boolean(granted), { asked: asked.status, decided: decided.status, granted: Boolean(granted) });
 
     const browser = await chromium.launch();
     const errors = [];
@@ -59,19 +80,21 @@ await withUiStack(
       // Non-vacuous: the grant is real, so the page shows the operation; the missing controls are the grant's limit.
       const shown = await page.getByText(READ).first().waitFor({ timeout: 60_000 }).then(() => true, () => false);
       check('1 Desk\'s builder opens the module and sees its operation', shown, { url: page.url() });
+      // Non-vacuous: the owner's page of the same module shows the controls the member's must not.
+      const owner = await consoleSignIn(browser, consoleUrl, JAMES, PASSWORD, errors);
+      await owner.goto(`${consoleUrl}/data/tools/${moduleId}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+      await owner.getByText(READ).first().waitFor({ timeout: 60_000 });
+      const ownerControls = { addOperation: await owner.getByTestId('ops-add').count(), importOperations: await owner.getByTestId('ops-import').count() };
+      check('1b the owner sees Add operation and Import on the same page', ownerControls.addOperation > 0 && ownerControls.importOperations > 0, ownerControls);
       const controls = {
         addOperation: await page.getByTestId('ops-add').count(),
         importOperations: await page.getByTestId('ops-import').count(),
         requestReview: await page.getByTestId('header-request-review').count(),
       };
       check('2 there is no Add operation, Import or Request security review control', Object.values(controls).every((n) => n === 0), controls);
-      await page.getByRole('button', { name: /^Actions/ }).click().catch(() => undefined);
-      const menu = {
-        editDetails: await page.getByTestId('edit-details').count(),
-        deleteEnabled: await page.getByRole('menuitem', { name: /^Delete/ }).and(page.locator(':not([data-disabled])')).count(),
-      };
-      check('3 the Actions menu offers neither Edit details nor a Delete that works', menu.editDetails === 0 && menu.deleteEnabled === 0, menu);
-      await page.keyboard.press('Escape');
+      // The member's page has no Actions menu at all (its Edit details, Delete and Request approval items are the owner's).
+      const actions = { member: await page.getByRole('button', { name: /^Actions/ }).count(), owner: await owner.getByRole('button', { name: /^Actions/ }).count() };
+      check('3 the member has no Actions menu, so no Edit details or Delete, where the owner has one', actions.member === 0 && actions.owner > 0, actions);
       const publish = await page.getByRole('button', { name: /^Publish version/ }).filter({ visible: true }).count();
       check('4 no Publish version button is visible', publish === 0, { publish });
       const edit = await call('PATCH', `${tools}/v1/tool-modules/${moduleId}`, D, { description: 'changed by Desk' });
