@@ -33,6 +33,9 @@ def main() -> int:
             except BlockingIOError:
                 os.close(fd)
                 continue
+            started = os.environ.get("OPS_SLOT_STARTED_FILE")  # scripts/usecase_batch.py starts its timeout from this
+            if started:
+                open(started, "w").close()
             return subprocess.call(cmd)
         if not said:
             print(f"at-most: {n} {kind} runs already going; waiting for one to finish", file=sys.stderr, flush=True)
