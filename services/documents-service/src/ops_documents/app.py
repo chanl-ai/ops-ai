@@ -443,7 +443,8 @@ def create_documents_app(
     @types.get("", response_model=Envelope[DocumentTypeList], dependencies=[service_scope("view")])
     async def list_types(who: Caller, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The team's types on the shared list contract, by name and searched on it, and whether the caller may add
-        one (the console's New type). sortBy=name with sortOrder sets the order; no other column sorts."""
+        one (the console's New type). sortBy name or latestVersion with sortOrder sets the order; equal versions
+        keep name order."""
         return ok(await document_types.page(who, q))
 
     @types.get("/{type_id}", response_model=Envelope[DocumentType], dependencies=[service_scope("view")])

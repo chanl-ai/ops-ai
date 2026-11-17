@@ -366,3 +366,23 @@ async def test_the_type_list_sorts_by_name_in_the_order_asked(make: Make) -> Non
             data(await c.post("/v1/document-types", json={**TYPE, "id": key, "name": name}, headers=OPS), 201)
         down = data(await c.get("/v1/document-types?sortBy=name&sortOrder=desc", headers=OPS))
     assert [t["name"] for t in down["data"]] == ["Lease", "Invoice notice", "Bank statement"], down
+
+
+async def test_the_type_list_sorts_by_latest_version_over_every_page(make: Make) -> None:
+    """sortBy=latestVersion orders the Document types table on the server; equal versions keep name order, so a page
+    never repeats or skips a type."""
+    s = make(Models(), Floor(), Prices())
+    async with s.client as c:
+        for key, name in (("lease", "Lease"), ("statement", "Bank statement"), ("notice", "Invoice notice")):
+            data(await c.post("/v1/document-types", json={**TYPE, "id": key, "name": name}, headers=OPS), 201)
+        more = [*FIELDS, {"key": "customer", "type": "text"}]
+        data(await c.post("/v1/document-types/notice/versions", json={"fields": more}, headers=OPS), 201)
+        seen: dict[str, list[str]] = {}
+        for order in ("asc", "desc"):
+            query = f"/v1/document-types?sortBy=latestVersion&sortOrder={order}&pageSize=2"
+            pages = [data(await c.get(f"{query}&page={n}", headers=OPS))["data"] for n in (1, 2)]
+            seen[order] = [t["name"] for page in pages for t in page]
+    assert seen == {
+        "asc": ["Bank statement", "Lease", "Invoice notice"],
+        "desc": ["Invoice notice", "Bank statement", "Lease"],
+    }, seen

@@ -51,7 +51,8 @@ export interface paths {
         /**
          * List Types
          * @description The team's types on the shared list contract, by name and searched on it, and whether the caller may add
-         *     one (the console's New type). sortBy=name with sortOrder sets the order; no other column sorts.
+         *     one (the console's New type). sortBy name or latestVersion with sortOrder sets the order; equal versions
+         *     keep name order.
          */
         get: operations["document_types_list_types"];
         put?: never;

@@ -41,11 +41,13 @@ document_types = sa.Table(
     # The list sorts on it; uq_document_types_name (tenant, team, name) is its index.
     sa.Column("name", sa.String(200), nullable=False, info=LISTED),
     sa.Column("description", sa.String(1000)),
-    sa.Column("latest_version", sa.Integer, nullable=False),
+    # The list sorts on it (sortBy=latestVersion); ix_document_types_latest_version is its index.
+    sa.Column("latest_version", sa.Integer, nullable=False, info=LISTED),
     sa.Column("created_by", sa.String(320), nullable=False),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     # A name names one type in its team, so a picker never shows two "Levy notice".
     sa.UniqueConstraint("tenant_id", "team", "name", name="uq_document_types_name"),
+    sa.Index("ix_document_types_latest_version", "tenant_id", "team", "latest_version"),
     info={**TENANT_SCOPED, **team_owned("team")},
 )
 
@@ -311,16 +313,21 @@ class DocumentTypesStore(Store):
             return await rows(c, q, TypeRow)
 
     async def list(self, team: str, params: ListParams) -> tuple[list[TypeRow], ListPage]:
-        """One page of the team's types on the shared list contract, by name (sortBy=name turns it), searched on the
-        name. Only the name sorts: the list row shows no time, and uq_document_types_name (tenant, team, name) serves
-        the order."""
+        """One page of the team's types on the shared list contract, by name, searched on the name. sortBy=name turns
+        it, sortBy=latestVersion orders by the newest version with equal versions by name; uq_document_types_name and
+        ix_document_types_latest_version serve the orders."""
         t = document_types.c
         query = sa.select(document_types).where(
             t.tenant_id == isolation.tenant(), t.team == team, team_visible(document_types)
         )
         async with self.tx() as c:
             page = await list_page(
-                c, query, params, search=[t.name], sortable={"name": t.name}, default_sort=t.name.asc()
+                c,
+                query,
+                params,
+                search=[t.name],
+                sortable={"name": t.name, "latestVersion": t.latest_version},
+                default_sort=t.name.asc(),
             )
         return [TypeRow.model_validate(r) for r in page["data"]], page
 

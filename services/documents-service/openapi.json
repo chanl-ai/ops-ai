@@ -4037,7 +4037,7 @@
     },
     "/v1/document-types": {
       "get": {
-        "description": "The team's types on the shared list contract, by name and searched on it, and whether the caller may add\none (the console's New type). sortBy=name with sortOrder sets the order; no other column sorts.",
+        "description": "The team's types on the shared list contract, by name and searched on it, and whether the caller may add\none (the console's New type). sortBy name or latestVersion with sortOrder sets the order; equal versions\nkeep name order.",
         "operationId": "document_types_list_types",
         "parameters": [
           {
