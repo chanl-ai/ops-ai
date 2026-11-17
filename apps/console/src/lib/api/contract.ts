@@ -283,15 +283,12 @@ export interface OpsApi {
     /** The person's role on each team, read fresh from platform-service so a role change shows without signing in
      * again. Absent off platform sign-in, where the session's role stands in. */
     me?(): Promise<Me>;
-    /** What `can()` grants the person in each team and in every team (`*`), from platform-service
-     * (GET /v1/me/permissions). Absent off platform sign-in, where the session's role stands in. */
-    permissions?(): Promise<MyPermissions>;
     /** The roles that grant `area.action` in `team` (the current team when omitted) and who holds them there
      * (GET /v1/access/holders); asking about a team the person is not in is refused. */
     holders?(area: string, action: string, team?: string): Promise<Holders>;
     /** The workspace's roles, one role's grid, and a person's grants with the role behind each. Absent off
      * platform sign-in. */
-    roles?(): Promise<RoleSummary[]>;
+    roles?(p: ListParams): Promise<ListResult<RoleSummary>>;
     role?(id: string): Promise<RoleDetail>;
     /** Sets every cell a role holds; a workspace admin's, audited. */
     editRole?(id: string, permissions: RoleCell[]): Promise<RoleDetail>;
@@ -301,9 +298,9 @@ export interface OpsApi {
     createRole?(input: RoleInput): Promise<RoleCreated>;
     renameRole?(id: string, input: { name: string; description?: string }): Promise<RoleDetail>;
     deleteRole?(id: string, moveTo?: string): Promise<void>;
-    roleHolders?(id: string): Promise<RoleHolder[]>;
+    roleHolders?(id: string, p: ListParams): Promise<ListResult<RoleHolder>>;
     /** The custom roles given to a person, each in one of their teams; given and taken by that team's admins. */
-    roleGrants?(personId: string): Promise<RoleGrant[]>;
+    roleGrants?(personId: string, p: ListParams): Promise<ListResult<RoleGrant>>;
     /** Gives the role in the team the console acts in. */
     giveRole?(personId: string, input: { roleId: string }): Promise<RoleGrant>;
     takeRole?(personId: string, grantId: string): Promise<void>;

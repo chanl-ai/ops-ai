@@ -12,5 +12,6 @@ export interface WorkspaceTeamsApi {
   rename(id: string, name: string): Promise<WorkspaceTeam>;
   archive(id: string): Promise<WorkspaceTeam>;
   restore(id: string): Promise<WorkspaceTeam>;
-  editor(): Promise<{ canView: boolean; canManage: boolean }>;
+  /** The mock's answer; under platform sign-in the console reads the cells from the one `/v1/me` answer, so this is absent. */
+  editor?(): Promise<{ canView: boolean; canManage: boolean }>;
 }

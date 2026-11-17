@@ -7,10 +7,6 @@
 # `keep <lane>: <why it stays>`, `convert <lane>: <onto what>` or `delete <lane>: <with what>`. Role-name compares are
 # also counted per lane in scripts/access-baselines/<lane>.txt, which may only fall.
 apps/console/src/components/access/members-panel.tsx role-name admin 1 E20  # keep console: presentation only, the admin badge's style; decides nothing
-apps/console/src/hooks/me-queries.ts role-name admin 1 E19  # convert console: onto useCan, read from GET /v1/me/permissions
-apps/console/src/hooks/me-queries.ts role-name builder 1 E19  # convert console: onto useCan, read from GET /v1/me/permissions
-apps/console/src/lib/auth/providers/platform.ts role-name admin 1 E22  # convert console: the session role is retired; each screen asks useCan for its cell
-apps/console/src/lib/auth/providers/platform.ts role-name viewer 1 E22  # convert console: the session role is retired; each screen asks useCan for its cell
 packages/ops_access/src/ops_access/check.py lock dev-caller 1 E09  # keep components: the dev header caller, in dev only, inside can() itself
 packages/ops_access/src/ops_access/check.py lock protection-system 1 E05  # keep components: can() reads the system mark to ask for <area>.manage
 packages/ops_store/src/ops_store/isolation.py lock dev-caller 1 E09  # keep components: the dev header caller, in dev only

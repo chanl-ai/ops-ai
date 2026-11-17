@@ -3,8 +3,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
-import type { PolicyValue } from '@/lib/types/workspace-policies';
+import type { PolicyEditor, PolicyValue } from '@/lib/types/workspace-policies';
 
+import { useMyPermissions } from './me-queries';
 import { useTeam } from './use-team';
 import { useTeamQuery } from './team-query';
 
@@ -12,11 +13,17 @@ const KEY = ['workspace-policies'] as const;
 
 export const useWorkspacePolicies = () => useTeamQuery({ queryKey: KEY, queryFn: () => api.workspacePolicies.list() });
 /** Whether the person may change policies in the team they act in, as the server's own permissions say. */
-export function usePolicyEditor() {
+export function usePolicyEditor(): { data?: PolicyEditor; isPending: boolean } {
   // The resolved team: the stored choice may name a team the person is not in, and the requests then act in their first one.
   const { team } = useTeam();
   const teamId = team?.id ?? '';
-  return useTeamQuery({ queryKey: [...KEY, 'editor', teamId], queryFn: () => api.workspacePolicies.editor(teamId), enabled: !!teamId });
+  // Under platform sign-in the cells come from the one GET /v1/me answer; the mock serves its own.
+  const perms = useMyPermissions();
+  const sample = useTeamQuery({ queryKey: [...KEY, 'editor', teamId], queryFn: () => api.workspacePolicies.editor!(teamId), enabled: !!teamId && !api.teams.me });
+  if (!api.teams.me) return sample;
+  const cells: PolicyEditor['cells'] = {};
+  for (const p of perms.data?.teams.find((t) => t.teamId === teamId)?.permissions ?? []) cells[`${p.area}.${p.action}`] = [...new Set(p.roles.map((r) => r.name))];
+  return { data: perms.data ? { cells } : undefined, isPending: perms.isPending };
 }
 export function useSetWorkspacePolicy() {
   const qc = useQueryClient();

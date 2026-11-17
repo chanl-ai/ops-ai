@@ -9,5 +9,6 @@ export interface WorkspacePoliciesApi {
   list(): Promise<WorkspacePolicy[]>;
   /** `teamId` names the team a per-team policy (publish review) is set for; the mock needs it, platform-service reads it from X-Team-Id. */
   set(key: string, value: PolicyValue, teamId?: string): Promise<WorkspacePolicy>;
-  editor(teamId: string): Promise<PolicyEditor>;
+  /** The mock's cells; under platform sign-in the console reads them from the one `/v1/me` answer, so this is absent. */
+  editor?(teamId: string): Promise<PolicyEditor>;
 }

@@ -3,7 +3,7 @@
 import type { BulkResult } from './domain';
 import type { FeatureFlag } from './flags';
 
-export type MemberRole = 'admin' | 'builder' | 'approver' | 'viewer';
+export type MemberRole = 'admin' | 'builder' | 'approver' | 'viewer' | 'chat_user';
 
 /** The signed-in person and their role on each of their teams (platform-service GET /v1/me). */
 export interface Me {
@@ -12,6 +12,8 @@ export interface Me {
   /** The workspace's own name (platform-service), for the header. */
   tenantName?: string;
   teams: { id: string; name: string; role: MemberRole }[];
+  /** What `can()` grants the person in each team and in every team: the one answer the shell, every `useCan` and the policy editors read. */
+  permissions: MyPermissions;
   /** Every feature flag with whether the install config turns it on; read through hooks/flag-queries. */
   flags?: FeatureFlag[];
 }

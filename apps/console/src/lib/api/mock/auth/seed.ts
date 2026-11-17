@@ -1,7 +1,11 @@
 import type { AuthMethod, SessionUser } from '@/lib/auth/provider';
 
 /** Harbor & Pine people the mock can sign in. Every password is `northfield-demo`; every TOTP code is `123456`. */
+/** Which seeded person this is; the mock grants every signed-in person every action, so nothing reads it but the invites mock. */
+export type MockRole = 'admin' | 'member' | 'viewer';
+
 export interface MockUser extends SessionUser {
+  role: MockRole;
   password: string | null;
   mfaEnrolled: boolean;
   method: AuthMethod;

@@ -18,7 +18,7 @@ import { Row, Rows, Section } from '@/components/shared/surface';
 import { TeamName } from '@/components/shared/team-name';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useCan, usePersonPermissions, useRoleGrants, useRoles } from '@/hooks/me-queries';
+import { useCan, usePersonPermissions, useRoleGrants } from '@/hooks/me-queries';
 import { useTeam } from '@/hooks/use-team';
 import type { EffectivePermission, RoleGrant } from '@/lib/types/settings';
 
@@ -69,7 +69,6 @@ export default function PersonAccessPage() {
   const canCheck = useCan('access', 'view') === true;
   // Giving a role is an admin's of the role's team; the service refuses anyone else and the dialog shows why.
   const canGive = useCan('access', 'manage') === true;
-  const roles = useRoles();
   const { grants, give, take, available } = useRoleGrants(id);
   const [checking, setChecking] = React.useState(false);
   const [giving, setGiving] = React.useState(false);
@@ -116,9 +115,9 @@ export default function PersonAccessPage() {
                   ) : undefined
                 }
               >
-                {grants.data?.length ? (
+                {grants.data?.pagination.total ? (
                   <Rows testId="role-grants">
-                    {grants.data.map((g) => (
+                    {grants.data.data.map((g) => (
                       <Row
                         key={g.id}
                         title={g.roleName}
@@ -156,7 +155,6 @@ export default function PersonAccessPage() {
           open={giving}
           onOpenChange={setGiving}
           personName={p.name ?? 'this person'}
-          roles={roles.data ?? []}
           teamName={team?.name ?? 'this team'}
           pending={give.isPending}
           onSubmit={(input) => give.mutateAsync(input).then((g) => toast.success(`Gave ${p.name ?? 'them'} ${g.roleName}`))}
