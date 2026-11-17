@@ -144,6 +144,10 @@ async def list_skills(
     view: View = "all",
     usable_by: Annotated[Literal["agent"] | None, Query(alias="usableBy")] = None,
     agent_id: Annotated[str | None, Query(alias="agentId")] = None,
+    status: Annotated[list[str] | None, Query()] = None,
+    owner_team: Annotated[list[str] | None, Query(alias="ownerTeam")] = None,
+    origin: Annotated[list[str] | None, Query()] = None,
+    loading: Annotated[list[str] | None, Query()] = None,
 ) -> JSONResponse:
     """One page of the team's skills on the shared list contract, by name then id: `search` matches the name, use-when
     or slug, `ids` names skills exactly. `view=published` rows describe the published version, its inputs and parts,
@@ -155,6 +159,8 @@ async def list_skills(
     Every view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.
     With `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing
     a tool or knowledge base the agent lacks as `locked`, naming them in `needs`."""
+    # Read from `q.filters`; declared so the document and the SDKs name them.
+    del status, owner_team, origin, loading
     spec: dict[str, Any] | None = None
     offered = None
     if agent_id is not None:

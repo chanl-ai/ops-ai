@@ -2940,11 +2940,11 @@ export interface paths {
         };
         /**
          * List Workflows
-         * @description The team's workflows of both engines, a page at a time. `startable` keeps those a person starts by hand (Start
-         *     run), `takesFiles` those whose start form takes a file (Files' "Start a workflow with this file"); each row's
-         *     `start` says how it starts. `engine=current` leaves out the earlier engine's workflows before the page,
-         *     the total and the status counts are taken, since the console no longer shows them. Both engines' rows are joined
-         *     here, so the list sorts and pages in memory: by the sort column, then the id.
+         * @description The team's workflows of both engines, a page at a time, from one statement over both (store.workflow_list).
+         *     `startable` keeps those a person starts by hand (Start run), `takesFiles` those whose start form takes a file
+         *     (Files' "Start a workflow with this file"); each row's `start` says how it starts. `engine=current` leaves out the
+         *     earlier engine's workflows, since the console no longer shows them. Sorted by the sort column (name unless one of
+         *     SORTS), then by engine and id; a page past the end answers the last page.
          */
         get: operations["workflows_list_workflows"];
         put?: never;
@@ -12975,6 +12975,8 @@ export interface operations {
     agents_list_agents: {
         parameters: {
             query?: {
+                availability?: string[] | null;
+                teamId?: string[] | null;
                 page?: number;
                 pageSize?: number | null;
                 search?: string | null;
@@ -24061,6 +24063,10 @@ export interface operations {
                 view?: "all" | "published" | "always" | "drafts" | "in_review" | "deprecated" | "unused";
                 usableBy?: "agent" | null;
                 agentId?: string | null;
+                status?: string[] | null;
+                ownerTeam?: string[] | null;
+                origin?: string[] | null;
+                loading?: string[] | null;
                 page?: number;
                 pageSize?: number | null;
                 search?: string | null;

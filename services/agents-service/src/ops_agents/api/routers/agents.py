@@ -368,10 +368,19 @@ async def require_known_alias(rt: Runtime, alias: str) -> None:
 
 
 @router.get("", response_model=Envelope[ListResult[Agent]])
-async def list_agents(*, rt: Rt, _: Reader, q: ListQuery) -> JSONResponse:
+async def list_agents(
+    *,
+    rt: Rt,
+    _: Reader,
+    q: ListQuery,
+    availability: Annotated[list[str] | None, Query()] = None,
+    team_id: Annotated[list[str] | None, Query(alias="teamId")] = None,
+) -> JSONResponse:
     """One page of the team's agents on the shared list contract, by name: `search` matches the name, role and slug;
     `sortBy` is one of name, updatedAt, tasks24h, version, teamId and availability; the filters `availability`,
     `teamId` and `templateId` narrow the page, and the first two are counted in `facets`."""
+    # Read from `q.filters`; declared so the document and the SDKs name them.
+    del availability, team_id
     listed = await registry(rt).page(q, since=a_day_ago())
     offered = await _offered(rt) if listed["data"] else None
     used = await used_in_all(rt) if listed["data"] else {}
