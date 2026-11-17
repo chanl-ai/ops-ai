@@ -127,9 +127,9 @@ def skill_columns(*, served: bool) -> tuple[sa.Select[Any], dict[str, sa.ColumnE
 def offered_by(agent_id: str, *, team: str, menu: str) -> sa.ColumnElement[bool]:
     """The skills an agent's skill menu setting offers in a chat of `team` (`api.skills.usable`): every published, live
     skill of the team for `team`, those the agent's newest version pins for `attached`, none for `off`."""
-    if menu == "off":
-        return sa.false()
     s, p = registry_skills, agent_skill_pins
+    if menu == "off":
+        return s.c.id.is_(None)
     terms = [s.c.team_id == team, s.c.published_version.is_not(None), s.c.deprecated_reason.is_(None)]
     if menu == "attached":
         terms.append(
@@ -145,7 +145,8 @@ def in_view(view: View, col: dict[str, sa.ColumnElement[Any]]) -> sa.ColumnEleme
     review."""
     status, published = col["status"], col["published_version"]
     return {
-        "all": sa.true(),
+        # A condition, not TRUE: SQL Server reads a bare 1 in a CASE WHEN as no condition at all.
+        "all": col["id"].is_not(None),
         "published": sa.and_(published.is_not(None), status != _word("deprecated")),
         "always": col["loading"] == _word("always"),
         "drafts": sa.and_(sa.or_(published.is_(None), col["version"] != published), status != _word("in_review")),

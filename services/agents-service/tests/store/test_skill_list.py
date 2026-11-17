@@ -5,12 +5,16 @@ when the database lets every team through."""
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import os
+from collections.abc import AsyncIterator, Iterator
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
+from alembic import command
+from alembic.config import Config
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agents.store.agent_registry import AgentRegistry, agent_skill_pins
@@ -18,16 +22,31 @@ from ops_agents.store.skill_list import skills_page
 from ops_agents.store.skills import SkillRegistry
 from ops_agents.store.tenancy import tenant_tx
 from ops_service_kit.listing import ListParams
+from ops_service_kit.settings import Settings
 from ops_store import isolation
 from ops_store.team_scope import acting_as
+from ops_store.testing import DATABASES, NO_SQL_SERVER, sql_server_schema
 
+ROOT = Path(__file__).resolve().parents[2]
 TEAM, OTHER = "team_cards", "team_lending"
 BY = "maya@x.example"
 
 
+@pytest.fixture(scope="module", params=DATABASES)
+def url(request: pytest.FixtureRequest) -> Iterator[str]:
+    if request.param == "postgresql":
+        command.upgrade(Config(str(ROOT / "alembic.ini")), "head")
+        yield Settings().database_url
+        return
+    with sql_server_schema("agents", os.environ.get("OPS_MSSQL_SERVER"), os.environ.get("MSSQL_SA_PASSWORD")) as u:
+        if u is None:
+            pytest.skip(NO_SQL_SERVER)
+        yield u
+
+
 @pytest.fixture
-async def engine(database_url: str) -> AsyncIterator[AsyncEngine]:
-    e = create_async_engine(database_url)
+async def engine(url: str) -> AsyncIterator[AsyncEngine]:
+    e = create_async_engine(url)
     yield e
     await e.dispose()
 

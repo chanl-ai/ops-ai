@@ -222,7 +222,7 @@
 1 dict-any services/agents-service/src/ops_agents/api/routers/run_resume.py
 1 extra-allow services/agents-service/src/ops_agents/api/routers/run_resume.py
 2 dict-any services/agents-service/src/ops_agents/api/routers/service_events.py
-10 dict-any services/agents-service/src/ops_agents/api/routers/skills.py
+8 dict-any services/agents-service/src/ops_agents/api/routers/skills.py
 12 dict-any services/agents-service/src/ops_agents/api/routers/task_types.py
 7 dict-any services/agents-service/src/ops_agents/api/routers/tasks.py
 11 dict-any services/agents-service/src/ops_agents/api/routers/team_assistant.py
@@ -242,7 +242,7 @@
 33 dict-any services/agents-service/src/ops_agents/api/schemas.py
 2 extra-allow services/agents-service/src/ops_agents/api/schemas.py
 13 dict-any services/agents-service/src/ops_agents/api/service_events.py
-72 dict-any services/agents-service/src/ops_agents/api/skills.py
+66 dict-any services/agents-service/src/ops_agents/api/skills.py
 3 dict-any services/agents-service/src/ops_agents/api/step_shapes.py
 1 dict-any services/agents-service/src/ops_agents/api/sweeper.py
 15 dict-any services/agents-service/src/ops_agents/api/task_assist.py
