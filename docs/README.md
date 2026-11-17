@@ -603,3 +603,8 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/agents-service/a-schedule-starts-a-run-once.md` | uc-workflows-1: A Schedule trigger starts one run per tick key |
 | `usecases/platform-service/team-usage-guards-team-deletion.md` | uc-platform-1: A team's running work is counted for that team only and stops its deletion |
 | `usecases/agents-service/evals-keep-saved-cases-and-runs.md` | uc-751: Evals keep saved cases and runs for the team |
+| `usecases/agents-service/an-agent-answers-from-a-knowledge.md` | uc-752: An agent answers from a knowledge source with a citation, in mock and real mode |
+| `usecases/tools-service/an-agent-reads-with-a-tool.md` | uc-753: An agent reads with a tool, asks for approval, and the write runs only after approval, in mock and real mode |
+| `usecases/tools-service/approval-fails-closed-when-the-approval.md` | uc-754: Approval fails closed: when the approval rules cannot be read, a write that needs approval is refused and never runs |
+| `usecases/tools-service/a-team-holding-only-a-workflow.md` | uc-755: A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it |
+| `usecases/agents-service/a-shared-form-filled-in-signed.md` | uc-756: A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record |
