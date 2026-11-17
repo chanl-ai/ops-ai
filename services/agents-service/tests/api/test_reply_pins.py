@@ -182,6 +182,22 @@ async def test_the_chat_run_and_review_replies_keep_every_key_value_and_error_ob
     seen["overview"] = answer(await c.get("/v1/overview"))
     seen["reviews.list"] = answer(await c.get("/reviews"))
     seen["reviews.missing"] = answer(await c.get("/reviews/th_missing"))
+
+    # Two runs of the registry workflow waiting at their review, so each list builds a row from its sources.
+    for subject in ("Hold the wire", "Release the wire"):
+        made = await c.post("/v1/threads", json={"graph": "wire_hold_review"})
+        email = {"sender": "ops@bank.example", "subject": subject, "body": "Please act on wire 4411."}
+        run = await c.post(f"/v1/threads/{_id(made, 'threadId')}/runs/stream", json={"input": {"email": email}})
+        assert run.status_code == 200 and '"interrupt"' in run.text, run.text
+    waiting = _id(made, "threadId")
+    seen["reviews.waiting"] = answer(await c.get("/reviews", params={"view": "all"}))
+    seen["reviews.waitingOne"] = answer(await c.get(f"/reviews/{waiting}"))
+    seen["overview.waiting"] = answer(await c.get("/v1/overview"))
+    seen["runs.waiting"] = answer(await c.get("/runs", params={"view": "open"}))
+    events = await c.get("/v1/events", params={"follow": "false"})
+    # A run's lease owner names the host and process, so it is left out.
+    frames = [f | {"data": {k: v for k, v in f["data"].items() if k != "owner"}} for f in sse_events(events.text)]
+    seen["events.waiting"] = {"status": events.status_code, "frames": scrubbed(frames)}
     compare(seen, FIXTURES / "reply-pins-runtime.json")
 
 

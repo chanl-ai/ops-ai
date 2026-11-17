@@ -349,6 +349,121 @@
     },
     "status": 200
   },
+  "events.waiting": {
+    "frames": [
+      {
+        "at": "<timeZ>",
+        "data": {
+          "generation": 1,
+          "graph": "agent_wrapper",
+          "kind": "input"
+        },
+        "id": "<evt>",
+        "node": null,
+        "runId": "<run>",
+        "seq": 2,
+        "threadId": "<th>",
+        "type": "started"
+      },
+      {
+        "at": "<timeZ>",
+        "data": {
+          "status": "done"
+        },
+        "id": "<evt>",
+        "node": null,
+        "runId": "<run>",
+        "seq": 16,
+        "threadId": "<th>",
+        "type": "finished"
+      },
+      {
+        "at": "<timeZ>",
+        "data": {
+          "generation": 1,
+          "graph": "wire_hold_review",
+          "kind": "input"
+        },
+        "id": "<evt>",
+        "node": null,
+        "runId": "<run>",
+        "seq": 1,
+        "threadId": "<gth>",
+        "type": "started"
+      },
+      {
+        "at": "<timeZ>",
+        "data": {
+          "id": "<hex>",
+          "payload": {
+            "call": {
+              "input": {
+                "body": "Here is what the policy says [1].",
+                "subject": "Re: Hold the wire",
+                "to": "ops@bank.example"
+              },
+              "step": "REV-DBDF00:reply",
+              "tool": "send_reply"
+            },
+            "draft": "Here is what the policy says [1].",
+            "kind": "review",
+            "node": "review",
+            "review_id": "<REV>",
+            "score": null
+          }
+        },
+        "id": "<evt>",
+        "node": null,
+        "runId": "<run>",
+        "seq": 14,
+        "threadId": "<gth>",
+        "type": "waiting_review"
+      },
+      {
+        "at": "<timeZ>",
+        "data": {
+          "generation": 1,
+          "graph": "wire_hold_review",
+          "kind": "input"
+        },
+        "id": "<evt>",
+        "node": null,
+        "runId": "<run>",
+        "seq": 1,
+        "threadId": "<gth>",
+        "type": "started"
+      },
+      {
+        "at": "<timeZ>",
+        "data": {
+          "id": "<hex>",
+          "payload": {
+            "call": {
+              "input": {
+                "body": "Here is what the policy says [1].",
+                "subject": "Re: Release the wire",
+                "to": "ops@bank.example"
+              },
+              "step": "REV-4E5C6E:reply",
+              "tool": "send_reply"
+            },
+            "draft": "Here is what the policy says [1].",
+            "kind": "review",
+            "node": "review",
+            "review_id": "<REV>",
+            "score": null
+          }
+        },
+        "id": "<evt>",
+        "node": null,
+        "runId": "<run>",
+        "seq": 14,
+        "threadId": "<gth>",
+        "type": "waiting_review"
+      }
+    ],
+    "status": 200
+  },
   "overview": {
     "body": {
       "data": {
@@ -367,6 +482,159 @@
         "overdueReviews": 0,
         "runsInFlight": [],
         "urgentReviews": [],
+        "waitingForMe": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "overview.waiting": {
+    "body": {
+      "data": {
+        "cases": {
+          "awaitingApproval": 0,
+          "breaching": 0,
+          "open": 0
+        },
+        "casesDue": [],
+        "counts": {
+          "casesDue": 0,
+          "runsInFlight": 0,
+          "waitingForMe": 0
+        },
+        "openReviews": 2,
+        "overdueReviews": 0,
+        "runsInFlight": [],
+        "urgentReviews": [
+          {
+            "actionFields": [
+              {
+                "label": "To",
+                "value": "ops@bank.example"
+              },
+              {
+                "label": "Subject",
+                "value": "Re: Release the wire"
+              },
+              {
+                "label": "Body",
+                "value": "Here is what the policy says [1]."
+              }
+            ],
+            "actionTool": "send_reply",
+            "agentSlug": "wire_hold_review",
+            "amount": null,
+            "approvals": [],
+            "assignee": null,
+            "calls": null,
+            "confidence": 0.0,
+            "consequence": "Send reply: to ops@bank.example, subject Re: Release the wire, body Here is what the policy says [1].",
+            "createdAt": "<timeZ>",
+            "currency": "USD",
+            "customer": "",
+            "decidingTeam": {
+              "id": "team_ops",
+              "name": null
+            },
+            "error": null,
+            "evidence": [
+              {
+                "detail": "{'to': 'ops@bank.example', 'subject': 'Re: Release the wire', 'body': 'Here is what the policy says [1].'}",
+                "kind": "tool",
+                "label": "send_reply"
+              }
+            ],
+            "id": "<gth>",
+            "kind": "approval",
+            "options": null,
+            "optionsError": null,
+            "origin": {
+              "kind": "workflow"
+            },
+            "policy": {
+              "condition": "Every outgoing reply",
+              "fourEyes": false,
+              "id": "wire_hold_review:review",
+              "name": "Human review",
+              "onTimeout": "Per workflow",
+              "reviewers": "Reviewers",
+              "sla": "Per workflow"
+            },
+            "proposal": "Here is what the policy says [1].",
+            "reasoning": [],
+            "risk": "medium",
+            "slaMinutes": null,
+            "status": "pending",
+            "stepUp": false,
+            "title": "Review Wire hold review",
+            "workflowId": "wire_hold_review",
+            "workflowName": "Wire hold review"
+          },
+          {
+            "actionFields": [
+              {
+                "label": "To",
+                "value": "ops@bank.example"
+              },
+              {
+                "label": "Subject",
+                "value": "Re: Hold the wire"
+              },
+              {
+                "label": "Body",
+                "value": "Here is what the policy says [1]."
+              }
+            ],
+            "actionTool": "send_reply",
+            "agentSlug": "wire_hold_review",
+            "amount": null,
+            "approvals": [],
+            "assignee": null,
+            "calls": null,
+            "confidence": 0.0,
+            "consequence": "Send reply: to ops@bank.example, subject Re: Hold the wire, body Here is what the policy says [1].",
+            "createdAt": "<timeZ>",
+            "currency": "USD",
+            "customer": "",
+            "decidingTeam": {
+              "id": "team_ops",
+              "name": null
+            },
+            "error": null,
+            "evidence": [
+              {
+                "detail": "{'to': 'ops@bank.example', 'subject': 'Re: Hold the wire', 'body': 'Here is what the policy says [1].'}",
+                "kind": "tool",
+                "label": "send_reply"
+              }
+            ],
+            "id": "<gth>",
+            "kind": "approval",
+            "options": null,
+            "optionsError": null,
+            "origin": {
+              "kind": "workflow"
+            },
+            "policy": {
+              "condition": "Every outgoing reply",
+              "fourEyes": false,
+              "id": "wire_hold_review:review",
+              "name": "Human review",
+              "onTimeout": "Per workflow",
+              "reviewers": "Reviewers",
+              "sla": "Per workflow"
+            },
+            "proposal": "Here is what the policy says [1].",
+            "reasoning": [],
+            "risk": "medium",
+            "slaMinutes": null,
+            "status": "pending",
+            "stepUp": false,
+            "title": "Review Wire hold review",
+            "workflowId": "wire_hold_review",
+            "workflowName": "Wire hold review"
+          }
+        ],
         "waitingForMe": []
       },
       "success": true
@@ -422,6 +690,255 @@
     },
     "status": 404
   },
+  "reviews.waiting": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "actionFields": [
+              {
+                "label": "To",
+                "value": "ops@bank.example"
+              },
+              {
+                "label": "Subject",
+                "value": "Re: Release the wire"
+              },
+              {
+                "label": "Body",
+                "value": "Here is what the policy says [1]."
+              }
+            ],
+            "actionTool": "send_reply",
+            "agentSlug": "wire_hold_review",
+            "amount": null,
+            "approvals": [],
+            "assignee": null,
+            "calls": null,
+            "canDecide": true,
+            "confidence": 0.0,
+            "consequence": "Send reply: to ops@bank.example, subject Re: Release the wire, body Here is what the policy says [1].",
+            "createdAt": "<timeZ>",
+            "currency": "USD",
+            "customer": "",
+            "decidingTeam": {
+              "id": "team_ops",
+              "name": null
+            },
+            "error": null,
+            "evidence": [
+              {
+                "detail": "{'to': 'ops@bank.example', 'subject': 'Re: Release the wire', 'body': 'Here is what the policy says [1].'}",
+                "kind": "tool",
+                "label": "send_reply"
+              }
+            ],
+            "id": "<gth>",
+            "kind": "approval",
+            "options": null,
+            "optionsError": null,
+            "origin": {
+              "kind": "workflow"
+            },
+            "policy": {
+              "condition": "Every outgoing reply",
+              "fourEyes": false,
+              "id": "wire_hold_review:review",
+              "name": "Human review",
+              "onTimeout": "Per workflow",
+              "reviewers": "Reviewers",
+              "sla": "Per workflow"
+            },
+            "proposal": "Here is what the policy says [1].",
+            "reasoning": [],
+            "risk": "medium",
+            "slaMinutes": null,
+            "status": "pending",
+            "stepUp": false,
+            "title": "Review Wire hold review",
+            "workflowId": "wire_hold_review",
+            "workflowName": "Wire hold review"
+          },
+          {
+            "actionFields": [
+              {
+                "label": "To",
+                "value": "ops@bank.example"
+              },
+              {
+                "label": "Subject",
+                "value": "Re: Hold the wire"
+              },
+              {
+                "label": "Body",
+                "value": "Here is what the policy says [1]."
+              }
+            ],
+            "actionTool": "send_reply",
+            "agentSlug": "wire_hold_review",
+            "amount": null,
+            "approvals": [],
+            "assignee": null,
+            "calls": null,
+            "canDecide": true,
+            "confidence": 0.0,
+            "consequence": "Send reply: to ops@bank.example, subject Re: Hold the wire, body Here is what the policy says [1].",
+            "createdAt": "<timeZ>",
+            "currency": "USD",
+            "customer": "",
+            "decidingTeam": {
+              "id": "team_ops",
+              "name": null
+            },
+            "error": null,
+            "evidence": [
+              {
+                "detail": "{'to': 'ops@bank.example', 'subject': 'Re: Hold the wire', 'body': 'Here is what the policy says [1].'}",
+                "kind": "tool",
+                "label": "send_reply"
+              }
+            ],
+            "id": "<gth>",
+            "kind": "approval",
+            "options": null,
+            "optionsError": null,
+            "origin": {
+              "kind": "workflow"
+            },
+            "policy": {
+              "condition": "Every outgoing reply",
+              "fourEyes": false,
+              "id": "wire_hold_review:review",
+              "name": "Human review",
+              "onTimeout": "Per workflow",
+              "reviewers": "Reviewers",
+              "sla": "Per workflow"
+            },
+            "proposal": "Here is what the policy says [1].",
+            "reasoning": [],
+            "risk": "medium",
+            "slaMinutes": null,
+            "status": "pending",
+            "stepUp": false,
+            "title": "Review Wire hold review",
+            "workflowId": "wire_hold_review",
+            "workflowName": "Wire hold review"
+          }
+        ],
+        "facets": {
+          "agentSlug": {
+            "wire_hold_review": 2
+          },
+          "kind": {
+            "approval": 2
+          },
+          "risk": {
+            "medium": 2
+          },
+          "status": {
+            "pending": 2
+          },
+          "workflowId": {
+            "wire_hold_review": 2
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 25,
+          "total": 2,
+          "totalPages": 1
+        },
+        "stats": {
+          "approvedAsProposedRate": 0,
+          "decidedToday": 0,
+          "medianDecisionMinutes": 0,
+          "medianDecisionTrendMinutes": 0,
+          "unassigned": 2
+        },
+        "viewCounts": {
+          "mine": 0,
+          "open": 2,
+          "overdue": 0,
+          "resolved": 0
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "reviews.waitingOne": {
+    "body": {
+      "data": {
+        "actionFields": [
+          {
+            "label": "To",
+            "value": "ops@bank.example"
+          },
+          {
+            "label": "Subject",
+            "value": "Re: Release the wire"
+          },
+          {
+            "label": "Body",
+            "value": "Here is what the policy says [1]."
+          }
+        ],
+        "actionTool": "send_reply",
+        "agentSlug": "wire_hold_review",
+        "amount": null,
+        "approvals": [],
+        "assignee": null,
+        "calls": null,
+        "canDecide": true,
+        "confidence": 0.0,
+        "consequence": "Send reply: to ops@bank.example, subject Re: Release the wire, body Here is what the policy says [1].",
+        "createdAt": "<timeZ>",
+        "currency": "USD",
+        "customer": "",
+        "decidingTeam": {
+          "id": "team_ops",
+          "name": null
+        },
+        "error": null,
+        "evidence": [
+          {
+            "detail": "{'to': 'ops@bank.example', 'subject': 'Re: Release the wire', 'body': 'Here is what the policy says [1].'}",
+            "kind": "tool",
+            "label": "send_reply"
+          }
+        ],
+        "id": "<gth>",
+        "kind": "approval",
+        "options": null,
+        "optionsError": null,
+        "origin": {
+          "kind": "workflow"
+        },
+        "policy": {
+          "condition": "Every outgoing reply",
+          "fourEyes": false,
+          "id": "wire_hold_review:review",
+          "name": "Human review",
+          "onTimeout": "Per workflow",
+          "reviewers": "Reviewers",
+          "sla": "Per workflow"
+        },
+        "proposal": "Here is what the policy says [1].",
+        "reasoning": [],
+        "risk": "medium",
+        "slaMinutes": null,
+        "status": "pending",
+        "stepUp": false,
+        "title": "Review Wire hold review",
+        "workflowId": "wire_hold_review",
+        "workflowName": "Wire hold review"
+      },
+      "success": true
+    },
+    "status": 200
+  },
   "runs.list": {
     "body": {
       "data": {
@@ -453,6 +970,147 @@
       "success": false
     },
     "status": 404
+  },
+  "runs.waiting": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "actionsApproved": 0,
+            "actionsPending": 1,
+            "assignee": null,
+            "caseId": null,
+            "children": null,
+            "durationMs": "<durationMs>",
+            "id": "<gth>",
+            "parentThreadId": null,
+            "queue": "Reviews",
+            "reviewId": "<gth>",
+            "slaDueAt": null,
+            "slaMinutes": null,
+            "startedAt": "<timeZ>",
+            "state": "waiting",
+            "status": "waiting_review",
+            "steps": [
+              {
+                "durationMs": "<durationMs>",
+                "kind": "trigger",
+                "label": "Started",
+                "nodeId": "trigger",
+                "status": "done"
+              },
+              {
+                "durationMs": "<durationMs>",
+                "kind": "tool",
+                "label": "T",
+                "nodeId": "t",
+                "status": "done"
+              },
+              {
+                "durationMs": "<durationMs>",
+                "kind": "tool",
+                "label": "Assess",
+                "nodeId": "assess",
+                "status": "done"
+              },
+              {
+                "durationMs": "<durationMs>",
+                "kind": "tool",
+                "label": "Review",
+                "nodeId": "review",
+                "status": "waiting"
+              }
+            ],
+            "subject": "Release the wire",
+            "trigger": "From ops@bank.example",
+            "version": 1,
+            "waitingOn": "Reviewers",
+            "workflowId": "wire_hold_review",
+            "workflowName": "Wire hold review"
+          },
+          {
+            "actionsApproved": 0,
+            "actionsPending": 1,
+            "assignee": null,
+            "caseId": null,
+            "children": null,
+            "durationMs": "<durationMs>",
+            "id": "<gth>",
+            "parentThreadId": null,
+            "queue": "Reviews",
+            "reviewId": "<gth>",
+            "slaDueAt": null,
+            "slaMinutes": null,
+            "startedAt": "<timeZ>",
+            "state": "waiting",
+            "status": "waiting_review",
+            "steps": [
+              {
+                "durationMs": "<durationMs>",
+                "kind": "trigger",
+                "label": "Started",
+                "nodeId": "trigger",
+                "status": "done"
+              },
+              {
+                "durationMs": "<durationMs>",
+                "kind": "tool",
+                "label": "T",
+                "nodeId": "t",
+                "status": "done"
+              },
+              {
+                "durationMs": "<durationMs>",
+                "kind": "tool",
+                "label": "Assess",
+                "nodeId": "assess",
+                "status": "done"
+              },
+              {
+                "durationMs": "<durationMs>",
+                "kind": "tool",
+                "label": "Review",
+                "nodeId": "review",
+                "status": "waiting"
+              }
+            ],
+            "subject": "Hold the wire",
+            "trigger": "From ops@bank.example",
+            "version": 1,
+            "waitingOn": "Reviewers",
+            "workflowId": "wire_hold_review",
+            "workflowName": "Wire hold review"
+          }
+        ],
+        "facets": {
+          "queue": {
+            "Reviews": 2
+          },
+          "state": {
+            "waiting": 2
+          },
+          "workflowId": {
+            "wire_hold_review": 2
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 25,
+          "total": 2,
+          "totalPages": 1
+        },
+        "viewCounts": {
+          "done_today": 1,
+          "needs_person": 2,
+          "open": 2,
+          "past_sla": 0
+        }
+      },
+      "success": true
+    },
+    "status": 200
   },
   "threads.create": {
     "body": {
