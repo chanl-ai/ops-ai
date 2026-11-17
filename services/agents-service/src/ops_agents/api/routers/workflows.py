@@ -19,12 +19,16 @@ from pydantic import BaseModel, Field
 
 from ops_access import can
 from ops_agents.graphs.definition import ROUTE_OP_LABELS, compile_definition, route_field_types
+from ops_engine.store.definitions import HUMAN_REVIEW
 from ops_identity import CurrentTenantCaller
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unprocessable, ValidationFailed
 from ops_service_kit.http import Envelope, In, ListResult, paged
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListParams
 
+from ...store.tenancy import tenant_tx
+from ...store.workflow_list import SORTS, PageExtra, WorkflowRow, page_details, workflows_page
 from .. import engine_lifecycle
 from ..agent_registry import registry as agent_registry
 from ..agent_registry import review_view
@@ -173,42 +177,86 @@ class WorkflowsQuery(BaseModel):
     engine: Literal["all", "current"] = "all"
 
 
-SORTS = {"name", "updatedAt", "runs24h", "status", "version"}
-
-
 @router.get("", response_model=Envelope[ListResult[Workflow]])
 async def list_workflows(rt: Rt, me: Me, _: Tx, q: Annotated[WorkflowsQuery, Query()]) -> JSONResponse:
-    """The team's workflows of both engines, a page at a time. `startable` keeps those a person starts by hand (Start
-    run), `takesFiles` those whose start form takes a file (Files' "Start a workflow with this file"); each row's
-    `start` says how it starts. `engine=current` leaves out the earlier engine's workflows before the page,
-    the total and the status counts are taken, since the console no longer shows them. Both engines' rows are joined
-    here, so the list sorts and pages in memory: by the sort column, then the id."""
-    counts = await counts_24h(rt)
-    # A graph workflow of the earlier engine starts from its input form, with no file field.
-    rows: list[dict[str, Any]] = (
-        []
-        if q.engine == "current"
-        else [{**await _view(rt, r["id"], counts), "start": V1_START} for r in await registry(rt).rows()]
-    )
-    # v2 runner definitions join here, so the console lists both kinds from one page of one request.
+    """The team's workflows of both engines, a page at a time, from one statement over both (store.workflow_list).
+    `startable` keeps those a person starts by hand (Start run), `takesFiles` those whose start form takes a file
+    (Files' "Start a workflow with this file"); each row's `start` says how it starts. `engine=current` leaves out the
+    earlier engine's workflows, since the console no longer shows them. Sorted by the sort column (name unless one of
+    SORTS), then by engine and id; a page past the end answers the last page."""
     since = (datetime.now(UTC) - timedelta(days=1)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-    rows += await engine.v2_workflow_rows(rt, since)
-    if q.search:
-        s = q.search.lower()
-        rows = [w for w in rows if s in w["name"].lower() or s in w["description"].lower()]
-    facets: dict[str, dict[str, int]] = {"status": {}}
-    for w in rows:
-        facets["status"][w["status"]] = facets["status"].get(w["status"], 0) + 1
-    if q.startable:
-        rows = [w for w in rows if w["start"]["byHand"]]
-    if q.takesFiles:
-        rows = [w for w in rows if w["start"]["takesFiles"]]
-    # An archived workflow leaves the list unless asked for; the facet still counts it, so the filter can show it.
-    rows = [w for w in rows if (w["status"] in q.status if q.status else w["status"] != "archived")]
-    key = q.sortBy if q.sortBy in SORTS else "name"
-    rows.sort(key=lambda w: (w[key], w["id"]), reverse=q.sortOrder == "desc")
-    start = (q.page - 1) * q.pageSize
-    return ok(paged(rows[start : start + q.pageSize], len(rows), q.page, q.pageSize, facets=facets))
+    params = ListParams(
+        page=q.page,
+        search=q.search,
+        sort_by=q.sortBy if q.sortBy in SORTS else "name",
+        sort_order=q.sortOrder,
+        filters={"status": q.status} if q.status else {},
+    )
+    # This route's own page size (WorkflowsQuery, up to 200): the console's pickers read 100 and 200 at a time.
+    params = params.model_copy(update={"page_size": q.pageSize})
+    async with tenant_tx(rt.db) as c:
+        listed = await workflows_page(
+            c,
+            params,
+            since=since,
+            current_only=q.engine == "current",
+            startable=q.startable,
+            takes_files=q.takesFiles,
+        )
+        rows = listed["data"]
+        details = await page_details(
+            c,
+            [str(r["id"]) for r in rows if r["source"] == "v1"],
+            [str(r["id"]) for r in rows if r["source"] == "v2"],
+            since=since,
+        )
+    data = [_listed_row(row, details[row.source, row.id]) for row in map(WorkflowRow.model_validate, rows)]
+    return ok({**listed, "data": data})
+
+
+def _listed_row(r: WorkflowRow, more: PageExtra) -> dict[str, Any]:
+    """A page row as schemas.Workflow: a v1 workflow as its detail page shows it, a v2 one with its steps and gates
+    from its latest definition and the fields v2 has no counterpart for (agents, deployments) empty."""
+    pending = more.pending
+    if r.source == "v1":
+        row = {**r.model_dump(), "published_version": r.version, "draft": more.draft}
+        live = {"graph": more.graph} if more.graph else None
+        request = pending.model_dump() if pending else None
+        return {**workflow_view(row, live, request, r.runs24h, more.waiting), "start": V1_START}
+    stored = more.definition if isinstance(more.definition, dict) else {}
+    raw = stored.get("nodes")
+    nodes = [n for n in raw if isinstance(n, dict)] if isinstance(raw, list) else []
+    return {
+        "id": r.id,
+        "name": r.name,
+        "description": r.description,
+        "teamId": r.team_id,
+        "trigger": r.trigger,
+        "agentSlugs": [],
+        "stepCount": len(nodes),
+        "gateCount": sum(1 for n in nodes if n.get("type") == HUMAN_REVIEW),
+        "runs24h": r.runs24h,
+        "reviewed24h": more.reviewed,
+        "openReviews": more.open_reviews,
+        "status": r.status,
+        "version": r.version,
+        "updatedAt": r.updated_at,
+        "deploymentCount": 0,
+        "kind": "standard",
+        "engine": "v2",
+        "start": {"kind": engine.start_of(stored)["kind"], "byHand": r.startable, "takesFiles": r.takes_files},
+        **(
+            {
+                "pendingPublish": {
+                    "reviewId": pending.id,
+                    "toVersion": pending.version,
+                    "requestedBy": pending.requested_by,
+                }
+            }
+            if pending
+            else {}
+        ),
+    }
 
 
 async def changeable(rt: Runtime, me: Principal, workflow_id: str, action: str) -> dict[str, Any]:

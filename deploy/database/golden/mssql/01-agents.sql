@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0114_drop_local_tenant_defaults
+-- agents-service, stamped at 0115_workflow_list_columns
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -14,6 +14,10 @@ CREATE TABLE engine_definitions (
 	stage VARCHAR(16) NOT NULL DEFAULT 'draft', 
 	archived_at VARCHAR(32) NULL, 
 	archived_by VARCHAR(200) NULL, 
+	description VARCHAR(max) NOT NULL, 
+	[trigger] VARCHAR(max) NOT NULL, 
+	startable BIT NOT NULL, 
+	takes_files BIT NOT NULL, 
 	CONSTRAINT engine_definitions_pkey PRIMARY KEY (tenant_id, workflow_id, version), 
 	CONSTRAINT uq_engine_definitions_digest UNIQUE (tenant_id, workflow_id, digest)
 );
@@ -1501,5 +1505,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0114_drop_local_tenant_defaults');
+INSERT INTO alembic_version (version_num) VALUES ('0115_workflow_list_columns');
 GO

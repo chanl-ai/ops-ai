@@ -1,7 +1,8 @@
-"""The v2 workflows list a page at a time in SQL (`definitions_page`), by failure mode: another team's workflow on the
-page or in the counts when the database lets every team through; a status worked out wrong in SQL (in review from a
-pending request, archived over every stage); an archived workflow shown by default or missing from its count;
-workflows of one update time repeated or lost between pages."""
+"""The v2 workflows list a page at a time in SQL (`definitions_page`), and the Workflows list over both engines
+(`workflows_page`), by failure mode: another team's workflow or runs on the page or in the counts when the database
+lets every team through; a status worked out wrong in SQL (in review from a pending request, archived over every
+stage); an archived workflow shown by default or missing from its count; workflows of one update time repeated or
+lost between pages."""
 
 from __future__ import annotations
 
@@ -14,7 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agents.store.agent_registry import publish_requests
 from ops_agents.store.definition_list import definitions_page
+from ops_agents.store.graphs import graph_threads
 from ops_agents.store.tenancy import tenant_tx
+from ops_agents.store.workflow_list import workflows_page
+from ops_agents.store.workflow_registry import registry_workflows
 from ops_engine.store.tables import engine_definitions
 from ops_service_kit.listing import ListParams
 from ops_store import isolation
@@ -48,6 +52,10 @@ async def _version(
                 digest=f"{wf}_{version}",
                 name=wf.title(),
                 definition={},
+                description="",
+                trigger="",
+                startable=False,
+                takes_files=False,
                 created_at=AT,
                 created_by="a@x.example",
                 team_id=team,
@@ -123,3 +131,61 @@ async def test_equal_update_times_page_by_the_key_without_repeats(engine: AsyncE
             await _version(engine, wf, 1)
         seen = [w for p in (1, 2, 3) for w, _ in (await _listed(engine, page=p, page_size=1))[0]]
     assert seen == ["wf_c", "wf_b", "wf_a"]
+
+
+async def _v1(e: AsyncEngine, wf: str, *, team: str, threads: int = 0, graph: str | None = None) -> None:
+    """A v1 workflow `wf` of `team` (none when `graph` is given), and `threads` threads of `graph` or `wf`."""
+    async with tenant_tx(e) as c:
+        if graph is None:
+            await c.execute(
+                registry_workflows.insert().values(
+                    tenant_id=isolation.tenant(),
+                    id=wf,
+                    team_id=team,
+                    name=wf.title(),
+                    description="",
+                    trigger="Email",
+                    status="live",
+                    published_version=1,
+                    created_at=AT,
+                    updated_at=AT,
+                )
+            )
+        for _ in range(threads):
+            await c.execute(
+                graph_threads.insert().values(
+                    tenant_id=isolation.tenant(),
+                    id=f"thr_{uuid4().hex[:12]}",
+                    graph=graph or wf,
+                    meta={},
+                    team_id=team,
+                    created_at=AT,
+                    updated_at=AT,
+                    status="idle",
+                )
+            )
+
+
+async def test_the_workflows_list_holds_the_acting_team_in_each_engine_when_every_team_is_let_through(
+    engine: AsyncEngine, tenant: str
+) -> None:
+    with isolation.scope(tenant, TEAM):
+        await _v1(engine, "flow_mine", team=TEAM, threads=1)
+        await _version(engine, "wf_mine", 1)
+    with isolation.scope(tenant, OTHER):
+        # Another team's threads of a graph named like this team's workflow are not its runs.
+        await _v1(engine, "flow_theirs", team=OTHER)
+        await _v1(engine, "", team=OTHER, threads=2, graph="flow_mine")
+        await _version(engine, "wf_theirs", 1, team=OTHER)
+    with (
+        isolation.tenant_wide("a test reads the workflows list with every team let through", tenant_id=tenant),
+        acting_as(TEAM),
+    ):
+        async with tenant_tx(engine) as c:
+            page = await workflows_page(c, ListParams(sort_by="name", sort_order="asc"), since=AT)
+    rows = [(r["source"], r["id"], int(r["runs24h"])) for r in page["data"]]
+    assert (rows, page["pagination"]["total"], page["facets"]["status"]) == (
+        [("v1", "flow_mine", 1), ("v2", "wf_mine", 0)],
+        2,
+        {"draft": 1, "live": 1},
+    )

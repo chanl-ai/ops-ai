@@ -1,7 +1,7 @@
 # The statement budget of each agents-service GET at 5 and 50 rows (ops_service_kit.testing.budget_check, data-access
 # standard DA1 and DA6), measured on PostgreSQL by tests/api/test_statement_budget.py. Each row is today's count at 50
-# rows. The seed adds rows to agents (each holding a tool and an account), skills, guardrails, widgets, cases and runs
-# of the registry workflow (each waiting at its review) and queued engine runs only;
+# rows. The seed adds rows to agents (each holding a tool and an account), skills, guardrails, widgets, cases, workflows
+# of each engine and runs of the registry workflow (each waiting at its review) and queued engine runs only;
 # a row for any other list proves its count, not that it stays flat as rows grow. Rows listing more than one
 # transaction or connection open one per store read and are budgeted as they run until their route is converted. A
 # `not_budgeted` row that grows names its counts.
@@ -350,7 +350,7 @@ connections = 7
 queries = 2
 
 ["GET /v1/workflows"]
-queries = 16
+queries = 6
 
 ["GET /v1/workflows/definitions"]
 queries = 3

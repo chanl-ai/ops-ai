@@ -115,9 +115,10 @@ def _id(answer: Any) -> str:
 
 @pytest.fixture
 def seed_team(served: tuple[FastAPI, AsyncClient], swaps: dict[str, str]) -> SeedTeam:
-    """`n` more agents (each holding a tool and an account), skills, guardrails, widgets, cases and runs of the registry
-    workflow (each waiting at its review) and queued engine runs on the dev caller's team, beside the seed
-    folder's records; the path ids name the first of each, and the seeded fraud agent and its records otherwise."""
+    """`n` more agents (each holding a tool and an account), skills, guardrails, widgets, cases, workflows of each
+    engine and runs of the registry workflow (each waiting at its review) and queued engine runs on the dev caller's
+    team, beside the seed folder's records; the path ids name the first of each, and the seeded fraud agent and its
+    records otherwise."""
     client = served[1]
     ids: dict[str, str] = dict.fromkeys(PATH_IDS, "missing")
     ids.update(
@@ -153,6 +154,10 @@ def seed_team(served: tuple[FastAPI, AsyncClient], swaps: dict[str, str]) -> See
             rule = _id(await client.post("/v1/guardrails", json={**RULE, "name": f"Rule {tag}"}, headers=DEV))
             widget = _id(await client.post("/v1/widgets", json={**LIMIT_CARD, "name": f"Card {tag}"}, headers=DEV))
             case = _id(await client.post("/v1/cases", json={**DISPUTE, "subject": f"Dispute {tag}"}, headers=DEV))
+            # A workflow of each engine, so the Workflows list grows on both sides of its union.
+            _id(await client.post("/v1/workflows", json={"name": f"Flow {tag}"}, headers=DEV))
+            flow = {"yaml": BASIC.read_text().replace("id: refund_check", f"id: budget_flow_{n}_{i:02d}")}
+            assert (await client.post("/v1/workflows/definitions", json=flow, headers=DEV)).status_code == 201
             # A run of the registry workflow to its review, so its runs list and each run's journal grow.
             made = await client.post("/v1/threads", json={"graph": REGISTRY_WORKFLOW}, headers=DEV)
             assert made.status_code == 201, made.text

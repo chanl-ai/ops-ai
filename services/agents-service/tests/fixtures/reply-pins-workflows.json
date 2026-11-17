@@ -393,7 +393,132 @@
   "list.pastEnd": {
     "body": {
       "data": {
-        "data": [],
+        "data": [
+          {
+            "agentSlugs": [],
+            "deploymentCount": 0,
+            "description": "Seeded definition",
+            "engine": "v1",
+            "gateCount": 1,
+            "id": "dispute_email",
+            "kind": "standard",
+            "name": "Dispute email",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 9,
+            "teamId": "team_ops",
+            "trigger": "Email",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          },
+          {
+            "agentSlugs": [],
+            "deploymentCount": 0,
+            "description": "Seeded definition",
+            "engine": "v1",
+            "gateCount": 1,
+            "id": "levy-case",
+            "kind": "standard",
+            "name": "Levy-case",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 6,
+            "teamId": "team_ops",
+            "trigger": "Email",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          },
+          {
+            "agentSlugs": [],
+            "deploymentCount": 0,
+            "description": "Seeded definition",
+            "engine": "v1",
+            "gateCount": 0,
+            "id": "levy-intake",
+            "kind": "standard",
+            "name": "Levy-intake",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 5,
+            "teamId": "team_ops",
+            "trigger": "Email",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          },
+          {
+            "agentSlugs": [
+              "wire-fraud-sentinel"
+            ],
+            "deploymentCount": 0,
+            "description": "",
+            "engine": "v1",
+            "gateCount": 1,
+            "id": "<wf>",
+            "kind": "standard",
+            "name": "Payee check",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "draft",
+            "stepCount": 2,
+            "teamId": "team_ops",
+            "trigger": "Payee added",
+            "updatedAt": "<timeZ>",
+            "version": 0
+          },
+          {
+            "agentSlugs": [
+              "wire-fraud-sentinel"
+            ],
+            "deploymentCount": 0,
+            "description": "Wire Fraud Sentinel reads the request, then a fraud analyst approves or rejects the hold.",
+            "engine": "v1",
+            "gateCount": 1,
+            "id": "wire_hold_review",
+            "kind": "standard",
+            "name": "Wire hold review",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 2,
+            "teamId": "team_ops",
+            "trigger": "Hold requested",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          }
+        ],
         "facets": {
           "status": {
             "draft": 1,
@@ -402,8 +527,8 @@
         },
         "pagination": {
           "hasNext": false,
-          "hasPrev": true,
-          "page": 99,
+          "hasPrev": false,
+          "page": 1,
           "pageSize": 10,
           "total": 5,
           "totalPages": 1

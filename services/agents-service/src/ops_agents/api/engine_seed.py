@@ -13,14 +13,14 @@ from typing import Any, cast
 
 from ops_engine import default_registry
 from ops_engine.definition import parse, validate
-from ops_engine.store import DefinitionStore
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 from ops_store import isolation
 
-from ..store.engine import DatabaseError, EngineTransactions
+from ..store.engine import DatabaseError
 from ..store.tenancy import LOCAL_TENANT, SEED
 from .deps import Runtime
+from .engine_lifecycle import definitions
 
 log = get_logger("ops_agents.api.engine_seed")
 
@@ -32,7 +32,7 @@ def seed_path(seed_dir: Path, agents_seed_file: Path | None) -> Path:
 async def load_seed(rt: Runtime, path: Path) -> None:
     if not path.is_file():  # noqa: ASYNC240
         return
-    store = DefinitionStore(EngineTransactions(rt.db))
+    store = definitions(rt)
     raw: list[dict[str, Any]] = json.loads(path.read_text())  # noqa: ASYNC240
     for item in raw:
         team = cast(str | None, item.get("teamId"))

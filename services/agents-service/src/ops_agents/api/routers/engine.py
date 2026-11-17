@@ -308,7 +308,7 @@ class DefinitionView(Out):
 
 
 def definitions(rt: Runtime) -> DefinitionStore:
-    return DefinitionStore(EngineTransactions(rt.db))
+    return engine_lifecycle.definitions(rt)
 
 
 def _parsed(body: DefinitionInput) -> WorkflowDefinition:

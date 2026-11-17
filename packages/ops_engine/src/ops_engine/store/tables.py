@@ -36,6 +36,12 @@ engine_definitions = sa.Table(
     # its versions and runs kept; restoring clears it.
     sa.Column("archived_at", sa.String(32)),
     sa.Column("archived_by", sa.String(200)),
+    # What the Workflows list reads of the definition (`node_types.list_columns`), written with the version since it
+    # needs the node type registry, so the list searches, filters and pages in SQL (agents 0115).
+    sa.Column("description", sa.Text, nullable=False),
+    sa.Column("trigger", sa.Text, nullable=False),
+    sa.Column("startable", sa.Boolean, nullable=False),
+    sa.Column("takes_files", sa.Boolean, nullable=False),
     # One version per definition: publishing the same definition again returns its version.
     sa.UniqueConstraint("tenant_id", "workflow_id", "digest", name="uq_engine_definitions_digest"),
     # The v2 workflows list, one team's page by name or update time (agents 0112).
