@@ -18,41 +18,45 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useChannels } from '@/hooks/channel-queries';
 import { useCan } from '@/hooks/me-queries';
-import { useDeleteMcpLink, useMcpLinks, useSetMcpLinkPaused } from '@/hooks/mcp-link-queries';
+import { type McpLinkRow, useDeleteMcpLink, useMcpLinks, useSetMcpLinkPaused } from '@/hooks/mcp-link-queries';
+import { useCreatedRows } from '@/hooks/use-created-rows';
+import { useListParams } from '@/hooks/use-list-params';
 import { useTeam } from '@/hooks/use-team';
+import { serverPagination } from '@/components/shared/server-pagination';
 import { plural, relativeTime } from '@/lib/format';
-import type { McpLink } from '@/lib/types/mcp-links';
 
 import { NewLinkDialog } from './new-link-dialog';
 
-type Row = McpLink & { teamName: string; env: string; href: string; onRowClick: () => void; rowTestId: string };
-
-const inValues = (row: { getValue: (id: string) => unknown }, id: string, value: string[]) => value.includes(String(row.getValue(id)));
+type Row = McpLinkRow & { teamName: string; env: string; href: string; onRowClick: () => void; rowTestId: string };
 
 /** Channels › MCP: the links of every team the person works in. Admins make, pause and delete them; every member opens
  * a link to see how to connect. */
 export function McpLinksPage() {
   const router = useRouter();
   const kinds = useChannels({ page: 1, pageSize: 1, search: '' });
-  const q = useMcpLinks();
+  const list = useListParams<Record<string, never>>('name');
+  const q = useMcpLinks({ page: list.params.page, pageSize: list.params.pageSize, search: list.params.search });
+  const [filterResetKey, setFilterResetKey] = React.useState(0);
   const remove = useDeleteMcpLink();
   const setPaused = useSetMcpLinkPaused();
   const { teams, teamId, switchTeam } = useTeam();
   const canEdit = useCan('deployments', 'edit') === true;
   const canDelete = useCan('deployments', 'delete') === true;
   const [open, setOpen] = React.useState(false);
-  const [deleting, setDeleting] = React.useState<McpLink | null>(null);
+  const [deleting, setDeleting] = React.useState<McpLinkRow | null>(null);
   const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? id;
   // A link's page, keys and calls are read in its own team, so opening another team's link works in that team.
-  const openLink = (l: McpLink, href: string) => {
+  const openLink = (l: McpLinkRow, href: string) => {
     if (l.teamId !== teamId) switchTeam(l.teamId);
     router.push(href);
   };
-  const rows: Row[] = (q.data ?? []).map((l) => {
+  const toRow = (l: McpLinkRow): Row => {
     const href = `/build/channels/mcp/${encodeURIComponent(l.id)}`;
     return { ...l, teamName: teamName(l.teamId), env: 'Test', href, onRowClick: () => openLink(l, href), rowTestId: `mcp-link-row-${l.slug}` };
-  });
-  const pause = (l: McpLink) =>
+  };
+  const rows: Row[] = (q.data?.data ?? []).map(toRow);
+  const created = useCreatedRows<Row>();
+  const pause = (l: McpLinkRow) =>
     setPaused.mutate(
       { id: l.id, paused: !l.paused },
       {
@@ -71,11 +75,10 @@ export function McpLinksPage() {
         </span>
       ),
     },
-    { accessorKey: 'teamName', header: 'Team', filterFn: (row, id, value: string[]) => inValues(row, id, value) },
+    { accessorKey: 'teamName', header: 'Team' },
     {
       accessorKey: 'env',
       header: 'Environment',
-      filterFn: (row, id, value: string[]) => inValues(row, id, value),
       cell: ({ row }) => (
         <span className="flex flex-wrap gap-1">
           <Badge variant="outline">Test</Badge>
@@ -119,7 +122,6 @@ export function McpLinksPage() {
       ),
     },
   ];
-  const options = (key: 'teamName' | 'env') => [...new Set(rows.map((r) => r[key]))].map((v) => ({ label: v, value: v }));
   return (
     <PageLayout
       icon={Plug}
@@ -147,17 +149,16 @@ export function McpLinksPage() {
             searchColumn="name"
             searchPlaceholder="Search MCP links…"
             hideViewSwitcher
-            hidePaginationOnOnePage
-            filters={[
-              { column: 'teamName', title: 'Team', options: options('teamName') },
-              { column: 'env', title: 'Environment', options: options('env') },
-            ]}
-            emptyState={<ListEmpty icon={Plug} noun="MCP links" filtered={false} description="A link gives people one address for a chosen set of this team’s tools. An admin makes one with New MCP link." />}
+            onColumnFiltersChange={list.onColumnFiltersChange}
+            filterResetKey={filterResetKey}
+            created={created}
+            serverPagination={serverPagination(list, q)}
+            emptyState={<ListEmpty icon={Plug} noun="MCP links" filtered={list.isFiltered} onClear={() => setFilterResetKey((k) => k + 1)} description="A link gives people one address for a chosen set of this team’s tools. An admin makes one with New MCP link." />}
           />
           <p className="text-xs text-muted-foreground">Outside assistants reach test data only until production is turned on for the install.</p>
         </div>
       )}
-      <NewLinkDialog open={open} onOpenChange={setOpen} />
+      <NewLinkDialog open={open} onOpenChange={setOpen} onCreated={(l) => created.show(toRow(l))} />
       {deleting && (
         <ConfirmActionDialog
           open

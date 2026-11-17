@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCreateMcpLink } from '@/hooks/mcp-link-queries';
+import type { McpLink } from '@/lib/types/mcp-links';
 import { linkToolOptions, useOptionLabels } from '@/hooks/options-queries';
 import { useTeam } from '@/hooks/use-team';
 import type { ToolOptionsPage } from '@/lib/types/query';
@@ -35,7 +36,7 @@ type Values = z.infer<typeof schema>;
  * what the team may run (the agent page's tools picker, which lists the team's grantable tools and published
  * workflows). A write always waits for a person when an assistant calls it.
  */
-export function NewLinkDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function NewLinkDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated?: (link: McpLink) => void }) {
   const router = useRouter();
   const { team } = useTeam();
   const create = useCreateMcpLink();
@@ -55,6 +56,7 @@ export function NewLinkDialog({ open, onOpenChange }: { open: boolean; onOpenCha
       {
         onSuccess: (link) => {
           toast.success(`Made ${link.name}`, { description: 'Copy its address into an assistant to connect.' });
+          onCreated?.(link);
           onOpenChange(false);
           router.push(`/build/channels/mcp/${encodeURIComponent(link.id)}`);
         },
