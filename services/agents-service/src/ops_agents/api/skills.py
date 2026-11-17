@@ -20,7 +20,7 @@ from ops_service_kit.errors import Conflict, NotFound, Unprocessable, Validation
 from ops_service_kit.logging import get_logger
 
 from ..activities.catalog import AgentDefinition, kernel_skills
-from ..store.skill_list import pinning_agents
+from ..store.skill_list import pinning_agents, published_pinning
 from ..store.skills import SkillRegistry, slug_of
 from .agent_registry import SEED_BY, SEED_TEAM, seed_agent_version
 from .agent_registry import registry as agent_registry
@@ -291,15 +291,10 @@ async def _requests(rt: Runtime, skill_id: str) -> list[dict[str, Any]]:
 
 async def pinned_by(rt: Runtime, skill_id: str) -> list[str]:
     """Agents whose newest or published version pins the skill (the published one serves chat), and published
-    workflows whose agent steps carry it (a workflow keeps the agent version it was published with)."""
-    reg = agent_registry(rt)
-    names: set[str] = set()
-    for row in await reg.rows():
-        for n in {row["version"], row["published_version"]} - {None}:
-            spec = (await reg.version(row["id"], int(n)))["spec"]
-            pins: list[dict[str, Any]] = list(spec.get("skillPins") or [])
-            if any(p["skillId"] == skill_id for p in pins):
-                names.add(str(spec["name"]))
+    workflows whose agent steps carry it (a workflow keeps the agent version it was published with). The acting
+    team's agents only, as the skills list counts them."""
+    names = {str(a.spec["name"]) for a in await pinning_agents(rt.db, skill_id)}
+    names.update(await published_pinning(rt.db, skill_id))
     names.update(await workflows_pinning(rt, "skills", "skill_id", skill_id))
     return sorted(names)
 

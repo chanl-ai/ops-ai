@@ -25,7 +25,7 @@ from ops_store.listing import ListPage, list_page, listed_rows
 from ops_store.rows import rows
 from ops_store.team_scope import team_visible
 
-from .agent_registry import agent_skill_pins, publish_requests, registry_agent_versions, registry_agents
+from .agent_registry import agent_skill_pins, pins_of, publish_requests, registry_agent_versions, registry_agents
 from .skills import registry_skill_versions, registry_skills
 from .tenancy import current_tenant, tenant_tx
 
@@ -285,6 +285,33 @@ async def newest_specs(engine: AsyncEngine) -> list[dict[str, JsonValue]]:
         return [a.spec for a in await rows(c, q, AgentSpec)]
 
 
+async def published_pinning(engine: AsyncEngine, skill_id: str) -> list[str]:
+    """The names of the acting team's agents of the caller's tenant whose published version pins `skill_id` while
+    their newest version is another one: `agent_skill_pins` holds the newest version's pins only, and the published
+    version is the one chat serves. One read of those agents' published specs."""
+    a, v = registry_agents, registry_agent_versions
+    q = (
+        sa.select(v.c.spec)
+        .select_from(
+            a.join(
+                v,
+                sa.and_(v.c.agent_id == a.c.id, v.c.tenant_id == a.c.tenant_id, v.c.version == a.c.published_version),
+            )
+        )
+        .where(
+            a.c.tenant_id == current_tenant(),
+            a.c.published_version.is_not(None),
+            a.c.published_version != a.c.version,
+            team_visible(a),
+            team_visible(v),
+        )
+        .order_by(a.c.id)
+    )
+    async with tenant_tx(engine) as c:
+        specs = [r.spec for r in await rows(c, q, AgentSpec)]
+    return [str(s["name"]) for s in specs if skill_id in pins_of(s.get("skillPins"))]
+
+
 __all__ = [
     "FACETS",
     "VIEWS",
@@ -295,6 +322,7 @@ __all__ = [
     "newest_specs",
     "offered_by",
     "pinning_agents",
+    "published_pinning",
     "skill_columns",
     "skills_page",
 ]
