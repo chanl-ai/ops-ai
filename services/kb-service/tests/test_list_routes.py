@@ -225,7 +225,7 @@ async def test_bases_list_only_the_teams_rows_with_health_counted_and_ids_answer
     await insert_rows(engine, tenant, "team_ops", kb_items, item_row(failing, "Rate sheet", "failed"))
     made = [
         base_row(tenant, "team_ops", "Disputes", template="banking/policies"),
-        base_row(tenant, "team_ops", "Hardship", refreshed=False),
+        {**base_row(tenant, "team_ops", "Hardship", refreshed=False), "color": "amber"},
         base_row(tenant, "team_ops", "Rates"),
     ]
     with isolation.scope(tenant, "team_ops"):
@@ -253,9 +253,10 @@ async def test_bases_list_only_the_teams_rows_with_health_counted_and_ids_answer
     }
     assert (past["pagination"]["page"], [r["id"] for r in past["data"]]) == (2, [r["id"] for r in second["data"]])
 
-    # Pickers: exact rows by id whatever the search says, never another team's; search and the template filter.
+    # Pickers and the chat screens' labels: exact rows by id with each base's own name and colour, whatever the
+    # search says, never another team's; search and the template filter.
     picked = await _page(kb, "/v1/knowledge-bases", ids=[made[1]["id"], lending["id"]], search="zzz")
-    assert [r["id"] for r in picked["data"]] == [made[1]["id"]]
+    assert [(r["id"], r["name"], r["color"]) for r in picked["data"]] == [(made[1]["id"], "Hardship", "amber")]
     assert [r["name"] for r in (await _page(kb, "/v1/knowledge-bases", search="hards"))["data"]] == ["Hardship"]
     templated = await _page(kb, "/v1/knowledge-bases", templateId="banking/policies")
     assert [r["name"] for r in templated["data"]] == ["Disputes"]
