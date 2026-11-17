@@ -61,12 +61,13 @@ async def team_frames(
     readable: dict[str, bool] = {}
     while True:
         batch = await EventLog(store.engine).team_events(team_id, cursor)
+        # The batch's threads not yet seen, read in one statement; a thread the store does not return is not readable.
+        unseen = sorted({e.thread_id for e in batch} - readable.keys())
+        found = {t.id: t.model_dump() for t in await store.threads_named(unseen)}
+        readable |= {tid: tid in found and may_read_thread(found[tid], me) for tid in unseen}
         for e in batch:
             cursor = position = e.position
             thread_id = e.thread_id
-            if thread_id not in readable:
-                row = await store.thread(thread_id)
-                readable[thread_id] = row is not None and may_read_thread(row, me)
             if not readable[thread_id]:
                 continue
             yield {"id": str(position), "event": f"thread.{e.type}", "data": json.dumps(e.wire(), ensure_ascii=False)}

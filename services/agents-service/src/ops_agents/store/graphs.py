@@ -277,6 +277,18 @@ class GraphStore(RuntimeStore):
             row = (await c.execute(q)).mappings().first()
         return dict(row) if row else None
 
+    async def threads_named(self, thread_ids: Sequence[str]) -> list[ThreadRow]:
+        """The named threads the caller may see, in one statement; `thread_ids` is bounded by the caller (a batch of
+        a stream's events)."""
+        if not thread_ids:
+            return []
+        t = graph_threads
+        q = sa.select(*(t.c[name] for name in ThreadRow.model_fields)).where(
+            t.c.id.in_(list(thread_ids)), mine(t), team_visible(t)
+        )
+        async with self.tx() as c:
+            return await rows(c, q, ThreadRow)
+
     async def versions_at(self, pairs: Collection[tuple[str, int]]) -> dict[tuple[str, int], StoredVersion]:
         """The named workflow versions in one statement, by (name, version); a pair with no stored version is left
         out. Read by the names and versions asked for, then matched in pairs, so no tuple IN is needed."""

@@ -183,7 +183,9 @@ queries = 1
 query = { types = "dt_budget" }
 
 ["GET /v1/events"]
-not_budgeted = "grows with runs: 6 statements, transactions and checkouts at 5 runs, 56 at 50 (one per thread)"
+queries = 2
+transactions = 2
+connections = 2
 query = { follow = "false" }
 
 ["GET /v1/forms/public/{slug}"]
