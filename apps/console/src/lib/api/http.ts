@@ -268,8 +268,6 @@ export function createHttpApi(baseUrl: string): OpsApi {
       bulkRemove: (ids) => send('POST', '/agents/bulk-delete', { ids }),
     },
     workflows: {
-      // The current engine's workflows only: the console no longer shows the earlier engine's.
-      list: (p) => get(`/workflows?${qs(p)}&engine=current`),
       get: (id) => get(`/workflows/${id}`),
       create: (i) => send('POST', '/workflows', i),
       validate: (id, graph, target) => send('POST', `/workflows/${id}/validate`, { graph, target }),
@@ -281,7 +279,6 @@ export function createHttpApi(baseUrl: string): OpsApi {
       update: (id, i) => send('PATCH', `/workflows/${id}`, i),
       setStatus: (id, status) => send('POST', `/workflows/${id}/status`, { status }),
       remove: (id) => send('DELETE', `/workflows/${id}`),
-      runs: (id, p) => get(`/workflows/${id}/runs?${qs(p)}`),
       versions: (id) => get(`/workflows/${id}/versions`),
       restore: (id, version) => send('POST', `/workflows/${id}/versions/${version}/restore`),
       bulkUpdate: (ids, patch) => send('POST', '/workflows/bulk-update', { ids, patch }),

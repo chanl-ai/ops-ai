@@ -142,7 +142,6 @@ export interface OpsApi {
   /** Channels > Email: the team's mailboxes. */
   channels: ChannelsApi;
   workflows: {
-    list(params: ListParams<WorkflowFilters>): Promise<ListResult<Workflow>>;
     get(id: string): Promise<WorkflowDetail>;
     create(input: WorkflowInput): Promise<Workflow>;
     /** Runs the workflow's test cases against a draft graph (and the live version for comparison). Advisory: never blocks. */
@@ -159,7 +158,6 @@ export interface OpsApi {
     update(id: string, input: WorkflowSettingsInput): Promise<Workflow>;
     setStatus(id: string, status: LifecycleStatus): Promise<Workflow>;
     remove(id: string): Promise<void>;
-    runs(id: string, params: ListParams<RunFilters>): Promise<ListResult<WorkflowRun>>;
     versions(id: string): Promise<Version[]>;
     restore(id: string, version: number): Promise<Workflow>;
     /** Absent when the backend has no bulk route (the agents-service registry). */

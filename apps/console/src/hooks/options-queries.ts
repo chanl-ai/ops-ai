@@ -4,6 +4,7 @@ import * as React from 'react';
 import { keepPreviousData } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import { fetchWorkflows } from './queries';
 import { sdk } from '@/lib/api/ops-sdk';
 import type { AgentFilters, ConnectionOptionsPage, OptionsPage, OptionsParams, ToolOptionsPage, WorkflowFilters } from '@/lib/types/query';
 import type { SkillLoading } from '@/lib/types/skills';
@@ -43,7 +44,7 @@ const workflowsWhere = (key: string, filters: WorkflowFilters = {}): OptionSourc
   key,
   fetch: async ({ search, cursor, limit = 25, ids }) => {
     const page = Number(cursor ?? 1);
-    const res = await api.workflows.list({ page, pageSize: limit, search: ids?.length ? undefined : search, filters });
+    const res = await fetchWorkflows({ page, pageSize: limit, search: ids?.length ? undefined : search, filters });
     const rows = ids?.length ? res.data.filter((w) => ids.includes(w.id)) : res.data;
     return {
       data: rows.map((w) => ({ id: w.id, label: w.name, hint: w.status === 'live' ? null : w.status })),

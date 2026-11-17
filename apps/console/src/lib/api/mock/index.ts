@@ -860,10 +860,6 @@ export function createMockApi(): OpsApi {
     },
 
     workflows: {
-      list: (p) =>
-        respond((m) =>
-          list(teamWorkflows().map(workflowRow), p, { text: (w) => `${w.name} ${w.trigger}`, value: (w, k) => (k === 'startable' ? String(!!w.start?.byHand) : k === 'takesFiles' ? String(!!w.start?.takesFiles) : field(w, k)), facetKeys: ['status'] }, m),
-        ),
       get: (wid) =>
         respond((m): WorkflowDetail => {
           const w = m === 'empty' ? undefined : workflows.find((x) => x.id === wid);
@@ -966,11 +962,6 @@ export function createMockApi(): OpsApi {
           if (i < 0) notFound('Workflow');
           if (reviews.some((r) => r.workflowId === wid && isOpen(r))) throw new ApiError('This workflow has open reviews. Decide them or pause the workflow first.', 409);
           workflows.splice(i, 1);
-        }),
-      runs: (wid, p) =>
-        respond((m) => {
-          if (!workflows.some((x) => x.id === wid)) notFound('Workflow');
-          return list(runsOf(wid), p, { text: (r) => `${r.id} ${r.subject}`, value: field, facetKeys: ['status'] }, m);
         }),
       versions: (wid) =>
         respond(() => {
