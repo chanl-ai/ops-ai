@@ -240,7 +240,6 @@ export function createChatMock(deps: Deps): ChatApi {
 
   return {
     memories: {
-      list: async (agentId) => respond(() => memories.filter((m) => !agentId || m.agentId === agentId)),
       correct: async (mid, value) =>
         respond(() => {
           const fixed = { ...memoryOf(mid), id: id('mem'), value, confidence: 1, source: 'person' as const };
