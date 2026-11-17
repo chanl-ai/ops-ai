@@ -5,6 +5,7 @@ lists `seed_team` adds rows to are named in its docstring, and a list it does no
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator, Mapping
 from pathlib import Path
 from typing import Any
@@ -79,21 +80,31 @@ def app(served: tuple[FastAPI, AsyncClient]) -> FastAPI:
 
 
 class Caller:
-    """The test's client as the budget calls it: an engine definition's path gets the definition's id, which the
-    shared `{workflow_id}` template cannot carry."""
+    """The test's client as the budget calls it: an engine definition's path gets the definition's id, and a path in
+    `swaps` (a review's, a graph run's) its own ids, which the shared `{workflow_id}`, `{thread_id}` and `{run_id}`
+    templates cannot carry."""
 
-    def __init__(self, client: AsyncClient) -> None:
+    def __init__(self, client: AsyncClient, swaps: dict[str, str]) -> None:
         self.client = client
+        self.swaps = swaps
 
     async def get(self, url: str, *, headers: Mapping[str, str]) -> Response:
         if url.startswith(f"/v1/workflows/definitions/{REGISTRY_WORKFLOW}"):
             url = url.replace(REGISTRY_WORKFLOW, DEFINITION, 1)
+        path, mark, query = url.partition("?")
+        url = self.swaps.get(path, path) + mark + query
         return await self.client.get(url, headers=headers)
 
 
 @pytest.fixture
-def client(served: tuple[FastAPI, AsyncClient]) -> Caller:
-    return Caller(served[1])
+def swaps() -> dict[str, str]:
+    """The paths whose ids the seed fills in: a path as the shared ids format it, to the path to call instead."""
+    return {}
+
+
+@pytest.fixture
+def client(served: tuple[FastAPI, AsyncClient], swaps: dict[str, str]) -> Caller:
+    return Caller(served[1], swaps)
 
 
 def _id(answer: Any) -> str:
@@ -103,10 +114,10 @@ def _id(answer: Any) -> str:
 
 
 @pytest.fixture
-def seed_team(served: tuple[FastAPI, AsyncClient]) -> SeedTeam:
+def seed_team(served: tuple[FastAPI, AsyncClient], swaps: dict[str, str]) -> SeedTeam:
     """`n` more agents (each holding a tool and an account), skills, guardrails, widgets, cases and runs of the registry
-    workflow (each waiting at its review) on the dev caller's team, beside the seed folder's records; the path ids
-    name the first of each, and the seeded fraud agent and its records otherwise."""
+    workflow (each waiting at its review) and queued engine runs on the dev caller's team, beside the seed
+    folder's records; the path ids name the first of each, and the seeded fraud agent and its records otherwise."""
     client = served[1]
     ids: dict[str, str] = dict.fromkeys(PATH_IDS, "missing")
     ids.update(
@@ -129,6 +140,9 @@ def seed_team(served: tuple[FastAPI, AsyncClient]) -> SeedTeam:
             ids["thread_id"] = str(made.json()["data"]["threadId"])
             made = await client.post("/v1/workflows/definitions", json={"yaml": BASIC.read_text()}, headers=DEV)
             assert made.status_code == 201, made.text
+            # Dev auto-approve takes the definition live, so runs of it start (and stay queued: no worker runs here).
+            live = await client.post(f"/v1/workflows/definitions/{DEFINITION}/publish-requests", json={}, headers=DEV)
+            assert live.status_code == 201, live.text
         for i in range(n):
             tag = f"{n}-{i:02d}"
             agent = _id(await client.post("/v1/agents", json={"name": f"Agent {tag}", "role": "Answers"}, headers=DEV))
@@ -142,12 +156,20 @@ def seed_team(served: tuple[FastAPI, AsyncClient]) -> SeedTeam:
             # A run of the registry workflow to its review, so its runs list and each run's journal grow.
             made = await client.post("/v1/threads", json={"graph": REGISTRY_WORKFLOW}, headers=DEV)
             assert made.status_code == 201, made.text
-            run = await client.post(
-                f"/v1/threads/{made.json()['data']['threadId']}/runs/stream", json={"input": RUN_INPUT}, headers=DEV
-            )
+            waiting = str(made.json()["data"]["threadId"])
+            run = await client.post(f"/v1/threads/{waiting}/runs/stream", json={"input": RUN_INPUT}, headers=DEV)
             assert run.status_code == 200 and '"interrupt"' in run.text, run.text
+            graph_run = str(json.loads(run.text.split("data: ", 1)[1].split("\n", 1)[0])["runId"])
+            body = {"workflowId": DEFINITION, "input": {"customerId": f"C-{tag}", "amount": 250}, "runKey": tag}
+            queued = await client.post("/v1/runs", json=body, headers=DEV)
+            assert queued.status_code == 202, queued.text
             if i == 0 and n == 5:
                 ids.update(agent_id=agent, skill_id=skill, guardrail_id=rule, widget_id=widget, case_id=case)
+                ids.update(run_id=str(queued.json()["data"]["runId"]))
+                # The thread routes keep the seeded thread; a review and a graph run's events read the waiting run.
+                swaps[f"/reviews/{ids['thread_id']}"] = f"/reviews/{waiting}"
+                events = f"/v1/threads/{ids['thread_id']}/runs/{ids['run_id']}/events"
+                swaps[events] = f"/v1/threads/{waiting}/runs/{graph_run}/events"
         return Seeded(headers=DEV, ids=ids)
 
     return seed

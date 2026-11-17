@@ -1,7 +1,7 @@
 # The statement budget of each agents-service GET at 5 and 50 rows (ops_service_kit.testing.budget_check, data-access
 # standard DA1 and DA6), measured on PostgreSQL by tests/api/test_statement_budget.py. Each row is today's count at 50
 # rows. The seed adds rows to agents (each holding a tool and an account), skills, guardrails, widgets, cases and runs
-# of the registry workflow (each waiting at its review) only;
+# of the registry workflow (each waiting at its review) and queued engine runs only;
 # a row for any other list proves its count, not that it stays flat as rows grow. Rows listing more than one
 # transaction or connection open one per store read and are budgeted as they run until their route is converted. A
 # `not_budgeted` row that grows names its counts.
@@ -48,7 +48,9 @@ transactions = 5
 connections = 5
 
 ["GET /reviews/{thread_id}"]
-not_budgeted = "needs a run waiting at a review step; the budget seed starts none yet"
+queries = 11
+transactions = 11
+connections = 11
 
 ["GET /runs"]
 not_budgeted = "grows with runs: 20 statements, transactions and checkouts at 5 runs, 80 at 50"
@@ -59,13 +61,13 @@ transactions = 6
 connections = 6
 
 ["GET /v1/account-uses"]
-queries = 2
+queries = 3
 query = { app = "salesforce", name = "Main" }
 
 ["GET /v1/activity"]
-queries = 5
-transactions = 4
-connections = 4
+queries = 6
+transactions = 5
+connections = 5
 
 ["GET /v1/agents"]
 queries = 15
@@ -231,10 +233,15 @@ transactions = 2
 connections = 2
 
 ["GET /v1/runs/{run_id}"]
-not_budgeted = "needs an engine run; the budget seed starts none yet"
+queries = 5
+transactions = 9
+connections = 9
 
 ["GET /v1/runs/{run_id}/events"]
-not_budgeted = "needs an engine run; the budget seed starts none yet"
+queries = 2
+transactions = 2
+connections = 2
+query = { follow = "false" }
 
 ["GET /v1/skills"]
 queries = 7
@@ -257,7 +264,7 @@ queries = 2
 queries = 2
 
 ["GET /v1/tasks/{task_id}"]
-not_budgeted = "needs a task; the budget seed opens none yet"
+not_budgeted = "needs a task waiting at its step: opening one waits for a run worker, which the API test app does not run"
 
 ["GET /v1/teams/usage"]
 queries = 7
@@ -275,7 +282,10 @@ queries = 2
 queries = 3
 
 ["GET /v1/threads/{thread_id}/runs/{run_id}/events"]
-not_budgeted = "needs a graph run; the budget seed starts none yet"
+queries = 3
+transactions = 3
+connections = 3
+query = { follow = "false" }
 
 ["GET /v1/threads/{thread_id}/state"]
 queries = 5
@@ -337,7 +347,7 @@ queries = 16
 queries = 3
 
 ["GET /v1/workflows/definitions/account-uses"]
-queries = 2
+queries = 3
 query = { app = "salesforce", name = "Main" }
 
 ["GET /v1/workflows/definitions/{workflow_id}"]
