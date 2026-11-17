@@ -19,7 +19,7 @@ client = budget.client
 seed_team = budget.seed_team
 
 
-async def test_an_apps_accounts_and_credentials_each_hold_one_transaction(
+async def test_an_apps_account_and_credential_writes_each_hold_one_transaction(
     client: httpx.AsyncClient, seed_team: SeedTeam
 ) -> None:
     seeded = await seed_team(2)
@@ -28,21 +28,14 @@ async def test_an_apps_accounts_and_credentials_each_hold_one_transaction(
     ledger = (await c.get(f"/v1/app-credentials/{credential}", headers=admin)).json()["data"]["app"]
     revision = (await c.get(f"/v1/apps/{app}/accounts/{account}", headers=admin)).json()["data"]["revision"]
     steps = [
-        ("account", "GET", f"/v1/apps/{app}/accounts/{account}", None),
         ("rename", "PATCH", f"/v1/apps/{app}/accounts/{account}", {"revision": revision, "name": "Desk tx"}),
-        ("mine", "GET", "/v1/me/accounts", None),
         ("add", "POST", f"/v1/apps/{app}/accounts", {"name": "Desk tx 2", "credentials": {"token": "t-tx"}}),
         ("team default", "PUT", f"/v1/apps/{app}/accounts/{account}/team-default", None),
         ("turn on", "PUT", f"/v1/apps/{app}/team", {"enabled": True, "credentials": {"token": "t-1"}}),
-        ("choices", "GET", f"/v1/apps/{app}/accounts", None),
-        ("apps", "GET", "/v1/apps", None),
-        ("credentials", "GET", "/v1/app-credentials", None),
         ("new credential", "POST", "/v1/app-credentials", {"app": ledger, "clientId": "tx", "clientSecret": "tx-s"}),
-        ("credential", "GET", f"/v1/app-credentials/{credential}", None),
         ("edit credential", "PATCH", f"/v1/app-credentials/{credential}", {"name": "Ledger tx"}),
         ("secret", "PUT", f"/v1/app-credentials/{credential}/secret", {"clientSecret": "tx-s-2"}),
         ("delete credential", "DELETE", f"/v1/app-credentials/{credential}?move=true", None),
-        ("page", "GET", f"/v1/apps/{app}", None),
     ]
     counts: dict[str, int] = {}
     for name, method, path, body in steps:

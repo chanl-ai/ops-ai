@@ -25,22 +25,13 @@ client = budget.client
 seed_team = budget.seed_team
 
 
-async def test_a_modules_reads_and_local_writes_each_hold_one_transaction(
-    client: httpx.AsyncClient, seed_team: SeedTeam
-) -> None:
+async def test_a_modules_local_writes_each_hold_one_transaction(client: httpx.AsyncClient, seed_team: SeedTeam) -> None:
     seeded = await seed_team(2)
     c, admin = client, dict(seeded.headers)
     made = await c.post("/v1/tool-modules/blank", json={"displayName": "Desk tx", "name": "desk-tx"}, headers=admin)
     assert made.status_code == 201, made.text
     mod = made.json()["data"]["id"]
-    module, call = seeded.ids["module_id"], seeded.ids["call_id"]
     steps: list[tuple[str, str, str, Any]] = [
-        ("list", "GET", "/v1/tool-modules", None),
-        ("grants", "GET", "/v1/tool-modules/grants", None),
-        ("one", "GET", f"/v1/tool-modules/{module}", None),
-        ("activity", "GET", f"/v1/tool-modules/{module}/activity", None),
-        ("calls", "GET", "/v1/executions", None),
-        ("call", "GET", f"/v1/executions/{call}", None),
         ("details", "PATCH", f"/v1/tool-modules/{mod}", {"description": "Desk tools"}),
         ("connection", "PUT", f"/v1/tool-modules/{mod}/connection", {"connectionId": None}),
         ("revoke", "POST", f"/v1/tool-modules/{mod}/approvals/revoke", {"ids": ["apr_none"], "reason": "tx"}),

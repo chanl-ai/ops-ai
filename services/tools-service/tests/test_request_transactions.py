@@ -23,20 +23,15 @@ from .test_egress_and_secrets_need_security_admin import client  # noqa: F401  #
 from .test_plugin_versions import ID, admin, routes  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from .test_review_decisions import person
 
-# (method, path, body): each answered in one transaction.
+# (method, path, body): each write answered in one transaction. A GET is held to one by the statement budget
+# (tests/test_statement_budget.py), so none is listed here.
 ROUTES = [
-    ("GET", "/v1/egress", None),
-    ("GET", "/v1/egress/hosts", None),
     ("POST", "/v1/egress/hosts", {"value": "tx-count.example.com"}),
     ("POST", "/v1/egress/hosts/remove", {"value": "tx-count.example.com"}),
     ("POST", "/v1/egress/ranges", {"value": "10.71.0.0/16"}),
     ("POST", "/v1/egress/ranges/remove", {"value": "10.71.0.0/16"}),
     ("PUT", "/v1/send-policy", {"text": "Never send a card number."}),
-    ("GET", "/v1/send-policy", None),
     ("POST", "/v1/secrets", {"name": "TX_KEY", "value": "tx-value-1"}),
-    ("GET", "/v1/secrets", None),
-    ("GET", "/v1/secrets?page=1&pageSize=5&search=TX", None),
-    ("GET", "/v1/secrets?ids=TX_KEY", None),
     ("POST", "/v1/secrets/TX_KEY/rotate", {"value": "tx-value-2"}),
     ("POST", "/v1/secrets/TX_KEY/rename", {"name": "TX_KEY_2"}),
     ("DELETE", "/v1/secrets/TX_KEY_2", None),
@@ -103,14 +98,12 @@ async def test_an_mcp_links_routes_each_hold_one_transaction(gateway: Gateway) -
     assert r.status_code == 201, r.text
     link = f"/v1/mcp-links/{r.json()['data']['id']}"
     for name, method, path, body in (
-        ("list", "GET", "/v1/mcp-links", None),
-        ("get", "GET", link, None),
         ("pause", "PATCH", link, {"paused": True}),
         ("delete", "DELETE", link, None),
     ):
         r, counts[name] = await _counted(c, method, path, body, {})
         assert r.status_code in (200, 204), (name, r.text)
-    assert counts == dict.fromkeys(["create", "list", "get", "pause", "delete"], 1), counts
+    assert counts == dict.fromkeys(["create", "pause", "delete"], 1), counts
 
 
 @pytest.mark.parametrize("path", ["/v1/egress/hosts"])
@@ -130,7 +123,7 @@ async def test_a_page_past_the_end_answers_the_last_page(
     assert (page["pagination"]["page"], page["pagination"]["total"]) == (2, 3)
 
 
-async def test_a_plugins_update_review_take_and_sources_each_hold_one_transaction(
+async def test_a_plugins_update_take_holds_one_transaction(
     routes: tuple[httpx.AsyncClient, PluginHost, Plugin],  # noqa: F811
     tenant: str,
 ) -> None:
@@ -139,11 +132,9 @@ async def test_a_plugins_update_review_take_and_sources_each_hold_one_transactio
     assert (await c.put(f"/v1/apps/plugin:{ID}/team", json=on, headers=admin(tenant))).status_code == 200
     host.loaded = [Loaded("fields_desk", v2, None)]
     counts: dict[str, int] = {}
-    r, counts["review"] = await _counted(c, "GET", f"/v1/apps/plugin:{ID}/update", None, admin(tenant))
+    r = await c.get(f"/v1/apps/plugin:{ID}/update", headers=admin(tenant))
     assert r.status_code == 200, r.text
     take = {"digest": r.json()["data"]["installed"]["digest"]}
     r, counts["take"] = await _counted(c, "POST", f"/v1/apps/plugin:{ID}/update", take, admin(tenant))
     assert r.status_code == 200, r.text
-    r, counts["sources"] = await _counted(c, "GET", "/v1/knowledge-sources", None, admin(tenant))
-    assert r.status_code == 200, r.text
-    assert counts == dict.fromkeys(["review", "take", "sources"], 1), counts
+    assert counts == {"take": 1}, counts

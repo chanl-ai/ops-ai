@@ -1,7 +1,7 @@
 """Sealed secret values are held by the database (proved across every locked table in C5), by failure mode:
-another team reads a team's tool secrets or their audit through the store; another team reads or changes them, or a
-team's own app credential, with SQL that names no team, which only the database policy can stop; the store's page
-reading another team's secrets while the database lets every team through. Runs on the compose PostgreSQL as
+another team reads a team's tool secrets or their audit through the store; another team changes them with SQL that
+names no team, which only the database policy can stop; the store's page reading another team's secrets while the
+database lets every team through. Runs on the compose PostgreSQL as
 `ops_tools_tenant`, the role every store transaction runs as, since the database user the tests connect as bypasses
 row security."""
 
@@ -16,11 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.listing import ListParams
 from ops_store import isolation
-from ops_store.schema import isolation_kind
 from ops_store.team_scope import acting_as
 from ops_tools.store.connections import app_credentials, connection_audit
 from ops_tools.store.modules import service_outbox
-from ops_tools.store.secrets import SecretStore, secret_audit, tool_secrets
+from ops_tools.store.secrets import SecretStore, secret_audit
 
 from .conftest import setup_tx
 
@@ -68,27 +67,17 @@ async def test_another_team_finds_no_secret_through_the_store(engine: AsyncEngin
         assert [s.name for s in await store.listed(tenant, TEAM_A)] == ["DESK_KEY"]
 
 
-async def test_the_database_alone_hides_and_guards_them(engine: AsyncEngine, tenant: str) -> None:
-    assert [isolation_kind(t) for t in (tool_secrets, secret_audit, app_credentials)] == ["team", "team", "team"]
+async def test_another_team_cannot_change_a_teams_secret_with_sql_that_names_no_team(
+    engine: AsyncEngine, tenant: str
+) -> None:
+    # Reads across teams and tenants are held by deploy/database/tests/test_credential_tables_locked.py.
     await _sealed(engine, tenant)
     with isolation.scope(tenant, TEAM_B):
         async with isolation.isolated_tx(engine, role=ROLE) as c:
-            for name in ("tool_secrets", "secret_audit", "app_credentials"):
-                seen = await c.execute(sa.text(f"SELECT count(*) FROM {name} WHERE tenant_id = :t"), {"t": tenant})  # noqa: S608
-                assert seen.scalar_one() == 0, f"team B read {name}"
             changed = await c.execute(
                 sa.text("UPDATE tool_secrets SET version = version WHERE tenant_id = :t"), {"t": tenant}
             )
             assert changed.rowcount == 0, "team B changed team A's secret"
-    with isolation.scope("t_elsewhere", TEAM_A):
-        async with isolation.isolated_tx(engine, role=ROLE) as c:
-            seen = await c.execute(sa.text("SELECT count(*) FROM app_credentials WHERE app_id = 'test.desk'"))
-            assert seen.scalar_one() == 0, "another tenant read a team's app credential"
-    with isolation.scope(tenant, TEAM_A):
-        async with isolation.isolated_tx(engine, role=ROLE) as c:
-            for name, rows in (("tool_secrets", 1), ("secret_audit", 1), ("app_credentials", 1)):
-                seen = await c.execute(sa.text(f"SELECT count(*) FROM {name} WHERE tenant_id = :t"), {"t": tenant})  # noqa: S608
-                assert seen.scalar_one() == rows, name
 
 
 async def test_the_store_page_holds_the_acting_team_when_the_policy_lets_every_team_through(
