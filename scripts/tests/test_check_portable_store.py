@@ -44,6 +44,7 @@ T = text("SELECT id FROM kb_units WHERE kb_id IN :ids AND CAST(shared AS FLOAT) 
 U = select(t).where(t.c.on.is_(True), t.c.off.isnot(False), t.c.x.is_not(True), t.c.y.is_(False), t.c.z.is_(None))
 V = text("SELECT id FROM roles WHERE builtin IS FALSE AND hidden IS NOT TRUE")
 W = select(t).where(t.c.on == sa.true(), t.c.z.is_(None), t.c.n.is_(other))
+X = select(sa.func.count().filter(t.c.a == 1), sa.funcfilter(sa.func.max(t.c.n), t.c.b), q.filter(t.c.a == 1))
 '''
 
 
@@ -73,6 +74,8 @@ def test_each_postgres_only_construct_in_code_is_found() -> None:
         24: {"PostgreSQL cast"},
         26: {"boolean IS"},
         27: {"boolean IS"},
+        # `q.filter(...)` on a query is not an aggregate's.
+        29: {"aggregate FILTER"},
         4: {"dialect insert"},
     }, found
 

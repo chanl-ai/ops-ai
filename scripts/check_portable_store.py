@@ -7,9 +7,9 @@
         parameter), an aggregate's FILTER (WHERE ...) and `::` casts, which a migration may hold in its PostgreSQL
         branch (deploy/database/mssql.py refuses them in the SQL a revision renders for SQL Server); the same built
         with SQLAlchemy Core
-        (on_conflict_*, a dialect's own insert); a row lock (with_for_update, which renders nothing on SQL Server);
-        the host-dependent clock functions (func.now, make_interval, date_trunc); and postgresql_* index options,
-        except a postgresql_where given with its mssql_where twin.
+        (on_conflict_*, a dialect's own insert, an aggregate's `.filter(...)`); a row lock (with_for_update, which
+        renders nothing on SQL Server); the host-dependent clock functions (func.now, make_interval, date_trunc); and
+        postgresql_* index options, except a postgresql_where given with its mssql_where twin.
   meta  table metadata SQL Server refuses: a key column (primary key, unique, indexed or a foreign key) of unbounded
         text, and a table, column, index or constraint name over 60 characters.
   slice a list cut to its page in Python (`rows[start : start + size]`) in a service's code outside its store: every
@@ -123,6 +123,10 @@ def sql_findings(source: str, *, migration: bool = False) -> list[tuple[int, str
             out.append((node.lineno, "boolean IS"))
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in CALLS:
             out.append((node.lineno, CALLS[node.func.attr]))
+        # An aggregate built with SQLAlchemy's filter (`func.count().filter(...)`, `funcfilter`) renders
+        # FILTER (WHERE ...), which SQL Server refuses; `func.count(case((cond, 1)))` counts the same on both.
+        if not migration and isinstance(node, ast.Call) and _aggregate_filter(node):
+            out.append((node.lineno, "aggregate FILTER"))
         # The same constructs built from names: `sa.func.pg_try_advisory_xact_lock(...)` and the `JSONB` column type.
         if isinstance(node, (ast.Attribute, ast.Name)):
             name = node.attr if isinstance(node, ast.Attribute) else node.id
@@ -155,6 +159,19 @@ def sql_findings(source: str, *, migration: bool = False) -> list[tuple[int, str
         ):
             out.append((node.lineno, "SKIP LOCKED"))
     return sorted(set(out))
+
+
+def _aggregate_filter(node: ast.Call) -> bool:
+    f = node.func
+    if _named(f) == "funcfilter":
+        return True
+    return (
+        isinstance(f, ast.Attribute)
+        and f.attr == "filter"
+        and isinstance(f.value, ast.Call)
+        and isinstance(f.value.func, ast.Attribute)
+        and _named(f.value.func.value) == "func"
+    )
 
 
 def _factors(node: ast.expr) -> set[str]:

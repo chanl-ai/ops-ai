@@ -380,7 +380,8 @@ class CaseStore:
         )
         q = (
             sa.select(
-                sa.func.count().filter(needs).label("needs"), sa.func.count().filter(breaching).label("breaching")
+                sa.func.count(sa.case((needs, 1))).label("needs"),
+                sa.func.count(sa.case((breaching, 1))).label("breaching"),
             )
             .select_from(cases)
             .where(cases.c.team_id.in_(teams), team_visible(cases))

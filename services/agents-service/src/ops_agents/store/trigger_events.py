@@ -130,7 +130,8 @@ class TriggerEvents:
         """The reads on which starting this message's run failed, and whether it was set aside."""
         t = trigger_events
         q = sa.select(
-            sa.func.count().filter(t.c.outcome == "start_failed"), sa.func.count().filter(t.c.outcome == "set_aside")
+            sa.func.count(sa.case((t.c.outcome == "start_failed", 1))),
+            sa.func.count(sa.case((t.c.outcome == "set_aside", 1))),
         ).where(
             t.c.tenant_id == current_tenant(),
             t.c.workflow_id == workflow_id,

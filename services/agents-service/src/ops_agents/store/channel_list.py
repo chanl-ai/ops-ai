@@ -99,9 +99,9 @@ class ChannelList(RuntimeStore):
                 await c.execute(
                     sa.select(
                         r.c.created_by,
-                        sa.func.count().filter(r.c.created_at >= day),
-                        sa.func.count().filter(sa.and_(r.c.created_at >= day, r.c.status == "failed")),
-                        sa.func.count().filter(r.c.created_at >= week),
+                        sa.func.count(sa.case((r.c.created_at >= day, 1))),
+                        sa.func.count(sa.case((sa.and_(r.c.created_at >= day, r.c.status == "failed"), 1))),
+                        sa.func.count(sa.case((r.c.created_at >= week, 1))),
                         sa.func.max(r.c.created_at),
                     )
                     .where(r.c.tenant_id == tenant, r.c.created_by.in_(starters))
@@ -113,9 +113,9 @@ class ChannelList(RuntimeStore):
                 await c.execute(
                     sa.select(
                         thread_starter,
-                        sa.func.count().filter(t.c.created_at >= day),
-                        sa.func.count().filter(sa.and_(t.c.created_at >= day, t.c.status == "error")),
-                        sa.func.count().filter(t.c.created_at >= week),
+                        sa.func.count(sa.case((t.c.created_at >= day, 1))),
+                        sa.func.count(sa.case((sa.and_(t.c.created_at >= day, t.c.status == "error"), 1))),
+                        sa.func.count(sa.case((t.c.created_at >= week, 1))),
                         sa.func.max(t.c.updated_at),
                     )
                     .where(t.c.tenant_id == tenant, thread_starter.in_(starters))
@@ -210,8 +210,8 @@ class ChannelList(RuntimeStore):
             q = (
                 sa.select(
                     e.c.source,
-                    sa.func.count().filter(e.c.recorded_at >= day),
-                    sa.func.count().filter(e.c.recorded_at >= week),
+                    sa.func.count(sa.case((e.c.recorded_at >= day, 1))),
+                    sa.func.count(sa.case((e.c.recorded_at >= week, 1))),
                     sa.func.max(e.c.recorded_at),
                 )
                 .where(e.c.tenant_id == tenant, team_visible(e))
@@ -269,9 +269,9 @@ class ChannelList(RuntimeStore):
             q = (
                 sa.select(
                     t.c.deployment_id,
-                    sa.func.count().filter(t.c.created_at >= day),
-                    sa.func.count().filter(sa.and_(t.c.created_at >= day, t.c.status == "error")),
-                    sa.func.count().filter(t.c.created_at >= week),
+                    sa.func.count(sa.case((t.c.created_at >= day, 1))),
+                    sa.func.count(sa.case((sa.and_(t.c.created_at >= day, t.c.status == "error"), 1))),
+                    sa.func.count(sa.case((t.c.created_at >= week, 1))),
                     sa.func.max(t.c.updated_at),
                 )
                 .where(t.c.tenant_id == tenant, t.c.deployment_id.is_not(None), team_visible(t))
