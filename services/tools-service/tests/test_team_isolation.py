@@ -21,12 +21,14 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
+from ops_identity.testing import TEST_TOKEN_TTL_S
+from ops_policy import mint
 from ops_service_kit.settings import Settings
 from ops_tools.modules.seed import load
 from ops_tools.store.modules import ModuleStore
 
 from .conftest import FakeReviews, build_app, service_headers
-from .test_review_decisions import HOST, introspect, jwks, person
+from .test_review_decisions import HOST, PLATFORM, introspect, jwks, person
 
 # A team made on the Teams page: the dev seed's directory does not hold it.
 NEW_TEAM = "team_d90630bcb0e7"
@@ -146,14 +148,43 @@ async def test_a_module_approved_for_a_teams_workflow_is_read_by_that_team(
     assert (await c.get("/v1/tool-modules/mod_payments_hub", headers=who["lending"])).status_code == 404
 
 
+def _signed(tenant: str, name: str, access: dict[str, list[str]], team: str) -> dict[str, str]:
+    """A token as platform-service mints one from role assignments (the `access` claim), acting in `team`."""
+    first = name.split(maxsplit=1)[0].lower()
+    claims = {
+        "sub": f"usr_{first}",
+        "email": f"{first}@bank.example",
+        "name": name,
+        "kind": "person",
+        "security_team": "team_security",
+        "aud": ["tools"],
+        "tenant_id": tenant,
+        "team_ids": [t for t in access if t != "*"],
+        "access": access,
+        "auth_method": "session",
+    }
+    return {"Authorization": f"Bearer {mint(claims, PLATFORM, ttl_s=TEST_TOKEN_TTL_S)}", "X-Team-Id": team}
+
+
+# Lending holds only its workflow's grant on Core Banking (the all-scope Platform team's, as team_ops is). Every
+# write, test and run from the module screens answers as for a module the caller cannot see, and the module's
+# buttons are off: the grant lets Lending's workflows call the operation through the gateway, nothing more. A
+# workspace admin (Admin in every team) acting in Lending is held to Lending's view too.
+GRANTEE_CALLERS = {
+    "builder of the grantee team": ({"team_lending": ["builder"]}, "team_lending"),
+    "admin of the grantee team": ({"team_lending": ["admin"]}, "team_lending"),
+    "workspace admin acting in the grantee team": ({"team_lending": ["viewer"], "*": ["admin"]}, "team_lending"),
+}
+
+
+@pytest.mark.parametrize("caller", list(GRANTEE_CALLERS))
 async def test_a_team_holding_only_a_workflow_grant_changes_nothing_of_the_module(
-    people: tuple[httpx.AsyncClient, dict[str, dict[str, str]]], tenant: str
+    people: tuple[httpx.AsyncClient, dict[str, dict[str, str]]], tenant: str, caller: str
 ) -> None:
-    # Lending reads Core Banking through its workflow's grant; every write and every try of its tools answers as for a
-    # module it cannot see.
     c, _ = people
     owner = person(tenant, "Pat Platform", {"team_platform": "admin"})
-    lending = person(tenant, "Lena Lending", {"team_lending": "admin"})
+    access, team = GRANTEE_CALLERS[caller]
+    grantee = _signed(tenant, "Lena Lending", access, team)
     base = "/v1/tool-modules/mod_core_banking"
     before = (await c.get(base, headers=owner)).json()["data"]
     op, name = before["operations"][0]["id"], before["operations"][0]["name"]
@@ -182,11 +213,22 @@ async def test_a_team_holding_only_a_workflow_grant_changes_nothing_of_the_modul
         ("POST", f"{base}/test", {"operation": name, "contextId": "owner", "target": "stub", "input": {}}),
         ("POST", f"{base}/operations/{name}/run", {"mode": "mock", "input": {}}),
     )
+    table: dict[str, object] = {}
     for method, path, body in tries:
-        r = await c.request(method, path, json=body, headers=lending)
-        assert r.status_code == 404, (method, path, r.status_code, r.text)
-    bulk = await c.post("/v1/tool-modules/bulk-delete", json={"ids": ["mod_core_banking"]}, headers=lending)
-    assert bulk.json()["data"] == {"updated": [], "skipped": [{"id": "mod_core_banking", "reason": "Not found"}]}
+        r = await c.request(method, path, json=body, headers=grantee)
+        table[f"{method} {path.removeprefix(base) or '/'}"] = r.status_code
+    bulk = await c.post("/v1/tool-modules/bulk-delete", json={"ids": ["mod_core_banking"]}, headers=grantee)
+    table["POST bulk-delete"] = bulk.json()["data"]
+    seen = await c.get(base, headers=grantee)
+    assert seen.status_code == 200, seen.text
+    table.update({k: seen.json()["data"][k] for k in ("canEdit", "canDelete", "canPublish")})
+    assert table == {
+        **{f"{m} {p.removeprefix(base) or '/'}": 404 for m, p, _ in tries},
+        "POST bulk-delete": {"updated": [], "skipped": [{"id": "mod_core_banking", "reason": "Not found"}]},
+        "canEdit": False,
+        "canDelete": False,
+        "canPublish": False,
+    }, caller
     assert (await c.get(base, headers=owner)).json()["data"] == held
     assert (await c.get(f"{base}/operations/{op}/mocks", headers=owner)).json() == get.json()
     assert before["approvals"] == held["approvals"]

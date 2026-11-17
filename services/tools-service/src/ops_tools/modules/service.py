@@ -642,7 +642,11 @@ class ModuleService:
         """What the caller may do with this module, by the check each write route runs: `can` for the action
         with the module's protection, so the console's buttons and the routes never disagree."""
         out: dict[str, bool] = {}
+        owned = self._team_owns(who, m)
         for action in ("edit", "delete", "publish"):
+            if not owned:
+                out[f"can{action.capitalize()}"] = False
+                continue
             try:
                 _can(who, "tools", action, what="it", protection=m.get("protection"))
             except Forbidden:
@@ -796,9 +800,14 @@ class ModuleService:
         """The module, when the caller's team owns it (or it is workspace-level); 404 otherwise, as for one it cannot
         see. A team that reads a module through its workflow's grant uses it and changes nothing of it."""
         m = await self._find(who, module_id)
-        if not owns_module(who.team, m.get("team_id"), verified=who.verified):
+        if not self._team_owns(who, m):
             raise NotFound("Module")
         return m
+
+    @staticmethod
+    def _team_owns(who: Caller, m: Aggregate) -> bool:
+        """The one team check every module write, test and run shares, and the detail's can* flags with them."""
+        return owns_module(who.team, m.get("team_id"), verified=who.verified)
 
     async def _changeable(self, who: Caller, module_id: str, action: str = "edit") -> Aggregate:
         """The module, when the caller may change it: its team's, and a `system` module is the provisioner's alone."""
@@ -1518,11 +1527,7 @@ class ModuleService:
         out: dict[str, Any] = {"updated": [], "skipped": []}
         for module_id in ids:
             m = await self.store.get(who.tenant_id, module_id)
-            if (
-                m is None
-                or not self._sees(who, m)
-                or not owns_module(who.team, m.get("team_id"), verified=who.verified)
-            ):
+            if m is None or not self._sees(who, m) or not self._team_owns(who, m):
                 out["skipped"].append({"id": module_id, "reason": "Not found"})
                 continue
             try:
