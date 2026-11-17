@@ -86,7 +86,7 @@ pool-documents:
 pool-runner:
 	@$(call pool_job,$@,OPS_TEST_DATABASE_URL=$(call db_for,runner) $(MAKE) -k -C services/runner-service verify)
 pool-pyright:
-	@$(call pool_job,$@,uv run pyright packages)
+	@$(call pool_job,$@,uv run python scripts/check_tests_typecheck.py packages)
 pool-store:
 	@$(call pool_job,$@,uv run python scripts/test_db.py $(call db_for,store) && cd packages/ops_store && OPS_DATABASE_URL=$(call db_for,store) uv run pytest)
 pool-engine:

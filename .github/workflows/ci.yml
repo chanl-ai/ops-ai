@@ -82,7 +82,7 @@ jobs:
       - name: Types of the packages
         run: |
           base=$(git merge-base "$BASE_SHA" HEAD)
-          if git diff --name-only "$base" HEAD | grep -q '^packages/'; then uv run pyright packages; fi
+          if git diff --name-only "$base" HEAD | grep -q '^packages/'; then uv run python scripts/check_tests_typecheck.py packages; fi
       - run: make -s checks
       - name: Script tests
         if: needs.plan.outputs.scripts == 'true'

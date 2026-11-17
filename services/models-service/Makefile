@@ -21,8 +21,8 @@ lint: ## ruff format check and lint
 	uv run ruff format --check $(PY_DIRS)
 	uv run ruff check $(PY_DIRS)
 
-typecheck: ## Strict pyright
-	uv run pyright $(PY_DIRS)
+typecheck: ## Strict pyright, test-file errors held to tests-typecheck-baseline.txt
+	uv run python $(ROOT)/scripts/check_tests_typecheck.py $(PY_DIRS)
 
 test: ## pytest on the test database (make db-up); T= runs only those files
 	$(TEST_DB) uv run pytest $(PYTEST_PAR) $(T)

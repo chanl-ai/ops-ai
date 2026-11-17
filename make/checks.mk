@@ -25,6 +25,7 @@ CHECKS = \
   config-literals config-literals-commits \
   typed-boundaries typed-boundaries-commits \
   console-baselines console-baselines-commits \
+  tests-typecheck-self-test tests-typecheck-commits \
   isolation-markings isolation-sites \
   store-inventory roles-matrix sbom k8s-base \
   ratchet-history lint-imports sdk-drift changelog-entries console-standards \
@@ -64,6 +65,11 @@ check-run.console-baselines-commits = $(PY) scripts/check_console_baselines.py -
 check-paths.console-baselines-commits = ^apps/console/scripts/[\w-]*baseline[\w-]*\.json$$
 check-run.typed-boundaries-commits = $(PY) scripts/check_typed_boundaries.py --commits
 check-paths.typed-boundaries-commits = (^|/)typed-boundaries-baseline\.txt$$
+# Type errors in test files beyond the member's tests-typecheck-baseline.txt (the typecheck targets below run it).
+check-run.tests-typecheck-self-test = $(PY) scripts/check_tests_typecheck.py --self-test
+check-paths.tests-typecheck-self-test = ^scripts/(check_tests_typecheck|baseline_history)\.py$$
+check-run.tests-typecheck-commits = $(PY) scripts/check_tests_typecheck.py --commits
+check-paths.tests-typecheck-commits = (^|/)tests-typecheck-baseline\.txt$$
 
 # Every table marked and indexed; the raw transaction, savepoint, relay and loop-health sites each service still holds.
 check-run.isolation-markings = $(PYTEST) deploy/database/tests/test_isolation_markings.py deploy/database/tests/test_indexes.py
@@ -116,14 +122,15 @@ check-paths.service-standards-self-test = ^scripts/check_service_standards\.py$$
 
 # Strict types on the code and its tests: `packages` as one run, and each service through its own typecheck target. A new
 # test file's untyped helper reached CI because nothing on this list type-checked tests. Pre-commit runs only the members
-# whose files are staged.
+# whose files are staged. Code outside tests stays at zero errors; a test file may hold no more than its row in the
+# member's tests-typecheck-baseline.txt (scripts/check_tests_typecheck.py), which only falls.
 TYPED_SERVICES = agents-service documents-service files-service kb-service models-service platform-service runner-service tools-service
 CHECK_TYPED = typecheck-packages $(addprefix typecheck-,$(TYPED_SERVICES))
 CHECKS += $(CHECK_TYPED)
-check-run.typecheck-packages = $(PYRIGHT) packages
-check-paths.typecheck-packages = ^packages/.*\.pyi?$$|^pyproject\.toml$$
+check-run.typecheck-packages = $(PY) scripts/check_tests_typecheck.py packages
+check-paths.typecheck-packages = ^packages/.*(\.pyi?|/tests-typecheck-baseline\.txt)$$|^pyproject\.toml$$|^scripts/check_tests_typecheck\.py$$
 $(foreach s,$(TYPED_SERVICES),$(eval check-run.typecheck-$(s) = $$(MAKE) -C services/$(s) typecheck))
-$(foreach s,$(TYPED_SERVICES),$(eval check-paths.typecheck-$(s) = ^services/$(s)/.*\.pyi?$$$$|^services/$(s)/pyproject\.toml$$$$|^pyproject\.toml$$$$))
+$(foreach s,$(TYPED_SERVICES),$(eval check-paths.typecheck-$(s) = ^services/$(s)/.*\.pyi?$$$$|^services/$(s)/tests-typecheck-baseline\.txt$$$$|^scripts/check_tests_typecheck\.py$$$$|^services/$(s)/pyproject\.toml$$$$|^pyproject\.toml$$$$))
 
 # STAGED=1 runs a check only when a staged path can change its result. STAGED_FILES names a file of staged paths, one
 # a line (verify-staged.sh passes its own, read from the commit's index); unset, the index is read.
@@ -138,7 +145,8 @@ checks: ## Every check on the one list (CHECKS), each run to the end and the fai
 
 # The checks that read history, as CI's maintainer-review job runs them after scripts/check_review_approval.py has set
 # OPS_STANDARDS_REVIEW: `required` fails a rise in a baseline, `approved` passes it, `deferred` prints it as not checked.
-CHECKS_HISTORY = access-exceptions-commits portable-store-commits config-literals-commits typed-boundaries-commits console-baselines-commits ratchet-history
+CHECKS_HISTORY = access-exceptions-commits portable-store-commits config-literals-commits typed-boundaries-commits console-baselines-commits \
+  tests-typecheck-commits ratchet-history
 # The review is the one given, else the one GitHub holds for this branch's pull request (`required` when it cannot be
 # read), so a rise fails here unless a maintainer approved it. `make verify` runs this too.
 checks-history: export OPS_STANDARDS_REVIEW = $(or $(REVIEW_GIVEN),$(shell $(PY) scripts/check_review_approval.py --local))

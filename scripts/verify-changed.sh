@@ -50,7 +50,7 @@ mapfile -t tested < <(for p in "${packages[@]}"; do [ -d "$p/tests" ] && echo "$
 [ -n "$plan" ] && { echo "plan: packages [${packages[*]}] services [${services[*]}]"; exit 0; }
 mapfile -t py < <(printf '%s\n' "${changed[@]}" | grep -E '\.py$' | while read -r f; do [ -f "$f" ] && echo "$f"; done)
 if [ "${#py[@]}" -gt 0 ]; then uv run ruff format --check "${py[@]}"; uv run ruff check "${py[@]}"; fi
-[ "${#pkgs[@]}" -gt 0 ] && uv run pyright "${!pkgs[@]}"
+[ "${#pkgs[@]}" -gt 0 ] && uv run python scripts/check_tests_typecheck.py "${!pkgs[@]}"
 # One background job per member, each writing its own log; VERIFY_JOBS (default 4) run at once.
 db=${OPS_TEST_DATABASE_URL:-}
 logs=$(mktemp -d "${TMPDIR:-/tmp}/ops-verify-changed.XXXXXX")
