@@ -1587,7 +1587,7 @@ export interface components {
             } | null;
             /** Pluginsettings */
             pluginSettings?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Redirecturi */
             redirectUri?: string | null;
@@ -1639,7 +1639,7 @@ export interface components {
             at?: string | null;
             /** Detail */
             detail: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /**
@@ -1668,7 +1668,7 @@ export interface components {
             sandbox: boolean;
             /** Settings */
             settings?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Signin */
             signIn?: string | null;
@@ -1709,7 +1709,7 @@ export interface components {
             };
             /** Settings */
             settings?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Signin */
             signIn?: ("team" | "person" | "person_or_team") | null;
@@ -1765,7 +1765,7 @@ export interface components {
             name: string;
             /** Settings */
             settings?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /**
@@ -1917,7 +1917,7 @@ export interface components {
             secretEnds?: string | null;
             /** Settings */
             settings?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Signinagain */
             signInAgain: number;
@@ -1975,7 +1975,7 @@ export interface components {
             secretEnds?: string | null;
             /** Settings */
             settings?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /**
              * Status
@@ -3493,14 +3493,14 @@ export interface components {
             };
             /** Values */
             values?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /** EvaluateOut */
         EvaluateOut: {
             /** Out */
             out: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /** ExecutionList */
@@ -3783,7 +3783,7 @@ export interface components {
             getTool: string;
             /** Inputs */
             inputs?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Listtool */
             listTool: string;
@@ -3803,7 +3803,7 @@ export interface components {
             previewTool?: string | null;
             /** Schedule */
             schedule: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Scopestool */
             scopesTool?: string | null;
@@ -3940,8 +3940,7 @@ export interface components {
         };
         /** MockAnswer */
         MockAnswer: {
-            /** Body */
-            body?: unknown;
+            body?: components["schemas"]["JsonValue"];
             /** Createdby */
             createdBy: string;
             /** Default */
@@ -3960,7 +3959,7 @@ export interface components {
             id: string;
             /** Match */
             match: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Name */
             name: string;
@@ -3975,8 +3974,7 @@ export interface components {
         };
         /** MockIn */
         MockIn: {
-            /** Body */
-            body?: unknown;
+            body?: components["schemas"]["JsonValue"];
             /**
              * Default
              * @default false
@@ -3999,7 +3997,7 @@ export interface components {
             };
             /** Match */
             match?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Name */
             name: string;
@@ -4033,8 +4031,7 @@ export interface components {
         };
         /** MockPatchIn */
         MockPatchIn: {
-            /** Body */
-            body?: unknown;
+            body?: components["schemas"]["JsonValue"];
             /** Default */
             default?: boolean | null;
             /** Delayms */
@@ -4045,7 +4042,7 @@ export interface components {
             } | null;
             /** Match */
             match?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Name */
             name?: string | null;
@@ -4264,8 +4261,7 @@ export interface components {
             signInHeader?: string | null;
             /** Stepup */
             stepUp: boolean;
-            /** Stub */
-            stub?: unknown;
+            stub?: components["schemas"]["JsonValue"];
             /** Timeoutms */
             timeoutMs?: number | null;
             /** Toolid */
@@ -4334,7 +4330,7 @@ export interface components {
             environment: "test" | "live";
             /** Input */
             input: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Operation */
             operation: string;
@@ -4378,10 +4374,8 @@ export interface components {
             masked: string[];
             /** Mockid */
             mockId?: string | null;
-            /** Output */
-            output: unknown;
-            /** Rawresponse */
-            rawResponse?: unknown;
+            output: components["schemas"]["JsonValue"];
+            rawResponse?: components["schemas"]["JsonValue"];
             /** Reachedhost */
             reachedHost?: string | null;
             request?: components["schemas"]["TestRequestOut"] | null;
@@ -4684,8 +4678,7 @@ export interface components {
             scopes?: string[] | null;
             /** Stepup */
             stepUp?: boolean | null;
-            /** Stub */
-            stub?: unknown;
+            stub?: components["schemas"]["JsonValue"];
             /** Timeoutms */
             timeoutMs?: number | null;
         };
@@ -4864,7 +4857,7 @@ export interface components {
         PluginTemplate: {
             /** Body */
             body?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Digest */
             digest: string;
@@ -5377,7 +5370,7 @@ export interface components {
             source: string;
             /** Values */
             values?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /** SubjectBinding */
@@ -5529,7 +5522,7 @@ export interface components {
             updateAvailable: boolean;
             /** Values */
             values?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /** TakeUpdateIn */
@@ -5558,7 +5551,7 @@ export interface components {
             sandbox: boolean;
             /** Settings */
             settings?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Signin */
             signIn?: string | null;
@@ -5582,8 +5575,7 @@ export interface components {
         TestDraftIn: {
             /** Responsetransform */
             responseTransform?: string | null;
-            /** Stub */
-            stub?: unknown;
+            stub?: components["schemas"]["JsonValue"];
         };
         /** TestIn */
         TestIn: {
@@ -6108,7 +6100,7 @@ export interface components {
             environment?: ("test" | "live") | null;
             /** Input */
             input?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /**
              * Mode
@@ -6143,10 +6135,8 @@ export interface components {
             mockId?: string | null;
             /** Mocked */
             mocked: boolean;
-            /** Output */
-            output: unknown;
-            /** Rawresponse */
-            rawResponse?: unknown;
+            output: components["schemas"]["JsonValue"];
+            rawResponse?: components["schemas"]["JsonValue"];
             /** Reachedhost */
             reachedHost?: string | null;
             request?: components["schemas"]["TestRequestOut"] | null;

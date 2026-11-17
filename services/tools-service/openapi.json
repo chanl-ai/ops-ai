@@ -321,7 +321,9 @@
           "pluginSettings": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -476,7 +478,9 @@
             "title": "At"
           },
           "detail": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Detail",
             "type": "object"
           }
@@ -550,7 +554,9 @@
             "type": "boolean"
           },
           "settings": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Settings",
             "type": "object"
           },
@@ -688,7 +694,9 @@
           "settings": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -853,7 +861,9 @@
             "type": "string"
           },
           "settings": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Settings",
             "type": "object"
           }
@@ -1338,7 +1348,9 @@
             "title": "Secretends"
           },
           "settings": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Settings",
             "type": "object"
           },
@@ -1511,7 +1523,9 @@
             "title": "Secretends"
           },
           "settings": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Settings",
             "type": "object"
           },
@@ -5542,7 +5556,9 @@
             "type": "object"
           },
           "values": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Values",
             "type": "object"
           }
@@ -5557,7 +5573,9 @@
         "additionalProperties": false,
         "properties": {
           "out": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Out",
             "type": "object"
           }
@@ -6320,7 +6338,9 @@
             "type": "string"
           },
           "inputs": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Inputs",
             "type": "object"
           },
@@ -6354,7 +6374,9 @@
             "title": "Previewtool"
           },
           "schedule": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Schedule",
             "type": "object"
           },
@@ -6769,7 +6791,7 @@
         "additionalProperties": false,
         "properties": {
           "body": {
-            "title": "Body"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "createdBy": {
             "title": "Createdby",
@@ -6810,7 +6832,9 @@
             "type": "string"
           },
           "match": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Match",
             "type": "object"
           },
@@ -6856,7 +6880,7 @@
         "additionalProperties": false,
         "properties": {
           "body": {
-            "title": "Body"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "default": {
             "default": false,
@@ -6887,7 +6911,9 @@
             "type": "object"
           },
           "match": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Match",
             "type": "object"
           },
@@ -6958,7 +6984,7 @@
         "additionalProperties": false,
         "properties": {
           "body": {
-            "title": "Body"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "default": {
             "anyOf": [
@@ -7001,7 +7027,9 @@
           "match": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -7835,7 +7863,7 @@
             "type": "boolean"
           },
           "stub": {
-            "title": "Stub"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "timeoutMs": {
             "anyOf": [
@@ -8052,7 +8080,9 @@
             "type": "string"
           },
           "input": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Input",
             "type": "object"
           },
@@ -8186,10 +8216,10 @@
             "title": "Mockid"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "rawResponse": {
-            "title": "Rawresponse"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "reachedHost": {
             "anyOf": [
@@ -9320,7 +9350,7 @@
             "title": "Stepup"
           },
           "stub": {
-            "title": "Stub"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "timeoutMs": {
             "anyOf": [
@@ -9804,7 +9834,9 @@
         "additionalProperties": false,
         "properties": {
           "body": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Body",
             "type": "object"
           },
@@ -11399,7 +11431,9 @@
             "type": "string"
           },
           "values": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Values",
             "type": "object"
           }
@@ -11895,7 +11929,9 @@
             "type": "boolean"
           },
           "values": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Values",
             "type": "object"
           }
@@ -11988,7 +12024,9 @@
             "type": "boolean"
           },
           "settings": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Settings",
             "type": "object"
           },
@@ -12061,7 +12099,7 @@
             "title": "Responsetransform"
           },
           "stub": {
-            "title": "Stub"
+            "$ref": "#/components/schemas/JsonValue"
           }
         },
         "title": "TestDraftIn",
@@ -13730,7 +13768,9 @@
             "title": "Environment"
           },
           "input": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Input",
             "type": "object"
           },
@@ -13842,10 +13882,10 @@
             "type": "boolean"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "rawResponse": {
-            "title": "Rawresponse"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "reachedHost": {
             "anyOf": [

@@ -14,41 +14,9 @@ class AbandonIn(TypedDict, closed=True):
     tool: str
 
 
-class AccountEvent(TypedDict, closed=True):
-    action: str
-    actor: str
-    at: NotRequired[str | None]
-    detail: dict[str, Any]
-
-
-class AccountIn(TypedDict, closed=True):
-    credentialId: NotRequired[str | None]
-    credentials: NotRequired[dict[str, str]]
-    kind: NotRequired[str | None]
-    makeDefault: NotRequired[bool | None]
-    name: str
-    sandbox: NotRequired[bool]
-    settings: NotRequired[dict[str, Any]]
-    signIn: NotRequired[str | None]
-
-
 class AccountOwner(TypedDict, closed=True):
     kind: Literal["team", "each", "person"]
     name: str
-
-
-class AccountPatchIn(TypedDict, closed=True):
-    category: NotRequired[str | None]
-    credentialId: NotRequired[str | None]
-    description: NotRequired[str | None]
-    docsUrl: NotRequired[str | None]
-    name: NotRequired[str | None]
-    revision: int
-    sandbox: NotRequired[bool | None]
-    secretValues: NotRequired[dict[str, str]]
-    settings: NotRequired[dict[str, Any] | None]
-    signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
-    teamBackup: NotRequired[bool | None]
 
 
 class AccountTest(TypedDict, closed=True):
@@ -66,11 +34,6 @@ class ActivityDay(TypedDict, closed=True):
     date: str
     errors: int
     p95Ms: int
-
-
-class AnotherOwnIn(TypedDict, closed=True):
-    name: str
-    settings: NotRequired[dict[str, Any]]
 
 
 Scope: TypeAlias = str
@@ -366,15 +329,6 @@ class ErrorEnvelope(TypedDict, closed=True):
     success: Literal[False]
 
 
-class EvaluateIn(TypedDict, closed=True):
-    expressions: dict[str, str]
-    values: NotRequired[dict[str, Any]]
-
-
-class EvaluateOut(TypedDict, closed=True):
-    out: dict[str, Any]
-
-
 class FenceIn(TypedDict, closed=True):
     generation: int
     thread: str
@@ -472,13 +426,13 @@ class KnowledgeSourceView(TypedDict, closed=True):
     fetchAtOnce: NotRequired[int]
     getTakesTag: NotRequired[bool]
     getTool: str
-    inputs: NotRequired[dict[str, Any]]
+    inputs: NotRequired[dict[str, JsonValue]]
     listTool: str
     listsWhole: NotRequired[bool]
     needsConnection: NotRequired[bool]
     plugin: str
     previewTool: NotRequired[str | None]
-    schedule: dict[str, Any]
+    schedule: dict[str, JsonValue]
     scopesTool: NotRequired[str | None]
     signIn: str | None
     site: NotRequired[bool]
@@ -529,7 +483,7 @@ class McpLinkView(TypedDict, closed=True):
 
 
 class MockAnswer(TypedDict, closed=True):
-    body: NotRequired[Any]
+    body: NotRequired[JsonValue]
     createdBy: str
     default: bool
     delayMs: int
@@ -537,7 +491,7 @@ class MockAnswer(TypedDict, closed=True):
     fromCallId: NotRequired[str | None]
     headers: dict[str, str]
     id: str
-    match: dict[str, Any]
+    match: dict[str, JsonValue]
     name: str
     position: int
     status: int
@@ -546,23 +500,23 @@ class MockAnswer(TypedDict, closed=True):
 
 
 class MockIn(TypedDict, closed=True):
-    body: NotRequired[Any]
+    body: NotRequired[JsonValue]
     default: NotRequired[bool]
     delayMs: NotRequired[int]
     environment: NotRequired[Literal["test", "example"]]
     headers: NotRequired[dict[str, str]]
-    match: NotRequired[dict[str, Any]]
+    match: NotRequired[dict[str, JsonValue]]
     name: str
     status: NotRequired[int]
     timeout: NotRequired[bool]
 
 
 class MockPatchIn(TypedDict, closed=True):
-    body: NotRequired[Any]
+    body: NotRequired[JsonValue]
     default: NotRequired[bool | None]
     delayMs: NotRequired[int | None]
     headers: NotRequired[dict[str, str] | None]
-    match: NotRequired[dict[str, Any] | None]
+    match: NotRequired[dict[str, JsonValue] | None]
     name: NotRequired[str | None]
     status: NotRequired[int | None]
     timeout: NotRequired[bool | None]
@@ -976,7 +930,7 @@ class SourceHost(TypedDict, closed=True):
 class SourceHostsIn(TypedDict, closed=True):
     plugin: str
     source: str
-    values: NotRequired[dict[str, Any]]
+    values: NotRequired[dict[str, JsonValue]]
 
 
 class SubjectBinding(TypedDict, closed=True):
@@ -1016,7 +970,7 @@ class TeamPluginIn(TypedDict, closed=True):
     enabled: bool
     kind: NotRequired[str | None]
     sandbox: NotRequired[bool]
-    settings: NotRequired[dict[str, Any]]
+    settings: NotRequired[dict[str, JsonValue]]
     signIn: NotRequired[str | None]
 
 
@@ -1028,7 +982,7 @@ class TemplateRequires(TypedDict, closed=True):
 
 class TestDraftIn(TypedDict, closed=True):
     responseTransform: NotRequired[str | None]
-    stub: NotRequired[Any]
+    stub: NotRequired[JsonValue]
 
 
 class TestIn(TypedDict, closed=True):
@@ -1202,7 +1156,7 @@ class ToolPublished(TypedDict, closed=True):
 class ToolRunIn(TypedDict, closed=True):
     confirmed: NotRequired[bool]
     environment: NotRequired[Literal["test", "live"] | None]
-    input: NotRequired[dict[str, Any]]
+    input: NotRequired[dict[str, JsonValue]]
     mode: Literal["mock", "real"]
 
 
@@ -1218,8 +1172,8 @@ class ToolRunResult(TypedDict, closed=True):
     masked: list[str]
     mockId: NotRequired[str | None]
     mocked: bool
-    output: Any
-    rawResponse: NotRequired[Any]
+    output: JsonValue
+    rawResponse: NotRequired[JsonValue]
     reachedHost: NotRequired[str | None]
     request: NotRequired[TestRequestOut | None]
     status: int
@@ -1292,6 +1246,43 @@ class AccountChoice(TypedDict, closed=True):
     own: NotRequired[bool]
     pointsAt: NotRequired[str | None]
     sandbox: NotRequired[bool]
+
+
+class AccountEvent(TypedDict, closed=True):
+    action: str
+    actor: str
+    at: NotRequired[str | None]
+    detail: dict[str, JsonValue]
+
+
+class AccountIn(TypedDict, closed=True):
+    credentialId: NotRequired[str | None]
+    credentials: NotRequired[dict[str, str]]
+    kind: NotRequired[str | None]
+    makeDefault: NotRequired[bool | None]
+    name: str
+    sandbox: NotRequired[bool]
+    settings: NotRequired[dict[str, JsonValue]]
+    signIn: NotRequired[str | None]
+
+
+class AccountPatchIn(TypedDict, closed=True):
+    category: NotRequired[str | None]
+    credentialId: NotRequired[str | None]
+    description: NotRequired[str | None]
+    docsUrl: NotRequired[str | None]
+    name: NotRequired[str | None]
+    revision: int
+    sandbox: NotRequired[bool | None]
+    secretValues: NotRequired[dict[str, str]]
+    settings: NotRequired[dict[str, JsonValue] | None]
+    signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
+    teamBackup: NotRequired[bool | None]
+
+
+class AnotherOwnIn(TypedDict, closed=True):
+    name: str
+    settings: NotRequired[dict[str, JsonValue]]
 
 
 class AppCredential(TypedDict, closed=True):
@@ -1506,11 +1497,6 @@ class EnvelopeDiscoveryResult(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeEvaluateOut(TypedDict, closed=True):
-    data: EvaluateOut
-    success: Literal[True]
-
-
 class EnvelopeFenceResult(TypedDict, closed=True):
     data: FenceResult
     success: Literal[True]
@@ -1614,6 +1600,15 @@ class EnvelopeListMyAccount(TypedDict, closed=True):
 class EnvelopeListSourceHost(TypedDict, closed=True):
     data: list[SourceHost]
     success: Literal[True]
+
+
+class EvaluateIn(TypedDict, closed=True):
+    expressions: dict[str, str]
+    values: NotRequired[dict[str, JsonValue]]
+
+
+class EvaluateOut(TypedDict, closed=True):
+    out: dict[str, JsonValue]
 
 
 class ExecutionList(TypedDict, closed=True):
@@ -1747,7 +1742,7 @@ class ModuleOperation(TypedDict, closed=True):
     secrets: NotRequired[list[SecretNeed]]
     signInHeader: NotRequired[str | None]
     stepUp: bool
-    stub: NotRequired[Any]
+    stub: NotRequired[JsonValue]
     timeoutMs: NotRequired[int | None]
     toolId: str
     waits: NotRequired[bool | None]
@@ -1758,7 +1753,7 @@ class ModuleTestIn(TypedDict, closed=True):
     contextId: str
     draft: NotRequired[TestDraftIn | None]
     environment: NotRequired[Literal["test", "live"]]
-    input: dict[str, Any]
+    input: dict[str, JsonValue]
     operation: str
     secretValues: NotRequired[dict[str, str] | None]
     simulateApproval: NotRequired[bool]
@@ -1776,8 +1771,8 @@ class ModuleTestResult(TypedDict, closed=True):
     log: NotRequired[list[TestLogLine]]
     masked: list[str]
     mockId: NotRequired[str | None]
-    output: Any
-    rawResponse: NotRequired[Any]
+    output: JsonValue
+    rawResponse: NotRequired[JsonValue]
     reachedHost: NotRequired[str | None]
     request: NotRequired[TestRequestOut | None]
     status: int
@@ -1861,7 +1856,7 @@ class OperationPatchIn(TypedDict, closed=True):
     reviewerRole: NotRequired[str | None]
     scopes: NotRequired[list[Scope] | None]
     stepUp: NotRequired[bool | None]
-    stub: NotRequired[Any]
+    stub: NotRequired[JsonValue]
     timeoutMs: NotRequired[int | None]
 
 
@@ -1879,7 +1874,7 @@ class PluginSetting(TypedDict, closed=True):
 
 
 class PluginTemplate(TypedDict, closed=True):
-    body: NotRequired[dict[str, Any]]
+    body: NotRequired[dict[str, JsonValue]]
     digest: str
     id: str
     kind: Literal[
@@ -1940,7 +1935,7 @@ class SystemPlugin(TypedDict, closed=True):
     teamVersion: NotRequired[str | None]
     tools: NotRequired[list[str]]
     updateAvailable: NotRequired[bool]
-    values: NotRequired[dict[str, Any]]
+    values: NotRequired[dict[str, JsonValue]]
 
 
 class TestOut(TypedDict, closed=True):
@@ -2032,7 +2027,7 @@ class AccountDetail(TypedDict, closed=True):
     people: NotRequired[list[PersonSignedIn]]
     platformApp: NotRequired[str | None]
     pluginSecrets: NotRequired[dict[str, bool] | None]
-    pluginSettings: NotRequired[dict[str, Any] | None]
+    pluginSettings: NotRequired[dict[str, JsonValue] | None]
     redirectUri: NotRequired[str | None]
     revision: int
     sandbox: bool
@@ -2112,7 +2107,7 @@ class AppCredentialChange(TypedDict, closed=True):
     permissions: list[Permission]
     redirectUri: NotRequired[str | None]
     secretEnds: NotRequired[str | None]
-    settings: NotRequired[dict[str, Any]]
+    settings: NotRequired[dict[str, JsonValue]]
     signInAgain: int
     status: Literal["working", "not_tested", "failing"]
     teamId: str
@@ -2136,7 +2131,7 @@ class AppCredentialDetail(TypedDict, closed=True):
     permissions: list[Permission]
     redirectUri: NotRequired[str | None]
     secretEnds: NotRequired[str | None]
-    settings: NotRequired[dict[str, Any]]
+    settings: NotRequired[dict[str, JsonValue]]
     status: Literal["working", "not_tested", "failing"]
     teamId: str
     type: Literal["ops_ai", "own"]
@@ -2206,6 +2201,11 @@ class EnvelopeAppTool(TypedDict, closed=True):
 
 class EnvelopeChange(TypedDict, closed=True):
     data: Change
+    success: Literal[True]
+
+
+class EnvelopeEvaluateOut(TypedDict, closed=True):
+    data: EvaluateOut
     success: Literal[True]
 
 

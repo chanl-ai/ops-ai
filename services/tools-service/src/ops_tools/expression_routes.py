@@ -4,7 +4,7 @@ service holding `tools:view` may call it."""
 
 # No `from __future__ import annotations`: FastAPI resolves the request model's annotations at import.
 
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -12,7 +12,7 @@ from pydantic import Field
 
 from ops_identity import Principal
 from ops_service_kit.errors import ValidationFailed
-from ops_service_kit.http import Envelope, In, Out, error_responses, ok
+from ops_service_kit.http import Envelope, In, JsonValue, Out, error_responses, ok
 
 from .callers import tools_reader
 from .expressions import MAX_FORMULAS, evaluate
@@ -22,11 +22,11 @@ class EvaluateIn(In):
     # Formulas by the name their value takes, run in this order; each sees the values and the earlier ones.
     expressions: dict[str, str] = Field(min_length=1, max_length=MAX_FORMULAS)
     # The step's resolved values, by name: what the formulas read.
-    values: dict[str, Any] = Field(default_factory=dict)
+    values: dict[str, JsonValue] = Field(default_factory=dict)
 
 
 class EvaluateOut(Out):
-    out: dict[str, Any]
+    out: dict[str, JsonValue]
 
 
 def expressions_router() -> APIRouter:

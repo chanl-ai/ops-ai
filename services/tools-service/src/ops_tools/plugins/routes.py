@@ -21,7 +21,7 @@ from ops_plugin_sdk.knowledge import source_hosts
 from ops_plugin_sdk.manifest import Setting
 from ops_plugin_sdk.versions import declarations, diff, digest, tools_of
 from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unprocessable, ValidationFailed
-from ops_service_kit.http import Envelope, In, Out, ok
+from ops_service_kit.http import Envelope, In, JsonValue, Out, ok
 
 from ..auth.kinds import Kind, kind_of
 from ..callers import caller_in
@@ -52,7 +52,7 @@ CLIENT_FIELDS = ("clientId", "clientSecret")
 
 class TeamPluginIn(In):
     enabled: bool
-    settings: dict[str, Any] = Field(default_factory=dict[str, Any])
+    settings: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
     # The team's app credential (GET /v1/app-credentials) the account signs in with; left out of the first turn-on,
     # Ops AI's app, and of a later one, the account keeps the app it has. Null puts it on Ops AI's app.
     credential_id: str | None = Field(default=None, min_length=1, max_length=64)
@@ -132,7 +132,7 @@ class SourceHostsIn(In):
     plugin: str = Field(min_length=1, max_length=200)
     source: str = Field(min_length=1, max_length=200)
     # The source's own values (its start addresses): the hosts asked about are the ones its egress_from input holds.
-    values: dict[str, Any] = Field(default_factory=dict[str, Any])
+    values: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
 
 
 class SourceHost(Out):
@@ -168,13 +168,13 @@ class KnowledgeSourceView(Out):
     site: bool = False
     # What a source of this kind is set up with, checked by kb-service and sent to each tool as `source`; and the
     # input whose addresses the source's sync may reach.
-    inputs: dict[str, Any] = Field(default_factory=dict[str, Any])
+    inputs: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
     egress_from: str | None = None
     # Whether the get tool takes the version tag kb-service holds, to answer `unchanged` without the content.
     get_takes_tag: bool = False
     # A plugin that signs in to nothing (a public website) needs no connection for a source.
     needs_connection: bool = True
-    schedule: dict[str, Any]
+    schedule: dict[str, JsonValue]
     connection_id: str | None
     sign_in: str | None
     # healthy, needs_reconnect, error, ...: a source paused for a reconnect resumes once Test connection passes.

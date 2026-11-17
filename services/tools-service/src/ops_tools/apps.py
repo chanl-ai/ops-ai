@@ -19,7 +19,7 @@ from typing import Annotated, Any, Literal, TypedDict, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from pydantic import Field, JsonValue
+from pydantic import Field
 
 from ops_access import tool_waits
 from ops_identity import ActingPerson
@@ -28,7 +28,7 @@ from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.manifest import Setting
 from ops_plugin_sdk.versions import tools_of
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
-from ops_service_kit.http import Envelope, In, ListResult, Out, ok
+from ops_service_kit.http import Envelope, In, JsonValue, ListResult, Out, ok
 from ops_service_kit.listing import ListQuery
 from ops_store import isolation
 from ops_store.listing import ListPage
@@ -154,7 +154,7 @@ class SystemPlugin(Out):
     # The settings a team types, in the manifest's order; those read from the token at sign-in are left out.
     settings: list[PluginSetting]
     # The team's settings as a person may read them: a secret one never, even as its reference.
-    values: dict[str, Any] = Field(default_factory=dict[str, Any])
+    values: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
     # The sign-in kinds' fields the plugin fixes itself (how its key is sent), so a team is never asked for them.
     fixed: list[str]
     # The plugin's tools the team's version has, by operation name.
@@ -320,7 +320,7 @@ class AppCredentialDetail(AppCredential):
     redirect_uri: str | None = None
     updated: str | None = None
     # The registration's settings the credential holds, and every one it may hold, with its label.
-    settings: dict[str, Any] = Field(default_factory=dict[str, Any])
+    settings: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
     # Each setting's mode, by name (ConfigField.mode); a value with no mode is fixed.
     modes: dict[str, ConfigMode] = Field(default_factory=dict[str, ConfigMode])
     fields: list[CredentialField] = Field(default_factory=list[CredentialField])

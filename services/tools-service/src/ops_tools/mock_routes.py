@@ -14,7 +14,7 @@ from pydantic import Field
 from ops_access import Access, reader_of
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, In, ListResult, Out, ok
+from ops_service_kit.http import Envelope, In, JsonValue, ListResult, Out, ok
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListQuery
 
@@ -23,7 +23,7 @@ from .mocks import MAX_WAIT_MS
 from .modules.directory import Directory, owns_module
 from .modules.routes import ERRORS
 from .modules.service import Caller
-from .store.mocks import MockStore
+from .store.mocks import MOCK_CHANGE, MOCK_ROW, MockRow, MockStore, NewMock
 from .store.modules import ModuleStore
 
 # What a mock's body may weigh, as an operation's stub may (modules/service.py MAX_STUB_BYTES).
@@ -35,9 +35,9 @@ class MockIn(In):
     # test: answers test-environment calls; example: the operation's example answer, one per operation.
     environment: Literal["test", "example"] = "test"
     # Input field to the value it must equal; empty matches every call (use it as the default).
-    match: dict[str, Any] = Field(default_factory=dict[str, Any])
+    match: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
     status: int = Field(default=200, ge=100, le=599)
-    body: Any = None
+    body: JsonValue = None
     headers: dict[str, str] = Field(default_factory=dict[str, str])
     delay_ms: int = Field(default=0, ge=0, le=MAX_WAIT_MS)
     timeout: bool = False
@@ -46,9 +46,9 @@ class MockIn(In):
 
 class MockPatchIn(In):
     name: str | None = Field(default=None, min_length=1, max_length=200)
-    match: dict[str, Any] | None = None
+    match: dict[str, JsonValue] | None = None
     status: int | None = Field(default=None, ge=100, le=599)
-    body: Any = None
+    body: JsonValue = None
     headers: dict[str, str] | None = None
     delay_ms: int | None = Field(default=None, ge=0, le=MAX_WAIT_MS)
     timeout: bool | None = None
@@ -60,9 +60,9 @@ class MockAnswer(Out):
     name: str
     environment: str
     position: int
-    match: dict[str, Any]
+    match: dict[str, JsonValue]
     status: int
-    body: Any = None
+    body: JsonValue = None
     headers: dict[str, str]
     delay_ms: int
     timeout: bool
@@ -78,7 +78,7 @@ class MockList(ListResult[MockAnswer]):
     operation: str
 
 
-def _view(row: dict[str, Any]) -> dict[str, Any]:
+def _view(row: MockRow) -> dict[str, Any]:
     return MockAnswer(
         id=row["id"],
         name=row["name"],
@@ -146,7 +146,7 @@ def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory) -
         contract (`search` on the name), or (`environment=example`) its example answer."""
         m, op = await _operation(who, module_id, op_id)
         page = await mocks.page(who.tenant_id, str(m["id"]), str(op["name"]), environment, q)
-        return ok({**page, "operation": op["name"], "data": [_view(x) for x in page["data"]]})
+        return ok({**page, "operation": op["name"], "data": [_view(MOCK_ROW.validate_python(x)) for x in page["data"]]})
 
     @r.post("/{module_id}/operations/{op_id}/mocks", response_model=Envelope[MockAnswer], status_code=201)
     async def add_mock(  # pyright: ignore[reportUnusedFunction]
@@ -159,7 +159,7 @@ def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory) -
         i = body.model_dump()
         _checked(i, op)
         now = datetime.now(UTC)
-        row = {
+        row: NewMock = {
             "tenant_id": who.tenant_id,
             "id": new_id("mck"),
             "module_id": m["id"],
@@ -194,7 +194,7 @@ def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory) -
             raise NotFound(f"Mock {mock_id}")
         given = body.model_dump(exclude_unset=True)
         _checked(given, op)
-        values = {("is_default" if k == "default" else k): v for k, v in given.items()}
+        values = MOCK_CHANGE.validate_python({("is_default" if k == "default" else k): v for k, v in given.items()})
         changed = await mocks.change(who.tenant_id, mock_id, values, at=datetime.now(UTC))
         assert changed is not None
         return ok(_view(changed))

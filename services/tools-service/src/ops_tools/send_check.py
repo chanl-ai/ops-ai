@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, cast
 
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+from ops_service_kit.http import JsonValue
 from ops_service_kit.logging import get_logger
 from ops_service_kit.model_calls import ModelCallError, ModelCalls
 
@@ -18,7 +20,7 @@ from .store.send_policies import SendPolicies
 
 log = get_logger("ops_tools.send_check")
 
-SCHEMA: dict[str, Any] = {
+SCHEMA: dict[str, JsonValue] = {
     "type": "object",
     "additionalProperties": False,
     "required": ["ok", "reason"],
@@ -34,6 +36,15 @@ NEEDS_REVIEW = "needs_review"
 NO_JUDGE = "The sending check could not run, so a person decides before it is sent."
 
 
+class _Verdict(BaseModel):
+    """The judge's answer, as SCHEMA asks for it; `ok` must be a real boolean."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    ok: bool
+    reason: str | None = None
+
+
 @dataclass
 class SendCheck:
     store: SendPolicies
@@ -41,7 +52,7 @@ class SendCheck:
     judge: ModelCalls | None
 
     async def needs_person(
-        self, tenant_id: str, team_id: str | None, tool: str, arguments: dict[str, Any], input_hash: str
+        self, tenant_id: str, team_id: str | None, tool: str, arguments: dict[str, JsonValue], input_hash: str
     ) -> str | None:
         """Why the write waits for a person; None when it may go."""
         if team_id is None or not await self.setting.on(tenant_id, team_id):
@@ -62,9 +73,9 @@ class SendCheck:
         except ModelCallError as e:
             log.warning("send_check_unreached", tool=tool, error=str(e))
             return NO_JUDGE
-        verdict = cast(dict[str, Any], answer) if isinstance(answer, dict) else {}
-        if not isinstance(verdict.get("ok"), bool):
+        try:
+            verdict = _Verdict.model_validate(answer, strict=True)
+        except ValidationError:
             return NO_JUDGE
-        reason = str(verdict.get("reason") or "")
-        await self.store.keep(tenant_id, team_id, input_hash, version, ok=verdict["ok"], reason=reason)
-        return None if verdict["ok"] else (reason or "It breaks the team's sending policy.")
+        await self.store.keep(tenant_id, team_id, input_hash, version, ok=verdict.ok, reason=verdict.reason or "")
+        return None if verdict.ok else (verdict.reason or "It breaks the team's sending policy.")

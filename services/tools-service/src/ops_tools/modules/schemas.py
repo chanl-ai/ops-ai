@@ -5,11 +5,11 @@ contract checker validates every response against that document, so a field adde
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 from pydantic import Field
 
-from ops_service_kit.http import In, ListResult, Out
+from ops_service_kit.http import In, JsonValue, ListResult, Out
 
 from ..environments import ModuleEnvironment, RunKind
 
@@ -205,7 +205,7 @@ class ModuleOperation(Out):
     approved_workflows: int
     secrets: list[SecretNeed] = Field(default_factory=list[SecretNeed])
     # The mock response: answers a stub executor and every test against the mock.
-    stub: Any = None
+    stub: JsonValue = None
     # Set for a code operation only.
     code: CodeSettings | None = None
 
@@ -378,7 +378,7 @@ class ModuleTestResult(Out):
     latency_ms: int
     bound: list[BoundInput]
     would_pause: bool
-    output: Any
+    output: JsonValue
     masked: list[str]
     call_id: str
     # Sandbox target: whether the answer came from the stub (a write) or the real system (a read), and which host.
@@ -389,7 +389,7 @@ class ModuleTestResult(Out):
     # What was sent (secret values masked), the answer before the transform, why the transform failed, and the
     # gateway's steps in order.
     request: TestRequestOut | None = None
-    raw_response: Any = None
+    raw_response: JsonValue = None
     transform_error: str | None = None
     log: list[TestLogLine] = Field(default_factory=list[TestLogLine])
 
@@ -567,7 +567,7 @@ class OperationPatchIn(In):
     # The whole input schema as it should be; fields left out of the list are removed.
     input: list[SchemaFieldIn] | None = None
     # The mock response: what the stub executor and every test write answer; null is back to {"ok": true}.
-    stub: Any = None
+    stub: JsonValue = None
     # A code operation's function, bindings, secrets and limits as they should be.
     code: CodeSettingsIn | None = None
 
@@ -599,14 +599,14 @@ class TestDraftIn(In):
     uses the operation's own; `responseTransform: null` runs with no transform."""
 
     response_transform: str | None = None
-    stub: Any = None
+    stub: JsonValue = None
 
 
 class ModuleTestIn(In):
     operation: str
     context_id: str
     target: Literal["stub", "sandbox"]
-    input: dict[str, Any]
+    input: dict[str, JsonValue]
     simulate_approval: bool = False
     # The person's yes to a Real test run that asks them first (the console's approval card).
     confirmed: bool = False
@@ -622,7 +622,7 @@ class ToolRunIn(In):
     call, with every check, in the environment picked."""
 
     mode: Literal["mock", "real"]
-    input: dict[str, Any] = Field(default_factory=dict[str, Any])
+    input: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
     # The kind of run a Real run is; left out, test: it uses the app's sandbox account when it has one, and a write on
     # a live account waits for a person.
     environment: RunKind | None = None
@@ -764,3 +764,7 @@ class ReviewDecisionIn(In):
     decision: Literal["approved", "rejected", "returned"]
     reason: str | None = None
     by: str | None = None
+
+
+# ModuleActivity names ToolCallRow before it is defined.
+ModuleActivity.model_rebuild()

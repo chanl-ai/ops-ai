@@ -3,11 +3,11 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
-from ops_service_kit.http import In, Out
+from ops_service_kit.http import In, JsonValue, Out
 
 # Whose account a call signs in with: the team's one sign-in, the person the call acts for, or the person's
 # with the team's as the backup for calls with nobody behind them.
@@ -51,7 +51,7 @@ class AccountIn(In):
     name: str = Field(min_length=1, max_length=200)
     sandbox: bool = False
     # A plugin's settings this account keeps its own, such as a sandbox's sign-in address.
-    settings: dict[str, Any] = Field(default_factory=dict[str, Any])
+    settings: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
     # The team's app credential (GET /v1/app-credentials) the account signs in with; left out, Ops AI's app.
     credential_id: str | None = Field(default=None, min_length=1, max_length=64)
     sign_in: str | None = None
@@ -72,7 +72,7 @@ class AnotherOwnIn(In):
     server's address), kept as given rather than copied from the account it starts from."""
 
     name: str = Field(min_length=1, max_length=200)
-    settings: dict[str, Any] = Field(default_factory=dict[str, Any])
+    settings: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
 
 
 class AccountPatchIn(In):
@@ -90,7 +90,7 @@ class AccountPatchIn(In):
     # Its accounts sign in again.
     credential_id: str | None = Field(default=None, min_length=1, max_length=64)
     # The kind's plain settings and the client certificate's (GET /v1/connection-kinds lists them).
-    settings: dict[str, Any] | None = None
+    settings: dict[str, JsonValue] | None = None
     # Secret parts by field name; one left out keeps its stored value.
     secret_values: dict[str, str] = Field(default_factory=dict[str, str])
 
@@ -241,7 +241,7 @@ class AccountEvent(Out):
     action: str
     actor: str
     at: str | None = None
-    detail: dict[str, Any]
+    detail: dict[str, JsonValue]
 
 
 Status = Literal["draft", "healthy", "needs_reconnect", "expiring", "revoked", "error"]
@@ -345,7 +345,7 @@ class AccountDetail(AccountRow):
     # The team's app credential it signs in with; null on Ops AI's app or a kind with no OAuth client.
     credential_id: str | None = None
     # An app from a plugin: its settings here as a call reads them, and for a secret one only whether it is set.
-    plugin_settings: dict[str, Any] | None = None
+    plugin_settings: dict[str, JsonValue] | None = None
     plugin_secrets: dict[str, bool] | None = None
     # The address to register with the system's sign-in, for a kind that signs in with an account.
     redirect_uri: str | None = None

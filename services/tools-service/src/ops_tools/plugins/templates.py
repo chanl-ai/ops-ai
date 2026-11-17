@@ -32,7 +32,7 @@ from ops_identity.fastapi import Tx
 from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.manifest import KnowledgeSource, Template
 from ops_service_kit.errors import NotFound, ServiceUnavailable, ValidationFailed
-from ops_service_kit.http import Envelope, Out, ok
+from ops_service_kit.http import Envelope, JsonValue, Out, ok
 
 from ..callers import tools_reader
 from ..modules.routes import ERRORS
@@ -70,7 +70,7 @@ class PluginTemplate(Out):
     title: str
     requires: TemplateRequires
     # The request body the kind's create route takes (a workflow's is its definition).
-    body: dict[str, Any] = Field(default_factory=dict[str, Any])
+    body: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
     # sha256 of the body as canonical JSON: a copy keeps the digest it was made from, so a template whose body changed
     # since then shows as changed even when its version did not move.
     digest: str

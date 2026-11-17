@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from ops_store import isolation
 from ops_tools.mocks import MockAnswers
 from ops_tools.modules.seed import blank
-from ops_tools.store.mocks import MockStore
+from ops_tools.store.mocks import MockStore, NewMock
 from ops_tools.store.modules import ModuleStore
 
 from .test_calls import MODULE, Gateway, gateway  # noqa: F401  # pyright: ignore[reportUnusedImport]
@@ -52,7 +52,7 @@ async def test_the_example_is_one_answer_that_never_holds_back_a_real_run(gatewa
 async def test_a_mock_answers_only_its_own_modules_operation(engine: AsyncEngine, tenant: str) -> None:
     store = MockStore(engine)
     now = datetime.now(UTC)
-    row = {
+    row: NewMock = {
         "tenant_id": tenant, "id": "mck_a", "module_id": "mod_team_a", "operation": "lookup", "environment": "test",
         "name": "A", "match": {}, "status": 200, "body": {"team": "a"}, "headers": {}, "delay_ms": 0,
         "timeout": False, "is_default": True, "from_call_id": None, "created_by": "t", "created_at": now,

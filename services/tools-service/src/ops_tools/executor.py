@@ -47,6 +47,7 @@ from .mocks import MockAnswers
 from .plugins.host import plugin_id_of
 from .registry import Resolved
 from .secrets import SecretMissing, SecretResolver, scrub
+from .store.mocks import MockRow
 from .tools import ToolCaller, ToolRunner
 
 if TYPE_CHECKING:
@@ -718,7 +719,7 @@ class Executor:
         # A plugin's Python tools; without it they fail.
         self.plugins = plugins
 
-    async def _mocked(self, module: dict[str, Any], op: dict[str, Any], mock: dict[str, Any]) -> ToolOutcome:
+    async def _mocked(self, module: dict[str, Any], op: dict[str, Any], mock: MockRow) -> ToolOutcome:
         """A test call answered as the system would have, before any egress: the same failures a real answer
         or a real timeout gives, so a workflow's ports behave as they would against the system."""
         assert self.mocks is not None
