@@ -1,6 +1,6 @@
 # An agent reads with a tool, asks for approval, and the write runs only after approval, in mock and real mode
 
-Status: current. Id: `uc-753`. Service: `tools-service`. Layers: api.
+Status: current. Id: `uc-753`. Service: `tools-service`. Layers: api, sdk, cli, ui.
 
 Short title: An agent reads with a tool, asks for approval, and the write runs only after approval, in mock and real mode
 
@@ -22,7 +22,7 @@ A tool module on a mock upstream has a read (balance) and a write (a hold) whose
 
 | # | Story | Layer | Steps | Proved by |
 |---|---|---|---|---|
-| S1 | The read answers at once, the write waits, runs once after approval and is logged | api | 1 to 5 | 4 |
+| S1 | The read answers at once, the write waits, runs once after approval and is logged | api | 1-5 | 4 |
 
 ## Preconditions
 
@@ -32,7 +32,7 @@ A tool module on a mock upstream has a read (balance) and a write (a hold) whose
 
 ## Mode switch
 
-`MODE=mock` (default): scripted model, mock upstream (`lib/fake_bank_https.py`, `lib/main_chains.py`). `MODE=real` (`APPROVED_REAL_CALLS` 1 to 40): a real model and the Salesforce test org (`make sf-signin-env AS=<person>`): a read, then an approved write on a test record. Real mode is **not built yet**; sdk, cli and ui layers are also not written.
+`MODE=mock` (default): scripted model, mock upstream (`lib/fake_bank_https.py`, `lib/main_chains.py`). `MODE=real` (`APPROVED_REAL_CALLS` 1 to 40): a real model and the Salesforce test org (`make sf-signin-env AS=<person>`): a read, then an approved write on a test record. Real mode is **not built**: `make sf-signin-env` reads its keys from a `.env` file, which this repo forbids, and no model alias key is available on this machine.
 
 ## Steps and expected results
 
@@ -49,10 +49,13 @@ A tool module on a mock upstream has a read (balance) and a write (a hold) whose
 | Layer | Script | State |
 |---|---|---|
 | api | `tools-service/scripts/test-uc-753-api.py` | passing |
+| sdk | `tools-service/scripts/test-uc-753-sdk.py` | passing |
+| cli | `tools-service/scripts/test-uc-753-cli.py` | passing |
+| ui | `tools-service/scripts/test-uc-753-ui.mjs` | passing |
 
 ## Open
 
-After fail-closed lands, tools-service without platform-service refuses every write, so this stack needs platform-service (people_stack style) before it is rebased.
+The api script runs tools-service without platform-service, which the fail-closed rule (503 approval_rules_unavailable) refuses for a write without its own approval switch; its write has the switch on, so it still waits for approval. The sdk and cli scripts run on `bank_stack` (platform sign-in).
 
 ## Non-vacuous check
 

@@ -41,7 +41,7 @@ if MODE not in ("mock", "real"):
 import time  # noqa: E402
 from typing import Any  # noqa: E402
 
-from fake_bank_https import HOST  # noqa: E402
+from fake_bank_https import HOST, fake_bank  # noqa: E402
 from usecase_harness import approve_tool_review, check, data  # noqa: E402
 
 SECURITY = {"X-Dev-User": "Nadia Petrov", "X-Team-Id": "team_security"}
@@ -50,7 +50,9 @@ MAYA = {"X-Dev-User": "Maya Okafor"}
 ACCOUNT = "CHQ-2219"
 
 
-def publish_bank_module(gw: Any, run: int, *, approval: bool, team: dict[str, str] | None = None) -> tuple[str, str, str]:
+def publish_bank_module(
+    gw: Any, run: int, *, approval: bool, team: dict[str, str] | None = None, security: dict[str, str] | None = None
+) -> tuple[str, str, str]:
     """A tool module with a read (an account's balance) and a write (a hold on it) on the mock upstream, reviewed and
     published. `approval` turns the write's own approval switch on, one approver. Returns (module id, read, write)."""
     headers = team or {}
@@ -78,7 +80,18 @@ def publish_bank_module(gw: Any, run: int, *, approval: bool, team: dict[str, st
         patched = gw.patch(f"/v1/tool-modules/{mid}/operations/{op_id}", json={"approvers": 1, "requiresApproval": True}, headers=headers)
         check("setup: the write's approval switch is on with one approver", patched.status_code == 200, patched.text[:200])
     data(gw.post(f"/v1/tool-modules/{mid}/reviews", json={"note": "main chains"}, headers=headers))
-    approve_tool_review(gw, mid, SECURITY)
+    if security is None:
+        approve_tool_review(gw, mid, SECURITY)
+    else:
+        # Platform sign-in: the owner reads its own module, Security decides the review in agents-service.
+        import httpx
+        from usecase_harness import AGENTS_PORT
+
+        shown = data(gw.get(f"/v1/tool-modules/{mid}", headers=headers))
+        waiting = next(v for v in shown["versions"] if v["status"] == "in_review")
+        with httpx.Client(base_url=f"http://127.0.0.1:{AGENTS_PORT}", timeout=30) as reviews:
+            decided = reviews.post(f"/v1/publish-requests/{waiting['reviewId']}/decision", json={"decision": "approved"}, headers=security)
+        check(f"the review of {mid} is approved (200)", decided.status_code == 200, decided.text[:300])
     return mid, read, write
 
 
@@ -86,10 +99,44 @@ def holds(bank: Any) -> list[dict[str, Any]]:
     return [r for r in bank.received if r["method"] == "POST" and r["path"] == f"/v1/accounts/{ACCOUNT}/holds"]
 
 
-def agent_with(api: Any, run: int, tools: list[str]) -> str:
-    """An agent holding `tools`, published. agents-service keeps each tenant's tool list for 30 seconds, so the call waits."""
+def agent_with(api: Any, run: int, tools: list[str], headers: dict[str, str] | None = None) -> str:
+    """An agent holding `tools`, published. agents-service keeps each tenant's tool list for 30 seconds, so the call waits.
+    `headers` act as a signed-in person (platform sign-in); the default is the dev team header."""
+    as_who = headers or TEAM
     time.sleep(31)
-    agent = data(api.post("/v1/agents", json={"name": f"Account desk {run}", "role": "Reads and freezes accounts"}, headers=TEAM))
-    granted = data(api.patch(f"/v1/agents/{agent['id']}", json={"toolIds": tools}, headers=TEAM))
-    api.post(f"/v1/agents/{agent['id']}/publish-requests", json={"version": granted["version"], "note": "main chains"}, headers=TEAM)
+    agent = data(api.post("/v1/agents", json={"name": f"Account desk {run}", "role": "Reads and freezes accounts"}, headers=as_who))
+    granted = data(api.patch(f"/v1/agents/{agent['id']}", json={"toolIds": tools}, headers=as_who))
+    api.post(f"/v1/agents/{agent['id']}/publish-requests", json={"version": granted["version"], "note": "main chains"}, headers=as_who)
     return str(agent["id"])
+
+
+from collections.abc import Generator  # noqa: E402
+from contextlib import contextmanager  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
+
+
+@contextmanager
+def bank_stack() -> Generator[SimpleNamespace]:
+    """platform-service with the dev seed's people, tools-service and agents-service both verifying their tokens, and the
+    mock upstream: the stack the sdk and cli layers of uc-753 sign in to. Yields `bank`, `gw` (tools), `api` (agents),
+    `accounts` (platform) and `who`, the headers of each seeded role. Writes need platform-service (approval rules are
+    read from it), so every layer of a write case runs on this stack or the UI runner's."""
+    from apps_walk import AUTH
+    from usecase_harness import AGENTS_PORT as agents_port
+    from usecase_harness import TOOLS_PORT as tools_port
+    from usecase_harness import agents, as_role, platform, tools
+
+    from usecase_harness import bearer, signed_in
+
+    with fake_bank() as bank, platform() as (accounts, _):
+        # Team writes need approval only once the admin turns the policy on (off by default). The change refuses tokens
+        # issued before it, so every person signs in after it.
+        admin = bearer(signed_in(accounts, "w.kamau@harborpine.example"), "team_ops")
+        on = accounts.put("/v1/policies/toolWritesNeedApproval", json={"value": True}, headers=admin)
+        check("setup: the admin turns write approvals on for the team", on.status_code == 200, on.text[:200])
+        who = {role: as_role(accounts, role) for role in ("builder", "approver", "security")}
+        team_settings = {**bank.settings, **AUTH, "OPS_AGENTS_URL": f"http://127.0.0.1:{agents_port}"}
+        with agents(gateway_url=f"http://127.0.0.1:{tools_port}", env=AUTH) as api, tools(settings=team_settings) as gw:
+            for path, value in (("hosts", HOST), ("ranges", bank.range)):
+                gw.post(f"/v1/egress/{path}", json={"value": value, "note": "main chains mock upstream"}, headers=who["security"])
+            yield SimpleNamespace(bank=bank, gw=gw, api=api, accounts=accounts, who=who)
