@@ -14,13 +14,52 @@ root="$(git rev-parse --show-toplevel)"
 git_dir="$(git -C "$root" rev-parse --absolute-git-dir)"
 index="${GIT_INDEX_FILE:-$git_dir/index}"
 case "$index" in /*) ;; *) index="$PWD/$index" ;; esac
-tmp="$(mktemp -d "${TMPDIR:-/tmp}/ops-ai-staged.XXXXXX")"
-trap 'rm -rf "$tmp"' EXIT
-GIT_INDEX_FILE="$index" git -C "$root" checkout-index -a --prefix="$tmp/"
+# The export of the index lives in the worktree's git folder and is brought up to date by changed paths only
+# (scripts/sync-staged-tree.sh); a fresh export of every tracked file took seconds on each commit. `tmp` keeps the name of
+# the folder the checks run in. Scratch files of this run go in a per-run folder, so the shared tree holds the index's
+# content and nothing else.
+run="$(mktemp -d "${TMPDIR:-/tmp}/ops-ai-staged.XXXXXX")"
+trap 'rm -rf "$run"' EXIT
+# The shared export is used only when this run is inside a commit that holds the commit lock (scripts/commit-lock.sh), so
+# two runs never rewrite it at once. A plain `git commit` that skipped the lock gets a private export, as before.
+common="$(cd "$(git -C "$root" rev-parse --git-common-dir)" && pwd)"
+lock_pid="$(cat "$common/commit.lock/pid" 2>/dev/null || true)"
+shared=0
+if [ -n "$lock_pid" ]; then
+  p=$$
+  while [ -n "$p" ] && [ "$p" -gt 1 ]; do
+    if [ "$p" = "$lock_pid" ]; then shared=1; break; fi
+    p="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')"
+  done
+fi
+if [ "$shared" = 1 ]; then tmp="$git_dir/staged-tree"; list="$git_dir/staged-tree.list"; tsc_state="$git_dir/staged-tsc"
+else tmp="$run/tree"; list="$run/tree.list"; tsc_state="$run/tsc"; fi
+# Mechanical fixes first, so the checks below see the fixed content: ruff's safe fixes and the formatter on the staged
+# Python files. Only a file whose working copy equals its staged copy is touched (no partial staging, no unstaged edits
+# of another builder); the fixed file is staged again by its own path. The console has no formatter or fixing linter
+# configured, so nothing runs there.
+mapfile -t fixable < <(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only --diff-filter=ACMR -- '*.py' || true)
+fix_skipped=()
+if [ "${#fixable[@]}" -gt 0 ] && [ -x "$root/.venv/bin/ruff" ]; then
+  for f in "${fixable[@]}"; do
+    if ! GIT_INDEX_FILE="$index" git -C "$root" diff --quiet -- "$f"; then fix_skipped+=("$f"); continue; fi
+    before="$(git -C "$root" hash-object -- "$f")"
+    (cd "$root" && "$root/.venv/bin/ruff" check --fix --quiet -- "$f" >/dev/null 2>&1 || true; "$root/.venv/bin/ruff" format --quiet -- "$f" >/dev/null 2>&1 || true)
+    if [ "$(git -C "$root" hash-object -- "$f")" != "$before" ]; then
+      GIT_INDEX_FILE="$index" git -C "$root" add -- "$f"
+      echo "verify-staged: fixed $f (ruff safe fixes and format), staged again"
+    fi
+  done
+fi
+if [ -x "$root/scripts/sync-staged-tree.sh" ]; then
+  "$root/scripts/sync-staged-tree.sh" "$index" "$tmp" "$list"
+else
+  rm -rf "$tmp" "$list"; mkdir -p "$tmp"; GIT_INDEX_FILE="$index" git -C "$root" checkout-index -a --prefix="$tmp/"
+fi
 # apps/embed/node_modules: console verify type-checks the embed app too, which draws the console's chat components.
 # sdk/typescript/node_modules: the sdk gate runs openapi-typescript from there.
 for dep in node_modules apps/console/node_modules apps/embed/node_modules packages/usecase-runner/node_modules sdk/typescript/node_modules; do
-  if [ -e "$root/$dep" ] && [ -d "$(dirname "$tmp/$dep")" ]; then ln -s "$root/$dep" "$tmp/$dep"; fi
+  if [ -e "$root/$dep" ] && [ -d "$(dirname "$tmp/$dep")" ]; then ln -sfn "$root/$dep" "$tmp/$dep"; fi
 done
 # The Python checks run on the checkout's own environment ($root/.venv/bin/...), which is never linked into the export:
 # the export is a whole uv workspace, so a `uv run` inside it would reinstall every member into a linked .venv pointing
@@ -38,7 +77,36 @@ touches() { [ "${#staged[@]}" -gt 0 ] && grep -qE "$1" <<<"$(printf '%s\n' "${st
 # The console's typecheck, standards and tests (apps/console/CLAUDE.md), and the embed app's typecheck, which draws the
 # console's chat components.
 if touches '^apps/(console|embed)/|^package\.json$|^pnpm-lock\.yaml$'; then
-  GIT_DIR="$git_dir" GIT_WORK_TREE="$tmp" GIT_INDEX_FILE="$index" pnpm -s --filter @ops-ai/console verify
+  # The same steps as `pnpm --filter @ops-ai/console verify` (apps/console/package.json), with two differences that do not
+  # change what is judged. The type checks are incremental: their state lives next to the persistent export, so only the
+  # files that changed since the last commit check, and their dependents, are checked again, with the same errors.
+  # The unit tests are the ones next to the staged sources (the whole suite runs in .githooks/pre-push).
+  mkdir -p "$tsc_state"
+  tsc="$tmp/apps/console/node_modules/.bin/tsc"
+  (
+    cd "$tmp/apps/console"
+    "$tsc" --noEmit --incremental --tsBuildInfoFile "$tsc_state/console.tsbuildinfo"
+    "$tsc" --noEmit -p ../embed --incremental --tsBuildInfoFile "$tsc_state/embed.tsbuildinfo"
+    GIT_DIR="$git_dir" GIT_WORK_TREE="$tmp" GIT_INDEX_FILE="$index" node scripts/check-standards.mjs
+    GIT_DIR="$git_dir" GIT_WORK_TREE="$tmp" GIT_INDEX_FILE="$index" node scripts/check-standards.mjs --self-test
+  )
+  tests=(); sources=0
+  for f in "${staged[@]}"; do
+    case "$f" in
+      apps/console/*.md|apps/embed/*.md) ;;
+      apps/console/*.test.ts|apps/embed/*.test.ts) if [ -f "$tmp/$f" ]; then tests+=("$tmp/$f"); fi ;;
+      apps/console/*|apps/embed/*|package.json|pnpm-lock.yaml)
+        sources=1
+        case "$f" in *.ts|*.tsx) sib="${f%.*}.test.ts"; if [ -f "$tmp/$sib" ]; then tests+=("$tmp/$sib"); fi ;; esac ;;
+    esac
+  done
+  if [ "${#tests[@]}" -gt 0 ]; then
+    mapfile -t tests < <(printf '%s\n' "${tests[@]}" | sort -u)
+    (cd "$tmp/apps/console" && node --test "${tests[@]}")
+  elif [ "$sources" = 1 ]; then
+    # Nothing next to the staged files: the whole suite, as before.
+    (cd "$tmp/apps/console" && node --test 'src/**/*.test.ts')
+  fi
 fi
 # Where docs live, on the staged files; docs/README.md is always named, so the index's entries are checked even when the
 # commit only deletes. The private-path scan reads the staged files only.
@@ -58,23 +126,25 @@ export_path="$(ls -d "$PWD"/packages/*/src "$PWD"/services/*/src 2>/dev/null | t
 # can(), the standards ratchets and their history, the files written from code, import directions, the SDK drift check.
 # CI's checks job and `make verify` run the same list. They run on this export with the checkout's own tools; GIT_DIR
 # lets the history checks read the commits already made, which the export does not have.
-printf '%s\n' "${staged[@]}" > "$tmp/.staged"
+printf '%s\n' "${staged[@]}" > "$run/.staged"
 # A service's typecheck target runs `uv run pyright`, which would build an environment in the export; this `uv` runs the
 # command from the checkout's own environment instead. Any other uv command (the SBOM check's `uv export --frozen` on a
 # lock change) goes to the real uv, which reads the export's lock and writes nothing.
 real_uv="$(command -v uv || echo uv)"
-mkdir -p "$tmp/.bin"
-printf '#!/bin/sh\nif [ "$1" = run ]; then shift; exec "$@"; fi\nexec "%s" "$@"\n' "$real_uv" > "$tmp/.bin/uv"
-chmod +x "$tmp/.bin/uv"
-if ! PATH="$tmp/.bin:$root/.venv/bin:$PATH" GIT_DIR="$git_dir" PYTHONPATH="$export_path" make -s -C "$tmp" checks STAGED=1 STAGED_FILES="$tmp/.staged" \
-  PY="$root/.venv/bin/python" PYRIGHT="$root/.venv/bin/pyright" LINT_IMPORTS="$root/.venv/bin/lint-imports --no-logo" >"$tmp/.checks.log" 2>&1; then
-  tail -60 "$tmp/.checks.log"; echo "verify-staged: make checks failed (above); fix what it names"; exit 1
+mkdir -p "$run/.bin"
+printf '#!/bin/sh\nif [ "$1" = run ]; then shift; exec "$@"; fi\nexec "%s" "$@"\n' "$real_uv" > "$run/.bin/uv"
+chmod +x "$run/.bin/uv"
+if ! PATH="$run/.bin:$root/.venv/bin:$PATH" GIT_DIR="$git_dir" PYTHONPATH="$export_path" make -s -C "$tmp" checks STAGED=1 STAGED_FILES="$run/.staged" \
+  PY="$root/.venv/bin/python" PYRIGHT="$root/.venv/bin/pyright" LINT_IMPORTS="$root/.venv/bin/lint-imports --no-logo" >"$run/.checks.log" 2>&1; then
+  tail -60 "$run/.checks.log"; echo "verify-staged: make checks failed (above); fix what it names"; exit 1
 fi
 # Python files in the commit are linted and format-checked; a second each.
 mapfile -t py < <(GIT_INDEX_FILE="$index" git -C "$root" diff --cached --name-only --diff-filter=ACMR -- '*.py' || true)
 if [ "${#py[@]}" -gt 0 ]; then
-  "$root/.venv/bin/ruff" check "${py[@]}"
-  "$root/.venv/bin/ruff" format --check "${py[@]}"
+  fixhint="verify-staged: ruff refused the files above; run uv run ruff check --fix <file> and uv run ruff format <file>, stage the file, commit again"
+  if [ "${#fix_skipped[@]}" -gt 0 ]; then fixhint="$fixhint (not fixed here because the working copy differs from the staged copy: ${fix_skipped[*]})"; fi
+  "$root/.venv/bin/ruff" check "${py[@]}" || { echo "$fixhint"; exit 1; }
+  "$root/.venv/bin/ruff" format --check "${py[@]}" || { echo "$fixhint"; exit 1; }
 fi
 # Slower checks that build each service (OpenAPI documents, the generated SDKs, import directions, strict types, the
 # SQL Server DDL and store tests) run in CI on every pull request and in `make verify`, not on each commit. After a route
