@@ -74,7 +74,7 @@ make db-upgrade-sql FROM=<running release> TO=<new release> OUT=dist/db/<new>/up
 | `downgrade.sql` | The reverse steps where the revision has a downgrade; a step without one says to restore a backup |
 | `SHA256SUMS` | As above |
 
-After `upgrade.sql`, run the new release's `grants.sql`, so new tables reach their runtime role. Proof check 2 applies
+`make db-upgrade-sql` writes no `grants.sql`. Get the new release's from `make db-ddl REF=<new release> SERVER=<throwaway server's admin URL>`, which writes it with the rest of the baseline to `dist/db/<new release>/baseline/grants.sql` (or to `OUT`; on SQL Server, `DIALECT=mssql` needs no `SERVER`). After `upgrade.sql`, run that `grants.sql`, so new tables reach their runtime role. Proof check 2 applies
 an older baseline plus the upgrade and finds no difference from the newer schema; check 2b runs the upgrade again and
 the first guard refuses it. Eight revisions applied before offline rendering was a rule cannot render as SQL (agents
 0031, 0036, 0042; tools 0001, 0020; platform 0006, 0013, 0017); an upgrade across one is refused by name, and a
