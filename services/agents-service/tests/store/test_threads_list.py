@@ -1,7 +1,8 @@
 """The threads list a page at a time in SQL (`threads_page`), by failure mode: another team's thread on the page or in
 the total when the database lets every team through; a thread the reader may not read counted in the total; threads
-of one update time repeated or lost between pages; a `startedFor` or legacy `owner` text too long for SQL Server's
-JSON_VALUE (over 4000 characters) read as absent, so the team reads a person's thread. On PostgreSQL and SQL Server.
+of one update time repeated or lost between pages; metadata the SQL reads otherwise than the Python rule (a text too
+long for SQL Server's JSON_VALUE, a `chat` or `owner` that is true to Python but not `true`, an all-space text, an
+ownerEmail missing from the `owner` column), so a reader gains a thread. On PostgreSQL and SQL Server.
 Who reads which thread is pinned through the route
 (`tests/api/test_thread_readers.py`)."""
 
@@ -57,7 +58,10 @@ def tenant() -> str:
     return f"t_{uuid4().hex[:10]}"
 
 
-async def _thread(e: AsyncEngine, thread_id: str, *, team: str = TEAM, meta: dict[str, Any] | None = None) -> None:
+async def _thread(
+    e: AsyncEngine, thread_id: str, *, team: str = TEAM, meta: dict[str, Any] | None = None, column: bool = True
+) -> None:
+    """`column`: the `owner` column holds meta's ownerEmail, as the store writes it; False leaves it NULL."""
     meta = meta or {}
     async with tenant_tx(e) as c:
         await c.execute(
@@ -66,7 +70,7 @@ async def _thread(e: AsyncEngine, thread_id: str, *, team: str = TEAM, meta: dic
                 graph="agent_wrapper" if meta else "refunds",
                 meta=meta,
                 team_id=team,
-                owner=meta.get("ownerEmail"),
+                owner=meta.get("ownerEmail") if column else None,
                 created_at=AT,
                 updated_at=AT,
                 status="idle",
@@ -108,14 +112,40 @@ async def test_unreadable_threads_are_not_counted_and_equal_update_times_page_by
     assert pages == [(["th_vera", "th_c"], 4), (["th_b", "th_a"], 4), (["th_b", "th_a"], 4)]
 
 
-async def test_a_text_too_long_to_read_never_hands_a_persons_thread_to_the_team(
-    engine: AsyncEngine, tenant: str
-) -> None:
-    long = "x" * 4000
+# id -> (meta, owner column written, read by the team, by vera at chat.view own); a reader of every chat reads each.
+# Each outcome is the Python rule's (`api.chat_threads.may_read_thread`) for the same row.
+MALFORMED: dict[str, tuple[dict[str, Any], bool, bool, bool]] = {
+    # Too long for SQL Server's JSON_VALUE: still a person's thread, never the team's.
+    "th_started_for_long": ({"startedFor": "x" * 4000 + "vera@harborpine.example"}, True, False, False),
+    "th_owner_long": ({"owner": "x" * 4000 + "vera"}, True, False, False),
+    # `chat` and `owner` count when Python reads them as true.
+    "th_chat_yes": ({"chat": "yes"}, True, False, False),
+    "th_chat_two": ({"chat": 2}, True, False, False),
+    "th_chat_zero_text": ({"chat": "0"}, True, False, False),
+    "th_owner_object": ({"owner": {"name": "vera"}}, True, False, False),
+    "th_owner_spaces": ({"owner": "  "}, True, False, False),
+    "th_chat_false": ({"chat": False, "owner": ""}, True, True, True),
+    "th_chat_zero": ({"chat": 0.0, "owner": {}, "startedFor": []}, True, True, True),
+    # An all-space ownerEmail is set, so startedFor names nobody.
+    "th_spaces_email": (
+        {"ownerEmail": "   ", "startedFor": "vera@harborpine.example", "chat": True},
+        True,
+        False,
+        False,
+    ),
+    "th_email_in_meta_only": ({"ownerEmail": "vera@harborpine.example"}, False, False, True),
+}
+
+
+async def test_malformed_or_long_metadata_is_read_as_the_python_rule_reads_it(engine: AsyncEngine, tenant: str) -> None:
     team_only = ThreadReader(graphs=None, chat="none", email="otto@harborpine.example", name="otto")
     every_chat = ThreadReader(graphs=None, chat="all", email="rita@harborpine.example", name="rita")
     with isolation.scope(tenant, TEAM):
-        await _thread(engine, "th_started_for", meta={"startedFor": long + "vera@harborpine.example"})
-        await _thread(engine, "th_owner", meta={"owner": long + "vera"})
-        seen = [sorted((await _listed(engine, reader))[0]) for reader in (team_only, every_chat)]
-    assert seen == [[], ["th_owner", "th_started_for"]]
+        for thread_id, (meta, column, _, _) in MALFORMED.items():
+            await _thread(engine, thread_id, meta=meta, column=column)
+        seen = [sorted((await _listed(engine, reader, page_size=100))[0]) for reader in (team_only, VERA, every_chat)]
+    assert seen == [
+        sorted(i for i, (_, _, team, _) in MALFORMED.items() if team),
+        sorted(i for i, (_, _, _, vera) in MALFORMED.items() if vera),
+        sorted(MALFORMED),
+    ]

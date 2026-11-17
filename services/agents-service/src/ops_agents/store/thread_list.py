@@ -60,43 +60,81 @@ def _same_email(term: sa.ColumnElement[str], email: str) -> sa.ColumnElement[boo
     return sa.func.lower(sa.func.trim(term)) == email
 
 
+def _true(meta: sa.ColumnElement[Any], key: str) -> sa.ColumnElement[bool]:
+    """Python reads `meta[key]` as true: present and not null, false, a zero number, an empty text, list or object.
+    Strings are told apart from numbers and booleans by their length (`JsonTextLength`, NULL for any other value), so
+    the text `"0"` is true and the number 0 is not; an empty text by its length, as SQL Server's `=` ignores trailing
+    spaces. Never NULL."""
+    size = JsonTextLength(meta, key)
+    text = json_text(meta, key)
+    fragment = json_fragment(meta, key)
+    # A JSON number whose only digits are 0 is zero, whatever its sign, point or exponent.
+    digits: sa.ColumnElement[str] = text
+    for c in ("0", ".", "-", "+", "e", "E"):
+        digits = sa.func.replace(digits, c, "")
+    present = sa.or_(size.is_not(None), text.is_not(None), sa.and_(fragment.is_not(None), fragment != "null"))
+    empty = sa.or_(
+        sa.func.coalesce(size, -1) == 0,
+        sa.and_(size.is_(None), text.is_not(None), sa.or_(text == "false", sa.and_(text != "true", digits == ""))),
+        sa.func.coalesce(sa.func.replace(fragment, " ", ""), "").in_(("[]", "{}")),
+    )
+    return sa.and_(present, sa.not_(empty))
+
+
+@dataclass(frozen=True)
+class _Named:
+    """What one metadata field says of the person a thread names: `person` the text when it is a text holding an `@`
+    and short enough to read, else NULL; `nobody` TRUE when it names a person nobody is (a list or object holding an
+    `@`, whose text matches no email, or a text too long to read), else FALSE."""
+
+    person: sa.ColumnElement[str]
+    nobody: sa.ColumnElement[bool]
+
+
+def _named(meta: sa.ColumnElement[Any], key: str) -> _Named:
+    size = sa.func.coalesce(JsonTextLength(meta, key), -1)
+    text = json_text(meta, key)
+    fragment = json_fragment(meta, key)
+    # An array or object: its own JSON text on both databases (JSON_VALUE answers NULL for one on SQL Server). Read by
+    # its first character, not LIKE, where SQL Server takes `[` as the start of a character set.
+    nested = sa.func.coalesce(sa.func.substring(fragment, 1, 1), "").in_(("[", "{"))
+    readable_text = sa.and_(size >= 0, size <= JSON_TEXT_MAX)
+    person = sa.case((sa.and_(readable_text, text.like("%@%")), text), else_=None)
+    nobody = sa.or_(sa.and_(nested, sa.func.coalesce(fragment, "").like("%@%")), size > JSON_TEXT_MAX)
+    return _Named(person, nobody)
+
+
 def readable(reader: ThreadReader) -> sa.ColumnElement[bool]:
-    """The threads `reader` may read: `may_read_thread` as one predicate on `graph_threads`."""
+    """The threads `reader` may read: `may_read_thread` as one predicate on `graph_threads`, read from the metadata as
+    the Python rule reads it (never the `owner` column, which a row may lack)."""
     t = graph_threads
     terms: list[sa.ColumnElement[bool]] = []
     if reader.graphs is not None:
         terms.append(t.c.graph.in_(reader.graphs) if reader.graphs else sa.false())
     if reader.chat == "all":
         return sa.and_(*terms) if terms else sa.true()
-    owner_email = sa.func.nullif(t.c.owner, "")
-    raw = json_text(t.c.meta, "startedFor")
-    started_for = sa.case((sa.func.length(raw) <= JSON_TEXT_MAX, sa.func.nullif(raw, "")), else_=None)
-    fragment = json_fragment(t.c.meta, "startedFor")
-    # An array or object: its own JSON text on both databases (JSON_VALUE answers NULL for one on SQL Server). Read by
-    # its first character, not LIKE, where SQL Server takes `[` as the start of a character set.
-    nested = sa.func.coalesce(sa.func.substring(fragment, 1, 1), "").in_(("[", "{"))
-    # The text that decides the person: ownerEmail when set, else a text startedFor (a JSON string reads its text).
-    named = sa.case((owner_email.is_not(None), owner_email), else_=sa.case((nested, None), else_=started_for))
-    person = sa.case((named.like("%@%"), named), else_=None)
-    # Each term below is TRUE or FALSE, never NULL, as the NOTs that use them need.
-    long_started_for = sa.func.coalesce(JsonTextLength(t.c.meta, "startedFor"), 0) > JSON_TEXT_MAX
-    long_owner = sa.func.coalesce(JsonTextLength(t.c.meta, "owner"), 0) > JSON_TEXT_MAX
-    nobody = sa.and_(
-        owner_email.is_(None),
-        sa.or_(sa.and_(nested, sa.func.coalesce(fragment, "").like("%@%")), long_started_for),
-    )
-    chat = sa.func.coalesce(json_text(t.c.meta, "chat"), "").in_(("true", "1"))
-    legacy = json_text(t.c.meta, "owner")
-    flagged = sa.or_(chat, sa.func.coalesce(legacy, "") != "", long_owner)
+    # ownerEmail decides the person when Python reads it as true, else startedFor (`run_person.person_of_thread`).
+    has_owner_email = _true(t.c.meta, "ownerEmail")
+    by_email, by_start = _named(t.c.meta, "ownerEmail"), _named(t.c.meta, "startedFor")
+    person = sa.case((has_owner_email, by_email.person), else_=by_start.person)
+    # Each term below is TRUE or FALSE, never NULL, as the NOTs that use them need. A predicate, not a CASE: SQL Server
+    # takes no condition as a CASE's value.
+    nobody = sa.or_(sa.and_(has_owner_email, by_email.nobody), sa.and_(sa.not_(has_owner_email), by_start.nobody))
+    flagged = sa.or_(_true(t.c.meta, "chat"), _true(t.c.meta, "owner"))
     teams = sa.and_(person.is_(None), sa.not_(nobody), sa.not_(flagged))
     allowed: list[sa.ColumnElement[bool]] = [t.c.graph != CHAT_GRAPH, teams]
     if reader.chat == "own":
         allowed.append(sa.and_(person.is_not(None), _same_email(person, reader.email)))
         # No email names the person and `chat` or `owner` does: the ownerEmail text, else the reader `owner` names.
         unnamed = sa.and_(person.is_(None), sa.not_(nobody))
-        allowed.append(sa.and_(unnamed, owner_email.is_not(None), _same_email(owner_email, reader.email)))
+        owner_email = json_text(t.c.meta, "ownerEmail")
+        allowed.append(sa.and_(unnamed, has_owner_email, _same_email(owner_email, reader.email)))
         if reader.email:
-            allowed.append(sa.and_(unnamed, owner_email.is_(None), _ends(legacy, reader.name)))
+            # Python compares `owner` to the name, so only a text `owner` can match.
+            legacy = sa.and_(
+                JsonTextLength(t.c.meta, "owner").is_not(None), _ends(json_text(t.c.meta, "owner"), reader.name)
+            )
+            allowed.append(sa.and_(unnamed, sa.not_(has_owner_email), legacy))
     return sa.and_(*terms, sa.or_(*allowed))
 
 

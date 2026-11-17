@@ -54,8 +54,30 @@ THREADS: dict[str, tuple[str, str, dict[str, Any]]] = {
     # Longer than SQL Server's JSON_VALUE reads (4000 characters): still a person's thread, never the team's.
     "th_started_for_long": (CHAT, "team_ops", {"startedFor": "x" * 4000 + VERA}),
     "th_lending": ("refunds", "team_lending", {"ownerEmail": "lena@harborpine.example"}),
+    # `chat` and `owner` count when Python reads them as true: any non-empty text, a non-zero number, a non-empty list.
+    "th_chat_yes": (CHAT, "team_ops", {"chat": "yes"}),
+    "th_chat_two": (CHAT, "team_ops", {"chat": 2}),
+    "th_chat_zero_text": (CHAT, "team_ops", {"chat": "0"}),
+    "th_owner_object": (CHAT, "team_ops", {"owner": {"name": "otto"}}),
+    "th_owner_spaces": (CHAT, "team_ops", {"owner": "  "}),
+    # False, zero and empty values count as absent, so these are the team's.
+    "th_chat_false": (CHAT, "team_ops", {"chat": False, "owner": ""}),
+    "th_chat_zero": (CHAT, "team_ops", {"chat": 0.0, "owner": {}, "startedFor": []}),
+    # An all-space ownerEmail is set, so startedFor names nobody; `chat` makes the thread a person's that no one is.
+    "th_spaces_email_started_for": (CHAT, "team_ops", {"ownerEmail": "   ", "startedFor": VERA, "chat": True}),
+    # The rule reads ownerEmail from the metadata, whatever the `owner` column holds (NO_OWNER_COLUMN).
+    "th_email_in_meta_only": (CHAT, "team_ops", {"ownerEmail": VERA}),
 }
-TEAM_ROWS = ["th_workflow", "th_other_workflow", "th_agent", "th_chat_nobody", "th_chat_not_an_email"]
+NO_OWNER_COLUMN = {"th_email_in_meta_only"}
+TEAM_ROWS = [
+    "th_workflow",
+    "th_other_workflow",
+    "th_agent",
+    "th_chat_nobody",
+    "th_chat_not_an_email",
+    "th_chat_false",
+    "th_chat_zero",
+]
 
 
 def chat_reader(policies: dict[str, Any] | None) -> dict[str, str]:
@@ -119,7 +141,7 @@ async def c(database_url: str) -> AsyncIterator[AsyncClient]:
                             graph=graph,
                             meta=meta,
                             team_id=team,
-                            owner=meta.get("ownerEmail"),
+                            owner=None if thread_id in NO_OWNER_COLUMN else meta.get("ownerEmail"),
                             created_at=AT,
                             updated_at=AT,
                             status="idle",
@@ -130,7 +152,12 @@ async def c(database_url: str) -> AsyncIterator[AsyncClient]:
 
 
 READERS: list[tuple[str, dict[str, str], int, list[str]]] = [
-    ("owner", VIEWER, 200, [*TEAM_ROWS, "th_chat_vera", "th_call_for_vera", "th_vera_started_for_otto"]),
+    (
+        "owner",
+        VIEWER,
+        200,
+        [*TEAM_ROWS, "th_chat_vera", "th_call_for_vera", "th_vera_started_for_otto", "th_email_in_meta_only"],
+    ),
     ("teammate", person("otto", "team_ops", "viewer"), 200, [*TEAM_ROWS, "th_chat_otto_by_name", "th_owner_name_only"]),
     ("admin", ADMIN, 200, TEAM_ROWS),
     ("reviewer", REVIEWER, 200, TEAM_ROWS),
@@ -153,6 +180,13 @@ READERS: list[tuple[str, dict[str, str], int, list[str]]] = [
             # Its person is the list's text, which matches no one's email, so only a reader of every chat sees it.
             "th_started_for_list",
             "th_started_for_long",
+            "th_chat_yes",
+            "th_chat_two",
+            "th_chat_zero_text",
+            "th_owner_object",
+            "th_owner_spaces",
+            "th_spaces_email_started_for",
+            "th_email_in_meta_only",
         ],
     ),
     ("key for a workflow", key("wf"), 200, ["th_workflow"]),
@@ -166,7 +200,7 @@ READERS: list[tuple[str, dict[str, str], int, list[str]]] = [
 async def test_each_reader_sees_exactly_the_threads_the_rule_gives_it(c: AsyncClient) -> None:
     seen: dict[str, tuple[int, list[str]]] = {}
     for name, headers, _, _ in READERS:
-        r = await c.get("/v1/threads", headers=headers)
+        r = await c.get("/v1/threads?pageSize=100", headers=headers)
         rows = cast(list[dict[str, Any]], r.json()["data"]["data"] if r.status_code == 200 else [])
         seen[name] = (r.status_code, sorted(str(t["threadId"]) for t in rows))
     assert seen == {name: (status, sorted(ids)) for name, _, status, ids in READERS}
