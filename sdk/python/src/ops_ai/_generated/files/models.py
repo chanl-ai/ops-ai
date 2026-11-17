@@ -83,10 +83,10 @@ class FileData(TypedDict, closed=True):
     fieldsToCheck: int
     path: Literal["template", "model"]
     readAt: str
-    templateId: NotRequired[str | None]
-    typeId: NotRequired[str | None]
-    typeName: NotRequired[str | None]
-    version: NotRequired[int | None]
+    templateId: str | None
+    typeId: str | None
+    typeName: str | None
+    version: int | None
 
 
 class FileDataIn(TypedDict, closed=True):
@@ -102,8 +102,8 @@ class FileDataIn(TypedDict, closed=True):
 
 class FileReference(TypedDict, closed=True):
     addedAt: str
-    blocked: NotRequired[str | None]
-    href: NotRequired[str | None]
+    blocked: str | None
+    href: str | None
     id: str
     name: str
     type: Literal[
@@ -121,14 +121,14 @@ class FileReference(TypedDict, closed=True):
 class FileRetention(TypedDict, closed=True):
     classId: str
     className: str
-    deleteAfter: NotRequired[str | None]
+    deleteAfter: str | None
 
 
 class FileScan(TypedDict, closed=True):
-    at: NotRequired[str | None]
-    detail: NotRequired[str | None]
-    engine: NotRequired[str | None]
-    status: NotRequired[Literal["pending", "clean", "infected", "failed"]]
+    at: str | None
+    detail: str | None
+    engine: str | None
+    status: Literal["pending", "clean", "infected", "failed"]
 
 
 class FileVersion(TypedDict, closed=True):
@@ -311,19 +311,19 @@ class Skipped(TypedDict, closed=True):
 class StorageLocation(TypedDict, closed=True):
     backend: Literal["s3", "azure_blob", "local"]
     container: str
-    encryption: NotRequired[str]
+    encryption: str
     environment: Literal["dev", "test", "prod"]
     key: str
-    locked: NotRequired[bool]
-    region: NotRequired[str]
+    locked: bool
+    region: str
 
 
 class StorageTarget(TypedDict, closed=True):
     backend: Literal["local", "s3", "azure_blob"]
     container: str
-    credential: NotRequired[str]
-    encryption: NotRequired[str]
-    endpoint: NotRequired[str]
+    credential: str
+    encryption: str
+    endpoint: str
     purpose: (
         Literal[
             "knowledge_source",
@@ -340,8 +340,8 @@ class StorageTarget(TypedDict, closed=True):
         ]
         | Literal["default"]
     )
-    region: NotRequired[str]
-    uploadPath: NotRequired[Literal["direct", "proxy"]]
+    region: str
+    uploadPath: Literal["direct", "proxy"]
 
 
 class StorageTargetIn(TypedDict, closed=True):
@@ -441,15 +441,15 @@ class EnvelopeUploadTicket(TypedDict, closed=True):
 
 
 class FileDetail(TypedDict, closed=True):
-    canDelete: NotRequired[bool | None]
-    canEdit: NotRequired[bool | None]
-    canPublish: NotRequired[bool | None]
-    data: NotRequired[FileData | None]
-    deleteBlockedBy: NotRequired[str | None]
-    digest: NotRequired[str]
+    canDelete: bool | None
+    canEdit: bool | None
+    canPublish: bool | None
+    data: FileData | None
+    deleteBlockedBy: str | None
+    digest: str
     id: str
-    immutable: NotRequired[bool]
-    legalHold: NotRequired[LegalHold | None]
+    immutable: bool
+    legalHold: LegalHold | None
     mime: str
     name: str
     purpose: Literal[
@@ -465,27 +465,27 @@ class FileDetail(TypedDict, closed=True):
         "tool_spec",
         "avatar",
     ]
-    referenceCount: NotRequired[int]
-    references: NotRequired[list[FileReference]]
+    referenceCount: int
+    references: list[FileReference]
     retention: FileRetention
-    scan: NotRequired[FileScan]
-    sensitivity: NotRequired[Literal["public", "internal", "confidential", "restricted"]]
-    sensitivitySuggested: NotRequired[bool]
+    scan: FileScan
+    sensitivity: Literal["public", "internal", "confidential", "restricted"]
+    sensitivitySuggested: bool
     size: int
-    storage: NotRequired[StorageLocation | None]
+    storage: StorageLocation | None
     team: str
     uploadedAt: str
     uploadedBy: str
-    versionCount: NotRequired[int]
-    versions: NotRequired[list[FileVersion]]
+    versionCount: int
+    versions: list[FileVersion]
 
 
 class FileRow(TypedDict, closed=True):
-    data: NotRequired[FileData | None]
+    data: FileData | None
     digest: str
     id: str
     immutable: bool
-    legalHold: NotRequired[LegalHold | None]
+    legalHold: LegalHold | None
     mime: str
     name: str
     purpose: Literal[
@@ -507,7 +507,7 @@ class FileRow(TypedDict, closed=True):
     sensitivity: str
     sensitivitySuggested: bool
     size: int
-    storage: NotRequired[StorageLocation | None]
+    storage: StorageLocation | None
     team: str
     uploadedAt: str
     uploadedBy: str
@@ -520,10 +520,10 @@ class ProbeResult(TypedDict, closed=True):
 
 
 class StorageDocument(TypedDict, closed=True):
-    downloadLinkSeconds: NotRequired[int]
-    limits: NotRequired[list[PurposeLimit]]
-    retention: NotRequired[list[PurposeRetention]]
-    targets: NotRequired[list[StorageTarget]]
+    downloadLinkSeconds: int
+    limits: list[PurposeLimit]
+    retention: list[PurposeRetention]
+    targets: list[StorageTarget]
 
 
 class StorageDocumentIn(TypedDict, closed=True):

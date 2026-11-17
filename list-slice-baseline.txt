@@ -1,6 +1,5 @@
-# 6 findings: lists cut to their page in Python outside a store (scripts/check_portable_store.py). A row may only fall; ops_store.listing.list_page pages in SQL.
-# services/agents-service: 6
+# 5 findings: lists cut to their page in Python outside a store (scripts/check_portable_store.py). A row may only fall; ops_store.listing.list_page pages in SQL.
+# services/agents-service: 5
 1 slice services/agents-service/src/ops_agents/api/hitl_facade.py list slice
-1 slice services/agents-service/src/ops_agents/api/routers/channel_list.py list slice
 2 slice services/agents-service/src/ops_agents/api/routers/tool_catalog.py list slice
 2 slice services/agents-service/src/ops_agents/api/routers/widgets.py list slice

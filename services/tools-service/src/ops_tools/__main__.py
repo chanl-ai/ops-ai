@@ -54,7 +54,7 @@ from .modules.policy import CheckBeforeSend, PublishPolicy, RequesterMayDecide, 
 from .modules.review_handoff import keep_handing_over
 from .modules.reviews import Reviews
 from .modules.routes import executions_router, modules_router
-from .modules.seed import load
+from .modules.seed import catalog_titles, load
 from .modules.service import ModuleService
 from .modules.tool_users import AgentsToolUsers
 from .modules.workflows import AgentsWorkflows
@@ -177,6 +177,10 @@ def main() -> None:
     tokens.plugin_hosts = plugins.connection_hosts if plugins else None
     # The call log names a plugin tool by its manifest title.
     modules.titles = plugins.title_of if plugins else None
+    # The catalogue events title each tool as the grantable list does (`tool_title`), from the same manifests.
+    store.titles = catalog_titles(plugins.title_of if plugins else None)
+    tool_catalog = ToolCatalog(engine)
+    tool_catalog.titles = store.titles
     # A plugin tool's page names the team's own account of the app.
     modules.team_connections = plugins.team_connection if plugins else None
     modules.awaits_sign_in = plugins.awaits_sign_in if plugins else None
@@ -329,7 +333,7 @@ def main() -> None:
             executions_router(modules, directory),
             mailboxes_router(settings, secrets, policy, graph),
             egress_router(EgressStore(engine)),
-            catalog_router(ToolCatalog(engine)),
+            catalog_router(tool_catalog),
             expressions_router(),
             secrets_router(secrets, modules=store, credentials=connection_store),
             send_policy_router(SendPolicies(engine), directory),

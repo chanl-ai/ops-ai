@@ -770,6 +770,14 @@ class SameText(Out):
     processed_at: datetime | None
 
 
+class CopyName(Out):
+    """The item a duplicate repeats, by the names a person knows it by."""
+
+    id: str
+    title: str
+    source_name: str
+
+
 class ChangePage(NamedTuple):
     rows: list[ChangeRow]
     total: int
@@ -1451,6 +1459,20 @@ class KnowledgeStore(Store):
         )
         async with self.tx() as c:
             return await rows(c, q, SameText)
+
+    async def copy_names(self, tenant: str, item_ids: list[str]) -> list[CopyName]:
+        """The title and source name of each of `item_ids` the acting team may see, in one statement: the copy a
+        duplicate names. An item or source outside the caller's team is left out, so its name never reaches them."""
+        if not item_ids:
+            return []
+        i, s = kb_items, kb_sources
+        q = (
+            sa.select(i.c.id, i.c.title, s.c.name.label("source_name"))
+            .join(s, (s.c.tenant_id == i.c.tenant_id) & (s.c.id == i.c.source_id))
+            .where(i.c.tenant_id == tenant, i.c.id.in_(item_ids), team_visible(i), team_visible(s))
+        )
+        async with self.tx() as c:
+            return await rows(c, q, CopyName)
 
     async def update_run(
         self, tenant: str, run_id: str, values: dict[str, Any], *, release: tuple[str, str] | None = None

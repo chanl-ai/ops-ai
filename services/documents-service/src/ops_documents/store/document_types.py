@@ -483,7 +483,7 @@ class DocumentTypesStore(Store):
         t = document_type_tests
         q = (
             sa.select(t)
-            .where(t.c.status.in_(("queued", "running")), any_team(t, "a restart picks up every team's"))
+            .where(t.c.status.in_(("queued", "running")), any_team(t, RECOVER_PENDING))
             .order_by(t.c.asked_at)
         )
         async with self.system_tx(RECOVER_PENDING) as c:

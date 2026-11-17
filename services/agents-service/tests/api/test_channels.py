@@ -12,15 +12,18 @@ from typing import Any
 from httpx import AsyncClient
 
 from ops_agents.store.agent_registry import registry_agents
+from ops_agents.store.api_key_copies import ApiKeyCopies, KeySummary, listed_event
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.mailboxes import MailboxRow, MailboxStore
 from ops_agents.store.poll_cursors import poll_cursors
 from ops_agents.store.tenancy import tenant_scope
 from ops_agents.store.widget_deployments import WidgetDeployments
 from ops_engine.store import RunStore
+from ops_store.outbox import ApiKeyChanged
 from tests.api.test_action_roles import REVIEWER
 from tests.api.test_activity import email
 from tests.api.test_case_routes import started_run
+from tests.api.test_default_assistant import platform_token
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from tests.engine.test_lifecycle_rights import BUILDER, TENANT, VIEWER, person
 
@@ -80,13 +83,48 @@ async def read_at(s: Stack, workflow: str, at: str) -> None:
 
 
 async def test_a_team_sees_its_own_channels_only(stack: Stack) -> None:  # noqa: F811
-    c, _ = stack
+    # Each type in another team of the tenant, and in the same team of another tenant: none of them lists.
+    c, rt = stack
     await mailbox(stack, "ops@bank.example")
     await mailbox(stack, "fraud@bank.example", team="team_fraud")
-    ours = await channels(c, BUILDER)
-    assert [r["id"] for r in ours["data"]] == ["mbx_ops"] and ours["data"][0]["canEdit"] is True
+    await give_keys(stack, [key("key_ops"), key("key_fraud", team="team_fraud")])
+    with tenant_scope(TENANT):
+        await WidgetDeployments(rt.db).add({**OTHER_EMBED, "id": "wd_fraud", "team_id": "team_fraud"})
+    other = "t-elsewhere"
+    with tenant_scope(other):
+        await MailboxStore(rt.db).create(OTHER_BOX)
+        await WidgetDeployments(rt.db).add({**OTHER_EMBED, "id": "wd_elsewhere"})
+        copies = ApiKeyCopies(rt.db)
+        await copies.reconcile(
+            [listed_event(KeySummary.model_validate(key("key_elsewhere")), tenant_id=other)], await copies.held()
+        )
+    ours = await channels(c, BUILDER, team="all")
+    assert [r["id"] for r in ours["data"]] == ["mbx_ops", "key_ops"] and ours["data"][0]["canEdit"] is True
+    assert ours["pagination"]["total"] == 2 and ours["facets"]["type"] == {"email": 1, "api": 1}
     theirs = await channels(c, FRAUD_BUILDER)
-    assert [r["id"] for r in theirs["data"]] == ["mbx_fraud"]
+    assert [r["id"] for r in theirs["data"]] == ["mbx_fraud", "wd_fraud", "key_fraud"]
+
+
+OTHER_BOX = MailboxRow(
+    id="mbx_elsewhere",
+    team_id="team_ops",
+    name="Elsewhere",
+    address="ops@elsewhere.example",
+    provider="imap",
+    created_by="b",
+    created_at="n",
+    updated_at="n",
+)
+OTHER_EMBED: dict[str, Any] = {
+    "team_id": "team_ops",
+    "name": "Elsewhere help",
+    "agent_id": "ag_branch",
+    "agent_version": None,
+    "origins": ["https://elsewhere.example"],
+    "created_by": "b",
+    "created_at": "n",
+    "updated_at": "n",
+}
 
 
 async def test_an_email_channel_is_green_only_while_it_is_read(stack: Stack) -> None:  # noqa: F811
@@ -290,14 +328,15 @@ async def test_an_api_key_is_a_channel_with_its_traffic_and_health(stack: Stack)
     await mailbox(stack, "api@bank.example")
     workflow = await watch(c, "api@bank.example")
     soon = (datetime.now(UTC) + timedelta(days=3)).isoformat().replace("+00:00", "Z")
-    rt.key_summaries = FakeKeys(
+    await give_keys(
+        stack,
         [
             key("key_ci", target={"kind": "workflow", "id": workflow, "version": None}),
             key("key_soon", expiresAt=soon),
             key("key_gone", status="disabled"),
             key("key_rev", status="revoked"),
             key("key_fraud", team="team_fraud"),
-        ]
+        ],
     )
     parent = await started_run(c, BUILDER, "ops_check")
     tx = EngineTransactions(rt.db)
@@ -422,3 +461,71 @@ async def test_channel_list_routes_keep_every_reply_and_error(stack: Stack) -> N
     ]
     seen = {name: answer(await c.request(m, path, json=body, headers=who)) for name, m, path, body, who in rows}
     compare(seen, FIXTURES / "reply-pins-channel-list.json")
+
+
+async def give_keys(s: Stack, keys: list[dict[str, Any]]) -> None:
+    """platform-service's API keys as this service holds them: its copy, as a resync writes it."""
+    _, rt = s
+    rt.key_summaries = FakeKeys(keys)
+    with tenant_scope(TENANT):
+        copies = ApiKeyCopies(rt.db)
+        listed = [listed_event(KeySummary.model_validate(k), tenant_id=TENANT) for k in keys]
+        await copies.reconcile(listed, await copies.held())
+
+
+async def test_channel_list_pages_filters_and_counts_every_type(stack: Stack) -> None:  # noqa: F811
+    """One list over mailboxes, embeds and API keys: its order, pages, filters, search, facets and kinds."""
+    c, _ = stack
+    await widget(stack)
+    await mailbox(stack, "ops@bank.example")
+    await mailbox(stack, "idle@bank.example")
+    await mailbox(stack, "fraud@bank.example", team="team_fraud")
+    flow = await watch(c, "ops@bank.example")
+    await read_at(stack, flow, "2999-01-01T00:00:00.000Z")
+    soon = (datetime.now(UTC) + timedelta(days=3)).isoformat().replace("+00:00", "Z")
+    await give_keys(
+        stack,
+        [
+            key("key_ci", name="Intranet help", target={"kind": "workflow", "id": flow, "version": None}),
+            key("key_bot", target={"kind": "agent", "id": "ag_branch", "version": None}),
+            key("key_soon", expiresAt=soon),
+            key("key_gone", status="disabled"),
+            key("key_rev", status="revoked"),
+            key("key_fraud", team="team_fraud"),
+        ],
+    )
+    rows: list[tuple[str, str, dict[str, str]]] = [
+        ("list", "/v1/channels", BUILDER),
+        ("page2", "/v1/channels?page=2&pageSize=2", BUILDER),
+        ("pastEnd", "/v1/channels?type=api&page=5&pageSize=2", BUILDER),
+        ("typeApi", "/v1/channels?type=api", BUILDER),
+        ("typeEmailChat", "/v1/channels?type=email&type=chat", BUILDER),
+        ("healthWarnError", "/v1/channels?health=warn&health=error", BUILDER),
+        ("searchName", "/v1/channels?search=INTRANET", BUILDER),
+        ("searchDetail", "/v1/channels?search=key_so", BUILDER),
+        ("agent", "/v1/channels?agentId=ag_branch", BUILDER),
+        ("teamAll", "/v1/channels?team=all", BUILDER),
+        ("otherTeam", "/v1/channels", FRAUD_BUILDER),
+        ("viewer", "/v1/channels", VIEWER),
+    ]
+    seen = {name: answer(await c.get(path, headers=who)) for name, path, who in rows}
+    compare(seen, FIXTURES / "reply-pins-channel-pages.json")
+
+
+async def test_an_api_key_event_from_platform_lists_and_revokes_the_key(stack: Stack) -> None:  # noqa: F811
+    # As platform's relay sends it (`ops_store.outbox.add`); a replay of the older revision changes nothing.
+    c, _ = stack
+    made = ApiKeyChanged(id="key_new", name="Billing sync", prefix="key_new", status="active", created_at="n")
+
+    async def send(payload: ApiKeyChanged, revision: int) -> int:
+        body = {"name": "api_key.changed", "key": f"key_new@{revision}", "teamId": "team_ops"}
+        body |= {"payload": payload.model_dump(by_alias=True, mode="json") | {"revision": revision}}
+        r = await c.post("/v1/platform-events", json=body, headers=platform_token("team_ops", ["agents:create"]))
+        assert r.status_code == 200 and r.json()["data"]["handled"], r.text
+        return int(r.json()["data"]["changed"])
+
+    await send(made, 1)
+    assert [r["name"] for r in (await channels(c, BUILDER, type="api"))["data"]] == ["Billing sync"]
+    await send(made.model_copy(update={"status": "revoked"}), 2)
+    await send(made, 1)
+    assert (await channels(c, BUILDER, type="api"))["data"] == []

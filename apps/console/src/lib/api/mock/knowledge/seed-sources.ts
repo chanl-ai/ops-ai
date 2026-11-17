@@ -36,6 +36,7 @@ const ingest = (preset: IngestSettings["preset"], strategies: IngestStrategy[], 
 const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] = [
   {
     id: "src_hr_sharepoint",
+    aiCeiling: 5,
     type: "sharepoint",
     kind: "tool",
     cleaning: fileCleaning,
@@ -76,6 +77,7 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
   },
   {
     id: "src_eng_confluence",
+    aiCeiling: 5,
     type: "confluence",
     kind: "tool",
     cleaning: fileCleaning,
@@ -115,6 +117,7 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
   },
   {
     id: "src_github_docs",
+    aiCeiling: 5,
     type: "github",
     kind: "tool",
     cleaning: fileCleaning,
@@ -154,6 +157,7 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
   },
   {
     id: "src_contracts",
+    aiCeiling: 5,
     type: "file",
     kind: "file",
     cleaning: fileCleaning,
@@ -189,6 +193,7 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
   },
   {
     id: "src_pricing_crawl",
+    aiCeiling: 5,
     type: "crawl",
     kind: "web",
     cleaning: webCleaning,
@@ -226,6 +231,7 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
   },
   {
     id: "src_lending_policies",
+    aiCeiling: 5,
     type: "file",
     kind: "file",
     cleaning: fileCleaning,
@@ -262,6 +268,7 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
   },
   {
     id: "src_branch_faq",
+    aiCeiling: 5,
     type: "text",
     kind: "file",
     cleaning: fileCleaning,
@@ -294,6 +301,7 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
   },
   {
     id: "src_zendesk_draft",
+    aiCeiling: 5,
     type: "zendesk",
     kind: "tool",
     cleaning: fileCleaning,
@@ -325,6 +333,7 @@ const seedRows: Omit<Source, "kindLabel" | "aiStepsWaiting" | "waitingHosts">[] 
   },
   {
     id: "src_notion_product",
+    aiCeiling: 5,
     type: "notion",
     kind: "tool",
     cleaning: fileCleaning,
@@ -460,6 +469,7 @@ function mk(
     processedAt: src.lastSyncAt ?? daysAgo(1),
     sizeBytes: Math.floor(20_000 + rnd() * 2_400_000),
     status: "indexed",
+    freshness: stale ? "stale" : "fresh",
     chunkCount: 4 + Math.floor(rnd() * 40),
     tags: [...src.tags],
     metadata: {},

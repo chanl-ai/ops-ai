@@ -110,8 +110,7 @@ def calls_to_tools(tools: ServiceClient | None, caller: Principal, token: str | 
     before the run's deadline (`time.monotonic()`), so calls together never hold a run past its limit; one that
     answers later fails `call_failed`."""
 
-    async def call(tool: str, args: dict[str, JsonValue]) -> CallReply:
-        assert tools is not None and token is not None
+    async def call(client: ServiceClient, call_token: str, tool: str, args: dict[str, JsonValue]) -> CallReply:
         late: CallReply = {
             "ok": False,
             "error": failure("call_failed", "The tool did not answer within the run's time limit."),
@@ -120,10 +119,10 @@ def calls_to_tools(tools: ServiceClient | None, caller: Principal, token: str | 
             return late
         try:
             async with asyncio.timeout(left):
-                data = await tools.post(
+                data = await client.post(
                     "/v1/code-runs/calls",
                     json={"tool": tool, "input": args},
-                    headers={"X-Code-Run": token},
+                    headers={"X-Code-Run": call_token},
                     tenant=caller.tenant_id,
                     team=caller.team_id,
                     timeout=left,
@@ -139,7 +138,7 @@ def calls_to_tools(tools: ServiceClient | None, caller: Principal, token: str | 
     def answer(tool: str, args: dict[str, JsonValue]) -> CallReply:
         if tools is None or not token:
             return {"ok": False, "error": failure("calls_unavailable", "This run cannot call tools.")}
-        return anyio.from_thread.run(call, tool, args)
+        return anyio.from_thread.run(call, tools, token, tool, args)
 
     return answer
 

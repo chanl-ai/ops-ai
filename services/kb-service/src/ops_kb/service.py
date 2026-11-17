@@ -38,6 +38,7 @@ from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
+from ops_store import isolation
 from ops_store.listing import ListPage
 from ops_store.schedule import last_slot, next_run
 
@@ -66,7 +67,7 @@ from .source_settings import (
 )
 from .store import DECIDABLE, KnowledgeStore
 from .store.document_list import SHOWN_STATUS, doc_type, document_page
-from .store.knowledge import BaseRow, ChangeRow, ChunkRow, ItemRow, PieceWrite, RunRow, SourceRow, UnitWrite
+from .store.knowledge import BaseRow, ChangeRow, ChunkRow, CopyName, ItemRow, PieceWrite, RunRow, SourceRow, UnitWrite
 from .store.vectors import PgVectorStore
 from .tool_sources import ToolReader, declared_source, refusal_of, source_config, sync_tool_source
 
@@ -583,20 +584,21 @@ class KnowledgeService:
         return found.page
 
     async def get_base(self, who: Who, kb_id: str) -> dict[str, Any]:
-        b = await self.store.base(who.tenant_id, kb_id)
-        if b is None:
-            raise NotFound("No knowledge base with that id.")
-        by_kb, by_source = await self._joined(who.tenant_id)
-        attached = await self.store.sources(who.tenant_id, by_kb.get(kb_id, []))
-        running = await self.store.running_sources(who.tenant_id)
+        """The base with its sources, counts, jobs and coverage read in one transaction; then, with none open,
+        agents-service's "used by"."""
+        async with isolation.request_transaction():
+            b = await self.store.base(who.tenant_id, kb_id)
+            if b is None:
+                raise NotFound("No knowledge base with that id.")
+            by_kb, by_source = await self._joined(who.tenant_id)
+            attached = await self.store.sources(who.tenant_id, by_kb.get(kb_id, []))
+            running = await self.store.running_sources(who.tenant_id)
+            counts = await self._counts(who.tenant_id)
+            jobs = await self._jobs(who.tenant_id, by_kb.get(kb_id, []))
+            cov = await self.embedding_coverage(who, kb_id)
         using = await self.agents.usage(who.tenant_id, who.team_id, [kb_id])
         return {
-            **self._base(
-                b,
-                by_kb.get(kb_id, []),
-                await self._counts(who.tenant_id),
-                await self._jobs(who.tenant_id, by_kb.get(kb_id, [])),
-            ),
+            **self._base(b, by_kb.get(kb_id, []), counts, jobs),
             "sourceNames": [s.name for s in attached],
             **_used_by(using, kb_id),
             "attached": [
@@ -613,7 +615,7 @@ class KnowledgeService:
             "metadataKeys": [],
             "suggestedQuestions": [],
             "heldCount": 0,
-            **({"embedding": cov} if (cov := await self.embedding_coverage(who, kb_id)) else {}),
+            **({"embedding": cov} if cov else {}),
             **self._rights(who, b.team_id, b.name, b.protection),
         }
 
@@ -2332,14 +2334,14 @@ class KnowledgeService:
             "verified_at": datetime.now(UTC) if verified else None,
         }
         await self.store.update_item(who.tenant_id, item_id, values)
-        return self._item(i.model_copy(update=values), s)
+        return self._item(i.model_copy(update=values), s, await self._copies(who, [i]))
 
     async def set_item_owner(self, who: Who, item_id: str, owner: str) -> dict[str, Any]:
         if not owner.strip():
             raise ValidationFailed("A document always has an owner.")
         i, s = await self._changeable_item(who, item_id)
         await self.store.update_item(who.tenant_id, item_id, {"owner": owner.strip()})
-        return self._item(i.model_copy(update={"owner": owner.strip()}), s)
+        return self._item(i.model_copy(update={"owner": owner.strip()}), s, await self._copies(who, [i]))
 
     async def lookups(self, who: Who) -> dict[str, list[str]]:
         bases = await self.store.bases(who.tenant_id)
@@ -2465,7 +2467,14 @@ class KnowledgeService:
 
     # ── Items and documents ──────────────────────────────────────────────
 
-    def _item(self, i: ItemRow, s: SourceRow) -> dict[str, Any]:
+    async def _copies(self, who: Who, items: list[ItemRow]) -> dict[str, CopyName]:
+        """The copies the page's duplicates repeat, by id, read in one statement and only when a row is a
+        duplicate; a copy the caller's team cannot see is not in it."""
+        ids = sorted({i.duplicate_of for i in items if i.duplicate_of})
+        return {c.id: c for c in await self.store.copy_names(who.tenant_id, ids)} if ids else {}
+
+    def _item(self, i: ItemRow, s: SourceRow, copies: dict[str, CopyName] | None = None) -> dict[str, Any]:
+        copy = (copies or {}).get(i.duplicate_of) if i.duplicate_of else None
         return {
             "id": i.id,
             "sourceId": i.source_id,
@@ -2482,6 +2491,7 @@ class KnowledgeService:
             **({"errorClass": i.error_class, "error": i.error} if i.error_class else {}),
             **({"warning": i.warning} if i.warning else {}),
             **({"duplicateOf": i.duplicate_of} if i.duplicate_of else {}),
+            **({"duplicateCopy": {"title": copy.title, "sourceName": copy.source_name}} if copy else {}),
             **({"folder": i.folder} if i.folder else {}),
             "chunkCount": i.chunk_count,
             "tags": s.tags,
@@ -2505,7 +2515,8 @@ class KnowledgeService:
     async def source_items(self, who: Who, source_id: str, q: ListParams) -> ListPage:
         s = await self._source_row(who, source_id)
         page, items = await self.store.item_page(who.tenant_id, source_id, q)
-        page["data"] = [self._item(i, s) for i in items]
+        copies = await self._copies(who, items)
+        page["data"] = [self._item(i, s, copies) for i in items]
         # Counted as stored; shown under the console's names, so an item being read counts as processing.
         shown: dict[str, int] = {}
         for status, n in page["facets"].get("status", {}).items():
@@ -2595,7 +2606,7 @@ class KnowledgeService:
             await self.store.update_item(who.tenant_id, item.id, {"url": url})
             item = item.model_copy(update={"url": url})
         outcome = "unchanged" if same else "created" if before is None else "updated"
-        return {"outcome": outcome, "item": self._item(item, found)}
+        return {"outcome": outcome, "item": self._item(item, found, await self._copies(who, [item]))}
 
     async def add_documents(self, who: Who, kb_id: str, file_ids: list[str]) -> dict[str, Any]:
         """Files from Files added to the base: into its own documents source, made and attached the first
@@ -2644,9 +2655,10 @@ class KnowledgeService:
         freshness = {sid: self.freshness_of(s) for sid, s in sources.items()}
         tags = {sid: s.tags for sid, s in sources.items()}
         page, items = await document_page(self.store, who.tenant_id, kb_id, q, freshness=freshness, tags=tags)
+        copies = await self._copies(who, items)
         page["data"] = [
             {
-                **self._item(i, sources[i.source_id]),
+                **self._item(i, sources[i.source_id], copies),
                 "sourceName": sources[i.source_id].name,
                 "docType": doc_type(i.mime, sources[i.source_id].type, bool(i.url)),
             }
@@ -2697,19 +2709,24 @@ class KnowledgeService:
         return {"readerVersion": answer.get("readerVersion"), "ocr": ocr, "pages": out}
 
     async def item(self, who: Who, item_id: str) -> dict[str, Any]:
-        found = await self.store.items(who.tenant_id, item_id=item_id)
-        if not found:
-            raise NotFound("No item with that id.")
-        i = found[0]
-        s = await self._source_row(who, i.source_id)
-        chunks = await self.store.chunks(who.tenant_id, item_id)
+        """The item, its source, pieces, versions and copy read in one transaction; then, with none open,
+        documents-service's reading of its file."""
+        async with isolation.request_transaction():
+            found = await self.store.items(who.tenant_id, item_id=item_id)
+            if not found:
+                raise NotFound("No item with that id.")
+            i = found[0]
+            s = await self._source_row(who, i.source_id)
+            chunks = await self.store.chunks(who.tenant_id, item_id)
+            units = await self.store.units(who.tenant_id, item_id)
+            versions = await self.store.versions(who.tenant_id, item_id)
+            copies = await self._copies(who, [i])
         searched: dict[str, list[dict[str, str]]] = {}
-        for u in await self.store.units(who.tenant_id, item_id):
+        for u in units:
             searched.setdefault(u.chunk_id, []).append({"kind": u.kind, "text": u.text})
-        versions = await self.store.versions(who.tenant_id, item_id)
         settings = self.settings_of(s)
         return {
-            **self._item(i, s),
+            **self._item(i, s, copies),
             "reading": await self._reading_summary(who, s, i),
             "settingsUsed": {
                 "preset": settings.ingest.preset,

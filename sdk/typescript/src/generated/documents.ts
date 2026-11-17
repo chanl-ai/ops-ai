@@ -693,7 +693,7 @@ export interface components {
         /** CopyRef */
         CopyRef: {
             /** Detachedat */
-            detachedAt?: string | null;
+            detachedAt: string | null;
             /** Id */
             id: string;
             /**
@@ -1300,8 +1300,8 @@ export interface components {
              * @enum {string}
              */
             outcome: "kept" | "taken" | "conflict";
-            template?: components["schemas"]["JsonValue"];
-            yours?: components["schemas"]["JsonValue"];
+            template: components["schemas"]["JsonValue"];
+            yours: components["schemas"]["JsonValue"];
         };
         /**
          * FieldScore
@@ -1756,6 +1756,13 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** ReviewedDigests */
+        ReviewedDigests: {
+            /** Digest */
+            digest: string | null;
+            /** Recorddigest */
+            recordDigest: string | null;
+        };
         /** Sample */
         Sample: {
             /**
@@ -1846,7 +1853,7 @@ export interface components {
                 [key: string]: string;
             }[];
             /** Resources */
-            resources?: string[];
+            resources: string[];
             /** Tools */
             tools: string[];
         };
@@ -1878,7 +1885,7 @@ export interface components {
             addCell: components["schemas"]["AddCell"];
             /** Canadd */
             canAdd: boolean;
-            copy?: components["schemas"]["CopyRef"] | null;
+            copy: components["schemas"]["CopyRef"] | null;
             /** Id */
             id: string;
             installed: components["schemas"]["Installed"];
@@ -1888,7 +1895,7 @@ export interface components {
              */
             kind: "document_type";
             plugin: components["schemas"]["TemplatePlugin"];
-            removeCell?: components["schemas"]["AddCell"] | null;
+            removeCell: components["schemas"]["AddCell"] | null;
             requires: components["schemas"]["TemplateRequires"];
             /** Source */
             source: string;
@@ -2005,9 +2012,9 @@ export interface components {
             draftOpen: boolean;
             /** Edits */
             edits: string[];
-            expect?: components["schemas"]["UpdateExpect"];
+            expect: components["schemas"]["ReviewedDigests"];
             /** Fields */
-            fields?: components["schemas"]["FieldReview"][];
+            fields: components["schemas"]["FieldReview"][];
             /** Fromversion */
             fromVersion: number;
             /**
@@ -2018,7 +2025,7 @@ export interface components {
             /** Toversion */
             toVersion: number;
             /** Version */
-            version?: number | null;
+            version: number | null;
         };
     };
     responses: never;

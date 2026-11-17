@@ -18,7 +18,7 @@ from typing import Any, Literal, cast
 from pydantic import JsonValue
 
 from .starts import ONLY_FROM_WORKFLOWS, StartSpec, only_from_workflows, trigger_node
-from .store.definitions import ListColumns
+from .store.definitions import ListColumns, watched_mailbox
 
 Effects = Literal["none", "model", "read", "write", "human"]
 Group = Literal["trigger", "data", "ai", "action", "flow", "human"]
@@ -1848,4 +1848,5 @@ def list_columns(definition: JsonValue, registry: TypeRegistry) -> ListColumns:
         "trigger": description or label,
         "startable": by_hand,
         "takes_files": by_hand and bool(form and form["takesFiles"]),
+        "mailbox": watched_mailbox(d),
     }

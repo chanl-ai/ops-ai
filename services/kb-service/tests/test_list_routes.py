@@ -398,3 +398,32 @@ async def test_documents_list_only_the_bases_team_rows_with_tags_and_shown_statu
                 await c.execute(
                     sa.delete(kb_items).where(kb_items.c.tenant_id == tenant, kb_items.c.status == "reading")
                 )
+
+
+async def test_a_duplicate_names_its_copy_only_when_the_callers_team_can_see_it(
+    kb: httpx.AsyncClient,  # noqa: F811
+    engine: AsyncEngine,
+    tenant: str,
+) -> None:
+    """The copy a duplicate repeats is named on the list row and the detail when it is the caller's team's; another
+    team's copy keeps its id but gives no title or source name."""
+    [mine] = await _seed_sources(engine, tenant, "team_ops", "Rates")
+    [lending] = await _seed_sources(engine, tenant, "team_lending", "Lending rates")
+    [kept] = await insert_rows(engine, tenant, "team_ops", kb_items, item_row(mine, "Rate sheet"))
+    [hidden] = await insert_rows(engine, tenant, "team_lending", kb_items, item_row(lending, "Lending sheet"))
+    same, other = item_row(mine, "Rate sheet copy"), item_row(mine, "Lending copy")
+    await insert_rows(
+        engine, tenant, "team_ops", kb_items, {**same, "duplicate_of": kept}, {**other, "duplicate_of": hidden}
+    )
+    rows = {r["id"]: r for r in (await _page(kb, f"/v1/sources/{mine}/items"))["data"]}
+    assert rows[same["id"]]["duplicateCopy"] == {"title": "Rate sheet", "sourceName": "Rates"}
+    assert rows[other["id"]]["duplicateOf"] == hidden and "duplicateCopy" not in rows[other["id"]]
+    detail = await _page(kb, f"/v1/items/{other['id']}")
+    assert detail["duplicateOf"] == hidden and "duplicateCopy" not in detail, detail
+    # The query's own predicates, with the row policy open to every team: another team's item in this team's source
+    # and this team's item in another team's source are not named.
+    [crossed] = await insert_rows(engine, tenant, "team_lending", kb_items, item_row(mine, "Crossed sheet"))
+    [stray] = await insert_rows(engine, tenant, "team_ops", kb_items, item_row(lending, "Stray sheet"))
+    with isolation.tenant_wide(WIDE, tenant_id=tenant), acting_as("team_ops"):
+        named = await KnowledgeStore(engine).copy_names(tenant, [kept, hidden, crossed, stray])
+    assert [c.id for c in named] == [kept]

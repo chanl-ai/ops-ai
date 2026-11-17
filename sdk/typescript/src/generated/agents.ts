@@ -1021,8 +1021,10 @@ export interface paths {
         /**
          * List Channels
          * @description The channels of the selected team (`team=all`: every team the caller is in and may view channels of), filtered
-         *     by type, health and a search over name and detail. `facets` count by type and health under the other filters;
-         *     `kinds` describes every channel type, built or not, over the caller's whole list.
+         *     by type, health and a search over name and detail, in the list's order (email, chat, then API, each by name), a
+         *     page at a time from one statement over the three (store.channel_list); a page past the end answers the last page.
+         *     `facets` count by type and health under the other filters; `kinds` describes every channel type, built or not,
+         *     over the caller's whole list.
          */
         get: operations["channels_list_channels"];
         put?: never;
@@ -1922,8 +1924,8 @@ export interface paths {
         };
         /**
          * List Engine Runs
-         * @description The selected team's runs on the shared list contract, newest first, then by id; `workflowId` keeps one
-         *     workflow's, `status` repeats to keep several; `facets.status` and `facets.workflowId` count the runs per status
+         * @description The selected team's runs on the shared list contract, newest first, then by id; `workflowId` and `status`
+         *     repeat to keep several; `facets.status` and `facets.workflowId` count the runs per status
          *     and per workflow under the other filters, and `labels.workflowId` names each counted workflow, so the workflow
          *     filter is filled from this reply. A scoped API key lists its own workflow's runs only.
          *     No request transaction: people's names and the masking policy come from platform-service, with none open.
@@ -2117,9 +2119,9 @@ export interface paths {
          * @description One page of the team's skills on the shared list contract, by name then id: `search` matches the name, use-when
          *     or slug, `ids` names skills exactly. `view=published` rows describe the published version, its inputs and parts,
          *     which is what chat and the MCP prompts use; every other view describes the newest version an editor sees. `status`,
-         *     `ownerTeam`, `origin` and `loading` filter by facet. The view counts and facets cover every skill the search
-         *     leaves, before the view and the facet filters; the page, its counts and its facets are read in SQL
-         *     (`store/skill_list.py`).
+         *     `ownerTeam`, `origin` and `loading` filter by facet; `knowledgeBases` keeps skills naming any base given. The view
+         *     counts and facets cover every skill the search leaves, before the view and the facet filters; the page, its counts
+         *     and its facets are read in SQL (`store/skill_list.py`).
          *
          *     Every view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.
          *     With `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing
@@ -6949,6 +6951,8 @@ export interface components {
         FormView: {
             /** Aftertext */
             afterText: string;
+            /** Canedit */
+            canEdit: boolean;
             /** Dailycap */
             dailyCap: number;
             /** Description */
@@ -23103,7 +23107,7 @@ export interface operations {
     workflows_list_engine_runs: {
         parameters: {
             query?: {
-                workflowId?: string | null;
+                workflowId?: string[] | null;
                 status?: string[] | null;
                 page?: number;
                 pageSize?: number | null;
@@ -24077,6 +24081,7 @@ export interface operations {
                 ownerTeam?: string[] | null;
                 origin?: string[] | null;
                 loading?: string[] | null;
+                knowledgeBases?: string[] | null;
                 page?: number;
                 pageSize?: number | null;
                 search?: string | null;

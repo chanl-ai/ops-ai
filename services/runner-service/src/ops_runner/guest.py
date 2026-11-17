@@ -5,6 +5,7 @@ log, so the function cannot write on the call channel."""
 import json
 import sys
 import traceback
+import types
 from typing import Any, cast
 
 _chan_in, _chan_out = sys.stdin, sys.stdout
@@ -52,8 +53,12 @@ def _wire(value: Any) -> Any:
     return value
 
 
+# A value a function passes to `ops.call`: JSON, with a `Secret` handle anywhere a value goes.
+type Arg = bool | int | float | str | Secret | list[Arg] | tuple[Arg, ...] | dict[str, Arg] | None
+
+
 class Ops:
-    def call(self, tool: str, args: dict[str, Any] | None = None) -> Any:
+    def call(self, tool: str, args: dict[str, Arg] | None = None) -> Any:
         """Calls a tool this function is bound to, as the caller's own gateway call, and returns its output."""
         _send({"call": str(tool), "args": _wire(args or {})})
         reply: dict[str, Json] = json.loads(_chan_in.readline())
@@ -70,10 +75,12 @@ class Ops:
 
 def _main() -> None:
     request: dict[str, Json] = json.loads(_chan_in.readline())
-    scope: dict[str, Any] = {"ops": Ops(), "OpsError": OpsError, "__name__": "tool"}
+    # The function's source runs as a module named `tool`, with `ops` and `OpsError` in its namespace.
+    tool = types.ModuleType("tool")
+    tool.__dict__.update(ops=Ops(), OpsError=OpsError)
     try:
-        exec(compile(str(request["source"]), "tool.py", "exec"), scope)
-        output = scope[str(request["entry"])](request["input"])
+        exec(compile(str(request["source"]), "tool.py", "exec"), tool.__dict__)
+        output = tool.__dict__[str(request["entry"])](request["input"])
         json.dumps(output)
     except MemoryError:
         _send({"error": {"code": "memory_limit", "message": "The function used more memory than its limit."}})

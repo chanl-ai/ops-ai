@@ -56,6 +56,7 @@ from ..store.usage import UsageLedger
 from . import agent_registry, engine_seed, guardrails, skills, workflow_registry
 from .acting_for import CallPeople, acting_for_tokens
 from .agent_calls import AgentCalls
+from .api_key_copy import key_changed_handler
 from .approval_renewal import ApprovalRenewal
 from .apps_line import AppsLine
 from .chat_attachments import ChatAttachmentReader
@@ -568,8 +569,11 @@ def create_app(
     mount(channel_list.router, "Channels")
     mount(channel_list.live_router, "Channels")
     mount(service_events.router, "Workflows")
-    # platform-service's events: a new team gets its Ops Assistant, its default here, before its first chat.
-    mount(platform_events_router(team_created_handlers(lambda: cast(Runtime, app.state.runtime)), tags=()), "Agents")
+    # platform-service's events: a new team gets its Ops Assistant, its default here, before its first chat; a changed
+    # API key updates the copy the Channels list reads.
+    handlers = team_created_handlers(lambda: cast(Runtime, app.state.runtime))
+    handlers |= key_changed_handler(lambda: cast(Runtime, app.state.runtime).db)
+    mount(platform_events_router(handlers, tags=()), "Agents")
     mount(overview.router, "Cases")
     mount(step_up.router, "Auth")
     mount(events.router, "Threads")

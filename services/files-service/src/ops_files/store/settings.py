@@ -163,7 +163,7 @@ class SettingsStore(Store):
         on one."""
         with isolation.tenant_wide(STORAGE_TARGETS):
             tenant = isolation.tenant()
-            where = (files.c.tenant_id == tenant, any_team(files, "a target any team's files are on stays"))
+            where = (files.c.tenant_id == tenant, any_team(files, STORAGE_TARGETS))
             q = sa.select(files.c.storage_backend, files.c.storage_container).where(*where).distinct()
             async with self.tx() as c:
                 return {(str(r[0]), str(r[1])) for r in await c.execute(q)}

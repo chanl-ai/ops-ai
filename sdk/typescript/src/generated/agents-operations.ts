@@ -340,6 +340,7 @@ export const agentsOperations = {
       "ownerTeam",
       "origin",
       "loading",
+      "knowledgeBases",
       "page",
       "pageSize",
       "search",

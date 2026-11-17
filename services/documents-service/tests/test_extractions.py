@@ -27,7 +27,7 @@ from ops_files_client import FilesRefused
 from ops_identity import dev_service_signer, mint_service_token
 from ops_store import background
 
-from .conftest import OPS, Make
+from .conftest import OPS, Make, tenant_outbox
 
 NOTICE = b"Invoice INV-2207\nAmount due: 1,250.00 CAD\nCustomer: Marcus Bell\n"
 FIELDS = [
@@ -277,15 +277,14 @@ async def test_every_end_of_a_read_reports_extraction_finished_once_with_its_out
             "data"
         ]
         await failing.extractor.drain()
-    async with engine.connect() as conn:
-        o = service_outbox
-        q = sa.select(o.c.event_key, o.c.team_id, o.c.payload).where(
-            o.c.tenant_id == s.tenant, o.c.name == "extraction.finished"
-        )
-        rows = {r.event_key: r for r in (await conn.execute(q)).all()}
+    o = service_outbox
+    q = sa.select(o.c.event_key, o.c.team_id, o.c.payload).where(
+        o.c.tenant_id == s.tenant, o.c.name == "extraction.finished"
+    )
+    rows = {r["event_key"]: r for r in await tenant_outbox(engine, s.tenant, q)}
     assert set(rows) == {done["id"], failed["id"]}, rows
-    assert rows[done["id"]].payload["status"] == "done" and rows[done["id"]].payload["fileId"] == done["fileId"], rows
-    assert rows[failed["id"]].payload["status"] == "failed", rows
+    assert rows[done["id"]]["payload"]["status"] == "done" and rows[done["id"]]["payload"]["fileId"] == done["fileId"]
+    assert rows[failed["id"]]["payload"]["status"] == "failed", rows
 
 
 class _DownModels(Models):

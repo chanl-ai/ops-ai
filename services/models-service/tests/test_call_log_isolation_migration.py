@@ -66,6 +66,14 @@ async def _rerun(url: str, statements: list[str]) -> None:
     await _sql(url, [(text, {}) for text in statements])
 
 
+async def _move_one_at_a_time(url: str, source: str, target: str, which: str) -> None:
+    engine = create_async_engine(url)
+    move = _migration().move_batches
+    async with engine.begin() as c, past_the_call_log_policy(c):
+        await c.run_sync(lambda s: move(s, source, target, which, batch=1))
+    await engine.dispose()
+
+
 def test_the_log_moves_under_the_policy_with_its_spend_and_its_refusals_kept(
     database_url: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -122,6 +130,14 @@ def test_the_log_moves_under_the_policy_with_its_spend_and_its_refusals_kept(
         # The backfill sets totals from the log, so a second run changes nothing.
         asyncio.run(_rerun(database_url, _migration().backfill_sql(dialect)))
         assert asyncio.run(_sql(database_url, [(spend_q, {"k": key})]))[0] == spend, "a re-run changed a total"
+
+        # The move goes a batch at a time: one row per batch still moves both calls each way, none lost or left.
+        legs = [("model_calls_untenanted", "model_call_log", "1 = 1", 2, 0)]
+        legs.append(("model_call_log", "model_calls_untenanted", "tenant_id IS NULL", 0, 2))
+        for source, target, which, in_log, in_untenanted in legs:
+            asyncio.run(_move_one_at_a_time(database_url, source, target, which))
+            nulls, kept = asyncio.run(_sql(database_url, [(log_q, {"k": key}), (kept_q, {"k": key})]))
+            assert (len(nulls), kept) == (in_log, [(in_untenanted,)]), f"a batched move to {target} lost or left a call"
 
         command.downgrade(cfg, BEFORE)
         back = "SELECT count(*) FROM model_call_log WHERE key_id = :k AND tenant_id IS NULL"

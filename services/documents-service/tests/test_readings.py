@@ -29,7 +29,7 @@ from ops_identity import dev_service_signer, mint_service_token
 from ops_ingest.reading import READER_VERSION, open_file, read
 from ops_store import isolation
 
-from .conftest import OPS, Make
+from .conftest import OPS, Make, tenant_outbox
 from .test_extractions import NOTICE, Floor, Models
 
 SCANNED = Path(__file__).resolve().parents[3] / "packages" / "ops_ingest" / "tests" / "fixtures" / "scanned.pdf"
@@ -128,10 +128,11 @@ async def test_a_scan_is_read_in_the_background_and_reported(make: Make, engine:
     assert asked.status_code == 202 and asked.json()["data"]["status"] == "queued", asked.text
     assert done["status"] == "done" and done["pages"][0]["source"] == "ocr", done
     assert "LATE PAYMENT FEE" in page["pages"][0]["text"].upper() and len(page["pages"]) == 1
-    async with engine.connect() as conn:
-        mine = service_outbox.c.tenant_id == s.tenant
-        events = (await conn.execute(sa.select(service_outbox.c.name, service_outbox.c.payload).where(mine))).all()
-    finished = [p for n, p in events if n == "reading.finished"]
+    mine = service_outbox.c.tenant_id == s.tenant
+    events = await tenant_outbox(
+        engine, s.tenant, sa.select(service_outbox.c.name, service_outbox.c.payload).where(mine)
+    )
+    finished = [e["payload"] for e in events if e["name"] == "reading.finished"]
     assert [(p["fileId"], p["settingsKey"]) for p in finished] == [(fid, "auto:eng")], events
 
 

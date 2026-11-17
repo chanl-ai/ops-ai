@@ -28,7 +28,7 @@ from ops_contracts.field_values import DEFAULT_DATE_ORDER
 from ops_documents.document_types import DocumentTypes
 from ops_documents.extraction import request_of
 from ops_documents.files import Who
-from ops_documents.models import DocumentTypeIn, DocumentTypeVersionIn
+from ops_documents.models import DocumentTypeIn, DocumentTypeVersionIn, Reply
 from ops_documents.store import NameTakenError, TemplateCopies
 from ops_documents.store.template_copies import CopyRow
 from ops_documents.tools_client import PluginTemplates
@@ -61,13 +61,13 @@ class TemplatePlugin(Out):
     version: str
 
 
-class TemplateRequires(Out):
+class TemplateRequires(Reply):
     tools: list[str]
     bind: list[dict[str, str]]
     resources: list[str] = Field(default_factory=list[str])
 
 
-class Installed(Out):
+class Installed(Reply):
     # Live copies the team holds of this template, the newest version among them, and whether the source ships a
     # newer one. A copy never changes by itself; updating one is a later card.
     copies: int
@@ -77,7 +77,7 @@ class Installed(Out):
     changed: bool = False
 
 
-class CopyRef(Out):
+class CopyRef(Reply):
     id: str
     kind: Kind
     record_id: str
@@ -94,7 +94,7 @@ class AddCell(Out):
     action: str
 
 
-class TemplateView(Out):
+class TemplateView(Reply):
     source: str
     plugin: TemplatePlugin
     kind: Kind
@@ -135,6 +135,12 @@ class UpdateExpect(In):
     record_digest: str | None = None
 
 
+class ReviewedDigests(Reply):
+    # The digests a review read, as the take's `expect` names them back.
+    digest: str | None = None
+    record_digest: str | None = None
+
+
 class UpdateInput(In):
     # merge (the default) keeps the team's edits field by field; reset makes the next version from the template and
     # drops them. Left out with `confirm`, the call is a reset: an older console's "take the template as it is".
@@ -147,7 +153,7 @@ class UpdateInput(In):
     confirm: bool = False
 
 
-class FieldReview(Out):
+class FieldReview(Reply):
     field: str
     label: str
     # kept: only the team changed it; taken: only the template did; conflict: both did, the team's unless chosen.
@@ -157,7 +163,7 @@ class FieldReview(Out):
     template: JsonValue = None
 
 
-class UpdateReview(Out):
+class UpdateReview(Reply):
     copy_: CopyRef = Field(alias="copy")
     # The template version the copy was made from, and the one the app ships now.
     from_version: int
@@ -170,7 +176,7 @@ class UpdateReview(Out):
     # pinned keep reading as they were; a workflow saved after it pins the new one. The dialog says so first.
     applies_now: bool = True
     # What the take names back, so a template or type that moved since this review is refused.
-    expect: UpdateExpect = Field(default_factory=UpdateExpect)
+    expect: ReviewedDigests = Field(default_factory=ReviewedDigests)
     # For older consoles: the fields the update changes, and the fields the team's own edits hold.
     changes: list[str]
     edits: list[str]

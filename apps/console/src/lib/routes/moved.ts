@@ -7,7 +7,7 @@
 export const MOVED: readonly (readonly [string, string])[] = [
   ['/integrations/my-accounts', '/settings/account/connectors'],
   ['/integrations/credentials', '/data/secrets'],
-  ['/integrations/sources', '/data/sources'],
+  ['/integrations/sources', '/data/knowledge'],
   ['/integrations/apps', '/data/connectors'],
   ['/workflows/batches', '/build/runs/batches'],
   ['/knowledge/changes', '/data/changes'],

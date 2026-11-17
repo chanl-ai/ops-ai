@@ -11,7 +11,7 @@ export const pct = (n: number) => `${Math.round(n * 100)}%`;
 
 export const count = (n: number) => n.toLocaleString('en-CA');
 
-export function relativeTime(iso?: string, now: number = Date.now()) {
+export function relativeTime(iso?: string | null, now: number = Date.now()) {
   if (!iso) return '—';
   const ms = new Date(iso).getTime() - now;
   // A time ahead (a grant's end, a deadline) reads "in 3h"; one behind reads "3h ago". Past a day either way, the date.

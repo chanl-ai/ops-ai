@@ -364,9 +364,7 @@ class ReadingsStore(Store):
         t = documents_readings
         async with self.system_tx(RECOVER_PENDING) as c:
             query = (
-                sa.select(*ROW)
-                .where(t.c.status.in_(PENDING), any_team(t, "a restart picks up every team's unfinished readings"))
-                .order_by(t.c.created_at)
+                sa.select(*ROW).where(t.c.status.in_(PENDING), any_team(t, RECOVER_PENDING)).order_by(t.c.created_at)
             )
             return await rows(c, query, ReadingRow)
 

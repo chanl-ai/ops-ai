@@ -149,6 +149,10 @@ const AREAS: { prefix: string; served: boolean }[] = [
   // Tool access lists tools-service's grants.
   { prefix: '/govern/access/tool-access', served: Boolean(toolsUrl) },
   { prefix: '/govern/activity/audit', served: onPlatform },
+  // My account is GET /v1/me on platform-service; its security and connections pages are still sample data.
+  { prefix: '/settings/account', served: onPlatform },
+  { prefix: '/settings/account/security', served: false },
+  { prefix: '/settings/account/connections', served: false },
   { prefix: '/settings/account/memory', served: Boolean(chatUrl) },
   // A person's own sign-ins, a connection's sign-in setting and the sign-in pages are tools-service's.
   { prefix: '/settings/account/connectors', served: Boolean(toolsUrl) },

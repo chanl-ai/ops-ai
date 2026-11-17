@@ -724,13 +724,13 @@ export interface components {
              */
             readAt: string;
             /** Templateid */
-            templateId?: string | null;
+            templateId: string | null;
             /** Typeid */
-            typeId?: string | null;
+            typeId: string | null;
             /** Typename */
-            typeName?: string | null;
+            typeName: string | null;
             /** Version */
-            version?: number | null;
+            version: number | null;
         };
         /**
          * FileDataIn
@@ -765,14 +765,14 @@ export interface components {
         /** FileDetail */
         FileDetail: {
             /** Candelete */
-            canDelete?: boolean | null;
+            canDelete: boolean | null;
             /** Canedit */
-            canEdit?: boolean | null;
+            canEdit: boolean | null;
             /** Canpublish */
-            canPublish?: boolean | null;
-            data?: components["schemas"]["FileData"] | null;
+            canPublish: boolean | null;
+            data: components["schemas"]["FileData"] | null;
             /** Deleteblockedby */
-            deleteBlockedBy?: string | null;
+            deleteBlockedBy: string | null;
             /**
              * Digest
              * @default
@@ -785,7 +785,7 @@ export interface components {
              * @default false
              */
             immutable: boolean;
-            legalHold?: components["schemas"]["LegalHold"] | null;
+            legalHold: components["schemas"]["LegalHold"] | null;
             /** Mime */
             mime: string;
             /** Name */
@@ -801,9 +801,9 @@ export interface components {
              */
             referenceCount: number;
             /** References */
-            references?: components["schemas"]["FileReference"][];
+            references: components["schemas"]["FileReference"][];
             retention: components["schemas"]["FileRetention"];
-            scan?: components["schemas"]["FileScan"];
+            scan: components["schemas"]["FileScan"];
             /**
              * Sensitivity
              * @default internal
@@ -817,7 +817,7 @@ export interface components {
             sensitivitySuggested: boolean;
             /** Size */
             size: number;
-            storage?: components["schemas"]["StorageLocation"] | null;
+            storage: components["schemas"]["StorageLocation"] | null;
             /** Team */
             team: string;
             /**
@@ -833,7 +833,7 @@ export interface components {
              */
             versionCount: number;
             /** Versions */
-            versions?: components["schemas"]["FileVersion"][];
+            versions: components["schemas"]["FileVersion"][];
         };
         /**
          * FileList
@@ -862,9 +862,9 @@ export interface components {
              */
             addedAt: string;
             /** Blocked */
-            blocked?: string | null;
+            blocked: string | null;
             /** Href */
-            href?: string | null;
+            href: string | null;
             /** Id */
             id: string;
             /** Name */
@@ -882,21 +882,21 @@ export interface components {
             /** Classname */
             className: string;
             /** Deleteafter */
-            deleteAfter?: string | null;
+            deleteAfter: string | null;
         };
         /**
          * FileRow
          * @description A list row: the file record without versions and references.
          */
         FileRow: {
-            data?: components["schemas"]["FileData"] | null;
+            data: components["schemas"]["FileData"] | null;
             /** Digest */
             digest: string;
             /** Id */
             id: string;
             /** Immutable */
             immutable: boolean;
-            legalHold?: components["schemas"]["LegalHold"] | null;
+            legalHold: components["schemas"]["LegalHold"] | null;
             /** Mime */
             mime: string;
             /** Name */
@@ -916,7 +916,7 @@ export interface components {
             sensitivitySuggested: boolean;
             /** Size */
             size: number;
-            storage?: components["schemas"]["StorageLocation"] | null;
+            storage: components["schemas"]["StorageLocation"] | null;
             /** Team */
             team: string;
             /** Uploadedat */
@@ -929,11 +929,11 @@ export interface components {
         /** FileScan */
         FileScan: {
             /** At */
-            at?: string | null;
+            at: string | null;
             /** Detail */
-            detail?: string | null;
+            detail: string | null;
             /** Engine */
-            engine?: string | null;
+            engine: string | null;
             /**
              * Status
              * @default pending
@@ -1190,11 +1190,11 @@ export interface components {
              */
             downloadLinkSeconds: number;
             /** Limits */
-            limits?: components["schemas"]["PurposeLimit"][];
+            limits: components["schemas"]["PurposeLimit"][];
             /** Retention */
-            retention?: components["schemas"]["PurposeRetention"][];
+            retention: components["schemas"]["PurposeRetention"][];
             /** Targets */
-            targets?: components["schemas"]["StorageTarget"][];
+            targets: components["schemas"]["StorageTarget"][];
         };
         /** StorageDocumentIn */
         StorageDocumentIn: {

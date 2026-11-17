@@ -44,7 +44,7 @@ const COPY_HREF: Record<ResourceKind, string> = {
   skill: '/build/skills',
   workflow: '/build/workflows',
   document_type: '/data/document-types',
-  knowledge_source: '/data/knowledge/sources',
+  knowledge_source: '/data/knowledge',
   guardrail: '/build/guardrails',
   // Case and task types have no page of their own; the cases page is where a team meets them.
   case_type: '/work/cases',

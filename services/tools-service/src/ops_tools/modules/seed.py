@@ -11,7 +11,7 @@ agents-service's Reviews.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from datetime import datetime, timedelta
 from typing import Any, Literal, cast
 
@@ -22,7 +22,7 @@ from ops_store.team_scope import acting_as
 from ..connections.records import auth_of, connection_base, seed_rows
 from ..store.connections import ConnectionStore
 from ..store.egress import EgressStore
-from ..store.modules import Aggregate, ModuleStore, StaleModuleError
+from ..store.modules import Aggregate, ModuleStore, StaleModuleError, TitleOf
 
 # The dev seed writes every team's connections into one tenant, each in its own team.
 SEED = "seed"
@@ -370,17 +370,20 @@ _BUILT_IN_TITLES: dict[str, str] = {op: t for app in BUILT_IN for op, t in app["
 _BUILT_IN_MODULES = {str(app["module"]) for app in BUILT_IN}
 
 
-def tool_title(
-    module: Mapping[str, Any], operation: str, plugin_title: Callable[[Mapping[str, Any], str], str | None] | None
-) -> str | None:
+def tool_title(module: Mapping[str, Any], operation: str, plugin_title: TitleOf | None) -> str | None:
     """What people see in place of a tool's name: a built-in app's title from BUILT_IN, a plugin tool's from its
     manifest (`plugin_title`, the plugin host's), and for a team's own tool its name in words (`open_case` is "Open
     case"), so no list shows a bare code name where the rest show titles."""
     built_in = str(module.get("template_id") or "").startswith("builtin:") or module.get("name") in _BUILT_IN_MODULES
     if built_in and (title := _BUILT_IN_TITLES.get(operation)):
         return title
-    named = plugin_title(module, operation) if plugin_title is not None else None
+    named = plugin_title(dict(module), operation) if plugin_title is not None else None
     return named or name_in_words(operation)
+
+
+def catalog_titles(plugin_title: TitleOf | None) -> TitleOf:
+    """`tool_title` with the plugin host's manifest titles, for the store's catalogue events (`ModuleStore.titles`)."""
+    return lambda module, operation: tool_title(module, operation, plugin_title)
 
 
 def name_in_words(name: str) -> str:

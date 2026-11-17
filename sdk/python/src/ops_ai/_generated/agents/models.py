@@ -823,6 +823,7 @@ class FormPatch(TypedDict, closed=True):
 
 class FormView(TypedDict, closed=True):
     afterText: str
+    canEdit: bool
     dailyCap: int
     description: str
     expiresAt: str

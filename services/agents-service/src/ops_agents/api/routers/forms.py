@@ -109,6 +109,8 @@ class FormView(Out):
     # The page's path; with the link's token only when it was just made (create or Rotate).
     url: str
     token: str | None = None
+    # Whether the caller may rotate, pause or change the form: the check those routes run.
+    can_edit: bool
 
 
 class FormFields(Out):
@@ -154,7 +156,16 @@ def _slug(title: str) -> str:
     return f"{words}-{secrets.token_hex(3)}"
 
 
-def _view(row: dict[str, Any], token: str | None = None) -> dict[str, Any]:
+def _may_edit(me: Principal, team_id: str, form_id: str) -> bool:
+    """`_own`'s check (`can(workflows, edit)` in the form's team) as a flag, so the page and the routes agree."""
+    try:
+        require_builder(me, area="workflows", team_id=team_id, action="edit", what=f"form {form_id}")
+    except Forbidden:
+        return False
+    return True
+
+
+def _view(row: dict[str, Any], me: Principal, token: str | None = None) -> dict[str, Any]:
     out = {
         "id": row["id"],
         "workflowId": row["workflow_id"],
@@ -167,6 +178,7 @@ def _view(row: dict[str, Any], token: str | None = None) -> dict[str, Any]:
         "dailyCap": row["daily_cap"],
         "paused": bool(row["paused"]),
         "url": f"/f/{row['slug']}" + (f"?t={token}" if token else ""),
+        "canEdit": _may_edit(me, str(row["team_id"]), str(row["id"])),
     }
     return out | ({"token": token} if token else {})
 
@@ -211,7 +223,7 @@ async def create_form(rt: Rt, me: Me, _: Tx, workflow_id: str, body: FormIn) -> 
     )
     token, hashed = _token(current_tenant(), me.team_id, str(row["id"]))
     row = await links.update(str(row["id"]), token_hash=hashed) or row
-    return ok(_view(row, token if body.mode == "link" else None), 201)
+    return ok(_view(row, me, token if body.mode == "link" else None), 201)
 
 
 @router.get("/v1/workflows/{workflow_id}/forms", response_model=Envelope[ListResult[FormView]])
@@ -219,7 +231,7 @@ async def workflow_forms(rt: Rt, me: Me, _: Tx, workflow_id: str, q: ListQuery) 
     """The workflow's forms in the caller's team on the shared list contract: newest first, then by id; `search`
     matches the title and slug, `ids` names forms."""
     listed = await _links(rt).page(workflow_id, q)
-    return ok({**listed, "data": [_view(r) for r in listed["data"]]})
+    return ok({**listed, "data": [_view(r, me) for r in listed["data"]]})
 
 
 async def _own(rt: Runtime, me: Principal, form_id: str) -> dict[str, Any]:
@@ -237,7 +249,7 @@ async def rotate_form(rt: Rt, me: Me, _: Tx, form_id: str) -> JSONResponse:
     token, hashed = _token(current_tenant(), str(row["team_id"]), form_id)
     now = datetime.now(UTC).isoformat()
     row = await _links(rt).update(form_id, token_hash=hashed, rotated_at=now) or row
-    return ok(_view(row, token))
+    return ok(_view(row, me, token))
 
 
 @router.patch("/v1/forms/{form_id}", response_model=Envelope[FormView])
@@ -246,7 +258,7 @@ async def update_form(rt: Rt, me: Me, _: Tx, form_id: str, body: FormPatch) -> J
     changes = body.model_dump(exclude_none=True)
     row = await _links(rt).update(form_id, **changes) if changes else await _links(rt).get(form_id)
     assert row is not None
-    return ok(_view(row))
+    return ok(_view(row, me))
 
 
 def _opened(token: str, slug: str) -> tuple[str, str, str, str]:

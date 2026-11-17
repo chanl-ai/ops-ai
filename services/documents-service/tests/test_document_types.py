@@ -19,9 +19,8 @@ from ops_documents import document_types
 from ops_documents.store.extractions import service_outbox
 from ops_identity import ServiceClient
 from ops_service_kit.settings import Settings
-from ops_store import isolation
 
-from .conftest import OPS, Make
+from .conftest import OPS, Make, tenant_outbox
 from .test_extractions import NOTICE, Floor
 
 FIELDS = [{"key": "invoice", "type": "text", "required": True}, {"key": "amount", "type": "money", "required": True}]
@@ -272,14 +271,6 @@ async def test_a_numeric_date_reads_month_first_unless_the_type_says_day_first(m
     assert (us["fields"]["served"]["value"], dmy["fields"]["served"]["value"]) == ("2026-03-04", "2026-04-03")
 
 
-async def _outbox(engine: AsyncEngine, tenant: str, q: sa.Select[Any]) -> list[dict[str, Any]]:
-    """The tenant's outbox rows, read in the tenant's scope: SQL Server applies its row policies to every user, so a
-    read outside the tenant's session context finds none."""
-    with isolation.tenant_wide("test: the tenant's outbox rows", tenant_id=tenant):
-        async with isolation.isolated_tx(engine) as conn:
-            return [dict(r) for r in (await conn.execute(q)).mappings()]
-
-
 async def test_a_correction_reports_the_newest_read_with_nothing_left_to_check_and_an_older_one_none(
     make: Make, engine: AsyncEngine
 ) -> None:
@@ -299,7 +290,7 @@ async def test_a_correction_reports_the_newest_read_with_nothing_left_to_check_a
         fixed = data(await c.patch(f"/v1/documents/extractions/{newer['id']}/fields/invoice", json=again, headers=OPS))
     o = service_outbox
     q = sa.select(o).where(o.c.tenant_id == s.tenant, o.c.name == "extraction.corrected")
-    events = await _outbox(engine, s.tenant, q)
+    events = await tenant_outbox(engine, s.tenant, q)
     assert fixed["needsReview"] == [] and fixed["fields"]["amount"]["needsReview"] is False, fixed
     # Two corrections in a row send one event, the last, after the settle time; the first is superseded unsent, and is
     # never due again nor marked sent, so nothing reads it as delivered.
@@ -329,7 +320,7 @@ async def test_a_read_of_a_document_type_reports_what_the_file_was_read_as_and_a
         typed = data(await extract(c, fid, documentTypeId="invoice_notice"))
         data(await extract(c, fid, fields=FIELDS))
     o = service_outbox
-    events = await _outbox(
+    events = await tenant_outbox(
         engine, s.tenant, sa.select(o).where(o.c.tenant_id == s.tenant, o.c.name == "extraction.read")
     )
     [event] = events

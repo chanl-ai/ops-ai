@@ -19,6 +19,7 @@ event and the clients that reach them, and never writes its own send function or
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
@@ -83,9 +84,21 @@ class ToolOperation(Out):
 
     id: str
     name: str
+    # What people see in place of the name, as the grantable list titles it (version 2 on).
+    title: str | None = None
+    # The start of its description, at most DESCRIPTION_MAX characters (version 2 on).
+    description: str | None = None
     access: str  # read or write
     requires_approval: bool = False
     enabled: bool = True
+
+
+# The longest operation description an event carries; a longer one is cut and its whole text read from the tool.
+DESCRIPTION_MAX = 500
+# The largest payload a receiver applies (agents-service's POST /v1/events refuses more). A module event past it is
+# sent `truncated`, with no operations: a receiver never applies it and resyncs the tenant instead.
+MAX_EVENT_BYTES = 16_384
+TemplateKind = Literal["builtin", "plugin", "custom"]
 
 
 class ToolModule(Out):
@@ -100,9 +113,23 @@ class ToolModule(Out):
     owner_team: str | None = None
     status: str | None = None
     version: str | None = None
+    # Where it comes from: a built-in app, a plugin, or one the team made (its own module or a custom app's).
+    template_kind: TemplateKind | None = None
+    # The id of the app card it belongs to on the Apps page (`GET /v1/apps?ids=`), which a reader asks for the
+    # caller's own state of the app (connected, needs their sign-in), never carried here.
+    app_card_id: str | None = None
     operations: list[ToolOperation] = Field(default_factory=list[ToolOperation])
     # True when the module is gone: a copy marks its row deleted and ignores any older event about it.
     deleted: bool = False
+    # True when the module's operations did not fit in one event and were left out (`fitted`).
+    truncated: bool = False
+
+    def fitted(self, revision: int) -> Self:
+        """This payload as it travels: itself, or past MAX_EVENT_BYTES with its operations left out and `truncated`."""
+        body = self.model_dump(by_alias=True, mode="json") | {"revision": revision}
+        if len(json.dumps(body)) <= MAX_EVENT_BYTES:
+            return self
+        return self.model_copy(update={"operations": [], "truncated": True})
 
 
 class ToolPublished(ToolModule):
@@ -118,15 +145,21 @@ class ToolChanged(ToolModule):
 
 
 class ToolTeamStateChanged(Out):
-    """One team's grant of a module it does not own, and what the grant is: written when it starts or changes, and
-    with `deleted` when it ends. Keyed by `id` (`<via>:<module id>`), so each kind of grant orders its own events."""
+    """One team's state of a module, keyed by `id` (`<via>:<module id>`), so each kind orders its own events.
+
+    `approval`: the team's grant of a module it does not own, at the module's revision; `deleted` when it ends.
+    `added`: what the team turned on of the module and which of those wait for an answer, at the team state's own
+    revision (a team turning a tool on changes no module); `deleted` when the app is off for the team. No sender
+    writes `added` yet."""
 
     kind: Literal["tool.team_state.changed"] = "tool.team_state.changed"
     id: str
     module_id: str
-    via: Literal["approval"]
-    # The operations the grant covers, by name.
+    via: Literal["approval", "added"]
+    # The operations the grant covers, or the team added, by name.
     operations: list[str] = Field(default_factory=list[str])
+    # `added` only: the added operations whose answer waits for this team, after the team's and app's policy.
+    waits: list[str] = Field(default_factory=list[str])
     # ISO time the grant ends; a reader drops it past then, since an approval expires with no write.
     expires_at: str | None = None
     deleted: bool = False
@@ -142,7 +175,27 @@ class KbChanged(Out):
     deleted: bool = False
 
 
-Payload = Step | ToolPublished | ToolChanged | ToolTeamStateChanged | KbChanged
+class ApiKeyChanged(Out):
+    """An API key created, changed (its status, expiry or last use) or revoked in platform-service, for the copy the
+    Channels list reads. Never the secret or its hash: `prefix` is the key's public id part. The key's team is the
+    event's team; a revoked key keeps its row with that status, and `deleted` only when the record is gone."""
+
+    kind: Literal["api_key.changed"] = "api_key.changed"
+    id: str
+    name: str
+    prefix: str
+    status: Literal["active", "disabled", "revoked"]
+    # What it starts: agent, workflow or mcp_link, its id, and a pinned version; none for any live workflow.
+    target_kind: str | None = None
+    target_id: str | None = None
+    target_version: int | None = None
+    created_at: str
+    last_used_at: str | None = None
+    expires_at: str | None = None
+    deleted: bool = False
+
+
+Payload = Step | ToolPublished | ToolChanged | ToolTeamStateChanged | KbChanged | ApiKeyChanged
 
 
 class Event(Out):

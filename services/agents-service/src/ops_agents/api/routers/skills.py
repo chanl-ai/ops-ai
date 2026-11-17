@@ -148,19 +148,20 @@ async def list_skills(
     owner_team: Annotated[list[str] | None, Query(alias="ownerTeam")] = None,
     origin: Annotated[list[str] | None, Query()] = None,
     loading: Annotated[list[str] | None, Query()] = None,
+    knowledge_bases: Annotated[list[str] | None, Query(alias="knowledgeBases")] = None,
 ) -> JSONResponse:
     """One page of the team's skills on the shared list contract, by name then id: `search` matches the name, use-when
     or slug, `ids` names skills exactly. `view=published` rows describe the published version, its inputs and parts,
     which is what chat and the MCP prompts use; every other view describes the newest version an editor sees. `status`,
-    `ownerTeam`, `origin` and `loading` filter by facet. The view counts and facets cover every skill the search
-    leaves, before the view and the facet filters; the page, its counts and its facets are read in SQL
-    (`store/skill_list.py`).
+    `ownerTeam`, `origin` and `loading` filter by facet; `knowledgeBases` keeps skills naming any base given. The view
+    counts and facets cover every skill the search leaves, before the view and the facet filters; the page, its counts
+    and its facets are read in SQL (`store/skill_list.py`).
 
     Every view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.
     With `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing
     a tool or knowledge base the agent lacks as `locked`, naming them in `needs`."""
     # Read from `q.filters`; declared so the document and the SDKs name them.
-    del status, owner_team, origin, loading
+    del status, owner_team, origin, loading, knowledge_bases
     spec: dict[str, Any] | None = None
     offered = None
     if agent_id is not None:

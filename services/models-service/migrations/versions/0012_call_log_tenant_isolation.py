@@ -3,8 +3,9 @@
 model_call_log holds a tenant's runs, threads, request hashes and the cost of each call, and was an install table
 because a key's caps summed its rows across tenants. The caps now read model_key_spend, a key's spend and calls per
 second, UTC day and run, whose day and run totals are set here from the call rows; a call that named no tenant moves
-to model_calls_untenanted, which has no tenant column, in one pass; then the log carries the generated tenant
-policy for ops_models_tenant (models_0009). Plain SQL, so it renders offline; both steps are safe to re-run.
+to model_calls_untenanted, which has no tenant column, BATCH rows at a time (one pass in offline SQL); then the log
+carries the generated tenant policy for ops_models_tenant (models_0009). Plain SQL, so it renders offline; both steps
+are safe to re-run.
 
 Revision ID: models_0012
 Revises: models_0011
@@ -32,6 +33,8 @@ MONEY = sa.Numeric(18, 6)
 # A day or run idle this long is spend no cap reads again: not backfilled, and swept once it is
 # (ops_models.store.tables.SPEND_KEPT_IDLE_S, the same value; a migration does not import the service).
 KEPT_IDLE_S = 14 * 86400.0
+# Rows per insert or delete of the move; under 5000, where SQL Server escalates row locks to a table lock.
+BATCH = 1000
 
 CALL = [
     "id",
@@ -115,15 +118,38 @@ def backfill_sql(dialect: str) -> list[str]:
 
 
 def move_sql(source: str, target: str, which: str) -> list[str]:
-    """Moves the rows of `source` that `which` selects into `target`: one insert of every row not already there, then
-    one delete of every row now there, each a single pass with no per-page rescan of `target`. The revision is one
-    transaction, so a stopped run leaves nothing moved, and a re-run finds nothing left to move."""
+    """Moves the rows of `source` that `which` selects into `target`: an insert of every row not already there, then
+    a delete of every row now there. The revision is one transaction, so a stopped run leaves nothing moved, and a
+    re-run finds nothing left to move."""
     cols = ", ".join(CALL)
     there = f"EXISTS (SELECT 1 FROM {target} m WHERE m.id = {source}.id)"
     return [
         f"INSERT INTO {target} ({cols}) SELECT {cols} FROM {source} WHERE {which} AND NOT {there}",
         f"DELETE FROM {source} WHERE {which} AND {there}",
     ]
+
+
+def move_batches(bind: sa.Connection, source: str, target: str, which: str, *, batch: int = BATCH) -> None:
+    """`move_sql` over one window of keys at a time, in key order: each batch reads the next `batch` ids after the
+    last window, and its insert and delete touch only the rows inside it, so no statement holds more than `batch` row
+    locks (under the count where SQL Server turns them into a table lock) or reads the rows a batch before moved."""
+    top, limit = (f"TOP ({batch}) ", "") if bind.dialect.name == "mssql" else ("", f" LIMIT {batch}")
+    read = sa.text(f"SELECT {top}id FROM {source} WHERE {which} AND id > :after ORDER BY id{limit}")
+    window = f"{which} AND {source}.id > :after AND {source}.id <= :upto"
+    after = ""
+    while ids := [str(i) for i in bind.execute(read, {"after": after}).scalars()]:
+        for statement in move_sql(source, target, window):
+            bind.execute(sa.text(statement), {"after": after, "upto": ids[-1]})
+        after = ids[-1]
+
+
+def _move(source: str, target: str, which: str) -> None:
+    """Offline SQL has no rows to count, so it renders the move as one pass."""
+    if op.get_context().as_sql:
+        for statement in move_sql(source, target, which):
+            op.execute(statement)
+        return
+    move_batches(op.get_bind(), source, target, which)
 
 
 ALIAS_OUTCOME = {"ix_model_call_log_alias": "alias", "ix_model_call_log_outcome": "outcome"}
@@ -172,8 +198,7 @@ def upgrade() -> None:
     # model_call_log is policed only at the end of this step, so the backfill reads every tenant's calls as the owner.
     for statement in backfill_sql(dialect):
         op.execute(statement)
-    for statement in move_sql("model_call_log", "model_calls_untenanted", "tenant_id IS NULL"):
-        op.execute(statement)
+    _move("model_call_log", "model_calls_untenanted", "tenant_id IS NULL")
     if dialect == "postgresql":
         op.execute(f"GRANT SELECT, INSERT ON model_call_log TO {ROLE}")
     else:
@@ -191,8 +216,7 @@ def downgrade() -> None:
     if dialect == "postgresql":
         op.execute(f"REVOKE ALL ON model_call_log FROM {ROLE}")
     if dialect in ("postgresql", "mssql"):
-        for statement in move_sql("model_calls_untenanted", "model_call_log", "1 = 1"):
-            op.execute(statement)
+        _move("model_calls_untenanted", "model_call_log", "1 = 1")
     for name in ALIAS_OUTCOME:
         op.drop_index(name, table_name="model_call_log", if_exists=True)
     op.drop_index("ix_model_call_log_tenant_created", table_name="model_call_log")

@@ -113,8 +113,11 @@ async def test_tools_service_down_is_refused_not_guessed() -> None:
 async def test_a_run_gets_only_granted_names_the_registry_still_offers_with_their_schema() -> None:
     tools = Tools({"acme": [op("get_account"), op("update_address", "write")]})
     with tenant_scope("acme"):
+        # A name an agent holds twice (saved from a list that repeated it) is one tool of the turn: the model's
+        # toolset refuses two tools of one name and the whole turn fails.
         grants = await grants_for(
-            directory(tools, Clock()), ["get_account", "hidden_since", "workflow:dispute_email", "update_address"]
+            directory(tools, Clock()),
+            ["get_account", "hidden_since", "workflow:dispute_email", "update_address", "get_account"],
         )
     assert [(g.name, g.server, g.access) for g in grants] == [
         ("get_account", "Harbor & Pine Core Banking", "read"),

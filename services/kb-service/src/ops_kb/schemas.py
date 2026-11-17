@@ -8,7 +8,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from ops_service_kit.http import In, ListResult, Out
+from ops_service_kit.http import In, JsonValue, ListResult, Out
 
 Json = dict[str, Any]
 
@@ -329,6 +329,25 @@ class SourceDetail(Source):
     can_publish: bool | None = None
 
 
+class RunPhase(Out):
+    """One step of a run as the console draws it; no run records its steps yet, so the list is empty."""
+
+    name: str
+    duration_ms: int
+    status: Literal["done", "running", "skipped", "failed"]
+
+
+class RunError(Out):
+    """One failure a run recorded: the step (list, get, store or parse), its class and message, and the item when one
+    was reached (a listing failure names none; an app's item may have no title)."""
+
+    item_id: str | None = None
+    item_title: str | None = None
+    phase: str
+    error_class: str
+    message: str
+
+
 class SyncRun(Out):
     id: str
     source_id: str
@@ -337,12 +356,19 @@ class SyncRun(Out):
     duration_sec: float
     status: str
     counts: dict[str, int]
-    phases: list[Json]
-    errors: list[Json]
+    phases: list[RunPhase]
+    errors: list[RunError]
     log: list[str]
     # A run in the background (a rebuild after a settings change): when it ended, and who asked it to stop.
     finished_at: str | None = None
     cancelled_by: str | None = None
+
+
+class DuplicateCopy(Out):
+    """The item a duplicate repeats, named as the caller knows it."""
+
+    title: str
+    source_name: str
 
 
 class Item(Out):
@@ -361,6 +387,8 @@ class Item(Out):
     warning: str | None = None
     # The newer item with the same cleaned text, which search returns instead of this one.
     duplicate_of: str | None = None
+    # That item's title and source; absent when the caller's team cannot see it.
+    duplicate_copy: DuplicateCopy | None = None
     # Where a fetched item sits at its source: a library folder, a space's page tree.
     folder: str | None = None
     # Its address at its source, which a citation links to: a fetched page's, or the url a pushed item was sent with.
@@ -392,14 +420,86 @@ class DocumentRow(Item):
     doc_type: Literal["pdf", "word", "spreadsheet", "slides", "web", "text", "typed", "app", "other"]
 
 
+class ItemUnit(Out):
+    """What search matches for a piece: its own text (`self`), a child, or a question written for it."""
+
+    kind: str
+    text: str
+
+
+class ItemChunk(Out):
+    index: int
+    tokens: int
+    location: str
+    page: int | None = None
+    kind: str
+    text: str
+    units: list[ItemUnit]
+    # The source's own fields for the document, as its metadata mapping kept them.
+    metadata: dict[str, JsonValue]
+
+
+class ItemRevision(Out):
+    """An edit to the document; nothing records edits yet, so the list is empty."""
+
+    n: int
+    author: str
+    date: str
+    size_delta: int
+    note: str | None = None
+
+
+class ItemVersion(Out):
+    item_id: str
+    title: str
+    version: str
+    effective_date: str
+    status: str
+    digest: str
+    source_name: str
+    # Who the source system lets see this version, as it sent it; stored, not yet enforced.
+    allowed: list[JsonValue] | None = None
+
+
+class ItemDetail(Out):
+    content: str
+    chunks: list[ItemChunk]
+    revisions: list[ItemRevision]
+    versions: list[ItemVersion]
+
+
+class ReadingPage(Out):
+    """One page of the stored reading: how it was read, its blocks by kind after cleaning, and what cleaning removed.
+    Number and reader are documents-service's, passed on as it sent them."""
+
+    number: int | None
+    read_by: str | None
+    blocks: dict[str, int]
+    removed_chars: int
+    ocr_confidence: float | None = None
+
+
+class ItemReading(Out):
+    reader_version: str | None
+    ocr: str
+    pages: list[ReadingPage]
+
+
+class ItemSettingsUsed(Out):
+    preset: str
+    strategies: list[str]
+    indexed_with: str | None
+    current: bool
+
+
 class ItemWithDetail(Item):
     source_name: str
     source_type: str
-    detail: Json
+    detail: ItemDetail
     # How the file was read and what cleaning removed, page by page, from its stored reading.
-    reading: Json | None = None
+    reading: ItemReading | None = None
     # The splitting it was built under, and whether that is still the source's.
-    settings_used: Json | None = None
+    settings_used: ItemSettingsUsed | None = None
 
 
 class QueryIn(In):
@@ -523,13 +623,40 @@ class SearchOut(Out):
     answers: dict[str, AnswerSettings] = Field(default_factory=dict[str, AnswerSettings])
 
 
+class PlaygroundCitation(Out):
+    """A passage the answer cites, numbered as the answer cites it."""
+
+    n: int
+    document_id: str
+    title: str
+    section: str
+    page: int | None = None
+    version: str
+    snippet: str
+
+
+class PlaygroundChunk(Out):
+    """A piece the search found, with each lane's score."""
+
+    chunk_id: str
+    document_id: str
+    document_title: str
+    source_name: str
+    score: float
+    lanes: dict[str, float]
+    location: str
+    text: str
+    rejected: bool
+    version: str
+
+
 class PlaygroundAnswer(Out):
     id: str
     question: str
     matchers: list[str]
     answer: str
-    citations: list[Json]
-    chunks: list[Json]
+    citations: list[PlaygroundCitation]
+    chunks: list[PlaygroundChunk]
     no_answer: bool | None = None
     passages: list[PassageOut]
     lanes: Lanes
@@ -561,6 +688,15 @@ class DraftEdit(In):
     answer: str = Field(min_length=1, max_length=4000)
 
 
+class ChangeCitation(Out):
+    """A workflow whose runs cited the changed passage; nothing records citations yet, so the list is empty."""
+
+    workflow_id: str
+    workflow_name: str
+    citations30d: int
+    tests: int
+
+
 class KnowledgeChange(Out):
     id: str
     summary: str
@@ -580,7 +716,7 @@ class KnowledgeChange(Out):
     trust: str
     freshness: str
     review_by: str
-    cited_by: list[Json]
+    cited_by: list[ChangeCitation]
     owner: str
     can_decide: bool
     status: str

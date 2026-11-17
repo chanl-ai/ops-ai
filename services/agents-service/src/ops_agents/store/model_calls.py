@@ -22,12 +22,15 @@ from ops_metering import MICRO, Totals
 from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
-from ops_store.dialect import insert_ignore
+from ops_store.dialect import db_now, insert_ignore
 from ops_store.rows import rows
-from ops_store.schema import TENANT_SCOPED
+from ops_store.schema import TENANT_SCOPED, system
 
 from .base import metadata
 from .tenancy import RuntimeStore, current_tenant
+
+# Why the side tables of model_call_records and thread_budgets hold no tenant.
+UNATTRIBUTED = "unattributed rows kept from before tenancy: a thread gone and no other row naming its tenant (0104)"
 
 model_call_records = sa.Table(
     "model_call_records",
@@ -54,6 +57,31 @@ model_call_records = sa.Table(
     sa.UniqueConstraint("thread_id", "task", "request_hash", name="uq_model_call_replay"),
     sa.Index("ix_model_call_records_thread_id", "thread_id"),
     info=TENANT_SCOPED,
+)
+
+# The calls recorded before 0104 whose thread is gone and that nothing else names a tenant for: kept, as recorded spend,
+# for operators. No store reads or writes it, and neither tenant transactions nor the SQL Server runtime user hold a
+# grant on it, so no tenant reads it.
+model_call_records_unattributed = sa.Table(
+    "model_call_records_unattributed",
+    metadata,
+    sa.Column("id", sa.String(64), primary_key=True),
+    sa.Column("thread_id", sa.String(64), nullable=False),
+    sa.Column("run_id", sa.String(64)),
+    sa.Column("step", sa.String(120), nullable=False),
+    sa.Column("task", sa.String(200)),
+    sa.Column("kind", sa.String(40), nullable=False),
+    sa.Column("model_alias", sa.String(120), nullable=False),
+    sa.Column("calls", sa.Integer(), nullable=False),
+    sa.Column("input_tokens", sa.BigInteger(), nullable=False),
+    sa.Column("output_tokens", sa.BigInteger(), nullable=False),
+    sa.Column("cost_micros", sa.BigInteger(), nullable=False),
+    sa.Column("latency_ms", sa.Integer()),
+    sa.Column("request_hash", sa.String(64)),
+    sa.Column("response", sa.JSON()),
+    sa.Column("created_at", sa.String(40), nullable=False),
+    sa.Column("moved_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now()),
+    info=system(UNATTRIBUTED),
 )
 
 

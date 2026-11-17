@@ -8,11 +8,9 @@ queries = 0
 ["GET /health/background"]
 queries = 0
 
-# Short transactions, one per store read, since documents-service is asked for the file's reading between them.
+# The item, its source, pieces, versions and copy in one transaction; documents-service is asked with none open.
 ["GET /v1/items/{item_id}"]
 queries = 6
-transactions = 5
-connections = 5
 
 # The page, its count, the health GROUP BY, the page's links, and its sources with their item counts.
 ["GET /v1/knowledge-bases"]
@@ -24,11 +22,9 @@ queries = 1
 ["GET /v1/knowledge-bases/refs"]
 queries = 1
 
-# Short transactions, one per store read, since agents-service is asked who uses the base between them.
+# The base's reads in one transaction; agents-service is asked who uses the base with none open.
 ["GET /v1/knowledge-bases/{kb_id}"]
 queries = 8
-transactions = 6
-connections = 6
 
 ["GET /v1/knowledge-bases/{kb_id}/documents"]
 # The base, its links and sources, then the page in SQL: a count, the page, and one per facet (seven); rows are no

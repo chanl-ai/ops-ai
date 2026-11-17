@@ -368,7 +368,7 @@ export function govern(items: Item[], sources: Source[], kbs: KnowledgeBase[]) {
       continue;
     }
     const name = (sid: string) => srcById.get(sid)?.name ?? sid;
-    it.duplicateOf = { itemId: first.id, title: first.title, sourceName: name(first.sourceId) };
+    it.duplicateOf = first.id;
     first.alsoIn = [...(first.alsoIn ?? []), { itemId: it.id, title: it.title, sourceName: name(it.sourceId) }];
   }
 

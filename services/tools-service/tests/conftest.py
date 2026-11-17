@@ -49,7 +49,7 @@ from ops_tools.mock_routes import mocks_router
 from ops_tools.modules.directory import Directory
 from ops_tools.modules.policy import WriteApprovals
 from ops_tools.modules.routes import executions_router, modules_router
-from ops_tools.modules.seed import load
+from ops_tools.modules.seed import catalog_titles, load
 from ops_tools.modules.service import ModuleService
 from ops_tools.modules.workflows import StaticWorkflows, WorkflowDirectory
 from ops_tools.opa import OpaClient
@@ -434,6 +434,9 @@ def build_app(
     accounts.sign_in_scopes = plugins.sign_in_scopes if plugins else None
     # As the service wires them (__main__): a plugin tool's title, its team's account and whether its address waits.
     service.titles = plugins.title_of if plugins else None
+    store.titles = catalog_titles(plugins.title_of if plugins else None)
+    tool_catalog = ToolCatalog(engine)
+    tool_catalog.titles = store.titles
     service.team_connections = plugins.team_connection if plugins else None
     service.installed_plugins = (lambda: sorted(plugins.plugins)) if plugins else None
     service.awaits_sign_in = plugins.awaits_sign_in if plugins else None
@@ -456,7 +459,7 @@ def build_app(
             modules_router(service, directory),
             executions_router(service, directory),
             egress_router(EgressStore(engine)),
-            catalog_router(ToolCatalog(engine)),
+            catalog_router(tool_catalog),
             secrets_router(resolver, modules=ModuleStore(engine), credentials=connections),
             send_policy_router(SendPolicies(engine), directory),
             mcp_links_router(links, registry, directory, settings.tools_public_url),

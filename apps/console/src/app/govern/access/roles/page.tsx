@@ -89,7 +89,7 @@ export default function RolesPage() {
         pending={create.isPending}
         onSubmit={(input) =>
           create.mutateAsync(input).then((made) => {
-            toast.success(`Created ${made.name}`, made.leftOut.length ? { description: `Left out ${made.leftOut.length} secrets, egress and Security-team permissions: only a built-in role holds them.` } : undefined);
+            toast.success(`Created ${made.name}`, (made.leftOut ?? []).length ? { description: `Left out ${(made.leftOut ?? []).length} secrets, egress and Security-team permissions: only a built-in role holds them.` } : undefined);
             router.push(`/govern/access/roles/${encodeURIComponent(made.id)}`);
           })
         }

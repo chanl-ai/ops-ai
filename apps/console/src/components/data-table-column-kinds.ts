@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 /**
  * What a column holds, so every table sizes it the same way: ids, dates and statuses on one line at their own width;
  * a name or title taking the free space; a description up to its own width. Names, descriptions and plain text columns
- * stay on one line and end in an ellipsis, with the full value on hover (`revealTruncated`), so one long value cannot
+ * stay on one line and end in an ellipsis, with the full value on hover (`markTruncated`), so one long value cannot
  * stretch a row or push the other columns off screen. A column whose text a person must read whole sets `wrap: true`
  * and wraps instead. Numbers and money on one line, right-aligned. A kind cell that draws nothing shows a dash:
  * it is the drawn cell that is checked, not the row's value, so a column wording its own empty state ("Not read") keeps it.
@@ -66,12 +66,34 @@ export function kindClass(meta: ColumnMeta | undefined, pin: 'select' | 'name' |
 }
 
 /**
- * Shows the full text of a cell that ends in an ellipsis as its hover title, set when the pointer or focus arrives so
- * a table of many rows does not carry a title on every cell. The text is in the page for a screen reader either way.
+ * Gives every clipped piece of text in a table its full value as a hover title: the cell itself, a link or span inside
+ * it, a custom renderer's own element. Run after each render and each resize, because whether text is clipped depends
+ * on the width the table has now. Clipped means the element's text is wider than its box, so a cell that fits keeps no
+ * title, and a title left from a wider layout is removed. The cell also carries the text when anything inside it is
+ * clipped, so a pointer anywhere on the cell reveals it.
  */
-export function revealTruncated(cell: HTMLElement) {
-  const clipped = cell.scrollWidth > cell.clientWidth || [...cell.querySelectorAll<HTMLElement>('*')].some((e) => e.scrollWidth > e.clientWidth);
-  const text = cell.textContent?.trim();
-  if (clipped && text) cell.title = text;
-  else cell.removeAttribute('title');
+export function markTruncated(root: HTMLElement) {
+  for (const cell of root.querySelectorAll<HTMLElement>('td, th')) {
+    let any = false;
+    for (const el of [cell, ...cell.querySelectorAll<HTMLElement>('*')]) {
+      if (el !== cell && el.closest('svg')) continue;
+      const clipped = el.scrollWidth > el.clientWidth + 1;
+      const text = el.textContent?.trim();
+      if (clipped && text) {
+        any = true;
+        if (el !== cell && el.title !== text) el.title = text;
+      } else if (el !== cell && el.dataset.truncTitle === '1') {
+        el.removeAttribute('title');
+      }
+      if (clipped && text && el !== cell) el.dataset.truncTitle = '1';
+    }
+    const text = cell.textContent?.trim();
+    if (any && text) {
+      cell.title = text;
+      cell.dataset.truncTitle = '1';
+    } else if (cell.dataset.truncTitle === '1') {
+      cell.removeAttribute('title');
+      delete cell.dataset.truncTitle;
+    }
+  }
 }

@@ -68,6 +68,10 @@ async def test_two_tenants_and_two_teams_never_see_each_others_rows(engine: Asyn
                 module(a, "m_all", None, ["read_all"]),
                 module(a, "m_y", "team_y", ["read_b", "write_c"]),
                 module(a, "m_ended", "team_y", ["read_d"]),
+                # One name in a workspace-level module and in team_x's own copy (a built-in app): one row per name, and
+                # a team's own copy is the one a call resolves to, so it wins; a team without one reads the workspace's.
+                module(a, "m_doc_all", None, ["read_doc"]),
+                module(a, "m_doc_x", "team_x", ["read_doc"]),
                 grant(a, "team_x", "m_y", ["read_b"]),
                 grant(a, "team_x", "m_ended", ["read_d"], expires="2000-01-01T00:00:00+00:00"),
             ]
@@ -76,8 +80,8 @@ async def test_two_tenants_and_two_teams_never_see_each_others_rows(engine: Asyn
         # The same module id and team id in another tenant are another tenant's rows.
         await ToolCopies(engine).apply([module(b, "m_own", "team_x", ["read_z"]), grant(b, "team_x", "m_y", ["x"])])
     cases: list[tuple[str, str, list[str]]] = [
-        (a, "team_x", ["m_all/read_all", "m_y/read_b", "m_own/read_x"]),
-        (a, "team_y", ["m_all/read_all", "m_y/read_b", "m_ended/read_d", "m_y/write_c"]),
+        (a, "team_x", ["m_all/read_all", "m_y/read_b", "m_doc_x/read_doc", "m_own/read_x"]),
+        (a, "team_y", ["m_all/read_all", "m_y/read_b", "m_ended/read_d", "m_doc_all/read_doc", "m_y/write_c"]),
         (b, "team_x", ["m_own/read_z"]),
         (b, "team_y", []),
     ]

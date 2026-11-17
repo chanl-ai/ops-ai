@@ -459,7 +459,44 @@
   "list.pastEnd": {
     "body": {
       "data": {
-        "data": [],
+        "data": [
+          {
+            "activity7d": 0,
+            "canEdit": true,
+            "detail": "https://intranet.example",
+            "embed": {
+              "activeKeys": 0,
+              "agentId": "ag_branch",
+              "agentVersion": 1,
+              "origins": [
+                "https://intranet.example"
+              ],
+              "retiredAt": null
+            },
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "wd_branch",
+            "lastActivityAt": null,
+            "name": "Intranet help",
+            "paused": false,
+            "serves": {
+              "behind": 2,
+              "id": "ag_branch",
+              "kind": "agent",
+              "latestVersion": 3,
+              "name": "Branch Concierge",
+              "version": 1
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "chat"
+          }
+        ],
         "facets": {
           "health": {
             "idle": 1,
@@ -523,7 +560,7 @@
         "pagination": {
           "hasNext": false,
           "hasPrev": true,
-          "page": 9,
+          "page": 2,
           "pageSize": 1,
           "total": 2,
           "totalPages": 2

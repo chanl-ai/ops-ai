@@ -12,7 +12,7 @@ call resolves its module across teams, so a team policy would hide rows these re
 
 from __future__ import annotations
 
-from collections.abc import Generator, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta
 from typing import Any, ClassVar, cast
@@ -27,7 +27,9 @@ from ops_service_kit.listing import ListParams
 from ops_store import Guarantee, isolation
 from ops_store.listing import LISTED, ListPage, list_page
 from ops_store.outbox import (
+    DESCRIPTION_MAX,
     Event,
+    TemplateKind,
     ToolChanged,
     ToolModule,
     ToolOperation,
@@ -403,10 +405,35 @@ def served_operations(agg: Aggregate) -> list[dict[str, Any]]:
     return out
 
 
-def catalog_of(agg: Aggregate, *, deleted: bool = False) -> ToolModule:
+# A tool's title as people see it (module, operation name), the grantable list's `tool_title`: the service wires it
+# with the plugin host's manifest titles, which this layer cannot read.
+TitleOf = Callable[[Aggregate, str], str | None]
+
+
+def template_card(agg: Aggregate) -> tuple[TemplateKind, str]:
+    """Where a module comes from and the id of its app card (Apps.cards): a plugin's and a built-in app's card is
+    named by the module's template slot, a custom app's by its account, and a team's own module by the module."""
+    template = str(agg.get("template_id") or "")
+    if template.startswith("plugin:"):
+        return "plugin", template
+    if template.startswith("builtin:"):
+        return "builtin", template
+    if agg.get("connection_id"):
+        return "custom", str(agg["connection_id"])
+    return "custom", f"module:{agg['id']}"
+
+
+def _cut(text: object) -> str | None:
+    words = str(text or "").strip()
+    return None if not words else words if len(words) <= DESCRIPTION_MAX else words[: DESCRIPTION_MAX - 1] + "…"
+
+
+def catalog_of(agg: Aggregate, *, deleted: bool = False, titles: TitleOf | None = None) -> ToolModule:
     """What the agents lane's catalogue copy keeps of a module: its served operations only, so a staged edit Security
-    has not approved never reaches another service's list."""
+    has not approved never reaches another service's list. `titles` names each tool as the grantable list does; without
+    it an operation's title is null."""
     ops = [] if deleted else served_operations(agg)
+    kind, card = template_card(agg)
     return ToolModule(
         id=str(agg["id"]),
         name=str(agg["name"]),
@@ -415,10 +442,14 @@ def catalog_of(agg: Aggregate, *, deleted: bool = False) -> ToolModule:
         owner_team=agg.get("team_id"),
         status=agg.get("status"),
         version=agg.get("version"),
+        template_kind=kind,
+        app_card_id=card,
         operations=[
             ToolOperation(
                 id=str(o["id"]),
                 name=str(o["name"]),
+                title=titles(agg, str(o["name"])) if titles is not None else None,
+                description=_cut(o.get("description")),
                 access=str(o["access"]),
                 requires_approval=bool(o.get("requires_approval")),
                 enabled=bool(o.get("enabled", True)),
@@ -456,7 +487,13 @@ def team_grants(agg: Aggregate) -> dict[str, ToolTeamStateChanged]:
 
 
 async def report_module(
-    c: AsyncConnection, agg: Aggregate, before: Aggregate | None, revision: int, *, deleted: bool = False
+    c: AsyncConnection,
+    agg: Aggregate,
+    before: Aggregate | None,
+    revision: int,
+    *,
+    deleted: bool = False,
+    titles: TitleOf | None = None,
 ) -> None:
     """The catalogue events of one module write, on its transaction: `tool.module.published` for a new module or a new
     version, `tool.module.changed` for any other change the copy holds (or a delete), and `tool.team_state.changed`
@@ -465,12 +502,13 @@ async def report_module(
     The catalogue event goes out on the module's team, or the acting team for a workspace-level module; with neither
     (a start-up install of a plugin) it is left to the agents lane's resync, which reads `catalog_events`."""
     tenant = str(agg["tenant_id"])
-    now = catalog_of(agg, deleted=deleted)
-    was = None if before is None else catalog_of(before)
+    now = catalog_of(agg, deleted=deleted, titles=titles)
+    was = None if before is None else catalog_of(before, titles=titles)
     route = agg.get("team_id") or acting_team()
     if route is not None and now != was:
         new = was is None or now.version != was.version or (now.status == "published" and was.status != "published")
         payload = ToolPublished(**now.model_dump()) if new and not deleted else ToolChanged(**now.model_dump())
+        payload = payload.fitted(revision)
         event = Event(name=payload.kind, tenant_id=tenant, team_id=route, revision=revision, payload=payload)
         await add_event(c, service_outbox, event)
     grants, held = team_grants(agg), {} if before is None else team_grants(before)
@@ -528,9 +566,9 @@ def team_modules() -> sa.ColumnElement[bool]:
     """The acting team's modules and the tenant's workspace-level ones (no team); every module with no acting team.
     The team rule for `tool_modules`, which the database holds only to its tenant (tools_0086)."""
     team = acting_team()
-    if team is None:
-        return sa.true()
     t = tool_modules.c
+    if team is None:
+        return t.team_id.is_(None)
     return sa.or_(t.team_id == team, t.team_id.is_(None))
 
 
@@ -602,6 +640,8 @@ class ModuleStore(Store):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.CAS})
     role = ROLE
     system_role = SYSTEM_ROLE
+    # Set by the service at start (`__main__`), so the catalogue events title tools as the grantable list does.
+    titles: TitleOf | None = None
 
     async def _children(
         self, c: AsyncConnection, tenant_id: str, ids: list[str], within: sa.Select[Any] | None = None
@@ -1008,7 +1048,7 @@ class ModuleStore(Store):
             await add_event(c, service_outbox, **event)
         # A seed refresh keeps revision 0, which no copy would take over its first write; the resync carries it.
         if not (seeded and before is not None):
-            await report_module(c, {**agg, **row}, before, int(row["revision"]))
+            await report_module(c, {**agg, **row}, before, int(row["revision"]), titles=self.titles)
         # A built-in app's card and a removed plugin's are built from its team's modules (Apps.cards).
         await forget_cards(c, row["tenant_id"], _team_of(row.get("team_id")))
         return {**agg, "revision": row["revision"]}
@@ -1033,7 +1073,7 @@ class ModuleStore(Store):
             done = await c.execute(tool_modules.delete().where(t.tenant_id == tenant_id, t.id == module_id))
             await forget_cards(c, tenant_id, _team_of(found["team_id"]))
             # One past the last write, as a copy takes a delete only over a lower revision.
-            await report_module(c, found, found, int(found["revision"]) + 1, deleted=True)
+            await report_module(c, found, found, int(found["revision"]) + 1, deleted=True, titles=self.titles)
             return done.rowcount > 0
 
     async def _held(self, c: AsyncConnection, tenant_id: str, module_id: str) -> Aggregate | None:

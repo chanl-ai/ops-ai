@@ -182,8 +182,10 @@ class ToolCopies(RuntimeStore):
 
     async def visible(self, team: str | None) -> list[CopiedTool]:
         """Every live operation `team` may see in the current tenant, by name then key: its own modules,
-        workspace-level ones, and modules another team granted it whose grant has not ended. Names its tenant and
-        team itself; the row policies hold it to them as well."""
+        workspace-level ones, and modules another team granted it whose grant has not ended. One row per name, since a
+        grant names a tool by name: the team's own module first (its copy of a built-in app is the one a call resolves
+        to, as tools-service's grantable list decides), then a workspace-level one, then a granted one, the lowest
+        module id within each. Names its tenant and team itself; the row policies hold it to them as well."""
         m, o, g = tool_catalog, tool_catalog_operations, tool_team_state
         tenant = current_tenant()
         grant = (
@@ -224,25 +226,37 @@ class ToolCopies(RuntimeStore):
         )
         async with self.tx() as c:
             rows = (await c.execute(q)).all()
-        out: list[CopiedTool] = []
+        out: dict[str, CopiedTool] = {}
         for r in rows:
             mine = r.owner_team is None or r.owner_team == team
             ops = None if mine else tuple(str(n) for n in cast(list[object], r.operations or []))
             if ops is not None and r.op_name not in ops:
                 continue  # a grant covers the operations it names
-            out.append(
-                CopiedTool(
-                    str(r.id),
-                    str(r.name),
-                    r.title,
-                    r.app,
-                    r.owner_team,
-                    str(r.op_id),
-                    str(r.op_name),
-                    str(r.access),
-                    bool(r.requires_approval),
-                    bool(r.enabled),
-                    ops,
-                )
+            held = out.get(str(r.op_name))
+            if held is not None and _rank(held, team) <= _rank_of(r.owner_team, ops, team):
+                continue
+            out[str(r.op_name)] = CopiedTool(
+                str(r.id),
+                str(r.name),
+                r.title,
+                r.app,
+                r.owner_team,
+                str(r.op_id),
+                str(r.op_name),
+                str(r.access),
+                bool(r.requires_approval),
+                bool(r.enabled),
+                ops,
             )
-        return out
+        return sorted(out.values(), key=lambda t: (t.name, t.module_id, t.operation_id))
+
+
+def _rank_of(owner_team: str | None, granted: tuple[str, ...] | None, team: str | None) -> int:
+    """Which of two modules serving one name a team reads: 0 its own, 1 workspace-level, 2 granted by another team."""
+    if granted is not None:
+        return 2
+    return 0 if owner_team is not None and owner_team == team else 1
+
+
+def _rank(tool: CopiedTool, team: str | None) -> int:
+    return _rank_of(tool.owner_team, tool.granted, team)

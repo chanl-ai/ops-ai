@@ -119,7 +119,7 @@ export type EngineRunRow = Awaited<ReturnType<OpsAI['raw']['agents']['workflows_
 export const useEngineRuns = (p: EngineRunsParams) =>
   usePagedQuery({ queryKey: ek.runs(p), queryFn: () =>
       sdk((ops) =>
-        ops.raw.agents.workflows_list_engine_runs({ query: { workflowId: p.workflowId, status: p.status?.length ? p.status : undefined, page: p.page ?? 1, pageSize: p.pageSize ?? 20 } }),
+        ops.raw.agents.workflows_list_engine_runs({ query: { workflowId: p.workflowId ? [p.workflowId] : undefined, status: p.status?.length ? p.status : undefined, page: p.page ?? 1, pageSize: p.pageSize ?? 20 } }),
       ),
     refetchInterval: 5_000,
   });

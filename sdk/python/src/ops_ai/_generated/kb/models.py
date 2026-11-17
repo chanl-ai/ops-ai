@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, NotRequired
+from typing import Any, Literal, NotRequired, TypeAlias
 
 from typing_extensions import TypedDict
 
@@ -43,6 +43,13 @@ class BackgroundProcessOut(TypedDict, closed=True):
     waiting: int | None
 
 
+class ChangeCitation(TypedDict, closed=True):
+    citations30D: int
+    tests: int
+    workflowId: str
+    workflowName: str
+
+
 class ChangeViewCounts(TypedDict, closed=True):
     conflicts: int
     mine: int
@@ -55,48 +62,14 @@ class DecideIn(TypedDict, closed=True):
     ids: list[str]
 
 
-class DocumentRow(TypedDict, closed=True):
-    acl: list[str]
-    chunkCount: int
-    collection: str
-    digest: str
-    docType: Literal["pdf", "word", "spreadsheet", "slides", "web", "text", "typed", "app", "other"]
-    duplicateOf: NotRequired[str | None]
-    effectiveDate: str
-    error: NotRequired[str | None]
-    errorClass: NotRequired[str | None]
-    externalId: str
-    family: str
-    fileId: NotRequired[str | None]
-    folder: NotRequired[str | None]
-    freshness: str
-    id: str
-    metadata: dict[str, str]
-    mimeType: str
-    modifiedAt: str
-    owner: str
-    pageCount: NotRequired[int | None]
-    path: str
-    processedAt: NotRequired[str | None]
-    queries30d: int
-    reviewBy: str
-    sensitivity: str
-    sizeBytes: int
-    sourceId: str
-    sourceName: str
-    status: str
-    tags: list[str]
-    title: str
-    url: NotRequired[str | None]
-    verified: bool
-    version: str
-    versionStatus: str
-    warning: NotRequired[str | None]
-
-
 class DraftEdit(TypedDict, closed=True):
     answer: str
     question: str
+
+
+class DuplicateCopy(TypedDict, closed=True):
+    sourceName: str
+    title: str
 
 
 class EmbeddingCoverage(TypedDict, closed=True):
@@ -162,6 +135,7 @@ class Item(TypedDict, closed=True):
     chunkCount: int
     collection: str
     digest: str
+    duplicateCopy: NotRequired[DuplicateCopy | None]
     duplicateOf: NotRequired[str | None]
     effectiveDate: str
     error: NotRequired[str | None]
@@ -194,46 +168,27 @@ class Item(TypedDict, closed=True):
     warning: NotRequired[str | None]
 
 
-class ItemWithDetail(TypedDict, closed=True):
-    acl: list[str]
-    chunkCount: int
-    collection: str
-    detail: dict[str, Any]
-    digest: str
-    duplicateOf: NotRequired[str | None]
-    effectiveDate: str
-    error: NotRequired[str | None]
-    errorClass: NotRequired[str | None]
-    externalId: str
-    family: str
-    fileId: NotRequired[str | None]
-    folder: NotRequired[str | None]
-    freshness: str
-    id: str
-    metadata: dict[str, str]
-    mimeType: str
-    modifiedAt: str
-    owner: str
-    pageCount: NotRequired[int | None]
-    path: str
-    processedAt: NotRequired[str | None]
-    queries30d: int
-    reading: NotRequired[dict[str, Any] | None]
-    reviewBy: str
-    sensitivity: str
-    settingsUsed: NotRequired[dict[str, Any] | None]
-    sizeBytes: int
-    sourceId: str
-    sourceName: str
-    sourceType: str
-    status: str
-    tags: list[str]
-    title: str
-    url: NotRequired[str | None]
-    verified: bool
-    version: str
-    versionStatus: str
-    warning: NotRequired[str | None]
+class ItemRevision(TypedDict, closed=True):
+    author: str
+    date: str
+    n: int
+    note: NotRequired[str | None]
+    sizeDelta: int
+
+
+class ItemSettingsUsed(TypedDict, closed=True):
+    current: bool
+    indexedWith: str | None
+    preset: str
+    strategies: list[str]
+
+
+class ItemUnit(TypedDict, closed=True):
+    kind: str
+    text: str
+
+
+JsonValue: TypeAlias = Any
 
 
 class KbSourceLink(TypedDict, closed=True):
@@ -398,6 +353,29 @@ class PassageOut(TypedDict, closed=True):
     version: str
 
 
+class PlaygroundChunk(TypedDict, closed=True):
+    chunkId: str
+    documentId: str
+    documentTitle: str
+    lanes: dict[str, float]
+    location: str
+    rejected: bool
+    score: float
+    sourceName: str
+    text: str
+    version: str
+
+
+class PlaygroundCitation(TypedDict, closed=True):
+    documentId: str
+    n: int
+    page: NotRequired[int | None]
+    section: str
+    snippet: str
+    title: str
+    version: str
+
+
 class PluginSource(TypedDict, closed=True):
     id: str
     kbIds: list[str]
@@ -433,6 +411,14 @@ class Reader(TypedDict, closed=True):
     slug: str
 
 
+class ReadingPage(TypedDict, closed=True):
+    blocks: dict[str, int]
+    number: int | None
+    ocrConfidence: NotRequired[float | None]
+    readBy: str | None
+    removedChars: int
+
+
 class RerankOut(TypedDict, closed=True):
     model: str
     ms: NotRequired[int]
@@ -446,6 +432,20 @@ class RewriteOut(TypedDict, closed=True):
     ms: NotRequired[int]
     rewritten: NotRequired[str | None]
     skipped: NotRequired[str | None]
+
+
+class RunError(TypedDict, closed=True):
+    errorClass: str
+    itemId: NotRequired[str | None]
+    itemTitle: NotRequired[str | None]
+    message: str
+    phase: str
+
+
+class RunPhase(TypedDict, closed=True):
+    durationMs: int
+    name: str
+    status: Literal["done", "running", "skipped", "failed"]
 
 
 class Scope(TypedDict, closed=True):
@@ -561,11 +561,11 @@ class SyncRun(TypedDict, closed=True):
     cancelledBy: NotRequired[str | None]
     counts: dict[str, int]
     durationSec: float
-    errors: list[dict[str, Any]]
+    errors: list[RunError]
     finishedAt: NotRequired[str | None]
     id: str
     log: list[str]
-    phases: list[dict[str, Any]]
+    phases: list[RunPhase]
     sourceId: str
     startedAt: str
     status: str
@@ -634,6 +634,46 @@ class BackgroundHealthOut(TypedDict, closed=True):
     processes: list[BackgroundProcessOut]
 
 
+class DocumentRow(TypedDict, closed=True):
+    acl: list[str]
+    chunkCount: int
+    collection: str
+    digest: str
+    docType: Literal["pdf", "word", "spreadsheet", "slides", "web", "text", "typed", "app", "other"]
+    duplicateCopy: NotRequired[DuplicateCopy | None]
+    duplicateOf: NotRequired[str | None]
+    effectiveDate: str
+    error: NotRequired[str | None]
+    errorClass: NotRequired[str | None]
+    externalId: str
+    family: str
+    fileId: NotRequired[str | None]
+    folder: NotRequired[str | None]
+    freshness: str
+    id: str
+    metadata: dict[str, str]
+    mimeType: str
+    modifiedAt: str
+    owner: str
+    pageCount: NotRequired[int | None]
+    path: str
+    processedAt: NotRequired[str | None]
+    queries30d: int
+    reviewBy: str
+    sensitivity: str
+    sizeBytes: int
+    sourceId: str
+    sourceName: str
+    status: str
+    tags: list[str]
+    title: str
+    url: NotRequired[str | None]
+    verified: bool
+    version: str
+    versionStatus: str
+    warning: NotRequired[str | None]
+
+
 class EnvelopeAddedDocuments(TypedDict, closed=True):
     data: AddedDocuments
     success: Literal[True]
@@ -646,11 +686,6 @@ class EnvelopeAiEstimate(TypedDict, closed=True):
 
 class EnvelopeEventOut(TypedDict, closed=True):
     data: EventOut
-    success: Literal[True]
-
-
-class EnvelopeItemWithDetail(TypedDict, closed=True):
-    data: ItemWithDetail
     success: Literal[True]
 
 
@@ -718,11 +753,39 @@ class HTTPValidationError(TypedDict):
     detail: NotRequired[list[ValidationError]]
 
 
+class ItemChunk(TypedDict, closed=True):
+    index: int
+    kind: str
+    location: str
+    metadata: dict[str, JsonValue]
+    page: NotRequired[int | None]
+    text: str
+    tokens: int
+    units: list[ItemUnit]
+
+
+class ItemReading(TypedDict, closed=True):
+    ocr: str
+    pages: list[ReadingPage]
+    readerVersion: str | None
+
+
+class ItemVersion(TypedDict, closed=True):
+    allowed: NotRequired[list[JsonValue] | None]
+    digest: str
+    effectiveDate: str
+    itemId: str
+    sourceName: str
+    status: str
+    title: str
+    version: str
+
+
 class KnowledgeChange(TypedDict, closed=True):
     after: str
     before: str
     canDecide: bool
-    citedBy: list[dict[str, Any]]
+    citedBy: list[ChangeCitation]
     createdAt: str
     decidedAt: NotRequired[str | None]
     decidedBy: NotRequired[str | None]
@@ -779,8 +842,8 @@ class ListResultSyncRun(TypedDict, closed=True):
 
 class PlaygroundAnswer(TypedDict, closed=True):
     answer: str
-    chunks: list[dict[str, Any]]
-    citations: list[dict[str, Any]]
+    chunks: list[PlaygroundChunk]
+    citations: list[PlaygroundCitation]
     cost: SearchCost
     id: str
     lanes: Lanes
@@ -997,6 +1060,56 @@ class EnvelopeListKnowledgeChange(TypedDict, closed=True):
     success: Literal[True]
 
 
+class ItemDetail(TypedDict, closed=True):
+    chunks: list[ItemChunk]
+    content: str
+    revisions: list[ItemRevision]
+    versions: list[ItemVersion]
+
+
+class ItemWithDetail(TypedDict, closed=True):
+    acl: list[str]
+    chunkCount: int
+    collection: str
+    detail: ItemDetail
+    digest: str
+    duplicateCopy: NotRequired[DuplicateCopy | None]
+    duplicateOf: NotRequired[str | None]
+    effectiveDate: str
+    error: NotRequired[str | None]
+    errorClass: NotRequired[str | None]
+    externalId: str
+    family: str
+    fileId: NotRequired[str | None]
+    folder: NotRequired[str | None]
+    freshness: str
+    id: str
+    metadata: dict[str, str]
+    mimeType: str
+    modifiedAt: str
+    owner: str
+    pageCount: NotRequired[int | None]
+    path: str
+    processedAt: NotRequired[str | None]
+    queries30d: int
+    reading: NotRequired[ItemReading | None]
+    reviewBy: str
+    sensitivity: str
+    settingsUsed: NotRequired[ItemSettingsUsed | None]
+    sizeBytes: int
+    sourceId: str
+    sourceName: str
+    sourceType: str
+    status: str
+    tags: list[str]
+    title: str
+    url: NotRequired[str | None]
+    verified: bool
+    version: str
+    versionStatus: str
+    warning: NotRequired[str | None]
+
+
 class KbSourceView(TypedDict, closed=True):
     itemsContributed: int
     rules: list[dict[str, Any]]
@@ -1050,6 +1163,11 @@ class ListResultSourceRow(TypedDict, closed=True):
     data: list[SourceRow]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
+
+
+class EnvelopeItemWithDetail(TypedDict, closed=True):
+    data: ItemWithDetail
+    success: Literal[True]
 
 
 class EnvelopeKnowledgeBaseDetail(TypedDict, closed=True):

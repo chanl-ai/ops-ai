@@ -352,7 +352,7 @@ class ExtractionsStore(Store):
         t = extractions
         query = (
             sa.select(*ROW)
-            .where(t.c.status.in_(PENDING), any_team(t, "a restart picks up every team's"))
+            .where(t.c.status.in_(PENDING), any_team(t, RECOVER_PENDING))
             .order_by(extractions.c.asked_at)
         )
         async with self.system_tx(RECOVER_PENDING) as c:

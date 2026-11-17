@@ -193,6 +193,8 @@ RUNTIME_GRANTS: dict[str, Grants] = {
         "eval_runs": (_SI, ()),
         "form_links": (_SIU, ()),
         "message_memory_use": (_SI, ()),
+        # Rows no tenant can be named for (agents 0104): no store reads them, so no tenant transaction holds them.
+        "model_call_records_unattributed": ((), ()),
         "ops_checkpoint_fences": (_SIU, ()),
         "poll_cursors": (_SIU, ()),
         "review_assignments": (_SI, ()),
@@ -204,6 +206,7 @@ RUNTIME_GRANTS: dict[str, Grants] = {
         "task_types": (_SIU, ()),
         "team_default_agents": (_SIU, ()),
         "template_copies": (_SIU, ()),
+        "thread_budgets_unattributed": ((), ()),
         "thread_leases": (_SIU, ()),
         "timers": (_SIU, ()),
         # A trigger event is settled in place (agents 0089, 0091); what fired it is never rewritten.

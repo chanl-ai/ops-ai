@@ -13,7 +13,7 @@ from ops_service_kit.http import Out
 from ops_store.outbox import ToolPublished, ToolTeamStateChanged
 from ops_store.team_scope import any_team
 
-from .modules import Aggregate, ModuleStore, catalog_of, team_grants, tool_modules
+from .modules import Aggregate, ModuleStore, TitleOf, catalog_of, team_grants, tool_modules
 
 # Why the read crosses teams: a copy holds every team's modules of the tenant, and each read of it applies the team.
 RESYNC = "a copy of the tool catalogue is rebuilt from every team's modules of the tenant"
@@ -36,10 +36,10 @@ class CatalogPage(Out):
     next_cursor: str | None
 
 
-def catalog_events(agg: Aggregate) -> list[CatalogEvent]:
-    """A module as it stands, as the events that report it."""
+def catalog_events(agg: Aggregate, titles: TitleOf | None = None) -> list[CatalogEvent]:
+    """A module as it stands, as the events that report it, titled as `report_module` titles them."""
     tenant, revision = str(agg["tenant_id"]), int(agg["revision"])
-    module = ToolPublished(**catalog_of(agg).model_dump())
+    module = ToolPublished(**catalog_of(agg, titles=titles).model_dump()).fitted(revision)
     owner = agg.get("team_id")
     out = [CatalogEvent(name=module.kind, tenant_id=tenant, team_id=owner, revision=revision, payload=module)]
     for team, state in sorted(team_grants(agg).items()):
@@ -57,5 +57,5 @@ class ToolCatalog(ModuleStore):
             rows = [dict(r) for r in (await c.execute(q)).mappings()]
             more, rows = len(rows) > limit, rows[:limit]
             kids = await self._children(c, tenant_id, [str(r["id"]) for r in rows])
-        items = [e for r in rows for e in catalog_events({**r, **kids[str(r["id"])]})]
+        items = [e for r in rows for e in catalog_events({**r, **kids[str(r["id"])]}, self.titles)]
         return CatalogPage(items=items, next_cursor=str(rows[-1]["id"]) if more else None)

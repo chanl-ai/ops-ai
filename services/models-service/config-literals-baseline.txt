@@ -1,5 +1,3 @@
-# 4 literal timeouts and HTTP clients built in services/models-service (scripts/check_config_literals.py). A row may only fall.
+# 2 literal timeouts and HTTP clients built in services/models-service (scripts/check_config_literals.py). A row may only fall.
 1 client services/models-service/src/ops_models/app.py
 1 timeout services/models-service/src/ops_models/app.py
-1 client services/models-service/src/ops_models/providers.py
-1 timeout services/models-service/src/ops_models/providers.py

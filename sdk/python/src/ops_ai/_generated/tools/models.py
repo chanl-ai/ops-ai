@@ -1175,14 +1175,17 @@ class ToolModule(TypedDict, closed=True):
 
 class ToolOperation(TypedDict, closed=True):
     access: str
+    description: NotRequired[str | None]
     enabled: NotRequired[bool]
     id: str
     name: str
     requiresApproval: NotRequired[bool]
+    title: NotRequired[str | None]
 
 
 class ToolPublished(TypedDict, closed=True):
     app: NotRequired[str | None]
+    appCardId: NotRequired[str | None]
     deleted: NotRequired[bool]
     id: str
     kind: NotRequired[Literal["tool.module.published"]]
@@ -1190,7 +1193,9 @@ class ToolPublished(TypedDict, closed=True):
     operations: NotRequired[list[ToolOperation]]
     ownerTeam: NotRequired[str | None]
     status: NotRequired[str | None]
+    templateKind: NotRequired[Literal["builtin", "plugin", "custom"] | None]
     title: NotRequired[str | None]
+    truncated: NotRequired[bool]
     version: NotRequired[str | None]
 
 
@@ -1231,7 +1236,8 @@ class ToolTeamStateChanged(TypedDict, closed=True):
     kind: NotRequired[Literal["tool.team_state.changed"]]
     moduleId: str
     operations: NotRequired[list[str]]
-    via: Literal["approval"]
+    via: Literal["approval", "added"]
+    waits: NotRequired[list[str]]
 
 
 class ToolUser(TypedDict, closed=True):

@@ -8,14 +8,17 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy import event
 
-from ops_models.store import ModelKeys
+from ops_models.store import CallLog, ModelKeys
 from ops_service_kit.logging import captured_logging
+from ops_store import isolation
 
 from .conftest import Models
 
@@ -157,10 +160,15 @@ async def test_a_stop_right_after_the_provider_answered_still_records_the_spend(
     assert await models.spent(key_id) > 0, "the stop dropped the spend the provider charged"
 
 
-async def test_a_settle_that_fails_still_leaves_the_calls_row(models: Models) -> None:
+@pytest.mark.parametrize("per_tenant", [False, True], ids=["one_budget", "per_tenant"])
+async def test_a_settle_that_fails_still_leaves_the_calls_row(models: Models, per_tenant: bool) -> None:
     """The settle's transaction fails after the provider answered: the call still has its one row, an error with the
-    usage the provider charged, so the log never shows fewer calls than were made."""
+    usage the provider charged, so the log never shows fewer calls than were made; and every ledger records that cost
+    once: the key's spent total, the tenant's share, and the period totals the day and run caps read."""
     key_id, secret = await models.key(budget="5")
+    keys = ModelKeys(models.engine)
+    if per_tenant:
+        await keys.set_tenant_budget(key_id, Decimal("2"))
     failed: list[bool] = []
 
     def fail_once() -> None:
@@ -178,3 +186,10 @@ async def test_a_settle_that_fails_still_leaves_the_calls_row(models: Models) ->
     rows = await models.calls(key_id)
     assert [(r["outcome"], r["reason"]) for r in rows] == [("error", "settle_failed")], rows
     assert rows[0]["inputTokens"] > 0, rows
+    charged = Decimal(rows[0]["cost"])
+    assert charged > 0, rows
+    today = (await CallLog(models.engine).totals(key_id, datetime.now(UTC))).today
+    with isolation.scope("local", None):
+        share = (await keys.tenant_share(key_id, "local", Decimal("2"))).spent if per_tenant else charged
+    ledgers = {"period totals": today, "key spent": await models.spent(key_id), "tenant share": share}
+    assert ledgers == dict.fromkeys(ledgers, charged), f"the ledgers disagree on the {charged} charged: {ledgers}"

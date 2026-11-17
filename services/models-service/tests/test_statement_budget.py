@@ -5,7 +5,7 @@ provider key's model list), which the budget's service-call count cannot see, si
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator
 from pathlib import Path
 from uuid import uuid4
 
@@ -59,35 +59,21 @@ def app(models: Models, held: list[int], tenant: str) -> FastAPI:
     return built
 
 
-class Caller:
-    """The test's client as the budget calls it. The provider key routes are an account admin's, and every other GET
-    a service's, so a path under /v1/provider-keys goes without the service token; its model list names the provider,
-    a query the budget's path template cannot carry."""
-
-    def __init__(self, client: httpx.AsyncClient) -> None:
-        self.client = client
-
-    async def get(self, url: str, *, headers: Mapping[str, str]) -> httpx.Response:
-        if not url.startswith("/v1/provider-keys"):
-            return await self.client.get(url, headers=headers)
-        person = {k: v for k, v in headers.items() if k.lower() != "authorization"}
-        query = {"provider": "openai"} if url.endswith("/models") else None
-        return await self.client.get(url, headers=person, params=query)
-
-
 @pytest.fixture
-async def client(app: FastAPI) -> AsyncIterator[Caller]:
+async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
     hooks = {"response": [response_checker(app)]}
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://models", event_hooks=hooks) as http:
-        yield Caller(http)
+        yield http
 
 
 @pytest.fixture
-def seed_team(app: FastAPI, client: Caller, models: Models) -> SeedTeam:
+def seed_team(app: FastAPI, client: httpx.AsyncClient, models: Models) -> SeedTeam:
     """`n` more of each list: connections, aliases and one alias's versions, model keys, calls on one key, and the
-    account's provider keys. The versioned alias and a provider key share one name, since both paths name `{name}`."""
-    http = client.client
+    account's provider keys. The versioned alias and a provider key share one name, since both paths name `{name}`.
+    A request with no bearer token is an account admin (`app`), who reads the provider keys and connections; the
+    routes budgets.toml marks `caller = "service"` are called with the service token."""
+    http = client
     name = f"budget-{uuid4().hex[:8]}"
     on_app = Models(http, models.engine, app)
 
@@ -109,7 +95,7 @@ def seed_team(app: FastAPI, client: Caller, models: Models) -> SeedTeam:
             await on_app.key()
             assert (await on_app.complete(secret)).status_code == 200
             assert (await http.put(f"/v1/provider-keys/{tag}", json={"value": KEY})).status_code == 200
-        return Seeded(headers=SERVICE, ids={"name": name})
+        return Seeded(headers={}, ids={"name": name}, service_headers=SERVICE)
 
     return seed
 

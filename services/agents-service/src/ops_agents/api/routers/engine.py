@@ -1201,11 +1201,11 @@ async def list_engine_runs(
     rt: Rt,
     me: Me,
     q: ListQuery,
-    workflow_id: Annotated[str | None, Query(alias="workflowId")] = None,
+    workflow_id: Annotated[list[str] | None, Query(alias="workflowId")] = None,
     status: Annotated[list[str] | None, Query()] = None,
 ) -> JSONResponse:
-    """The selected team's runs on the shared list contract, newest first, then by id; `workflowId` keeps one
-    workflow's, `status` repeats to keep several; `facets.status` and `facets.workflowId` count the runs per status
+    """The selected team's runs on the shared list contract, newest first, then by id; `workflowId` and `status`
+    repeat to keep several; `facets.status` and `facets.workflowId` count the runs per status
     and per workflow under the other filters, and `labels.workflowId` names each counted workflow, so the workflow
     filter is filled from this reply. A scoped API key lists its own workflow's runs only.
     No request transaction: people's names and the masking policy come from platform-service, with none open."""
@@ -1213,7 +1213,7 @@ async def list_engine_runs(
     del status
     pinned = None
     if (scope := key_scope(me)) is not None:
-        if scope[0] != "workflow" or workflow_id not in (None, scope[1]):
+        if scope[0] != "workflow" or any(w != scope[1] for w in workflow_id or []):
             nothing = paged(
                 [], 0, q.page, q.page_size, facets={"status": {}, "workflowId": {}}, labels={"workflowId": {}}
             )

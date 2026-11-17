@@ -321,7 +321,8 @@ transactions = 18
 connections = 18
 
 ["GET /v1/widget-deployments"]
-queries = 1
+# The list, its conversations and its keys: 1 was measured while the seed made no deployment.
+queries = 3
 
 ["GET /v1/widget-deployments/{deployment_id}/keys"]
 not_budgeted = "needs a widget deployment; the budget seed makes none yet (a missing id answers 404 and measures nothing)"

@@ -37,6 +37,7 @@ from ops_files.models import (
     PurposeLimit,
     ReadRequest,
     ReadRequestIn,
+    Reply,
     StorageLocation,
     UploadRequest,
     UploadTicket,
@@ -120,7 +121,7 @@ class Health(Out):
     reason: str | None = None
 
 
-class FileRow(Out):
+class FileRow(Reply):
     """A list row: the file record without versions and references."""
 
     id: str

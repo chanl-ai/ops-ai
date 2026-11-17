@@ -97,6 +97,7 @@ from .schemas import (
 from .store import SENSITIVITY, Aliases, CallLog, ModelKeys, ProviderKeyStore, Providers, cleared
 from .store.aliases import AliasRow, ServingAlias
 from .store.keys import KeyRow
+from .store.provider_keys import ProviderKeyRow
 from .store.providers import ProviderRow
 
 
@@ -337,13 +338,13 @@ def _provider_view(r: ProviderRow) -> ProviderOut:
     )
 
 
-def _provider_key_view(r: Mapping[str, Any]) -> ProviderKeyOut:
+def _provider_key_view(r: ProviderKeyRow) -> ProviderKeyOut:
     return ProviderKeyOut(
-        name=r["name"],
-        version=r["version"],
-        created_by=r["created_by"],
-        created_at=r["created_at"].isoformat(),
-        rotated_at=_iso(r["rotated_at"]),
+        name=r.name,
+        version=r.version,
+        created_by=r.created_by,
+        created_at=r.created_at.isoformat(),
+        rotated_at=_iso(r.rotated_at),
     )
 
 
@@ -451,10 +452,9 @@ def create_models_app(
     keys = ProviderKeys(key_vault, provider_secrets)
     access = Access()
 
-    # TODO(auth): every /v1/models/* route below takes a calling service's Ed25519 token (CurrentService), the same
-    # as agents-service's alias lookup and key admission. Providers, keys and alias versions are also what a person
-    # administers: when the console gets a models admin page, those routes move to CurrentPrincipal with an admin
-    # role check, and only aliases, admit and calls stay service-only.
+    # The /v1/models/* routes under `guard` take only a calling service's Ed25519 token: a person's token, an API key or
+    # none is refused with 401 before the route runs, so no person's permission is decided here. A route a person
+    # calls (provider connections, provider keys) takes the tenant caller and asks can(), as `connections_caller`.
     guard = Depends(current_service)
 
     async def connections_caller(p: CurrentTenantCaller) -> Principal:
@@ -561,7 +561,7 @@ def create_models_app(
         """The account's model provider keys by name; a value is never returned. `search` and `ids` match the name."""
         account_admin(p)
         page = await key_vault.page(p.tenant_id, q)
-        views = [_provider_key_view(r.model_dump()) for r in page.data]
+        views = [_provider_key_view(r) for r in page.data]
         return typed(ListResult[ProviderKeyOut](data=views, pagination=page.pagination, facets=page.facets))
 
     @app.put(
@@ -892,7 +892,7 @@ def create_models_app(
             """The call's one row: the named tenant's, written as that tenant; a call that named none has no tenant's
             log to land in (`CallLog.record`)."""
             row = {
-                "id": new_id("mc"),
+                "id": values.pop("id", None) or new_id("mc"),
                 "input_tokens": values.pop("input_tokens", 0),
                 "output_tokens": values.pop("output_tokens", 0),
                 "cost": values.pop("cost", Decimal(0)),
@@ -926,22 +926,29 @@ def create_models_app(
             task.add_done_callback(lambda done: settling.pop(done, None))
             await asyncio.shield(task)
 
+        async def _charge(self, outcome: str, reason: str | None, call_id: str, **values: Any) -> None:
+            """The call's row, the period totals its caps read, the key's spent total and the tenant's share, in the
+            open transaction: every ledger records the cost together or none does. The row's id is the settle's one id,
+            so a second attempt after a first that committed fails on the row and adds no spend again."""
+            spend: Decimal = values["cost"]
+            if self.key.tenant_budget is not None and self.tenant is not None:
+                with isolation.scope(self.tenant, None):
+                    await key_store.spend(self.key.id, spend, tenant_id=self.tenant)
+            else:
+                await key_store.spend(self.key.id, spend)
+            await self.log(outcome, reason, id=call_id, **values, **self.version)
+
         async def _settle(self, input_tokens: int, output_tokens: int, spend: Decimal) -> None:
-            tenant = self.tenant if self.key.tenant_budget is not None else None
+            call_id = new_id("mc")
+            charged = {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost": spend}
             try:
                 async with isolation.request_transaction():
                     await self.observed()
-                    if tenant is not None:
-                        with isolation.scope(tenant, None):
-                            await key_store.spend(self.key.id, spend, tenant_id=tenant)
-                    else:
-                        await key_store.spend(self.key.id, spend)
                     # An Azure answer from another region than its connection names is recorded on the row, not
                     # refused.
                     provider = self.provider
                     mismatch = provider.region_mismatch if isinstance(provider, AzureOpenAIProvider) else None
-                    values = {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost": spend}
-                    await self.log("ok", mismatch[:64] if mismatch else None, **values, **self.version)
+                    await self._charge("ok", mismatch[:64] if mismatch else None, call_id, **charged)
             except Exception:
                 log.exception(
                     "model_call_settle_failed",
@@ -953,10 +960,11 @@ def create_models_app(
                     output_tokens=output_tokens,
                     cost=str(spend),
                 )
-                # The call keeps its one row, an error with what the provider charged, in a transaction of its own.
+                # The call keeps its one row, an error with what the provider charged, and every ledger its cost, in a
+                # transaction of its own.
                 try:
-                    charged = {"input_tokens": input_tokens, "output_tokens": output_tokens, "cost": spend}
-                    await self.log("error", "settle_failed", **charged, **self.version)
+                    async with isolation.request_transaction():
+                        await self._charge("error", "settle_failed", call_id, **charged)
                 except Exception:
                     log.exception("model_call_row_lost", key_id=self.key.id, tenant_id=self.tenant)
                 raise

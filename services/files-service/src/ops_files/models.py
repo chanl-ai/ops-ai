@@ -38,7 +38,14 @@ FileReferenceType = Literal["source", "case", "chat", "eval_set", "test_set", "e
 FileStatus = Literal["uploading", "available", "rejected"]
 
 
-class StorageLocation(Out):
+class Reply(Out):
+    """A reply model. Every field is sent, defaulted ones too (no route drops a None), so its schema lists each as
+    required and a generated client reads it as present."""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+
+class StorageLocation(Reply):
     backend: StorageBackendName
     environment: StorageEnvironment
     container: str
@@ -48,7 +55,7 @@ class StorageLocation(Out):
     locked: bool = False
 
 
-class FileReference(Out):
+class FileReference(Reply):
     type: FileReferenceType
     id: str
     name: str
@@ -66,14 +73,14 @@ class FileVersion(Out):
     current: bool
 
 
-class FileScan(Out):
+class FileScan(Reply):
     status: ScanStatus = "pending"
     engine: str | None = None
     at: datetime | None = None
     detail: str | None = None
 
 
-class FileRetention(Out):
+class FileRetention(Reply):
     class_id: str
     class_name: str
     delete_after: date | None = None
@@ -101,7 +108,7 @@ class FileDataIn(In):
     read_at: datetime
 
 
-class FileData(Out):
+class FileData(Reply):
     """What was recorded from a file, as FileDataIn took it."""
 
     type_id: str | None = None
@@ -141,7 +148,7 @@ class ReadRequest(Out):
     requested_at: datetime
 
 
-class FileRecord(Out):
+class FileRecord(Reply):
     id: str
     name: str
     mime: str

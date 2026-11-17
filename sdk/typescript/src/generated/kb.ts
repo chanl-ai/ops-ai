@@ -864,6 +864,20 @@ export interface components {
             /** Waiting */
             waiting: number | null;
         };
+        /**
+         * ChangeCitation
+         * @description A workflow whose runs cited the changed passage; nothing records citations yet, so the list is empty.
+         */
+        ChangeCitation: {
+            /** Citations30D */
+            citations30D: number;
+            /** Tests */
+            tests: number;
+            /** Workflowid */
+            workflowId: string;
+            /** Workflowname */
+            workflowName: string;
+        };
         /** ChangeList */
         ChangeList: {
             /** Data */
@@ -913,6 +927,7 @@ export interface components {
              * @enum {string}
              */
             docType: "pdf" | "word" | "spreadsheet" | "slides" | "web" | "text" | "typed" | "app" | "other";
+            duplicateCopy?: components["schemas"]["DuplicateCopy"] | null;
             /** Duplicateof */
             duplicateOf?: string | null;
             /** Effectivedate */
@@ -984,6 +999,16 @@ export interface components {
             answer: string;
             /** Question */
             question: string;
+        };
+        /**
+         * DuplicateCopy
+         * @description The item a duplicate repeats, named as the caller knows it.
+         */
+        DuplicateCopy: {
+            /** Sourcename */
+            sourceName: string;
+            /** Title */
+            title: string;
         };
         /** EmbeddingCoverage */
         EmbeddingCoverage: {
@@ -1368,6 +1393,7 @@ export interface components {
             collection: string;
             /** Digest */
             digest: string;
+            duplicateCopy?: components["schemas"]["DuplicateCopy"] | null;
             /** Duplicateof */
             duplicateOf?: string | null;
             /** Effectivedate */
@@ -1431,6 +1457,103 @@ export interface components {
             /** Warning */
             warning?: string | null;
         };
+        /** ItemChunk */
+        ItemChunk: {
+            /** Index */
+            index: number;
+            /** Kind */
+            kind: string;
+            /** Location */
+            location: string;
+            /** Metadata */
+            metadata: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Page */
+            page?: number | null;
+            /** Text */
+            text: string;
+            /** Tokens */
+            tokens: number;
+            /** Units */
+            units: components["schemas"]["ItemUnit"][];
+        };
+        /** ItemDetail */
+        ItemDetail: {
+            /** Chunks */
+            chunks: components["schemas"]["ItemChunk"][];
+            /** Content */
+            content: string;
+            /** Revisions */
+            revisions: components["schemas"]["ItemRevision"][];
+            /** Versions */
+            versions: components["schemas"]["ItemVersion"][];
+        };
+        /** ItemReading */
+        ItemReading: {
+            /** Ocr */
+            ocr: string;
+            /** Pages */
+            pages: components["schemas"]["ReadingPage"][];
+            /** Readerversion */
+            readerVersion: string | null;
+        };
+        /**
+         * ItemRevision
+         * @description An edit to the document; nothing records edits yet, so the list is empty.
+         */
+        ItemRevision: {
+            /** Author */
+            author: string;
+            /** Date */
+            date: string;
+            /** N */
+            n: number;
+            /** Note */
+            note?: string | null;
+            /** Sizedelta */
+            sizeDelta: number;
+        };
+        /** ItemSettingsUsed */
+        ItemSettingsUsed: {
+            /** Current */
+            current: boolean;
+            /** Indexedwith */
+            indexedWith: string | null;
+            /** Preset */
+            preset: string;
+            /** Strategies */
+            strategies: string[];
+        };
+        /**
+         * ItemUnit
+         * @description What search matches for a piece: its own text (`self`), a child, or a question written for it.
+         */
+        ItemUnit: {
+            /** Kind */
+            kind: string;
+            /** Text */
+            text: string;
+        };
+        /** ItemVersion */
+        ItemVersion: {
+            /** Allowed */
+            allowed?: components["schemas"]["JsonValue"][] | null;
+            /** Digest */
+            digest: string;
+            /** Effectivedate */
+            effectiveDate: string;
+            /** Itemid */
+            itemId: string;
+            /** Sourcename */
+            sourceName: string;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
+            /** Version */
+            version: string;
+        };
         /** ItemWithDetail */
         ItemWithDetail: {
             /** Acl */
@@ -1439,12 +1562,10 @@ export interface components {
             chunkCount: number;
             /** Collection */
             collection: string;
-            /** Detail */
-            detail: {
-                [key: string]: unknown;
-            };
+            detail: components["schemas"]["ItemDetail"];
             /** Digest */
             digest: string;
+            duplicateCopy?: components["schemas"]["DuplicateCopy"] | null;
             /** Duplicateof */
             duplicateOf?: string | null;
             /** Effectivedate */
@@ -1483,18 +1604,12 @@ export interface components {
             processedAt?: string | null;
             /** Queries30D */
             queries30d: number;
-            /** Reading */
-            reading?: {
-                [key: string]: unknown;
-            } | null;
+            reading?: components["schemas"]["ItemReading"] | null;
             /** Reviewby */
             reviewBy: string;
             /** Sensitivity */
             sensitivity: string;
-            /** Settingsused */
-            settingsUsed?: {
-                [key: string]: unknown;
-            } | null;
+            settingsUsed?: components["schemas"]["ItemSettingsUsed"] | null;
             /** Sizebytes */
             sizeBytes: number;
             /** Sourceid */
@@ -1520,6 +1635,7 @@ export interface components {
             /** Warning */
             warning?: string | null;
         };
+        JsonValue: unknown;
         /** KbSourceLink */
         KbSourceLink: {
             /** Itemscontributed */
@@ -1929,9 +2045,7 @@ export interface components {
             /** Candecide */
             canDecide: boolean;
             /** Citedby */
-            citedBy: {
-                [key: string]: unknown;
-            }[];
+            citedBy: components["schemas"]["ChangeCitation"][];
             /** Createdat */
             createdAt: string;
             /** Decidedat */
@@ -2160,13 +2274,9 @@ export interface components {
             /** Answer */
             answer: string;
             /** Chunks */
-            chunks: {
-                [key: string]: unknown;
-            }[];
+            chunks: components["schemas"]["PlaygroundChunk"][];
             /** Citations */
-            citations: {
-                [key: string]: unknown;
-            }[];
+            citations: components["schemas"]["PlaygroundCitation"][];
             cost: components["schemas"]["SearchCost"];
             /** Id */
             id: string;
@@ -2187,6 +2297,54 @@ export interface components {
             shape: string;
             /** Synthesisms */
             synthesisMs: number;
+        };
+        /**
+         * PlaygroundChunk
+         * @description A piece the search found, with each lane's score.
+         */
+        PlaygroundChunk: {
+            /** Chunkid */
+            chunkId: string;
+            /** Documentid */
+            documentId: string;
+            /** Documenttitle */
+            documentTitle: string;
+            /** Lanes */
+            lanes: {
+                [key: string]: number;
+            };
+            /** Location */
+            location: string;
+            /** Rejected */
+            rejected: boolean;
+            /** Score */
+            score: number;
+            /** Sourcename */
+            sourceName: string;
+            /** Text */
+            text: string;
+            /** Version */
+            version: string;
+        };
+        /**
+         * PlaygroundCitation
+         * @description A passage the answer cites, numbered as the answer cites it.
+         */
+        PlaygroundCitation: {
+            /** Documentid */
+            documentId: string;
+            /** N */
+            n: number;
+            /** Page */
+            page?: number | null;
+            /** Section */
+            section: string;
+            /** Snippet */
+            snippet: string;
+            /** Title */
+            title: string;
+            /** Version */
+            version: string;
         };
         /** PluginSource */
         PluginSource: {
@@ -2252,6 +2410,25 @@ export interface components {
             slug: string;
         };
         /**
+         * ReadingPage
+         * @description One page of the stored reading: how it was read, its blocks by kind after cleaning, and what cleaning removed.
+         *     Number and reader are documents-service's, passed on as it sent them.
+         */
+        ReadingPage: {
+            /** Blocks */
+            blocks: {
+                [key: string]: number;
+            };
+            /** Number */
+            number: number | null;
+            /** Ocrconfidence */
+            ocrConfidence?: number | null;
+            /** Readby */
+            readBy: string | null;
+            /** Removedchars */
+            removedChars: number;
+        };
+        /**
          * RerankOut
          * @description Present when a base reranks: whether it ran, on which alias, how many pieces it scored, or why it was skipped.
          */
@@ -2289,6 +2466,38 @@ export interface components {
             rewritten?: string | null;
             /** Skipped */
             skipped?: string | null;
+        };
+        /**
+         * RunError
+         * @description One failure a run recorded: the step (list, get, store or parse), its class and message, and the item when one
+         *     was reached (a listing failure names none; an app's item may have no title).
+         */
+        RunError: {
+            /** Errorclass */
+            errorClass: string;
+            /** Itemid */
+            itemId?: string | null;
+            /** Itemtitle */
+            itemTitle?: string | null;
+            /** Message */
+            message: string;
+            /** Phase */
+            phase: string;
+        };
+        /**
+         * RunPhase
+         * @description One step of a run as the console draws it; no run records its steps yet, so the list is empty.
+         */
+        RunPhase: {
+            /** Durationms */
+            durationMs: number;
+            /** Name */
+            name: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "done" | "running" | "skipped" | "failed";
         };
         /** Scope */
         Scope: {
@@ -2920,9 +3129,7 @@ export interface components {
             /** Durationsec */
             durationSec: number;
             /** Errors */
-            errors: {
-                [key: string]: unknown;
-            }[];
+            errors: components["schemas"]["RunError"][];
             /** Finishedat */
             finishedAt?: string | null;
             /** Id */
@@ -2930,9 +3137,7 @@ export interface components {
             /** Log */
             log: string[];
             /** Phases */
-            phases: {
-                [key: string]: unknown;
-            }[];
+            phases: components["schemas"]["RunPhase"][];
             /** Sourceid */
             sourceId: string;
             /** Startedat */

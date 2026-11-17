@@ -12,6 +12,7 @@ from typing import Annotated, Any
 
 import httpx
 import pytest
+import sqlalchemy as sa
 from fastapi import FastAPI, Header, Request
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -161,6 +162,14 @@ class Service:
 
 
 Make = Callable[..., Service]
+
+
+async def tenant_outbox(engine: AsyncEngine, tenant: str, q: sa.Executable) -> list[dict[str, Any]]:
+    """The tenant's outbox rows, read in the tenant's scope: SQL Server applies its row policies to every user, so a
+    read outside the tenant's session context finds none."""
+    with isolation.tenant_wide("test: the tenant's outbox rows", tenant_id=tenant):
+        async with isolation.isolated_tx(engine) as conn:
+            return [dict(r) for r in (await conn.execute(q)).mappings()]
 
 
 @pytest.fixture

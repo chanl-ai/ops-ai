@@ -7,10 +7,17 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from ops_ingest.reading import OcrMode
 from ops_service_kit.http import In, JsonValue, ListResult, Out
+
+
+class Reply(Out):
+    """A reply model. Every field is sent, defaulted ones too (no route drops a None), so its schema lists each as
+    required and a generated client reads it as present."""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
 
 
 class ExtractionRequest(In):

@@ -81,6 +81,8 @@ async def test_a_scoped_key_reads_only_its_targets_runs_and_threads(stack: Stack
     for headers, query, ids, counted in (
         (WF, {}, [mine], {"refunds": 1}),
         (BUILDER, {"workflowId": "refunds"}, [mine], {"refunds": 1, "payouts": 1}),
+        (BUILDER, {"workflowId": ["payouts", "refunds"]}, [other_run, mine], {"refunds": 1, "payouts": 1}),
+        (WF, {"workflowId": ["payouts", "refunds"]}, [], {}),
         (OUTSIDER, {}, [], {}),
         (OUTSIDER, {"workflowId": "refunds"}, [], {}),
     ):

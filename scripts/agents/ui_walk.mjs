@@ -122,6 +122,8 @@ export async function inspect(page, url, { settleMs = 800 } = {}) {
 
 async function signIn(page, s, role) {
   await page.goto(`${s.origin}${s.loginPath}`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+  // The form renders only after the sign-in policy request answers, which is slow on a cold start.
+  await page.getByLabel(s.emailLabel).waitFor({ state: 'visible', timeout: 60_000 });
   await page.getByLabel(s.emailLabel).fill(role.email);
   await page.getByLabel(s.passwordLabel).fill(role.password);
   await page.getByRole('button', { name: new RegExp(`^${s.signInButton}`) }).first().click();

@@ -9,7 +9,9 @@ else published once a version is, else draft.
 The view counts and the facets cover every skill the menu, `ids` and the search leave, before the view and the facet
 filters, and read the newest version, as the page described them when it filtered in memory; a search reads the
 newest version's name and use-when line and the slug; the rows, their sort (by name, lower-cased, then id) and the
-`loading` filter read the version the view shows."""
+`loading` and `knowledgeBases` filters read the version the view shows. `knowledgeBases` keeps a skill whose
+`knowledgeBases` hold any value asked for. It has no facet, and `tools` (an array of objects) no filter, until
+ops_store.dialect can read a JSON array as rows and match a field of its objects."""
 
 from __future__ import annotations
 
@@ -20,7 +22,7 @@ from pydantic import BaseModel, JsonValue
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.listing import ListParams
-from ops_store.dialect import json_text
+from ops_store.dialect import json_array_has, json_text
 from ops_store.listing import ListPage, list_page, listed_rows
 from ops_store.rows import rows
 from ops_store.team_scope import team_visible
@@ -140,6 +142,19 @@ def offered_by(agent_id: str, *, team: str, menu: str) -> sa.ColumnElement[bool]
     return sa.and_(*terms)
 
 
+# Query key -> the JSON array field of a version's content it matches.
+ARRAY_FILTERS = {"knowledgeBases": "knowledgeBases"}
+
+
+def holding(params: ListParams, content: sa.ColumnElement[Any]) -> list[sa.ColumnElement[bool]]:
+    """Per array filter asked for, the skills whose `content` field holds any of its values."""
+    return [
+        sa.or_(*(json_array_has(content, field, v) for v in params.filters[key]))
+        for key, field in ARRAY_FILTERS.items()
+        if params.filters.get(key)
+    ]
+
+
 def in_view(view: View, col: dict[str, sa.ColumnElement[Any]]) -> sa.ColumnElement[bool]:
     """The skills a view shows, by the newest version: a published version stays in use while a newer one is in
     review."""
@@ -186,7 +201,7 @@ async def _skills_page(
         facets[facet] = {str(v): int(n) for v, n in await c.execute(grouped) if v is not None}
     page = await list_page(
         c,
-        q.where(in_view(view, col)),
+        q.where(in_view(view, col), *holding(params, col["content"])),
         params,
         search=search,
         default_sort=col["shown_name"].asc(),

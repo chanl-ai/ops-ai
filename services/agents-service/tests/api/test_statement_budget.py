@@ -15,6 +15,11 @@ from fastapi import FastAPI
 from httpx import AsyncClient, Response
 
 from ops_agents.api.agent_registry import SEED_TEAM
+from ops_agents.store.api_key_copies import ApiKeyCopies, KeySummary, listed_event
+from ops_agents.store.mailboxes import MailboxRow, MailboxStore
+from ops_agents.store.tenancy import tenant_scope
+from ops_agents.store.widget_deployments import WidgetDeployments
+from ops_identity.fastapi import DEV_TENANT
 from ops_service_kit.settings import Settings
 from ops_service_kit.testing import Seeded, SeedTeam, StatementBudget, budget_check
 from ops_store.database import open_database
@@ -113,12 +118,38 @@ def _id(answer: Any) -> str:
     return str(data.get("id") or data["widgetId"])
 
 
+async def _channels(app: FastAPI, tag: str, agent: str) -> None:
+    """A mailbox, an embed of `agent` and an API key on the dev caller's team, so the Channels list grows in each of
+    its three sources."""
+    db = app.state.runtime.db
+    with tenant_scope(DEV_TENANT):
+        await MailboxStore(db).create(
+            MailboxRow(
+                id=f"mbx_budget{tag.replace('-', '')}",
+                team_id=SEED_TEAM,
+                name=f"Mail {tag}",
+                address=f"budget-{tag}@bank.example",
+                provider="imap",
+                created_by="b",
+                created_at="n",
+                updated_at="n",
+            )
+        )
+        embed = {"id": f"wd_budget{tag.replace('-', '')}", "team_id": SEED_TEAM, "name": f"Embed {tag}"}
+        made = {"agent_id": agent, "agent_version": None, "origins": ["https://budget.example"]}
+        await WidgetDeployments(db).add(embed | made | {"created_by": "b", "created_at": "n", "updated_at": "n"})
+        summary = {"id": f"key_budget{tag.replace('-', '')}", "name": f"Key {tag}", "prefix": f"key_budget{tag}"}
+        summary |= {"teamId": SEED_TEAM, "status": "active", "target": {"kind": "agent", "id": agent}}
+        summary |= {"lastUsedAt": None, "expiresAt": None, "createdAt": "2026-10-01T00:00:00.000Z"}
+        await ApiKeyCopies(db).apply([listed_event(KeySummary.model_validate(summary), tenant_id=DEV_TENANT)])
+
+
 @pytest.fixture
 def seed_team(served: tuple[FastAPI, AsyncClient], swaps: dict[str, str]) -> SeedTeam:
     """`n` more agents (each holding a tool, an account and a saved eval case, so the Evals suites grow), skills,
-    guardrails, widgets, cases, workflows of each engine and runs of the registry workflow (each waiting at its review)
-    and queued engine runs on the dev caller's team, beside the seed folder's records; the path ids name the first of
-    each, and the seeded fraud agent and its records otherwise."""
+    guardrails, widgets, cases, workflows of each engine and runs of the registry workflow (each waiting at its review),
+    queued engine runs and channels of each type on the dev caller's team, beside the seed folder's records; the path
+    ids name the first of each, and the seeded fraud agent and its records otherwise."""
     client = served[1]
     ids: dict[str, str] = dict.fromkeys(PATH_IDS, "missing")
     ids.update(
@@ -171,6 +202,7 @@ def seed_team(served: tuple[FastAPI, AsyncClient], swaps: dict[str, str]) -> See
             body = {"workflowId": DEFINITION, "input": {"customerId": f"C-{tag}", "amount": 250}, "runKey": tag}
             queued = await client.post("/v1/runs", json=body, headers=DEV)
             assert queued.status_code == 202, queued.text
+            await _channels(served[0], tag, agent)
             if i == 0 and n == 5:
                 ids.update(agent_id=agent, skill_id=skill, guardrail_id=rule, widget_id=widget, case_id=case)
                 ids.update(run_id=str(queued.json()["data"]["runId"]))

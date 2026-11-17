@@ -3,6 +3,7 @@
     "body": {
       "data": {
         "afterText": "",
+        "canEdit": true,
         "dailyCap": 200,
         "description": "",
         "expiresAt": "<time+00:00>",
@@ -78,6 +79,7 @@
         "data": [
           {
             "afterText": "",
+            "canEdit": true,
             "dailyCap": 200,
             "description": "",
             "expiresAt": "<time+00:00>",
@@ -91,6 +93,54 @@
           },
           {
             "afterText": "Thank you.",
+            "canEdit": true,
+            "dailyCap": 100,
+            "description": "Tell us what has changed.",
+            "expiresAt": "<time+00:00>",
+            "id": "<form>",
+            "mode": "link",
+            "paused": false,
+            "slug": "ask-for-a-payment-plan-<tail>",
+            "title": "Ask for a payment plan",
+            "url": "/f/ask-for-a-payment-plan-<tail>",
+            "workflowId": "payment_plan"
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 20,
+          "total": 2,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "list.viewer": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "afterText": "",
+            "canEdit": false,
+            "dailyCap": 200,
+            "description": "",
+            "expiresAt": "<time+00:00>",
+            "id": "<form>",
+            "mode": "members",
+            "paused": false,
+            "slug": "ask-for-a-payment-plan-<tail>",
+            "title": "Ask for a payment plan",
+            "url": "/f/ask-for-a-payment-plan-<tail>",
+            "workflowId": "payment_plan"
+          },
+          {
+            "afterText": "Thank you.",
+            "canEdit": false,
             "dailyCap": 100,
             "description": "Tell us what has changed.",
             "expiresAt": "<time+00:00>",
@@ -255,6 +305,7 @@
     "body": {
       "data": {
         "afterText": "Thanks.",
+        "canEdit": true,
         "dailyCap": 100,
         "description": "Tell us what has changed.",
         "expiresAt": "<time+00:00>",
@@ -305,6 +356,7 @@
     "body": {
       "data": {
         "afterText": "Thanks.",
+        "canEdit": true,
         "dailyCap": 100,
         "description": "Tell us what has changed.",
         "expiresAt": "<time+00:00>",

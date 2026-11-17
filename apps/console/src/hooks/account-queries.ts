@@ -29,7 +29,8 @@ export const useTestSsoConnection = () => usePolicyWrite(() => api.signInPolicy.
 
 // ── Account (the signed-in person) ──
 const AK = { profile: ['account', 'profile'] as const, mfa: ['account', 'mfa'] as const, sessions: (p: unknown) => ['account', 'sessions', p] as const };
-export const useAccountProfile = () => useTeamQuery({ queryKey: AK.profile, queryFn: () => api.account.profile() });
+/** `enabled` is false where the signed-in person comes from the platform's /v1/me, so no sample read is made. */
+export const useAccountProfile = (enabled = true) => useTeamQuery({ queryKey: AK.profile, queryFn: () => api.account.profile(), enabled });
 export const useMfaDevices = () => useTeamQuery({ queryKey: AK.mfa, queryFn: () => api.account.mfa.list() });
 export const useAccountSessions = (p: ListParams<SessionFilters>) => usePagedQuery({ queryKey: AK.sessions(p), queryFn: () => api.account.sessions.list(p) });
 function useAccountWrite<A, R>(fn: (a: A) => Promise<R>) {

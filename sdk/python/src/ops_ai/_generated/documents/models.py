@@ -44,7 +44,7 @@ class ClassifyIn(TypedDict, closed=True):
 
 
 class CopyRef(TypedDict, closed=True):
-    detachedAt: NotRequired[str | None]
+    detachedAt: str | None
     id: str
     kind: Literal["document_type"]
     recordId: str
@@ -188,7 +188,7 @@ class Installation(TypedDict, closed=True):
 
 
 class Installed(TypedDict, closed=True):
-    changed: NotRequired[bool]
+    changed: bool
     copies: int
     newerAvailable: bool
     version: int | None
@@ -297,6 +297,11 @@ class ReadingWord(TypedDict, closed=True):
     text: str
 
 
+class ReviewedDigests(TypedDict, closed=True):
+    digest: str | None
+    recordDigest: str | None
+
+
 class Sample(TypedDict, closed=True):
     addedAt: str
     addedBy: str
@@ -347,7 +352,7 @@ class TemplatePlugin(TypedDict, closed=True):
 
 class TemplateRequires(TypedDict, closed=True):
     bind: list[dict[str, str]]
-    resources: NotRequired[list[str]]
+    resources: list[str]
     tools: list[str]
 
 
@@ -363,12 +368,12 @@ class TemplateSuggestion(TypedDict, closed=True):
 class TemplateView(TypedDict, closed=True):
     addCell: AddCell
     canAdd: bool
-    copy: NotRequired[CopyRef | None]
+    copy: CopyRef | None
     id: str
     installed: Installed
     kind: Literal["document_type"]
     plugin: TemplatePlugin
-    removeCell: NotRequired[AddCell | None]
+    removeCell: AddCell | None
     requires: TemplateRequires
     source: str
     state: Literal["available", "added", "update_available", "removed_upstream"]
@@ -523,8 +528,8 @@ class FieldReview(TypedDict, closed=True):
     field: str
     label: str
     outcome: Literal["kept", "taken", "conflict"]
-    template: NotRequired[JsonValue]
-    yours: NotRequired[JsonValue]
+    template: JsonValue
+    yours: JsonValue
 
 
 class LayoutBlock(TypedDict, closed=True):
@@ -570,17 +575,17 @@ class ReadingPage(TypedDict, closed=True):
 
 
 class UpdateReview(TypedDict, closed=True):
-    appliesNow: NotRequired[bool]
+    appliesNow: bool
     changes: list[str]
     copy: CopyRef
-    draftOpen: NotRequired[bool]
+    draftOpen: bool
     edits: list[str]
-    expect: NotRequired[UpdateExpect]
-    fields: NotRequired[list[FieldReview]]
+    expect: ReviewedDigests
+    fields: list[FieldReview]
     fromVersion: int
-    taken: NotRequired[bool]
+    taken: bool
     toVersion: int
-    version: NotRequired[int | None]
+    version: int | None
 
 
 class DocumentType(TypedDict, closed=True):

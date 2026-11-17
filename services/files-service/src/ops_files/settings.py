@@ -28,7 +28,7 @@ from azure.storage.blob import BlobServiceClient
 from obstore.store import AzureStore, S3Store
 from pydantic import Field, model_validator
 
-from ops_files.models import FilePurpose, PurposeLimit, PurposeLimitIn
+from ops_files.models import FilePurpose, PurposeLimit, PurposeLimitIn, Reply
 from ops_files.secrets import FIELDS, CredentialCipher, CredentialKind
 from ops_files.service import FilesConfig
 from ops_files.store.settings import SavedSettings, SettingsStore
@@ -71,7 +71,7 @@ class StorageTargetIn(In):
         return self
 
 
-class StorageTarget(Out):
+class StorageTarget(Reply):
     """A saved target, as StorageTargetIn took it."""
 
     purpose: TargetPurpose
@@ -119,7 +119,7 @@ class StorageDocumentIn(In):
         return self
 
 
-class StorageDocument(Out):
+class StorageDocument(Reply):
     """A saved document, as StorageDocumentIn took it."""
 
     targets: list[StorageTarget] = Field(default_factory=list[StorageTarget])

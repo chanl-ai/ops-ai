@@ -90,6 +90,9 @@ async def test_the_same_text_in_two_sources_of_a_base_answers_once(client: httpx
     }, found
     [older] = data(await client.get(f"/v1/sources/{old['id']}/items"))["data"]
     assert older["duplicateOf"] and "same text" in older["warning"], older
+    copy = {"title": "Telling us late", "sourceName": "Policy pages"}
+    assert older["duplicateCopy"] == copy, older
+    assert data(await client.get(f"/v1/items/{older['id']}"))["duplicateCopy"] == copy
     assert data(await client.get(f"/v1/sources/{old['id']}"))["governance"]["duplicates"] == 1
 
 

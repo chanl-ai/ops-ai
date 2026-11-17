@@ -31,6 +31,7 @@ from ops_store import background, isolation
 from ops_store.isolation import Isolation
 from ops_store.schema_version import require_current_schema
 
+from ..store.api_key_copies import RESYNC_KEY as KEY_RESYNC_KEY
 from ..store.background import BackgroundJobs, heartbeats
 from ..store.cases import CaseStore
 from ..store.engine import AsyncEngine, EngineTransactions, connect
@@ -42,6 +43,7 @@ from ..store.tenancy import ENGINE_PASS
 from ..store.tool_copies import RESYNC_KEY
 from .acting_for import CallPeople, acting_for_tokens
 from .ai_steps_gate import RunTeamRules
+from .api_key_copy import keep_in_step as keep_keys_in_step
 from .app import instance_owner, required_client, service_client
 from .batches import start_forever as start_batches_forever
 from .email_trigger import EmailTriggers
@@ -152,6 +154,7 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             ports.hooks = KillAfterNode(settings.engine_fault_kill_after_node)
         # The workspace's review deadline, for a review step that expires and sets none (reviewSlaHours).
         review_sla = None
+        platform_http: httpx.AsyncClient | None = None
         if settings.platform_url:
             platform_http = await stack.enter_async_context(
                 httpx.AsyncClient(base_url=settings.platform_url, timeout=10)
@@ -195,11 +198,21 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
         # Batches: each tick starts up to 50 of every tenant's pending rows, each in its own tenant and team.
         starting = asyncio.create_task(start_batches_forever(db, stop))
         stack.push_async_callback(lambda: asyncio.wait_for(starting, None))
+        # The API key copy's resync reads platform-service's keys as this service (settings:view).
+        key_reader = service_client(settings, platform_http, "platform") if platform_http is not None else None
+        if tools is not None or key_reader is not None:
+            await stack.enter_async_context(background.supervisor())
         if tools is not None:
             # The tool catalogue copy's resync: a pass at start, then hourly, on the lifespan's supervisor.
-            await stack.enter_async_context(background.supervisor())
             await background.start(
                 keep_in_step(db, tools, stop=stop, beats=heartbeats(db)), key=RESYNC_KEY, store=heartbeats(db)
+            )
+        if key_reader is not None:
+            # The API key copy's resync: a pass at start, then every minute.
+            await background.start(
+                keep_keys_in_step(db, key_reader, stop=stop, beats=heartbeats(db)),
+                key=KEY_RESYNC_KEY,
+                store=heartbeats(db),
             )
         listener = email_listener(settings, db, owner, stack)
         if listener is not None:

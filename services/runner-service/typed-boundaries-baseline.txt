@@ -1,2 +1,1 @@
-# 2 boundaries crossed without a model in services/runner-service (scripts/check_typed_boundaries.py). A row may only fall.
-2 dict-any services/runner-service/src/ops_runner/guest.py
+# 0 boundaries crossed without a model in services/runner-service (scripts/check_typed_boundaries.py). A row may only fall.

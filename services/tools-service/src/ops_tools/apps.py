@@ -1047,7 +1047,7 @@ class Apps:
                 waits = app_state(c, conn, token, None, configured=configured, person=True, pack=pack)
                 ends = (token or {}).get("expires_at")
                 # A team token that ends with no refresh token turns the state to expired then, with no write.
-                lapses = token is not None and token.get("refused_at") is None and not token.get("refresh_ct")
+                lapses = token is not None and token.get("refused_at") is None and not token.get("renews")
                 facts[str(c["id"])] = CardFacts(
                     state=app_state(c, conn, token, None, configured=configured, pack=pack)[0],
                     sign_in=(conn.get("sign_in") or "team") if conn else None,

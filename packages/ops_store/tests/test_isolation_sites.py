@@ -99,6 +99,8 @@ WIDENINGS: dict[str, set[str]] = {
     "ASSISTANT_CATCH_UP": {"services/agents-service/src/ops_agents/api/ops_tools.py"},
     # The tool catalogue copy's resync applies one tenant's catalogue, every team's grants, as that tenant.
     "TOOL_CATALOG_RESYNC": {"services/agents-service/src/ops_agents/api/tool_catalog_copy.py"},
+    # The API key copy's resync makes one tenant's copy equal to platform's list of its keys, every team's.
+    "API_KEY_RESYNC": {"services/agents-service/src/ops_agents/api/api_key_copy.py"},
     # Start-up: every tenant's published agent pointers past the tenant, then each tenant's specs under its own.
     "SERVE_PUBLISHED": {
         "services/agents-service/src/ops_agents/api/agent_registry.py",

@@ -678,7 +678,11 @@
           }
         },
         "required": [
+          "typeId",
+          "typeName",
+          "version",
           "path",
+          "templateId",
           "fieldsToCheck",
           "extractionId",
           "readAt"
@@ -958,11 +962,27 @@
           "name",
           "mime",
           "size",
+          "digest",
           "purpose",
           "team",
           "uploadedBy",
           "uploadedAt",
-          "retention"
+          "scan",
+          "sensitivity",
+          "sensitivitySuggested",
+          "retention",
+          "legalHold",
+          "immutable",
+          "referenceCount",
+          "versionCount",
+          "storage",
+          "data",
+          "versions",
+          "references",
+          "deleteBlockedBy",
+          "canEdit",
+          "canDelete",
+          "canPublish"
         ],
         "title": "FileDetail",
         "type": "object"
@@ -1065,7 +1085,9 @@
           "type",
           "id",
           "name",
-          "addedAt"
+          "href",
+          "addedAt",
+          "blocked"
         ],
         "title": "FileReference",
         "type": "object"
@@ -1096,7 +1118,8 @@
         },
         "required": [
           "classId",
-          "className"
+          "className",
+          "deleteAfter"
         ],
         "title": "FileRetention",
         "type": "object"
@@ -1227,7 +1250,10 @@
           "retention",
           "immutable",
           "referenceCount",
-          "versionCount"
+          "versionCount",
+          "legalHold",
+          "storage",
+          "data"
         ],
         "title": "FileRow",
         "type": "object"
@@ -1281,6 +1307,12 @@
             "type": "string"
           }
         },
+        "required": [
+          "status",
+          "engine",
+          "at",
+          "detail"
+        ],
         "title": "FileScan",
         "type": "object"
       },
@@ -2033,6 +2065,12 @@
             "type": "array"
           }
         },
+        "required": [
+          "targets",
+          "limits",
+          "retention",
+          "downloadLinkSeconds"
+        ],
         "title": "StorageDocument",
         "type": "object"
       },
@@ -2120,7 +2158,10 @@
           "backend",
           "environment",
           "container",
-          "key"
+          "key",
+          "region",
+          "encryption",
+          "locked"
         ],
         "title": "StorageLocation",
         "type": "object"
@@ -2275,7 +2316,12 @@
         "required": [
           "purpose",
           "backend",
-          "container"
+          "container",
+          "region",
+          "endpoint",
+          "credential",
+          "uploadPath",
+          "encryption"
         ],
         "title": "StorageTarget",
         "type": "object"

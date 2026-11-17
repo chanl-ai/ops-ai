@@ -6033,6 +6033,8 @@ export interface components {
         ToolOperation: {
             /** Access */
             access: string;
+            /** Description */
+            description?: string | null;
             /**
              * Enabled
              * @default true
@@ -6047,6 +6049,8 @@ export interface components {
              * @default false
              */
             requiresApproval: boolean;
+            /** Title */
+            title?: string | null;
         };
         /**
          * ToolPublished
@@ -6055,6 +6059,8 @@ export interface components {
         ToolPublished: {
             /** App */
             app?: string | null;
+            /** Appcardid */
+            appCardId?: string | null;
             /**
              * Deleted
              * @default false
@@ -6075,8 +6081,15 @@ export interface components {
             ownerTeam?: string | null;
             /** Status */
             status?: string | null;
+            /** Templatekind */
+            templateKind?: ("builtin" | "plugin" | "custom") | null;
             /** Title */
             title?: string | null;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
             /** Version */
             version?: string | null;
         };
@@ -6150,8 +6163,12 @@ export interface components {
         };
         /**
          * ToolTeamStateChanged
-         * @description One team's grant of a module it does not own, and what the grant is: written when it starts or changes, and
-         *     with `deleted` when it ends. Keyed by `id` (`<via>:<module id>`), so each kind of grant orders its own events.
+         * @description One team's state of a module, keyed by `id` (`<via>:<module id>`), so each kind orders its own events.
+         *
+         *     `approval`: the team's grant of a module it does not own, at the module's revision; `deleted` when it ends.
+         *     `added`: what the team turned on of the module and which of those wait for an answer, at the team state's own
+         *     revision (a team turning a tool on changes no module); `deleted` when the app is off for the team. No sender
+         *     writes `added` yet.
          */
         ToolTeamStateChanged: {
             /**
@@ -6174,9 +6191,11 @@ export interface components {
             operations?: string[];
             /**
              * Via
-             * @constant
+             * @enum {string}
              */
-            via: "approval";
+            via: "approval" | "added";
+            /** Waits */
+            waits?: string[];
         };
         /** ToolUsedBy */
         ToolUsedBy: {

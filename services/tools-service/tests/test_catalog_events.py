@@ -1,8 +1,9 @@
 """The catalogue events agents-service keeps its copy of the tools by, by failure mode: a module write that changes
 what a tools list shows and reports nothing, reports twice, or reports a revision that does not rise; a write that
 changes nothing a list shows reported anyway; a grant to another team started, changed or ended with no event for
-that team; an event written apart from its change, so a write that rolls back still reports; and one tenant's write
-reported as, or beside, another's."""
+that team; an event written apart from its change, so a write that rolls back still reports; one tenant's write
+reported as, or beside, another's; and a module too large for one event sent whole, which its receiver refuses
+forever."""
 
 from __future__ import annotations
 
@@ -60,6 +61,11 @@ CASES: list[tuple[str, Change | None, list[tuple[str, str, bool]]]] = [
     ("operations renamed", _renamed, [("tool.module.changed", "owner", False)]),
     ("new version", lambda m: {**m, "version": "9.0.0"}, [("tool.module.published", "owner", False)]),
     ("description only", lambda m: {**m, "description": "Nothing a tools list shows."}, []),
+    (
+        "operation described",
+        lambda m: {**m, "operations": [{**o, "description": "Shown in the tool picker."} for o in m["operations"]]},
+        [("tool.module.changed", "owner", False)],
+    ),
     ("grant to a new team", _granted, [("tool.team_state.changed", "team_new", False)]),
     ("grant revoked", _revoked, [("tool.team_state.changed", "revoked", True)]),
     ("module deleted", None, [("tool.module.changed", "owner", True), ("tool.team_state.changed", "granted", True)]),
@@ -128,3 +134,15 @@ async def test_a_tenants_write_reports_for_that_tenant_only(
     [event] = (await _reported(engine, tenant))[before:]
     assert event["tenant_id"] == tenant
     assert await _reported(engine, other) == theirs, "nothing reported under the other tenant"
+
+
+async def test_a_module_too_large_for_one_event_is_reported_truncated_without_operations(
+    engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]]
+) -> None:
+    module = await _loaded(engine, seed, tenant, catalog_tools)
+    first = module["operations"][0]
+    many = [{**first, "id": f"op_{i}", "name": f"tool_{i}", "description": "x" * 400} for i in range(300)]
+    before = len(await _reported(engine, tenant))
+    await ModuleStore(engine).put({**module, "operations": many}, expected_revision=module["revision"])
+    [event] = (await _reported(engine, tenant))[before:]
+    assert (event["payload"]["truncated"], event["payload"]["operations"]) == (True, [])

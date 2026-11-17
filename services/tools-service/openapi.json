@@ -13531,6 +13531,17 @@
             "title": "Access",
             "type": "string"
           },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
           "enabled": {
             "default": true,
             "title": "Enabled",
@@ -13548,6 +13559,17 @@
             "default": false,
             "title": "Requiresapproval",
             "type": "boolean"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
           }
         },
         "required": [
@@ -13572,6 +13594,17 @@
               }
             ],
             "title": "App"
+          },
+          "appCardId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appcardid"
           },
           "deleted": {
             "default": false,
@@ -13621,6 +13654,22 @@
             ],
             "title": "Status"
           },
+          "templateKind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "builtin",
+                  "plugin",
+                  "custom"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Templatekind"
+          },
           "title": {
             "anyOf": [
               {
@@ -13631,6 +13680,11 @@
               }
             ],
             "title": "Title"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
           },
           "version": {
             "anyOf": [
@@ -13872,7 +13926,7 @@
       },
       "ToolTeamStateChanged": {
         "additionalProperties": false,
-        "description": "One team's grant of a module it does not own, and what the grant is: written when it starts or changes, and\nwith `deleted` when it ends. Keyed by `id` (`<via>:<module id>`), so each kind of grant orders its own events.",
+        "description": "One team's state of a module, keyed by `id` (`<via>:<module id>`), so each kind orders its own events.\n\n`approval`: the team's grant of a module it does not own, at the module's revision; `deleted` when it ends.\n`added`: what the team turned on of the module and which of those wait for an answer, at the team state's own\nrevision (a team turning a tool on changes no module); `deleted` when the app is off for the team. No sender\nwrites `added` yet.",
         "properties": {
           "deleted": {
             "default": false,
@@ -13912,9 +13966,19 @@
             "type": "array"
           },
           "via": {
-            "const": "approval",
+            "enum": [
+              "approval",
+              "added"
+            ],
             "title": "Via",
             "type": "string"
+          },
+          "waits": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Waits",
+            "type": "array"
           }
         },
         "required": [

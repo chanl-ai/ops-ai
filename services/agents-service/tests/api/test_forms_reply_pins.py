@@ -16,7 +16,7 @@ from sqlalchemy import event
 
 from tests.api.test_forms import OUTSIDER, VALUES, live, shared
 from tests.api.test_team_default_agent import Stack, stack  # noqa: F401  # pyright: ignore[reportUnusedImport]
-from tests.engine.test_lifecycle_rights import BUILDER
+from tests.engine.test_lifecycle_rights import BUILDER, VIEWER
 
 from .test_reply_pins import FIXTURES, answer, compare
 
@@ -45,6 +45,7 @@ async def test_the_form_routes_keep_every_key_value_and_error_object(stack: Stac
         await c.post("/v1/workflows/payment_plan/forms", json={"dailyCap": 0}, headers=BUILDER)
     )
     seen["list"] = _seen(await c.get("/v1/workflows/payment_plan/forms", headers=BUILDER))
+    seen["list.viewer"] = _seen(await c.get("/v1/workflows/payment_plan/forms", headers=VIEWER))
     seen["update"] = _seen(await c.patch(f"/v1/forms/{fid}", json={"afterText": "Thanks."}, headers=BUILDER))
     seen["update.outsider"] = _seen(await c.patch(f"/v1/forms/{fid}", json={"paused": True}, headers=OUTSIDER))
     seen["update.missing"] = _seen(await c.patch("/v1/forms/form_missing1", json={}, headers=BUILDER))

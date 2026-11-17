@@ -14,12 +14,12 @@ from ops_metering import MICRO, Budget, Exhausted, PriceTable, Totals, Usage, co
 from ops_service_kit.http import Out
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
-from ops_store.dialect import upsert
+from ops_store.dialect import db_now, upsert
 from ops_store.rows import one
-from ops_store.schema import TENANT_SCOPED
+from ops_store.schema import TENANT_SCOPED, system
 
 from .base import metadata
-from .model_calls import ModelCall, ModelCallLedger
+from .model_calls import UNATTRIBUTED, ModelCall, ModelCallLedger
 from .tenancy import RuntimeStore, current_tenant
 
 thread_budgets = sa.Table(
@@ -33,6 +33,19 @@ thread_budgets = sa.Table(
     # The thread's tenant, set from the request's or loop's context, never from a body (migration 0104).
     sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant),
     info=TENANT_SCOPED,
+)
+
+# The budgets of gone threads with no tenant to hold them to (0104), kept beside model_call_records_unattributed.
+thread_budgets_unattributed = sa.Table(
+    "thread_budgets_unattributed",
+    metadata,
+    sa.Column("thread_id", sa.String(64), primary_key=True),
+    sa.Column("max_calls", sa.Integer()),
+    sa.Column("max_tokens", sa.BigInteger()),
+    sa.Column("max_cost_micros", sa.BigInteger()),
+    sa.Column("updated_at", sa.String(40), nullable=False),
+    sa.Column("moved_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now()),
+    info=system(UNATTRIBUTED),
 )
 
 

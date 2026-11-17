@@ -953,14 +953,20 @@ class ConnectionStore(Store):
 
     async def team_tokens(self, tenant_id: str, connection_ids: list[str]) -> dict[str, Row]:
         """The team account's token row (never a person's) of each of these connections: what an app's state is
-        derived from."""
+        derived from. `renews` says whether a refresh token is held, so a caller never names the reference's column."""
         if not connection_ids:
             return {}
-        q = connection_tokens.select().where(
-            connection_tokens.c.tenant_id == tenant_id,
-            connection_tokens.c.connection_id.in_(connection_ids),
-            connection_tokens.c.person_id == SHARED,
-            team_visible(connection_tokens),
+        # A CASE, not the bare test: SQL Server refuses a predicate as a selected value.
+        renews = sa.case((connection_tokens.c.refresh_ct.is_not(None), 1), else_=0).label("renews")
+        q = (
+            connection_tokens.select()
+            .add_columns(renews)
+            .where(
+                connection_tokens.c.tenant_id == tenant_id,
+                connection_tokens.c.connection_id.in_(connection_ids),
+                connection_tokens.c.person_id == SHARED,
+                team_visible(connection_tokens),
+            )
         )
         async with self.tx() as c:
             return {str(r["connection_id"]): dict(r) for r in (await c.execute(q)).mappings()}

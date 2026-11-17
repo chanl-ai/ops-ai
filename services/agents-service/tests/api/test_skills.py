@@ -193,3 +193,26 @@ async def test_a_skill_a_published_workflow_still_carries_is_not_deleted(tmp_pat
         r = await c.delete(f"/v1/skills/{s['id']}")
         assert (r.status_code, r.json()["error"]["code"]) == (409, "skill_pinned"), r.text
         assert "workflow Hardship intake" in r.json()["error"]["message"]
+
+
+async def test_the_knowledge_base_filter_keeps_skills_naming_any_base_given(tmp_path: Path) -> None:
+    """The Skills page's Knowledge base filter: a filter the list ignores answers every skill."""
+    async with _app(str(tmp_path / "db.sqlite")) as c:
+        bodies: dict[str, dict[str, list[str]]] = {
+            "Hardship": {},
+            "Documents": {"toolIds": ["request_document"], "knowledgeBases": ["kb_other"]},
+            "Plain": {"toolIds": [], "knowledgeBases": []},
+        }
+        made = {
+            name: _ok(await c.post("/v1/skills", json={**HARDSHIP, "name": name, **extra}), 201)["id"]
+            for name, extra in bodies.items()
+        }
+
+        async def names(params: dict[str, Any]) -> list[str]:
+            got = _ok(await c.get("/v1/skills", params=params))["data"]
+            return sorted(n for n, i in made.items() if i in {r["id"] for r in got})
+
+        assert await names({"knowledgeBases": ["kb_support", "kb_other"]}) == ["Documents", "Hardship"]
+        assert await names({"knowledgeBases": "kb_support"}) == ["Hardship"]
+        assert await names({"knowledgeBases": "kb_support", "search": "documents"}) == []
+        assert await names({"knowledgeBases": "kb_none"}) == []

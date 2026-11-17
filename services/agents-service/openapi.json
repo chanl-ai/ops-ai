@@ -9783,6 +9783,10 @@
             "title": "Aftertext",
             "type": "string"
           },
+          "canEdit": {
+            "title": "Canedit",
+            "type": "boolean"
+          },
           "dailyCap": {
             "title": "Dailycap",
             "type": "integer"
@@ -9850,7 +9854,8 @@
           "expiresAt",
           "dailyCap",
           "paused",
-          "url"
+          "url",
+          "canEdit"
         ],
         "title": "FormView",
         "type": "object"
@@ -35278,7 +35283,7 @@
     },
     "/v1/channels": {
       "get": {
-        "description": "The channels of the selected team (`team=all`: every team the caller is in and may view channels of), filtered\nby type, health and a search over name and detail. `facets` count by type and health under the other filters;\n`kinds` describes every channel type, built or not, over the caller's whole list.",
+        "description": "The channels of the selected team (`team=all`: every team the caller is in and may view channels of), filtered\nby type, health and a search over name and detail, in the list's order (email, chat, then API, each by name), a\npage at a time from one statement over the three (store.channel_list); a page past the end answers the last page.\n`facets` count by type and health under the other filters; `kinds` describes every channel type, built or not,\nover the caller's whole list.",
         "operationId": "channels_list_channels",
         "parameters": [
           {
@@ -46031,7 +46036,7 @@
     },
     "/v1/runs": {
       "get": {
-        "description": "The selected team's runs on the shared list contract, newest first, then by id; `workflowId` keeps one\nworkflow's, `status` repeats to keep several; `facets.status` and `facets.workflowId` count the runs per status\nand per workflow under the other filters, and `labels.workflowId` names each counted workflow, so the workflow\nfilter is filled from this reply. A scoped API key lists its own workflow's runs only.\nNo request transaction: people's names and the masking policy come from platform-service, with none open.",
+        "description": "The selected team's runs on the shared list contract, newest first, then by id; `workflowId` and `status`\nrepeat to keep several; `facets.status` and `facets.workflowId` count the runs per status\nand per workflow under the other filters, and `labels.workflowId` names each counted workflow, so the workflow\nfilter is filled from this reply. A scoped API key lists its own workflow's runs only.\nNo request transaction: people's names and the masking policy come from platform-service, with none open.",
         "operationId": "workflows_list_engine_runs",
         "parameters": [
           {
@@ -46041,7 +46046,10 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
                 },
                 {
                   "type": "null"
@@ -47873,7 +47881,7 @@
     },
     "/v1/skills": {
       "get": {
-        "description": "One page of the team's skills on the shared list contract, by name then id: `search` matches the name, use-when\nor slug, `ids` names skills exactly. `view=published` rows describe the published version, its inputs and parts,\nwhich is what chat and the MCP prompts use; every other view describes the newest version an editor sees. `status`,\n`ownerTeam`, `origin` and `loading` filter by facet. The view counts and facets cover every skill the search\nleaves, before the view and the facet filters; the page, its counts and its facets are read in SQL\n(`store/skill_list.py`).\n\nEvery view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.\nWith `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing\na tool or knowledge base the agent lacks as `locked`, naming them in `needs`.",
+        "description": "One page of the team's skills on the shared list contract, by name then id: `search` matches the name, use-when\nor slug, `ids` names skills exactly. `view=published` rows describe the published version, its inputs and parts,\nwhich is what chat and the MCP prompts use; every other view describes the newest version an editor sees. `status`,\n`ownerTeam`, `origin` and `loading` filter by facet; `knowledgeBases` keeps skills naming any base given. The view\ncounts and facets cover every skill the search leaves, before the view and the facet filters; the page, its counts\nand its facets are read in SQL (`store/skill_list.py`).\n\nEvery view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.\nWith `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing\na tool or knowledge base the agent lacks as `locked`, naming them in `needs`.",
         "operationId": "agents_list_skills",
         "parameters": [
           {
@@ -48002,6 +48010,25 @@
                 }
               ],
               "title": "Loading"
+            }
+          },
+          {
+            "in": "query",
+            "name": "knowledgeBases",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Knowledgebases"
             }
           },
           {

@@ -302,6 +302,36 @@
         "title": "BackgroundProcessOut",
         "type": "object"
       },
+      "ChangeCitation": {
+        "additionalProperties": false,
+        "description": "A workflow whose runs cited the changed passage; nothing records citations yet, so the list is empty.",
+        "properties": {
+          "citations30D": {
+            "title": "Citations30D",
+            "type": "integer"
+          },
+          "tests": {
+            "title": "Tests",
+            "type": "integer"
+          },
+          "workflowId": {
+            "title": "Workflowid",
+            "type": "string"
+          },
+          "workflowName": {
+            "title": "Workflowname",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflowId",
+          "workflowName",
+          "citations30D",
+          "tests"
+        ],
+        "title": "ChangeCitation",
+        "type": "object"
+      },
       "ChangeList": {
         "additionalProperties": false,
         "properties": {
@@ -431,6 +461,16 @@
             ],
             "title": "Doctype",
             "type": "string"
+          },
+          "duplicateCopy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DuplicateCopy"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "duplicateOf": {
             "anyOf": [
@@ -679,6 +719,26 @@
           "answer"
         ],
         "title": "DraftEdit",
+        "type": "object"
+      },
+      "DuplicateCopy": {
+        "additionalProperties": false,
+        "description": "The item a duplicate repeats, named as the caller knows it.",
+        "properties": {
+          "sourceName": {
+            "title": "Sourcename",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "sourceName"
+        ],
+        "title": "DuplicateCopy",
         "type": "object"
       },
       "EmbeddingCoverage": {
@@ -1563,6 +1623,16 @@
             "title": "Digest",
             "type": "string"
           },
+          "duplicateCopy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DuplicateCopy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "duplicateOf": {
             "anyOf": [
               {
@@ -1783,6 +1853,297 @@
         "title": "Item",
         "type": "object"
       },
+      "ItemChunk": {
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "title": "Metadata",
+            "type": "object"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "tokens": {
+            "title": "Tokens",
+            "type": "integer"
+          },
+          "units": {
+            "items": {
+              "$ref": "#/components/schemas/ItemUnit"
+            },
+            "title": "Units",
+            "type": "array"
+          }
+        },
+        "required": [
+          "index",
+          "tokens",
+          "location",
+          "kind",
+          "text",
+          "units",
+          "metadata"
+        ],
+        "title": "ItemChunk",
+        "type": "object"
+      },
+      "ItemDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "chunks": {
+            "items": {
+              "$ref": "#/components/schemas/ItemChunk"
+            },
+            "title": "Chunks",
+            "type": "array"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/ItemRevision"
+            },
+            "title": "Revisions",
+            "type": "array"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/ItemVersion"
+            },
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "content",
+          "chunks",
+          "revisions",
+          "versions"
+        ],
+        "title": "ItemDetail",
+        "type": "object"
+      },
+      "ItemReading": {
+        "additionalProperties": false,
+        "properties": {
+          "ocr": {
+            "title": "Ocr",
+            "type": "string"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingPage"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "readerVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readerversion"
+          }
+        },
+        "required": [
+          "readerVersion",
+          "ocr",
+          "pages"
+        ],
+        "title": "ItemReading",
+        "type": "object"
+      },
+      "ItemRevision": {
+        "additionalProperties": false,
+        "description": "An edit to the document; nothing records edits yet, so the list is empty.",
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "sizeDelta": {
+            "title": "Sizedelta",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n",
+          "author",
+          "date",
+          "sizeDelta"
+        ],
+        "title": "ItemRevision",
+        "type": "object"
+      },
+      "ItemSettingsUsed": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "title": "Current",
+            "type": "boolean"
+          },
+          "indexedWith": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indexedwith"
+          },
+          "preset": {
+            "title": "Preset",
+            "type": "string"
+          },
+          "strategies": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Strategies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "preset",
+          "strategies",
+          "indexedWith",
+          "current"
+        ],
+        "title": "ItemSettingsUsed",
+        "type": "object"
+      },
+      "ItemUnit": {
+        "additionalProperties": false,
+        "description": "What search matches for a piece: its own text (`self`), a child, or a question written for it.",
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "text"
+        ],
+        "title": "ItemUnit",
+        "type": "object"
+      },
+      "ItemVersion": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allowed"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "effectiveDate": {
+            "title": "Effectivedate",
+            "type": "string"
+          },
+          "itemId": {
+            "title": "Itemid",
+            "type": "string"
+          },
+          "sourceName": {
+            "title": "Sourcename",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "itemId",
+          "title",
+          "version",
+          "effectiveDate",
+          "status",
+          "digest",
+          "sourceName"
+        ],
+        "title": "ItemVersion",
+        "type": "object"
+      },
       "ItemWithDetail": {
         "additionalProperties": false,
         "properties": {
@@ -1802,13 +2163,21 @@
             "type": "string"
           },
           "detail": {
-            "additionalProperties": true,
-            "title": "Detail",
-            "type": "object"
+            "$ref": "#/components/schemas/ItemDetail"
           },
           "digest": {
             "title": "Digest",
             "type": "string"
+          },
+          "duplicateCopy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DuplicateCopy"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "duplicateOf": {
             "anyOf": [
@@ -1937,14 +2306,12 @@
           "reading": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/ItemReading"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Reading"
+            ]
           },
           "reviewBy": {
             "title": "Reviewby",
@@ -1957,14 +2324,12 @@
           "settingsUsed": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/ItemSettingsUsed"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Settingsused"
+            ]
           },
           "sizeBytes": {
             "title": "Sizebytes",
@@ -2065,6 +2430,7 @@
         "title": "ItemWithDetail",
         "type": "object"
       },
+      "JsonValue": {},
       "KbSourceLink": {
         "additionalProperties": false,
         "properties": {
@@ -3206,8 +3572,7 @@
           },
           "citedBy": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/ChangeCitation"
             },
             "title": "Citedby",
             "type": "array"
@@ -3861,16 +4226,14 @@
           },
           "chunks": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/PlaygroundChunk"
             },
             "title": "Chunks",
             "type": "array"
           },
           "citations": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/PlaygroundCitation"
             },
             "title": "Citations",
             "type": "array"
@@ -3962,6 +4325,120 @@
           "shape"
         ],
         "title": "PlaygroundAnswer",
+        "type": "object"
+      },
+      "PlaygroundChunk": {
+        "additionalProperties": false,
+        "description": "A piece the search found, with each lane's score.",
+        "properties": {
+          "chunkId": {
+            "title": "Chunkid",
+            "type": "string"
+          },
+          "documentId": {
+            "title": "Documentid",
+            "type": "string"
+          },
+          "documentTitle": {
+            "title": "Documenttitle",
+            "type": "string"
+          },
+          "lanes": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Lanes",
+            "type": "object"
+          },
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "rejected": {
+            "title": "Rejected",
+            "type": "boolean"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "sourceName": {
+            "title": "Sourcename",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunkId",
+          "documentId",
+          "documentTitle",
+          "sourceName",
+          "score",
+          "lanes",
+          "location",
+          "text",
+          "rejected",
+          "version"
+        ],
+        "title": "PlaygroundChunk",
+        "type": "object"
+      },
+      "PlaygroundCitation": {
+        "additionalProperties": false,
+        "description": "A passage the answer cites, numbered as the answer cites it.",
+        "properties": {
+          "documentId": {
+            "title": "Documentid",
+            "type": "string"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          },
+          "snippet": {
+            "title": "Snippet",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "n",
+          "documentId",
+          "title",
+          "section",
+          "version",
+          "snippet"
+        ],
+        "title": "PlaygroundCitation",
         "type": "object"
       },
       "PluginSource": {
@@ -4157,6 +4634,64 @@
         "title": "Reader",
         "type": "object"
       },
+      "ReadingPage": {
+        "additionalProperties": false,
+        "description": "One page of the stored reading: how it was read, its blocks by kind after cleaning, and what cleaning removed.\nNumber and reader are documents-service's, passed on as it sent them.",
+        "properties": {
+          "blocks": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Blocks",
+            "type": "object"
+          },
+          "number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number"
+          },
+          "ocrConfidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ocrconfidence"
+          },
+          "readBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Readby"
+          },
+          "removedChars": {
+            "title": "Removedchars",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "number",
+          "readBy",
+          "blocks",
+          "removedChars"
+        ],
+        "title": "ReadingPage",
+        "type": "object"
+      },
       "RerankOut": {
         "additionalProperties": false,
         "description": "Present when a base reranks: whether it ran, on which alias, how many pieces it scored, or why it was skipped.",
@@ -4238,6 +4773,84 @@
           "asked"
         ],
         "title": "RewriteOut",
+        "type": "object"
+      },
+      "RunError": {
+        "additionalProperties": false,
+        "description": "One failure a run recorded: the step (list, get, store or parse), its class and message, and the item when one\nwas reached (a listing failure names none; an app's item may have no title).",
+        "properties": {
+          "errorClass": {
+            "title": "Errorclass",
+            "type": "string"
+          },
+          "itemId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Itemid"
+          },
+          "itemTitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Itemtitle"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "phase": {
+            "title": "Phase",
+            "type": "string"
+          }
+        },
+        "required": [
+          "phase",
+          "errorClass",
+          "message"
+        ],
+        "title": "RunError",
+        "type": "object"
+      },
+      "RunPhase": {
+        "additionalProperties": false,
+        "description": "One step of a run as the console draws it; no run records its steps yet, so the list is empty.",
+        "properties": {
+          "durationMs": {
+            "title": "Durationms",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "done",
+              "running",
+              "skipped",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "durationMs",
+          "status"
+        ],
+        "title": "RunPhase",
         "type": "object"
       },
       "Scope": {
@@ -5930,8 +6543,7 @@
           },
           "errors": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/RunError"
             },
             "title": "Errors",
             "type": "array"
@@ -5960,8 +6572,7 @@
           },
           "phases": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/RunPhase"
             },
             "title": "Phases",
             "type": "array"

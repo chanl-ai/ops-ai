@@ -6,7 +6,7 @@ a reference copied to another name or tenant does not open."""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import sqlalchemy as sa
 
@@ -17,6 +17,7 @@ from ops_store import Guarantee
 from ops_store.database import Database
 from ops_store.dialect import db_now, locked
 from ops_store.listing import list_page
+from ops_store.rows import one, rows
 from ops_store.store import Store
 
 from .tables import provider_keys as t
@@ -46,11 +47,10 @@ class ProviderKeyStore(Store):
         super().__init__(db)
         self.credentials = credentials
 
-    async def listed(self, tenant_id: str) -> list[dict[str, Any]]:
+    async def listed(self, tenant_id: str) -> list[ProviderKeyRow]:
         """Each key's name and history, never its value."""
         async with self.tx() as c:
-            rows = await c.execute(sa.select(*META).where(t.c.tenant_id == tenant_id).order_by(t.c.name))
-            return [dict(r) for r in rows.mappings()]
+            return await rows(c, sa.select(*META).where(t.c.tenant_id == tenant_id).order_by(t.c.name), ProviderKeyRow)
 
     async def page(self, tenant_id: str, params: ListParams) -> ListResult[ProviderKeyRow]:
         """One page of the account's keys by name; `search` matches the name and `ids` names keys by name."""
@@ -59,7 +59,7 @@ class ProviderKeyStore(Store):
             page = await list_page(c, query, params, search=(t.c.name,), default_sort=t.c.name.asc())
         return ListResult[ProviderKeyRow].model_validate(page)
 
-    async def save(self, tenant_id: str, name: str, value: str, *, by: str) -> tuple[dict[str, Any], bool]:
+    async def save(self, tenant_id: str, name: str, value: str, *, by: str) -> tuple[ProviderKeyRow, bool]:
         """Creates the key or replaces its value; returns its history and whether it was new. A replaced value is
         dropped from the credential store once the row names the new one."""
         context = context_of(tenant_id, name)
@@ -75,10 +75,12 @@ class ProviderKeyStore(Store):
             else:
                 change = {"ciphertext": ref, "version": found.version + 1, "rotated_at": db_now()}
                 await c.execute(t.update().where(mine).values(**change))
-            saved = (await c.execute(sa.select(*META).where(mine))).mappings().one()
+            saved = await one(c, sa.select(*META).where(mine), ProviderKeyRow)
+        if saved is None:
+            raise LookupError(f"no provider key {name} for the tenant after it was saved")
         if old is not None:
             await self.credentials.delete(str(old), context=context)
-        return dict(saved), found is None
+        return saved, found is None
 
     async def delete(self, tenant_id: str, name: str) -> bool:
         async with self.tx() as c:

@@ -1,3 +1,11 @@
+import type { OpsAI } from '@chanl-ai/ops-ai';
+
+import type { Narrow } from './served';
+
+type Platform = OpsAI['raw']['platform'];
+type Reply<K extends keyof Platform> = Awaited<ReturnType<Platform[K]>>;
+type Body<K extends keyof Platform> = NonNullable<NonNullable<Parameters<Platform[K]>[0]>['body']>;
+
 /** Logo shown for a team in the switcher. */
 export type TeamIcon = 'platform' | 'lending' | 'cards' | 'fraud' | 'onboarding' | 'retail' | 'wealth' | 'team';
 
@@ -5,15 +13,11 @@ export type TeamIcon = 'platform' | 'lending' | 'cards' | 'fraud' | 'onboarding'
  * A bank team using Ops AI. The current team scopes every list, count and record the API returns:
  * a team sees records whose owner is one of its owner groups; a team with scope `all` sees everything.
  */
-export interface Team {
-  id: string;
-  name: string;
+/** `role` (the signed-in person's role in the team) is returned too; no screen reads it. */
+export type Team = Omit<Narrow<Reply<'teams_list_teams'>[number], { scope: 'all' | 'owned' }>, 'role'> & {
+  /** Not returned by platform-service yet: the switcher derives it from the name. */
   icon: TeamIcon;
-  /** Owner values (as set on agents, workflows and sources) this team is responsible for. */
-  ownerGroups: string[];
-  scope: 'all' | 'owned';
-  memberCount: number;
-}
+};
 
 export interface TeamInput {
   name: string;
@@ -24,25 +28,11 @@ export interface TeamInput {
 export type TeamRef = Pick<Team, 'id' | 'name'>;
 
 /** A team as a workspace admin sees it on Govern > Access > Teams; counts come from platform-service. */
-export interface WorkspaceTeam {
-  id: string;
-  name: string;
-  status: 'active' | 'archived';
-  scope: 'all' | 'owned';
-  createdAt: string;
-  archivedAt: string | null;
-  memberCount: number;
-  adminCount: number;
-  /** The workspace's Security team: workspace settings are decided there, so it cannot be archived. */
-  security: boolean;
-}
+export type WorkspaceTeam = Narrow<Reply<'teams_list_workspace_teams'>['data'][number], { scope: 'all' | 'owned' }>;
 
 export type WorkspaceTeamFilters = {
   status?: WorkspaceTeam['status'][];
 };
 
 /** A new team and the email of the person who becomes its first admin. */
-export interface WorkspaceTeamInput {
-  name: string;
-  admin: string;
-}
+export type WorkspaceTeamInput = Body<'teams_create_team'>;

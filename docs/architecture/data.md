@@ -27,6 +27,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.activity` | `Activity` | none | none |
 | agents-service | `ops_agents.store.actor_names` | `ActorNames` | none | none |
 | agents-service | `ops_agents.store.agent_registry` | `AgentRegistry` | CAS, TRANSACTION | `agent_skill_pins`, `registry_agent_versions`, `registry_agents`, `registry_publish_requests` |
+| agents-service | `ops_agents.store.api_key_copies` | `ApiKeyCopies` | CAS, TRANSACTION | `api_key_copies` |
 | agents-service | `ops_agents.store.background` | `BackgroundJobs` | RLS, TRANSACTION | `background_heartbeats`, `background_jobs` |
 | agents-service | `ops_agents.store.batches` | `Batches` | none | `run_batch_rows`, `run_batches` |
 | agents-service | `ops_agents.store.case_links` | `CaseLinks` | none | none |
@@ -44,7 +45,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.leases` | `Leases` | CAS, CLOCK, LOCK | `thread_leases` |
 | agents-service | `ops_agents.store.mailboxes` | `MailboxStore` | CAS | `mailboxes` |
 | agents-service | `ops_agents.store.memories` | `Memories` | TRANSACTION | `agent_memories`, `memory_audit`, `message_memory_use` |
-| agents-service | `ops_agents.store.model_calls` | `ModelCallLedger` | CAS | `model_call_records` |
+| agents-service | `ops_agents.store.model_calls` | `ModelCallLedger` | CAS | `model_call_records`, `model_call_records_unattributed` |
 | agents-service | `ops_agents.store.pin_users` | `PinUsers` | none | none |
 | agents-service | `ops_agents.store.poll_cursors` | `PollCursors` | none | `poll_cursors` |
 | agents-service | `ops_agents.store.review_assignments` | `ReviewAssignments` | none | `review_assignments` |
@@ -60,7 +61,7 @@ Every repository module, generated from the code; `make python-verify` fails whe
 | agents-service | `ops_agents.store.tool_copies` | `ToolCopies` | CAS, TRANSACTION | `tool_catalog`, `tool_catalog_operations`, `tool_team_state` |
 | agents-service | `ops_agents.store.trigger_events` | `TriggerEvents` | none | `trigger_events` |
 | agents-service | `ops_agents.store.typed_records` | `VersionedRecords` | CAS, TRANSACTION | none |
-| agents-service | `ops_agents.store.usage` | `UsageLedger` | TRANSACTION | `thread_budgets` |
+| agents-service | `ops_agents.store.usage` | `UsageLedger` | TRANSACTION | `thread_budgets`, `thread_budgets_unattributed` |
 | agents-service | `ops_agents.store.widget_deployments` | `WidgetDeployments` | CAS | `widget_deployments` |
 | agents-service | `ops_agents.store.widget_keys` | none: no repository class | | `widget_mint_key_audit`, `widget_mint_keys` |
 | agents-service | `ops_agents.store.widget_picker` | `WidgetPicker` | none | none |
@@ -167,6 +168,21 @@ The tools-service tables sit in agents-service's Alembic history and tools-servi
 Splitting migrations per service is a later step in [service-map.md](service-map.md). Databases that once ran the
 psycopg saver still hold LangGraph's `checkpoints`, `checkpoint_writes`, `checkpoint_blobs` and
 `checkpoint_migrations`; threads there do not carry over, and the tables can be dropped once nothing reads them.
+
+### Catalogue events
+
+What tools-service's outbox and `GET /v1/tool-catalog` carry for agents-service's tool catalogue copy
+(`packages/ops_store/src/ops_store/outbox.py`).
+Each is written in the transaction of the write it reports (`ops_tools.store.modules.report_module`) and keyed
+`<id>@<revision>`; the resync returns the same payloads. Every event names its tenant and team; none carries a secret,
+a credential or a person's state of an app. Fields are added with defaults; a payload model refuses fields it does not
+name, so a receiver deploys before its sender.
+
+| Event | Key; revision | Fields | Team |
+|---|---|---|---|
+| `tool.module.published`, `tool.module.changed` | module id; module revision | `id`, `name`, `title`, `app`, `ownerTeam`, `status`, `version`, `templateKind` (builtin, plugin, custom), `appCardId`, `deleted`, `truncated` (over 16,384 bytes: no operations, not applied by a receiver); per operation `id`, `name`, `title`, `description` (at most 500 characters), `access`, `requiresApproval`, `enabled` | the module's, or the acting team for a workspace-level one |
+| `tool.team_state.changed`, `via: approval` | `approval:<module>` per team; module revision | `moduleId`, `operations`, `expiresAt`, `deleted` | the granted team |
+| `tool.team_state.changed`, `via: added` | `added:<module>` per team; the team state's own revision | `moduleId`, `operations` (names added), `waits` (added names whose answer waits), `deleted`. Model only: no sender yet | the team |
 
 ## What the checkpointer package ships
 

@@ -67,7 +67,7 @@ async def _pins(e: AsyncEngine, agent_id: str) -> set[tuple[str, int, str]]:
         return {(str(s), int(v), str(t)) for s, v, t in found}
 
 
-async def _skill(e: AsyncEngine, name: str, team: str) -> str:
+async def _skill(e: AsyncEngine, name: str, team: str, *kbs: str) -> str:
     slug = name.lower().replace(" ", "-")
     content: dict[str, Any] = {
         "name": name,
@@ -75,7 +75,7 @@ async def _skill(e: AsyncEngine, name: str, team: str) -> str:
         "useWhen": "u",
         "loading": "on_match",
         "tools": [],
-        "knowledgeBases": [],
+        "knowledgeBases": list(kbs),
     }
     return await SkillRegistry(e).create(
         content, owner_team="Retail", team_id=team, origin="blank", by=BY, published=True
@@ -107,15 +107,19 @@ async def test_the_page_and_its_used_by_hold_the_acting_team_when_the_policy_let
 ) -> None:
     reg = AgentRegistry(engine)
     with isolation.scope(tenant, TEAM):
-        mine = await _skill(engine, "Card dispute", TEAM)
+        mine = await _skill(engine, "Card dispute", TEAM, "kb_cards")
         await reg.create(_spec("Card desk", (mine, 1)), by=BY, team_id=TEAM, published=True)
     with isolation.scope(tenant, OTHER):
-        theirs = await _skill(engine, "Loan hardship", OTHER)
+        theirs = await _skill(engine, "Loan hardship", OTHER, "kb_loans", "kb_cards")
         # Another team's agent pins this team's skill: it is not this team's to count.
         await reg.create(_spec("Loan desk", (mine, 1), (theirs, 1)), by=BY, team_id=OTHER, published=True)
     # Tenant-wide with a team acting, so the database policy lets every team through and the query alone holds them.
     reason = "a test reads the skills list with every team let through"
     with isolation.tenant_wide(reason, tenant_id=tenant), acting_as(TEAM):
         page, counts = await skills_page(engine, ListParams(), view="all")
+        bases = [["kb_loans", "kb_cards"], ["kb_loans"]]
+        held = [await skills_page(engine, ListParams(filters={"knowledgeBases": b}), view="all") for b in bases]
     seen = [(r["id"], r["used_by"], r["live_agents"]) for r in page["data"]]
     assert (seen, counts["all"], page["facets"]["status"]) == ([(mine, 1, 1)], 1, {"published": 1})
+    # The knowledge base filter keeps the team's skill naming any base given, never another team's.
+    assert [[r["id"] for r in p["data"]] for p, _ in held] == [[mine], []]

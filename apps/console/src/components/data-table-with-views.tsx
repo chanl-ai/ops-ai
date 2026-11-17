@@ -43,7 +43,7 @@ import {
 import { PaginationState, PAGINATION_DEFAULTS } from '@/lib/types/pagination';
 import { useBulkSelectionTransport } from '@/components/bulk-selection-context';
 import { useCurrentPerson } from '@/hooks/auth-queries';
-import { type ColumnMeta, kindClass, revealTruncated } from '@/components/data-table-column-kinds';
+import { type ColumnMeta, kindClass, markTruncated } from '@/components/data-table-column-kinds';
 import { idLast } from '@/lib/column-order';
 import { withCreatedRows } from '@/lib/created-rows';
 import type { CreatedRows } from '@/hooks/use-created-rows';
@@ -177,14 +177,23 @@ function useRememberedColumns<T, V>(columns: ColumnDef<T, V>[], initial: Visibil
   const storageKey = `ops-columns:${ids[0] ?? 'anyone'}:${pathname}:${keys.join(',')}`;
   const defaults = React.useMemo(() => {
     const out: VisibilityState = { ...initial };
-    const cap = shownByDefault();
-    let shown = 0;
+    // Columns that always show (cannot be hidden, or the page turns them on) take their places in the cap first and the
+    // hideable ones fill what is left, so the total is the cap however the page orders or forces its columns.
+    const isId = (c: ColumnDef<T, V>) => (c.meta as ColumnMeta | undefined)?.kind === 'id';
+    const isData = (c: ColumnDef<T, V>) => {
+      const k = keyOf(c);
+      return !!k && k !== 'select' && k !== 'actions' && !isId(c);
+    };
+    const always = (c: ColumnDef<T, V>) => c.enableHiding === false || initial[keyOf(c)!] === true;
+    const fixed = columns.filter((c) => isData(c) && !(initial[keyOf(c)!] === false) && always(c)).length;
+    let room = Math.max(0, shownByDefault() - fixed);
     for (const c of columns) {
       const k = keyOf(c);
       if (!k || k === 'select' || k === 'actions' || k in initial) continue;
       // The record id is a detail: under View until the person turns it on, and never counted among the five.
-      if ((c.meta as ColumnMeta | undefined)?.kind === 'id') out[k] = false;
-      else if (c.enableHiding === false || shown < cap) shown++;
+      if (isId(c)) out[k] = false;
+      else if (c.enableHiding === false) continue;
+      else if (room > 0) room--;
       else out[k] = false;
     }
     return out;
@@ -390,6 +399,15 @@ export function DataTableWithViews<TData, TValue>({
   // Imperative selection clear — parent bumps selectionResetKey after a bulk
   // action so the checkboxes don't linger on rows that shifted under a refetch.
   const tableBox = React.useRef<HTMLDivElement>(null);
+  // Titles follow the current widths: measured after every render, and again when the box is resized.
+  React.useEffect(() => {
+    const box = tableBox.current;
+    if (!box) return;
+    markTruncated(box);
+    const watch = new ResizeObserver(() => markTruncated(box));
+    watch.observe(box);
+    return () => watch.disconnect();
+  });
   const newest = shownData.pinned[0];
   React.useEffect(() => {
     if (newest) tableBox.current?.querySelector('[data-created]')?.scrollIntoView({ block: 'nearest' });
@@ -602,8 +620,6 @@ export function DataTableWithViews<TData, TValue>({
                             <TableCell
                               key={cell.id}
                               className={kindClass(meta, pinOf(cell.column.id), hasSelect, typeof value === 'string')}
-                              onMouseEnter={(e) => revealTruncated(e.currentTarget)}
-                              onFocus={(e) => revealTruncated(e.currentTarget)}
                             >
                               {cell.id === openCellId ? <RowOpen href={rowData.href}>{content}</RowOpen> : content}
                               {isNew && cell.id === firstDataCellId && (

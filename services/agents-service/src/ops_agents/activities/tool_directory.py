@@ -81,7 +81,8 @@ class ToolDirectory(Protocol):
 async def grants_for(directory: ToolDirectory, names: list[str]) -> list[ToolGrant]:
     """Grants for the tool names an agent holds that the registry still offers; `workflow:` names are offered by the
     workflow runner, and a name the registry no longer has (hidden, unpublished, drifted) is not handed to the model."""
-    wanted = [n for n in names if not n.startswith(("workflow:", "agent:"))]
+    # One grant per name: the model's toolset refuses two tools of one name, so a repeated grant fails the turn.
+    wanted = [n for n in dict.fromkeys(names) if not n.startswith(("workflow:", "agent:"))]
     if not wanted:
         return []
     by_name = {o.name: o for o in await directory.operations()}

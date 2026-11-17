@@ -180,11 +180,15 @@ export function DocumentSheet({
             {item.duplicateOf && (
               <Alert>
                 <Copy className="size-4" />
-                <AlertTitle>Indexed once, as {item.duplicateOf.title}</AlertTitle>
+                <AlertTitle>Indexed once, as {item.duplicateCopy?.title ?? 'another document'}</AlertTitle>
                 <AlertDescription className="flex flex-col items-start gap-2">
-                  <p>The content is identical to the copy in {item.duplicateOf.sourceName}, so search returns that one and lists both sources.</p>
+                  <p>
+                    {item.duplicateCopy
+                      ? `The content is identical to the copy in ${item.duplicateCopy.sourceName}, so search returns that one.`
+                      : "The content is identical to another document's, so search returns that one."}
+                  </p>
                   {onOpenItem && (
-                    <Button size="sm" variant="outline" onClick={() => onOpenItem(item.duplicateOf!.itemId)}>
+                    <Button size="sm" variant="outline" onClick={() => onOpenItem(item.duplicateOf!)}>
                       Open the indexed copy
                     </Button>
                   )}

@@ -232,8 +232,9 @@ export function createMockAuthProvider(opts: { stepUpUrl?: string } = {}): AuthP
       const p = currentSignInPolicy();
       const host = email.trim().toLowerCase().split('@')[1] ?? '';
       const label = IDP_LABEL[p.sso.provider];
-      if (p.methods.sso && p.sso.domains.some((d) => d.verified && d.domain === host)) return { password: false, sso: { kind: 'sso', label } };
-      return { password: p.methods.password, sso: p.methods.sso ? { kind: 'sso', label } : null };
+      const ssoKind = p.sso.provider === 'saml' ? 'saml' : 'oidc';
+      if (p.methods.sso && p.sso.domains.some((d) => d.verified && d.domain === host)) return { password: false, sso: { kind: ssoKind, label } };
+      return { password: p.methods.password, sso: p.methods.sso ? { kind: ssoKind, label } : null };
     },
     startSso: async ({ email, domain, next }) => {
       const who = (email ?? `sso.user@${domain}`).trim().toLowerCase();

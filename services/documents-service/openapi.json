@@ -287,7 +287,8 @@
           "recordId",
           "source",
           "templateId",
-          "version"
+          "version",
+          "detachedAt"
         ],
         "title": "CopyRef",
         "type": "object"
@@ -1972,7 +1973,9 @@
         "required": [
           "field",
           "label",
-          "outcome"
+          "outcome",
+          "yours",
+          "template"
         ],
         "title": "FieldReview",
         "type": "object"
@@ -2361,7 +2364,8 @@
         "required": [
           "copies",
           "version",
-          "newerAvailable"
+          "newerAvailable",
+          "changed"
         ],
         "title": "Installed",
         "type": "object"
@@ -3233,6 +3237,39 @@
         "title": "ReadingWord",
         "type": "object"
       },
+      "ReviewedDigests": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
+          "recordDigest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorddigest"
+          }
+        },
+        "required": [
+          "digest",
+          "recordDigest"
+        ],
+        "title": "ReviewedDigests",
+        "type": "object"
+      },
       "Sample": {
         "additionalProperties": false,
         "properties": {
@@ -3502,7 +3539,8 @@
         },
         "required": [
           "tools",
-          "bind"
+          "bind",
+          "resources"
         ],
         "title": "TemplateRequires",
         "type": "object"
@@ -3638,7 +3676,9 @@
           "installed",
           "state",
           "canAdd",
-          "addCell"
+          "addCell",
+          "removeCell",
+          "copy"
         ],
         "title": "TemplateView",
         "type": "object"
@@ -3928,7 +3968,7 @@
             "type": "array"
           },
           "expect": {
-            "$ref": "#/components/schemas/UpdateExpect"
+            "$ref": "#/components/schemas/ReviewedDigests"
           },
           "fields": {
             "items": {
@@ -3966,8 +4006,14 @@
           "copy",
           "fromVersion",
           "toVersion",
+          "fields",
+          "draftOpen",
+          "appliesNow",
+          "expect",
           "changes",
-          "edits"
+          "edits",
+          "taken",
+          "version"
         ],
         "title": "UpdateReview",
         "type": "object"

@@ -8,7 +8,7 @@ import type { SettingsApi } from '../../settings-contract';
 import * as F from '../fixtures';
 import { bulk, field, id, list, notFound, respond } from '../runtime';
 import { teamDirectory } from '../teams';
-import { seedApiKeys, seedDeliveries, seedMembers, seedNotifications, seedUsage, seedWebhooks } from './seed';
+import { seedApiKeys, seedDeliveries, seedMembers, seedNotifications, seedUsage, serviceScopes, seedWebhooks } from './seed';
 
 export type AuditLog = (e: Pick<AuditEntry, 'action' | 'target' | 'summary'> & Partial<Pick<AuditEntry, 'diff' | 'reason'>>) => void;
 
@@ -90,7 +90,7 @@ export function createSettingsMock({ log, me }: { log: AuditLog; me: string }): 
       invite: (input) =>
         respond(() => {
           const t = targetTeam(input.teamId);
-          const links: { email: string; token: string }[] = [];
+          const links: { email: string; memberId: string; token: string }[] = [];
           const res = bulk(input.emails, (email) => {
             const e = email.trim().toLowerCase();
             if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return 'Not an email address';
@@ -101,7 +101,7 @@ export function createSettingsMock({ log, me }: { log: AuditLog; me: string }): 
             const name = e.split('@')[0].split('.').map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
             const invited = { id: id('mem'), name, email: e, role: input.role, teamId: t.id, team: t.name, status: 'invited' as const, invitedAt: new Date().toISOString() };
             const token = linkFor(invited);
-            links.push({ email: e, token });
+            links.push({ email: e, memberId: invited.id, token });
             members.unshift({ ...invited, inviteToken: token });
             log({ action: 'invited', target: { type: 'member', name: e, href: '/settings/members' }, summary: `Invited to ${t.name} as ${ROLE_LABEL[input.role]}`, diff: [{ field: 'Role', after: ROLE_LABEL[input.role] }] });
           });
@@ -238,7 +238,7 @@ export function createSettingsMock({ log, me }: { log: AuditLog; me: string }): 
           if (!input.scopes.length) throw new ApiError('Pick at least one scope.', 400);
           const t = targetTeam(input.teamId);
           const key = `nfb_live_${Array.from({ length: 32 }, () => 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random() * 57)]).join('')}`;
-          const k = { id: id('key'), teamId: t.id, team: t.name, name, prefix: key.slice(0, 12), scopes: input.scopes, createdBy: me, createdAt: new Date().toISOString(), expiresAt: input.expiresInDays ? new Date(Date.now() + input.expiresInDays * 86_400_000).toISOString() : undefined };
+          const k = { id: id('key'), teamId: t.id, team: t.name, name, prefix: key.slice(0, 12), scopes: serviceScopes(input.scopes), status: 'active' as const, createdBy: me, createdAt: new Date().toISOString(), lastUsedAt: null, expiresAt: input.expiresInDays ? new Date(Date.now() + input.expiresInDays * 86_400_000).toISOString() : null };
           keys.unshift(k);
           log({ action: 'created', target: { type: 'api_key', name: `${name} (${k.prefix}…)`, href: '/settings/team/api-keys' }, summary: 'Created an API key', diff: [{ field: 'Scopes', after: input.scopes.join(', ') }, { field: 'Expires', after: input.expiresInDays ? `In ${input.expiresInDays} days` : 'Never' }] });
           return { key, apiKey: strip(k) };
