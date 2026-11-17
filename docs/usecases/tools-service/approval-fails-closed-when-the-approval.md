@@ -47,7 +47,11 @@ tools-service starts with no platform client, so the team approval rules cannot 
 
 | Layer | Script | State |
 |---|---|---|
-| api | `tools-service/scripts/test-uc-754-api.py` | failing, expected: policy.py:56 answers empty levels |
+| api | `tools-service/scripts/test-uc-754-api.py` | red on this base (step 3: the write ran, hold placed); expected green after f2c59b2b |
+
+## Open
+
+On this base the write runs with the rules unreadable. After the fail-closed change the write answers 503 `approval_rules_unavailable`; step 3 then needs to accept that refusal (it already accepts a refused status or a card).
 
 ## Non-vacuous check
 

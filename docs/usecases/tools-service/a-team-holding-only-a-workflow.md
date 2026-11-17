@@ -1,6 +1,6 @@
 # A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it
 
-Status: draft, not built: the scripts are stubs that fail until written (see the hand-back). Id: `uc-755`. Service: `tools-service`. Layers: api.
+Status: draft, not built: the script is a stub. Expected green after 65210d8c (every write answers 404 and the can* flags are fixed); the ui half checks the edit controls are gone. Sign in as a plain member added by invite-and-accept, not the team's creator (403 team_forbidden). Id: `uc-755`. Service: `tools-service`. Layers: api.
 
 Short title: A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it
 
