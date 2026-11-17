@@ -3,6 +3,7 @@
  * YAML files are a Python/CLI concern; this surface accepts a parsed object or JSON text.
  */
 import { NotFound } from './errors.js';
+import { eachPage } from './transport.js';
 
 export const PLANNED = 'This command is planned; the public API for it is not shipped.';
 
@@ -40,6 +41,23 @@ export class Workflows {
     private readonly raw: { agents: any },
     private readonly runs: { start: Function; wait: Function },
   ) {}
+
+  /** Every workflow definition, page after page (`search`, `ids`, `status`). */
+  list(query: Record<string, unknown> = {}) {
+    return eachPage((page) => this.raw.agents.workflows_list_definitions({ query: page }), query);
+  }
+
+  /** The workflow's forms, every page (`search`, `ids`). */
+  forms(workflowId: string, query: Record<string, unknown> = {}) {
+    return eachPage((page) => this.raw.agents.forms_workflow_forms({ path: { workflow_id: workflowId }, query: page }), query);
+  }
+
+  /** Starts a batch over the rows of an uploaded file. The API refuses a field it does not name. */
+  startBatch(workflowId: string, fileId: string, options: { mode?: 'live' | 'test'; dryRun?: boolean } = {}) {
+    const { mode, dryRun } = options;
+    const body = { fileId, ...(mode === undefined ? {} : { mode }), ...(dryRun === undefined ? {} : { dryRun }) };
+    return this.raw.agents.batches_start_batch({ path: { workflow_id: workflowId }, body: body as never });
+  }
 
   async types(group?: string) {
     const found = (await this.raw.agents.workflows_node_types()) as Record<string, any>[];

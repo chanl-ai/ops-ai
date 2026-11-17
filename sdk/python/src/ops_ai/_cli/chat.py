@@ -19,7 +19,6 @@ from typing import Any
 
 from ops_ai import OpsAI
 from ops_ai._chat import action_body, connect_card
-from ops_ai._transport import page_items
 
 from .chat_script import evals, run_script
 from .common import MARK, client, console_url, emit, marked, parser, refuse, short, table, testing, values, verb_options
@@ -152,7 +151,7 @@ def agent_id(ops: OpsAI, name: str | None, *, test: bool) -> str | None:
     never published."""
     if not name:
         return None
-    agents = list(ops.agents.list(page_size=100)) if test else ops.chat.agents()
+    agents = list(ops.agents.list()) if test else ops.chat.agents()
     wanted = name.lower()
     hits = [
         a
@@ -207,7 +206,7 @@ def skill_pick(ops: OpsAI, wanted: str | None, given: list[str]) -> dict[str, An
             raise ValueError("--input needs --skill")
         return {}
     name, _, part = wanted.partition("/")
-    rows = page_items(ops.raw.agents.agents_list_skills(view="published", page_size=200))[0]
+    rows = list(ops.skills.list(view="published"))
     hits = [
         s
         for s in rows

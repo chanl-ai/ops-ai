@@ -1,7 +1,7 @@
 /** Agent lifecycle, chat and test over the generated agents operations. */
 /* Agents talks to raw.agents only, so this file does not import the client. */
 
-import { pageItems } from './transport.js';
+import { eachPage } from './transport.js';
 
 export const PLANNED = 'This command is planned; the public API for it is not shipped.';
 
@@ -19,13 +19,8 @@ function replyText(data: unknown): string {
 export class Agents {
   constructor(private readonly raw: { agents: any }) {}
 
-  async *list(query: Record<string, unknown> = {}) {
-    let next: Record<string, unknown> | null = {};
-    while (next) {
-      const [items, more] = pageItems(await this.raw.agents.agents_list_agents({ query: { ...query, ...next } }));
-      yield* items;
-      next = more;
-    }
+  list(query: Record<string, unknown> = {}) {
+    return eachPage((page) => this.raw.agents.agents_list_agents({ query: page }), query);
   }
 
   get(id: string) {

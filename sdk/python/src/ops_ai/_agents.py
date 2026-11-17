@@ -5,11 +5,12 @@ from __future__ import annotations
 import asyncio
 import threading
 import uuid
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import Any
 
 from ._io import Definition, load_definition
-from ._transport import page_items
+from ._transport import iter_pages, iter_pages_async
 from .errors import NotFound, OpsError
 
 _BACKGROUND: set[asyncio.Task[None]] = set()
@@ -50,14 +51,8 @@ class Agents:
     def __init__(self, raw: Any) -> None:
         self._raw = raw
 
-    def list(self, **query: Any) -> Any:
-        nxt: dict[str, Any] = {}
-        while True:
-            items, nxt_more = page_items(self._raw.agents.agents_list_agents(**{**query, **nxt}))
-            yield from items
-            if nxt_more is None:
-                return
-            nxt = nxt_more
+    def list(self, **query: Any) -> Iterator[Any]:
+        return iter_pages(self._raw.agents.agents_list_agents, **query)
 
     def get(self, id: str) -> Any:
         return self._raw.agents.agents_get_agent(id)
@@ -198,15 +193,8 @@ class AsyncAgents:
     def __init__(self, raw: Any) -> None:
         self._raw = raw
 
-    async def list(self, **query: Any) -> Any:
-        nxt: dict[str, Any] = {}
-        while True:
-            items, nxt_more = page_items(await self._raw.agents.agents_list_agents(**{**query, **nxt}))
-            for item in items:
-                yield item
-            if nxt_more is None:
-                return
-            nxt = nxt_more
+    def list(self, **query: Any) -> AsyncIterator[Any]:
+        return iter_pages_async(self._raw.agents.agents_list_agents, **query)
 
     async def get(self, id: str) -> Any:
         return await self._raw.agents.agents_get_agent(id)

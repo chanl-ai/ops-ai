@@ -20,7 +20,7 @@ import type { operations as PlatformOps } from './generated/platform.js';
 import { platformOperations } from './generated/platform-operations.js';
 import type { operations as ToolsOps } from './generated/tools.js';
 import { toolsOperations } from './generated/tools-operations.js';
-import { type CallArgs, type Config, type Operation, pageItems, result, type Service, Transport } from './transport.js';
+import { type CallArgs, type Config, eachPage, type Operation, pageItems, result, type Service, Transport } from './transport.js';
 import { Agents } from './agents.js';
 import { Chat } from './chat.js';
 import { savedOptions } from './profile.js';
@@ -84,11 +84,13 @@ interface Noun {
   list?: string;
   get?: string;
   create?: string;
+  /** False: the list is one array, whatever the query. */
+  paged?: false;
 }
 
 /** Which operation each verb of a resource calls; the Python SDK reads the same table (sdk/python/src/ops_ai/_client.py). */
 export const NOUNS = {
-  teams: { service: 'platform', list: 'teams_list_teams' },
+  teams: { service: 'platform', list: 'teams_list_teams', paged: false },
   agents: { service: 'agents', list: 'agents_list_agents', get: 'agents_get_agent', create: 'agents_create_agent' },
   workflows: { service: 'agents', list: 'workflows_list_workflows', get: 'workflows_get_workflow' },
   threads: { service: 'agents', list: 'threads_list_threads', get: 'threads_thread_state', create: 'threads_create_thread' },
@@ -101,6 +103,11 @@ export const NOUNS = {
   files: { service: 'files', list: 'files_list_files', get: 'files_get_file' },
   runs: { service: 'agents', list: 'workflows_list_engine_runs', get: 'workflows_get_engine_run' },
   tasks: { service: 'agents', list: 'reviews_list_reviews', get: 'reviews_get_review' },
+  skills: { service: 'agents', list: 'agents_list_skills', get: 'agents_get_skill' },
+  guardrails: { service: 'agents', list: 'agents_list_guardrails', get: 'agents_get_guardrail' },
+  widgets: { service: 'agents', list: 'agents_list_widgets', get: 'agents_get_widget' },
+  caseTypes: { service: 'agents', list: 'cases_list_case_types', get: 'cases_get_case_type' },
+  taskTypes: { service: 'agents', list: 'reviews_list_task_types', get: 'reviews_get_task_type' },
 } as const satisfies Record<string, Noun>;
 
 export class Resource {
@@ -116,13 +123,13 @@ export class Resource {
   }
 
   /** Every item, page after page, whichever paging the route uses. */
-  async *list(query: Record<string, unknown> = {}): AsyncGenerator<any> {
-    let next: Record<string, unknown> | null = {};
-    while (next) {
-      const [items, more] = pageItems(await this.call('list', { query: { ...query, ...next } }));
-      yield* items;
-      next = more;
-    }
+  list(query: Record<string, unknown> = {}): AsyncGenerator<any> {
+    if (this.noun.paged === false) return this.once(query);
+    return eachPage((page) => this.call('list', { query: page }), query);
+  }
+
+  private async *once(query: Record<string, unknown>): AsyncGenerator<any> {
+    yield* pageItems(await this.call('list', { query }))[0];
   }
 
   get(id: string): Promise<any> {
@@ -132,6 +139,17 @@ export class Resource {
 
   create(body: unknown): Promise<any> {
     return this.call('create', { body });
+  }
+}
+
+export class Threads extends Resource {
+  constructor(t: Transport, noun: Noun, private readonly raw: Raw) {
+    super(t, noun);
+  }
+
+  /** A thread's channel messages. A person who cannot read the thread gets NotFound, as for another team's. */
+  inbox(threadId: string): Promise<any> {
+    return this.raw.agents.threads_get_inbox({ path: { thread_id: threadId } });
   }
 }
 
@@ -278,8 +296,13 @@ export class OpsAI {
   readonly agents: Agents;
   readonly chat: Chat;
   readonly workflows: Workflows;
-  readonly threads: Resource;
+  readonly threads: Threads;
   readonly cases: Resource;
+  readonly skills: Resource;
+  readonly guardrails: Resource;
+  readonly widgets: Resource;
+  readonly caseTypes: Resource;
+  readonly taskTypes: Resource;
   readonly tools: Tools;
   readonly secrets: Secrets;
   readonly egress: Egress;
@@ -321,8 +344,13 @@ export class OpsAI {
     const t = new Transport(this.config);
     this.raw = new Raw(t);
     this.teams = new Resource(t, NOUNS.teams);
-    this.threads = new Resource(t, NOUNS.threads);
+    this.threads = new Threads(t, NOUNS.threads, this.raw);
     this.cases = new Resource(t, NOUNS.cases);
+    this.skills = new Resource(t, NOUNS.skills);
+    this.guardrails = new Resource(t, NOUNS.guardrails);
+    this.widgets = new Resource(t, NOUNS.widgets);
+    this.caseTypes = new Resource(t, NOUNS.caseTypes);
+    this.taskTypes = new Resource(t, NOUNS.taskTypes);
     this.apps = new Apps(this.raw);
     this.tools = new Tools(this.raw, this.apps, new Resource(t, NOUNS.tools));
     this.secrets = new Secrets(this.raw);

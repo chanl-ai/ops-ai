@@ -9,7 +9,6 @@ import sys
 from typing import Any
 
 from ops_ai import OpsAI, OpsError
-from ops_ai._transport import page_items
 
 from .common import client, emit, parser, payload, refuse, short, table, verb_options
 
@@ -42,8 +41,8 @@ def runs_main(argv: list[str]) -> int:
 
 def _runs(ns: argparse.Namespace, ops: OpsAI) -> int:
     if ns.verb == "list":
-        found = ops.raw.agents.workflows_list_engine_runs(workflow_id=ns.workflow, status=ns.status, page_size=50)
-        return table(ns, page_items(found)[0], "id", "workflowId", "mode", "status", "outcome", "createdAt")
+        found = ops.runs.list(workflow_id=ns.workflow, status=ns.status)
+        return table(ns, found, "id", "workflowId", "mode", "status", "outcome", "createdAt")
     if ns.verb == "start":
         started = ops.runs.start(ns.workflow, input=payload(ns.input), mode="live" if ns.live else "test")
         if ns.wait:
@@ -89,6 +88,8 @@ def tasks_main(argv: list[str]) -> int:
     listing = sub.add_parser("list", parents=common, help="the Human Tasks queue")
     listing.add_argument("--view", help="the queue's tab, e.g. mine, open, done")
     listing.add_argument("--search")
+    types = sub.add_parser("types", parents=common, help="the task types a team defines")
+    types.add_argument("--search")
     sub.add_parser("show", parents=common, help="one task").add_argument("task")
     decide = sub.add_parser("decide", parents=common, help="send one of the actions the task offers")
     decide.add_argument("task")
@@ -112,8 +113,10 @@ def tasks_main(argv: list[str]) -> int:
 
 def _tasks(ns: argparse.Namespace, ops: OpsAI) -> int:
     if ns.verb == "list":
-        found = ops.raw.agents.reviews_list_reviews(view=ns.view, search=ns.search, page_size=50)
-        return table(ns, page_items(found)[0], "id", "kind", "title", "risk", "status")
+        found = ops.tasks.list(view=ns.view, search=ns.search)
+        return table(ns, found, "id", "kind", "title", "risk", "status")
+    if ns.verb == "types":
+        return table(ns, ops.task_types.list(search=ns.search), "id", "name", "description")
     if ns.verb == "show":
         return emit(ns, ops.tasks.get(ns.task))
     if ns.verb == "decide":

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from ops_ai import OpsAI
-from ops_ai._transport import every_page, page_items
+from ops_ai._transport import every_page
 
 from .common import client, emit, marked, parser, refuse, table, verb_options
 
@@ -25,6 +25,8 @@ def cases_main(argv: list[str]) -> int:
     listing = sub.add_parser("list", parents=common, help="cases")
     listing.add_argument("--status", action="append")
     listing.add_argument("--search")
+    types = sub.add_parser("types", parents=common, help="the case types a team defines")
+    types.add_argument("--search")
     sub.add_parser("show", parents=common, help="one case").add_argument("case")
     note = sub.add_parser("note", parents=common, help="add a note to a case's timeline")
     note.add_argument("case")
@@ -34,8 +36,10 @@ def cases_main(argv: list[str]) -> int:
         ops = client(ns)
         cases = ops.raw.agents
         if ns.verb == "list":
-            rows = page_items(cases.cases_list_cases(status=ns.status, search=ns.search, page_size=50))[0]
+            rows = ops.cases.list(status=ns.status, search=ns.search)
             return table(ns, rows, "id", "subject", "status", "priority", "assignee", "customerName")
+        if ns.verb == "types":
+            return table(ns, ops.case_types.list(search=ns.search), "id", "name", "description")
         if ns.verb == "show":
             return emit(ns, cases.cases_get_case(ns.case))
         return emit(ns, cases.cases_add_event(ns.case, {"kind": "note", "text": ns.text}))

@@ -37,7 +37,8 @@ def main(argv: list[str]) -> int:
     test.add_argument("--message", required=True)
     trace = sub.add_parser("trace", help="recent runs")
     trace.add_argument("id")
-    sub.add_parser("list", help="the team's agents")
+    listing = sub.add_parser("list", help="the team's agents")
+    listing.add_argument("--search")
     options = sub.add_parser("tool-options", help="the operations an agent may be granted")
     options.add_argument("--search")
     grant = sub.add_parser("grant-tools", help="add tools to an agent's draft, keeping the ones it holds")
@@ -54,7 +55,7 @@ def _dispatch(ns: argparse.Namespace) -> int:
     ops = client(ns)
     agents = ops.agents
     if ns.verb == "list":
-        return emit(ns, list(agents.list()))
+        return emit(ns, list(agents.list(search=ns.search)))
     if ns.verb == "validate":
         return emit(ns, agents.validate(agent_file(ns.definition)))
     if ns.verb == "apply":
