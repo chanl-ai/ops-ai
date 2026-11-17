@@ -216,6 +216,7 @@ erDiagram
 | `registry_agents, registry_agent_versions` | An agent and its immutable versions. A version carries the limits a caller may override within, the on or off switch of each pinned guardrail and optional call caps per turn and per conversation. An empty per-turn model-call cap means 50, and an empty per-conversation cap means 200 model calls and a cost of 5.00 | built |
 | `registry_publish_requests` | A request to publish a version, decided by a second person. Moves to the reviews package | partial (moving) |
 | `registry_skills, registry_skill_versions` | Versioned procedures an agent loads when a request matches. A skill records who created it, once, so the right to delete it does not pass to whoever saved a draft last | built |
+| `agent_skill_pins` | The skills each agent's newest version pins, one row per agent and skill with the pinned version and the agent's team, written in the transaction that saves the version (0113). The skills list counts pins from it and a skill's delete guard reads it; a published version older than the newest is read from its spec | built |
 | `registry_guardrails, registry_guardrail_versions` | Versioned checks on the question and the answer | built |
 | `graph_threads` | A conversation or job thread, with the overrides set for the thread. Its origin and owning team are planned `ix_graph_threads_team_updated` (tenant_id, team_id, updated_at) serves a team's thread list (0071). | partial |
 | `chat_search` | A thread's title, agent, last reply and questions as plain columns, so search works on every supported database | built |
@@ -485,6 +486,7 @@ erDiagram
 | `module_egress_hosts, egress_hosts, egress_ranges, egress_audit` | The hosts and address ranges a module may reach, and each check made | built |
 | `gateway_calls, gateway_fences` | Every call with its verified caller and outcome, the kind of run (test or live) and the account it used, the route that took it (the API or MCP) and the name an MCP client gives itself, reconciled by key; fences reject stale approvals | built |
 | `connections, app_credentials, connection_audit` | An app's accounts, one row each: how the platform signs in to one system, its credentials bound to the system's address, and whether it is a sandbox account (which test runs use); a team's own OAuth client, kept once; secret parts are rows of `tool_secrets` | built |
+| `app_cards` | Each team's app cards (plugins, accounts and built-in apps) as rows, so the Apps list pages, searches and sorts in SQL. Rebuilt from the plugins, bindings and accounts when the team's stamp differs from the install's; held to its team by the database (0084) | built |
 | `connection_tokens, oauth_states` | Encrypted OAuth tokens, stored against the rotation they replaced, and sign-ins in progress | built |
 | `operation_mocks` | An operation's mock answers in test, which a test call gets before anything is sent | built |
 | `tool_secrets, secret_audit` | Encrypted credentials and every read of them. Each secret also lists the teams whose modules may read it; none means every team | built |
