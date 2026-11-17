@@ -2,8 +2,7 @@
 // docs/usecases/agents-service/a-chat-uses-the-account-picked-for-it.md. Salesforce has two team accounts on the fake
 // Salesforce (Retail org, the team default, and EU org, at two My Domains), both signed in. Maya opens a chat with an
 // agent holding salesforce_query: the picker says Retail org; she changes it to EU org and asks; the fake records the
-// query on the EU org's host and the chat's connectors answer names EU org. Screenshots go to OPS_USECASE_SHOTS when
-// set (the evidence folder otherwise), at 1440 and 390.
+// query on the EU org's host and the chat's connectors answer names EU org. Screenshots go to the evidence folder, at 1440 and 390.
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { request } from 'node:https';
@@ -18,7 +17,7 @@ const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const PASSWORD = 'northfield-demo';
 const PRIYA = 'p.shah@harborpine.example';
 const MAYA = 'm.okafor@harborpine.example';
-const SHOTS = process.env.OPS_USECASE_SHOTS || evidenceDir('697', 'uc');
+const SHOTS = evidenceDir('697', 'uc');
 const SALESFORCE = join(process.env.OPS_PLUGINS_REPO || join(ROOT, '..', 'ops-ai-plugins'), 'plugins/salesforce/src/ops_plugin_salesforce');
 const LIB = join(ROOT, 'docs/usecases/lib');
 const APP = 'plugin:opsai.salesforce';

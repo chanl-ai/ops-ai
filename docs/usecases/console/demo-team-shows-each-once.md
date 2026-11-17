@@ -22,7 +22,7 @@ only the cardholder's chequing account. This use case checks all three on a depl
 | b | On Workflows, Start run, then Choose a workflow | No name shows twice; `Levy notice: read the document` and `Levy notice: one debtor` once each |
 | c | Ask Dispute Desk about Marcus Bell's Coastal Air charge of 1,240.00 CAD on his credit card | It calls `list_transactions` and names the charge on `VISA-5521`; one chat turn on the team's live model |
 
-`UC450_ONLY=a,b` leaves out step c and its model calls. `UC450_SHOTS=<dir>` saves a screenshot per step.
+`UC450_ONLY=a,b` leaves out step c and its model calls. A screenshot per step is saved in `.logs/usecases/450/screens/`.
 
 ## Acceptance layers
 

@@ -16,7 +16,7 @@ const JAMES = 'j.richardson@harborpine.example';
 const ALIAS = 'uc532-mini';
 const MODEL = 'gpt-4.1-mini';
 const KEY = 'OPENAI';
-const SHOTS = evidenceDir('509', 'uc-532');
+const SHOTS = evidenceDir('532', 'uc-532');
 mkdirSync(SHOTS, { recursive: true });
 const signIn = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: PASSWORD }) })).json()).data;
 const data = async (r) => {

@@ -1,8 +1,7 @@
 // uc-627 A team connects Salesforce at its company address, ui layer: docs/usecases/tools-service/salesforce-org-address.md.
 // Priya adds an auth config holding the org's My Domain from the console's own form, connects Salesforce with it
 // against the fake Salesforce, sees the account Connected with its org address, and runs a SOQL query from the tool's
-// Test. Security allows the fake's private range only. Screenshots go to OPS_USECASE_SHOTS when set (the evidence
-// folder otherwise), at 1280 and 390.
+// Test. Security allows the fake's private range only. Screenshots go to the evidence folder, at 1280 and 390.
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -16,7 +15,7 @@ const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const PASSWORD = 'northfield-demo';
 const PRIYA = 'p.shah@harborpine.example';
-const SHOTS = process.env.OPS_USECASE_SHOTS || evidenceDir('627', 'uc');
+const SHOTS = evidenceDir('627', 'uc');
 const SALESFORCE = process.env.OPS_SALESFORCE_PLUGIN || join(process.env.OPS_PLUGINS_REPO || join(ROOT, '..', 'ops-ai-plugins'), 'plugins/salesforce/src/ops_plugin_salesforce');
 const LIB = join(ROOT, 'docs/usecases/lib');
 const APP = 'plugin:opsai.salesforce';

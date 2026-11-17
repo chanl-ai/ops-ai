@@ -5,6 +5,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { evidenceRoot } from './evidence.ts';
 import { pathToFileURL } from 'node:url';
 import type { Layer } from './layers.ts';
 import { DB_VAR, dropDatabase, runDatabaseName } from './isolation.ts';
@@ -207,7 +208,7 @@ export function extract(root: string, id: string): string[] {
   const path = findPage(root, id);
   if (!path) throw new Error(`no page names ${id} in its use case table under docs/usecases/`);
   const page = parsePage(readFileSync(join(root, path), 'utf8'), path);
-  const dir = join(root, '.logs/usecases/pages', id);
+  const dir = join(evidenceRoot(root), 'pages', id);
   mkdirSync(dir, { recursive: true });
   const files: [string, Tab, string][] = [['python.py', 'Python', '#'], ['typescript.mts', 'TypeScript', '//'], ['cli.sh', 'CLI', '#'], ['mcp.py', 'MCP', '#']];
   return files.map(([name, tab, mark]) => {
@@ -255,7 +256,7 @@ function startStack(root: string, page: Page, config: string, env: NodeJS.Proces
 export async function runPage(root: string, path: string, layer: Layer, env: NodeJS.ProcessEnv): Promise<{ code: number | null; output: string }> {
   const page = parsePage(readFileSync(join(root, path), 'utf8'), path);
   const tabs = LAYER_TABS[layer] ?? [];
-  const dir = join(root, '.logs/usecases/pages', `${page.path.replace(/[^a-z0-9]+/gi, '-')}-${layer}-${process.pid}`);
+  const dir = join(evidenceRoot(root), 'pages', `${page.path.replace(/[^a-z0-9]+/gi, '-')}-${layer}-${process.pid}`);
   const work = join(dir, 'work');
   mkdirSync(work, { recursive: true });
   let output = '';

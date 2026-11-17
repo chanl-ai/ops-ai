@@ -3,7 +3,10 @@
 // on an install with no flags, nothing offers the MCP address or connecting an outside assistant; on one whose
 // OPS_FLAGS names mcp_gateway, the same places show it. The flag reaches platform-service and tools-service from this
 // process's environment, as the install config reaches them.
-import { check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { check, chromium, consoleSignIn, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { PASSWORD, PRIYA } from '../../lib/workflow_ui.mjs';
 
 /** Opens ⌘K, searches, and returns the option labels it lists. */
@@ -40,7 +43,8 @@ async function walk(consoleUrl, step) {
     await page.getByRole('tab', { name: /^Workflows/ }).or(page.getByRole('button', { name: /^Workflows/ })).first().click({ timeout: 90_000 });
     await page.getByTestId('workflow-tools').waitFor({ timeout: 60_000 });
     seen.toolsLink = await page.getByTestId('workflow-tools-manage').count();
-    await page.screenshot({ path: `${process.env.OPS_EVIDENCE_DIR ?? '/tmp'}/uc-612-${step}-tools.png` });
+    mkdirSync(evidenceDir('612', 'screens'), { recursive: true });
+    await page.screenshot({ path: join(evidenceDir('612', 'screens'), `${step}-tools.png`) });
   } finally {
     await browser.close();
   }

@@ -4,6 +4,7 @@
 // which stories work and, for each broken one, the step that failed. The checks stay the evidence underneath.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { caseDir } from './evidence.ts';
 import { isLayer, type Layer } from './layers.ts';
 import type { UseCase } from './registry.ts';
 import type { Checks } from './report.ts';
@@ -147,13 +148,13 @@ export function loadGreen(root: string, id: string, layer: Layer): SavedRun | un
 }
 
 /** The script's full output for the latest run, written so a failure can be read after the terminal is gone. */
-export function logPath(id: string, layer: Layer): string {
-  return `${RUNS_DIR}/${id}-${layer}.log`;
+export function logPath(root: string, id: string, layer: Layer): string {
+  return caseDir(root, id, `${layer}.log`);
 }
 
 export function saveLog(root: string, id: string, layer: Layer, output: string): void {
-  mkdirSync(join(root, RUNS_DIR), { recursive: true });
-  writeFileSync(join(root, logPath(id, layer)), output);
+  mkdirSync(caseDir(root, id), { recursive: true });
+  writeFileSync(logPath(root, id, layer), output);
 }
 
 export interface Step {

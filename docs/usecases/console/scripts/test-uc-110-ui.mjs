@@ -50,7 +50,7 @@ await withUiStack(
       check('Enter in Add secret lists the secret', (await page.getByRole('cell', { name: SECRET }).count()) === 1 && writes.includes('/v1/secrets'), writes);
 
       check('no page errors', errors.length === 0, errors);
-      const dir = evidenceDir('113');
+      const dir = evidenceDir('110');
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, 'uc-110-tools-posts.json'), `${JSON.stringify(writes, null, 2)}\n`);
     } finally {

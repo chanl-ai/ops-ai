@@ -46,10 +46,10 @@ const OURS = [
   { when: '\\bFind case (?P<num>\\d{8})', after: 'salesforce_query', result: '(?=[\\s\\S]*"Status": ?"(?P<status>[^"]+)")(?=[\\s\\S]*"Subject": ?"(?P<subject>[^"]+)")', text: 'Case {num} is {status}: {subject}.' },
   { when: '(?=[\\s\\S]*\\[(?P<n>\\d+)\\] Reset a card PIN[^\\n]*: (?P<quote>[^\\n]+))[\\s\\S]*resetting a card PIN', text: '{quote} [{n}]' },
 ];
-const RULES = '.logs/usecase/uc564-model';
+const RULES = evidenceDir('564', 'model');
 const demo = JSON.parse(readFileSync(join(ROOT, 'services/models-service/seed/demo-fake-openai/script.json'), 'utf8'));
-mkdirSync(join(ROOT, RULES), { recursive: true });
-writeFileSync(join(ROOT, RULES, 'script.json'), JSON.stringify({ ...demo, rules: [...OURS, ...demo.rules] }));
+mkdirSync(RULES, { recursive: true });
+writeFileSync(join(RULES, 'script.json'), JSON.stringify({ ...demo, rules: [...OURS, ...demo.rules] }));
 
 /** The fake Salesforce, started from its script; resolves with what it printed and stops when the walk ends. */
 async function startSalesforce() {

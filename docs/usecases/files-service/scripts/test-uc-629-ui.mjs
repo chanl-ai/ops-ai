@@ -1,6 +1,6 @@
 // uc-629 A file's page shows its preview or says why not, ui layer: docs/usecases/files-service/file-page-preview.md.
 // Priya (admin) and Ravi (viewer) open a PDF, an image, a text file and a PDF whose stored bytes are gone, none of them
-// read for text yet, at 1280 and 390. Screenshots go to OPS_USECASE_SHOTS when set. Platform sign-in; no model call.
+// read for text yet, at 1280 and 390. Screenshots go to the evidence folder. Platform sign-in; no model call.
 import { readFileSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,7 +10,7 @@ import { PASSWORD, PRIYA, as } from '../../lib/workflow_ui.mjs';
 
 const RAVI = 'r.menon@harborpine.example';
 const files = `http://127.0.0.1:${FILES_PORT}`;
-const SHOTS = process.env.OPS_USECASE_SHOTS || evidenceDir('629', 'uc');
+const SHOTS = evidenceDir('629', 'uc');
 // Bytes of this run only: the same bytes as a file the team already holds complete as that file, under its name.
 const RUN = Buffer.from(`\n% uc-629 ${Date.now()}\n`);
 const own = (bytes) => Buffer.concat([bytes, RUN]);
