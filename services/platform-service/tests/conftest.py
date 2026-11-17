@@ -96,6 +96,12 @@ BOTH_DATABASES = frozenset(
         "test_team_names.py",
         "test_tenancy_mode.py",
         "test_workspace_admin.py",
+        "test_body_name_pins.py",
+        "test_signin_lockout.py",
+        "test_signin_password.py",
+        "test_auth.py",
+        "test_holders.py",
+        "test_signin_secrets.py",
     }
 )
 
