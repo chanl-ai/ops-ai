@@ -10,9 +10,10 @@ import { AddDocumentsDialog } from '@/components/shared/add-documents-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useFileDetails } from '@/hooks/file-queries';
+import { useKnowledgeBaseSearch } from '@/hooks/knowledge-queries';
 import type { ChatAttachment, SkillPick } from '@/lib/types/chat';
 import { cn } from '@/lib/utils';
 
@@ -34,12 +35,13 @@ export interface KbOption {
 }
 
 /** The knowledge bases a conversation grounds its answers in, as removable chips plus an Add menu. */
-/**
- * The knowledge an answer may use. `agentName` names the agent whose allowed bases `kbs` are, so an empty list says the
- * agent holds none and where they are added, rather than suggesting the person can read none (UX knowledge-5).
- */
 /** `oneLine`: the chips stay on one line and scroll sideways, for a header that has one line for them. */
-export function KbChips({ kbs, value, onChange, disabled, agentName, oneLine = false }: { kbs: KbOption[]; value: string[]; onChange: (ids: string[]) => void; disabled?: boolean; agentName?: string; oneLine?: boolean }) {
+/**
+ * `kbs` names the chips (the ones the page looked up by id). `within` is the agent's own list of ids: the menu searches
+ * only those on the server, and an agent that holds none offers none. Left out, the menu searches every knowledge base
+ * the person can read.
+ */
+export function KbChips({ kbs, within, value, onChange, disabled, agentName, oneLine = false }: { kbs: KbOption[]; within?: string[]; value: string[]; onChange: (ids: string[]) => void; disabled?: boolean; agentName?: string; oneLine?: boolean }) {
   const selected = value.map((id) => kbs.find((k) => k.id === id) ?? { id, name: id, color: 'slate' });
   return (
     <div className={cn('flex items-center gap-1.5', oneLine ? 'min-w-0 overflow-x-auto [scrollbar-width:none] [&>*]:shrink-0' : 'flex-wrap')}>
@@ -64,28 +66,39 @@ export function KbChips({ kbs, value, onChange, disabled, agentName, oneLine = f
             </Button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-72 p-0">
-            <div className="border-b px-3 py-2 text-xs font-medium">{agentName ? `${agentName} can answer from` : 'Answer from these knowledge bases'}</div>
-            <Command>
-              <CommandList className="max-h-64">
-                <CommandEmpty>{agentName ? `${agentName} has no knowledge bases. A builder adds them on its page.` : 'No knowledge bases you can read.'}</CommandEmpty>
-                <CommandGroup>
-                  {kbs.map((k) => {
-                    const on = value.includes(k.id);
-                    return (
-                      <CommandItem key={k.id} value={k.name} onSelect={() => onChange(on ? value.filter((v) => v !== k.id) : [...value, k.id])} aria-checked={on} role="menuitemcheckbox">
-                        <Checkbox checked={on} tabIndex={-1} aria-hidden />
-                        <KbDot color={k.color} />
-                        <span className="truncate">{k.name}</span>
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
-              </CommandList>
-            </Command>
+            <div className="border-b px-3 py-2 text-xs font-medium">{within && agentName ? `${agentName} can answer from` : 'Answer from these knowledge bases'}</div>
+            <KbMenu within={within} agentName={agentName} value={value} onChange={onChange} />
           </PopoverContent>
         </Popover>
       )}
     </div>
+  );
+}
+
+function KbMenu({ within, agentName, value, onChange }: { within?: string[]; agentName?: string; value: string[]; onChange: (ids: string[]) => void }) {
+  const [search, setSearch] = React.useState('');
+  const found = useKnowledgeBaseSearch(search, true, within);
+  const list = found.data ?? [];
+  const toggle = (id: string) => onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
+  return (
+    <Command shouldFilter={false}>
+      <CommandInput value={search} onValueChange={setSearch} placeholder="Search knowledge bases" />
+      <CommandList className="max-h-64">
+        <CommandEmpty>{found.isFetching ? 'Searching…' : within?.length === 0 ? `${agentName ?? 'This agent'} has no knowledge bases. A builder adds them on its page.` : 'No knowledge bases match.'}</CommandEmpty>
+        <CommandGroup>
+          {list.map((k) => {
+            const on = value.includes(k.id);
+            return (
+              <CommandItem key={k.id} value={k.name} onSelect={() => toggle(k.id)} aria-checked={on} role="menuitemcheckbox">
+                <Checkbox checked={on} tabIndex={-1} aria-hidden />
+                <KbDot color={k.color} />
+                <span className="truncate">{k.name}</span>
+              </CommandItem>
+            );
+          })}
+        </CommandGroup>
+      </CommandList>
+    </Command>
   );
 }
 
