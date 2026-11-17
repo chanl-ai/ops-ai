@@ -376,6 +376,7 @@ class CallLog(Store):
         team_ids: list[str],
         tools: list[str] | None = None,
         module_ids: list[str] | None = None,
+        moduleless: bool = False,
         thread_id: str | None = None,
         decision: str | None = None,
         since: str | None = None,
@@ -389,7 +390,8 @@ class CallLog(Store):
     ) -> tuple[list[GatewayCall], int]:
         """Calls made in `team_ids` (the caller's team), newest first, with the total that match; `since` is an ISO
         time, compared as text like created_at. The team is the one the call acted in, not the module's: a module every
-        team shares holds each team's calls, and each team reads only its own."""
+        team shares holds each team's calls, and each team reads only its own. `moduleless` also keeps the team's calls
+        on no module (a tool no module holds, refused) beside `module_ids`."""
         where: list[sa.ColumnElement[bool]] = [
             gateway_calls.c.tenant_id == tenant_id,
             gateway_calls.c.team_id.in_(team_ids),
@@ -397,7 +399,8 @@ class CallLog(Store):
         if tools is not None:
             where.append(gateway_calls.c.tool.in_(tools))
         if module_ids is not None:
-            where.append(gateway_calls.c.module_id.in_(module_ids))
+            listed = gateway_calls.c.module_id.in_(module_ids)
+            where.append(sa.or_(listed, gateway_calls.c.module_id.is_(None)) if moduleless else listed)
         if thread_id:
             where.append(gateway_calls.c.thread_id == thread_id)
         if decision:

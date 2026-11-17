@@ -951,6 +951,9 @@ class ModuleService:
                 team_ids=self._call_teams(who),
                 tools=[tool] if tool else None,
                 module_ids=scope,
+                # A refused call on a tool no module holds is the team's audit evidence too; a moduleId filter asks
+                # for those modules' calls only.
+                moduleless=module_ids is None,
                 thread_id=thread_id,
                 decision=decision,
                 key=key,
@@ -1006,7 +1009,7 @@ class ModuleService:
         if row is None:
             raise NotFound("Call")
         mods = {m["id"]: m for m in await self.store.all(who.tenant_id) if self._sees(who, m)}
-        if (who.verified or who.team.scope != "all") and row.module_id not in mods:
+        if (who.verified or who.team.scope != "all") and row.module_id is not None and row.module_id not in mods:
             raise NotFound("Call")
         module = mods.get(row.module_id or "")
         return call_row(row, _workflow_names(list(mods.values())), module, self._title(module, row.tool))
