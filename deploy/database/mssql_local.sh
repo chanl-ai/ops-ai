@@ -134,7 +134,9 @@ case "${1:-}" in
     # The run's status is the tests', not the cleanup's: bash ends with the trap's last status otherwise, and a volume
     # still held by the client container made a green run exit 1 and left the volume behind. The named client is
     # removed first so the volume is free.
-    trap 'rc=$?; docker rm -f "$run" ${cid:+"$cid"} >/dev/null 2>&1; docker volume rm -f "$src" >/dev/null 2>&1 \
+    # The run's PostgreSQL database is dropped here too; a killed run leaves it for the next sweep (scratch_db_sweep.py).
+    trap 'rc=$?; docker rm -f "$run" ${cid:+"$cid"} >/dev/null 2>&1; uv run --quiet --project "$ROOT" python \
+      "$ROOT/scripts/scratch_db_sweep.py" --url "postgresql://ops:ops@localhost:$PG_PORT/postgres" --drop "$db" >/dev/null 2>&1; docker volume rm -f "$src" >/dev/null 2>&1 \
       || echo "mssql test: could not remove volume $src (docker volume rm $src)" >&2; exit $rc' EXIT
     sync_tree "$src" "$ROOT"
     verify_tree "$src" "$ROOT"

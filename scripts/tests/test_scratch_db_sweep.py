@@ -106,3 +106,21 @@ def test_a_session_that_connects_after_the_look_is_not_killed(made: list[str]) -
     dropped, alive = asyncio.run(run())
     assert (dropped, alive) == (False, 1)
     assert asyncio.run(exists(name))
+
+
+def test_prune_drops_an_idle_old_database_and_keeps_one_with_a_session(made: list[str]) -> None:
+    prefix = f"ops_test_prune{os.getpid():x}_"  # every other session's databases fall outside it
+    idle = make(made, f"{prefix}idle")
+    busy = make(made, f"{prefix}busy")
+
+    async def run() -> tuple[list[str], int]:
+        held = await asyncpg.connect(ADMIN.replace("/postgres", f"/{busy}"))
+        try:
+            return await sweep.prune(ADMIN, hours=0, prefixes=(prefix,))
+        finally:
+            await held.close()
+
+    names, freed = asyncio.run(run())
+    assert names == [idle] and freed > 0
+    assert not asyncio.run(exists(idle)) and asyncio.run(exists(busy))
+    assert asyncio.run(sweep.prune(ADMIN, hours=3, prefixes=(prefix,), dry_run=True)) == ([], 0)

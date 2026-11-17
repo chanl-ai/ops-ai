@@ -24,6 +24,9 @@ endif
 db-sweep: ## Drop scratch databases of runs that are over (dead pid, no session); DRY_RUN=1 lists them
 	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/scratch_db_sweep.py $(if $(DRY_RUN),--dry-run)
 
+test-db-prune: ## Drop idle ops_test_/ops_usecase_ databases older than HOURS (default 3); DRY=1 lists only
+	@uv run --quiet --project $(ROOT) python $(ROOT)/scripts/scratch_db_sweep.py --prune --hours $(or $(HOURS),3) $(if $(DRY),--dry-run)
+
 db-shell: ## psql into the stack's database
 	$(COMPOSE) exec postgres psql -U ops -d ops_runtime
 
