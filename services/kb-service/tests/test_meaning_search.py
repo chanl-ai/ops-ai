@@ -24,7 +24,7 @@ from ops_kb.retrieval import Search
 from ops_kb.schedule import WITHDRAWN_KEPT
 from ops_kb.search import HybridRetriever
 from ops_kb.store import KnowledgeStore
-from ops_kb.store.vectors import PgVectorStore
+from ops_kb.store.vectors import PgVectorStore, VectorHit
 from ops_store import isolation
 from ops_store.dialect import vector_index_ddl
 
@@ -242,7 +242,7 @@ async def test_a_meaning_lane_with_no_candidate_says_so_instead_of_ran(engine: A
         async def coverage(self, *_: Any, **__: Any) -> tuple[int, int]:
             return 3, 3
 
-        async def nearest(self, *_: Any, **__: Any) -> list[dict[str, Any]]:
+        async def nearest(self, *_: Any, **__: Any) -> list[VectorHit]:
             return []
 
     retriever = HybridRetriever(engine, ConceptEmbedder())

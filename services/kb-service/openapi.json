@@ -1,6 +1,28 @@
 {
   "components": {
     "schemas": {
+      "AccessMembers": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "principals": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Principals",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "principals"
+        ],
+        "title": "AccessMembers",
+        "type": "object"
+      },
       "AddedDocuments": {
         "additionalProperties": false,
         "properties": {
@@ -1415,7 +1437,27 @@
         "title": "ErrorEnvelope",
         "type": "object"
       },
+      "ErrorGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "count"
+        ],
+        "title": "ErrorGroup",
+        "type": "object"
+      },
       "EventIn": {
+        "additionalProperties": false,
         "description": "A service event, as documents-service's relay sends it: the tenant and team come from the token.",
         "properties": {
           "actor": {
@@ -1442,7 +1484,9 @@
             "type": "string"
           },
           "payload": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Payload",
             "type": "object"
           },
@@ -1552,6 +1596,116 @@
         "title": "FileIdsIn",
         "type": "object"
       },
+      "FileSourceConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "fileIds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fileids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "fileIds"
+        ],
+        "title": "FileSourceConfig",
+        "type": "object"
+      },
+      "FilterCondition": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "default": "",
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "op": {
+            "enum": [
+              "is",
+              "is_not",
+              "one_of",
+              "before",
+              "after",
+              "exists"
+            ],
+            "title": "Op",
+            "type": "string"
+          },
+          "value": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "op"
+        ],
+        "title": "FilterCondition",
+        "type": "object"
+      },
+      "FilterGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "conditions": {
+            "items": {
+              "$ref": "#/components/schemas/FilterCondition"
+            },
+            "maxItems": 20,
+            "title": "Conditions",
+            "type": "array"
+          },
+          "match": {
+            "default": "all",
+            "enum": [
+              "all",
+              "any"
+            ],
+            "title": "Match",
+            "type": "string"
+          }
+        },
+        "title": "FilterGroup",
+        "type": "object"
+      },
+      "Governance": {
+        "additionalProperties": false,
+        "properties": {
+          "duplicates": {
+            "title": "Duplicates",
+            "type": "integer"
+          },
+          "excluded": {
+            "title": "Excluded",
+            "type": "integer"
+          },
+          "held": {
+            "title": "Held",
+            "type": "integer"
+          },
+          "superseded": {
+            "title": "Superseded",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "excluded",
+          "held",
+          "duplicates",
+          "superseded"
+        ],
+        "title": "Governance",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1599,6 +1753,166 @@
           "status"
         ],
         "title": "Health",
+        "type": "object"
+      },
+      "IndexJob": {
+        "additionalProperties": false,
+        "properties": {
+          "durationSec": {
+            "title": "Durationsec",
+            "type": "number"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "processed": {
+            "title": "Processed",
+            "type": "integer"
+          },
+          "startedAt": {
+            "title": "Startedat",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "trigger": {
+            "title": "Trigger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "startedAt",
+          "durationSec",
+          "processed",
+          "failed",
+          "status",
+          "trigger"
+        ],
+        "title": "IndexJob",
+        "type": "object"
+      },
+      "IndexingProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "done": {
+            "title": "Done",
+            "type": "integer"
+          },
+          "taskId": {
+            "title": "Taskid",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "done",
+          "total",
+          "taskId"
+        ],
+        "title": "IndexingProgress",
+        "type": "object"
+      },
+      "IngestApproval": {
+        "additionalProperties": false,
+        "properties": {
+          "approvedSteps": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Approvedsteps",
+            "type": "array"
+          },
+          "decidedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decidedat"
+          },
+          "decidedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decidedby"
+          },
+          "requestedBy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requestedby"
+          },
+          "status": {
+            "enum": [
+              "not_needed",
+              "pending",
+              "approved"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "approvedSteps",
+          "requestedBy",
+          "decidedBy",
+          "decidedAt"
+        ],
+        "title": "IngestApproval",
+        "type": "object"
+      },
+      "IngestColumn": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "searchable",
+              "metadata",
+              "ignored"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "role",
+          "key"
+        ],
+        "title": "IngestColumn",
         "type": "object"
       },
       "Item": {
@@ -2431,6 +2745,38 @@
         "type": "object"
       },
       "JsonValue": {},
+      "KbAccess": {
+        "additionalProperties": false,
+        "description": "What the console shows of who may search a base: the stored MCP offer beside the fixed facts of the team.",
+        "properties": {
+          "anyApiKey": {
+            "title": "Anyapikey",
+            "type": "boolean"
+          },
+          "documentPermissions": {
+            "title": "Documentpermissions",
+            "type": "string"
+          },
+          "mcp": {
+            "$ref": "#/components/schemas/McpAccess"
+          },
+          "members": {
+            "$ref": "#/components/schemas/AccessMembers"
+          },
+          "publicLink": {
+            "$ref": "#/components/schemas/PublicLink"
+          }
+        },
+        "required": [
+          "members",
+          "anyApiKey",
+          "mcp",
+          "publicLink",
+          "documentPermissions"
+        ],
+        "title": "KbAccess",
+        "type": "object"
+      },
       "KbSourceLink": {
         "additionalProperties": false,
         "properties": {
@@ -2440,8 +2786,7 @@
           },
           "rules": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SourceRule"
             },
             "title": "Rules",
             "type": "array"
@@ -2468,8 +2813,7 @@
           },
           "rules": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SourceRule"
             },
             "title": "Rules",
             "type": "array"
@@ -2496,18 +2840,63 @@
         "title": "KbSourceView",
         "type": "object"
       },
+      "KbStats": {
+        "additionalProperties": false,
+        "properties": {
+          "chunks": {
+            "title": "Chunks",
+            "type": "integer"
+          },
+          "documents": {
+            "title": "Documents",
+            "type": "integer"
+          },
+          "failures": {
+            "title": "Failures",
+            "type": "integer"
+          },
+          "medianLatencyMs": {
+            "title": "Medianlatencyms",
+            "type": "integer"
+          },
+          "noAnswerRate": {
+            "title": "Noanswerrate",
+            "type": "integer"
+          },
+          "queries7d": {
+            "title": "Queries7D",
+            "type": "integer"
+          },
+          "queriesChange7d": {
+            "title": "Querieschange7D",
+            "type": "integer"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "documents",
+          "chunks",
+          "failures",
+          "stale",
+          "queries7d",
+          "queriesChange7d",
+          "noAnswerRate",
+          "medianLatencyMs"
+        ],
+        "title": "KbStats",
+        "type": "object"
+      },
       "KnowledgeBase": {
         "additionalProperties": false,
         "properties": {
           "access": {
-            "additionalProperties": true,
-            "title": "Access",
-            "type": "object"
+            "$ref": "#/components/schemas/KbAccess"
           },
           "answer": {
-            "additionalProperties": true,
-            "title": "Answer",
-            "type": "object"
+            "$ref": "#/components/schemas/AnswerSettings"
           },
           "automation": {
             "title": "Automation",
@@ -2550,19 +2939,16 @@
           "indexing": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/IndexingProgress"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Indexing"
+            ]
           },
           "jobs": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/IndexJob"
             },
             "title": "Jobs",
             "type": "array"
@@ -2590,9 +2976,7 @@
             "title": "Lastsyncat"
           },
           "metadataProfile": {
-            "additionalProperties": true,
-            "title": "Metadataprofile",
-            "type": "object"
+            "$ref": "#/components/schemas/MetadataProfile"
           },
           "name": {
             "title": "Name",
@@ -2604,8 +2988,7 @@
           },
           "precedence": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/PrecedenceRule"
             },
             "title": "Precedence",
             "type": "array"
@@ -2626,18 +3009,14 @@
             "title": "Protection"
           },
           "retrieval": {
-            "additionalProperties": true,
-            "title": "Retrieval",
-            "type": "object"
+            "$ref": "#/components/schemas/RetrievalSettings"
           },
           "slug": {
             "title": "Slug",
             "type": "string"
           },
           "sourceDefaults": {
-            "additionalProperties": true,
-            "title": "Sourcedefaults",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceDefaults"
           },
           "sources": {
             "items": {
@@ -2647,14 +3026,10 @@
             "type": "array"
           },
           "stats": {
-            "additionalProperties": true,
-            "title": "Stats",
-            "type": "object"
+            "$ref": "#/components/schemas/KbStats"
           },
           "sync": {
-            "additionalProperties": true,
-            "title": "Sync",
-            "type": "object"
+            "$ref": "#/components/schemas/SyncSettings"
           },
           "templateId": {
             "anyOf": [
@@ -2698,9 +3073,7 @@
         "additionalProperties": false,
         "properties": {
           "access": {
-            "additionalProperties": true,
-            "title": "Access",
-            "type": "object"
+            "$ref": "#/components/schemas/KbAccess"
           },
           "agentNames": {
             "items": {
@@ -2720,9 +3093,7 @@
             "type": "boolean"
           },
           "answer": {
-            "additionalProperties": true,
-            "title": "Answer",
-            "type": "object"
+            "$ref": "#/components/schemas/AnswerSettings"
           },
           "attached": {
             "items": {
@@ -2819,19 +3190,16 @@
           "indexing": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/IndexingProgress"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Indexing"
+            ]
           },
           "jobs": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/IndexJob"
             },
             "title": "Jobs",
             "type": "array"
@@ -2866,9 +3234,7 @@
             "type": "array"
           },
           "metadataProfile": {
-            "additionalProperties": true,
-            "title": "Metadataprofile",
-            "type": "object"
+            "$ref": "#/components/schemas/MetadataProfile"
           },
           "name": {
             "title": "Name",
@@ -2880,8 +3246,7 @@
           },
           "precedence": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/PrecedenceRule"
             },
             "title": "Precedence",
             "type": "array"
@@ -2902,18 +3267,14 @@
             "title": "Protection"
           },
           "retrieval": {
-            "additionalProperties": true,
-            "title": "Retrieval",
-            "type": "object"
+            "$ref": "#/components/schemas/RetrievalSettings"
           },
           "slug": {
             "title": "Slug",
             "type": "string"
           },
           "sourceDefaults": {
-            "additionalProperties": true,
-            "title": "Sourcedefaults",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceDefaults"
           },
           "sourceNames": {
             "items": {
@@ -2930,9 +3291,7 @@
             "type": "array"
           },
           "stats": {
-            "additionalProperties": true,
-            "title": "Stats",
-            "type": "object"
+            "$ref": "#/components/schemas/KbStats"
           },
           "suggestedQuestions": {
             "items": {
@@ -2942,9 +3301,7 @@
             "type": "array"
           },
           "sync": {
-            "additionalProperties": true,
-            "title": "Sync",
-            "type": "object"
+            "$ref": "#/components/schemas/SyncSettings"
           },
           "templateId": {
             "anyOf": [
@@ -2996,7 +3353,9 @@
           "access": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -3008,7 +3367,9 @@
           "answer": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -3090,7 +3451,9 @@
           "retrieval": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -3102,7 +3465,9 @@
           "sourceDefaults": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -3122,7 +3487,9 @@
           "sync": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -3157,7 +3524,9 @@
           "access": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -3169,7 +3538,9 @@
           "answer": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -3217,7 +3588,9 @@
           "metadataProfile": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -3252,7 +3625,9 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -3281,7 +3656,9 @@
           "retrieval": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -3293,7 +3670,9 @@
           "sourceDefaults": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -3305,7 +3684,9 @@
           "sync": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -3335,9 +3716,7 @@
         "additionalProperties": false,
         "properties": {
           "access": {
-            "additionalProperties": true,
-            "title": "Access",
-            "type": "object"
+            "$ref": "#/components/schemas/KbAccess"
           },
           "agentNames": {
             "items": {
@@ -3357,9 +3736,7 @@
             "type": "boolean"
           },
           "answer": {
-            "additionalProperties": true,
-            "title": "Answer",
-            "type": "object"
+            "$ref": "#/components/schemas/AnswerSettings"
           },
           "automation": {
             "title": "Automation",
@@ -3402,19 +3779,16 @@
           "indexing": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/IndexingProgress"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Indexing"
+            ]
           },
           "jobs": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/IndexJob"
             },
             "title": "Jobs",
             "type": "array"
@@ -3442,9 +3816,7 @@
             "title": "Lastsyncat"
           },
           "metadataProfile": {
-            "additionalProperties": true,
-            "title": "Metadataprofile",
-            "type": "object"
+            "$ref": "#/components/schemas/MetadataProfile"
           },
           "name": {
             "title": "Name",
@@ -3456,8 +3828,7 @@
           },
           "precedence": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/PrecedenceRule"
             },
             "title": "Precedence",
             "type": "array"
@@ -3478,18 +3849,14 @@
             "title": "Protection"
           },
           "retrieval": {
-            "additionalProperties": true,
-            "title": "Retrieval",
-            "type": "object"
+            "$ref": "#/components/schemas/RetrievalSettings"
           },
           "slug": {
             "title": "Slug",
             "type": "string"
           },
           "sourceDefaults": {
-            "additionalProperties": true,
-            "title": "Sourcedefaults",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceDefaults"
           },
           "sourceNames": {
             "items": {
@@ -3506,14 +3873,10 @@
             "type": "array"
           },
           "stats": {
-            "additionalProperties": true,
-            "title": "Stats",
-            "type": "object"
+            "$ref": "#/components/schemas/KbStats"
           },
           "sync": {
-            "additionalProperties": true,
-            "title": "Sync",
-            "type": "object"
+            "$ref": "#/components/schemas/SyncSettings"
           },
           "templateId": {
             "anyOf": [
@@ -3941,6 +4304,43 @@
           "collections"
         ],
         "title": "Lookups",
+        "type": "object"
+      },
+      "McpAccess": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "toolName": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "title": "Toolname",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "toolName"
+        ],
+        "title": "McpAccess",
+        "type": "object"
+      },
+      "MetadataProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "required": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required",
+            "type": "array"
+          }
+        },
+        "required": [
+          "required"
+        ],
+        "title": "MetadataProfile",
         "type": "object"
       },
       "NamedRef": {
@@ -4473,11 +4873,48 @@
         "title": "PluginSource",
         "type": "object"
       },
+      "PrecedenceRule": {
+        "additionalProperties": false,
+        "description": "A rule choosing between two returned pieces on one topic; the index applies one: a newer version wins.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "loser": {
+            "title": "Loser",
+            "type": "string"
+          },
+          "winner": {
+            "title": "Winner",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "winner",
+          "loser"
+        ],
+        "title": "PrecedenceRule",
+        "type": "object"
+      },
       "PreviewIn": {
         "additionalProperties": false,
         "properties": {
           "config": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Config",
             "type": "object"
           }
@@ -4510,6 +4947,40 @@
           "willFetch"
         ],
         "title": "PreviewPage",
+        "type": "object"
+      },
+      "PublicLink": {
+        "additionalProperties": false,
+        "properties": {
+          "answerStyle": {
+            "title": "Answerstyle",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "rateLimit": {
+            "title": "Ratelimit",
+            "type": "integer"
+          },
+          "showSourceLinks": {
+            "title": "Showsourcelinks",
+            "type": "boolean"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "slug",
+          "answerStyle",
+          "rateLimit",
+          "showSourceLinks"
+        ],
+        "title": "PublicLink",
         "type": "object"
       },
       "QueryIn": {
@@ -4545,7 +5016,9 @@
           "overrides": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -4572,7 +5045,9 @@
           "runtime": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -4584,7 +5059,9 @@
           "settings": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -4733,6 +5210,115 @@
         "title": "RerankOut",
         "type": "object"
       },
+      "RetrievalSettings": {
+        "additionalProperties": false,
+        "description": "How a search of the base runs (retrieval.py) and which of its pieces it may return.",
+        "properties": {
+          "chunkLimit": {
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Chunklimit",
+            "type": "integer"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/FilterGroup"
+          },
+          "hybridWeight": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Hybridweight",
+            "type": "number"
+          },
+          "includeUntagged": {
+            "title": "Includeuntagged",
+            "type": "boolean"
+          },
+          "meaningThreshold": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Meaningthreshold",
+            "type": "number"
+          },
+          "queryModel": {
+            "title": "Querymodel",
+            "type": "string"
+          },
+          "rerank": {
+            "title": "Rerank",
+            "type": "boolean"
+          },
+          "rewrite": {
+            "title": "Rewrite",
+            "type": "string"
+          },
+          "rewriteInstructions": {
+            "title": "Rewriteinstructions",
+            "type": "string"
+          },
+          "scopeCollections": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopecollections",
+            "type": "array"
+          },
+          "scopeSourceIds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopesourceids",
+            "type": "array"
+          },
+          "searchMode": {
+            "enum": [
+              "keyword",
+              "meaning",
+              "hybrid"
+            ],
+            "title": "Searchmode",
+            "type": "string"
+          },
+          "tagsExclude": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tagsexclude",
+            "type": "array"
+          },
+          "tagsInclude": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tagsinclude",
+            "type": "array"
+          },
+          "threshold": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Threshold",
+            "type": "number"
+          }
+        },
+        "required": [
+          "searchMode",
+          "hybridWeight",
+          "rerank",
+          "chunkLimit",
+          "threshold",
+          "meaningThreshold",
+          "rewrite",
+          "rewriteInstructions",
+          "queryModel",
+          "scopeCollections",
+          "scopeSourceIds",
+          "tagsInclude",
+          "tagsExclude",
+          "includeUntagged",
+          "filters"
+        ],
+        "title": "RetrievalSettings",
+        "type": "object"
+      },
       "RewriteOut": {
         "additionalProperties": false,
         "description": "The question as asked and as searched, present when a base rewrites questions.",
@@ -4851,6 +5437,96 @@
           "status"
         ],
         "title": "RunPhase",
+        "type": "object"
+      },
+      "ScheduleDaily": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "daily",
+            "title": "Kind",
+            "type": "string"
+          },
+          "time": {
+            "title": "Time",
+            "type": "string"
+          },
+          "tz": {
+            "title": "Tz",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "time",
+          "tz"
+        ],
+        "title": "ScheduleDaily",
+        "type": "object"
+      },
+      "ScheduleHourly": {
+        "additionalProperties": false,
+        "properties": {
+          "every": {
+            "title": "Every",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "hourly",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "every"
+        ],
+        "title": "ScheduleHourly",
+        "type": "object"
+      },
+      "ScheduleManual": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "manual",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "ScheduleManual",
+        "type": "object"
+      },
+      "ScheduleWeekly": {
+        "additionalProperties": false,
+        "properties": {
+          "day": {
+            "title": "Day",
+            "type": "string"
+          },
+          "kind": {
+            "const": "weekly",
+            "title": "Kind",
+            "type": "string"
+          },
+          "time": {
+            "title": "Time",
+            "type": "string"
+          },
+          "tz": {
+            "title": "Tz",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "time",
+          "tz",
+          "day"
+        ],
+        "title": "ScheduleWeekly",
         "type": "object"
       },
       "Scope": {
@@ -5034,7 +5710,9 @@
           "overrides": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -5061,7 +5739,9 @@
           "runtime": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -5073,7 +5753,9 @@
           "settings": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -5177,18 +5859,22 @@
             "type": "array"
           },
           "cleaning": {
-            "additionalProperties": true,
-            "title": "Cleaning",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceCleaning"
           },
           "collection": {
             "title": "Collection",
             "type": "string"
           },
           "config": {
-            "additionalProperties": true,
-            "title": "Config",
-            "type": "object"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolSourceConfig"
+              },
+              {
+                "$ref": "#/components/schemas/FileSourceConfig"
+              }
+            ],
+            "title": "Config"
           },
           "createdAt": {
             "title": "Createdat",
@@ -5199,18 +5885,14 @@
             "type": "string"
           },
           "health": {
-            "additionalProperties": true,
-            "title": "Health",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceHealth"
           },
           "id": {
             "title": "Id",
             "type": "string"
           },
           "ingest": {
-            "additionalProperties": true,
-            "title": "Ingest",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceIngest"
           },
           "itemsFailed": {
             "title": "Itemsfailed",
@@ -5256,8 +5938,7 @@
           },
           "metadataMapping": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SourceMetadataMapping"
             },
             "title": "Metadatamapping",
             "type": "array"
@@ -5286,14 +5967,10 @@
             "type": "string"
           },
           "parsing": {
-            "additionalProperties": true,
-            "title": "Parsing",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceParsing"
           },
           "permissions": {
-            "additionalProperties": true,
-            "title": "Permissions",
-            "type": "object"
+            "$ref": "#/components/schemas/SourcePermissions"
           },
           "rebuild": {
             "anyOf": [
@@ -5307,16 +5984,36 @@
           },
           "rules": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SourceRule"
             },
             "title": "Rules",
             "type": "array"
           },
           "schedule": {
-            "additionalProperties": true,
-            "title": "Schedule",
-            "type": "object"
+            "discriminator": {
+              "mapping": {
+                "daily": "#/components/schemas/ScheduleDaily",
+                "hourly": "#/components/schemas/ScheduleHourly",
+                "manual": "#/components/schemas/ScheduleManual",
+                "weekly": "#/components/schemas/ScheduleWeekly"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleManual"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleHourly"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleDaily"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleWeekly"
+              }
+            ],
+            "title": "Schedule"
           },
           "scopeSummary": {
             "title": "Scopesummary",
@@ -5358,8 +6055,7 @@
           },
           "waitingHosts": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/WaitingHost"
             },
             "title": "Waitinghosts",
             "type": "array"
@@ -5395,9 +6091,84 @@
           "itemsFailed",
           "itemsPending",
           "usedByKbIds",
-          "createdAt"
+          "createdAt",
+          "health"
         ],
         "title": "Source",
+        "type": "object"
+      },
+      "SourceCleaning": {
+        "additionalProperties": false,
+        "properties": {
+          "duplicates": {
+            "enum": [
+              "flag",
+              "skip"
+            ],
+            "title": "Duplicates",
+            "type": "string"
+          },
+          "furniture": {
+            "title": "Furniture",
+            "type": "boolean"
+          },
+          "mainContent": {
+            "title": "Maincontent",
+            "type": "boolean"
+          },
+          "siteRepeats": {
+            "title": "Siterepeats",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "furniture",
+          "mainContent",
+          "siteRepeats",
+          "duplicates"
+        ],
+        "title": "SourceCleaning",
+        "type": "object"
+      },
+      "SourceDefaults": {
+        "additionalProperties": false,
+        "description": "How a new source of the base splits its documents; each source keeps its own copy, changed on the source. AI\nsteps are refused here: they need an estimate and an approval per source.",
+        "properties": {
+          "childSize": {
+            "title": "Childsize",
+            "type": "integer"
+          },
+          "overlap": {
+            "title": "Overlap",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "strategies": {
+            "items": {
+              "enum": [
+                "structure",
+                "fixed",
+                "context_headers",
+                "parent_child",
+                "table_rows",
+                "clean"
+              ],
+              "type": "string"
+            },
+            "title": "Strategies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "strategies",
+          "size",
+          "overlap",
+          "childSize"
+        ],
+        "title": "SourceDefaults",
         "type": "object"
       },
       "SourceDetail": {
@@ -5449,18 +6220,22 @@
             "title": "Canpublish"
           },
           "cleaning": {
-            "additionalProperties": true,
-            "title": "Cleaning",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceCleaning"
           },
           "collection": {
             "title": "Collection",
             "type": "string"
           },
           "config": {
-            "additionalProperties": true,
-            "title": "Config",
-            "type": "object"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolSourceConfig"
+              },
+              {
+                "$ref": "#/components/schemas/FileSourceConfig"
+              }
+            ],
+            "title": "Config"
           },
           "createdAt": {
             "title": "Createdat",
@@ -5472,30 +6247,23 @@
           },
           "errorGroups": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/ErrorGroup"
             },
             "title": "Errorgroups",
             "type": "array"
           },
           "governance": {
-            "additionalProperties": true,
-            "title": "Governance",
-            "type": "object"
+            "$ref": "#/components/schemas/Governance"
           },
           "health": {
-            "additionalProperties": true,
-            "title": "Health",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceHealth"
           },
           "id": {
             "title": "Id",
             "type": "string"
           },
           "ingest": {
-            "additionalProperties": true,
-            "title": "Ingest",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceIngest"
           },
           "itemCount": {
             "title": "Itemcount",
@@ -5556,8 +6324,7 @@
           },
           "metadataMapping": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SourceMetadataMapping"
             },
             "title": "Metadatamapping",
             "type": "array"
@@ -5586,14 +6353,10 @@
             "type": "string"
           },
           "parsing": {
-            "additionalProperties": true,
-            "title": "Parsing",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceParsing"
           },
           "permissions": {
-            "additionalProperties": true,
-            "title": "Permissions",
-            "type": "object"
+            "$ref": "#/components/schemas/SourcePermissions"
           },
           "readers": {
             "items": {
@@ -5614,8 +6377,7 @@
           },
           "recentRuns": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SyncRun"
             },
             "title": "Recentruns",
             "type": "array"
@@ -5633,8 +6395,7 @@
           },
           "rules": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SourceRule"
             },
             "title": "Rules",
             "type": "array"
@@ -5642,19 +6403,38 @@
           "running": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/SyncRun"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Running"
+            ]
           },
           "schedule": {
-            "additionalProperties": true,
-            "title": "Schedule",
-            "type": "object"
+            "discriminator": {
+              "mapping": {
+                "daily": "#/components/schemas/ScheduleDaily",
+                "hourly": "#/components/schemas/ScheduleHourly",
+                "manual": "#/components/schemas/ScheduleManual",
+                "weekly": "#/components/schemas/ScheduleWeekly"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleManual"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleHourly"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleDaily"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleWeekly"
+              }
+            ],
+            "title": "Schedule"
           },
           "scopeSummary": {
             "title": "Scopesummary",
@@ -5696,8 +6476,7 @@
           },
           "waitingHosts": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/WaitingHost"
             },
             "title": "Waitinghosts",
             "type": "array"
@@ -5734,6 +6513,7 @@
           "itemsPending",
           "usedByKbIds",
           "createdAt",
+          "health",
           "readers",
           "recentRuns",
           "errorGroups",
@@ -5743,6 +6523,63 @@
           "governance"
         ],
         "title": "SourceDetail",
+        "type": "object"
+      },
+      "SourceHealth": {
+        "additionalProperties": false,
+        "properties": {
+          "daysFailing": {
+            "title": "Daysfailing",
+            "type": "integer"
+          },
+          "failedRuns": {
+            "title": "Failedruns",
+            "type": "integer"
+          },
+          "failingSince": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failingsince"
+          },
+          "lastGoodSyncAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastgoodsyncat"
+          },
+          "state": {
+            "enum": [
+              "needs_reconnect",
+              "failing",
+              "healthy",
+              "never"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tombstoned": {
+            "title": "Tombstoned",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "state",
+          "daysFailing",
+          "failedRuns",
+          "tombstoned"
+        ],
+        "title": "SourceHealth",
         "type": "object"
       },
       "SourceIn": {
@@ -5764,7 +6601,9 @@
           "cleaning": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -5781,7 +6620,9 @@
           "config": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -5801,7 +6642,9 @@
           "ingest": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -5822,7 +6665,9 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -5851,7 +6696,9 @@
           "parsing": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -5864,7 +6711,9 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -5878,7 +6727,9 @@
           "schedule": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -5928,6 +6779,65 @@
         "title": "SourceIn",
         "type": "object"
       },
+      "SourceIngest": {
+        "additionalProperties": false,
+        "properties": {
+          "approval": {
+            "$ref": "#/components/schemas/IngestApproval"
+          },
+          "childSize": {
+            "title": "Childsize",
+            "type": "integer"
+          },
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/IngestColumn"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "overlap": {
+            "title": "Overlap",
+            "type": "integer"
+          },
+          "preset": {
+            "title": "Preset",
+            "type": "string"
+          },
+          "questionsPerSection": {
+            "title": "Questionspersection",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "strategies": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Strategies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "preset",
+          "strategies",
+          "size",
+          "overlap",
+          "childSize",
+          "questionsPerSection",
+          "columns",
+          "model",
+          "approval"
+        ],
+        "title": "SourceIngest",
+        "type": "object"
+      },
       "SourceKind": {
         "additionalProperties": false,
         "properties": {
@@ -5964,9 +6874,7 @@
             "type": "boolean"
           },
           "defaults": {
-            "additionalProperties": true,
-            "title": "Defaults",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceKindDefaults"
           },
           "group": {
             "enum": [
@@ -5977,7 +6885,9 @@
             "type": "string"
           },
           "inputs": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Inputs",
             "type": "object"
           },
@@ -6046,6 +6956,123 @@
         "title": "SourceKind",
         "type": "object"
       },
+      "SourceKindDefaults": {
+        "additionalProperties": false,
+        "properties": {
+          "aiCeiling": {
+            "title": "Aiceiling",
+            "type": "number"
+          },
+          "cleaning": {
+            "$ref": "#/components/schemas/SourceCleaning"
+          },
+          "ingest": {
+            "$ref": "#/components/schemas/SourceIngest"
+          },
+          "metadataMapping": {
+            "items": {
+              "$ref": "#/components/schemas/SourceMetadataMapping"
+            },
+            "title": "Metadatamapping",
+            "type": "array"
+          },
+          "parsing": {
+            "$ref": "#/components/schemas/SourceParsing"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRule"
+            },
+            "title": "Rules",
+            "type": "array"
+          },
+          "schedule": {
+            "discriminator": {
+              "mapping": {
+                "daily": "#/components/schemas/ScheduleDaily",
+                "hourly": "#/components/schemas/ScheduleHourly",
+                "manual": "#/components/schemas/ScheduleManual",
+                "weekly": "#/components/schemas/ScheduleWeekly"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleManual"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleHourly"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleDaily"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleWeekly"
+              }
+            ],
+            "title": "Schedule"
+          }
+        },
+        "required": [
+          "parsing",
+          "cleaning",
+          "ingest",
+          "rules",
+          "metadataMapping",
+          "aiCeiling",
+          "schedule"
+        ],
+        "title": "SourceKindDefaults",
+        "type": "object"
+      },
+      "SourceMetadataMapping": {
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "title": "From",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "from"
+        ],
+        "title": "SourceMetadataMapping",
+        "type": "object"
+      },
+      "SourceParsing": {
+        "additionalProperties": false,
+        "properties": {
+          "ocr": {
+            "enum": [
+              "off",
+              "auto",
+              "always"
+            ],
+            "title": "Ocr",
+            "type": "string"
+          },
+          "tables": {
+            "title": "Tables",
+            "type": "boolean"
+          },
+          "vision": {
+            "title": "Vision",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ocr",
+          "tables",
+          "vision"
+        ],
+        "title": "SourceParsing",
+        "type": "object"
+      },
       "SourcePatch": {
         "additionalProperties": false,
         "properties": {
@@ -6065,7 +7092,9 @@
           "cleaning": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -6088,7 +7117,9 @@
           "ingest": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -6101,7 +7132,9 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -6137,7 +7170,9 @@
           "parsing": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -6150,7 +7185,9 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -6164,7 +7201,9 @@
           "schedule": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -6201,7 +7240,9 @@
           "values": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -6212,6 +7253,20 @@
           }
         },
         "title": "SourcePatch",
+        "type": "object"
+      },
+      "SourcePermissions": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "SourcePermissions",
         "type": "object"
       },
       "SourcePreview": {
@@ -6262,18 +7317,22 @@
             "type": "array"
           },
           "cleaning": {
-            "additionalProperties": true,
-            "title": "Cleaning",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceCleaning"
           },
           "collection": {
             "title": "Collection",
             "type": "string"
           },
           "config": {
-            "additionalProperties": true,
-            "title": "Config",
-            "type": "object"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ToolSourceConfig"
+              },
+              {
+                "$ref": "#/components/schemas/FileSourceConfig"
+              }
+            ],
+            "title": "Config"
           },
           "createdAt": {
             "title": "Createdat",
@@ -6284,18 +7343,14 @@
             "type": "string"
           },
           "health": {
-            "additionalProperties": true,
-            "title": "Health",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceHealth"
           },
           "id": {
             "title": "Id",
             "type": "string"
           },
           "ingest": {
-            "additionalProperties": true,
-            "title": "Ingest",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceIngest"
           },
           "itemsFailed": {
             "title": "Itemsfailed",
@@ -6341,8 +7396,7 @@
           },
           "metadataMapping": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SourceMetadataMapping"
             },
             "title": "Metadatamapping",
             "type": "array"
@@ -6371,14 +7425,10 @@
             "type": "string"
           },
           "parsing": {
-            "additionalProperties": true,
-            "title": "Parsing",
-            "type": "object"
+            "$ref": "#/components/schemas/SourceParsing"
           },
           "permissions": {
-            "additionalProperties": true,
-            "title": "Permissions",
-            "type": "object"
+            "$ref": "#/components/schemas/SourcePermissions"
           },
           "rebuild": {
             "anyOf": [
@@ -6392,8 +7442,7 @@
           },
           "rules": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SourceRule"
             },
             "title": "Rules",
             "type": "array"
@@ -6403,9 +7452,30 @@
             "type": "boolean"
           },
           "schedule": {
-            "additionalProperties": true,
-            "title": "Schedule",
-            "type": "object"
+            "discriminator": {
+              "mapping": {
+                "daily": "#/components/schemas/ScheduleDaily",
+                "hourly": "#/components/schemas/ScheduleHourly",
+                "manual": "#/components/schemas/ScheduleManual",
+                "weekly": "#/components/schemas/ScheduleWeekly"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ScheduleManual"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleHourly"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleDaily"
+              },
+              {
+                "$ref": "#/components/schemas/ScheduleWeekly"
+              }
+            ],
+            "title": "Schedule"
           },
           "scopeSummary": {
             "title": "Scopesummary",
@@ -6454,8 +7524,7 @@
           },
           "waitingHosts": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/WaitingHost"
             },
             "title": "Waitinghosts",
             "type": "array"
@@ -6492,10 +7561,51 @@
           "itemsPending",
           "usedByKbIds",
           "createdAt",
+          "health",
           "usedBy",
           "running"
         ],
         "title": "SourceRow",
+        "type": "object"
+      },
+      "SourceRule": {
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "enum": [
+              "path",
+              "title",
+              "mime",
+              "modified_after",
+              "size_under"
+            ],
+            "title": "Field",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "include",
+              "exclude"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "field",
+          "value"
+        ],
+        "title": "SourceRule",
         "type": "object"
       },
       "SyncIn": {
@@ -6609,6 +7719,46 @@
         "title": "SyncRun",
         "type": "object"
       },
+      "SyncSettings": {
+        "additionalProperties": false,
+        "description": "How the syncs of the base's sources treat what they find: a changed version applied at once or held in Changes\nfor review, an item removed at its source taken out of search or kept and flagged, when an item is stale, and\nwhether the owner is told when a sync keeps failing.",
+        "properties": {
+          "changes": {
+            "enum": [
+              "apply",
+              "review"
+            ],
+            "title": "Changes",
+            "type": "string"
+          },
+          "notifyOnFailure": {
+            "title": "Notifyonfailure",
+            "type": "boolean"
+          },
+          "removedAtSource": {
+            "enum": [
+              "remove",
+              "keep"
+            ],
+            "title": "Removedatsource",
+            "type": "string"
+          },
+          "staleAfterDays": {
+            "maximum": 3650.0,
+            "minimum": 1.0,
+            "title": "Staleafterdays",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "changes",
+          "removedAtSource",
+          "staleAfterDays",
+          "notifyOnFailure"
+        ],
+        "title": "SyncSettings",
+        "type": "object"
+      },
       "TokenRange": {
         "additionalProperties": false,
         "properties": {
@@ -6683,6 +7833,130 @@
         "title": "TombstonesIn",
         "type": "object"
       },
+      "ToolSourceConfig": {
+        "additionalProperties": false,
+        "description": "What an app's source keeps of its settings for the screen: the plugin and source it reads, its tools and\nconnection, and the values it was set up with.",
+        "properties": {
+          "connectionId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connectionid"
+          },
+          "getTool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gettool"
+          },
+          "listTool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Listtool"
+          },
+          "paused": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paused"
+          },
+          "plugin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin"
+          },
+          "site": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "values": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Values"
+          }
+        },
+        "required": [
+          "plugin",
+          "source",
+          "title",
+          "listTool",
+          "getTool",
+          "connectionId",
+          "paused",
+          "site",
+          "values"
+        ],
+        "title": "ToolSourceConfig",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -6735,6 +8009,32 @@
           "verified"
         ],
         "title": "VerifyIn",
+        "type": "object"
+      },
+      "WaitingHost": {
+        "additionalProperties": false,
+        "properties": {
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "runKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runkey"
+          }
+        },
+        "required": [
+          "host",
+          "runKey"
+        ],
+        "title": "WaitingHost",
         "type": "object"
       },
       "WrittenItem": {
@@ -15463,15 +16763,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/SyncIn"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Body"
+                "$ref": "#/components/schemas/SyncIn"
               }
             }
           }

@@ -8,14 +8,13 @@ import asyncio
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 import httpx
-from fastapi import APIRouter, Depends, FastAPI, Query, Request, Response
+from fastapi import APIRouter, Body, Depends, FastAPI, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
 
 from ops_access import can
 from ops_documents_client import DocumentsClient
@@ -33,6 +32,8 @@ from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.errors import Forbidden
 from ops_service_kit.http import (
     Envelope,
+    In,
+    JsonValue,
     ListResult,
     OptionsPage,
     Out,
@@ -242,14 +243,14 @@ def _documents_service(settings: Settings) -> Readings | None:
 READING_EVENTS = ("reading.finished", "reading.failed")
 
 
-class EventIn(BaseModel):
+class EventIn(In):
     """A service event, as documents-service's relay sends it: the tenant and team come from the token."""
 
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
     name: str = Field(min_length=1, max_length=120)
     key: str = Field(min_length=1, max_length=200)
     team_id: str = Field(min_length=1, max_length=64)
-    payload: dict[str, Any] = Field(default_factory=dict[str, Any])
+    # Each event name carries its own fields (a reading's `fileId`), so any JSON object.
+    payload: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
     actor: str | None = None
 
 
@@ -374,17 +375,18 @@ def create_kb_app(
         response_model_exclude_none=True,
         responses={503: {"model": Health}},
     )
-    async def health() -> dict[str, Any] | JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def health(response: Response) -> Health:  # pyright: ignore[reportUnusedFunction]
         if not await reachable(engine):
-            return JSONResponse({"status": "degraded", "reason": "database"}, status_code=503)
-        if backlog.pending is not None:
-            return {"status": "ok", "unitsNotEmbedded": backlog.pending}
-        return {"status": "ok"}
+            response.status_code = 503
+            return Health(status="degraded", reason="database")
+        return Health(status="ok", units_not_embedded=backlog.pending)
 
     @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
-    async def health_background() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+    async def health_background() -> BackgroundHealthOut:  # pyright: ignore[reportUnusedFunction]
         """This service's background processes and their state; counts and error types only, no record's data."""
-        return {"processes": background_report(await LOCAL_BEATS.read(), "kb", time.time())}
+        return BackgroundHealthOut.model_validate(
+            {"processes": background_report(await LOCAL_BEATS.read(), "kb", time.time())}
+        )
 
     kbs = APIRouter(prefix="/v1/knowledge-bases", tags=["knowledge-bases"], responses=errors)
 
@@ -563,9 +565,10 @@ def create_kb_app(
         return ok(await service.add_files(who, source_id, body.file_ids))
 
     @sources.post("/{source_id}/sync", response_model=Envelope[SyncRun])
-    async def sync_source(source_id: str, who: Caller, body: SyncIn | None = None) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        opts = body or SyncIn()
-        return ok(await service.sync(who, source_id, full=opts.full, retry=opts.retry))
+    async def sync_source(
+        source_id: str, who: Caller, body: Annotated[SyncIn, Body(default_factory=SyncIn)]
+    ) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+        return ok(await service.sync(who, source_id, full=body.full, retry=body.retry))
 
     @sources.get("/{source_id}/runs", response_model=Envelope[ListResult[SyncRun]])
     async def list_runs(source_id: str, who: Person, _: Tx, q: ListQuery) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

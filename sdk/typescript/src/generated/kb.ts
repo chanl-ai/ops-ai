@@ -764,6 +764,13 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccessMembers */
+        AccessMembers: {
+            /** Mode */
+            mode: string;
+            /** Principals */
+            principals: string[];
+        };
         /** AddedDocuments */
         AddedDocuments: {
             /** Files */
@@ -1319,6 +1326,13 @@ export interface components {
              */
             success: false;
         };
+        /** ErrorGroup */
+        ErrorGroup: {
+            /** Count */
+            count: number;
+            /** Message */
+            message: string;
+        };
         /**
          * EventIn
          * @description A service event, as documents-service's relay sends it: the tenant and team come from the token.
@@ -1332,7 +1346,7 @@ export interface components {
             name: string;
             /** Payload */
             payload?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Teamid */
             teamId: string;
@@ -1369,6 +1383,53 @@ export interface components {
             /** Fileids */
             fileIds: string[];
         };
+        /** FileSourceConfig */
+        FileSourceConfig: {
+            /** Fileids */
+            fileIds: string[];
+        };
+        /** FilterCondition */
+        FilterCondition: {
+            /**
+             * Id
+             * @default
+             */
+            id: string;
+            /** Key */
+            key: string;
+            /**
+             * Op
+             * @enum {string}
+             */
+            op: "is" | "is_not" | "one_of" | "before" | "after" | "exists";
+            /**
+             * Value
+             * @default
+             */
+            value: string;
+        };
+        /** FilterGroup */
+        FilterGroup: {
+            /** Conditions */
+            conditions?: components["schemas"]["FilterCondition"][];
+            /**
+             * Match
+             * @default all
+             * @enum {string}
+             */
+            match: "all" | "any";
+        };
+        /** Governance */
+        Governance: {
+            /** Duplicates */
+            duplicates: number;
+            /** Excluded */
+            excluded: number;
+            /** Held */
+            held: number;
+            /** Superseded */
+            superseded: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1382,6 +1443,60 @@ export interface components {
             status: string;
             /** Unitsnotembedded */
             unitsNotEmbedded?: number | null;
+        };
+        /** IndexJob */
+        IndexJob: {
+            /** Durationsec */
+            durationSec: number;
+            /** Failed */
+            failed: number;
+            /** Id */
+            id: string;
+            /** Processed */
+            processed: number;
+            /** Startedat */
+            startedAt: string;
+            /** Status */
+            status: string;
+            /** Trigger */
+            trigger: string;
+        };
+        /** IndexingProgress */
+        IndexingProgress: {
+            /** Done */
+            done: number;
+            /** Taskid */
+            taskId: string;
+            /** Total */
+            total: number;
+        };
+        /** IngestApproval */
+        IngestApproval: {
+            /** Approvedsteps */
+            approvedSteps: string[];
+            /** Decidedat */
+            decidedAt: string | null;
+            /** Decidedby */
+            decidedBy: string | null;
+            /** Requestedby */
+            requestedBy: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "not_needed" | "pending" | "approved";
+        };
+        /** IngestColumn */
+        IngestColumn: {
+            /** Key */
+            key: boolean;
+            /** Name */
+            name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "searchable" | "metadata" | "ignored";
         };
         /** Item */
         Item: {
@@ -1636,14 +1751,25 @@ export interface components {
             warning?: string | null;
         };
         JsonValue: unknown;
+        /**
+         * KbAccess
+         * @description What the console shows of who may search a base: the stored MCP offer beside the fixed facts of the team.
+         */
+        KbAccess: {
+            /** Anyapikey */
+            anyApiKey: boolean;
+            /** Documentpermissions */
+            documentPermissions: string;
+            mcp: components["schemas"]["McpAccess"];
+            members: components["schemas"]["AccessMembers"];
+            publicLink: components["schemas"]["PublicLink"];
+        };
         /** KbSourceLink */
         KbSourceLink: {
             /** Itemscontributed */
             itemsContributed: number;
             /** Rules */
-            rules: {
-                [key: string]: unknown;
-            }[];
+            rules: components["schemas"]["SourceRule"][];
             /** Sourceid */
             sourceId: string;
         };
@@ -1652,9 +1778,7 @@ export interface components {
             /** Itemscontributed */
             itemsContributed: number;
             /** Rules */
-            rules: {
-                [key: string]: unknown;
-            }[];
+            rules: components["schemas"]["SourceRule"][];
             /**
              * Running
              * @default false
@@ -1664,16 +1788,29 @@ export interface components {
             /** Sourceid */
             sourceId: string;
         };
+        /** KbStats */
+        KbStats: {
+            /** Chunks */
+            chunks: number;
+            /** Documents */
+            documents: number;
+            /** Failures */
+            failures: number;
+            /** Medianlatencyms */
+            medianLatencyMs: number;
+            /** Noanswerrate */
+            noAnswerRate: number;
+            /** Queries7D */
+            queries7d: number;
+            /** Querieschange7D */
+            queriesChange7d: number;
+            /** Stale */
+            stale: number;
+        };
         /** KnowledgeBase */
         KnowledgeBase: {
-            /** Access */
-            access: {
-                [key: string]: unknown;
-            };
-            /** Answer */
-            answer: {
-                [key: string]: unknown;
-            };
+            access: components["schemas"]["KbAccess"];
+            answer: components["schemas"]["AnswerSettings"];
             /** Automation */
             automation: string;
             /** Collections */
@@ -1690,61 +1827,36 @@ export interface components {
             healthReasons: string[];
             /** Id */
             id: string;
-            /** Indexing */
-            indexing?: {
-                [key: string]: unknown;
-            } | null;
+            indexing?: components["schemas"]["IndexingProgress"] | null;
             /** Jobs */
-            jobs: {
-                [key: string]: unknown;
-            }[];
+            jobs: components["schemas"]["IndexJob"][];
             /** Lastrefreshedat */
             lastRefreshedAt?: string | null;
             /** Lastsyncat */
             lastSyncAt?: string | null;
-            /** Metadataprofile */
-            metadataProfile: {
-                [key: string]: unknown;
-            };
+            metadataProfile: components["schemas"]["MetadataProfile"];
             /** Name */
             name: string;
             /** Owner */
             owner: string;
             /** Precedence */
-            precedence: {
-                [key: string]: unknown;
-            }[];
+            precedence: components["schemas"]["PrecedenceRule"][];
             /** Protection */
             protection?: ("system" | "managed") | null;
-            /** Retrieval */
-            retrieval: {
-                [key: string]: unknown;
-            };
+            retrieval: components["schemas"]["RetrievalSettings"];
             /** Slug */
             slug: string;
-            /** Sourcedefaults */
-            sourceDefaults: {
-                [key: string]: unknown;
-            };
+            sourceDefaults: components["schemas"]["SourceDefaults"];
             /** Sources */
             sources: components["schemas"]["KbSourceLink"][];
-            /** Stats */
-            stats: {
-                [key: string]: unknown;
-            };
-            /** Sync */
-            sync: {
-                [key: string]: unknown;
-            };
+            stats: components["schemas"]["KbStats"];
+            sync: components["schemas"]["SyncSettings"];
             /** Templateid */
             templateId?: string | null;
         };
         /** KnowledgeBaseDetail */
         KnowledgeBaseDetail: {
-            /** Access */
-            access: {
-                [key: string]: unknown;
-            };
+            access: components["schemas"]["KbAccess"];
             /** Agentnames */
             agentNames: string[];
             /**
@@ -1757,10 +1869,7 @@ export interface components {
              * @default true
              */
             agentsKnown: boolean;
-            /** Answer */
-            answer: {
-                [key: string]: unknown;
-            };
+            answer: components["schemas"]["AnswerSettings"];
             /** Attached */
             attached: components["schemas"]["KbSourceView"][];
             /** Automation */
@@ -1788,58 +1897,36 @@ export interface components {
             heldCount: number;
             /** Id */
             id: string;
-            /** Indexing */
-            indexing?: {
-                [key: string]: unknown;
-            } | null;
+            indexing?: components["schemas"]["IndexingProgress"] | null;
             /** Jobs */
-            jobs: {
-                [key: string]: unknown;
-            }[];
+            jobs: components["schemas"]["IndexJob"][];
             /** Lastrefreshedat */
             lastRefreshedAt?: string | null;
             /** Lastsyncat */
             lastSyncAt?: string | null;
             /** Metadatakeys */
             metadataKeys: string[];
-            /** Metadataprofile */
-            metadataProfile: {
-                [key: string]: unknown;
-            };
+            metadataProfile: components["schemas"]["MetadataProfile"];
             /** Name */
             name: string;
             /** Owner */
             owner: string;
             /** Precedence */
-            precedence: {
-                [key: string]: unknown;
-            }[];
+            precedence: components["schemas"]["PrecedenceRule"][];
             /** Protection */
             protection?: ("system" | "managed") | null;
-            /** Retrieval */
-            retrieval: {
-                [key: string]: unknown;
-            };
+            retrieval: components["schemas"]["RetrievalSettings"];
             /** Slug */
             slug: string;
-            /** Sourcedefaults */
-            sourceDefaults: {
-                [key: string]: unknown;
-            };
+            sourceDefaults: components["schemas"]["SourceDefaults"];
             /** Sourcenames */
             sourceNames: string[];
             /** Sources */
             sources: components["schemas"]["KbSourceLink"][];
-            /** Stats */
-            stats: {
-                [key: string]: unknown;
-            };
+            stats: components["schemas"]["KbStats"];
             /** Suggestedquestions */
             suggestedQuestions: string[];
-            /** Sync */
-            sync: {
-                [key: string]: unknown;
-            };
+            sync: components["schemas"]["SyncSettings"];
             /** Templateid */
             templateId?: string | null;
         };
@@ -1847,11 +1934,11 @@ export interface components {
         KnowledgeBaseIn: {
             /** Access */
             access?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Answer */
             answer?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /**
              * Collections
@@ -1884,11 +1971,11 @@ export interface components {
             protection?: ("system" | "managed") | null;
             /** Retrieval */
             retrieval?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Sourcedefaults */
             sourceDefaults?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /**
              * Sourceids
@@ -1897,7 +1984,7 @@ export interface components {
             sourceIds: string[];
             /** Sync */
             sync?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Templateid */
             templateId?: string | null;
@@ -1906,11 +1993,11 @@ export interface components {
         KnowledgeBasePatch: {
             /** Access */
             access?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Answer */
             answer?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Collections */
             collections?: string[] | null;
@@ -1920,7 +2007,7 @@ export interface components {
             description?: string | null;
             /** Metadataprofile */
             metadataProfile?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Name */
             name?: string | null;
@@ -1928,31 +2015,28 @@ export interface components {
             owner?: string | null;
             /** Precedence */
             precedence?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[] | null;
             /** Protection */
             protection?: ("system" | "managed") | null;
             /** Retrieval */
             retrieval?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Sourcedefaults */
             sourceDefaults?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Sync */
             sync?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Templateid */
             templateId?: string | null;
         };
         /** KnowledgeBaseRow */
         KnowledgeBaseRow: {
-            /** Access */
-            access: {
-                [key: string]: unknown;
-            };
+            access: components["schemas"]["KbAccess"];
             /** Agentnames */
             agentNames: string[];
             /**
@@ -1965,10 +2049,7 @@ export interface components {
              * @default true
              */
             agentsKnown: boolean;
-            /** Answer */
-            answer: {
-                [key: string]: unknown;
-            };
+            answer: components["schemas"]["AnswerSettings"];
             /** Automation */
             automation: string;
             /** Collections */
@@ -1985,54 +2066,32 @@ export interface components {
             healthReasons: string[];
             /** Id */
             id: string;
-            /** Indexing */
-            indexing?: {
-                [key: string]: unknown;
-            } | null;
+            indexing?: components["schemas"]["IndexingProgress"] | null;
             /** Jobs */
-            jobs: {
-                [key: string]: unknown;
-            }[];
+            jobs: components["schemas"]["IndexJob"][];
             /** Lastrefreshedat */
             lastRefreshedAt?: string | null;
             /** Lastsyncat */
             lastSyncAt?: string | null;
-            /** Metadataprofile */
-            metadataProfile: {
-                [key: string]: unknown;
-            };
+            metadataProfile: components["schemas"]["MetadataProfile"];
             /** Name */
             name: string;
             /** Owner */
             owner: string;
             /** Precedence */
-            precedence: {
-                [key: string]: unknown;
-            }[];
+            precedence: components["schemas"]["PrecedenceRule"][];
             /** Protection */
             protection?: ("system" | "managed") | null;
-            /** Retrieval */
-            retrieval: {
-                [key: string]: unknown;
-            };
+            retrieval: components["schemas"]["RetrievalSettings"];
             /** Slug */
             slug: string;
-            /** Sourcedefaults */
-            sourceDefaults: {
-                [key: string]: unknown;
-            };
+            sourceDefaults: components["schemas"]["SourceDefaults"];
             /** Sourcenames */
             sourceNames: string[];
             /** Sources */
             sources: components["schemas"]["KbSourceLink"][];
-            /** Stats */
-            stats: {
-                [key: string]: unknown;
-            };
-            /** Sync */
-            sync: {
-                [key: string]: unknown;
-            };
+            stats: components["schemas"]["KbStats"];
+            sync: components["schemas"]["SyncSettings"];
             /** Templateid */
             templateId?: string | null;
         };
@@ -2167,6 +2226,18 @@ export interface components {
             owners: string[];
             /** Tags */
             tags: string[];
+        };
+        /** McpAccess */
+        McpAccess: {
+            /** Enabled */
+            enabled: boolean;
+            /** Toolname */
+            toolName: string;
+        };
+        /** MetadataProfile */
+        MetadataProfile: {
+            /** Required */
+            required: string[];
         };
         /** NamedRef */
         NamedRef: {
@@ -2357,11 +2428,27 @@ export interface components {
             /** Source */
             source: string;
         };
+        /**
+         * PrecedenceRule
+         * @description A rule choosing between two returned pieces on one topic; the index applies one: a newer version wins.
+         */
+        PrecedenceRule: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+            /** Loser */
+            loser: string;
+            /** Winner */
+            winner: string;
+        };
         /** PreviewIn */
         PreviewIn: {
             /** Config */
             config: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /** PreviewPage */
@@ -2373,6 +2460,19 @@ export interface components {
             /** Willfetch */
             willFetch: boolean;
         };
+        /** PublicLink */
+        PublicLink: {
+            /** Answerstyle */
+            answerStyle: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Ratelimit */
+            rateLimit: number;
+            /** Showsourcelinks */
+            showSourceLinks: boolean;
+            /** Slug */
+            slug: string;
+        };
         /** QueryIn */
         QueryIn: {
             /** Alsokbids */
@@ -2381,7 +2481,7 @@ export interface components {
             collection?: string | null;
             /** Overrides */
             overrides?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Question */
             question: string;
@@ -2389,11 +2489,11 @@ export interface components {
             runAsId?: string | null;
             /** Runtime */
             runtime?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Settings */
             settings?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
         };
         /** Reader */
@@ -2451,6 +2551,44 @@ export interface components {
             skipped?: string | null;
         };
         /**
+         * RetrievalSettings
+         * @description How a search of the base runs (retrieval.py) and which of its pieces it may return.
+         */
+        RetrievalSettings: {
+            /** Chunklimit */
+            chunkLimit: number;
+            filters: components["schemas"]["FilterGroup"];
+            /** Hybridweight */
+            hybridWeight: number;
+            /** Includeuntagged */
+            includeUntagged: boolean;
+            /** Meaningthreshold */
+            meaningThreshold: number;
+            /** Querymodel */
+            queryModel: string;
+            /** Rerank */
+            rerank: boolean;
+            /** Rewrite */
+            rewrite: string;
+            /** Rewriteinstructions */
+            rewriteInstructions: string;
+            /** Scopecollections */
+            scopeCollections: string[];
+            /** Scopesourceids */
+            scopeSourceIds: string[];
+            /**
+             * Searchmode
+             * @enum {string}
+             */
+            searchMode: "keyword" | "meaning" | "hybrid";
+            /** Tagsexclude */
+            tagsExclude: string[];
+            /** Tagsinclude */
+            tagsInclude: string[];
+            /** Threshold */
+            threshold: number;
+        };
+        /**
          * RewriteOut
          * @description The question as asked and as searched, present when a base rewrites questions.
          */
@@ -2498,6 +2636,50 @@ export interface components {
              * @enum {string}
              */
             status: "done" | "running" | "skipped" | "failed";
+        };
+        /** ScheduleDaily */
+        ScheduleDaily: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "daily";
+            /** Time */
+            time: string;
+            /** Tz */
+            tz: string;
+        };
+        /** ScheduleHourly */
+        ScheduleHourly: {
+            /** Every */
+            every: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "hourly";
+        };
+        /** ScheduleManual */
+        ScheduleManual: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "manual";
+        };
+        /** ScheduleWeekly */
+        ScheduleWeekly: {
+            /** Day */
+            day: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "weekly";
+            /** Time */
+            time: string;
+            /** Tz */
+            tz: string;
         };
         /** Scope */
         Scope: {
@@ -2554,7 +2736,7 @@ export interface components {
             limit?: number | null;
             /** Overrides */
             overrides?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Question */
             question: string;
@@ -2562,11 +2744,11 @@ export interface components {
             runAsId?: string | null;
             /** Runtime */
             runtime?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Settings */
             settings?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
         };
         /** SearchOut */
@@ -2598,30 +2780,19 @@ export interface components {
             aiCeiling: number;
             /** Aistepswaiting */
             aiStepsWaiting: string[];
-            /** Cleaning */
-            cleaning: {
-                [key: string]: unknown;
-            };
+            cleaning: components["schemas"]["SourceCleaning"];
             /** Collection */
             collection: string;
             /** Config */
-            config: {
-                [key: string]: unknown;
-            };
+            config: components["schemas"]["ToolSourceConfig"] | components["schemas"]["FileSourceConfig"];
             /** Createdat */
             createdAt: string;
             /** Deletedatsource */
             deletedAtSource: string;
-            /** Health */
-            health?: {
-                [key: string]: unknown;
-            };
+            health: components["schemas"]["SourceHealth"];
             /** Id */
             id: string;
-            /** Ingest */
-            ingest: {
-                [key: string]: unknown;
-            };
+            ingest: components["schemas"]["SourceIngest"];
             /** Itemsfailed */
             itemsFailed: number;
             /** Itemsindexed */
@@ -2637,9 +2808,7 @@ export interface components {
             /** Lastsyncat */
             lastSyncAt?: string | null;
             /** Metadatamapping */
-            metadataMapping: {
-                [key: string]: unknown;
-            }[];
+            metadataMapping: components["schemas"]["SourceMetadataMapping"][];
             /** Name */
             name: string;
             /** Nextsyncat */
@@ -2648,23 +2817,13 @@ export interface components {
             notifyOnFailure: boolean;
             /** Owner */
             owner: string;
-            /** Parsing */
-            parsing: {
-                [key: string]: unknown;
-            };
-            /** Permissions */
-            permissions: {
-                [key: string]: unknown;
-            };
+            parsing: components["schemas"]["SourceParsing"];
+            permissions: components["schemas"]["SourcePermissions"];
             rebuild?: components["schemas"]["SyncRun"] | null;
             /** Rules */
-            rules: {
-                [key: string]: unknown;
-            }[];
+            rules: components["schemas"]["SourceRule"][];
             /** Schedule */
-            schedule: {
-                [key: string]: unknown;
-            };
+            schedule: components["schemas"]["ScheduleManual"] | components["schemas"]["ScheduleHourly"] | components["schemas"]["ScheduleDaily"] | components["schemas"]["ScheduleWeekly"];
             /** Scopesummary */
             scopeSummary: string;
             /** Sensitivity */
@@ -2682,9 +2841,36 @@ export interface components {
             /** Usedbykbids */
             usedByKbIds: string[];
             /** Waitinghosts */
-            waitingHosts: {
-                [key: string]: unknown;
-            }[];
+            waitingHosts: components["schemas"]["WaitingHost"][];
+        };
+        /** SourceCleaning */
+        SourceCleaning: {
+            /**
+             * Duplicates
+             * @enum {string}
+             */
+            duplicates: "flag" | "skip";
+            /** Furniture */
+            furniture: boolean;
+            /** Maincontent */
+            mainContent: boolean;
+            /** Siterepeats */
+            siteRepeats: boolean;
+        };
+        /**
+         * SourceDefaults
+         * @description How a new source of the base splits its documents; each source keeps its own copy, changed on the source. AI
+         *     steps are refused here: they need an estimate and an approval per source.
+         */
+        SourceDefaults: {
+            /** Childsize */
+            childSize: number;
+            /** Overlap */
+            overlap: number;
+            /** Size */
+            size: number;
+            /** Strategies */
+            strategies: ("structure" | "fixed" | "context_headers" | "parent_child" | "table_rows" | "clean")[];
         };
         /** SourceDetail */
         SourceDetail: {
@@ -2701,38 +2887,22 @@ export interface components {
             canEdit?: boolean | null;
             /** Canpublish */
             canPublish?: boolean | null;
-            /** Cleaning */
-            cleaning: {
-                [key: string]: unknown;
-            };
+            cleaning: components["schemas"]["SourceCleaning"];
             /** Collection */
             collection: string;
             /** Config */
-            config: {
-                [key: string]: unknown;
-            };
+            config: components["schemas"]["ToolSourceConfig"] | components["schemas"]["FileSourceConfig"];
             /** Createdat */
             createdAt: string;
             /** Deletedatsource */
             deletedAtSource: string;
             /** Errorgroups */
-            errorGroups: {
-                [key: string]: unknown;
-            }[];
-            /** Governance */
-            governance: {
-                [key: string]: unknown;
-            };
-            /** Health */
-            health?: {
-                [key: string]: unknown;
-            };
+            errorGroups: components["schemas"]["ErrorGroup"][];
+            governance: components["schemas"]["Governance"];
+            health: components["schemas"]["SourceHealth"];
             /** Id */
             id: string;
-            /** Ingest */
-            ingest: {
-                [key: string]: unknown;
-            };
+            ingest: components["schemas"]["SourceIngest"];
             /** Itemcount */
             itemCount: number;
             /** Itemsfailed */
@@ -2752,9 +2922,7 @@ export interface components {
             /** Lastsyncat */
             lastSyncAt?: string | null;
             /** Metadatamapping */
-            metadataMapping: {
-                [key: string]: unknown;
-            }[];
+            metadataMapping: components["schemas"]["SourceMetadataMapping"][];
             /** Name */
             name: string;
             /** Nextsyncat */
@@ -2763,37 +2931,22 @@ export interface components {
             notifyOnFailure: boolean;
             /** Owner */
             owner: string;
-            /** Parsing */
-            parsing: {
-                [key: string]: unknown;
-            };
-            /** Permissions */
-            permissions: {
-                [key: string]: unknown;
-            };
+            parsing: components["schemas"]["SourceParsing"];
+            permissions: components["schemas"]["SourcePermissions"];
             /** Readers */
             readers: components["schemas"]["Reader"][];
             rebuild?: components["schemas"]["SyncRun"] | null;
             /** Recentruns */
-            recentRuns: {
-                [key: string]: unknown;
-            }[];
+            recentRuns: components["schemas"]["SyncRun"][];
             /** Reindexneeded */
             reindexNeeded: boolean;
             /** Requiredmetadata */
             requiredMetadata: string[];
             /** Rules */
-            rules: {
-                [key: string]: unknown;
-            }[];
-            /** Running */
-            running?: {
-                [key: string]: unknown;
-            } | null;
+            rules: components["schemas"]["SourceRule"][];
+            running?: components["schemas"]["SyncRun"] | null;
             /** Schedule */
-            schedule: {
-                [key: string]: unknown;
-            };
+            schedule: components["schemas"]["ScheduleManual"] | components["schemas"]["ScheduleHourly"] | components["schemas"]["ScheduleDaily"] | components["schemas"]["ScheduleWeekly"];
             /** Scopesummary */
             scopeSummary: string;
             /** Sensitivity */
@@ -2811,9 +2964,25 @@ export interface components {
             /** Usedbykbids */
             usedByKbIds: string[];
             /** Waitinghosts */
-            waitingHosts: {
-                [key: string]: unknown;
-            }[];
+            waitingHosts: components["schemas"]["WaitingHost"][];
+        };
+        /** SourceHealth */
+        SourceHealth: {
+            /** Daysfailing */
+            daysFailing: number;
+            /** Failedruns */
+            failedRuns: number;
+            /** Failingsince */
+            failingSince?: string | null;
+            /** Lastgoodsyncat */
+            lastGoodSyncAt?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "needs_reconnect" | "failing" | "healthy" | "never";
+            /** Tombstoned */
+            tombstoned: number;
         };
         /** SourceIn */
         SourceIn: {
@@ -2821,7 +2990,7 @@ export interface components {
             aiCeiling?: number | null;
             /** Cleaning */
             cleaning?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /**
              * Collection
@@ -2830,7 +2999,7 @@ export interface components {
             collection: string;
             /** Config */
             config?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /**
              * Fileids
@@ -2839,7 +3008,7 @@ export interface components {
             fileIds: string[];
             /** Ingest */
             ingest?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /**
              * Kbids
@@ -2848,7 +3017,7 @@ export interface components {
             kbIds: string[];
             /** Metadatamapping */
             metadataMapping?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[] | null;
             /** Name */
             name: string;
@@ -2856,15 +3025,15 @@ export interface components {
             owner?: string | null;
             /** Parsing */
             parsing?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Rules */
             rules?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[] | null;
             /** Schedule */
             schedule?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /**
              * Sensitivity
@@ -2886,6 +3055,26 @@ export interface components {
             /** Type */
             type: string;
         };
+        /** SourceIngest */
+        SourceIngest: {
+            approval: components["schemas"]["IngestApproval"];
+            /** Childsize */
+            childSize: number;
+            /** Columns */
+            columns: components["schemas"]["IngestColumn"][];
+            /** Model */
+            model: string;
+            /** Overlap */
+            overlap: number;
+            /** Preset */
+            preset: string;
+            /** Questionspersection */
+            questionsPerSection: number;
+            /** Size */
+            size: number;
+            /** Strategies */
+            strategies: string[];
+        };
         /** SourceKind */
         SourceKind: {
             /**
@@ -2902,10 +3091,7 @@ export interface components {
              * @default false
              */
             connected: boolean;
-            /** Defaults */
-            defaults: {
-                [key: string]: unknown;
-            };
+            defaults: components["schemas"]["SourceKindDefaults"];
             /**
              * Group
              * @enum {string}
@@ -2913,7 +3099,7 @@ export interface components {
             group: "built_in" | "apps";
             /** Inputs */
             inputs?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Kind */
             kind: string;
@@ -2946,23 +3132,56 @@ export interface components {
             /** Type */
             type: string;
         };
+        /** SourceKindDefaults */
+        SourceKindDefaults: {
+            /** Aiceiling */
+            aiCeiling: number;
+            cleaning: components["schemas"]["SourceCleaning"];
+            ingest: components["schemas"]["SourceIngest"];
+            /** Metadatamapping */
+            metadataMapping: components["schemas"]["SourceMetadataMapping"][];
+            parsing: components["schemas"]["SourceParsing"];
+            /** Rules */
+            rules: components["schemas"]["SourceRule"][];
+            /** Schedule */
+            schedule: components["schemas"]["ScheduleManual"] | components["schemas"]["ScheduleHourly"] | components["schemas"]["ScheduleDaily"] | components["schemas"]["ScheduleWeekly"];
+        };
+        /** SourceMetadataMapping */
+        SourceMetadataMapping: {
+            /** From */
+            from: string;
+            /** Key */
+            key: string;
+        };
+        /** SourceParsing */
+        SourceParsing: {
+            /**
+             * Ocr
+             * @enum {string}
+             */
+            ocr: "off" | "auto" | "always";
+            /** Tables */
+            tables: boolean;
+            /** Vision */
+            vision: boolean;
+        };
         /** SourcePatch */
         SourcePatch: {
             /** Aiceiling */
             aiCeiling?: number | null;
             /** Cleaning */
             cleaning?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Collection */
             collection?: string | null;
             /** Ingest */
             ingest?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Metadatamapping */
             metadataMapping?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[] | null;
             /** Name */
             name?: string | null;
@@ -2970,15 +3189,15 @@ export interface components {
             owner?: string | null;
             /** Parsing */
             parsing?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Rules */
             rules?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[] | null;
             /** Schedule */
             schedule?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Sensitivity */
             sensitivity?: string | null;
@@ -2986,8 +3205,13 @@ export interface components {
             tags?: string[] | null;
             /** Values */
             values?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
+        };
+        /** SourcePermissions */
+        SourcePermissions: {
+            /** Mode */
+            mode: string;
         };
         /** SourcePreview */
         SourcePreview: {
@@ -3009,30 +3233,19 @@ export interface components {
             aiCeiling: number;
             /** Aistepswaiting */
             aiStepsWaiting: string[];
-            /** Cleaning */
-            cleaning: {
-                [key: string]: unknown;
-            };
+            cleaning: components["schemas"]["SourceCleaning"];
             /** Collection */
             collection: string;
             /** Config */
-            config: {
-                [key: string]: unknown;
-            };
+            config: components["schemas"]["ToolSourceConfig"] | components["schemas"]["FileSourceConfig"];
             /** Createdat */
             createdAt: string;
             /** Deletedatsource */
             deletedAtSource: string;
-            /** Health */
-            health?: {
-                [key: string]: unknown;
-            };
+            health: components["schemas"]["SourceHealth"];
             /** Id */
             id: string;
-            /** Ingest */
-            ingest: {
-                [key: string]: unknown;
-            };
+            ingest: components["schemas"]["SourceIngest"];
             /** Itemsfailed */
             itemsFailed: number;
             /** Itemsindexed */
@@ -3048,9 +3261,7 @@ export interface components {
             /** Lastsyncat */
             lastSyncAt?: string | null;
             /** Metadatamapping */
-            metadataMapping: {
-                [key: string]: unknown;
-            }[];
+            metadataMapping: components["schemas"]["SourceMetadataMapping"][];
             /** Name */
             name: string;
             /** Nextsyncat */
@@ -3059,25 +3270,15 @@ export interface components {
             notifyOnFailure: boolean;
             /** Owner */
             owner: string;
-            /** Parsing */
-            parsing: {
-                [key: string]: unknown;
-            };
-            /** Permissions */
-            permissions: {
-                [key: string]: unknown;
-            };
+            parsing: components["schemas"]["SourceParsing"];
+            permissions: components["schemas"]["SourcePermissions"];
             rebuild?: components["schemas"]["SyncRun"] | null;
             /** Rules */
-            rules: {
-                [key: string]: unknown;
-            }[];
+            rules: components["schemas"]["SourceRule"][];
             /** Running */
             running: boolean;
             /** Schedule */
-            schedule: {
-                [key: string]: unknown;
-            };
+            schedule: components["schemas"]["ScheduleManual"] | components["schemas"]["ScheduleHourly"] | components["schemas"]["ScheduleDaily"] | components["schemas"]["ScheduleWeekly"];
             /** Scopesummary */
             scopeSummary: string;
             /** Sensitivity */
@@ -3097,9 +3298,24 @@ export interface components {
             /** Usedbykbids */
             usedByKbIds: string[];
             /** Waitinghosts */
-            waitingHosts: {
-                [key: string]: unknown;
-            }[];
+            waitingHosts: components["schemas"]["WaitingHost"][];
+        };
+        /** SourceRule */
+        SourceRule: {
+            /**
+             * Field
+             * @enum {string}
+             */
+            field: "path" | "title" | "mime" | "modified_after" | "size_under";
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "include" | "exclude";
+            /** Value */
+            value: string;
         };
         /**
          * SyncIn
@@ -3147,6 +3363,28 @@ export interface components {
             /** Trigger */
             trigger: string;
         };
+        /**
+         * SyncSettings
+         * @description How the syncs of the base's sources treat what they find: a changed version applied at once or held in Changes
+         *     for review, an item removed at its source taken out of search or kept and flagged, when an item is stale, and
+         *     whether the owner is told when a sync keeps failing.
+         */
+        SyncSettings: {
+            /**
+             * Changes
+             * @enum {string}
+             */
+            changes: "apply" | "review";
+            /** Notifyonfailure */
+            notifyOnFailure: boolean;
+            /**
+             * Removedatsource
+             * @enum {string}
+             */
+            removedAtSource: "remove" | "keep";
+            /** Staleafterdays */
+            staleAfterDays: number;
+        };
         /** TokenRange */
         TokenRange: {
             /** High */
@@ -3168,6 +3406,33 @@ export interface components {
             /** Ids */
             ids: string[];
         };
+        /**
+         * ToolSourceConfig
+         * @description What an app's source keeps of its settings for the screen: the plugin and source it reads, its tools and
+         *     connection, and the values it was set up with.
+         */
+        ToolSourceConfig: {
+            /** Connectionid */
+            connectionId: string | null;
+            /** Gettool */
+            getTool: string | null;
+            /** Listtool */
+            listTool: string | null;
+            /** Paused */
+            paused: boolean | string | null;
+            /** Plugin */
+            plugin: string | null;
+            /** Site */
+            site: boolean | null;
+            /** Source */
+            source: string | null;
+            /** Title */
+            title: string | null;
+            /** Values */
+            values: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -3185,6 +3450,13 @@ export interface components {
         VerifyIn: {
             /** Verified */
             verified: boolean;
+        };
+        /** WaitingHost */
+        WaitingHost: {
+            /** Host */
+            host: string;
+            /** Runkey */
+            runKey: string | null;
         };
         /** WrittenItem */
         WrittenItem: {
@@ -7600,7 +7872,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["SyncIn"] | null;
+                "application/json": components["schemas"]["SyncIn"];
             };
         };
         responses: {

@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Annotated, Any, ClassVar, Literal, NamedTuple, TypedDict, cast
+from typing import Annotated, Any, ClassVar, Literal, NamedTuple, NotRequired, TypedDict, cast
 
 import sqlalchemy as sa
 from pydantic import BeforeValidator, JsonValue
@@ -843,6 +843,91 @@ async def _sources_in(c: AsyncConnection, tenant: str, ids: list[str] | None) ->
     return [SourceRow.model_validate({**r, "item_counts": counts.get(r["id"], {})}) for r in rows]
 
 
+class AuditEntry(TypedDict):
+    """A settings change for the account's audit log: who, what and which fields changed, each before and after."""
+
+    actor: str
+    action: str
+    target_kind: str
+    target_id: str
+    summary: str
+    detail: dict[str, JsonValue]
+
+
+class NewBase(TypedDict):
+    """The columns of a knowledge base row to insert; the revision starts at 0 and the documents source is set later."""
+
+    tenant_id: str
+    id: str
+    team_id: str
+    name: str
+    slug: str
+    description: str
+    color: str
+    owner: str
+    collections: list[str]
+    retrieval: dict[str, JsonValue]
+    settings: NotRequired[dict[str, JsonValue] | None]
+    created_by: str
+    created_at: datetime
+    last_refreshed_at: datetime | None
+    template_id: str | None
+    protection: NotRequired[str | None]
+
+
+class BaseChanges(TypedDict, total=False):
+    """The columns of a knowledge base a change sets; the ones it names only."""
+
+    template_id: str
+    protection: str
+    name: str
+    slug: str
+    owner: str
+    description: str
+    color: str
+    collections: list[str]
+    retrieval: dict[str, JsonValue]
+    settings: dict[str, JsonValue]
+    documents_source_id: str
+
+
+class NewSource(TypedDict):
+    """The columns of a source row to insert; a lease, the last sync and the failure counts start empty."""
+
+    tenant_id: str
+    id: str
+    team_id: str
+    type: str
+    name: str
+    collection: str
+    owner: str
+    sensitivity: str
+    status: str
+    tags: list[str]
+    file_ids: list[str]
+    file_names: dict[str, str] | None
+    created_by: str
+    created_at: datetime
+    last_sync_at: NotRequired[datetime | None]
+    last_run_status: NotRequired[str | None]
+    config: NotRequired[dict[str, JsonValue] | None]
+    settings: NotRequired[dict[str, JsonValue] | None]
+
+
+class SourceChanges(TypedDict, total=False):
+    """The columns of a source a change sets; the ones it names only."""
+
+    name: str
+    sensitivity: str
+    owner: str
+    collection: str
+    tags: list[str]
+    config: dict[str, JsonValue] | None
+    settings: dict[str, JsonValue]
+    status: str
+    type: str
+
+
 class KnowledgeStore(Store):
     """kb-service's door to its knowledge bases and sources, always inside one tenant. Creating a knowledge base with
     its links, attaching sources and removing a source with its links each land whole."""
@@ -1018,7 +1103,7 @@ class KnowledgeStore(Store):
             )
             return [(r.kb_id, r.source_id) for r in await c.execute(q)]
 
-    async def create_base(self, row: dict[str, Any], source_ids: list[str]) -> None:
+    async def create_base(self, row: NewBase, source_ids: list[str]) -> None:
         async with self.tx() as c:
             try:
                 async with self.attempt(c):
@@ -1031,7 +1116,7 @@ class KnowledgeStore(Store):
                 await _changed(c, row["tenant_id"], written)
 
     async def update_base(
-        self, tenant: str, kb_id: str, values: dict[str, Any], *, audit: dict[str, Any] | None = None
+        self, tenant: str, kb_id: str, values: BaseChanges, *, audit: AuditEntry | None = None
     ) -> None:
         """`audit` is the change's entry for the account's audit log, written in the same transaction. A new name or
         colour raises the base's revision and reports `kb.changed`; the same name or colour sent again does neither."""
@@ -1067,7 +1152,7 @@ class KnowledgeStore(Store):
             link = {"tenant_id": tenant, "team_id": team, "kb_id": kb_id, "source_id": s}
             await c.execute(insert_ignore(c, kb_base_sources, link, keys=("tenant_id", "kb_id", "source_id")))
 
-    async def create_source(self, row: dict[str, Any], kb_ids: list[str]) -> None:
+    async def create_source(self, row: NewSource, kb_ids: list[str]) -> None:
         async with self.tx() as c:
             await c.execute(sa.insert(kb_sources).values(**row))
             for kb_id in kb_ids:
@@ -1367,7 +1452,7 @@ class KnowledgeStore(Store):
             )
 
     async def update_source(
-        self, tenant: str, source_id: str, values: dict[str, Any], *, audit: dict[str, Any] | None = None
+        self, tenant: str, source_id: str, values: SourceChanges, *, audit: AuditEntry | None = None
     ) -> None:
         """`audit` is the change's entry for the account's audit log, written in the same transaction."""
         async with self.tx() as c:

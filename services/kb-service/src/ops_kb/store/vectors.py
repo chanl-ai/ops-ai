@@ -5,7 +5,7 @@ vector with each unit's by cosine distance (ops_store.dialect) and returns each 
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import TypedDict
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -14,7 +14,7 @@ from ops_store.dialect import vector_distance_sql, vector_search_setup, vector_t
 from ops_store.store import Store
 from ops_store.team_scope import team_visible
 
-from .fulltext import Narrowing, scope_sql
+from .fulltext import Narrowing, PieceHit, piece_of, scope_sql
 from .knowledge import ROLE, kb_chunks, kb_unit_vectors, kb_units
 
 # Units read per piece asked for, as the keyword lane reads them: a piece's text, children and questions can all be
@@ -43,6 +43,37 @@ def _search_sql(width: int, scope: str = "TRUE") -> sa.TextClause:
     ).bindparams(sa.bindparam("kb_ids", expanding=True))
 
 
+class PendingUnit(TypedDict):
+    """An index unit waiting for a vector, with what its vector is made from."""
+
+    id: str
+    chunk_id: str
+    item_id: str
+    heading: str | None
+    text: str
+
+
+class UnitVector(TypedDict):
+    """A unit's vector to store, with the piece and item the unit belongs to."""
+
+    unit_id: str
+    chunk_id: str
+    item_id: str
+    vector: list[float]
+
+
+class VectorHit(PieceHit):
+    """A unit the meaning lane matched, with its similarity to the question (1 is the same direction)."""
+
+    similarity: float
+
+
+class MeaningHit(VectorHit):
+    """A vector hit above the bases' threshold, scored for the fusion by its similarity."""
+
+    lane_score: float
+
+
 class PgVectorStore(Store):
     role = ROLE
 
@@ -62,7 +93,7 @@ class PgVectorStore(Store):
                 self._ready = found is not None
         return self._ready
 
-    async def pending(self, tenant: str, *, model: str, width: int, limit: int) -> list[dict[str, Any]]:
+    async def pending(self, tenant: str, *, model: str, width: int, limit: int) -> list[PendingUnit]:
         """Units of live pieces with no vector of `model` at `width`, oldest piece first."""
         u, c, v = kb_units, kb_chunks, kb_unit_vectors
         current = sa.and_(v.c.tenant_id == u.c.tenant_id, v.c.unit_id == u.c.id, v.c.model == model, v.c.width == width)
@@ -80,7 +111,12 @@ class PgVectorStore(Store):
             .limit(limit)
         )
         async with self.tx() as conn:
-            return [dict(r) for r in (await conn.execute(q)).mappings()]
+            return [
+                PendingUnit(
+                    id=r["id"], chunk_id=r["chunk_id"], item_id=r["item_id"], heading=r["heading"], text=r["text"]
+                )
+                for r in (await conn.execute(q)).mappings()
+            ]
 
     async def pending_count(self, tenant: str, *, model: str, width: int) -> int:
         """How many units of live pieces have no vector of `model` at `width`."""
@@ -100,7 +136,7 @@ class PgVectorStore(Store):
         async with self.tx() as conn:
             return int(await conn.scalar(q) or 0)
 
-    async def put(self, tenant: str, rows: list[dict[str, Any]], *, model: str, width: int) -> None:
+    async def put(self, tenant: str, rows: list[UnitVector], *, model: str, width: int) -> None:
         """Each unit's vector, replacing one of another model or width."""
         if not rows:
             return
@@ -165,7 +201,7 @@ class PgVectorStore(Store):
         width: int,
         limit: int,
         how: Narrowing | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[VectorHit]:
         """The units nearest the question's vector within each base's scope, with their piece and similarity (1 is the
         same direction). The scope is in the query, so the nearest units out of scope never take the places."""
         scope, scoped = scope_sql(kb_ids, how)
@@ -181,4 +217,7 @@ class PgVectorStore(Store):
         async with self.tx() as conn:
             for statement in vector_search_setup(conn.dialect.name):
                 await conn.execute(sa.text(statement))
-            return [dict(r) for r in (await conn.execute(_search_sql(width, scope), params)).mappings()]
+            return [
+                VectorHit(**piece_of(r), similarity=r["similarity"])
+                for r in (await conn.execute(_search_sql(width, scope), params)).mappings()
+            ]

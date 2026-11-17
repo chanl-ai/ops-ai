@@ -33,7 +33,7 @@ from ops_ingest.split import ai_step_allowed, document_digest
 from ops_ingest.strategies.faq import piece_digest
 from ops_ingest.text import approx_tokens
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
-from ops_service_kit.http import options_page, options_window
+from ops_service_kit.http import JsonValue, options_page, options_window
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
@@ -67,7 +67,22 @@ from .source_settings import (
 )
 from .store import DECIDABLE, KnowledgeStore
 from .store.document_list import SHOWN_STATUS, doc_type, document_page
-from .store.knowledge import BaseRow, ChangeRow, ChunkRow, CopyName, ItemRow, PieceWrite, RunRow, SourceRow, UnitWrite
+from .store.knowledge import (
+    AuditEntry,
+    BaseChanges,
+    BaseRow,
+    ChangeRow,
+    ChunkRow,
+    CopyName,
+    ItemRow,
+    NewBase,
+    NewSource,
+    PieceWrite,
+    RunRow,
+    SourceChanges,
+    SourceRow,
+    UnitWrite,
+)
 from .store.vectors import PgVectorStore
 from .tool_sources import ToolReader, declared_source, refusal_of, source_config, sync_tool_source
 
@@ -621,6 +636,8 @@ class KnowledgeService:
 
     async def create_base(self, who: Who, i: dict[str, Any]) -> dict[str, Any]:
         who.require_builder(who.team_id, "create a knowledge base", "create")
+        if who.team_id is None:
+            raise ValidationFailed("A knowledge base is made in one team; this call names none.", code="team_required")
         name = str(i.get("name") or "").strip()
         if not name:
             raise ValidationFailed("Give the knowledge base a name.")
@@ -642,7 +659,7 @@ class KnowledgeService:
         slug = _slug(name)
         start = {k: {**v, **preset.get(k, {})} for k, v in sections_of(slug, {}, None).items()}
         chosen = settled(start, {k: i.get(k) for k in SECTIONS})
-        row: dict[str, Any] = {
+        row: NewBase = {
             "tenant_id": who.tenant_id,
             "id": i.get("id") or new_id("kb"),
             "team_id": who.team_id,
@@ -701,11 +718,11 @@ class KnowledgeService:
     async def update_base(self, who: Who, kb_id: str, patch: dict[str, Any]) -> dict[str, Any]:
         b = await self._changeable(who, kb_id)
         who.require_provisioner_for(patch)
-        values: dict[str, Any] = {
-            col: patch[key]
-            for col, key in (("template_id", "templateId"), ("protection", "protection"))
-            if patch.get(key)
-        }
+        values: BaseChanges = {}
+        if patch.get("templateId"):
+            values["template_id"] = patch["templateId"]
+        if patch.get("protection"):
+            values["protection"] = patch["protection"]
         if patch.get("name") is not None:
             name = str(patch["name"]).strip()
             if not name:
@@ -713,14 +730,18 @@ class KnowledgeService:
             taken = any(x.id != kb_id for x in await self.store.taken(who.tenant_id, name=name))
             if taken:
                 raise Conflict("A knowledge base with this name already exists.")
-            values |= {"name": name, "slug": _slug(name)}
+            values["name"] = name
+            values["slug"] = _slug(name)
         if patch.get("owner") is not None:
             if not str(patch["owner"]).strip():
                 raise ValidationFailed("A knowledge base always has an owner.", code="collection_without_owner")
             values["owner"] = str(patch["owner"]).strip()
-        for key in ("description", "color", "collections"):
-            if patch.get(key) is not None:
-                values[key] = patch[key]
+        if patch.get("description") is not None:
+            values["description"] = patch["description"]
+        if patch.get("color") is not None:
+            values["color"] = patch["color"]
+        if patch.get("collections") is not None:
+            values["collections"] = patch["collections"]
         # The route dumps the patch by field name, so the source defaults arrive as source_defaults.
         sections = {k: patch.get(k, patch.get(re.sub(r"([A-Z])", r"_\1", k).lower())) for k in SECTIONS}
         if any(v is not None for v in sections.values()):
@@ -728,7 +749,7 @@ class KnowledgeService:
             after = settled(current, sections)
             if after["retrieval"] != dict(b.retrieval):
                 values["retrieval"] = after["retrieval"]
-            rest = {k: v for k, v in after.items() if k != "retrieval"}
+            rest: dict[str, JsonValue] = {k: v for k, v in after.items() if k != "retrieval"}
             if rest != dict(b.settings or {}):
                 values["settings"] = rest
         if values:
@@ -910,8 +931,7 @@ class KnowledgeService:
         # Files named at creation are checked and referenced like any added later, before the source exists.
         names = [await self._use_file(who, row, f) for f in dict.fromkeys(i.get("fileIds") or [])]
         row = row.model_copy(update={"file_ids": [f for f, _ in names], "file_names": dict(names)})
-        stored = row.model_dump(exclude={"db_now", "item_counts"}) | {"tenant_id": who.tenant_id}
-        await self.store.create_source(stored, kb_ids)
+        await self.store.create_source(new_source(row, who.tenant_id), kb_ids)
         if i.get("sync"):
             # Add source's Create and sync: the first run starts now, in the background, and shows on the source.
             self._in_background(self._first_sync(who, row))
@@ -2132,7 +2152,7 @@ class KnowledgeService:
 
     async def update_source(self, who: Who, source_id: str, patch: dict[str, Any]) -> dict[str, Any]:
         s = await self._changeable_source(who, source_id)
-        values: dict[str, Any] = {}
+        values: SourceChanges = {}
         if patch.get("name") is not None:
             if not str(patch["name"]).strip():
                 raise ValidationFailed("Give the source a name.")
@@ -2145,9 +2165,10 @@ class KnowledgeService:
             if not str(patch["owner"]).strip():
                 raise ValidationFailed("A source always has an owner.")
             values["owner"] = str(patch["owner"]).strip()
-        for key in ("collection", "tags"):
-            if patch.get(key) is not None:
-                values[key] = patch[key]
+        if patch.get("collection") is not None:
+            values["collection"] = patch["collection"]
+        if patch.get("tags") is not None:
+            values["tags"] = patch["tags"]
         if patch.get("values") is not None:
             values["config"] = await self._values_changed(who, s, cast(dict[str, Any], patch["values"]))
         given = {k: patch[k] for k in SETTINGS_KEYS if patch.get(k) is not None}
@@ -2194,7 +2215,7 @@ class KnowledgeService:
             decided_at=datetime.now(UTC).isoformat(),
         )
         after = before.model_copy(update={"ingest": before.ingest.model_copy(update={"approval": approval})})
-        values = {"settings": wire(after)}
+        values: SourceChanges = {"settings": wire(after)}
         entry = audit_entry(
             who, "knowledge.source.settings", "knowledge_source", source_id, s.name, s.model_dump(), values
         )
@@ -2811,8 +2832,8 @@ def audit_entry(  # noqa: PLR0917 - each argument a different part of the entry
     target_id: str,
     name: str,
     before: dict[str, Any],
-    values: dict[str, Any],
-) -> dict[str, Any] | None:
+    values: Mapping[str, object],
+) -> AuditEntry | None:
     """The audit entry for a settings change: who made it, which fields changed, and each field before and after
     (for a nested setting, its changed keys). None when nothing changed. The seed, with no caller, is not audited."""
     if who.caller is None:
@@ -2838,6 +2859,30 @@ def audit_entry(  # noqa: PLR0917 - each argument a different part of the entry
         "summary": f"Changed the settings of {AUDITED[target_kind]} {name}: {', '.join(sorted(changes))}",
         "detail": {"name": name, "changes": changes},
     }
+
+
+def new_source(row: SourceRow, tenant: str) -> NewSource:
+    """The columns of a new source's row: all of the source's but the ones only a sync or a lease sets."""
+    return NewSource(
+        tenant_id=tenant,
+        id=row.id,
+        team_id=row.team_id,
+        type=row.type,
+        name=row.name,
+        collection=row.collection,
+        owner=row.owner,
+        sensitivity=row.sensitivity,
+        status=row.status,
+        tags=row.tags,
+        file_ids=row.file_ids,
+        file_names=row.file_names,
+        created_by=row.created_by,
+        created_at=row.created_at,
+        last_sync_at=row.last_sync_at,
+        last_run_status=row.last_run_status,
+        config=row.config,
+        settings=row.settings,
+    )
 
 
 def pieces(  # noqa: PLR0917 - each argument a different part of the piece rows

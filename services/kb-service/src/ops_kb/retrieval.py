@@ -11,8 +11,12 @@ by its best unit, at most two from one item. Every result says which lanes were 
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
+
+from .store.fulltext import KeywordHit
+from .store.vectors import MeaningHit
 
 Lane = Literal["keyword", "meaning"]
 LANES: tuple[Lane, ...] = ("keyword", "meaning")
@@ -130,13 +134,13 @@ def snippet(text: str, width: int = 280) -> str:
     return text if len(text) <= width else text[: width - 1].rsplit(" ", 1)[0] + "…"
 
 
-def fuse(lanes: dict[str, list[dict[str, Any]]], how: Search) -> list[Passage]:
+def fuse(lanes: Mapping[str, Sequence[KeywordHit] | Sequence[MeaningHit]], how: Search) -> list[Passage]:
     """Each lane's unit hits (best first, already above the threshold) to pieces, fused by weighted reciprocal rank."""
     weight = {"meaning": how.weight, "keyword": 1.0 - how.weight}
     if len(lanes) == 1:
         # One lane ran: its order is the order, at its full weight.
         weight = dict.fromkeys(lanes, 1.0)
-    best: dict[str, dict[str, Any]] = {}
+    best: dict[str, tuple[int, KeywordHit | MeaningHit]] = {}
     scores: dict[str, float] = {}
     lane_scores: dict[str, dict[str, float]] = {}
     for lane, rows in lanes.items():
@@ -151,13 +155,13 @@ def fuse(lanes: dict[str, list[dict[str, Any]]], how: Search) -> list[Passage]:
             scores[piece] = scores.get(piece, 0.0) + weight[lane] / (RRF_K + rank)
             lane_scores.setdefault(piece, {})[lane] = round(float(r["lane_score"]), 3)
             # The unit named is the best one of the lane that ranked the piece highest.
-            if piece not in best or rank < best[piece]["_rank"]:
-                best[piece] = {**r, "_rank": rank}
+            if piece not in best or rank < best[piece][0]:
+                best[piece] = (rank, r)
     order = sorted(scores, key=lambda k: scores[k], reverse=True)
     per_item: dict[str, int] = {}
     out: list[Passage] = []
     for piece in order:
-        r = best[piece]
+        r = best[piece][1]
         if per_item.get(r["item_id"], 0) >= PER_ITEM:
             continue
         per_item[r["item_id"]] = per_item.get(r["item_id"], 0) + 1
@@ -178,7 +182,7 @@ def fuse(lanes: dict[str, list[dict[str, Any]]], how: Search) -> list[Passage]:
                 url=r["url"],
                 lanes=lane_scores[piece],
                 chunk_id=piece,
-                verified=bool(r.get("verified")),
+                verified=bool(r["verified"]),
             )
         )
         if len(out) == how.limit:

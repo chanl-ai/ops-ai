@@ -5,13 +5,12 @@ it cannot, the result says why and the keyword lane answers alone."""
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 
 from .embedding import Embedder, EmbedFailed
 from .retrieval import Found, Lane, Search, fuse
 from .store import AsyncEngine
-from .store.fulltext import KeywordLane
-from .store.vectors import PgVectorStore
+from .store.fulltext import KeywordHit, KeywordLane
+from .store.vectors import MeaningHit, PgVectorStore
 
 
 class HybridRetriever:
@@ -24,7 +23,7 @@ class HybridRetriever:
         self, tenant: str, kb_ids: list[str], question: str, how: Search, *, deadline: float | None = None
     ) -> Found:
         asked = list(how.lanes)
-        ran: dict[str, list[dict[str, Any]]] = {}
+        ran: dict[str, list[KeywordHit] | list[MeaningHit]] = {}
         skipped: dict[str, str] = {}
         tokens = 0
         if not kb_ids or not question.strip():
@@ -46,7 +45,7 @@ class HybridRetriever:
 
     async def _meaning(
         self, tenant: str, kb_ids: list[str], question: str, how: Search, deadline: float | None
-    ) -> tuple[str | None, list[dict[str, Any]], int]:
+    ) -> tuple[str | None, list[MeaningHit], int]:
         """(why it did not run, the hits above the threshold, the question's embedding tokens)."""
         embedder = self.embedder
         if embedder is None:
@@ -70,7 +69,7 @@ class HybridRetriever:
             # The index answered no candidate in these bases at all: the lane did not run in any useful sense.
             return "no_candidates", [], tokens
         floor = how.meaning_threshold
-        hits = [{**r, "lane_score": float(r["similarity"])} for r in rows if float(r["similarity"]) >= floor]
+        hits = [MeaningHit(**r, lane_score=float(r["similarity"])) for r in rows if float(r["similarity"]) >= floor]
         return None, hits, tokens
 
 

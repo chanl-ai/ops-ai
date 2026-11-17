@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_kb.store import KnowledgeStore
 from ops_kb.store.document_list import document_page
-from ops_kb.store.knowledge import kb_items, kb_runs
+from ops_kb.store.knowledge import NewBase, NewSource, kb_items, kb_runs
 from ops_service_kit.listing import ListParams
 from ops_store import isolation
 from ops_store.team_scope import acting_as
@@ -27,7 +27,7 @@ from .test_team_isolation import outsider
 AT = datetime(2026, 11, 2, 9, 0, tzinfo=UTC)
 
 
-def source_row(tenant: str, team: str, name: str) -> dict[str, Any]:
+def source_row(tenant: str, team: str, name: str) -> NewSource:
     return {
         "tenant_id": tenant,
         "id": f"src_{uuid4().hex[:12]}",
@@ -194,9 +194,7 @@ async def test_items_list_only_the_sources_team_rows_oldest_first_with_ties_by_i
                 )
 
 
-def base_row(
-    tenant: str, team: str, name: str, *, refreshed: bool = True, template: str | None = None
-) -> dict[str, Any]:
+def base_row(tenant: str, team: str, name: str, *, refreshed: bool = True, template: str | None = None) -> NewBase:
     return {
         "tenant_id": tenant,
         "id": f"kb_{uuid4().hex[:12]}",
@@ -223,9 +221,11 @@ async def test_bases_list_only_the_teams_rows_with_health_counted_and_ids_answer
     store = KnowledgeStore(engine)
     [failing] = await _seed_sources(engine, tenant, "team_ops", "Rates")
     await insert_rows(engine, tenant, "team_ops", kb_items, item_row(failing, "Rate sheet", "failed"))
+    amber = base_row(tenant, "team_ops", "Hardship", refreshed=False)
+    amber["color"] = "amber"
     made = [
         base_row(tenant, "team_ops", "Disputes", template="banking/policies"),
-        {**base_row(tenant, "team_ops", "Hardship", refreshed=False), "color": "amber"},
+        amber,
         base_row(tenant, "team_ops", "Rates"),
     ]
     with isolation.scope(tenant, "team_ops"):
@@ -342,8 +342,10 @@ async def test_documents_list_only_the_bases_team_rows_with_tags_and_shown_statu
     """A base's documents across two sources, with a row on the same source written as another team and in another
     tenant. Tags are the source's, several to a row: a row counts under each of its tags and once in the total."""
     store = KnowledgeStore(engine)
-    cards: dict[str, Any] = {**source_row(tenant, "team_ops", "Cards feed"), "tags": ["cards", "disputes"]}
-    rules: dict[str, Any] = {**source_row(tenant, "team_ops", "Rules feed"), "tags": ["cards"]}
+    cards = source_row(tenant, "team_ops", "Cards feed")
+    cards["tags"] = ["cards", "disputes"]
+    rules = source_row(tenant, "team_ops", "Rules feed")
+    rules["tags"] = ["cards"]
     cards["collection"], rules["collection"] = "Cards", "Compliance"
     with isolation.scope(tenant, "team_ops"):
         for row in (cards, rules):
