@@ -6,9 +6,11 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from ._transport import Operation, page_items
+from ._transport import PAGE_MAX, Operation, page_items
 
 SERVICE = "models"
+# The shared list contract's query, as models-service takes it on every list route.
+_LIST = ("page", "pageSize", "search", "sortBy", "sortOrder", "ids")
 
 
 def _op(method: str, path: str, *params: str, query: tuple[str, ...] = ()) -> Operation:
@@ -25,9 +27,9 @@ def _op(method: str, path: str, *params: str, query: tuple[str, ...] = ()) -> Op
 
 
 OPERATIONS: dict[str, Operation] = {
-    "providers": _op("GET", "/v1/models/providers"),
+    "providers": _op("GET", "/v1/models/providers", query=_LIST),
     "add_provider": _op("POST", "/v1/models/providers"),
-    "keys": _op("GET", "/v1/provider-keys"),
+    "keys": _op("GET", "/v1/provider-keys", query=_LIST),
     "save_key": _op("PUT", "/v1/provider-keys/{name}", "name"),
     "remove_key": _op("DELETE", "/v1/provider-keys/{name}", "name"),
     "check_key": _op("POST", "/v1/provider-keys/{name}/check", "name"),
@@ -57,16 +59,24 @@ class Models:
         """The chat aliases an agent may name, with what each costs and the data it is cleared for."""
         return page_items(self._raw.agents.agents_list_model_aliases())[0]
 
-    def providers(self) -> list[dict[str, Any]]:
-        """The account's provider connections (account admins only; 403 admin_only for anyone else)."""
-        return page_items(self._call("providers"))[0]
+    def _every(self, name: str, **query: Any) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        more: dict[str, Any] | None = {}
+        while more is not None:
+            items, more = page_items(self._call(name, query={"pageSize": PAGE_MAX, **query, **more}))
+            rows += items
+        return rows
+
+    def providers(self, *, search: str | None = None) -> list[dict[str, Any]]:
+        """The account's provider connections, every page (account admins only; 403 admin_only for anyone else)."""
+        return self._every("providers", search=search)
 
     def add_provider(self, body: dict[str, Any]) -> dict[str, Any]:
         return cast(dict[str, Any], self._call("add_provider", body=body))
 
-    def keys(self) -> list[dict[str, Any]]:
-        """The provider keys by name; a key's value is never answered."""
-        return page_items(self._call("keys"))[0]
+    def keys(self, *, search: str | None = None) -> list[dict[str, Any]]:
+        """The provider keys by name, every page; a key's value is never answered."""
+        return self._every("keys", search=search)
 
     def save_key(self, name: str, value: str) -> dict[str, Any]:
         return cast(dict[str, Any], self._call("save_key", {"name": name}, {"value": value}))
@@ -98,14 +108,22 @@ class AsyncModels:
     async def aliases(self) -> list[dict[str, Any]]:
         return page_items(await self._raw.agents.agents_list_model_aliases())[0]
 
-    async def providers(self) -> list[dict[str, Any]]:
-        return page_items(await self._call("providers"))[0]
+    async def _every(self, name: str, **query: Any) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        more: dict[str, Any] | None = {}
+        while more is not None:
+            items, more = page_items(await self._call(name, query={"pageSize": PAGE_MAX, **query, **more}))
+            rows += items
+        return rows
+
+    async def providers(self, *, search: str | None = None) -> list[dict[str, Any]]:
+        return await self._every("providers", search=search)
 
     async def add_provider(self, body: dict[str, Any]) -> dict[str, Any]:
         return cast(dict[str, Any], await self._call("add_provider", body=body))
 
-    async def keys(self) -> list[dict[str, Any]]:
-        return page_items(await self._call("keys"))[0]
+    async def keys(self, *, search: str | None = None) -> list[dict[str, Any]]:
+        return await self._every("keys", search=search)
 
     async def save_key(self, name: str, value: str) -> dict[str, Any]:
         return cast(dict[str, Any], await self._call("save_key", {"name": name}, {"value": value}))
