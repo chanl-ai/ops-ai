@@ -28,11 +28,13 @@ import io
 import math
 import re
 import sys
+import uuid
 from collections.abc import Callable, Collection, Generator, Iterable
 from contextlib import contextmanager, redirect_stdout
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, cast
+from urllib.parse import urlsplit, urlunsplit
 
 import sqlalchemy as sa
 from alembic import command
@@ -40,6 +42,7 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from ops_service_kit.settings import migrating
 from ops_service_kit.testdb import migration_refusal
 
 from . import background
@@ -253,9 +256,9 @@ def _policy_rules(c: sa.Connection, tables: Collection[str]) -> set[tuple[object
     return set()
 
 
-def _on[T](url: str, check: Callable[[sa.Connection], T]) -> T:
+def _on[T](url: str, check: Callable[[sa.Connection], T], *, autocommit: bool = False) -> T:
     async def go() -> T:
-        engine = create_async_engine(url)
+        engine = create_async_engine(url, isolation_level="AUTOCOMMIT") if autocommit else create_async_engine(url)
         try:
             async with engine.connect() as c:
                 return await c.run_sync(check)
@@ -300,6 +303,42 @@ def prove_chain(
     drops tables and data."""
     if (why := migration_refusal(url)) is not None:
         raise RefusedDatabase(why)
+    if url.startswith("mssql"):
+        _prove(config, chain, url, version_table=version_table, floor=floor, fresh=fresh, known=known)
+        return
+    # PostgreSQL: the suite's database holds other tests' rows, and a downgrade over rows fails for reasons that are
+    # not the chain's. The proof runs in an empty database made beside it, which env.py reads for its duration.
+    with _empty_beside(url) as scratch, migrating(scratch):
+        _prove(config, chain, scratch, version_table=version_table, floor=floor, fresh=fresh, known=known)
+
+
+@contextmanager
+def _empty_beside(url: str) -> Generator[str]:
+    """An empty PostgreSQL database on `url`'s server, named after its database, dropped afterwards."""
+    parts = urlsplit(url)
+    name = f"{parts.path.lstrip('/')}_chain_{uuid.uuid4().hex[:8]}"
+
+    def run(statement: str) -> None:
+        # CREATE and DROP DATABASE cannot run inside a transaction.
+        _on(url, lambda c: c.execute(sa.text(statement)), autocommit=True)
+
+    run(f'CREATE DATABASE "{name}"')
+    try:
+        yield urlunsplit(parts._replace(path=f"/{name}"))
+    finally:
+        run(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)')
+
+
+def _prove(
+    config: Config,
+    chain: str,
+    url: str,
+    *,
+    version_table: str | None,
+    floor: str,
+    fresh: str | None,
+    known: Collection[str],
+) -> None:
     facts = chain_facts(chain)
     table = version_table or f"alembic_version_{chain}"
     tables = {t for md in facts.metadata for t in md.tables} - facts.excluded

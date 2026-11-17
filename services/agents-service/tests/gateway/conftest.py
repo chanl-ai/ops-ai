@@ -15,6 +15,7 @@ from alembic.config import Config
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agents.activities.catalog import load_catalog
+from ops_agents.api.app import PUBLIC_SCOPES
 from ops_agents.store.tenancy import tenant_scope
 from ops_email import MemorySender
 from ops_identity import ServiceClient, dev_service_signer, mint_service_token
@@ -41,7 +42,10 @@ SUB = "service:agents"
 
 
 def service_token(service: str = "agents") -> str:
-    return mint_service_token(dev_service_signer(), service=service, audience="tools", tenant_id="local")
+    # agents-service claims the scopes its own client does on tools-service (ops_agents.api.app.PUBLIC_SCOPES);
+    # another name claims none, so the gateway judges the identity alone.
+    scopes = PUBLIC_SCOPES["tools"] if service == "agents" else []
+    return mint_service_token(dev_service_signer(), service=service, audience="tools", tenant_id="local", scopes=scopes)
 
 
 class ServiceAuthHeader(httpx.Auth):

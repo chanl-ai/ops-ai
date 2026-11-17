@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Generator
+from contextlib import contextmanager
 from functools import cache
 from importlib.metadata import entry_points
 from pathlib import Path
@@ -800,6 +802,21 @@ def migration_test_urls() -> tuple[str | None, str | None]:
     """OPS_TEST_DATABASE_URL, which make test sets to the throwaway database, and OPS_DATABASE_URL, which a service's
     Alembic env.py migrates whatever URL its caller holds (testdb.migration_refusal compares the two)."""
     return os.environ.get("OPS_TEST_DATABASE_URL"), os.environ.get("OPS_DATABASE_URL")
+
+
+@contextmanager
+def migrating(database_url: str) -> Generator[None]:
+    """OPS_DATABASE_URL names `database_url` for the block, so a service's Alembic env.py migrates that database
+    (ops_store.testing.prove_chain runs each proof in an empty database beside the suite's)."""
+    before = os.environ.get("OPS_DATABASE_URL")
+    os.environ["OPS_DATABASE_URL"] = database_url
+    try:
+        yield
+    finally:
+        if before is None:
+            del os.environ["OPS_DATABASE_URL"]
+        else:
+            os.environ["OPS_DATABASE_URL"] = before
 
 
 def worker_url(test_url: str | None, database_url: str | None, worker: str | None) -> str | None:

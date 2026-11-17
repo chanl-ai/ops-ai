@@ -25,6 +25,8 @@ from ops_identity import ServiceClient, dev_service_signer
 from .conftest import Gateway
 
 SERVICES = Path(__file__).parents[3]
+# The scope agents-service claims on tools-service (ops_agents.api.app.PUBLIC_SCOPES).
+VIEW = ["tools:view"]
 # The server the test database is on; a lane's is on its own port.
 _SERVER = make_url(os.environ.get("OPS_TEST_DATABASE_URL", "postgresql+asyncpg://ops:ops@localhost:5477/ops_test"))
 ADMIN = _SERVER.set(drivername="postgresql", database="postgres").render_as_string(hide_password=False)
@@ -33,7 +35,7 @@ ADMIN = _SERVER.set(drivername="postgresql", database="postgres").render_as_stri
 async def test_tool_access_is_internal_and_comes_from_the_gateway_registry(gateway: Gateway) -> None:
     assert (await gateway.client.get("/v1/tools/place_wire_hold", headers={"Authorization": ""})).status_code == 401
     tools = GatewayClient(
-        ServiceClient(gateway.client, dev_service_signer(), "agents", "tools", tenant=lambda: "local")
+        ServiceClient(gateway.client, dev_service_signer(), "agents", "tools", VIEW, tenant=lambda: "local")
     )
     assert await tools.tool_access("place_wire_hold") == "write"
     assert await tools.tool_access("send_reply") == "write"

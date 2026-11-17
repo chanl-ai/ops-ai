@@ -118,6 +118,7 @@ async def stack(engine: AsyncEngine, gateway: Gateway) -> AsyncIterator[tuple[ht
                         dev_service_signer(),
                         "agents",
                         "tools",
+                        ["tools:view"],
                         tenant=lambda: "local",
                         team=current_team,
                     )

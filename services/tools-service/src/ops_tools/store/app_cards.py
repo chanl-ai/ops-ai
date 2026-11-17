@@ -114,11 +114,15 @@ class AppCards(Store):
     async def current(self, tenant_id: str, team_id: str, stamp: str, now: datetime) -> bool:
         """Whether the team's rows are built for `stamp` and none has lapsed by `now`, read without a lock."""
         t = team_defaults
-        q = sa.select(_current(tenant_id, team_id, stamp, now)).where(
-            t.c.tenant_id == tenant_id, t.c.team_id == team_id, team_visible(t)
+        # The condition sits in WHERE: SQL Server has no boolean value to select.
+        q = sa.select(sa.literal(1)).where(
+            t.c.tenant_id == tenant_id,
+            t.c.team_id == team_id,
+            team_visible(t),
+            _current(tenant_id, team_id, stamp, now),
         )
         async with self.tx() as c:
-            return bool((await c.execute(q)).scalar())
+            return (await c.execute(q)).first() is not None
 
     async def claim(self, tenant_id: str, team_id: str, stamp: str, now: datetime) -> bool:
         """Locks the team's defaults row until the caller's transaction ends and answers whether its rows still need
