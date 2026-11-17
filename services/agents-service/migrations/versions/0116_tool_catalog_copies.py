@@ -9,7 +9,9 @@ copy (store/tool_copies.py, `ops_store.copies`): `tool_catalog` (one row per mod
 `tool_catalog_operations` (tenant policy) and `tool_team_state` (one team's grant of a module it does not own, team
 policy). The tables start empty and the resync fills them, so there is nothing to backfill.
 
-The down path drops the three tables and their policies. Runs on PostgreSQL and SQL Server.
+The down path drops the three tables and their policies. They hold copies only: upgrading again makes them empty,
+and the worker's resync, which reads tools-service's full catalogue when it starts and every pass after, with no
+marker to reset (`ops_store.copies.resync`), fills them again. Runs on PostgreSQL and SQL Server.
 """
 
 from __future__ import annotations

@@ -19,7 +19,7 @@ from ops_service_kit.errors import Forbidden
 class Sees(Protocol):
     """Whether the caller's team reaches a module, or one operation of it when `operation` is named."""
 
-    def __call__(self, m: Any, operation: str | None = None, /) -> bool: ...
+    def __call__(self, m: Any, operation: str | None = None) -> bool: ...
 
 
 def grant_reaches(a: Any, team_id: str, operation: str | None, now: datetime) -> bool:

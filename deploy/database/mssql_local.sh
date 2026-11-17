@@ -41,7 +41,44 @@ WORKDIR /src
 EOF
 }
 
+# The client container gets a copy of the tree made here, not a bind mount of it. Docker Desktop's file sharing served
+# stale files through the mount (a file cut off at line 158 of 189, a migration at 3777 bytes of 5022), so a run tested
+# old code and said nothing. The files are read on the host, by git's list of tracked and untracked ones, and streamed
+# into a throwaway volume; images are left out. A worktree's `.git` file is copied too (the git directory it names is
+# mounted at the same path below); a main checkout's `.git` folder is mounted read-only.
+sync_tree() { # <volume> <root>
+  docker volume create "$1" >/dev/null
+  python3 - "$2" <<'PY' | docker run -i --rm -v "$1":/src "$CLIENT" sh -c 'find /src -mindepth 1 -delete; tar -x -C /src'
+import os, subprocess, sys, tarfile
+root = sys.argv[1]
+names = subprocess.run(["git", "-C", root, "ls-files", "-z", "-c", "-o", "--exclude-standard"], capture_output=True, check=True).stdout.split(b"\0")
+skip = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".pdf", ".mp4")
+with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
+    for raw in sorted(set(n for n in names if n)):
+        name = raw.decode()
+        path = os.path.join(root, name)
+        if name.lower().endswith(skip) or not os.path.lexists(path) or os.path.isdir(path):
+            continue
+        tar.add(path, arcname=name, recursive=False)
+    if os.path.isfile(os.path.join(root, ".git")):
+        tar.add(os.path.join(root, ".git"), arcname=".git", recursive=False)
+PY
+}
+
 case "${1:-}" in
+  sync-self-test)
+    # Plants a change after a copy, a file that was deleted and an image, and sees the copy follow the host.
+    client_image
+    t=$(mktemp -d); v=ops-mssql-src-selftest-$$
+    trap 'rm -rf "$t"; docker volume rm -f "$v" >/dev/null 2>&1' EXIT
+    git -C "$t" init -q; printf 'one\n' > "$t/a.py"; printf 'x\n' > "$t/gone.py"; printf 'img' > "$t/p.png"
+    git -C "$t" add . ; sync_tree "$v" "$t"
+    printf 'one\ntwo\nthree\n' > "$t/a.py"; rm "$t/gone.py"; printf 'new\n' > "$t/new.py"
+    sync_tree "$v" "$t"
+    got=$(docker run --rm -v "$v":/src:ro "$CLIENT" sh -c 'cd /src; wc -l < a.py; ls')
+    case "$got" in *3*a.py*new.py*) ;; *) echo "sync-self-test: FAILED, the copy did not follow the host: $got" >&2; exit 1 ;; esac
+    case "$got" in *gone.py*|*p.png*) echo "sync-self-test: FAILED, a deleted file or an image is in the copy: $got" >&2; exit 1 ;; esac
+    echo "sync-self-test: the copy follows the host" ;;
   start)
     if docker ps --format '{{.Names}}' | grep -qx "$SERVER"; then echo "$SERVER: running on 127.0.0.1:$PORT"; exit 0; fi
     # Letters and digits only, so the password cannot hide behind URL encoding in a traceback.
@@ -69,14 +106,16 @@ case "${1:-}" in
     if grep -rqs "opa_server" "$ROOT/$member/tests"; then
       cid=$(docker run -d --rm -p 127.0.0.1::8181 -v "$ROOT/services/tools-service/policy:/policy:ro" \
         openpolicyagent/opa:1.21.4 run --server --addr 0.0.0.0:8181 --log-level error /policy)
-      trap 'docker rm -f "$cid" >/dev/null 2>&1' EXIT
       extra+=(-e OPS_INFRA=external -e "OPS_OPA_URL=http://host.docker.internal:$(docker port "$cid" 8181/tcp | head -1 | cut -d: -f2)")
     fi
     # A worktree's .git names the main checkout's git directory by its host path, so that is mounted at the same path.
     gitdir=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)
-    [ "$gitdir" = "$ROOT/.git" ] || extra+=(-v "$gitdir:$gitdir:ro")
+    if [ "$gitdir" = "$ROOT/.git" ]; then extra+=(-v "$gitdir:/src/.git:ro"); else extra+=(-v "$gitdir:$gitdir:ro"); fi
+    src=ops-mssql-src-$$
+    trap 'docker rm -f "${cid:-}" >/dev/null 2>&1; docker volume rm -f "$src" >/dev/null 2>&1' EXIT
+    sync_tree "$src" "$ROOT"
     # The password goes in by name from this process's environment, so it is not on docker's command line.
-    MSSQL_SA_PASSWORD="$pw" docker run --rm -v "$ROOT":/src:ro -v ops-mssql-venv:/venv -v ops-mssql-uvcache:/root/.cache/uv \
+    MSSQL_SA_PASSWORD="$pw" docker run --rm -v "$src":/src -v ops-mssql-venv:/venv -v ops-mssql-uvcache:/root/.cache/uv \
       -e MSSQL_SA_PASSWORD -e OPS_MSSQL_SERVER="$addr" -e OPS_TEST_HANG_SECONDS ${extra[@]+"${extra[@]}"} \
       -e OPS_DATABASE_URL="postgresql+asyncpg://ops:ops@host.docker.internal:$PG_PORT/$db" \
       -e OPS_TEST_DATABASE_URL="postgresql+asyncpg://ops:ops@host.docker.internal:$PG_PORT/$db" -w "/src/$member" "$CLIENT" \

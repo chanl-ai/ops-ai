@@ -47,6 +47,9 @@ mssql-remote-proxy: ## fly proxy to the shared SQL Server in the background; pri
 mssql-remote-test: ## One member's tests on the shared SQL Server (PKG=services/kb-service T="tests/test_x.py")
 	bash $(ROOT)/deploy/database/mssql_remote.sh test $(PKG) -q -rs $(T)
 
+mssql-sync-self-test: ## The SQL Server client's copy of the tree follows the host (a changed, deleted and image file are planted); needs Docker
+	bash $(ROOT)/deploy/database/mssql_local.sh sync-self-test
+
 mssql-remote-status: ## The shared SQL Server machine's state and the proxy's port
 	bash $(ROOT)/deploy/database/mssql_remote.sh status
 

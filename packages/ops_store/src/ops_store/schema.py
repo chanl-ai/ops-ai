@@ -164,6 +164,72 @@ MSSQL_PRECONDITIONS = [
 ]
 
 
+def offline_dialect_opts(url: str) -> dict[str, bool]:
+    """Dialect options for a migration rendered as SQL with no server (`alembic --sql`). SQL Server's dialect learns
+    from the server it connects to that TEXT is deprecated; with none it renders `sa.Text` as TEXT, which the UTF-8
+    collation refuses (Msg 4188). Every supported SQL Server is past 2012, so offline SQL takes VARCHAR(max), as an
+    online run and the golden DDL do."""
+    return {"deprecate_large_types": True} if str(url).startswith("mssql") else {}
+
+
+def mssql_drop_constraint_ddl(table: str, find: str) -> str:
+    """SQL Server: drops the constraint on `table` that the scalar query `find` names, if it names one, as one batch.
+    A constraint made without a name has a generated one, known only at run time. EXEC takes a variable or literals,
+    not a function call, so the statement is built in a variable first. No trailing semicolon: Alembic adds one."""
+    return (
+        f"DECLARE @n sysname = ({find}); "
+        f"IF @n IS NOT NULL BEGIN DECLARE @s nvarchar(max) = N'ALTER TABLE {table} DROP CONSTRAINT ' "
+        "+ QUOTENAME(@n); EXEC (@s); END"
+    )
+
+
+def _mssql_query(query: sa.Select[Any]) -> str:
+    """`query` as SQL Server text, its values rendered as literals by the dialect, for a batch that holds it."""
+    return str(query.compile(dialect=mssql_dialect.dialect(), compile_kwargs={"literal_binds": True}))
+
+
+def mssql_drop_default_ddl(table: str, column: str) -> str:
+    """SQL Server: drops the default constraint on `table`.`column`, if one is there; SQL Server refuses to drop or
+    retype a column that holds one."""
+    d = sa.table(
+        "default_constraints",
+        sa.column("name"),
+        sa.column("parent_object_id"),
+        sa.column("parent_column_id"),
+        schema="sys",
+    ).alias("d")
+    found = sa.select(d.c.name).where(
+        d.c.parent_object_id == sa.func.object_id(table),
+        sa.func.col_name(d.c.parent_object_id, d.c.parent_column_id) == column,
+    )
+    return mssql_drop_constraint_ddl(table, _mssql_query(found))
+
+
+def mssql_drop_key_ddl(table: str, kind: Literal["PK", "UQ"], column: str | None = None) -> str:
+    """SQL Server: drops `table`'s primary key (`PK`) or the unique key (`UQ`) that holds `column`, if one is there."""
+    k = sa.table(
+        "key_constraints",
+        sa.column("name"),
+        sa.column("type"),
+        sa.column("parent_object_id"),
+        sa.column("unique_index_id"),
+        schema="sys",
+    ).alias("k")
+    found = sa.select(k.c.name).where(k.c.type == kind, k.c.parent_object_id == sa.func.object_id(table))
+    if column:
+        ic = sa.table(
+            "index_columns", sa.column("object_id"), sa.column("index_id"), sa.column("column_id"), schema="sys"
+        ).alias("ic")
+        c = sa.table("columns", sa.column("object_id"), sa.column("column_id"), sa.column("name"), schema="sys").alias(
+            "c"
+        )
+        joined = k.join(ic, (ic.c.object_id == k.c.parent_object_id) & (ic.c.index_id == k.c.unique_index_id)).join(
+            c, (c.c.object_id == ic.c.object_id) & (c.c.column_id == ic.c.column_id)
+        )
+        found = found.select_from(joined).where(c.c.name == column)
+    return mssql_drop_constraint_ddl(table, _mssql_query(found))
+
+
 def system(reason: str) -> dict[str, Any]:
     """The marker for a table with no tenant column (leases, timers, inbox, fences, an install's own settings): no
     policy. Reached through `Store.install_tx`, with no tenant, or `ops_store.isolation.system_tx`, past it, never as

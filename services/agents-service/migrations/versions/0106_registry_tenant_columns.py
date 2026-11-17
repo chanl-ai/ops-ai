@@ -35,7 +35,7 @@ install-wide keys would fail partway; offline SQL cannot count. Runs on PostgreS
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, Literal
 
 import sqlalchemy as sa
 from alembic import op
@@ -53,7 +53,7 @@ from ops_agents.store.registry_tenants import (
     tenant_of,
 )
 from ops_service_kit.settings import Settings
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, backfill_ddl, session_table_ddl
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, backfill_ddl, mssql_drop_key_ddl, session_table_ddl
 
 revision = "0106_registry_tenant_columns"
 down_revision = "0105_thread_owner_column"
@@ -100,24 +100,11 @@ def _every_tenant(dialect: str) -> tuple[list[str], list[str]]:
     return teams[0] + requests[0], teams[1] + requests[1]
 
 
-def _drop_key(name: str, *, kind: str, column: str | None, pg_name: str) -> None:
+def _drop_key(name: str, *, kind: Literal["PK", "UQ"], column: str | None, pg_name: str) -> None:
     """Drops a primary (PK) or unique (UQ) key made inline: SQL Server generated its name, so it is found by its type
     and, for a unique key, its column. Plain SQL, so the revision also renders as offline SQL."""
     if op.get_bind().dialect.name == "mssql":
-        by_column = (
-            "JOIN sys.index_columns ic ON ic.object_id = k.parent_object_id AND ic.index_id = k.unique_index_id "
-            "JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
-            if column
-            else ""
-        )
-        where = f" AND c.name = N'{column}'" if column else ""
-        op.execute(
-            f"DECLARE @n sysname = (SELECT k.name FROM sys.key_constraints k {by_column}"
-            f"WHERE k.type = '{kind}' AND k.parent_object_id = OBJECT_ID(N'{name}'){where}); "
-            # EXEC takes a variable or literals, not a function call, so the statement is built first.
-            f"IF @n IS NOT NULL BEGIN DECLARE @s nvarchar(max) = N'ALTER TABLE {name} DROP CONSTRAINT ' "
-            f"+ QUOTENAME(@n); EXEC (@s); END"
-        )
+        op.execute(mssql_drop_key_ddl(name, kind, column))
     else:
         op.execute(f"ALTER TABLE {name} DROP CONSTRAINT IF EXISTS {pg_name}")
 

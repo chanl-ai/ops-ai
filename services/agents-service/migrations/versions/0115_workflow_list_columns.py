@@ -15,6 +15,10 @@ stopped run starts again where it left off. The columns are added without a defa
 no default is left for a store that forgot them to fall back on. Stop agents-service before upgrading
 (docs/deploy/database.md).
 
+The values come from the node type registry in Python, which plain SQL cannot compute, so the revision is online
+only (deploy/database/schema.py ONLINE_ONLY): rendered as SQL it would add the columns and make them NOT NULL with no
+fill, which fails on any database with a workflow version. `alembic --sql` refuses it.
+
 The down path drops the four columns, first any default constraint SQL Server holds on one, found by its table and
 column. Runs on PostgreSQL and SQL Server.
 """
@@ -28,7 +32,7 @@ from alembic import op
 
 from ops_engine import default_registry
 from ops_engine.node_types import list_columns
-from ops_store.schema import TENANT_SCOPED, backfill_ddl
+from ops_store.schema import TENANT_SCOPED, backfill_ddl, mssql_drop_default_ddl
 
 revision = "0115_workflow_list_columns"
 down_revision = "0114_drop_local_tenant_defaults"
@@ -71,7 +75,7 @@ def _has_columns() -> bool:
 def _fill(t: sa.Table) -> None:
     """Works out every version still without values, BATCH at a time in key order."""
     if op.get_context().as_sql:
-        return
+        raise RuntimeError("0115 fills from the node type registry and cannot render as SQL; run it online")
     registry = default_registry()
     bind = op.get_bind()
     key = (t.c.tenant_id, t.c.workflow_id, t.c.version)
@@ -114,20 +118,10 @@ def upgrade() -> None:
             b.alter_column(name, existing_type=kind, nullable=False)
 
 
-def _drop_default_ddl(column: str) -> str:
-    """SQL Server: drops the default constraint on TABLE.`column`, if one is there, found by its table and column."""
-    return (
-        "DECLARE @c sysname = (SELECT d.name FROM sys.default_constraints d JOIN sys.columns c "
-        "ON c.object_id = d.parent_object_id AND c.column_id = d.parent_column_id "
-        f"WHERE d.parent_object_id = OBJECT_ID(N'{TABLE}') AND c.name = N'{column}');\n"
-        f"IF @c IS NOT NULL EXEC (N'ALTER TABLE {TABLE} DROP CONSTRAINT ' + QUOTENAME(@c));"
-    )
-
-
 def downgrade() -> None:
     if op.get_bind().dialect.name == "mssql":
         for name in COLUMNS:
-            op.execute(_drop_default_ddl(name))
+            op.execute(mssql_drop_default_ddl(TABLE, name))
     with op.batch_alter_table(TABLE) as b:
         for name in COLUMNS:
             b.drop_column(name)

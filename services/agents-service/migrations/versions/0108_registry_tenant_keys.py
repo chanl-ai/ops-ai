@@ -35,7 +35,7 @@ from typing import Any
 import sqlalchemy as sa
 from alembic import op
 
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, backfill_ddl, session_table_ddl
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, backfill_ddl, mssql_drop_key_ddl, session_table_ddl
 
 revision = "0108_registry_tenant_keys"
 down_revision = "0107_system_reads_agent_pointers"
@@ -156,13 +156,7 @@ def _every_tenant(dialect: str) -> tuple[list[str], list[str]]:
 def _drop_pk(name: str) -> None:
     """Drops the primary key, found by type on SQL Server since an install may carry a generated name."""
     if op.get_bind().dialect.name == "mssql":
-        op.execute(
-            f"DECLARE @n sysname = (SELECT k.name FROM sys.key_constraints k "
-            f"WHERE k.type = 'PK' AND k.parent_object_id = OBJECT_ID(N'{name}')); "
-            # EXEC takes a variable or literals, not a function call, so the statement is built first.
-            f"IF @n IS NOT NULL BEGIN DECLARE @s nvarchar(max) = N'ALTER TABLE {name} DROP CONSTRAINT ' "
-            f"+ QUOTENAME(@n); EXEC (@s); END"
-        )
+        op.execute(mssql_drop_key_ddl(name, "PK"))
     else:
         op.execute(f"ALTER TABLE {name} DROP CONSTRAINT IF EXISTS {name}_pkey")
 

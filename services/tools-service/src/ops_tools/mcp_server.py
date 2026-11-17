@@ -174,8 +174,8 @@ class McpAdapter:
         return found
 
     def _sees(self, team: Team) -> Sees:
-        def sees(module: Any, operation: str | None = None, /) -> bool:
-            return self.directory.sees_module(team, module, operation)
+        def sees(m: Any, operation: str | None = None) -> bool:
+            return self.directory.sees_module(team, m, operation)
 
         return sees
 

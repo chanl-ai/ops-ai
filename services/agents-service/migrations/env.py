@@ -19,6 +19,7 @@ from ops_agents.store import skills as _skills  # noqa: F401 - registers the ski
 from ops_agents.store import usage as _usage  # noqa: F401 - registers thread_budgets
 from ops_agents.store.graphs import metadata
 from ops_service_kit.settings import Settings
+from ops_store.schema import offline_dialect_opts
 
 URL = Settings().database_url
 
@@ -29,7 +30,13 @@ def _ours(name: str | None, type_: str, _parent: object) -> bool:
 
 
 def run_offline() -> None:
-    context.configure(url=URL, target_metadata=metadata, literal_binds=True, include_name=_ours)
+    context.configure(
+        url=URL,
+        target_metadata=metadata,
+        literal_binds=True,
+        include_name=_ours,
+        dialect_opts=offline_dialect_opts(URL),
+    )
     with context.begin_transaction():
         context.run_migrations()
 

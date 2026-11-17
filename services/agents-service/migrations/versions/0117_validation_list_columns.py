@@ -8,9 +8,12 @@ and failing-check counts out of its `summary` JSON, so the lists were built and 
 gains `passed`, `total`, `regressions` and `checks_failing`, written in the same insert as the summary
 (`store/workflow_registry.py` `summary_columns`), so the lists filter, count and page in SQL.
 
-The fill reads BATCH rows at a time in key order, each batch one UPDATE of the rows it read, inside the migration's
+The fill is plain SQL, so the revision renders as an offline script too: each count is the summary key's number,
+truncated to a whole number (true is 1, false 0, as Python's int() reads it), else 0. It runs inside the migration's
 transaction with the table's own policy set aside (on SQL Server it is dropped and made again before that transaction
-ends). Only rows still without values are read, so a stopped run starts again where it left off. The columns are added
+ends); on SQL Server BATCH rows per UPDATE, on PostgreSQL one UPDATE (no lock escalation); the JSON reads are
+ops_store.dialect's `json_whole_number`. Only rows still without
+values are written, so a stopped run starts again where it left off. The columns are added
 without a default and made NOT NULL once filled, so no default is left for a store that forgot them to fall back on.
 Stop agents-service before upgrading (docs/deploy/database.md).
 
@@ -20,12 +23,11 @@ column. Runs on PostgreSQL and SQL Server.
 
 from __future__ import annotations
 
-from typing import Any, cast
-
 import sqlalchemy as sa
 from alembic import op
 
-from ops_store.schema import TENANT_SCOPED, backfill_ddl
+from ops_store.dialect import json_whole_number
+from ops_store.schema import TENANT_SCOPED, backfill_ddl, mssql_drop_default_ddl
 
 revision = "0117_validation_list_columns"
 down_revision = "0116_tool_catalog_copies"
@@ -60,27 +62,17 @@ def _has_columns() -> bool:
     return "checks_failing" in {c["name"] for c in sa.inspect(op.get_bind()).get_columns(TABLE)}
 
 
-def _count(summary: Any, key: str) -> int:
-    value = cast(dict[str, Any], summary).get(key) if isinstance(summary, dict) else None
-    return int(value) if isinstance(value, int | float) else 0
-
-
-def _fill(t: sa.Table) -> None:
-    """Reads every run still without counts out of its summary, BATCH at a time in key order."""
-    if op.get_context().as_sql:
+def _fill(t: sa.Table, dialect: str) -> None:
+    """Writes every run still without counts from its summary."""
+    counts = {name: json_whole_number(dialect, t.c.summary, key) for name, key in COLUMNS.items()}
+    if dialect != "mssql":
+        op.execute(t.update().where(t.c.checks_failing.is_(None)).values(counts))
         return
-    bind = op.get_bind()
-    update = t.update().where(t.c.id == sa.bindparam("k_id")).values({name: sa.bindparam(name) for name in COLUMNS})
-    while True:
-        # Each batch fills the rows it read, so the next one reads the rows after them.
-        q = sa.select(t.c.id, t.c.summary).where(t.c.checks_failing.is_(None)).order_by(t.c.id).limit(BATCH)
-        rows = bind.execute(q).all()
-        if not rows:
-            return
-        bind.execute(
-            update,
-            [{"k_id": r.id} | {name: _count(r.summary, key) for name, key in COLUMNS.items()} for r in rows],
-        )
+    batch = sa.select(t.c.id).where(t.c.checks_failing.is_(None)).order_by(t.c.id).limit(BATCH)
+    update = t.update().where(t.c.id.in_(batch)).values(counts)
+    # One script line for both runs, so the offline render is the statement an online run executes.
+    sql = update.compile(dialect=op.get_context().dialect, compile_kwargs={"literal_binds": True})
+    op.execute(f"WHILE 1 = 1 BEGIN {sql}; IF @@ROWCOUNT = 0 BREAK; END")
 
 
 def upgrade() -> None:
@@ -94,7 +86,7 @@ def upgrade() -> None:
     before, after = backfill_ddl([t], dialect, chain=CHAIN, kind="tenant")
     for statement in before:
         op.execute(statement)
-    _fill(t)
+    _fill(t, dialect)
     for statement in after:
         op.execute(statement)
     with op.batch_alter_table(TABLE) as b:
@@ -102,20 +94,10 @@ def upgrade() -> None:
             b.alter_column(name, existing_type=sa.Integer(), nullable=False)
 
 
-def _drop_default_ddl(column: str) -> str:
-    """SQL Server: drops the default constraint on TABLE.`column`, if one is there, found by its table and column."""
-    return (
-        "DECLARE @c sysname = (SELECT d.name FROM sys.default_constraints d JOIN sys.columns c "
-        "ON c.object_id = d.parent_object_id AND c.column_id = d.parent_column_id "
-        f"WHERE d.parent_object_id = OBJECT_ID(N'{TABLE}') AND c.name = N'{column}');\n"
-        f"IF @c IS NOT NULL EXEC (N'ALTER TABLE {TABLE} DROP CONSTRAINT ' + QUOTENAME(@c));"
-    )
-
-
 def downgrade() -> None:
     if op.get_bind().dialect.name == "mssql":
         for name in COLUMNS:
-            op.execute(_drop_default_ddl(name))
+            op.execute(mssql_drop_default_ddl(TABLE, name))
     with op.batch_alter_table(TABLE) as b:
         for name in COLUMNS:
             b.drop_column(name)

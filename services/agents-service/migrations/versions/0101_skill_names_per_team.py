@@ -14,6 +14,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import mssql_drop_key_ddl
+
 revision = "0101_skill_names_per_team"
 down_revision = "0100_copies_base_and_detach"
 branch_labels = None
@@ -27,13 +29,7 @@ def _drop_slug_key() -> None:
     """Drops the unique key on the slug column alone. Plain SQL, so the revision also renders as offline SQL."""
     if op.get_bind().dialect.name == "mssql":
         # A key made inline has a generated name on SQL Server, so it is found by its column.
-        op.execute(
-            f"DECLARE @n sysname = (SELECT k.name FROM sys.key_constraints k "
-            f"JOIN sys.index_columns ic ON ic.object_id = k.parent_object_id AND ic.index_id = k.unique_index_id "
-            f"JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id "
-            f"WHERE k.type = 'UQ' AND k.parent_object_id = OBJECT_ID(N'{TABLE}') AND c.name = N'slug'); "
-            f"IF @n IS NOT NULL EXEC (N'ALTER TABLE {TABLE} DROP CONSTRAINT ' + QUOTENAME(@n))"
-        )
+        op.execute(mssql_drop_key_ddl(TABLE, "UQ", "slug"))
     else:
         op.execute(f"ALTER TABLE {TABLE} DROP CONSTRAINT IF EXISTS {TABLE}_slug_key")
 

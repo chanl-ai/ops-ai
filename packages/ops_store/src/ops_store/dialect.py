@@ -476,6 +476,90 @@ def _has_other(e: json_array_has, c: SQLCompiler, **kw: Any) -> str:
     return f"EXISTS (SELECT 1 FROM json_each({col}, '$.{key}') WHERE value = {val})"  # noqa: S608 - the key goes through _literal_text
 
 
+# JSON read in a migration's set-based fill, as SQLAlchemy expressions: the same value Python's json reading gives,
+# per dialect. Keys and matches are bound parameters, rendered as literals only in offline SQL.
+
+# OPENJSON's default schema; `type` 1 is a string, 2 a number, 3 true or false, 5 an object.
+_OPENJSON = ("key", "value", "type")
+
+
+def _openjson(doc: ColumnElement[Any], name: str) -> Any:
+    return sa.func.openjson(doc).table_valued(*_OPENJSON).alias(name)
+
+
+def _isjson(doc: ColumnElement[Any], kind: str) -> ColumnElement[Any]:
+    # ISJSON's second argument is a keyword (OBJECT, ARRAY), not a value; `kind` is one of those two.
+    return sa.func.isjson(doc, sa.literal_column(kind))
+
+
+def json_whole_number(dialect: str, column: ColumnElement[Any], key: str) -> ColumnElement[int]:
+    """`column`'s top-level `key` as Python's `int()` reads a JSON value: a number truncated toward zero, true 1, false
+    0; anything else, or a column that is not a JSON object, 0."""
+    if dialect == "mssql":
+        j = _openjson(sa.case((_isjson(column, "OBJECT") == 1, column)), "j")
+        read = sa.case(
+            (j.c.type == 2, sa.cast(sa.cast(j.c.value, sa.Float), sa.Integer)),
+            (j.c.type == 3, sa.case((j.c.value == "true", 1), else_=0)),
+        )
+        return sa.func.coalesce(sa.select(read).where(j.c.key == key).scalar_subquery(), 0)
+    v = sa.cast(column, postgresql.JSONB)[key]
+    kind = sa.func.jsonb_typeof(v)
+    as_text = sa.cast(v, sa.Text)
+    return sa.case(
+        (kind == "number", sa.cast(sa.func.trunc(sa.cast(as_text, sa.Numeric)), sa.Integer)),
+        (kind == "boolean", sa.case((as_text == "true", 1), else_=0)),
+        else_=0,
+    )
+
+
+def json_first_match_text(
+    dialect: str,
+    column: ColumnElement[Any],
+    *,
+    array: str,
+    match_key: str,
+    match: str,
+    path: tuple[str, str],
+    max_length: int,
+) -> ColumnElement[str | None]:
+    """In the list `column`.`array`, the first object whose `match_key` is the string `match`, and its `path` (an
+    object key, then a key in it) when that is a string of 1 to `max_length` characters; else NULL, as is a column
+    whose `array` is not a list."""
+    outer, inner = path
+    if dialect == "mssql":
+        items = sa.func.json_query(column, f"$.{array}")
+        n = _openjson(sa.case(((_isjson(column, "OBJECT") == 1) & (_isjson(items, "ARRAY") == 1), items)), "n")
+        p = _openjson(sa.func.json_query(n.c.value, f"$.{outer}"), "p")
+        # LEN drops trailing spaces, so a character is added and counted off.
+        length = sa.func.len(p.c.value + ".") - 1
+        found = (
+            sa.select(p.c.value).where(p.c.key == inner, p.c.type == 1, length.between(1, max_length)).scalar_subquery()
+        )
+        return (
+            sa.select(found)
+            .where(n.c.type == 5, sa.func.json_value(n.c.value, f"$.{match_key}") == match)
+            .order_by(sa.cast(n.c.key, sa.Integer))
+            .limit(1)
+            .scalar_subquery()
+        )
+    doc = sa.cast(column, postgresql.JSONB)[array]
+    listed = sa.case((sa.func.jsonb_typeof(doc) == "array", doc), else_=sa.func.jsonb_build_array())
+    n = sa.func.jsonb_array_elements(listed).table_valued("value", with_ordinality="i").render_derived("n")
+    value = sa.cast(n.c.value, postgresql.JSONB)
+    box = value[outer][inner]
+    text = box.astext
+    read = sa.case(
+        ((sa.func.jsonb_typeof(box) == "string") & sa.func.length(text).between(1, max_length), text),
+    )
+    return (
+        sa.select(read)
+        .where(sa.func.jsonb_typeof(value) == "object", value[match_key] == sa.func.to_jsonb(sa.cast(match, sa.Text)))
+        .order_by(n.c.i)
+        .limit(1)
+        .scalar_subquery()
+    )
+
+
 # Vectors ----------------------------------------------------------------------------------------------------------
 
 

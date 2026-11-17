@@ -2,14 +2,20 @@
 # Proves the DBA scripts on a throwaway PostgreSQL of its own (container ops-schema-proof on :15499, removed at the end;
 # never the dev stack's). Prints PASS or FAIL per check and exits 1 on any FAIL.
 #   1 the baseline applied to an empty database equals what the chains build (Alembic, online)
-#   2 an older ref's baseline plus the upgrade to this ref equals what the chains build
+#   2 an older ref's baseline, seeded with rows in every table a step fills, plus the upgrade to this ref equals what
+#     the chains build
+#   2a each fill wrote the values the store would (a step that skips its fill offline fails here)
+#   2c downgrade.sql then upgrade.sql again keeps every seeded row and fills them the same way
 #   3 a runtime role reads and writes its own tables (and the ones its code declares) and is refused DDL
 #   4 drift is green on a clean install, red on a hand-made index, green again once it is dropped
 #   5 a service refuses to start on a database whose recorded version is behind its chain
-#   sh deploy/database/proof.sh [FROM]     FROM defaults to c60afb6c; KEEP=1 leaves the container and output
+#   sh deploy/database/proof.sh [FROM]     KEEP=1 leaves the container and output; TO=. proves this folder as it is
+# FROM defaults to the first commit after every ONLINE_ONLY revision in schema.py (agents 0115), since an offline
+# upgrade across one is refused; docs/deploy/database.md gives the path from older releases.
 set -eu
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
-FROM=${1:-c60afb6c}
+FROM=${1:-874530fa}
+TO=${TO:-HEAD}
 NAME=ops-schema-proof
 PORT=${OPS_SCHEMA_PROOF_PORT:-15499}
 SERVER=postgresql://postgres:proof@localhost:$PORT/postgres
@@ -39,15 +45,19 @@ install() {
   psql_as "postgresql://ops_migrator:proof@localhost/$db" < "$dir/grants.sql" >/dev/null
 }
 
-echo "proof: baseline at HEAD and at $FROM, the upgrade between them"
-$TOOL ddl --server "$SERVER" --out "$OUT/head" --ref HEAD | head -1
+echo "proof: baseline at $TO and at $FROM, the upgrade between them"
+$TOOL ddl --server "$SERVER" --out "$OUT/head" --ref "$TO" | head -1
 $TOOL ddl --server "$SERVER" --out "$OUT/from" --ref "$FROM" | head -1
-$TOOL upgrade-sql --from "$FROM" --to HEAD --out "$OUT/upgrade"
+$TOOL upgrade-sql --from "$FROM" --to "$TO" --out "$OUT/upgrade"
 
-echo "proof: the chains at HEAD, run by Alembic"
+echo "proof: the chains at $TO, run by Alembic"
 docker exec $NAME psql -q -U postgres -c "CREATE DATABASE migrated"
-mkdir -p "$OUT/checkout" && (cd "$ROOT" && git archive HEAD | tar -x -C "$OUT/checkout")
-(cd "$OUT/checkout" && VIRTUAL_ENV= uv sync --frozen --no-dev --quiet)
+if [ "$TO" = . ]; then
+  ln -s "$ROOT" "$OUT/checkout"
+else
+  mkdir -p "$OUT/checkout" && (cd "$ROOT" && git archive "$TO" | tar -x -C "$OUT/checkout")
+  (cd "$OUT/checkout" && VIRTUAL_ENV= uv sync --frozen --no-dev --quiet)
+fi
 OPS_ROOT="$OUT/checkout" ALEMBIC="$OUT/checkout/.venv/bin/alembic" OPS_MIGRATE_SKIP_BOOTSTRAP=1 \
   OPS_DATABASE_URL="postgresql+asyncpg://postgres:proof@localhost:$PORT/migrated" sh "$ROOT/deploy/images/migrate.sh" >/dev/null
 
@@ -57,17 +67,43 @@ $TOOL diff "postgresql://postgres:proof@localhost:$PORT/migrated" "postgresql://
 check "1 the HEAD baseline on an empty database equals the Alembic-built schema" $?
 
 install "$OUT/from" upgraded
-psql_as "postgresql://postgres:proof@localhost/upgraded" < "$OUT/upgrade/upgrade-roles.sql" >/dev/null
-psql_as "postgresql://ops_migrator:proof@localhost/upgraded" < "$OUT/upgrade/upgrade.sql" >/dev/null
+# Rows in every table a step after FROM fills (as the superuser, past each table's forced policy), with the values the
+# store's own code works out for them checked below; a step that adds a NOT NULL column with no offline fill, or
+# leaves a nullable one empty, fails here instead of on a DBA's first real install.
+as_super="postgresql://postgres:proof@localhost/upgraded"
+psql_as "$as_super" < "$ROOT/deploy/database/proof_seed.sql" >/dev/null
+filled() {
+  psql_as "$as_super" -At -F' ' -c "SELECT id, passed, total, regressions, checks_failing FROM registry_validations ORDER BY id" \
+    -c "SELECT workflow_id, coalesce(mailbox, '-') FROM engine_definitions ORDER BY workflow_id" | tr '\n' ' '
+}
+want="v1 3 4 1 0 v2 0 0 0 0 w1 help@example.com w2 - "
+psql_as "$as_super" < "$OUT/upgrade/upgrade-roles.sql" >/dev/null
+psql_as "postgresql://ops_migrator:proof@localhost/upgraded" < "$OUT/upgrade/upgrade.sql" >/dev/null 2>"$OUT/upgrade.err"
 upgraded=$?
+[ "$upgraded" = 0 ] || grep -m2 -A1 "ERROR" "$OUT/upgrade.err" | sed 's/^/  /'
 psql_as "postgresql://ops_migrator:proof@localhost/upgraded" < "$OUT/head/grants.sql"
 $TOOL diff "postgresql://postgres:proof@localhost:$PORT/migrated" "postgresql://postgres:proof@localhost:$PORT/upgraded"
-check "2 the $FROM baseline plus upgrade.sql equals the Alembic-built HEAD schema" $(( $? + upgraded ))
+check "2 the seeded $FROM baseline plus upgrade.sql equals the Alembic-built $TO schema" $(( $? + upgraded ))
+got=$(filled 2>&1)
+echo "  filled: $got"
+[ "$got" = "$want" ]
+check "2a each fill in upgrade.sql wrote the values the store's code works out for the seeded rows" $(( $? + upgraded ))
 
 psql_as "postgresql://ops_migrator:proof@localhost/upgraded" < "$OUT/upgrade/upgrade.sql" 2>"$OUT/again.err"
 again=$?
 grep -q "this step needs" "$OUT/again.err"
 check "2b running upgrade.sql again is refused by its first guard, before any DDL" $(( (again == 0) + $? ))
+
+psql_as "postgresql://ops_migrator:proof@localhost/upgraded" < "$OUT/upgrade/downgrade.sql" >/dev/null 2>"$OUT/down.err"
+down=$?
+[ "$down" = 0 ] || grep -m2 -A1 "ERROR" "$OUT/down.err" | sed 's/^/  /'
+psql_as "postgresql://ops_migrator:proof@localhost/upgraded" < "$OUT/upgrade/upgrade.sql" >/dev/null 2>"$OUT/up2.err"
+up2=$?
+[ "$up2" = 0 ] || grep -m2 -A1 "ERROR" "$OUT/up2.err" | sed 's/^/  /'
+got=$(filled 2>&1)
+echo "  after down and up: $got"
+[ "$got" = "$want" ]
+check "2c downgrade.sql then upgrade.sql keeps every seeded row and fills it the same way" $(( down + up2 + $? ))
 
 as_runtime="postgresql://ops_agents_runtime:proof@localhost/fresh"
 psql_as "$as_runtime" -c "SELECT count(*) FROM graph_threads" -c "INSERT INTO registry_agents (id) SELECT 'x' WHERE false" >/dev/null
@@ -83,25 +119,32 @@ check "3c ops_tools_runtime is refused platform-service's tables" $(( $? == 0 ))
 psql_as "postgresql://ops_tools_runtime:proof@localhost/fresh" -At -c "SELECT has_table_privilege('gateway_calls', 'INSERT')" | grep -q t
 check "3d ops_tools_runtime may write gateway_calls, which its code declares though the agents chain creates it" $?
 
-$TOOL drift --server "$SERVER" --database "postgresql://ops_migrator:proof@localhost:$PORT/fresh" >/dev/null
+$TOOL drift --ref "$TO" --server "$SERVER" --database "postgresql://ops_migrator:proof@localhost:$PORT/fresh" >/dev/null
 check "4 drift on the fresh install is green" $?
 psql_as "postgresql://ops_migrator:proof@localhost/fresh" -c "CREATE INDEX ix_by_hand ON graph_threads (created_at)"
-$TOOL drift --server "$SERVER" --database "postgresql://ops_migrator:proof@localhost:$PORT/fresh" >"$OUT/drift.txt"
+$TOOL drift --ref "$TO" --server "$SERVER" --database "postgresql://ops_migrator:proof@localhost:$PORT/fresh" >"$OUT/drift.txt"
 red=$?
 cat "$OUT/drift.txt" | sed 's/^/  /'
 grep -q "extra    INDEX ix_by_hand" "$OUT/drift.txt"
 check "4b drift goes red on the hand-made index and names it" $(( (red == 0) + $? ))
 psql_as "postgresql://ops_migrator:proof@localhost/fresh" -c "DROP INDEX ix_by_hand"
-$TOOL drift --server "$SERVER" --database "postgresql://ops_migrator:proof@localhost:$PORT/fresh" >/dev/null
+$TOOL drift --ref "$TO" --server "$SERVER" --database "postgresql://ops_migrator:proof@localhost:$PORT/fresh" >/dev/null
 check "4c drift is green again once the index is dropped" $?
 
 install "$OUT/from" behind
-(cd "$OUT/checkout/services/models-service" && OPS_DATABASE_URL="postgresql+asyncpg://ops_models_runtime:proof@localhost:$PORT/behind" \
-  OPS_ENVIRONMENT=dev "$OUT/checkout/.venv/bin/python" -m ops_models) >"$OUT/behind.txt" 2>&1
+# agents-service: its chain has steps after FROM, so the database it meets is behind. A service that did not refuse
+# would serve until stopped; it is given 60 s, and still running counts as started.
+(cd "$OUT/checkout/services/agents-service" && OPS_DATABASE_URL="postgresql+asyncpg://ops_agents_runtime:proof@localhost:$PORT/behind" \
+  OPS_ENVIRONMENT=dev OPS_PORT=18765 OPS_PLATFORM_URL=http://localhost:1 OPS_PLATFORM_INTERNAL_URL=http://localhost:1 \
+  "$OUT/checkout/.venv/bin/python" -c 'import subprocess, sys
+try:
+    sys.exit(subprocess.run([sys.executable, "-m", "ops_agents.api"], timeout=60).returncode)
+except subprocess.TimeoutExpired:
+    print("still serving after 60 s")') >"$OUT/behind.txt" 2>&1
 started=$?
-tail -1 "$OUT/behind.txt" | sed 's/^/  /'
-grep -q "behind" "$OUT/behind.txt"
-check "5 models-service at HEAD refuses to start on the $FROM schema" $(( (started == 0) + $? ))
+grep -m1 "behind\|still serving" "$OUT/behind.txt" | cut -c1-200 | sed 's/^/  /'
+grep -q "schema is behind" "$OUT/behind.txt"
+check "5 agents-service at $TO refuses to start on the $FROM schema" $(( (started == 0) + $? ))
 set -e
 
 [ "$failed" = 0 ] && echo "proof: all checks passed" || echo "proof: a check failed"

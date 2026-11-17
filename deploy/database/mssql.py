@@ -730,10 +730,15 @@ def here() -> Checkout:
 def run(a: argparse.Namespace) -> None:
     if a.cmd == "ddl":
         with exported(a.ref) as checkout:
-            # The export's own models, through its own environment: this file runs there as a subprocess.
+            # The export's own models, through its own environment and its own copy of this tool: this file's
+            # imports name modules an older ref may not have (ops_platform.store.lookups), and its compile rules may
+            # be newer than that ref's models.
             if checkout.root != here().root:
+                tool = checkout.root / "deploy" / "database" / "mssql.py"
+                if not tool.is_file():
+                    raise SystemExit(f"{checkout.ref} has no deploy/database/mssql.py: it has no SQL Server baseline")
                 done = subprocess.run(
-                    [str(checkout.root / ".venv" / "bin" / "python"), __file__, "ddl", str(a.out.resolve())],
+                    [str(checkout.root / ".venv" / "bin" / "python"), str(tool), "ddl", str(a.out.resolve())],
                     cwd=checkout.root,
                     env={**checkout.env(OFFLINE_URL), "OPS_REF": checkout.ref, "OPS_COMMIT": checkout.commit},
                     check=False,

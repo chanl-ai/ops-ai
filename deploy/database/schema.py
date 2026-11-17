@@ -48,11 +48,17 @@ CHAINS = ROOT / "deploy" / "images" / "chains"
 DIALECTS: dict[str, Any] = {"postgresql": Postgres, "mssql": None}
 MIGRATOR = "ops_migrator"
 # Revisions that read rows or inspect tables, so Alembic cannot render them as SQL: most were applied before offline
-# rendering was a rule; tools_0071, tools_0076, 0033 and 0034 backfill per-row values (a casefolded name, JSON policies
-# and provider settings reshaped in Python) that plain SQL cannot compute the same way on every database. Every other
-# revision must render (test_offline.py); an upgrade across one of these is refused by name.
+# rendering was a rule; tools_0071, tools_0076, 0033, 0034 and agents 0115 backfill per-row values (a casefolded name,
+# JSON policies and provider settings reshaped in Python, a workflow's list columns from the node type registry) that
+# plain SQL cannot compute the same way on every database. Every other revision must render (test_offline.py); an
+# upgrade across one of these is refused by name. docs/deploy/database.md gives the path across them.
 ONLINE_ONLY = {
-    "agents": {"0031_engine_definitions_stage", "0036_widget_name", "0042_skill_published_loading"},
+    "agents": {
+        "0031_engine_definitions_stage",
+        "0036_widget_name",
+        "0042_skill_published_loading",
+        "0115_workflow_list_columns",
+    },
     "tools": {
         "tools_0001_gateway",
         "tools_0020_drop_security_reviews",

@@ -17,7 +17,9 @@ Server each is dropped and made again before that transaction ends), then writte
 committed alone, so no lock lasts the whole fill. A row already there is skipped, so a fill that stops part way can
 run again. Stop agents-service before upgrading (docs/deploy/database.md).
 
-The down path drops the table and its policy. Runs on PostgreSQL and SQL Server.
+The down path drops the table and its policy. No pin is lost: each row copies an entry of the newest version's
+`spec.skillPins`, which the store writes in the same transaction (store/agent_registry.py `hold_pins`) and the down
+path leaves in place, and upgrading again fills the table from there. Runs on PostgreSQL and SQL Server.
 """
 
 from __future__ import annotations

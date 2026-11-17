@@ -5,9 +5,13 @@ read every tenant's thread ids and could raise another tenant's fence, refusing 
 carries its tenant, is keyed by (tenant_id, thread_id) and is policed by tenant like the call log.
 
 Backfill: a fence takes the tenant of the calls logged on its thread. A fence no call names (a takeover raised it
-before the new owner wrote) is deleted: its tenant is unknown, and a fence no tenant reads guards nothing, so
-deleting it changes what no read sees. The new owner's next write raises it again. Downgrade keeps one fence per
-thread, the highest generation, and puts back the thread-only key and the system marking.
+before the new owner wrote) is deleted: its tenant is unknown, so no tenant's read could find it. That is safe because
+a fence only refuses a write whose generation is below it, every generation comes from agents' thread_leases, which
+raises a thread's generation on each acquire and never restarts it, and agents-service is stopped for this step
+(docs/deploy/database.md): no worker holding an older generation outlives the upgrade, and every lease taken after it
+is above any fence ever raised. The new owner's next write raises it again. The one change a caller can see: a call
+with no generation on such a thread, refused before, now passes, as on any thread no write has fenced. Downgrade
+keeps one fence per thread, the highest generation, and puts back the thread-only key and the system marking.
 
 Revision ID: tools_0082_tenant_fences
 Revises: tools_0081_store_roles

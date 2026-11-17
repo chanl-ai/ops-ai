@@ -10,7 +10,8 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from sqlalchemy.ext.asyncio import AsyncEngine
+import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_service_kit.contract import response_checker
 from ops_service_kit.ids import new_id
@@ -19,6 +20,7 @@ from ops_tools.store import CallLog
 from ops_tools.store.calls import LeaseSupersededError
 
 from .conftest import build_app, service_headers
+from .test_registry_store import _alembic, scratch_database  # pyright: ignore[reportPrivateUsage]
 
 TEAM = "team_platform"
 
@@ -88,3 +90,32 @@ async def test_the_fence_route_raises_the_callers_tenants_fence_and_refuses_a_lo
         other = {**fence, "generation": 2}
         elsewhere = await c.post("/v1/fences", json=other, headers=service_headers(f"t_{uuid4().hex[:10]}"))
         assert elsewhere.status_code == 200, "another tenant's fence on the same thread id refused this one"
+
+
+async def test_tools_0082_keeps_each_fence_a_call_names_and_drops_one_no_tenant_reads() -> None:
+    """A fence takes the tenant of its thread's calls; one no call names is deleted (its docstring says why that is
+    safe), and nothing else is lost."""
+    async with scratch_database("tools_fences") as target:
+        _alembic(target, "upgrade", "tools_0081_store_roles")
+        engine = create_async_engine(target)
+        try:
+            async with engine.begin() as c:
+                await c.execute(
+                    sa.text(
+                        "insert into gateway_calls (id, tenant_id, tool, access, input_hash, idempotency_key, "
+                        "thread_id, sub, decision, reasons, approvers, outcome, effect, effect_scope, created_at) "
+                        "values ('c1', 't_one', 'x', 'write', 'h', 'k1', 'th_called', 's', 'allow', "
+                        "cast('[]' as json), cast('[]' as json), 'ok', true, 'e1', 'now')"
+                    )
+                )
+                await c.execute(
+                    sa.text(
+                        "insert into gateway_fences (thread_id, generation) values ('th_called', 5), ('th_bare', 7)"
+                    )
+                )
+            _alembic(target, "upgrade", "tools_0082_tenant_fences")
+            async with engine.connect() as c:
+                rows = (await c.execute(sa.text("select tenant_id, thread_id, generation from gateway_fences"))).all()
+            assert [tuple(r) for r in rows] == [("t_one", "th_called", 5)]
+        finally:
+            await engine.dispose()

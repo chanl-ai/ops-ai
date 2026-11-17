@@ -75,11 +75,34 @@ make db-upgrade-sql FROM=<running release> TO=<new release> OUT=dist/db/<new>/up
 | `SHA256SUMS` | As above |
 
 `make db-upgrade-sql` writes no `grants.sql`. Get the new release's from `make db-ddl REF=<new release> SERVER=<throwaway server's admin URL>`, which writes it with the rest of the baseline to `dist/db/<new release>/baseline/grants.sql` (or to `OUT`; on SQL Server, `DIALECT=mssql` needs no `SERVER`). After `upgrade.sql`, run that `grants.sql`, so new tables reach their runtime role. Proof check 2 applies
-an older baseline plus the upgrade and finds no difference from the newer schema; check 2b runs the upgrade again and
-the first guard refuses it. Eight revisions applied before offline rendering was a rule cannot render as SQL (agents
-0031, 0036, 0042; tools 0001, 0020; platform 0006, 0013, 0017); an upgrade across one is refused by name, and a
-release after them installs from its baseline. `deploy/database/tests/test_offline.py`, run by `make verify`, keeps
-every later revision renderable.
+an older baseline, seeded with rows in every table a later step fills (`deploy/database/proof_seed.sql`), plus the
+upgrade, and compares it with the newer schema; check 2a checks the values each fill wrote; check 2b runs the upgrade
+again and the first guard refuses it; check 2c runs `downgrade.sql` and then `upgrade.sql` and finds every seeded row
+filled the same way; check 5 starts agents-service on the older schema and it refuses. From 874530fa every check
+passes. Agents 0119 makes the two side tables of 0104 (`model_call_records_unattributed`, `thread_budgets_unattributed`)
+on a database that ran the earlier form of 0104, which made none. The skill pins' drop and rebuild (agents 0113, before
+874530fa) is checked by `services/agents-service/tests/store/test_runtime_tables_migration.py`. Thirteen revisions cannot render as SQL (`ONLINE_ONLY` in `deploy/database/schema.py`): eight
+applied before offline rendering was a rule (agents 0031, 0036, 0042; tools 0001, 0020; platform 0006, 0013, 0017),
+and five that fill rows with values worked out in Python (tools 0071 and 0076, platform 0033 and 0034, agents 0115).
+An upgrade across one is refused by name. `deploy/database/tests/test_offline.py`, run by `make verify`, keeps every
+other revision renderable and these thirteen refused.
+
+### From the last release, v2026-11-11.3
+
+The offline scripts cannot upgrade a v2026-11-11.3 database: the range crosses tools 0076, platform 0033 and 0034 and
+agents 0115, so `make db-upgrade-sql FROM=v2026-11-11.3` and `make db-scripts-proof FROM=v2026-11-11.3` stop with
+exit 2 naming them. The supported paths:
+
+| Database | Path |
+|---|---|
+| PostgreSQL | Stop the services, then run the new release's migrate image (`deploy/images/migrate.sh`, online Alembic, every chain to its head), then that release's `grants.sql`. The scripts apply only from a release whose heads are at or after agents 0115 (commit 874530fa, which `make db-scripts-proof` starts from) |
+| SQL Server | No v2026-11-11.3 SQL Server install exists: no SQL Server baseline before 2026-11-16 installs (Msg 1785 on `signin_grants`' two cascade paths). Install the new release's baseline (`make db-ddl DIALECT=mssql REF=<release>`); upgrades start from that release |
+
+Making the offline path work from v2026-11-11.3 would need: tools 0076's JSON policy reshape and platform 0033 and
+0034's provider settings rewritten as set-based SQL per dialect; agents 0115's list columns (description, trigger
+label, startable, takes files) computed without the node type registry, or split so the offline script adds them
+nullable and a one-off online command fills them before a later step makes them NOT NULL; and then a proof run with
+`FROM=v2026-11-11.3`. For SQL Server it is not possible: no install of that release exists to upgrade.
 
 ### An index on a large live table
 
@@ -117,6 +140,7 @@ they are refused.
 | Revision | Stop | Why |
 |---|---|---|
 | models 0012 | models-service | It locks `model_call_log` against writes for the step, totals each key's spend per day and run from it, moves the calls that name no tenant to `model_calls_untenanted`, and then forces the tenant policy on the log. An old pod's insert names no tenant setting, so the policy refuses it and its completion answers 500 until the pod is replaced |
+| tools 0082 | agents-service | It deletes each write fence no logged call names, since its tenant is unknown. Safe only when no worker holding a lease from before the upgrade is still running: every lease taken after the restart carries a higher generation than any fence |
 | agents 0108 | agents-service | It changes the primary keys of the workflow, widget, deployment and channel tables to lead with the tenant and copies a workflow into each tenant whose threads run it. An old pod upserts deployments, channel messages and cursors on the keys this step drops, so its statements fail until it is replaced, and a version it writes under a parent of another tenant is refused by the new foreign key |
 
 ## Verify: drift

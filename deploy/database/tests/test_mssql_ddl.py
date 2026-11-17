@@ -274,7 +274,9 @@ def test_an_upgrade_after_the_baseline_renders_guarded_sql_server_steps(
 
 def test_a_statement_sql_server_runs_outside_a_transaction_stays_outside_one(tmp_path: Path) -> None:
     # 0085 creates a full-text catalog and index in an autocommit block; SQL Server refuses both inside a transaction.
-    mssql.write_upgrade(_At("agents", "0084_memory_audit_team_required"), HERE, tmp_path)
+    # The range stops before 0115, which is online only (schema.ONLINE_ONLY).
+    to = _At("agents", "0114_drop_local_tenant_defaults")
+    mssql.write_upgrade(_At("agents", "0084_memory_audit_team_required"), to, tmp_path)
     up = (tmp_path / "upgrade.sql").read_text()
     step = up[up.index("-> 0085_memory_full_text") : up.index("-- step agents 0085_memory_full_text")]
     open_transactions, at_full_text = 0, []

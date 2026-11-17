@@ -32,6 +32,7 @@ from ops_store.schema import (
     backfill_ddl,
     isolation_ddl,
     isolation_drop_ddl,
+    mssql_drop_default_ddl,
     mssql_predicates_ddl,
     session_table_ddl,
     system,
@@ -282,10 +283,4 @@ def downgrade() -> None:
 def _drop_default(name: str, column: str) -> None:
     """A database upgraded before the column lost its default still holds one, which SQL Server refuses to drop the
     column under; a database without one has nothing to drop, so the constraint is looked up first."""
-    op.execute(
-        f"DECLARE @n sysname = (SELECT d.name FROM sys.default_constraints d WHERE d.parent_object_id = "
-        f"OBJECT_ID(N'{name}') AND COL_NAME(d.parent_object_id, d.parent_column_id) = N'{column}'); "
-        # EXEC takes a variable or literals, not a function call, so the statement is built first.
-        f"IF @n IS NOT NULL BEGIN DECLARE @s nvarchar(max) = N'ALTER TABLE {name} DROP CONSTRAINT ' "
-        f"+ QUOTENAME(@n); EXEC (@s); END"
-    )
+    op.execute(mssql_drop_default_ddl(name, column))

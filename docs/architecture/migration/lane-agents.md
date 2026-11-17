@@ -136,7 +136,7 @@ async def receive(p: CurrentPrincipal, _: Tx, event: Event, rt: Rt) -> JSONRespo
 
 | Check | Green when |
 |---|---|
-| Markings and migrations | The 21 tables off the `WAITING` list; `registry_publish_requests.team_id` filled and indexed; `graph_threads.owner` filled and indexed; both chains downgrade on both databases; the release proof passes from the last tag against a seeded database |
+| Markings and migrations | The 21 tables off the `WAITING` list; `registry_publish_requests.team_id` filled and indexed; `graph_threads.owner` filled and indexed; both chains downgrade on both databases; the release proof (`make db-scripts-proof`) passes against a seeded database from 874530fa, the first commit after agents 0115; every check passes from there (docs/deploy/database.md). From the last tag, v2026-11-11.3, the offline scripts refuse tools 0076, platform 0033 and 0034 and agents 0115 by name, and the upgrade is the online migration (docs/deploy/database.md, "From the last release") |
 | Transactions | Zero raw engine sites and zero `tenant_tx` outside the alias; the 7 caught errors inside `attempt()`; the 6 streaming routes close the request transaction before the first frame; the agent page is a handful of calls each in one transaction, not 596 statements in 157 |
 | Lists and labels | The 7 lists and `/v1/tools` paged, filtered and faceted in SQL; publish requests filtered by team in SQL; the agent read's tool, knowledge-base and guardrail labels from the copies and local tables; the overview tiles counted in SQL; `owner_team()` gone |
 | Copies | A published module appears in `/v1/tools` after one relay pass; a renamed knowledge base appears on the agent page; the resyncs on `PROCESSES` with health tests |
