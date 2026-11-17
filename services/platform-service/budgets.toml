@@ -5,8 +5,18 @@
 ["GET /.well-known/jwks.json"]
 queries = 0
 
+["GET /.well-known/oauth-authorization-server"]
+queries = 0
+
 ["GET /health/background"]
 queries = 0
+
+["GET /oauth/authorize"]
+queries = 6
+transactions = 3   # listed: the assistant and its address's team are found before the tenant is known, each through system_tx on its own connection
+connections = 3
+status = 303       # listed: it redirects the browser to the consent page
+query = { response_type = "code", client_id = "{client_id}", redirect_uri = "https://claude.example/callback", code_challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", code_challenge_method = "S256", resource = "{resource}", state = "st-1" }
 
 ["GET /v1/access/holders"]
 queries = 10
