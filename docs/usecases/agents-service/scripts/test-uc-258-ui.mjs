@@ -41,13 +41,15 @@ const DEFINITION = {
 
 await withUiStack(
   async (consoleUrl, stack) => {
-    const J = await as(JAMES);
+    let J = await as(JAMES);
     const browser = await chromium.launch();
     const errors = [];
     try {
       const refused = await saveAndPublish(J, DEFINITION);
       const priya = await consoleSignIn(browser, consoleUrl, PRIYA, PASSWORD, errors);
       const turned = await turnOnPolicy(priya, consoleUrl, 'aiSteps');
+      // A policy change refuses every token issued before it (permissions_changed), so James signs in again.
+      J = await as(JAMES);
       const made = await saveAndPublish(J, DEFINITION);
       check(
         '1 with AI steps off the workflow is refused; Priya turns them on in Policies and it publishes',
