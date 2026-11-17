@@ -670,7 +670,24 @@ health() {
     if nc -z "$pg_host" "$pg_port" 2>/dev/null; then row postgres "$pg_port" "tcp://$pg_host:$pg_port" "ok (tcp)" compose; else row postgres "$pg_port" "tcp://$pg_host:$pg_port" DOWN compose; failed=1; fi
   fi
   [[ -z "$only" ]] && docker_disk
+  rev_warnings "$only"
   return "$failed"
+}
+
+# One line per running service whose recorded start commit is not HEAD. Any commit counts, docs and tests included:
+# a service two commits behind its neighbour answered 500 on routes the neighbour had changed. Informational only; the
+# exit status of health stays what the probes decide.
+rev_warnings() {
+  local svc root rev head
+  head=$(git rev-parse HEAD 2>/dev/null) || return 0
+  for svc in "${CHECKED[@]}"; do
+    [[ -n "$1" && "$1" != "$svc" ]] && continue
+    alive "$svc" || continue
+    read -r root rev <"$(stampfile "$svc")" 2>/dev/null || continue
+    [[ "$rev" == "$head" ]] && continue
+    echo "  WARNING: $svc runs ${rev:0:8}, tree is at ${head:0:8}; restart with make restart SVC=$svc"
+  done
+  return 0
 }
 
 logs() {
