@@ -380,3 +380,8 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due, the same tick key starts no second run, and a tick due later stays queued | api, sdk | failing |
 | uc-platform-1 | platform-service | A team's running work is counted for that team only, and the delete check names it and stops the deletion | api | passing |
 | uc-751 | agents-service | Evals keep saved cases and runs for the team | api, sdk, ui | draft |
+| uc-752 | agents-service | An agent answers from a knowledge source with a citation, in mock and real mode | api, sdk, ui | draft |
+| uc-753 | tools-service | An agent reads with a tool, asks for approval, and the write runs only after approval, in mock and real mode | api | draft |
+| uc-754 | tools-service | Approval fails closed: when the approval rules cannot be read, a write that needs approval is refused and never runs | api | draft |
+| uc-755 | tools-service | A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it | api, ui | draft |
+| uc-756 | agents-service | A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record | api, ui | draft |
