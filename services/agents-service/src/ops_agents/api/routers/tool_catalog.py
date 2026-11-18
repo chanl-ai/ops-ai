@@ -8,13 +8,13 @@ tools-service answers."""
 
 from __future__ import annotations
 
-from typing import Annotated, Any, TypeAlias, cast
+from typing import Annotated, NotRequired, TypeAlias, TypedDict, cast
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
 from ops_service_kit.errors import NotFound
-from ops_service_kit.http import Envelope, Json, options_page, options_window, page_window, paged
+from ops_service_kit.http import Envelope, Json, options_page, options_window, page_window, pagination
 from ops_store import isolation
 
 from ...activities.tool_directory import ToolsUnavailable
@@ -37,8 +37,62 @@ router = APIRouter(prefix="/v1/tools", dependencies=[Depends(principal)])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 
 
-# Tool rows as the catalogue lists them (`id`, `name`, `server`, `access`, `inputSchema`, ...).
-ToolRows = list[dict[str, Any]]
+class ToolEntry(TypedDict):
+    """A tool as the catalogue lists it; `title` only on a registry operation."""
+
+    id: str
+    name: str
+    title: NotRequired[str | None]
+    server: str
+    moduleId: str | None
+    description: str
+    access: str
+    inputSchema: Json
+    requiresApproval: bool
+    approval: str | None
+
+
+ToolRows = list[ToolEntry]
+
+
+class AppRef(TypedDict):
+    id: str
+    name: str
+
+
+class UserRef(TypedDict):
+    id: str
+    name: str
+
+
+class UsedBy(TypedDict):
+    agents: list[UserRef]
+    workflows: list[UserRef]
+
+
+class CatalogRow(TypedDict):
+    """One row of the Tools page: the catalogue's tool, then its app, kind, status and users."""
+
+    id: str
+    name: str
+    title: str
+    server: str
+    moduleId: str | None
+    description: str
+    access: str
+    inputSchema: Json
+    requiresApproval: bool
+    approval: str | None
+    app: AppRef | None
+    kind: str
+    status: str
+    usedBy: UsedBy
+
+
+class NotAdded(TypedDict):
+    appId: str
+    name: str
+    count: int
 
 
 async def directory_tools(rt: Runtime, *, fresh: bool = False) -> ToolRows:
@@ -47,7 +101,7 @@ async def directory_tools(rt: Runtime, *, fresh: bool = False) -> ToolRows:
     # Only a directory that keeps a list has one to drop; a fixed catalogue or a test's list has none.
     if fresh and (forget := getattr(rt.directory(), "forget", None)) is not None:
         forget()
-    rows: list[dict[str, Any]] = []
+    rows: ToolRows = []
     for op in await rt.directory().operations():
         # A reviewer card template, where the fixture catalogue has one; registry operations get the generic card.
         template = (d := rt.catalog.tool(op.name)) and d.approval
@@ -130,7 +184,7 @@ async def known_tools(rt: Runtime, *, fresh: bool = False, listed: ToolRows | No
 FACETS = ("app", "kind", "status")
 
 
-def _kind_of(tool: dict[str, Any], card: Json | None) -> str:
+def _kind_of(tool: ToolEntry, card: Json | None) -> str:
     if tool["access"] == "workflow":
         return "workflow"
     if str(tool["id"]).startswith("agent:"):
@@ -138,14 +192,14 @@ def _kind_of(tool: dict[str, Any], card: Json | None) -> str:
     return "app" if card is not None and card.get("kind") in ("plugin", "builtin") else "custom"
 
 
-def _status_of(tool: dict[str, Any], card: Json | None) -> str:
+def _status_of(tool: ToolEntry, card: Json | None) -> str:
     if card is not None and card.get("appGroup") != "on":
         # tools-service says who acts next: the person's own sign-in, or the team's (an admin).
         return "needs_your_sign_in" if card.get("appGroup") == "needs_you" else "app_not_connected"
     return "needs_approval" if tool.get("requiresApproval") else "ready"
 
 
-async def tool_rows(rt: Runtime, person: str | None, team: str | None) -> list[dict[str, Any]]:
+async def tool_rows(rt: Runtime, person: str | None, team: str | None) -> list[CatalogRow]:
     """Every tool the team may grant, one row each, joined in one read of tools-service's apps (for `person`) and one
     of this service's own grants and workflow steps. tools-service is asked for the apps and the operations before
     any statement, so the local reads that follow share one transaction with nothing called while it is open."""
@@ -157,15 +211,18 @@ async def tool_rows(rt: Runtime, person: str | None, team: str | None) -> list[d
         # A person's page reads the list fresh: a tool added to the team a moment ago shows at once.
         tools = await known_tools(rt, fresh=True)
         uses = await tool_uses(rt, team or current_team(), [str(t["id"]) for t in tools])
-    rows: list[dict[str, Any]] = []
+    rows: list[CatalogRow] = []
     for t in tools:
         module = t.get("moduleId")
         card = by_module.get(str(module)) if module else None
-        app = {"id": card["id"], "name": card["name"]} if card else None
+        # The card's id and name pass through as tools-service sends them (its schema says strings).
+        app: AppRef | None = {"id": cast(str, card["id"]), "name": cast(str, card["name"])} if card else None
         if app is None and module:
             app = {"id": f"module:{module}", "name": t["server"]}
         used = uses.get(str(t["id"])) or []
-        by = {k: [{"id": u["id"], "name": u["name"]} for u in used if u["kind"] == k] for k in ("agent", "workflow")}
+        by: dict[str, list[UserRef]] = {
+            k: [{"id": u["id"], "name": u["name"]} for u in used if u["kind"] == k] for k in ("agent", "workflow")
+        }
         rows.append(
             {
                 **t,
@@ -184,13 +241,15 @@ def _person(p: Principal) -> str | None:
     return p.email if not p.is_key and "@" in p.email else None
 
 
-def _app(row: dict[str, Any]) -> dict[str, str]:
-    return cast(dict[str, str], row.get("app") or {})
+def _app_name(row: CatalogRow) -> str | None:
+    return app["name"] if (app := row["app"]) else None
 
 
-def _facet(row: dict[str, Any], column: str) -> str | None:
+def _facet(row: CatalogRow, column: str) -> str | None:
     """The value a row is counted and filtered by: its app's id, or its kind or status."""
-    return _app(row).get("id") if column == "app" else str(row[column])
+    if column == "app":
+        return app["id"] if (app := row["app"]) else None
+    return str(row["kind"] if column == "kind" else row["status"])
 
 
 @router.get("", response_model=Envelope[ToolList])
@@ -209,31 +268,35 @@ async def list_tools(
     rows = await tool_rows(rt, _person(p), p.team_id)
     q = search.strip().lower()
     if q:
-        rows = [
-            r for r in rows if q in f"{r['title']} {r['name']} {_app(r).get('name', '')} {r['description']}".lower()
-        ]
+        rows = [r for r in rows if q in f"{r['title']} {r['name']} {_app_name(r) or ''} {r['description']}".lower()]
     facets: dict[str, dict[str, int]] = {c: {} for c in FACETS}
     names: dict[str, str] = {}
     for r in rows:
         for c in FACETS:
             if (value := _facet(r, c)) is not None:
                 facets[c][value] = facets[c].get(value, 0) + 1
-        if app := _app(r):
+        if app := r["app"]:
             names[app["id"]] = app["name"]
     for c in FACETS:
         if wanted := request.query_params.getlist(c):
             rows = [r for r in rows if _facet(r, c) in wanted]
     # The id last, so two tools of one app with one title keep their order from page to page.
-    rows.sort(key=lambda r: (_app(r).get("name") or "~", str(r["title"]).lower(), str(r["id"])))
+    rows.sort(key=lambda r: (_app_name(r) or "~", str(r["title"]).lower(), str(r["id"])))
     page_no, start = page_window(len(rows), page_no, page_size)
     # By name, the order the App filter lists them in.
     names = dict(sorted(names.items(), key=lambda kv: kv[1].lower()))
+    # `paged` takes loose rows; the same four keys, in its order.
     return ok(
-        {**paged(rows[start : start + page_size], len(rows), page_no, page_size), "facets": facets, "appNames": names}
+        {
+            "data": rows[start : start + page_size],
+            "pagination": pagination(len(rows), page_no, page_size),
+            "facets": facets,
+            "appNames": names,
+        }
     )
 
 
-async def not_added(rt: Runtime, team: str | None, search: str) -> list[dict[str, Any]]:
+async def not_added(rt: Runtime, team: str | None, search: str) -> list[NotAdded]:
     """The team's apps whose name matches `search` and whose catalog holds tools the team has not added, with how many.
     Read from tools-service's app cards; when it cannot be reached the picker still answers, without this line."""
     if rt.app_states is None:

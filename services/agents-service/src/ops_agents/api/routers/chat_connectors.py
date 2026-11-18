@@ -15,7 +15,8 @@ store call takes and returns its own connection and none is held while tools-ser
 
 from __future__ import annotations
 
-from typing import Annotated, Any, TypeAlias, cast
+from dataclasses import dataclass, field, replace
+from typing import Annotated, TypeAlias, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -23,7 +24,7 @@ from pydantic import Field
 
 from ops_agents.activities.overrides import limits_for, parse, resolve
 from ops_service_kit.errors import Unprocessable
-from ops_service_kit.http import In, Out
+from ops_service_kit.http import In, Json, Out
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 from ops_store import isolation
@@ -82,6 +83,17 @@ class ChatConnectors(Out):
     connectors: list[ChatConnector]
 
 
+@dataclass(frozen=True)
+class HeldApp:
+    """An app card as tools-service answers it, with the agent's tools of it, the accounts the person may pick (two or
+    more, else none) and the one in use."""
+
+    card: Json
+    tools: list[str]
+    account_list: list[Json] = field(default_factory=list[Json])
+    account: str | None = None
+
+
 class ConnectorsIn(In):
     # The apps this chat leaves out, by id; every other app the agent holds is on.
     off: list[Annotated[str, Field(min_length=1, max_length=120)]] = Field(max_length=100)
@@ -90,7 +102,7 @@ class ConnectorsIn(In):
     accounts: dict[str, Annotated[str, Field(min_length=1, max_length=200)]] | None = Field(default=None, max_length=50)
 
 
-async def _by_app(rt: Runtime, me: Principal, team: str, agent_id: str, held: list[str]) -> list[dict[str, Any]]:
+async def _by_app(rt: Runtime, me: Principal, team: str, agent_id: str, held: list[str]) -> list[HeldApp]:
     """The apps whose tools the agent holds, each with those tools, then the installed apps the team has off.
 
     An empty answer for an agent that holds tools reads "This agent uses no connector." in the picker, which is also
@@ -105,7 +117,7 @@ async def _by_app(rt: Runtime, me: Principal, team: str, agent_id: str, held: li
     except ToolsUnavailable:
         cards, reason = [], "tools_unavailable"
     module_of = {o.name: o.module_id for o in await rt.directory().operations()}
-    out: list[dict[str, Any]] = []
+    out: list[HeldApp] = []
     for card in cards:
         group = str(card.get("appGroup"))
         if card.get("kind") == "builtin" or group == "gone":
@@ -113,9 +125,9 @@ async def _by_app(rt: Runtime, me: Principal, team: str, agent_id: str, held: li
         modules = set(cast(list[str], card.get("moduleIds") or []))
         tools = [t for t in held if module_of.get(t) in modules]
         if group == ADMIN:
-            out.append({**card, "tools": []})
+            out.append(HeldApp(card, []))
         elif tools:
-            out.append({**card, "tools": tools})
+            out.append(HeldApp(card, tools))
     if not out and (reason or held):
         log.warning(
             "chat.connectors.empty",
@@ -129,46 +141,49 @@ async def _by_app(rt: Runtime, me: Principal, team: str, agent_id: str, held: li
 
 
 async def _with_accounts(
-    rt: Runtime, me: Principal, team: str, apps: list[dict[str, Any]], chosen: dict[str, str]
-) -> list[dict[str, Any]]:
+    rt: Runtime, me: Principal, team: str, apps: list[HeldApp], chosen: dict[str, str]
+) -> list[HeldApp]:
     """Each app with the accounts the person may pick for this chat, when there are two or more, and the one in use."""
     if rt.app_states is None:
         return apps
-    out: list[dict[str, Any]] = []
+    out: list[HeldApp] = []
     for a in apps:
-        listed: list[dict[str, Any]] = []
-        if a["appGroup"] != ADMIN and a.get("kind") == "plugin":
+        listed: list[Json] = []
+        if a.card["appGroup"] != ADMIN and a.card.get("kind") == "plugin":
             try:
-                listed = await rt.app_states.accounts(me.email or None, team, str(a["id"]))
+                listed = await rt.app_states.accounts(me.email or None, team, str(a.card["id"]))
             except ToolsUnavailable:
                 listed = []
         live = [x for x in listed if not x.get("sandbox")]
-        out.append({**a, "accountList": live if len(live) > 1 else [], "account": chosen.get(str(a["id"]))})
+        out.append(replace(a, account_list=live if len(live) > 1 else [], account=chosen.get(str(a.card["id"]))))
     return out
 
 
-def _view(thread_id: str, apps: list[dict[str, Any]], off: set[str]) -> dict[str, Any]:
+def _view(thread_id: str, apps: list[HeldApp], off: set[str]) -> Json:
+    # Validated as the constructor validates its arguments: the card's values are tools-service's, checked here.
     rows = [
-        ChatConnector(
-            app_id=str(a["id"]),
-            name=str(a["name"]),
-            logo=a.get("logo"),
-            app_state=a["appState"],
-            app_state_reason=a.get("appStateReason"),
-            app_group=a["appGroup"],
-            on=a["appGroup"] != ADMIN and not set(a["tools"]) <= off,
-            personal=a.get("signIn") in PERSON,
-            tools=a["tools"],
-            account=a.get("account"),
-            accounts=[
-                ChatAccount(
-                    name=str(x["name"]),
-                    identity=cast(list[dict[str, str]], x.get("identity") or []),
-                    default=bool(x.get("default")),
-                    own=bool(x.get("own")),
-                )
-                for x in cast(list[dict[str, Any]], a.get("accountList") or [])
-            ],
+        ChatConnector.model_validate(
+            {
+                "app_id": str(a.card["id"]),
+                "name": str(a.card["name"]),
+                "logo": a.card.get("logo"),
+                "app_state": a.card["appState"],
+                "app_state_reason": a.card.get("appStateReason"),
+                "app_group": a.card["appGroup"],
+                "on": a.card["appGroup"] != ADMIN and not set(a.tools) <= off,
+                "personal": a.card.get("signIn") in PERSON,
+                "tools": a.tools,
+                "account": a.account,
+                "accounts": [
+                    ChatAccount(
+                        name=str(x["name"]),
+                        identity=cast(list[dict[str, str]], x.get("identity") or []),
+                        default=bool(x.get("default")),
+                        own=bool(x.get("own")),
+                    )
+                    for x in a.account_list
+                ],
+            }
         )
         for a in apps
     ]
@@ -204,7 +219,8 @@ async def get_connectors(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     async with isolation.request_transaction():
         row, agent, limits = await _thread(rt, me, thread_id)
     apps = await _by_app(rt, me, str(row["team_id"]), agent.id, list(limits.switchable_tool_ids))
-    stored = cast(dict[str, Any], row.get("overrides") or {})
+    # As the thread stores them: overrides that are not an object fail at their first read.
+    stored = cast(Json, row.get("overrides") or {})
     chosen = chosen_accounts(agent=agent.accounts, chat=cast(dict[str, str], stored.get("accounts") or {}))
     apps = await _with_accounts(rt, me, str(row["team_id"]), apps, chosen)
     return ok(_view(thread_id, apps, set(cast(list[str], stored.get("toolsOff") or []))))
@@ -217,18 +233,19 @@ async def set_connectors(rt: Rt, me: Me, thread_id: str, body: ConnectorsIn) -> 
     on. 422 naming the app for one this chat does not hold."""
     row, agent, limits = await _thread(rt, me, thread_id)
     apps = await _by_app(rt, me, str(row["team_id"]), agent.id, list(limits.switchable_tool_ids))
-    held = {str(a["id"]): a for a in apps if a["appGroup"] != ADMIN}
+    held = {str(a.card["id"]): a for a in apps if a.card["appGroup"] != ADMIN}
     if unknown := [a for a in body.off if a not in held]:
         raise Unprocessable(
             f"This chat has no connector {unknown[0]} to turn off.",
             code="connector_unknown",
             details={"appId": unknown[0]},
         )
-    stored = cast(dict[str, Any], row.get("overrides") or {})
+    # As the thread stores them: overrides that are not an object fail at their first read.
+    stored = cast(Json, row.get("overrides") or {})
     before = set(cast(list[str], stored.get("toolsOff") or []))
     off = set(before)
     for app_id, app in held.items():
-        tools = set(app["tools"])
+        tools = set(app.tools)
         if app_id in body.off:
             off |= tools
         elif tools <= before:
@@ -247,7 +264,7 @@ async def set_connectors(rt: Rt, me: Me, thread_id: str, body: ConnectorsIn) -> 
 
 
 async def _checked_accounts(
-    rt: Runtime, me: Principal, team: str, held: dict[str, dict[str, Any]], wanted: dict[str, str]
+    rt: Runtime, me: Principal, team: str, held: dict[str, HeldApp], wanted: dict[str, str]
 ) -> dict[str, str]:
     """The chat's account choice, each one an account of an app this chat holds that the person may use; 422 naming
     the first that is not. tools-service compares the name, and checks it again on every call."""

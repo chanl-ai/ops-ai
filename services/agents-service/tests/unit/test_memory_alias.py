@@ -16,10 +16,11 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from ops_agent_kernel import aliases
 from ops_agent_kernel.ports import KernelPorts
 from ops_agents.api.memory import MEMORY_ALIAS, extractor_for
+from ops_service_kit.http import Json
 from tests.conftest import structured
 from tests.unit.test_guardrails_kernel import NoKnowledge, NoTools
 
-SCHEMA = {"type": "object", "properties": {"memories": {"type": "array"}}, "required": ["memories"]}
+SCHEMA: Json = {"type": "object", "properties": {"memories": {"type": "array"}}, "required": ["memories"]}
 
 
 def answering(value: str) -> FunctionModel:

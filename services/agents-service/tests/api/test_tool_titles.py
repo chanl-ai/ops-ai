@@ -5,7 +5,7 @@ readable name."""
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from typing import Any, cast
 
 import pytest
@@ -85,7 +85,7 @@ async def test_the_tools_catalog_lists_a_plugin_tools_title(monkeypatch: Any, db
     monkeypatch.setattr("ops_agents.api.routers.tool_catalog.published_workflows", _none)
     monkeypatch.setattr("ops_agents.api.routers.tool_catalog.engine_workflows", _none)
     with tenant_scope(LOCAL_TENANT):
-        rows = {r["name"]: r for r in await known_tools(cast(Any, Rt(db)))}
+        rows: dict[str, Mapping[str, object]] = {r["name"]: r for r in await known_tools(cast(Any, Rt(db)))}
     assert rows["salesforce_update_record"]["title"] == "Update a record", rows["salesforce_update_record"]
     assert rows["crm_lookup_account"]["title"] is None
 
