@@ -13,15 +13,26 @@ to what the database enforces: a marked table the database does not isolate, or 
 from __future__ import annotations
 
 from collections.abc import Callable, Collection, Iterable, Sequence
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 import sqlalchemy as sa
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy.dialects import mssql as mssql_dialect
 
+
+class FullText(TypedDict):
+    """A FULL_TEXT marking: the SQL Server catalog and the columns its full-text index covers."""
+
+    catalog: str
+    columns: tuple[str, ...]
+
+
+# A table's or column's `info` markings, each marker's value under its key; SQLAlchemy keeps `info` as a plain dict.
+Marking = dict[str, bool | str | tuple[str, ...] | FullText]
+
 TENANT_KEY = "tenant_scoped"
-TENANT_SCOPED: dict[str, Any] = {TENANT_KEY: True}
+TENANT_SCOPED: Marking = {TENANT_KEY: True}
 # A team's work or asset: every read names the caller's team through `ops_store.team_scope.team_visible`, and
 # `packages/ops_store/tests/test_team_reads.py` fails on a read that does not. Every row has a team: the
 # database policy reads only the acting team's rows, and nothing is shared across teams.
@@ -30,15 +41,15 @@ TEAM_KEY = "team_owned"
 TEAM_VIA_KEY = "team_owned_via"
 
 
-def team_owned(column: str = "team_id") -> dict[str, Any]:
+def team_owned(column: str = "team_id") -> Marking:
     """The marker for a team-owned table whose team is in `column` (`team` in files and documents)."""
     return {TEAM_KEY: column}
 
 
-TEAM_OWNED: dict[str, Any] = team_owned()
+TEAM_OWNED: Marking = team_owned()
 
 
-def team_owned_via(parent: str, column: str) -> dict[str, Any]:
+def team_owned_via(parent: str, column: str) -> Marking:
     """The marker for a table read through the team of its parent table `parent`, joined on `column` = parent.id."""
     return {TEAM_VIA_KEY: (parent, column)}
 
@@ -240,7 +251,7 @@ def mssql_drop_key_ddl(table: str, kind: Literal["PK", "UQ"], column: str | None
     return mssql_drop_constraint_ddl(table, _mssql_query(found))
 
 
-def system(reason: str) -> dict[str, Any]:
+def system(reason: str) -> Marking:
     """The marker for a table with no tenant column (leases, timers, inbox, fences, an install's own settings): no
     policy. Reached through `Store.install_tx`, with no tenant, or `ops_store.isolation.system_tx`, past it, never as
     the request role. `reason` says why it holds no tenant."""
@@ -554,11 +565,11 @@ POSTGRES_ONLY = "postgres_only"
 DIALECT_INDEXES = "dialect_indexes"
 
 
-def postgres_only() -> dict[str, Any]:
+def postgres_only() -> Marking:
     return {POSTGRES_ONLY: True}
 
 
-def dialect_indexes(*prefixes: str) -> dict[str, Any]:
+def dialect_indexes(*prefixes: str) -> Marking:
     return {DIALECT_INDEXES: tuple(prefixes)}
 
 
@@ -569,8 +580,8 @@ def dialect_indexes(*prefixes: str) -> dict[str, Any]:
 FULL_TEXT = "full_text"
 
 
-def full_text(catalog: str, *columns: str) -> dict[str, Any]:
-    return {FULL_TEXT: {"catalog": catalog, "columns": columns}}
+def full_text(catalog: str, *columns: str) -> Marking:
+    return {FULL_TEXT: FullText(catalog=catalog, columns=columns)}
 
 
 def mssql_full_text_ddl(table: sa.Table) -> list[str]:

@@ -33,7 +33,7 @@ from ops_service_kit.http import Out
 
 from . import background, isolation
 from .dialect import claim
-from .schema import system
+from .schema import Marking, system
 
 # An outbox not yet held to its tenant by the database (tools-service's); a service that isolates its
 # outbox passes TENANT_SCOPED: the request role then reads and writes its own tenant's events, and the relay reads
@@ -223,7 +223,7 @@ class Event(Out):
         return f"{about}@{self.revision}"
 
 
-def outbox_table(metadata: sa.MetaData, name: str = "service_outbox", *, info: dict[str, Any] = OUTBOX) -> sa.Table:
+def outbox_table(metadata: sa.MetaData, name: str = "service_outbox", *, info: Marking = OUTBOX) -> sa.Table:
     """The outbox's columns. Read by the relay across tenants through `isolation.system_tx`; `info` is its
     isolation marking."""
     return sa.Table(

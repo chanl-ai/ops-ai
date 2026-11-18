@@ -3,9 +3,11 @@ own check): the change and its entry are written in one transaction, and the ent
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from collections.abc import Mapping
+from typing import ClassVar
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from .guarantees import Guarantee
@@ -37,7 +39,7 @@ class SqlAuditLog:
             await c.run_sync(metadata.create_all)
         return self
 
-    async def apply(self, entity_id: str, value: str, entry: dict[str, Any] | None) -> None:
+    async def apply(self, entity_id: str, value: str, entry: Mapping[str, JsonValue] | None) -> None:
         async with self.engine.begin() as c:
             updated = await c.execute(audited.update().where(audited.c.id == entity_id).values(value=value))
             if updated.rowcount == 0:

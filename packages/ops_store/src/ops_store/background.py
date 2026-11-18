@@ -379,7 +379,7 @@ class Heartbeat:
     last_error: str | None = None
     last_error_at: float | None = None
 
-    def as_row(self) -> dict[str, Any]:
+    def as_row(self) -> dict[str, str | float | int | None]:
         return asdict(self)
 
 
