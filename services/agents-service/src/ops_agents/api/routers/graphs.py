@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 from decimal import Decimal
-from typing import Annotated, Any, Literal, TypeAlias, cast
+from typing import Annotated, Any, Literal, TypeAlias
 
 from fastapi import APIRouter, Depends
 from fastapi.encoders import jsonable_encoder
@@ -34,7 +34,7 @@ from ops_service_kit.errors import (
 from ops_service_kit.http import Envelope, In, Json, ListResult
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListQuery
-from ops_service_kit.narrow import an_object
+from ops_service_kit.narrow import an_object, json_object
 from ops_store import isolation
 
 from ...store.leases import LeaseHeldError
@@ -140,15 +140,15 @@ _definition = definition
 _thread = resolve
 
 
-def with_children(values: dict[str, Any], meta: dict[str, Any]) -> dict[str, Any]:
+def with_children(values: Json, meta: Json) -> Json:
     """The state with each child case's current outcome (hitl_facade.children_view): a child finishing after the
     parent's run ended writes its outcome back to the checkpoint when the parent's lease is free, and to the meta
     always, so the meta is read over the values here."""
     children = hitl_facade.children_view(values, meta)
-    return {**values, "children": children} if children is not None else values
+    return {**values, "children": [*children]} if children is not None else values
 
 
-def _thread_view(row: dict[str, Any]) -> dict[str, Any]:
+def _thread_view(row: Json) -> Json:
     return {
         "threadId": row["id"],
         "graph": row["graph"],
@@ -219,7 +219,7 @@ async def create_thread(rt: Rt, me: Me, _: Tx, body: ThreadInput) -> JSONRespons
         )
 
     # Find-or-create by external key, one transaction. A paused deployment returns an existing case but opens none.
-    default_budget: dict[str, Any] | None = None
+    default_budget: Json | None = None
     if body.deployment_id is not None:
         assert rt.channels is not None
         deployment = await rt.channels.deployment(body.deployment_id)
@@ -271,19 +271,19 @@ async def list_threads(rt: Rt, me: Me, _: Tx, q: ListQuery, graph: str | None = 
     return ok({**listed, "data": [_thread_view(dict(r)) for r in listed["data"]]})
 
 
-async def _worded_failure(rt: Runtime, values: dict[str, Any]) -> dict[str, Any]:
+async def _worded_failure(rt: Runtime, values: Json) -> Json:
     """A refused call's `tool_error` with `action`, the call in words (describe_call's label), so no page words a tool
     itself."""
-    raw = values.get("tool_error")
-    failure = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
+    failure = json_object(values.get("tool_error"))
     if not failure.get("tool"):
         return values
     # The input the refused call carried, when a decision chose it.
-    decision = cast(dict[str, Any], values.get("decision") or {})
-    call = cast(dict[str, Any], decision.get("call") or {})
+    decision = an_object(values.get("decision") or {}, "the step's decision")
+    call = an_object(decision.get("call") or {}, "the decided call")
     given = call.get("input") if call.get("tool") == failure["tool"] else None
     told = await describe_call(rt, {"tool": failure["tool"], "input": given or {}}, currency=None, money_key=None)
-    return values | {"tool_error": failure | {"action": str(told["label"])}}
+    worded: Json = failure | {"action": str(told["label"])}
+    return {**values, "tool_error": worded}
 
 
 @router.get("/{thread_id}/state", response_model=Envelope[ThreadState])
@@ -363,14 +363,14 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
             )
         # A spent budget follows the chat's rules on every thread: owner or admin, caps only up from spent. A chat
         # answers on its budget route; any other thread here, through the same checks (chat_budget.run_api_answer).
-        budget_pause = isinstance(payload, dict) and cast(dict[str, Any], payload).get("kind") == "budget_exhausted"
-        if budget_pause and cast(dict[str, Any], row["meta"] or {}).get("chat"):
+        budget_pause = json_object(waiting[0]["payload"]).get("kind") == "budget_exhausted"
+        if budget_pause and an_object(row["meta"] or {}, "thread meta").get("chat"):
             raise Conflict(
                 "A spent budget is answered with POST /chat/threads/{threadId}/budget.", code="resume_via_budget"
             )
         answered = (
             await run_api_answer(
-                rt, me, row, cast(dict[str, Any], payload), body.resume.model_dump(mode="json", exclude_none=True)
+                rt, me, row, json_object(waiting[0]["payload"]), body.resume.model_dump(mode="json", exclude_none=True)
             )
             if budget_pause
             else None
@@ -401,7 +401,7 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
         # JSON mode: a budget's Decimal cap travels as a string through the checkpointed resume value.
         resume = answered or body.resume.model_dump(mode="json", exclude_none=True)
         graph_input: Any = Command(resume=resume)
-        journal_input: dict[str, Any] = {"resume": resume}
+        journal_input: Json = {"resume": resume}
     else:
         if waiting:
             raise Conflict("This thread is waiting for a decision; resume it instead.", code="run_waiting")
@@ -604,7 +604,7 @@ SERVER_META = frozenset(
 )
 
 
-def owned(metadata: dict[str, Any] | None, me: Principal) -> dict[str, Any]:
+def owned(metadata: Json | None, me: Principal) -> Json:
     """The caller's metadata without the keys the server owns, plus the starter the server records."""
     kept = {k: v for k, v in (metadata or {}).items() if k not in SERVER_META}
     # `startedBy` is `key:<id>` for a key, which the Channels list counts its traffic by.
@@ -618,7 +618,7 @@ async def _agent_budget(rt: Runtime, thread_id: str, graph: str) -> None:
         await cap_at_agent(rt, thread_id, agent)
 
 
-async def _set_budget(rt: Runtime, thread_id: str, given: BudgetInput | None, default: dict[str, Any] | None) -> None:
+async def _set_budget(rt: Runtime, thread_id: str, given: BudgetInput | None, default: Json | None) -> None:
     if rt.usage is None:
         return
     raw = given.model_dump(exclude_none=True) if given is not None else default

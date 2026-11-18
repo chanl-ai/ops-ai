@@ -25,9 +25,10 @@ from typing import Any, Literal, cast
 
 from langgraph.types import Command
 
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
-from ops_service_kit.narrow import an_object
+from ops_service_kit.narrow import an_object, json_object
 from ops_store import background
 from ops_store.background import HeartbeatStore
 
@@ -47,24 +48,30 @@ def store_of(rt: Runtime) -> TimerStore:
     return TimerStore(graph_store(rt).engine)
 
 
-def _wanted(waiting: list[dict[str, Any]]) -> Wanted:
+def _wanted(waiting: list[Json]) -> Wanted:
     """(timer key, kind) -> (node, interrupt id, delay) for every timer the waiting interrupts call for. Warn and
     breach belong to one interrupt, so a re-raised interrupt (reassign, escalate) gets a fresh clock; max wait
     belongs to the step's review, so it keeps running across re-raises."""
     out: Wanted = {}
     for w in waiting:
-        p: dict[str, Any] = w["payload"]
-        sla: dict[str, Any] = p["sla"]
+        p = an_object(w["payload"], "the interrupt's payload")
+        sla = an_object(p["sla"], "the interrupt's sla")
         node = str(p.get("node") or "human")
+        interrupt_id = cast(str, w["id"])  # LangGraph's interrupt id
         # LangGraph gives every interrupt a node raises in one task the same id, so a re-raised review (reassign,
         # escalate) is told apart by its round.
-        clock = round_key(w["id"], sla.get("round", 0))
+        clock = round_key(interrupt_id, sla.get("round", 0))
+        # Seconds as the sla block gives them: a number, or a string of one.
         if sla.get("warnAtSeconds") is not None:
-            out[(clock, "warn")] = (node, w["id"], float(sla["warnAtSeconds"]))
+            out[(clock, "warn")] = (node, interrupt_id, float(cast(float | str, sla["warnAtSeconds"])))
         if sla.get("slaSeconds") is not None:
-            out[(clock, "breach")] = (node, w["id"], float(sla["slaSeconds"]))
+            out[(clock, "breach")] = (node, interrupt_id, float(cast(float | str, sla["slaSeconds"])))
         if sla.get("maxWaitSeconds") is not None:
-            out[(f"{node}:{p.get('review_id', '')}", "maxWait")] = (node, None, float(sla["maxWaitSeconds"]))
+            out[(f"{node}:{p.get('review_id', '')}", "maxWait")] = (
+                node,
+                None,
+                float(cast(float | str, sla["maxWaitSeconds"])),
+            )
     return out
 
 
@@ -78,13 +85,12 @@ def _key(row: Any) -> tuple[str, str]:
     return key_of(row)
 
 
-async def waiting_with_sla(rt: Runtime, thread_id: str) -> list[dict[str, Any]]:
+async def waiting_with_sla(rt: Runtime, thread_id: str) -> list[Json]:
     _, graph = await resolve(rt, thread_id)
     snap = await graph.aget_state(config(thread_id))
-    out: list[dict[str, Any]] = []
+    out: list[Json] = []
     for w in pending(snap):
-        payload: Any = w["payload"]
-        if isinstance(payload, dict) and cast(dict[str, Any], payload).get("sla"):
+        if json_object(w["payload"]).get("sla"):
             out.append(w)
     return out
 
@@ -104,7 +110,7 @@ async def sync_timers(rt: Runtime, thread_id: str, *, generation: int | None = N
         await rt.timer_scheduler.schedule(thread_id, timer_id, due_at)
 
 
-async def sla_view(rt: Runtime, thread_id: str) -> dict[str, Any] | None:
+async def sla_view(rt: Runtime, thread_id: str) -> Json | None:
     """The thread's timers and SLA events for GET state; None where timers are not kept (non-PostgreSQL)."""
     timer_store = store_of(rt)
     if not timer_store.enabled:
@@ -139,22 +145,21 @@ async def sla_view(rt: Runtime, thread_id: str) -> dict[str, Any] | None:
     }
 
 
-async def restart_on_customer_reply(rt: Runtime, thread_id: str) -> list[dict[str, Any]]:
+async def restart_on_customer_reply(rt: Runtime, thread_id: str) -> list[Json]:
     """A customer reply restarts the clock: the open warn and breach timers are cancelled and re-armed from now.
     The max wait keeps running, so a conversation that never ends still times out."""
     waiting = await waiting_with_sla(rt, thread_id)
     wanted = {k: v for k, v in _wanted(waiting).items() if k[1] != "maxWait"}
-    restarted = [
+    restarted: list[Json] = [
         {"timerId": timer_id, "kind": kind, "dueAt": due_at.isoformat()}
         for timer_id, kind, due_at in await store_of(rt).restart(thread_id, wanted)
     ]
-    await journal(
-        rt, thread_id, [{"event": "sla.restarted", "data": {"reason": "customer_reply", "timers": restarted}}]
-    )
+    data: Json = {"reason": "customer_reply", "timers": [*restarted]}
+    await journal(rt, thread_id, [{"event": "sla.restarted", "data": data}])
     return restarted
 
 
-async def journal(rt: Runtime, thread_id: str, events: list[dict[str, Any]], *, generation: int | None = None) -> None:
+async def journal(rt: Runtime, thread_id: str, events: list[Json], *, generation: int | None = None) -> None:
     """SLA events as a run row of kind `sla`, so GET /runs and the state view show them in order with the runs."""
     store = graph_store(rt)
     run_id = new_id("run")
@@ -170,14 +175,14 @@ async def journal(rt: Runtime, thread_id: str, events: list[dict[str, Any]], *, 
     )
 
 
-def _events_for(kind: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
-    sla: dict[str, Any] = payload["sla"]
-    base = {"group": sla["group"], "round": sla["round"], "node": payload.get("node")}
+def _events_for(kind: str, payload: Json) -> list[Json]:
+    sla = an_object(payload["sla"], "the interrupt's sla")
+    base: Json = {"group": sla["group"], "round": sla["round"], "node": payload.get("node")}
     if kind == "warn":
         return [{"event": "sla.warn", "data": base}]
     if kind == "maxWait":
         return [{"event": "sla.max_wait", "data": {**base, "outcome": "rejected"}}]
-    events: list[dict[str, Any]] = [{"event": "sla.breach", "data": base}]
+    events: list[Json] = [{"event": "sla.breach", "data": base}]
     action = sla["onTimeout"]
     if action == "escalate" and not sla["escalated"]:
         events.append({"event": "sla.escalated", "data": {**base, "to": sla.get("escalateTo")}})
@@ -203,7 +208,7 @@ class FireResult:
     attempts: int | None = None
 
 
-async def arm_job(rt: Runtime, thread_id: str, *, delay: float, key: str) -> dict[str, Any]:
+async def arm_job(rt: Runtime, thread_id: str, *, delay: float, key: str) -> Json:
     """Arms one `job` timer on `thread_id`. A second call with the same key does not start another run."""
     store = store_of(rt)
     if not store.enabled:
@@ -220,7 +225,7 @@ async def arm_job(rt: Runtime, thread_id: str, *, delay: float, key: str) -> dic
     return {"threadId": thread_id, "timerId": timer_id, "armed": True}
 
 
-async def fire_job_now(rt: Runtime, thread_id: str) -> dict[str, Any]:
+async def fire_job_now(rt: Runtime, thread_id: str) -> Json:
     """Starts the scheduled agent turn when the database has no timer clock (SQLite tests)."""
     result = await fire_job(
         rt,
@@ -241,8 +246,8 @@ async def fire_job(rt: Runtime, row: Any) -> FireResult:
         if getattr(row, "timer_id", None) and row.timer_id != "job":
             await store_of(rt).close(row, None, "cancelled")
         return FireResult("cancelled", row.timer_id)
-    meta = cast(dict[str, Any], thread.get("meta") or {})
-    schedule = cast(dict[str, Any], meta.get("schedule") or {})
+    meta = an_object(thread.get("meta") or {}, "thread meta")
+    schedule = an_object(meta.get("schedule") or {}, "the thread's schedule")
     if store_of(rt).enabled and row.timer_id != "job":
         require_graphs(rt)
         assert rt.leases is not None
@@ -274,7 +279,7 @@ async def fire_job(rt: Runtime, row: Any) -> FireResult:
         return FireResult("busy", row.timer_id)
     await store.set_thread_status(row.thread_id, "busy", now_iso(), generation=generation)
     thread_row, graph = await resolve(rt, row.thread_id)
-    graph_input: dict[str, Any] = {
+    graph_input: Json = {
         "message": message,
         "agent_id": agent_id,
         "history": [],
@@ -288,14 +293,16 @@ async def fire_job(rt: Runtime, row: Any) -> FireResult:
     return FireResult("fired", row.timer_id, run_id=run_id)
 
 
-def _matching(row: Any, waiting: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _matching(row: Any, waiting: list[Json]) -> Json | None:
     """The waiting interrupt this timer belongs to: by interrupt and round for warn and breach, by node for max
     wait."""
     for w in waiting:
+        payload = an_object(w["payload"], "the interrupt's payload")
         if row.interrupt_id:
-            if round_key(w["id"], w["payload"]["sla"].get("round", 0)) == _key(row)[0]:
+            sla = an_object(payload["sla"], "the interrupt's sla")
+            if round_key(cast(str, w["id"]), sla.get("round", 0)) == _key(row)[0]:
                 return w
-        elif w["payload"].get("node") == row.node:
+        elif payload.get("node") == row.node:
             return w
     return None
 
@@ -341,7 +348,7 @@ async def fire(rt: Runtime, thread_id: str, timer_id: str, *, after_accept: Hook
     attempts = claim.attempts
     if attempts > MAX_ATTEMPTS:
         await timer_store.close(row, generation, "failed")
-        data = {"timerId": timer_id, "attempts": attempts - 1, "error": await _last_error(rt, thread_id)}
+        data: Json = {"timerId": timer_id, "attempts": attempts - 1, "error": await _last_error(rt, thread_id)}
         await journal(rt, thread_id, [{"event": "sla.fire_failed", "data": data}], generation=generation)
         await rt.leases.release(thread_id, run_id)
         log.warning("timer_failed", thread=thread_id, timer=timer_id, attempts=attempts - 1)
@@ -355,12 +362,15 @@ async def fire(rt: Runtime, thread_id: str, timer_id: str, *, after_accept: Hook
     if after_accept is not None:
         await after_accept()
     thread_row, graph = await resolve(rt, thread_id)
-    events = _events_for(row.kind, match["payload"])
+    events = _events_for(row.kind, an_object(match["payload"], "the interrupt's payload"))
     accepted = False
     # From here execute owns the lease and releases it at the end.
     async for e in execute(rt, thread_row, graph, graph_input=Command(resume=decision), run_id=run_id, kind="timer"):
-        data: dict[str, Any] = e.get("data") or {}
-        done = e["event"] == "node_end" and e.get("node") == row.node and not data.get("error")
+        done = (
+            e["event"] == "node_end"
+            and e.get("node") == row.node
+            and not an_object(e.get("data") or {}, "the step's end event data").get("error")
+        )
         if not accepted and done:
             # The step has taken the timeout into its checkpoint: from here a crash continues the run, it does
             # not fire again. The mark is fenced: a fire whose lease was taken over cannot write it.
@@ -390,7 +400,7 @@ async def _fire_warning(rt: Runtime, row: Any) -> FireResult:
         return FireResult("not_waiting", row.timer_id)
     if not await timer_store.close(row, None, "fired", owner="warn"):
         return FireResult("duplicate", row.timer_id)
-    await journal(rt, row.thread_id, _events_for("warn", match["payload"]))
+    await journal(rt, row.thread_id, _events_for("warn", an_object(match["payload"], "the interrupt's payload")))
     return FireResult("fired", row.timer_id)
 
 

@@ -560,14 +560,14 @@ class GraphStore(RuntimeStore):
             late = {"event": "stale_owner_finished", "data": {"status": status, "at": now, "events": events}}
             await c.execute(graph_runs.update().where(graph_runs.c.id == run_id).values(events=[*row.events, late]))
 
-    async def meta(self, thread_id: str) -> dict[str, Any]:
+    async def meta(self, thread_id: str) -> Json:
         async with self.tx() as c:
-            meta: Any = (
+            meta: object = (
                 await c.execute(
                     sa.select(graph_threads.c.meta).where(graph_threads.c.id == thread_id, team_visible(graph_threads))
                 )
             ).scalar_one_or_none()
-        return dict(meta or {})
+        return dict(narrow.an_object(meta or {}, "thread meta"))
 
     async def set_overrides(self, thread_id: str, overrides: Json | None, *, updated_at: str) -> None:
         """Replaces the thread's overrides; the caller has checked them against the agent's limits."""

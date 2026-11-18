@@ -54,7 +54,9 @@ from ops_contracts.chat import (
     WidgetPart,
 )
 from ops_service_kit.errors import Forbidden
+from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import now_iso
+from ops_service_kit.narrow import json_object
 
 from ..store.chat_list import ChatListQuery, unsummarised_rows
 from ..store.chat_search import index_thread, indexed_ids, matching_threads
@@ -87,10 +89,6 @@ def _like(cap: str, value: Any) -> str:
         return f"{Decimal(str(value)):.{places}f}"
     except (InvalidOperation, ValueError, TypeError):
         return str(value)
-
-
-def _d(v: Any) -> dict[str, Any]:
-    return cast(dict[str, Any], v) if isinstance(v, dict) else {}
 
 
 # The quick reply that reruns a reply on the deeper model (routers/chat.py), and how many quick replies a reply holds.
@@ -126,7 +124,7 @@ class AssistantBuilder:
     # The alias Think harder reruns a reply on; a reply that made a plan or two calls, on another model, offers it.
     think_alias: str = ""
 
-    def _call(self, c: dict[str, Any]) -> ToolCall:
+    def _call(self, c: Json) -> ToolCall:
         status = str(c.get("status") or "")
         gated, output = None, c.get("output")
         definition = self.catalog.tool(str(c.get("tool")))
@@ -140,10 +138,10 @@ class AssistantBuilder:
             name=str(c.get("tool")),
             label=f"{call_label(self.catalog, c, self.titles)}{EARLIER if c.get('cached') else ''}",
             server=str(c.get("server") or ""),
-            input=_d(c.get("input")),
+            input=json_object(c.get("input")),
             output=output,
             status="running" if status == "running" else "failed" if status == "error" else "success",
-            duration_ms=int(c.get("durationMs") or 0),
+            duration_ms=int(cast(float | str, c.get("durationMs") or 0)),
             gated=gated,
         )
 
@@ -151,14 +149,14 @@ class AssistantBuilder:
         title = self.titles.get(tool)
         return text.replace(tool, title) if title and tool else text
 
-    def _approval(self, interrupt: dict[str, Any]) -> ApprovalWidget:
-        p = _d(interrupt.get("payload"))
+    def _approval(self, interrupt: Json) -> ApprovalWidget:
+        p = json_object(interrupt.get("payload"))
         definition = self.catalog.tool(str(p.get("tool")))
         tpl = definition.approval if definition else None
-        args = _d(p.get("input"))
+        args = json_object(p.get("input"))
         values = {k: str(v) for k, v in args.items()}
         decision = self.decisions.get(str(interrupt.get("id")))
-        step = str(_d(p.get("call")).get("step"))
+        step = str(json_object(p.get("call")).get("step"))
         # The recorded decision is checked against the card's states, as the card's own validation did.
         state: ApprovalState = (
             _APPROVAL_STATE.validate_python(decision.decision)
@@ -216,22 +214,26 @@ class AssistantBuilder:
                 m.content = str(data)
                 return [ReplaceEvent(text=str(data))]
             case "tool_call":
-                call = self._call(_d(data))
+                call = self._call(json_object(data))
                 if call.server == "kernel" and call.name != SEARCH_TOOL:
                     # The built-in present tool: the answer is the part, so no tool card is shown or kept. A search
                     # of the agent's own tools (search_tools) is shown like any call, so a person sees what it found.
-                    view = _d(data).get("view")
-                    if view and _d(data).get("status") == "ok" and isinstance(_d(view).get("followUps"), list):
+                    view = json_object(data).get("view")
+                    if (
+                        view
+                        and json_object(data).get("status") == "ok"
+                        and isinstance(json_object(view).get("followUps"), list)
+                    ):
                         # The reply's quick replies: the latest call's stand, at most three. A reply that asks or reads
                         # back for confirmation is answered by a tap, so the tables its reads drew give way, as they do
                         # for a presented card.
-                        m.follow_ups = [str(r) for r in cast(list[Any], _d(view)["followUps"])][:3]
+                        m.follow_ups = [str(r) for r in cast(list[Any], json_object(view)["followUps"])][:3]
                         m.parts = [p for p in m.parts or [] if p.id in self.presented] or None
-                    if view and _d(data).get("status") == "ok" and "part" in _d(view):
+                    if view and json_object(data).get("status") == "ok" and "part" in json_object(view):
                         # The plan is one part a turn, above the answer, that each plan call redraws.
                         planned = call.name == PLAN_TOOL
                         pid = PLAN_PART if planned else f"wp_{call.id}"
-                        part = WidgetPart.model_validate({**_d(_d(view)["part"]), "id": pid})
+                        part = WidgetPart.model_validate({**json_object(json_object(view)["part"]), "id": pid})
                         self.presented.add(part.id)
                         kept = [p for p in m.parts or [] if p.id != part.id]
                         if planned:
@@ -248,16 +250,16 @@ class AssistantBuilder:
                 if call.status == "running":
                     return [ToolStartEvent(call=call)]
                 out: list[ChatStreamEvent] = [ToolEndEvent(call=call)]
-                view = _d(data).get("view")
-                if view and _d(data).get("status") == "ok" and "part" in _d(view):
+                view = json_object(data).get("view")
+                if view and json_object(data).get("status") == "ok" and "part" in json_object(view):
                     # A shaped result (activities/shaper.py): its id is the call's, so a reload keeps the same one.
-                    part = WidgetPart.model_validate({**_d(_d(view)["part"]), "id": f"wp_{call.id}"})
+                    part = WidgetPart.model_validate({**json_object(json_object(view)["part"]), "id": f"wp_{call.id}"})
                     m.parts = [*(p for p in m.parts or [] if p.id != part.id), part]
                     out.append(PartEvent(part=part))
-                elif view and _d(data).get("status") == "ok":
+                elif view and json_object(data).get("status") == "ok":
                     widget = RecordWidget.model_validate(
                         {
-                            **_d(view),
+                            **json_object(view),
                             "id": f"wg_{call.id}",
                             "app": call.server,
                             "tool": call.name,
@@ -274,56 +276,59 @@ class AssistantBuilder:
                 m.citations = [Citation.model_validate(c) for c in cast(list[Any], data or [])]
                 return [CitationsEvent(citations=m.citations)]
             case "memory":
-                saved = cast(list[Any], _d(data).get("saved") or [])
+                saved = cast(list[Any], json_object(data).get("saved") or [])
                 m.remembered = [RememberedItem.model_validate(x) for x in saved] or None
                 return []
             case "skill_loaded":
-                m.skills = [*(m.skills or []), LoadedSkill.model_validate(_d(data))]
+                m.skills = [*(m.skills or []), LoadedSkill.model_validate(json_object(data))]
                 return []
             case "guardrail_withheld" | "guardrail_retracted":
                 if not self.audit:
                     return []
-                d = _d(data)
+                d = json_object(data)
                 entry = GuardrailAudit(
                     kind="withheld" if type_ == "guardrail_withheld" else "retracted",
                     text=str(d.get("text") or ""),
                     guardrail=GuardrailHit.model_validate(d["guardrail"]) if d.get("guardrail") else None,
-                    stop_reason=d.get("stopReason"),
+                    stop_reason=cast(str | None, d.get("stopReason")),
                     at=at,
                 )
                 m.guardrail_audit = [*(m.guardrail_audit or []), entry]
                 return []
             case "turn":
-                d = _d(data)
-                m.model = d.get("model")
+                d = json_object(data)
+                # The turn event as the agent graph writes it: its fields are strings.
+                m.model = cast(str | None, d.get("model"))
                 if self.think_alias and m.model != self.think_alias and _worth_more_thought(m):
                     m.follow_ups = [*(m.follow_ups or [])[: MAX_FOLLOW_UPS - 1], THINK_HARDER]
                 if d.get("noAnswer"):
                     m.no_answer = True
                 if d.get("status") == "failed":
-                    m.error = d.get("error") or "The reply failed."
-                    m.error_code = d.get("errorCode")
+                    m.error = cast(str, d.get("error") or "The reply failed.")
+                    m.error_code = cast(str | None, d.get("errorCode"))
                 if d.get("guardrail"):
                     m.guardrail = GuardrailHit.model_validate(d["guardrail"])
                     m.content = str(d.get("text") or m.content)
                 return []
             # A spent budget is logged as `waiting` (event_log.REVIEW_KINDS leaves it out): no review owns it.
-            case "waiting" | "waiting_review" if _d(_d(data).get("payload")).get("kind") == "budget_exhausted":
-                p = _d(_d(data).get("payload"))
+            case "waiting" | "waiting_review" if (
+                json_object(json_object(data).get("payload")).get("kind") == "budget_exhausted"
+            ):
+                p = json_object(json_object(data).get("payload"))
                 m.budget = BudgetPause(
-                    id=str(_d(data).get("id") or "") or None,
-                    limit=p.get("limit") or "calls",
+                    id=str(json_object(data).get("id") or "") or None,
+                    limit=cast(Literal["calls", "tokens", "cost"], p.get("limit") or "calls"),
                     spent=str(p.get("spent")),
                     cap=str(p.get("cap")),
                 )
                 self.ended = True
                 return []
             case "budget.answered":
-                d = _d(data)
+                d = json_object(data)
                 if m.budget is not None:
                     m.budget.state = "continued" if d.get("action") == "continue" else "raised"
                     m.budget.answered_by = str(d.get("by") or "")
-                    caps = _d(d.get("budget"))
+                    caps = json_object(d.get("budget"))
                     m.budget.new_cap = (
                         _like(m.budget.cap, caps.get("maxCost"))
                         if m.budget.limit == "cost"
@@ -331,7 +336,7 @@ class AssistantBuilder:
                     )
                 return []
             case "waiting_review":
-                widget = self._approval(_d(data))
+                widget = self._approval(json_object(data))
                 m.widgets = [*(m.widgets or []), widget]
                 out = [WidgetEvent(widget=widget)]
                 if widget.ask_first:
@@ -342,7 +347,7 @@ class AssistantBuilder:
                         out.append(TextEvent(delta=m.content))
                 elif not m.content.strip():
                     # The model went straight to the gated call; say what is waiting and for whom.
-                    reviewers = str(_d(_d(data).get("payload")).get("reviewers") or "a reviewer")
+                    reviewers = str(json_object(json_object(data).get("payload")).get("reviewers") or "a reviewer")
                     m.content = f"I drafted this for review: {widget.action}. It runs once {reviewers} approve it."
                     out.append(TextEvent(delta=m.content))
                 self.ended = True
@@ -351,13 +356,13 @@ class AssistantBuilder:
                 self.ended = True
                 return []
             case "failed":
-                m.error = m.error or str(_d(data).get("message") or "The reply failed.")
+                m.error = m.error or str(json_object(data).get("message") or "The reply failed.")
                 self.ended = True
                 return []
             case _:
                 return []
 
-    def apply_run_event(self, e: dict[str, Any]) -> list[ChatStreamEvent]:
+    def apply_run_event(self, e: Json) -> list[ChatStreamEvent]:
         """A run-stream event (`{event, node, data}`), as `execute` yields it."""
         return self.apply(designed_type(e), e.get("data"))
 
@@ -407,20 +412,20 @@ async def _thread_messages(
     titles = await tool_titles(rt) if runs else {}
     per_run: dict[str, list[Any]] = {}
     superseded: set[str] = set()
-    feedback: dict[str, dict[str, Any] | None] = {}
+    feedback: dict[str, JsonValue] = {}
     finished_children: dict[str, list[Any]] = {}
     for e in events:
         if e.type == "superseded":
-            superseded |= set(_d(e.data).get("messageIds") or [])
+            superseded |= set(cast(list[str], json_object(e.data).get("messageIds") or []))
         elif e.type == "child_finished":
-            finished_children.setdefault(str(_d(e.data).get("parentRunId")), []).append(e)
+            finished_children.setdefault(str(json_object(e.data).get("parentRunId")), []).append(e)
         elif e.type == "feedback":
-            feedback[str(_d(e.data).get("messageId"))] = _d(e.data).get("feedback")
+            feedback[str(json_object(e.data).get("messageId"))] = json_object(e.data).get("feedback")
         elif e.run_id:
             per_run.setdefault(e.run_id, []).append(e)
     messages: list[ChatMessage] = []
     for run in runs:
-        given = _d(_d(run.input).get("input"))
+        given = json_object(json_object(run.input).get("input"))
         if run.kind == "input" and given.get("user_message_id"):
             messages.append(
                 ChatMessage.model_validate(
@@ -456,7 +461,7 @@ async def _thread_messages(
         if reply.content or reply.tool_calls or reply.widgets or reply.error or reply.budget or run.status == "running":
             messages.append(reply)
         for e in finished_children.get(run.id, []):
-            d = _d(e.data)
+            d = json_object(e.data)
             name = str(d.get("workflow") or "").replace("_", " ")
             outcome = f": {d['outcome']}" if d.get("outcome") else ""
             content = f"The {name} workflow ({d.get('childThreadId')}) finished{outcome}."
@@ -495,8 +500,8 @@ async def _with_usage(rt: Runtime, thread_id: str, runs: list[RunRow], messages:
         )
 
 
-def thread_base(rt: Runtime, row: dict[str, Any], messages: list[ChatMessage]) -> dict[str, Any]:
-    meta = _d(row["meta"])
+def thread_base(rt: Runtime, row: Json, messages: list[ChatMessage]) -> Json:
+    meta = json_object(row["meta"])
     kb_ids = [str(k) for k in cast(list[Any], meta.get("kbIds") or [])]
     return {
         "id": row["id"],
@@ -504,9 +509,9 @@ def thread_base(rt: Runtime, row: dict[str, Any], messages: list[ChatMessage]) -
         "agent_id": meta.get("agentId"),
         "agent_name": meta.get("agentName"),
         "agent_version": meta.get("agentVersion") or 1,
-        "kb_ids": kb_ids,
+        "kb_ids": [*kb_ids],
         # As kb-service named them when the thread opened; an older thread shows ids, never the seed's names.
-        "kb_names": [str(n) for n in cast(list[Any], meta.get("kbNames") or [])] or kb_ids,
+        "kb_names": [str(n) for n in cast(list[Any], meta.get("kbNames") or [])] or [*kb_ids],
         "pinned": bool(meta.get("pinned")),
         "archived": bool(meta.get("archived")),
         "owner": meta.get("owner") or "",
@@ -519,11 +524,11 @@ def thread_base(rt: Runtime, row: dict[str, Any], messages: list[ChatMessage]) -
     }
 
 
-def thread_view(rt: Runtime, row: dict[str, Any], messages: list[ChatMessage]) -> ChatThread:
+def thread_view(rt: Runtime, row: Json, messages: list[ChatMessage]) -> ChatThread:
     return ChatThread.model_validate({**thread_base(rt, row, messages), "messages": messages})
 
 
-def thread_row_view(rt: Runtime, row: dict[str, Any], messages: list[ChatMessage]) -> ChatThreadRow:
+def thread_row_view(rt: Runtime, row: Json, messages: list[ChatMessage]) -> ChatThreadRow:
     last = next((m for m in reversed(messages) if m.content), None)
     return ChatThreadRow.model_validate(
         {
@@ -535,13 +540,13 @@ def thread_row_view(rt: Runtime, row: dict[str, Any], messages: list[ChatMessage
     )
 
 
-def owned_by(meta: dict[str, Any], me: Principal) -> bool:
+def owned_by(meta: Json, me: Principal) -> bool:
     """Whose chat this is: by the owner's email, recorded since chat reads became owner only; older threads by name."""
     email = meta.get("ownerEmail")
     return email == me.email if email else meta.get("owner") == me.name
 
 
-def may_read(meta: dict[str, Any], me: Principal) -> bool:
+def may_read(meta: Json, me: Principal) -> bool:
     """chat.view, which every built-in role holds for its own threads only (ops_access): the person who started the
     thread reads it, admins included; an API key reads none."""
     owner = str(meta.get("ownerEmail") or (me.email if meta.get("owner") == me.name else ""))
@@ -552,7 +557,7 @@ def may_read(meta: dict[str, Any], me: Principal) -> bool:
     return True
 
 
-def may_read_thread(row: dict[str, Any], me: Principal) -> bool:
+def may_read_thread(row: Json, me: Principal) -> bool:
     """Any graph thread, for the thread and event routes: a scoped API key reaches its own target only; an agent's chat
     or a call it made for a person (the chat graph) is read under `may_read`, with the person it ran for as owner; any
     other thread by the team rule the store already applies."""
@@ -560,7 +565,7 @@ def may_read_thread(row: dict[str, Any], me: Principal) -> bool:
     if scope is not None and graph_target(str(row["graph"])) != scope:
         return False
     person = person_of_thread(row)
-    meta = _d(row["meta"])
+    meta = json_object(row["meta"])
     # A run-API thread of the chat graph that names no person (no chat, no owner, started for nobody) is the team's.
     if person is None or not (person.email or meta.get("chat") or meta.get("owner")):
         return True
@@ -589,7 +594,11 @@ async def chat_rows(rt: Runtime, me: Principal) -> list[dict[str, Any]]:
     """The caller's own visible chat threads (`may_read`)."""
     rows = await graph_store(rt).threads(CHAT_GRAPH)
     return [
-        r for r in rows if _d(r["meta"]).get("chat") and not _d(r["meta"]).get("hidden") and may_read(_d(r["meta"]), me)
+        r
+        for r in rows
+        if json_object(r["meta"]).get("chat")
+        and not json_object(r["meta"]).get("hidden")
+        and may_read(json_object(r["meta"]), me)
     ]
 
 
@@ -598,11 +607,16 @@ async def chat_row(rt: Runtime, thread_id: str, me: Principal | None) -> dict[st
     `me=None` skips the owner rule for a review decision made from the thread, which the review policy authorises; the
     team rule still applies."""
     row = await graph_store(rt).thread(thread_id)
-    if row is None or row["graph"] != CHAT_GRAPH or not _d(row["meta"]).get("chat") or _d(row["meta"]).get("hidden"):
+    if (
+        row is None
+        or row["graph"] != CHAT_GRAPH
+        or not json_object(row["meta"]).get("chat")
+        or json_object(row["meta"]).get("hidden")
+    ):
         return None
     if (team := current_team()) is not None and row["team_id"] != team:
         return None
-    if me is not None and not may_read(_d(row["meta"]), me):
+    if me is not None and not may_read(json_object(row["meta"]), me):
         return None
     return row
 
@@ -611,7 +625,7 @@ async def update_meta(rt: Runtime, thread_id: str, **patch: Any) -> None:
     await graph_store(rt).merge_meta(thread_id, patch, updated_at=now_iso())
 
 
-def summary(messages: list[ChatMessage]) -> dict[str, Any]:
+def summary(messages: list[ChatMessage]) -> Json:
     """What a thread list reads from meta instead of rebuilding the messages; kept current after every turn."""
     last = next((m for m in reversed(messages) if m.content), None)
     return {
@@ -620,9 +634,9 @@ def summary(messages: list[ChatMessage]) -> dict[str, Any]:
     }
 
 
-async def index_chat(rt: Runtime, row: dict[str, Any], messages: list[ChatMessage]) -> None:
+async def index_chat(rt: Runtime, row: Json, messages: list[ChatMessage]) -> None:
     """The thread's search row: title, agent, last reply and every question, as plain columns (store/chat_search)."""
-    meta = _d(row["meta"])
+    meta = json_object(row["meta"])
     await index_thread(
         graph_store(rt).engine,
         {
@@ -656,19 +670,21 @@ async def with_stored_summaries(rt: Runtime, owner_email: str, owner_name: str) 
     await with_summaries(rt, rows)
 
 
-async def with_summaries(rt: Runtime, rows: list[dict[str, Any]]) -> None:
+async def with_summaries(rt: Runtime, rows: list[Json]) -> None:
     """Threads written before summaries or search rows were kept get them once, here, so later lists read meta only
     and search reads its own columns."""
-    indexed = await indexed_ids(graph_store(rt).engine, [r["id"] for r in rows])
-    missing = [r for r in rows if "messageCount" not in _d(r["meta"]) or r["id"] not in indexed]
+    # A thread row's id is its string column.
+    indexed = await indexed_ids(graph_store(rt).engine, [cast(str, r["id"]) for r in rows])
+    missing = [r for r in rows if "messageCount" not in json_object(r["meta"]) or r["id"] not in indexed]
     if not missing:
         return
-    msgs = await messages_of(rt, [r["id"] for r in missing])
+    msgs = await messages_of(rt, [cast(str, r["id"]) for r in missing])
     for r in missing:
-        s = summary(msgs[r["id"]])
-        r["meta"] = {**_d(r["meta"]), **s}
-        await update_meta(rt, r["id"], **s)
-        await index_chat(rt, r, msgs[r["id"]])
+        rid = cast(str, r["id"])
+        s = summary(msgs[rid])
+        r["meta"] = {**json_object(r["meta"]), **s}
+        await update_meta(rt, rid, **s)
+        await index_chat(rt, r, msgs[rid])
 
 
 async def matching_ids(rt: Runtime, search: str) -> set[str]:

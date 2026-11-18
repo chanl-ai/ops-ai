@@ -4,10 +4,10 @@ a name that cannot be read is None and the console shows the id."""
 
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Generator, Mapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, cast
+from typing import TYPE_CHECKING, cast
 
 from ops_files_client import FilesClient, FilesRefused
 from ops_identity import ServiceUnreachable
@@ -15,6 +15,9 @@ from ops_service_kit.logging import get_logger
 
 from ..store.tenancy import current_tenant
 from .deps import Runtime
+
+if TYPE_CHECKING:
+    from .run_story import FileRef
 
 log = get_logger("ops_agents.file_names")
 
@@ -52,10 +55,12 @@ def names_asked_once() -> Generator[None]:
         _ASKED.reset(token)
 
 
-async def named(rt: Runtime, team: str, files: list[dict[str, Any]], key: str = "id") -> list[dict[str, Any]]:
-    """`files` (each `{key: id, "name": ...}`) with each missing name read from files-service; unchanged without one."""
+async def named(rt: Runtime, team: str, given: Sequence[Mapping[str, object]]) -> list[FileRef]:
+    """`given` (each `{"id": id, "name": ...}`) with each missing name read from files-service, unchanged without."""
+    # Every caller builds its list from `run_story.files_in` and type fields, where a name is a string or None.
+    files: list[FileRef] = [{"id": cast(str, f["id"]), "name": cast(str | None, f.get("name"))} for f in given]
     reader = cast(FilesServiceNames | None, getattr(rt, "file_names", None))
-    missing = [str(f[key]) for f in files if not f.get("name")]
+    missing = [str(f["id"]) for f in files if not f["name"]]
     if reader is None or not missing:
         return files
     asked = _ASKED.get()
@@ -67,4 +72,4 @@ async def named(rt: Runtime, team: str, files: list[dict[str, Any]], key: str = 
             read = await reader.names(team, todo)
             asked |= {(team, i): read.get(i) for i in todo}
         names = {i: n for i in missing if (n := asked[(team, i)]) is not None}
-    return [f if f.get("name") else f | {"name": names.get(str(f[key]))} for f in files]
+    return [f if f["name"] else {"id": f["id"], "name": names.get(f["id"])} for f in files]

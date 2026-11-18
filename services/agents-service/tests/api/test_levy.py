@@ -247,7 +247,7 @@ async def test_hold_places_the_hold_with_the_decisions_call_and_amount(stack: St
     assert values["tool_error"] is None
     # The parent lists the child's outcome.
     assert stack.rt.graph_store is not None
-    listed = (await stack.rt.graph_store.meta(parent))["children"]
+    listed = cast(list[dict[str, Any]], (await stack.rt.graph_store.meta(parent))["children"])
     assert [(c["customerId"], c["outcome"]) for c in listed] == [("CUS-1001", "held")]
     parent_values = (await stack.state(parent))["values"]
     assert parent_values["status"] == "cases_opened"
@@ -272,9 +272,8 @@ async def test_flag_writes_the_note_only_with_the_decisions_token(stack: Stack) 
     assert (bound.thread, bound.tool, bound.approvers) == (case, "add_customer_note", [MAYA])
     assert values["decision"]["call"]["input"]["customerId"] == "CUS-4471"
     assert stack.rt.graph_store is not None
-    assert [(c["customerId"], c["outcome"]) for c in (await stack.rt.graph_store.meta(parent))["children"]] == [
-        ("CUS-4471", "flagged")
-    ]
+    children = cast(list[dict[str, Any]], (await stack.rt.graph_store.meta(parent))["children"])
+    assert [(c["customerId"], c["outcome"]) for c in children] == [("CUS-4471", "flagged")]
 
 
 async def test_a_hold_over_the_balance_shows_the_422_and_waits_for_a_new_decision(stack: Stack) -> None:
@@ -315,7 +314,7 @@ async def test_a_hold_over_the_balance_shows_the_422_and_waits_for_a_new_decisio
     row = (await stack.client.get(f"/runs/{case}")).json()["data"]
     assert row["status"] == "waiting_review"
     assert stack.rt.graph_store is not None
-    listed: list[dict[str, Any]] = list((await stack.rt.graph_store.meta(parent)).get("children") or [])
+    listed = list(cast(list[dict[str, Any]], (await stack.rt.graph_store.meta(parent)).get("children") or []))
     assert case not in {c["threadId"] for c in listed}, "a failed hold is not an outcome"
     # A new decision is a new call with its own step: the reviewer flags instead.
     executor.execute = real  # type: ignore[method-assign]
