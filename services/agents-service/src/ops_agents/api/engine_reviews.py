@@ -992,7 +992,7 @@ async def _typed_action(rt: Runtime, run: dict[str, Any], paused: dict[str, Any]
 
 # An action input naming a person (a task type's `format: person`), and the shape that names one.
 PERSON = "person"
-_EMAIL = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+_EMAIL = re.compile(r"[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+")
 
 
 def _action_inputs(action: dict[str, Any], inputs: dict[str, Any]) -> dict[str, Any]:

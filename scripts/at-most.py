@@ -75,7 +75,7 @@ def main() -> int:
     said = False
     while True:
         for i in range(n):
-            fd = os.open(f"{DIR}/{kind}-{i}.lock", os.O_CREAT | os.O_RDWR, 0o666)
+            fd = os.open(f"{DIR}/{kind}-{i}.lock", os.O_CREAT | os.O_RDWR, 0o600)
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:

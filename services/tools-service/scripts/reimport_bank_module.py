@@ -236,8 +236,9 @@ async def main() -> None:
         httpx.AsyncClient(base_url=args.tools, headers=keeper, timeout=60) as secrets,
     ):
         team = builder.get("X-Team-Id")
-        print(f"BANK_API_KEY: {await ensure_secret(secrets, 'BANK_API_KEY', args.bank_key, team)}")
-        print(f"LEVY_WEBHOOK_SECRET: {await ensure_secret(secrets, 'LEVY_WEBHOOK_SECRET', args.webhook_secret, team)}")
+        for name, value in (("BANK_API_KEY", args.bank_key), ("LEVY_WEBHOOK_SECRET", args.webhook_secret)):
+            state = await ensure_secret(secrets, name, value, team)
+            print(f"{name}: {state}")
         if args.module:
             module_id = args.module
         else:

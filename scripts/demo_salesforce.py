@@ -25,6 +25,7 @@ import os
 import re
 import shutil
 import signal
+import ssl
 import subprocess
 import sys
 import time
@@ -186,7 +187,14 @@ def fake_info() -> dict[str, Any] | None:
     try:
         os.kill(int(info["owner"]), 0)
         url = urlsplit(str(info["control"]))
-        got = httpx.get(str(info["control"]), headers={"Host": "login.salesforce.test"}, verify=False, timeout=5)
+        # The fake answers on the machine's address with a certificate for its own host names, so the CA is trusted
+        # and the certificate is checked against that name through SNI.
+        with httpx.Client(verify=ssl.create_default_context(cafile=str(info["ca"])), timeout=5) as client:
+            got = client.get(
+                str(info["control"]),
+                headers={"Host": "login.salesforce.test"},
+                extensions={"sni_hostname": "login.salesforce.test"},
+            )
         if got.status_code != 200 or not url.hostname:
             return None
     except (OSError, httpx.HTTPError):
