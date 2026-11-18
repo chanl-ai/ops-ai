@@ -16,11 +16,12 @@ import hmac
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Required, TypedDict, cast
 
 from ops_access import ANY_TEAM, BUILTIN_ROLES
 from ops_policy import STEP_UP_TTL_S, Ed25519Signer, TokenError, mint, verify
 from ops_service_kit.errors import Forbidden, Unauthorized
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
 
 from .passwords import Passwords
@@ -48,12 +49,64 @@ def _refused() -> Unauthorized:
     return Unauthorized("Sign in again.")
 
 
+class Claims(TypedDict, total=False):
+    """A session token's claims as `Auth._claims` writes them; `mint` adds `iat` and `exp`. Read back from a token
+    this service signed, the signature vouches for the shape, so it is not checked again."""
+
+    sub: Required[str]
+    tenant_id: Required[str]
+    sid: Required[str]
+    email: str
+    name: str
+    team_ids: list[str]
+    # Absent when the workspace names no Security team.
+    security_team: str
+    roles: dict[str, str]
+    perm_version: int
+    access: dict[str, list[str]]
+    grids: dict[str, dict[str, str]]
+    policies: Json
+    kind: str
+    auth_method: str
+    jti: str
+    aud: list[str]
+    amr: list[str]
+    auth_time: int
+    # An assistant's token only.
+    client_id: str
+    client_name: str
+    iat: int
+    exp: int
+
+
+class KeyRefView(TypedDict):
+    id: str
+    target: Json | None
+
+
+class PrincipalView(TypedDict, total=False):
+    """Who a token or API key stands for, as the session, refresh and introspection replies send it."""
+
+    kind: Required[str]
+    sub: Required[str]
+    email: Required[str]
+    name: Required[str]
+    tenantId: Required[str]
+    teamId: Required[str | None]
+    teamIds: Required[list[str]]
+    roles: Required[dict[str, str]]
+    scopes: Required[list[str]]
+    authMethod: Required[str]
+    policies: Json
+    apiKey: KeyRefView
+
+
 @dataclass(frozen=True)
 class Issued:
     token: str
     refresh_token: str
     expires_at: str
-    principal: dict[str, Any]
+    principal: PrincipalView
 
 
 @dataclass(frozen=True)
@@ -142,11 +195,11 @@ class Auth:
             raise _refused()
         return await self._issue(user, ref.id, f"{ref.id}.{fresh}", method.auth_method, now)
 
-    async def session_of(self, token: str, *, seen: bool = True) -> tuple[SessionRef, dict[str, Any]]:
+    async def session_of(self, token: str, *, seen: bool = True) -> tuple[SessionRef, Claims]:
         """The live session behind a token this service issued; a signed-out session is refused at once. `seen`
         records the moment as the session's last seen; a read request passes False and writes nothing."""
         try:
-            claims = verify(token, self.signer.verifier(AUDIENCE))
+            claims = cast(Claims, verify(token, self.signer.verifier(AUDIENCE)))
         except TokenError as e:
             raise _refused() from e
         # A step-up names the same session but is not one: only a person's token opens the session behind it.
@@ -227,7 +280,7 @@ class Auth:
         audience: list[str] | None = None,
         team: str | None = None,
         client_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> Claims:
         roles = await self.store.roles(user.tenant_id, user.id)
         version = await self.store.permission_version(user.tenant_id)
         access = await self.store.access(user.tenant_id, user.id, now=_iso(now))
@@ -245,15 +298,13 @@ class Auth:
             team_ids = [team]
             roles = {t: r for t, r in roles.items() if t == team}
             access = {t: r for t, r in access.items() if t in (team, ANY_TEAM)}
-        claims = {
+        claims: Claims = {
             "sub": user.id,
             "sid": session_id,
             "email": user.email,
             "name": user.name,
             "tenant_id": user.tenant_id,
             "team_ids": team_ids,
-            # Which team holds the Security-team actions in this workspace, for ops_access; absent when it names none.
-            **({"security_team": security} if security else {}),
             "roles": roles,
             "perm_version": version,
             "access": access,
@@ -266,12 +317,17 @@ class Auth:
             "aud": audience or [AUDIENCE, *(a for a in self.audiences if a != AUDIENCE)],
             "amr": [],
             "auth_time": int(now.timestamp()),
-            **({"client_id": client_id} if client_id else {}),
         }
+        # Which team holds the Security-team actions in this workspace, for ops_access; absent when it names none.
+        # The order of keys is not kept: `mint` signs them sorted.
+        if security:
+            claims["security_team"] = security
+        if client_id:
+            claims["client_id"] = client_id
         return claims
 
-    def _sign(self, claims: dict[str, Any], refresh_token: str, now: datetime) -> Issued:
-        token = mint(claims, self.signer, ttl_s=self.token_ttl_s, now=now.timestamp())
+    def _sign(self, claims: Claims, refresh_token: str, now: datetime) -> Issued:
+        token = mint(dict(claims), self.signer, ttl_s=self.token_ttl_s, now=now.timestamp())
         return Issued(
             token=token,
             refresh_token=refresh_token,
@@ -286,7 +342,7 @@ class Keys:
 
     store: IdentityStore
 
-    async def introspect(self, api_key: str) -> dict[str, Any]:
+    async def introspect(self, api_key: str) -> PrincipalView:
         """`ok_<id>.<secret>` to the key's principal. The secret is compared by hash in constant time (I11)."""
         key_id, _, secret = api_key.removeprefix(KEY_PREFIX).partition(".")
         if not api_key.startswith(KEY_PREFIX) or not secret:
@@ -298,25 +354,25 @@ class Keys:
         if creator is None:
             raise _refused()
         target = await self.store.key_used(key, at=_iso(datetime.now(UTC)))
-        return principal(
+        view = principal(
             kind="api_key",
             user=creator,
             team_id=key.team_id,
             roles={},
             scopes=key.scopes,
             auth_method="api_key",
-        ) | {
-            "teamIds": [key.team_id],
-            "policies": await PolicyStore(self.store.db).token_values(key.tenant_id),
-            # Which key, and what it may start: agents-service records `key:<id>` as a run's starter and refuses
-            # anything outside the target.
-            "apiKey": {"id": key.id, "target": target.model_dump() if target else None},
-        }
+        )
+        view["teamIds"] = [key.team_id]
+        view["policies"] = await PolicyStore(self.store.db).token_values(key.tenant_id)
+        # Which key, and what it may start: agents-service records `key:<id>` as a run's starter and refuses anything
+        # outside the target.
+        view["apiKey"] = {"id": key.id, "target": target.model_dump() if target else None}
+        return view
 
 
 def principal(
     *, kind: str, user: User, team_id: str | None, roles: dict[str, str], scopes: list[str], auth_method: str
-) -> dict[str, Any]:
+) -> PrincipalView:
     return {
         "kind": kind,
         "sub": user.id,
@@ -331,21 +387,22 @@ def principal(
     }
 
 
-def principal_from_claims(claims: dict[str, Any]) -> dict[str, Any]:
-    raw_roles: dict[str, Any] = claims.get("roles") or {}
-    raw_teams: list[Any] = claims.get("team_ids") or []
+def principal_from_claims(claims: Claims) -> PrincipalView:
+    # Each value passes through str() as it always has, so a token's other value types read as they did.
+    raw_roles = claims.get("roles") or {}
+    raw_teams = claims.get("team_ids") or []
     roles = {str(k): str(v) for k, v in raw_roles.items()}
     teams = [str(t) for t in raw_teams]
     user = User(str(claims["tenant_id"]), str(claims["sub"]), str(claims.get("email", "")), str(claims.get("name", "")))
-    return principal(
+    view = principal(
         kind=str(claims.get("kind", "person")),
         user=user,
         team_id=teams[0] if len(teams) == 1 else None,
         roles=roles,
         scopes=[],
         auth_method=str(claims.get("auth_method", "")),
-    ) | {
-        # The token's teams, which for a workspace admin include teams they hold no membership in.
-        "teamIds": teams,
-        "policies": dict(claims.get("policies") or {}),
-    }
+    )
+    # The token's teams, which for a workspace admin include teams they hold no membership in.
+    view["teamIds"] = teams
+    view["policies"] = dict(claims.get("policies") or {})
+    return view

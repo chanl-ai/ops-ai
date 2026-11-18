@@ -5,11 +5,11 @@ admin who asks needs `access.view` in the team; every check is written to the au
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from ops_access import BUILTIN_ROLES, Access, Grids, active, effective
 from ops_identity import Principal
 from ops_service_kit.errors import Forbidden, NotFound
+from ops_service_kit.http import Json
 from ops_service_kit.ids import now_iso
 
 from .store.holders import HolderStore
@@ -38,7 +38,7 @@ class AccessCheck:
         *,
         owner: str | None = None,
         requested_by: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> Json:
         """`caller.team_id` is the team the check is for; the caller must be able to view access there."""
         await self.members.require_admin(caller, "access", "view")
         answer = await self._answer(
@@ -60,7 +60,7 @@ class AccessCheck:
         )
         return answer
 
-    async def why(self, caller: Actor, area: str, action: str) -> dict[str, Any]:
+    async def why(self, caller: Actor, area: str, action: str) -> Json:
         """The caller's own answer for `area.action` in the team they act in, the roles that grant it there, and who
         in the team can give roles: what a locked button says. Not audited, as a person reads only their own."""
         answer = await self._answer(
@@ -68,8 +68,9 @@ class AccessCheck:
         )
         granting = await self.holders.holders(caller.tenant_id, caller.team_id, area, action)
         admins = await self.holders.holders(caller.tenant_id, caller.team_id, "access", "manage")
-        roles = [r.model_dump(by_alias=True) for r in granting.roles]
-        return answer | {"roles": roles, "askable": [h.name for h in admins.holders]}
+        answer["roles"] = [r.model_dump(by_alias=True) for r in granting.roles]
+        answer["askable"] = [h.name for h in admins.holders]
+        return answer
 
     async def _answer(
         self,
@@ -82,7 +83,7 @@ class AccessCheck:
         owner: str | None,
         requested_by: str | None,
         about_someone_else: bool = False,
-    ) -> dict[str, Any]:
+    ) -> Json:
         who = await self.identity.user(tenant, person_id)
         if who is None:
             raise NotFound("No person with that id.")
@@ -111,7 +112,7 @@ class AccessCheck:
         )
         # The built-in roles too, so a refusal names who holds the cell in this workspace.
         await access.grids.load(tenant, version, [*{a.role_id for a in live}, *(r.id for r in BUILTIN_ROLES)])
-        answer: dict[str, Any] = {"personId": person_id, "teamId": team, "area": area, "action": action}
+        answer: Json = {"personId": person_id, "teamId": team, "area": area, "action": action}
         try:
             # An admin checking someone reads a refusal about that person, not one addressed to themselves.
             scope = access.can(
@@ -126,17 +127,13 @@ class AccessCheck:
             )
             grids = await self.roles.grids(tenant, sorted({a.role_id for a in live}))
             granted = effective(live, grids, [team], now).get(team, {}).get((area, action))
-            answer |= {
-                "allowed": True,
-                "scope": scope,
-                "grantedBy": list(granted.roles) if granted else [],
-                "refusedBy": None,
-            }
+            answer["allowed"] = True
+            answer["scope"] = scope
+            answer["grantedBy"] = [{**r} for r in granted.roles] if granted else []
+            answer["refusedBy"] = None
         except Forbidden as e:
-            answer |= {
-                "allowed": False,
-                "scope": None,
-                "grantedBy": [],
-                "refusedBy": {"code": e.code, "reason": e.message},
-            }
+            answer["allowed"] = False
+            answer["scope"] = None
+            answer["grantedBy"] = []
+            answer["refusedBy"] = {"code": e.code, "reason": e.message}
         return answer

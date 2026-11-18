@@ -8,9 +8,10 @@ import hashlib
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TypedDict
 
 from ops_service_kit.errors import NotFound, ValidationFailed
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListParams
 from ops_store.listing import ListPage
@@ -25,15 +26,58 @@ def _iso(t: datetime) -> str:
     return t.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-def target_of(row: KeyRow) -> dict[str, Any] | None:
+class KeyTarget(TypedDict):
+    kind: str
+    id: str | None
+    version: int | None
+
+
+class KeyView(TypedDict):
+    """A key as `ApiKeyOut` sends it; never its secret."""
+
+    id: str
+    name: str
+    prefix: str
+    scopes: list[str]
+    createdBy: str
+    createdAt: str
+    lastUsedAt: str | None
+    expiresAt: str | None
+    team: str
+    status: str
+    target: KeyTarget | None
+
+
+class KeySummary(TypedDict):
+    """A key as `ApiKeySummary` sends it to another service."""
+
+    id: str
+    name: str
+    prefix: str
+    status: str
+    target: KeyTarget | None
+    lastUsedAt: str | None
+    expiresAt: str | None
+    createdAt: str
+    teamId: str
+    revision: int
+
+
+class KeyCreated(TypedDict):
+    key: KeyView
+    # Shown once, never stored or sent again.
+    secret: str
+
+
+def target_of(row: KeyRow) -> KeyTarget | None:
     if not row.target_kind:
         return None
     return {"kind": row.target_kind, "id": row.target_id, "version": row.target_version}
 
 
-def shown(row: KeyRow) -> dict[str, Any]:
+def shown(row: KeyRow) -> KeyView:
     status = status_of(row.revoked_at, row.disabled_at)
-    out = {
+    out: KeyView = {
         "id": row.id,
         "name": row.name,
         "prefix": row.prefix,
@@ -49,10 +93,18 @@ def shown(row: KeyRow) -> dict[str, Any]:
     return out
 
 
-def summary(row: KeyRow) -> dict[str, Any]:
+def summary(row: KeyRow) -> KeySummary:
     """A key as another service lists it: what it serves and whether it works, never its creator or secret."""
     out = shown(row)
-    return {k: out[k] for k in ("id", "name", "prefix", "status", "target", "lastUsedAt", "expiresAt", "createdAt")} | {
+    return {
+        "id": out["id"],
+        "name": out["name"],
+        "prefix": out["prefix"],
+        "status": out["status"],
+        "target": out["target"],
+        "lastUsedAt": out["lastUsedAt"],
+        "expiresAt": out["expiresAt"],
+        "createdAt": out["createdAt"],
         "teamId": row.team_id,
         "revision": row.revision,
     }
@@ -68,7 +120,7 @@ class ApiKeys:
         (an MCP link's Keys tab)."""
         await self.members.require_admin(actor)
         page = await self.store.page(actor.tenant_id, actor.team_id, params)
-        page["data"] = [shown(KeyRow.model_validate(r)) for r in page["data"]]
+        page["data"] = [dict(shown(KeyRow.model_validate(r))) for r in page["data"]]
         return page
 
     async def create(
@@ -77,8 +129,8 @@ class ApiKeys:
         name: str,
         scopes: list[str],
         expires_in_days: int | None,
-        target: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+        target: Json | None = None,
+    ) -> KeyCreated:
         await self.members.require_admin(actor, "access", "create")
         if target is not None and target["kind"] == "mcp_link" and ("write" in scopes or target.get("version")):
             # A key opens an MCP link for a system with no person behind it, so it reads only (decision D11).
@@ -102,12 +154,12 @@ class ApiKeys:
         )
         return {"key": shown(row), "secret": f"ok_{key_id}.{secret}"}
 
-    async def revoke(self, actor: Actor, key_id: str) -> dict[str, Any]:
+    async def revoke(self, actor: Actor, key_id: str) -> KeyView:
         await self.members.require_admin(actor, "access", "delete")
         row = await self.store.revoke(actor, key_id, at=_iso(datetime.now(UTC)))
         if row is None:
             raise NotFound("This team has no such key.")
         return shown(row)
 
-    async def summaries(self, tenant_id: str) -> list[dict[str, Any]]:
+    async def summaries(self, tenant_id: str) -> list[KeySummary]:
         return [summary(r) for r in await self.store.every(tenant_id)]

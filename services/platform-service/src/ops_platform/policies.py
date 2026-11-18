@@ -6,10 +6,12 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any, NotRequired, TypedDict
 
 from ops_access import BY_KEY, POLICIES
+from ops_service_kit import narrow
 from ops_service_kit.errors import Unprocessable, ValidationFailed
+from ops_service_kit.http import Json, JsonValue
 
 from .store.members import Actor
 from .store.policies import OLD_KEYS, PolicyStore
@@ -19,6 +21,27 @@ from .teams import Members
 Guard = Callable[[Actor, Any], Awaitable[None]]
 
 
+class PolicyChoiceView(TypedDict):
+    value: str
+    title: str
+    description: str
+
+
+class PolicyView(TypedDict):
+    """One policy as `PolicyOut` sends it."""
+
+    key: str
+    value: JsonValue
+    # The catalogue's open default, any JSON value.
+    default: Any
+    changedBy: str
+    effect: str
+    kind: str
+    title: str
+    choices: NotRequired[list[PolicyChoiceView]]
+    note: NotRequired[str]
+
+
 @dataclass
 class Policies:
     store: PolicyStore
@@ -26,17 +49,17 @@ class Policies:
     # Checks a value must pass before it is set, by policy key (companySignInRequired needs a break-glass account).
     guards: dict[str, Guard] = field(default_factory=dict[str, "Guard"])
 
-    async def list(self, actor: Actor) -> list[dict[str, Any]]:
+    async def list(self, actor: Actor) -> list[PolicyView]:
         """Every member of the workspace reads every policy: they are not secret, and a person who may change one
         must see it. Changing stays on each policy's cell."""
         return await self.for_tenant(actor.tenant_id)
 
-    async def for_tenant(self, tenant_id: str) -> list[dict[str, Any]]:
+    async def for_tenant(self, tenant_id: str) -> list[PolicyView]:
         """Every policy of the tenant, for a service whose token holds `settings:view` (a background sweep has no
         person, so no token carrying the values)."""
         return self._rows(await self.store.values(tenant_id))
 
-    async def set(self, actor: Actor, key: str, value: Any) -> dict[str, Any]:
+    async def set(self, actor: Actor, key: str, value: Any) -> PolicyView:
         # The cell the policy names: settings.manage in the security team for most (in the acting team for a team's
         # approval rule, `held_in`), chat.manage for memory retention.
         # An old key lands in appChanges / appChangesByApp (the store moves it), so the cell checked is that key's:
@@ -61,11 +84,13 @@ class Policies:
     async def _check_reviewer_roles(self, actor: Actor, key: str, value: Any) -> None:
         """A "reviewer" answer names a role, and the role must be able to decide reviews: otherwise nobody could ever
         answer and every change would wait for good. A role that does not exist is refused for the same reason."""
-        entries: list[dict[str, Any]] = []
-        if key == "appChanges" and isinstance(value, dict) and cast(dict[str, Any], value).get("ask"):
-            entries = [cast(dict[str, Any], value)]
+        # Read only when it is an object, as the isinstance checks say; `json_object` is the same object then.
+        given = narrow.json_object(value)
+        entries: list[Json] = []
+        if key == "appChanges" and isinstance(value, dict) and given.get("ask"):
+            entries = [given]
         elif key == "appChangesByApp" and isinstance(value, dict):
-            entries = [cast(dict[str, Any], e) for e in cast(dict[str, Any], value).values() if isinstance(e, dict)]
+            entries = [narrow.json_object(e) for e in given.values() if isinstance(e, dict)]
         else:
             return
         roles = self.members.roles or RoleStore(self.members.store)
@@ -86,9 +111,10 @@ class Policies:
                 )
 
     @staticmethod
-    def _rows(values: dict[str, Any]) -> list[dict[str, Any]]:
-        return [
-            {
+    def _rows(values: Json) -> list[PolicyView]:
+        rows: list[PolicyView] = []
+        for p in POLICIES:
+            row: PolicyView = {
                 "key": p.key,
                 "value": values[p.key],
                 "default": p.default,
@@ -97,12 +123,10 @@ class Policies:
                 # How the Policies page draws it and names it, so a new policy needs no console change.
                 "kind": p.kind,
                 "title": p.title,
-                **(
-                    {"choices": [{"value": v, "title": t, "description": d} for v, t, d in p.choices]}
-                    if p.choices
-                    else {}
-                ),
-                **({"note": p.note} if p.note else {}),
             }
-            for p in POLICIES
-        ]
+            if p.choices:
+                row["choices"] = [{"value": v, "title": t, "description": d} for v, t, d in p.choices]
+            if p.note:
+                row["note"] = p.note
+            rows.append(row)
+        return rows

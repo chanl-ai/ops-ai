@@ -8,11 +8,12 @@ the caller is not found, so the route cannot be used to list who exists elsewher
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import NotRequired, TypedDict
 
-from ops_access import ACTIONS, ANY_TEAM, AREAS, BUILTIN_GRIDS, SECURITY_TEAM_ACTIONS, Grant, effective
+from ops_access import ACTIONS, ANY_TEAM, AREAS, BUILTIN_GRIDS, SECURITY_TEAM_ACTIONS, Grant, Granted, effective
 from ops_access.catalogue import ADMIN
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
+from ops_service_kit.http import Json
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListParams
 from ops_store.listing import ListPage
@@ -25,6 +26,59 @@ from .store.roles import (
     RoleRow,
     RoleStore,
 )
+
+
+class Cell(TypedDict):
+    area: str
+    action: str
+    scope: str
+
+
+class GridRow(TypedDict):
+    area: str
+    # Every action in the catalogue: the scope this role grants it, or None.
+    actions: dict[str, str | None]
+
+
+class RoleView(TypedDict):
+    """One role as `RoleDetail` sends it; the routes add `canEdit`, and a created role names the cells it left out."""
+
+    id: str
+    name: str
+    builtin: bool
+    description: str
+    assignmentCount: int
+    permissionCount: int
+    permissions: list[Cell]
+    grid: list[GridRow]
+    notHeld: list[str]
+    leftOut: NotRequired[list[str]]
+    canEdit: NotRequired[bool]
+
+
+class EffectiveCell(TypedDict):
+    area: str
+    action: str
+    scope: str
+    securityTeamOnly: bool
+    roles: list[dict[str, str]]
+
+
+class TeamCells(TypedDict):
+    teamId: str
+    teamName: str
+    permissions: list[EffectiveCell]
+
+
+class PermissionsView(TypedDict):
+    """What a person may do, as `PermissionsOut` sends it; the person route adds their name and address."""
+
+    workspace: list[EffectiveCell]
+    personId: str
+    permissionVersion: int
+    teams: list[TeamCells]
+    name: NotRequired[str]
+    email: NotRequired[str]
 
 
 def custom_role_refuses(area: str, action: str) -> bool:
@@ -46,14 +100,18 @@ class Roles:
     async def list(self, tenant_id: str, params: ListParams) -> ListPage:
         return await self.store.roles(tenant_id, params)
 
-    async def get(self, tenant_id: str, role_id: str) -> dict[str, Any]:
+    async def get(self, tenant_id: str, role_id: str) -> RoleView:
         role = await self.store.role_by_id(tenant_id, role_id)
         if role is None:
             raise NotFound("No role with that id.")
         grants = role.grants
         held = {(a, x): s for a, x, s in grants}
         return {
-            **role.model_dump(by_alias=True, exclude={"grants"}),
+            "id": role.id,
+            "name": role.name,
+            "builtin": role.builtin,
+            "description": role.description,
+            "assignmentCount": role.assignment_count,
             "permissionCount": len(grants),
             "permissions": [{"area": a, "action": x, "scope": s} for a, x, s in grants],
             # The whole catalogue, one row per area, so a grid shows refused cells as well as granted ones.
@@ -66,9 +124,7 @@ class Roles:
             else [f"{a}.{x}" for a in AREAS for x in ACTIONS if custom_role_refuses(a, x)],
         }
 
-    async def edit(
-        self, tenant_id: str, role_id: str, cells: list[Grant], *, by: str, request_id: str
-    ) -> dict[str, Any]:
+    async def edit(self, tenant_id: str, role_id: str, cells: list[Grant], *, by: str, request_id: str) -> RoleView:
         """Sets a role's cells, built-in or custom. Admin keeps every cell: 409
         `admin_holds_every_cell`. A cell outside the catalogue is 400 `unknown_cell`. The caller's right to change roles
         is checked by the route."""
@@ -102,7 +158,7 @@ class Roles:
         cells: list[Grant] | None,
         by: str,
         request_id: str,
-    ) -> dict[str, Any]:
+    ) -> RoleView:
         """A custom role: from `cells`, or a copy of `copy_of`'s cells less those a custom role may not hold (named in
         `leftOut`), or empty. 409 `name_taken` for a name another role has."""
         left_out: list[str] = []
@@ -123,11 +179,13 @@ class Roles:
             )
         except RoleNameTakenError as e:
             raise Conflict(f"A role named {name} exists already.", code="name_taken") from e
-        return await self.get(tenant_id, role_id) | {"leftOut": left_out}
+        made = await self.get(tenant_id, role_id)
+        made["leftOut"] = left_out
+        return made
 
     async def rename(
         self, tenant_id: str, role_id: str, *, name: str, description: str | None, by: str, request_id: str
-    ) -> dict[str, Any]:
+    ) -> RoleView:
         role = await self._custom(tenant_id, role_id, "renamed")
         try:
             await self.store.rename(
@@ -154,7 +212,7 @@ class Roles:
 
     async def grant(
         self, tenant_id: str, person_id: str, role_id: str, team_id: str, *, by: str, request_id: str
-    ) -> dict[str, Any]:
+    ) -> Json:
         """Gives a person a custom role in a team they belong to. A built-in role comes with their team role instead
         (409 `builtin_role`); 409 `not_a_member` outside their teams, `already_granted` when they hold it there."""
         role = await self.store.role_by_id(tenant_id, role_id)
@@ -182,7 +240,7 @@ class Roles:
             raise Conflict(f"A built-in role is not {verb}; copy it to make your own.", code="builtin_role")
         return role
 
-    async def reset(self, tenant_id: str, role_id: str, *, by: str, request_id: str) -> dict[str, Any]:
+    async def reset(self, tenant_id: str, role_id: str, *, by: str, request_id: str) -> RoleView:
         """Puts a built-in role back to the cells it ships with; a custom role has none to go back to (400
         `not_builtin`)."""
         seed = BUILTIN_GRIDS.get(role_id)
@@ -193,12 +251,12 @@ class Roles:
         await self.store.set_grid(tenant_id, role_id, list(seed), by=by, request_id=request_id, action="role.reset")
         return await self.get(tenant_id, role_id)
 
-    async def of_me(self, tenant_id: str, user_id: str) -> dict[str, Any]:
+    async def of_me(self, tenant_id: str, user_id: str) -> PermissionsView:
         mine = await self.store.holdings(tenant_id, user_id)
         grids, security, version = await self._view_inputs(tenant_id, mine)
         return permissions_view(user_id, mine, grids, security=security, version=version, teams=None)
 
-    async def of_person(self, tenant_id: str, caller_id: str, person_id: str) -> dict[str, Any]:
+    async def of_person(self, tenant_id: str, caller_id: str, person_id: str) -> PermissionsView:
         if person_id == caller_id:
             return await self.of_me(tenant_id, caller_id)
         caller = await self.store.holdings(tenant_id, caller_id)
@@ -226,7 +284,7 @@ def permissions_view(
     security: str | None,
     version: int,
     teams: list[str] | None,
-) -> dict[str, Any]:
+) -> PermissionsView:
     """What a person may do, per team and in every team, from their holdings and the grids of the roles they hold: what
     `/v1/me/permissions` answers. `teams` limits the answer to those teams; None shows every team the person belongs to
     or is assigned in."""
@@ -246,7 +304,7 @@ def permissions_view(
     every = [a for a in assignments if a.team_id == ANY_TEAM]
     workspace = effective(every, grids, [ANY_TEAM], now_iso()).get(ANY_TEAM, {}) if every else {}
 
-    def rows(held: dict[tuple[str, str], Any]) -> list[dict[str, Any]]:
+    def rows(held: dict[tuple[str, str], Granted]) -> list[EffectiveCell]:
         return [
             {
                 "area": area,
