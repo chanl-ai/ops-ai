@@ -9,6 +9,9 @@
 #   5 signed in  the first admin signs in and lists agents through the public origin (platform issues, agents verifies)
 #   6 walk    docs/usecases/lib/stg_click_walk.mjs signs in and opens every console page and the first row of each list;
 #             SKIP_WALK=1 leaves it out
+# STG_ROLLBACK=1 (make stg-rollback) is a different run: REF's image is already pushed, so it only replaces the machine
+# with it (step 2) and waits for every process (step 4). No grants, OCR, plugin, sign-in or walk step: migrations only
+# add, so the older image runs on the newer schema, and grants for an older ref are already applied.
 # Each step prints its seconds; any failure exits non-zero. App names come from ~/.config/ops-ai/staging.env
 # (template deploy/fly/staging.env.example); secrets are read from the same directory and never printed.
 # Runbook: docs/deploy/fly-staging.md.
@@ -18,6 +21,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 . "$root/deploy/fly/stg_env.sh"
 app=$STG_APP
 ref=${REF:-HEAD}
+rollback=${STG_ROLLBACK:-0}
 conf=$stg_conf
 sha=$(git -C "$root" rev-parse --short=8 "$ref")
 # An open release PR pins staging to its build so it can be tested and rolled back to before merge.
@@ -47,7 +51,7 @@ echo "stg-deploy: $app at $sha"
 started=$(date +%s)
 begin=$started
 
-if [ "${SKIP_BUILD:-0}" != 1 ]; then
+if [ "${SKIP_BUILD:-0}" != 1 ] && [ "$rollback" != 1 ]; then
   # What's new shows the release tag on a tagged commit, else the commit (next.config.ts); the archive has no .git.
   tag=$(git -C "$root" describe --tags --exact-match --match 'v*' "$sha" 2>/dev/null || true)
   fly deploy "$work/src" -c "$work/src/deploy/fly/fly.toml" -a "$app" --remote-only --build-only --push \
@@ -61,23 +65,25 @@ fly deploy "$work/src" -c "$work/src/deploy/fly/fly.toml" -a "$app" --image "$im
   --wait-timeout 10m
 step "deploy (release command and machine)"
 
-# grants.sql at REF, built on a throwaway server of the cluster's major version.
-docker run -d --rm --name "$ddl_db" -e POSTGRES_PASSWORD=ddl -p 127.0.0.1::5432 pgvector/pgvector:pg18 >/dev/null
-ddl_port=$(docker port "$ddl_db" 5432/tcp | head -1 | sed 's/.*://')
-until docker exec "$ddl_db" pg_isready -U postgres -q 2>/dev/null; do sleep 1; done
-make -s -C "$root" db-ddl SERVER="postgresql://postgres:ddl@127.0.0.1:$ddl_port/postgres" REF="$sha" OUT="$work/ddl" \
-  >"$work/ddl.log" 2>&1 || { tail -20 "$work/ddl.log"; exit 1; }
-proxy_port=${STG_PROXY_PORT:-15433}
-fly proxy "$proxy_port:5432" -a "$STG_DB_APP" >/dev/null 2>&1 &
-proxy=$!
-for _ in $(seq 30); do nc -z 127.0.0.1 "$proxy_port" 2>/dev/null && break; sleep 1; done
-# The attach's URL with the proxy's address; read from the file, never echoed.
-superuser=$(sed -E "s#@[^/]+/#@127.0.0.1:$proxy_port/#; s#\?.*##" "$conf/staging-db-url.txt")
-psql -q -v ON_ERROR_STOP=1 "$superuser" -f "$work/ddl/grants.sql" >"$work/grants.log" 2>&1 \
-  || { tail -20 "$work/grants.log"; exit 1; }
-kill "$proxy" 2>/dev/null || true
-proxy=""
-step grants
+if [ "$rollback" != 1 ]; then
+  # grants.sql at REF, built on a throwaway server of the cluster's major version.
+  docker run -d --rm --name "$ddl_db" -e POSTGRES_PASSWORD=ddl -p 127.0.0.1::5432 pgvector/pgvector:pg18 >/dev/null
+  ddl_port=$(docker port "$ddl_db" 5432/tcp | head -1 | sed 's/.*://')
+  until docker exec "$ddl_db" pg_isready -U postgres -q 2>/dev/null; do sleep 1; done
+  make -s -C "$root" db-ddl SERVER="postgresql://postgres:ddl@127.0.0.1:$ddl_port/postgres" REF="$sha" OUT="$work/ddl" \
+    >"$work/ddl.log" 2>&1 || { tail -20 "$work/ddl.log"; exit 1; }
+  proxy_port=${STG_PROXY_PORT:-15433}
+  fly proxy "$proxy_port:5432" -a "$STG_DB_APP" >/dev/null 2>&1 &
+  proxy=$!
+  for _ in $(seq 30); do nc -z 127.0.0.1 "$proxy_port" 2>/dev/null && break; sleep 1; done
+  # The attach's URL with the proxy's address; read from the file, never echoed.
+  superuser=$(sed -E "s#@[^/]+/#@127.0.0.1:$proxy_port/#; s#\?.*##" "$conf/staging-db-url.txt")
+  psql -q -v ON_ERROR_STOP=1 "$superuser" -f "$work/ddl/grants.sql" >"$work/grants.log" 2>&1 \
+    || { tail -20 "$work/grants.log"; exit 1; }
+  kill "$proxy" 2>/dev/null || true
+  proxy=""
+  step grants
+fi
 
 # `fly deploy` returns once the machine starts; the host then starts each process in turn. Wait for all of them.
 health="python3 /app/deploy/host/ops_host.py --check /app/deploy/fly/processes.toml"
@@ -92,6 +98,10 @@ until fly ssh console -a "$app" -C "$health" >"$work/health.txt" 2>&1; do
 done
 grep -E '^(ok|DOWN)' "$work/health.txt"
 step "health (every process up)"
+if [ "$rollback" = 1 ]; then
+  echo "stg-deploy: rollback: $app runs $sha again, every process up in $(( $(date +%s) - begin ))s"
+  exit 0
+fi
 # Scanned files read only where Tesseract works and documents-service sees it; without it every scan fails quietly.
 fly ssh console -a "$app" -C "python3 /app/deploy/fly/check_ocr.py" >"$work/ocr.txt" 2>&1 || { cat "$work/ocr.txt"; exit 1; }
 grep -E '^(ok|FAIL) ocr' "$work/ocr.txt"
