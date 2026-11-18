@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, TypedDict
+from typing import TypedDict
 
 import httpx
 
 from ops_documents_client import DocumentsClient
 from ops_identity import ServiceClient, dev_service_signer
-from ops_service_kit.http import PageJSON
+from ops_service_kit.http import Json, JsonList, PageJSON
 
 
 def _error(status: int, code: str, message: str) -> httpx.Response:
@@ -36,6 +36,14 @@ class FakeTypesPage(TypedDict):
     facets: dict[str, dict[str, int]]
 
 
+class HeldExtraction(TypedDict):
+    """An extraction asked for under one Idempotency-Key: the request it was asked with and the polls it has left."""
+
+    request: Json
+    id: str
+    polls: int
+
+
 @dataclass
 class FakeDocumentsService:
     # Each file's pages of text, by file id; a file missing here has no text, even by OCR.
@@ -44,17 +52,18 @@ class FakeDocumentsService:
     polls: int = 0
     # A refusal every call answers with, standing in for a file documents-service cannot read.
     refuse: tuple[int, str, str] | None = None
-    keys: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
+    keys: dict[str, HeldExtraction] = field(default_factory=dict[str, HeldExtraction])
     # Readings made, by (file id, OCR mode); a second ask for the same pair reads nothing.
     readings: dict[tuple[str, str], int] = field(default_factory=dict[tuple[str, str], int])
     reads: int = 0
     # The team's document types, answered a page of `type_page_size` at a time as the real list is.
     types: list[FakeType] = field(default_factory=list[FakeType])
     type_page_size: int = 20
-    _running: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
+    _running: dict[str, HeldExtraction] = field(default_factory=dict[str, HeldExtraction])
 
-    def _reading(self, file_id: str, ocr: str) -> dict[str, Any]:
+    def _reading(self, file_id: str, ocr: str) -> Json:
         texts = self.pages.get(file_id)
+        pages: JsonList
         if not texts:
             pages = [{"number": 1, "source": "none", "text": "", "unreadReason": "no text found, even by OCR"}]
         else:
@@ -70,10 +79,10 @@ class FakeDocumentsService:
             "pages": pages,
         }
 
-    def _pending(self, file_id: str, ocr: str) -> dict[str, Any]:
+    def _pending(self, file_id: str, ocr: str) -> Json:
         return {**self._reading(file_id, ocr), "status": "reading", "pagesDone": 0, "pages": None}
 
-    def _answer(self, extraction_id: str, file_id: str) -> dict[str, Any]:
+    def _answer(self, extraction_id: str, file_id: str) -> Json:
         texts = self.pages.get(file_id)
         if not texts:
             return {"id": extraction_id, "status": "unreadable", "outcome": "unreadable", "fileId": file_id}
@@ -128,7 +137,7 @@ class FakeDocumentsService:
             held["polls"] -= 1
             if held["polls"] > 0:
                 return httpx.Response(200, json={"data": {"id": held["id"], "status": "running"}})
-            return httpx.Response(200, json={"data": self._answer(held["id"], held["request"]["fileId"])})
+            return httpx.Response(200, json={"data": self._answer(held["id"], str(held["request"]["fileId"]))})
         return _error(404, "no_route", f"{request.method} {path} is not faked")
 
     def client(self, *, service: str = "agents") -> DocumentsClient:

@@ -47,6 +47,19 @@ def a_list(value: object, what: str) -> JsonList:
     return cast(JsonList, value)
 
 
+def entries(value: JsonValue) -> JsonList:
+    """`value or []` iterated: a list's items (the list itself), an object's keys, a string's characters, nothing for
+    an empty or false value; a number or `true` is not iterable and raises `Malformed`. For saved definitions typed
+    after they were first stored, so a wrongly shaped one is refused (or fails the read) exactly as it was before."""
+    if not value:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict | str):
+        return [*value]
+    raise Malformed(f"{value!r} is not a list")
+
+
 def required[T: (str, int, float, bool)](obj: Mapping[str, JsonValue], key: str, kind: type[T]) -> T:
     """The scalar at `key`, read as `field` reads it, or `Malformed` when it is missing or another type."""
     value = field(obj, key, kind)

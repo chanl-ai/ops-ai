@@ -13,8 +13,9 @@ import hashlib
 import hmac
 import json
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, TypedDict, cast
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
@@ -28,6 +29,14 @@ class TokenError(ValueError):
     def __init__(self, reason: str, message: str) -> None:
         super().__init__(message)
         self.reason = reason
+
+
+class TokenHeader(TypedDict, total=False):
+    """The header keys a verifier reads, as they arrive: unchecked, so each value is whatever the token carried."""
+
+    alg: object
+    typ: object
+    kid: object
 
 
 class Signer(Protocol):
@@ -139,7 +148,7 @@ def _unb64(part: str) -> bytes:
     return base64.urlsafe_b64decode(part + "=" * (-len(part) % 4))
 
 
-def mint(claims: dict[str, Any], signer: Signer, *, ttl_s: int, now: float | None = None) -> str:
+def mint(claims: Mapping[str, object], signer: Signer, *, ttl_s: int, now: float | None = None) -> str:
     """Signs `claims` plus `iat` and `exp`."""
     issued = int(now if now is not None else time.time())
     body = {**claims, "iat": issued, "exp": issued + ttl_s}
@@ -183,7 +192,7 @@ def verify(
         raise TokenError("malformed", "The token could not be read.") from e
     if not isinstance(header, dict) or not isinstance(claims, dict):
         raise TokenError("malformed", "The token could not be read.")
-    if cast(dict[str, Any], header).get("alg") != signer.algorithm:
+    if cast(TokenHeader, header).get("alg") != signer.algorithm:
         # Checked before the signature: a token claiming `none` or another algorithm is never verified as this one.
         raise TokenError("algorithm", "The token is signed with an algorithm this service does not accept.")
     if not signer.verify(f"{parts[0]}.{parts[1]}".encode(), signature):
@@ -205,7 +214,7 @@ def verify(
     return body
 
 
-def header_of(token: str) -> dict[str, Any]:
+def header_of(token: str) -> TokenHeader:
     """The header without verifying it: a verifier reads `kid` here to choose the key, then verifies with it."""
     try:
         head = json.loads(_unb64(token.split(".", maxsplit=1)[0]))
@@ -213,7 +222,7 @@ def header_of(token: str) -> dict[str, Any]:
         raise TokenError("malformed", "The token could not be read.") from e
     if not isinstance(head, dict):
         raise TokenError("malformed", "The token could not be read.")
-    return cast(dict[str, Any], head)
+    return cast(TokenHeader, head)
 
 
 def claims_of(token: str) -> dict[str, Any]:

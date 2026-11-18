@@ -47,14 +47,14 @@ from ops_documents.store.document_types import (
 )
 from ops_documents.store.extractions import ExtractionRow
 from ops_extract import boxes, rules, templates
-from ops_extract.checks import entries, fold
+from ops_extract.checks import fold
 from ops_extract.shapes import FieldDefinition
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_pii import mask
 from ops_service_kit.http import Json, JsonList, JsonValue, PageJSON
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
-from ops_service_kit.narrow import an_object, json_list, json_object
+from ops_service_kit.narrow import an_object, entries, json_list, json_object
 from ops_service_kit.settings import Settings
 from ops_store import background, isolation
 
@@ -204,7 +204,7 @@ def example_view(e: ExampleRow) -> dict[str, Any]:
 def matches(f: FieldDefinition, expected: Any, got: Any) -> bool:
     """A read value against the expected one, both normalised as the checks normalise a field (numbers, money,
     dates), and text compared folded (case, quotes, runs of space)."""
-    want, _ = normalise(dict(f), expected) if expected is not None else (None, 0.0)
+    want, _ = normalise(f, expected) if expected is not None else (None, 0.0)
     if want is None:
         want = expected
     if isinstance(want, str) and isinstance(got, str):
@@ -473,9 +473,7 @@ class DocumentTypes:
                 for f in fields:
                     key = f["key"]
                     want = saved.get(key, {}).get("value")
-                    got = (
-                        normalise(dict(f), json_object(answers.get(key)).get("value"))[0] if answers.get(key) else None
-                    )
+                    got = normalise(f, json_object(answers.get(key)).get("value"))[0] if answers.get(key) else None
                     if want is not None or got is not None:
                         compared[key] = {"expected": want, "got": got, "match": matches(f, want, got)}
                 check["fields"] = compared

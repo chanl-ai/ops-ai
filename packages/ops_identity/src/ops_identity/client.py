@@ -28,6 +28,7 @@ import httpx
 
 from ops_policy import Ed25519Signer
 from ops_service_kit.errors import ApiError, ServiceUnavailable
+from ops_service_kit.narrow import json_object
 from ops_service_kit.request_timing import current, current_request_id
 from ops_service_kit.settings import Settings
 
@@ -204,9 +205,11 @@ def _data(audience: str, r: httpx.Response) -> Any:
                 r.status_code, f"{audience} answered {r.status_code} with a body that is not JSON", code="bad_response"
             ) from None
         body = None
-    envelope: dict[str, Any] = cast(dict[str, Any], body) if isinstance(body, dict) else {}
+    envelope = json_object(body)
     if r.is_success:
         return envelope.get("data", body)
+    # Not narrowed: an `error` of another shape fails here as an AttributeError, which callers that catch ValueError
+    # around a call (an unknown tool's policy, a file not ready) must not take for an answer.
     error: dict[str, Any] = cast(dict[str, Any], envelope.get("error") or {})
     raise ServiceCallError(
         r.status_code,

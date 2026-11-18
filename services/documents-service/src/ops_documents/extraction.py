@@ -35,7 +35,7 @@ from ops_documents.store import ExtractionRow, ExtractionsStore
 from ops_documents.store.document_types import SINGLE
 from ops_documents.store.extractions import CorrectedEvent, NewExample, file_read
 from ops_extract import boxes, classify, page_images, prompt, result, rules, templates
-from ops_extract.checks import CLEAN_RULES, DEFAULT_FLOOR, entries, in_quote, threshold
+from ops_extract.checks import CLEAN_RULES, DEFAULT_FLOOR, in_quote, threshold
 from ops_extract.floor import FloorUnreadError, PlatformFloor
 from ops_extract.layout import layout_of, page_text
 from ops_extract.pages import Pages
@@ -47,7 +47,7 @@ from ops_service_kit import narrow
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
-from ops_service_kit.narrow import Malformed, a_list, an_object, required
+from ops_service_kit.narrow import Malformed, a_list, an_object, entries, required
 from ops_service_kit.settings import Settings
 from ops_store import background, isolation
 from ops_store.documents import stored

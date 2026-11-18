@@ -33,7 +33,7 @@ import httpx
 from fastapi import Depends, FastAPI, Header, Request
 
 from ops_service_kit.errors import Forbidden
-from ops_service_kit.http import mark_public
+from ops_service_kit.http import Json, mark_public
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 
@@ -48,11 +48,11 @@ DEV_TENANT = "local"
 DEV_TEAM = "team_ops"
 
 
-async def _no_keys() -> dict[str, Any]:
+async def _no_keys() -> Json:
     return {"keys": []}
 
 
-async def _no_api_keys(_key: str) -> dict[str, Any] | None:
+async def _no_api_keys(_key: str) -> Json | None:
     return None
 
 
@@ -112,7 +112,7 @@ class Auth:
     ) -> Auth:
         """The fixed dev user; tests pass their own tenant so each runs on its own rows. `policies` stand in for the
         tenant's access policies a platform token would carry."""
-        dev_user: dict[str, Any] = {
+        dev_user: Json = {
             "sub": "usr_dev",
             "email": email,
             "name": name,

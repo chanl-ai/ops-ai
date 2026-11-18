@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from ops_policy import Ed25519Signer, mint
 from ops_service_kit.errors import Forbidden, ServiceUnavailable
+from ops_service_kit.narrow import an_object
 
 if TYPE_CHECKING:
     from .client import ServiceClient
@@ -48,7 +49,7 @@ def person_of(claims: dict[str, Any], *, service: str, tenant_id: str, team_id: 
     """The person a verified token's claims name, once they are this service's and this call's."""
     if claims.get("kind") != ACTING_FOR_KIND:
         raise refused("it is not an acting-for token")
-    act: dict[str, Any] = claims.get("act") or {}
+    act = an_object(claims["act"], "the token's act") if claims.get("act") else {}
     if act.get("sub") != service:
         raise refused("it was minted for another service")
     if claims.get("tenant_id") != tenant_id or not team_id or claims.get("team_id") != team_id:

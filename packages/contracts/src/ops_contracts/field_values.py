@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 FIELD_TYPES = ("text", "number", "money", "date", "enum")
 VALID, NORMALISED = 1.0, 0.9
@@ -24,6 +24,13 @@ _NUMERIC_FORMATS = {
     "DMY": ("%d/%m/%Y", "%d.%m.%Y", "%d-%m-%Y"),
 }
 _CURRENCY = re.compile(r"[A-Za-z$€£¥]+")
+
+
+class FieldSpec(Protocol):
+    """A field definition as `normalise` reads it: any mapping with `get` (a document type's field TypedDict, a case
+    type's field as a plain dict), read only, so a caller passes its own without a copy."""
+
+    def get(self, key: str, /) -> object: ...
 
 
 def as_number(raw: Any) -> tuple[float | None, float]:
@@ -58,7 +65,7 @@ def as_date(raw: Any, order: str = DEFAULT_DATE_ORDER) -> tuple[str | None, floa
     return None, 0.0
 
 
-def normalise(field: dict[str, Any], raw: Any) -> tuple[Any, float]:
+def normalise(field: FieldSpec, raw: Any) -> tuple[Any, float]:
     """The value in its type's canonical form and how much it was changed to get there: as given (1.0), reformatted
     (0.9: a date to ISO, a money string to a number, an enum's case), or not a valid value at all (None, 0)."""
     kind = str(field.get("type") or "text")

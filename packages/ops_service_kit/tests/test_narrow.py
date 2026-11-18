@@ -3,6 +3,7 @@
 import pytest
 
 from ops_service_kit import narrow
+from ops_service_kit.http import JsonList, JsonValue
 
 
 @pytest.mark.parametrize("value", [None, "text", 3, ["a"], True])
@@ -37,3 +38,16 @@ def test_a_value_that_decides_something_fails_on_a_wrong_shape() -> None:
         with pytest.raises(narrow.Malformed, match="published is not a int"):
             narrow.required(bad, "published", int)
     assert narrow.required({"published": 2}, "published", int) == 2
+
+
+def test_entries_iterates_as_value_or_empty_did_and_refuses_what_cannot_iterate() -> None:
+    held: JsonList = ["a", "b"]
+    assert narrow.entries(held) is held
+    assert narrow.entries({"k": 1, "j": 2}) == ["k", "j"]
+    assert narrow.entries("ab") == ["a", "b"]
+    falsy_values: tuple[JsonValue, ...] = (None, "", 0, False, [], {})
+    for falsy in falsy_values:
+        assert narrow.entries(falsy) == []
+    for scalar in (3, 2.5, True):
+        with pytest.raises(narrow.Malformed):
+            narrow.entries(scalar)
