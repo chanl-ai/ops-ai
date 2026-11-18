@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Proves ./install.sh the way a client team runs it (docs/deploy/install.md): a fresh clone in a temp folder, images
-# pulled anonymously from GHCR, an unattended install from an answers file on its own project and port, every console
+# pulled anonymously from a registry, an unattended install from an answers file on its own project and port, every console
 # page walked headless (docs/usecases/lib/stg_click_walk.mjs), then a rerun that changes nothing, upgrade to the same
 # version, backup, restore (shown to undo a change made after the backup) and status. Then DBA mode once, against a
 # separate PostgreSQL 17 with TLS and an admin that is not a superuser: this script plays the DBA and runs the three
 # psql commands the installer prints, and the model is an OpenAI-compatible endpoint whose key goes through Secrets
 # (the fake model, so no real model is called). It tears down only what it started and never prints a secret.
 #   bash deploy/release/install_proof.sh [<git source> [<ref>]]   source default: this repo; ref default: HEAD
-#   PORT (19890), DBA_PORT (19891), PG_PORT (15611), FAKE_PORT (18757), KEEP=1 leaves everything running
+#   PORT (19890), DBA_PORT (19891), PG_PORT (15611), FAKE_PORT (18757), REG_PORT (15612), KEEP=1 leaves everything running
+# The registry is ghcr.io/chanl-ai/ops-ai, which holds a version only once its vX.Y.Z tag ran release-images.yml.
+# BUILD=1 is for a release or hotfix branch before that tag: images.sh builds the clone's commit at its version and
+# pushes it to a registry container on 127.0.0.1:REG_PORT, and install.sh pulls from there through OPS_IMAGE_REGISTRY
+# (the company-mirror setting), so the install still pulls the release's own images, anonymously, from a clean clone.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 SOURCE=${1:-$ROOT}
@@ -16,10 +20,15 @@ PORT=${PORT:-19890}
 DBA_PORT=${DBA_PORT:-19891}
 PG_PORT=${PG_PORT:-15611}
 FAKE_PORT=${FAKE_PORT:-18757}
+REG_PORT=${REG_PORT:-15612}
+BUILD=${BUILD:-0}
+if [ "$BUILD" = 1 ]; then PREFIX=localhost:$REG_PORT/ops-ai; else PREFIX=ghcr.io/chanl-ai/ops-ai; fi
+export OPS_IMAGE_REGISTRY=$PREFIX
 PROJECT=ops-install-proof
 DBA_PROJECT=ops-install-dba
 PG=ops-install-dba-pg
 FAKE=ops-install-dba-fakeai
+REG=ops-install-proof-registry
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/ops-install-proof.XXXXXX")
 CLONE=$WORK/ops-ai
 CLONE_DBA=$WORK/ops-ai-dba
@@ -34,7 +43,7 @@ say() { echo "proof: $*"; }
 # that never has credentials.
 # SIGNED_IN=1 keeps this machine's registry login, for a run before the packages are public; the evidence says so.
 export DOCKER_HOST=${DOCKER_HOST:-$(docker context inspect --format '{{.Endpoints.docker.Host}}')}
-[ "${SIGNED_IN:-0}" = 1 ] || {
+[ "${SIGNED_IN:-0}" = 1 ] && [ "$BUILD" != 1 ] || {
 mkdir -p "$WORK/docker" "$WORK/bin"
 printf '#!/bin/sh\n[ "$1" = get ] && { echo "credentials not found in native keychain"; exit 1; }\n[ "$1" = list ] && echo "{}"\nexit 0\n' \
   >"$WORK/bin/docker-credential-anonymous"
@@ -49,7 +58,10 @@ cleanup() {
   if [ "${KEEP:-0}" = 1 ]; then say "left running: $PROJECT on :$PORT, $DBA_PROJECT on :$DBA_PORT (folder $WORK)"; return; fi
   [ -f "$CLONE/ops-ai.env" ] && (cd "$CLONE" && ./install.sh uninstall --yes --delete-data >/dev/null 2>&1) || true
   [ -f "$CLONE_DBA/ops-ai.env" ] && (cd "$CLONE_DBA" && ./install.sh uninstall --yes --delete-data >/dev/null 2>&1) || true
-  docker rm -fv $PG $FAKE >/dev/null 2>&1 || true
+  docker rm -fv $PG $FAKE $REG >/dev/null 2>&1 || true
+  if [ "$BUILD" = 1 ]; then
+    docker images --format '{{.Repository}}:{{.Tag}}' --filter "reference=$PREFIX/*" | xargs docker image rm >/dev/null 2>&1 || true
+  fi
   rm -rf "$WORK"
 }
 trap cleanup EXIT
@@ -75,18 +87,33 @@ SHA=$(git -C "$CLONE" rev-parse HEAD)
 VERSION=$(tr -d ' \n' <"$CLONE/deploy/release/version")
 say "clone at $SHA; deploy/release/version says $VERSION"
 
-say "2. no local copy of ghcr.io/chanl-ai/ops-ai/*:$VERSION$([ "${SIGNED_IN:-0}" = 1 ] && echo ', pulled with this machine'"'"'s registry login (SIGNED_IN=1)' || echo ' and no registry login')"
+if [ "$BUILD" = 1 ]; then
+  say "2a. BUILD=1: images.sh builds $SHA as $PREFIX/*:$VERSION and pushes it to a registry container on :$REG_PORT"
+  docker rm -fv $REG >/dev/null 2>&1 || true
+  docker run -d --name $REG -p 127.0.0.1:$REG_PORT:5000 \
+    registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373 >/dev/null
+  until curl -sf "http://localhost:$REG_PORT/v2/" >/dev/null; do sleep 1; done
+  IMAGE_PREFIX=$PREFIX sh "$CLONE/deploy/release/images.sh" "$SHA" "$VERSION" --push >"$LOG/images.txt" 2>&1 ||
+    { cat "$LOG/images.txt"; fail "building the images"; }
+  say "built and pushed $(grep -c '^images:' "$LOG/images.txt") images in $(($(date +%s) - T0))s"
+fi
+say "2. no local copy of $PREFIX/*:$VERSION$([ "${SIGNED_IN:-0}" = 1 ] && [ "$BUILD" != 1 ] && echo ', pulled with this machine'"'"'s registry login (SIGNED_IN=1)' || echo ' and no registry login')"
 for t in platform agents tools models kb files documents runner opa proxy console db-scripts; do
-  docker image rm "ghcr.io/chanl-ai/ops-ai/$t:$VERSION" >/dev/null 2>&1 || true
+  docker image rm "$PREFIX/$t:$VERSION" >/dev/null 2>&1 || true
 done
-[ -z "$(docker images -q --filter "reference=ghcr.io/chanl-ai/ops-ai/*:$VERSION")" ] || fail "an image for $VERSION is still here"
-if [ "${SIGNED_IN:-0}" != 1 ]; then
-grep -q ghcr "$DOCKER_CONFIG/config.json" && fail "the proof's Docker config holds a login"
+[ -z "$(docker images -q --filter "reference=$PREFIX/*:$VERSION")" ] || fail "an image for $VERSION is still here"
+if [ "${SIGNED_IN:-0}" != 1 ] || [ "$BUILD" = 1 ]; then
+grep -q '"auths"' "$DOCKER_CONFIG/config.json" && fail "the proof's Docker config holds a login"
 say "docker config: $(cat "$DOCKER_CONFIG/config.json") (a helper that never has credentials)"
-tok=$(curl -s "https://ghcr.io/token?scope=repository:chanl-ai/ops-ai/platform:pull" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
-code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $tok" -H 'Accept: application/vnd.oci.image.index.v1+json' \
-  "https://ghcr.io/v2/chanl-ai/ops-ai/platform/manifests/$VERSION")
-say "anonymous GET of ghcr.io/chanl-ai/ops-ai/platform:$VERSION's manifest: $code"
+accept='Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json'
+if [ "$BUILD" = 1 ]; then
+  code=$(curl -s -o /dev/null -w '%{http_code}' -H "$accept" "http://localhost:$REG_PORT/v2/ops-ai/platform/manifests/$VERSION")
+else
+  tok=$(curl -s "https://ghcr.io/token?scope=repository:chanl-ai/ops-ai/platform:pull" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+  code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $tok" -H "$accept" \
+    "https://ghcr.io/v2/chanl-ai/ops-ai/platform/manifests/$VERSION")
+fi
+say "anonymous GET of $PREFIX/platform:$VERSION's manifest: $code"
 [ "$code" = 200 ] || fail "the images are not public yet (anonymous manifest answered $code)"
 fi
 
@@ -109,9 +136,9 @@ say "clone to signed in: $((T1 - T0))s"
 stat -f '%Lp %N' "$CLONE/ops-ai.env" 2>/dev/null || stat -c '%a %n' "$CLONE/ops-ai.env"
 docker ps --filter "label=com.docker.compose.project=$PROJECT" --format '{{.Image}}' | sort -u | while read -r image; do
   case $image in
-    ghcr.io/chanl-ai/ops-ai/*:"$VERSION") echo "proof: running $image  $(docker image inspect --format '{{index .RepoDigests 0}} {{.Os}}/{{.Architecture}}' "$image")" ;;
+    "$PREFIX"/*:"$VERSION") echo "proof: running $image  $(docker image inspect --format '{{index .RepoDigests 0}} {{.Os}}/{{.Architecture}}' "$image")" ;;
     pgvector/pgvector:pg17) echo "proof: running $image (the built-in trial database)" ;;
-    *) fail "a container runs $image, from outside ghcr.io/chanl-ai/ops-ai/*:$VERSION" ;;
+    *) fail "a container runs $image, from outside $PREFIX/*:$VERSION" ;;
   esac
 done
 
@@ -155,18 +182,18 @@ say "8. ./install.sh status"
 say "8b. an upgrade whose check fails rolls back: version $VERSION-broken, every image the same but a console that exits"
 BROKEN=$VERSION-broken
 for t in platform agents tools models kb files documents runner opa proxy; do
-  docker tag "ghcr.io/chanl-ai/ops-ai/$t:$VERSION" "ghcr.io/chanl-ai/ops-ai/$t:$BROKEN"
+  docker tag "$PREFIX/$t:$VERSION" "$PREFIX/$t:$BROKEN"
 done
-printf 'FROM ghcr.io/chanl-ai/ops-ai/console:%s\nCMD ["sh", "-c", "echo broken console; exit 3"]\n' "$VERSION" >"$WORK/Dockerfile.broken"
-docker build -q -t "ghcr.io/chanl-ai/ops-ai/console:$BROKEN" -f "$WORK/Dockerfile.broken" "$WORK" >/dev/null
+printf 'FROM %s/console:%s\nCMD ["sh", "-c", "echo broken console; exit 3"]\n' "$PREFIX" "$VERSION" >"$WORK/Dockerfile.broken"
+docker build -q -t "$PREFIX/console:$BROKEN" -f "$WORK/Dockerfile.broken" "$WORK" >/dev/null
 # shellcheck disable=SC2046
-docker save -o "$WORK/broken-images.tar" $(for t in platform agents tools models kb files documents runner opa proxy console; do echo "ghcr.io/chanl-ai/ops-ai/$t:$BROKEN"; done)
+docker save -o "$WORK/broken-images.tar" $(for t in platform agents tools models kb files documents runner opa proxy console; do echo "$PREFIX/$t:$BROKEN"; done)
 set +e
 (cd "$CLONE" && ./install.sh upgrade --offline "$WORK/broken-images.tar") >"$LOG/rollback.txt" 2>&1
 code=$?
 set -e
 grep -v '^ \(Container\|Volume\|Network\|Image\)\b' "$LOG/rollback.txt"
-for t in platform agents tools models kb files documents runner opa proxy console; do docker image rm "ghcr.io/chanl-ai/ops-ai/$t:$BROKEN" >/dev/null; done
+for t in platform agents tools models kb files documents runner opa proxy console; do docker image rm "$PREFIX/$t:$BROKEN" >/dev/null; done
 rm -f "$WORK/broken-images.tar"
 [ "$code" = 1 ] || fail "the broken upgrade exited $code, want 1"
 grep -q "rolled back to $VERSION" "$LOG/rollback.txt" || fail "the broken upgrade did not roll back"
@@ -188,7 +215,7 @@ until docker exec $PG pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; do sl
 docker exec $PG psql -q -U postgres -c "CREATE ROLE opsadmin LOGIN NOSUPERUSER CREATEDB CREATEROLE BYPASSRLS PASSWORD '$DBA_ADMIN_PW'"
 # An OpenAI-compatible endpoint on the host: the fake model from the published models image. It never calls a provider.
 docker run -d --name $FAKE -p 127.0.0.1:$FAKE_PORT:8746 -e FAKE_OPENAI_HOST=0.0.0.0 -e FAKE_OPENAI_PORT=8746 \
-  -w /app/services/models-service/scripts --entrypoint python "ghcr.io/chanl-ai/ops-ai/models:$VERSION" \
+  -w /app/services/models-service/scripts --entrypoint python "$PREFIX/models:$VERSION" \
   -m fake_openai /app/services/models-service/seed/demo-fake-openai >/dev/null
 git clone -q "$CLONE" "$CLONE_DBA"
 DBA_ADMIN2_PW="proof dba admin $(secret)"
@@ -250,4 +277,4 @@ while IFS= read -r line; do
 done <"$WORK/secrets.txt"
 [ -z "$leaks" ] || fail "secret values appear in the logs:$leaks"
 say "$(wc -l <"$WORK/secrets.txt" | tr -d ' ') secret values (keys, passwords, connection strings) checked against every log: none printed"
-say "PASS install proof at $SHA, version $VERSION; clone to signed in $((T1 - T0))s"
+say "PASS install proof at $SHA, version $VERSION, images from $PREFIX; clone to signed in $((T1 - T0))s"

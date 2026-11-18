@@ -11,6 +11,7 @@ one prints what it would do unless `DRY=0`.
 | Step | Who | Command or action |
 |---|---|---|
 | 1. Cut | Maintainer | `make release-cut V=X.Y.Z` (preview), then `DRY=0`: pushes `release/X.Y.Z` from `origin/develop`. The push runs `ci.yml`, whose `staging` job deploys the branch with the click walk. A hotfix is `make hotfix-cut V=X.Y.Z`, from `origin/main` |
+| | | The version file is set at the cut: when `deploy/release/version` is not `X.Y.Z`, the cut pushes one commit on top that sets it. `release-proof` (`scripts/release.py check-version`) and `make release-pr` fail on a `release/X.Y.Z` or `hotfix/X.Y.Z` branch whose file says anything else |
 | 2. Test staging | Maintainer, owner | The click walk of that deploy, use cases against staging (`OPS_USECASE_BASE_URL=https://<staging host> make usecase-test UC=<id> LAYER=api`; only use cases marked safe run, see `docs/usecases/README.md`), and the owner's click-through. Only fixes go on the release branch; each push to it deploys again |
 | 3. Open the PR | Maintainer | `make release-pr V=X.Y.Z` (preview), then `DRY=0`: opens `release/X.Y.Z` into `main` titled `release: X.Y.Z (develop → main)` (`release: X.Y.Z (hotfix → main)` for a hotfix) |
 | 4. Merge | Owner | A merge commit. No squash and no rebase, so main's first-parent history holds one commit per release |
@@ -32,6 +33,8 @@ A rollback (`make stg-rollback`, also run by `deploy-staging.yml` when a check f
 | The staging deploy of that commit succeeded | The `staging / deploy` job of that `ci.yml` run, or the `deploy` job of a `deploy-staging.yml` run started by hand | Names the missing job or its conclusion |
 | The click walk ran and had no failures | The job's log line `click walk (N OK, N FAIL)` from `deploy/fly/stg_deploy.sh`; a skipped walk or a failure refuses | Names the line |
 | No PR from the branch is open | `gh pr list --base main --head <branch>` | Prints that PR and stops |
+
+The install proof in `release-proof` runs before the tag, when the release's images are not on ghcr.io yet, so it builds them from the commit into a registry inside the runner and installs from there (`make install-proof BUILD=1`). The pull from ghcr.io is a check after the tag, below.
 
 CI on a `release/*` or `hotfix/*` push runs in full whatever changed (every service and package, `checks`, release-proof and both databases), because the impact plan once skipped a job there and a failure reached develop untested; develop and pull requests keep the impact plan.
 
@@ -76,6 +79,7 @@ pick the newest release on the releases feed whichever scheme it uses (`scripts/
 | The PyPI version, same condition | `curl -sf https://pypi.org/pypi/ops-ai/<version>/json` answers; `<version>` is the one in `sdk/python/pyproject.toml` |
 | The `sdk-publish` run | `gh run list --workflow sdk-publish.yml --limit 1`: success; "dry run" in its log means nothing was published |
 | The images | `gh run list --workflow release-images.yml --limit 1`: success |
+| The published images install | Signed in to ghcr.io with a token that can read packages, `SIGNED_IN=1 make install-proof REF=vX.Y.Z` passes: a fresh clone of the tag installs on the images pulled from ghcr.io. The packages are private, so a pull without a login answers 403; a public pull needs the `ghcr.io/chanl-ai/ops-ai/*` packages made public, which is the owner's setting, and then `make install-proof REF=vX.Y.Z` proves it |
 | The docs site is updated | The Vercel deployment for the merge commit is ready, or the site shows the changed page. A skipped build is correct when the merge changed no docs |
 | Develop holds main | `git fetch origin && git rev-list --count origin/develop..origin/main` prints 0 after the back-merge; a count above 0 means the back-merge was squashed or not done |
 
