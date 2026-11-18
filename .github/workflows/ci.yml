@@ -76,6 +76,9 @@ jobs:
           # The SDK drift check, the changelog check and the console's standards run on node; the script tests drive
           # the commit hooks, which run pnpm.
           node: "true"
+          # The script tests start tools-service (scripts/tests/test_page_stack.py), which loads its review key into
+          # OPA at start and exits when none answers; with OPS_INFRA=external that is the side container infra starts.
+          infra: ${{ needs.plan.outputs.scripts }}
       - name: Lint and format the changed Python
         run: |
           base=$(git merge-base "$BASE_SHA" HEAD)
