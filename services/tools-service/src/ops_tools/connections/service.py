@@ -40,7 +40,7 @@ from ..auth.assertion import SigningError, key_matches, read_certificate
 from ..auth.discovery import Discovery
 from ..auth.kinds import BY_ID, CERTIFICATE, Kind, kind_of, views
 from ..auth.pkce import challenge, verifier
-from ..auth.tokens import SIGNED_IN_AS, ClientProof, Tokens, account_of, person_named
+from ..auth.tokens import SIGNED_IN_AS, ClientProof, Tokens, account_of, person_named, scope_list
 from ..egress import EgressDenied, EgressPolicy, for_tenant
 from ..environments import TEST
 from ..executor import transport_failure
@@ -54,6 +54,7 @@ from ..store.connections import (
     ConnectionInUse,
     ConnectionStore,
     StaleConnection,
+    TokenRow,
     name_key,
     owner_key,
     plugin_app,
@@ -373,7 +374,7 @@ class ConnectionService:
         return {r.name: r for r in await self.secrets.store.listed(tenant_id, team_id) if r.name in names}
 
     def _keys(
-        self, kind: Kind, conn: dict[str, Any], meta: dict[str, SecretMeta], token: dict[str, Any] | None
+        self, kind: Kind, conn: dict[str, Any], meta: dict[str, SecretMeta], token: TokenRow | None
     ) -> AccountKeys:
         """The account's settings, which secret parts are set (by whom and when, never a value), the team's sign-in and
         the signing certificate's view."""
@@ -389,10 +390,10 @@ class ConnectionService:
             )
         signed: TokenView | None = (
             {
-                "account": token.get("account"),
-                "since": _iso(token["refreshed_at"]),
-                "expiresAt": _iso(token.get("expires_at")),
-                "scopes": token.get("scopes") or [],
+                "account": token.account,
+                "since": _iso(token.refreshed_at),
+                "expiresAt": _iso(token.expires_at),
+                "scopes": scope_list(token.scopes),
             }
             if token
             else None
@@ -447,14 +448,14 @@ class ConnectionService:
         mine = own_key(who)
         out["people"] = [
             {
-                "personId": p["person_id"],
-                "account": p.get("account"),
-                "since": _iso(p.get("refreshed_at")),
-                "expiresAt": _iso(p.get("expires_at")),
-                "scopes": p.get("scopes") or [],
+                "personId": p.person_id,
+                "account": p.account,
+                "since": _iso(p.refreshed_at),
+                "expiresAt": _iso(p.expires_at),
+                "scopes": p.scopes or [],
             }
             for p in await self.store.people(who.tenant_id, str(conn["id"]))
-            if out["mayManage"] or p["person_id"] == mine
+            if out["mayManage"] or p.person_id == mine
         ]
         out["activity"] = [
             {"action": a["action"], "actor": a["actor"], "at": _iso(a["at"]), "detail": a["detail"]}
@@ -1185,7 +1186,7 @@ class ConnectionService:
             await self.store.mark_refused(who.tenant_id, connection_id, token_for, reason=message, at=now)
         detail = {"code": error, "who": whose, **({"own": True} if own else {})}
         await self.store.note(who.tenant_id, connection_id, self._event(who, "sign_in_refused", detail))
-        app = (await self._app_display(who, str(conn["app_id"]), {**conn, "connection_id": conn["id"]}))[0]
+        app = (await self._app_display(who, str(conn["app_id"]), str(conn["id"]), str(conn["name"])))[0]
         return Unprocessable(
             message,
             code="sign_in_refused",
@@ -1198,7 +1199,7 @@ class ConnectionService:
     ) -> tuple[str, str]:
         """The plugin's sentence for this code (its first sign_in_errors entry that matches), else the platform's:
         access not given, a wrong client secret at the token exchange, or the system's own words."""
-        app = (await self._app_display(who, str(conn["app_id"]), {**conn, "connection_id": conn["id"]}))[0]
+        app = (await self._app_display(who, str(conn["app_id"]), str(conn["id"]), str(conn["name"])))[0]
         credential = await self._credential_name(who, conn)
         if token_exchange and error in WRONG_SECRET and not await self._holds_secret(who, conn):
             # Known here, so said before any guess from the system's code: the team's app was never given a secret.
@@ -1288,7 +1289,7 @@ class ConnectionService:
         now = self.clock()
         await self.tokens.drop(who.tenant_id, await self.store.forget_token(who.tenant_id, connection_id))
         for p in await self.store.people(who.tenant_id, connection_id):
-            await self.store.mark_refused(who.tenant_id, connection_id, str(p["person_id"]), reason=why, at=now)
+            await self.store.mark_refused(who.tenant_id, connection_id, p.person_id, reason=why, at=now)
         await self.store.set_status(who.tenant_id, connection_id, "needs_reconnect", why)
         await self.store.note(who.tenant_id, str(conn["id"]), self._event(who, "credential_changed"))
 
@@ -1366,55 +1367,55 @@ class ConnectionService:
         out: list[dict[str, Any]] = []
         apps: dict[str, tuple[str, str | None]] = {}
         for r in rows:
-            kind = kind_of(str(r["auth_kind"]))
-            app_id = str(r["app_id"])
+            kind = kind_of(r.auth_kind)
+            app_id = r.app_id
             if app_id not in apps:
-                apps[app_id] = await self._app_display(who, app_id, r)
+                apps[app_id] = await self._app_display(who, app_id, r.connection_id, r.name)
             out.append(
                 {
-                    "connectionId": str(r["connection_id"]),
+                    "connectionId": r.connection_id,
                     "appId": app_id,
                     "app": apps[app_id][0],
                     "logo": apps[app_id][1],
-                    "connection": str(r["name"]),
-                    "connectionStatus": str(r["status"]),
-                    "sandbox": bool(r.get("sandbox")),
+                    "connection": r.name,
+                    "connectionStatus": r.status,
+                    "sandbox": r.sandbox,
                     "method": kind.label,
                     "authKind": kind.id,
                     "personFields": list(kind.person_fields),
-                    "connected": not every or r.get("person_id") is not None,
-                    "docsUrl": r.get("docs_url"),
-                    "account": r.get("account"),
-                    "scopes": r.get("scopes") or [],
-                    "since": _iso(r.get("refreshed_at")),
-                    "expiresAt": _iso(r.get("expires_at")),
-                    "test": r.get("test"),
-                    "refused": r.get("refused_at") is not None,
-                    "refusedAt": _iso(r.get("refused_at")),
-                    "refusedReason": r.get("refused_reason"),
+                    "connected": not every or r.person_id is not None,
+                    "docsUrl": r.docs_url,
+                    "account": r.account,
+                    "scopes": r.scopes or [],
+                    "since": _iso(r.refreshed_at),
+                    "expiresAt": _iso(r.expires_at),
+                    "test": r.test,
+                    "refused": r.refused_at is not None,
+                    "refusedAt": _iso(r.refused_at),
+                    "refusedReason": r.refused_reason,
                     # Which auth config it signs in through is for whoever manages the team's apps.
-                    "authConfig": (OPS_AI_APP if r.get("platform_app") else r.get("credential_name")) if may else None,
+                    "authConfig": (OPS_AI_APP if r.platform_app else r.credential_name) if may else None,
                     "state": (
                         "not_connected"
-                        if every and r.get("person_id") is None
+                        if every and r.person_id is None
                         else "expired"
-                        if r.get("refused_at") is not None
+                        if r.refused_at is not None
                         else "connected"
                     ),
                 }
             )
         return out
 
-    async def _app_display(self, who: Caller, app_id: str, row: dict[str, Any]) -> tuple[str, str | None]:
+    async def _app_display(self, who: Caller, app_id: str, account_id: str, name: str) -> tuple[str, str | None]:
         """An account's app as people know it: a plugin's title and logo, or a custom app's name, which its first
         account carries. The account's own name ("GitHub · Operations") names the account, not the app."""
         shown = self.app_display(app_id) if self.app_display is not None else None
         if shown is not None:
             return shown
-        if str(row["connection_id"]) == app_id:
-            return str(row["name"]), None
+        if account_id == app_id:
+            return name, None
         first = await self.store.get(who.tenant_id, app_id)
-        return str((first or row)["name"]), None
+        return str(first["name"]) if first else name, None
 
     async def add_own_account(self, who: Caller, connection_id: str, given: Json | None = None) -> SignInLink:
         """Another account of the caller's own on the app of `connection_id`, signed in through the same auth config

@@ -158,7 +158,7 @@ async def test_one_persons_refused_refresh_leaves_the_connection_and_everyone_el
     assert found is not None and found["status"] == "healthy"
     # Kept and marked refused, so Your connections says it expired; James's next call asks him to connect.
     held = await store.token(tenant, conn, JAMES.sub)
-    assert held is not None and held["refused_at"] is not None
+    assert held is not None and held.refused_at is not None
     with pytest.raises(AuthFailed) as again:
         await bearer(auth, tenant, conn, JAMES)
     assert again.value.code == "CONNECTION_NOT_LINKED" and again.value.details["reason"] == "refused"
@@ -327,14 +327,14 @@ async def test_granted_scopes_fall_back_to_the_tokens_claim_then_the_request_and
     claimed = {"access_token": jwt({"scp": ["api", "cases.write"]}), "expires_in": 3600}
     await tokens.store_answer(tenant, conn, claimed, JAMES.sub, requested=["openid"])
     found = await store.token(tenant, conn, JAMES.sub)
-    assert found is not None and found["scopes"] == ["api", "cases.write"], found
+    assert found is not None and found.scopes == ["api", "cases.write"], found
     spent = {"access_token": "at-old", "refresh_token": "rt-old", "expires_in": 1}
     await tokens.store_answer(tenant, conn, spent, MAYA.sub, requested=["openid", "api"])
     found = await store.token(tenant, conn, MAYA.sub)
-    assert found is not None and found["scopes"] == ["openid", "api"], found
+    assert found is not None and found.scopes == ["openid", "api"], found
     await tokens.access(tenant, conn, SETTINGS, None, grant="none", person=MAYA.sub)
     found = await store.token(tenant, conn, MAYA.sub)
-    assert found is not None and found["rotations"] == 2 and found["scopes"] == ["openid", "api"], found
+    assert found is not None and found.rotations == 2 and found.scopes == ["openid", "api"], found
 
 
 async def sign_in(
@@ -358,7 +358,7 @@ async def test_a_sign_in_whose_answer_names_no_scopes_is_granted_what_it_asked_f
     conn = await personal_connection(client, tenant)
     await sign_in(client, tenant, conn, JAMES_P, "james")
     rows = await ConnectionStore(engine).people(tenant, conn)
-    assert [r["scopes"] for r in rows] == [["openid", "api"]], rows
+    assert [r.scopes for r in rows] == [["openid", "api"]], rows
 
 
 async def test_a_person_lists_only_their_own_sign_ins(client: httpx.AsyncClient, tenant: str) -> None:

@@ -13,7 +13,10 @@ from typing import Any, cast
 
 from pydantic import JsonValue
 
+from ops_service_kit.narrow import an_object
+
 from ..environments import LIVE
+from ..store.connections import TokenRow
 
 Row = dict[str, Any]
 
@@ -72,7 +75,7 @@ def connection_base(conn: Row) -> str:
     return str(cast(Row, conn.get("settings") or {}).get("baseUrl") or "")
 
 
-def account_state(conn: dict[str, Any], team_token: dict[str, Any] | None, now: datetime) -> str:
+def account_state(conn: dict[str, Any], team_token: TokenRow | None, now: datetime) -> str:
     """The team account's state from its token, never from the saved settings: refused
     once the system refused it (the row's refused_at, or the connection marked by the gateway), expired once its
     token ended with no refresh token to renew it. With no token, a passing Test connection is what shows a key or
@@ -84,10 +87,10 @@ def account_state(conn: dict[str, Any], team_token: dict[str, Any] | None, now: 
         # An app that needs no sign-in has no token and no key to test, so nothing else could ever show it connected.
         return CONNECTED
     if team_token is not None:
-        expires: datetime | None = team_token.get("expires_at")
-        if team_token.get("refused_at") is not None or stored == "needs_reconnect":
+        expires = team_token.expires_at
+        if team_token.refused_at is not None or stored == "needs_reconnect":
             return REFUSED
-        if expires is not None and expires < now and not team_token.get("refresh_ct"):
+        if expires is not None and expires < now and not team_token.refresh_ct:
             return EXPIRED
         return CONNECTED
     health = cast(Row, conn.get("health") or {})
@@ -96,13 +99,12 @@ def account_state(conn: dict[str, Any], team_token: dict[str, Any] | None, now: 
     return CONNECTED if health.get("status") == "ok" and health.get("account") != "own" else NOT_SIGNED_IN
 
 
-def person_state(token: dict[str, Any], now: datetime) -> str:
+def person_state(refused_at: datetime | None, expires_at: datetime | None, renews: bool, now: datetime) -> str:
     """A person's own sign-in's state from their token row: refused once the system refused it, expired once it ended
-    with no way to renew, else connected."""
-    if token.get("refused_at") is not None:
+    with no way to renew (`renews`: a refresh token is held), else connected."""
+    if refused_at is not None:
         return REFUSED
-    expires: datetime | None = token.get("expires_at")
-    if expires is not None and expires < now and not token.get("renews"):
+    if expires_at is not None and expires_at < now and not renews:
         return EXPIRED
     return CONNECTED
 
@@ -121,22 +123,23 @@ def default_sign_in(mine: Sequence[Row]) -> Row | None:
     return next((t for t in live if t.get("pinned")), None) or (live[0] if live else None)
 
 
-def team_test(conn: dict[str, Any], team_token: dict[str, Any] | None) -> dict[str, Any] | None:
+def team_test(conn: dict[str, Any], team_token: TokenRow | None) -> dict[str, Any] | None:
     """The team account's last test: kept on its token row after a sign-in, else (a key or password, which has no
     token) the account's last test made as the team."""
-    if team_token is not None and team_token.get("test"):
-        return cast(dict[str, Any], team_token["test"])
+    if team_token is not None and team_token.test:
+        return an_object(team_token.test, "the team sign-in's test")
     health = cast(Row, conn.get("health") or {})
     if health.get("account") != "team" or health.get("status") not in ("ok", "failed"):
         return None
     return {"status": health["status"], "message": health.get("message"), "at": health.get("at")}
 
 
-def state_reason(conn: dict[str, Any], team_token: dict[str, Any] | None, state: str) -> str | None:
+def state_reason(conn: dict[str, Any], team_token: TokenRow | None, state: str) -> str | None:
     """Why the team account is refused or expired: the system's words, or the day its sign-in ended."""
     if state == REFUSED:
-        return str((team_token or {}).get("refused_reason") or conn.get("status_detail") or "") or None
-    if state == EXPIRED and team_token is not None and (ended := team_token.get("expires_at")) is not None:
+        refused = team_token.refused_reason if team_token is not None else None
+        return str(refused or conn.get("status_detail") or "") or None
+    if state == EXPIRED and team_token is not None and (ended := team_token.expires_at) is not None:
         return f"The sign-in ended on {ended.day} {ended:%b %Y}."
     return None
 

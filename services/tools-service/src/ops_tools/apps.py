@@ -82,6 +82,7 @@ from .store.connections import (
     FIXED_VALUE,
     PERSON_ORIGIN,
     PLUGIN_APP,
+    TokenRow,
     name_key,
     plugin_app,
     plugin_of,
@@ -1047,9 +1048,9 @@ class Apps:
                 # The state as the team sees it, and the account whose own sign-in decides it for a person: the one
                 # app_state waits on for a person with none (store/app_cards.py reads theirs in the page's query).
                 waits = app_state(c, conn, token, None, configured=configured, person=True, pack=pack)
-                ends = (token or {}).get("expires_at")
+                ends = token.expires_at if token is not None else None
                 # A team token that ends with no refresh token turns the state to expired then, with no write.
-                lapses = token is not None and token.get("refused_at") is None and not token.get("renews")
+                lapses = token is not None and token.refused_at is None and not token.renews
                 facts[str(c["id"])] = CardFacts(
                     state=app_state(c, conn, token, None, configured=configured, pack=pack)[0],
                     sign_in=(conn.get("sign_in") or "team") if conn else None,
@@ -1219,7 +1220,7 @@ class Apps:
         if not account:
             return set()
         held = (await self.connections.store.team_tokens(who.tenant_id, [str(account)])).get(str(account))
-        return set(cast(list[str], (held or {}).get("scopes") or []))
+        return set(cast(list[str], (held.scopes if held is not None else None) or []))
 
     async def change_kind(self, who: Caller, app_id: str, kind: str) -> dict[str, Any]:
         """Moves every account of a custom app to another sign-in kind (`ConnectionService.change_kind`), naming the
@@ -1290,7 +1291,7 @@ CONNECT_OWN = "Connect your own account."
 def app_state(
     card: dict[str, Any],
     conn: dict[str, Any] | None,
-    team_token: dict[str, Any] | None,
+    team_token: TokenRow | None,
     own: dict[str, Any] | None,
     *,
     configured: str = "ok",
@@ -1869,7 +1870,8 @@ async def app_credential(apps: Apps, who: Caller, credential_id: str) -> dict[st
     listed: list[dict[str, Any]] = []
     for a in accounts:
         state, status, why = states[str(a["id"])]
-        at = (tokens.get(str(a["id"])) or {}).get("refreshed_at")
+        held = tokens.get(str(a["id"]))
+        at = held.refreshed_at if held is not None else None
         listed.append(
             {
                 "id": str(a["id"]),
@@ -1970,7 +1972,7 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> dict[str, Any]:
         mine = own_key(who)
         signed = [p for p in (detail or {}).get("people", []) if p["personId"] == mine]
         people = (
-            {str(p["person_id"]) for p in await apps.connections.store.people(who.tenant_id, str(card["connectionId"]))}
+            {p.person_id for p in await apps.connections.store.people(who.tenant_id, str(card["connectionId"]))}
             if card.get("connectionId")
             else set[str]()
         )
@@ -2070,7 +2072,7 @@ async def account_choices(
             continue
         if wanted is not None and name_key(a.get("account_name")) != wanted:
             continue
-        signed = (tokens.get(aid) or {}).get("account")
+        signed = held.account if (held := tokens.get(aid)) is not None else None
         manifest = plugin.manifest if plugin else None
         identity = account_identity(manifest, own_and_registration(a), signed, "" if plugin else connection_base(a))
         out.append(
@@ -2105,7 +2107,7 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
     people_rows = await store.sign_ins(who.tenant_id, ids)
     people_on: dict[str, set[str]] = {}
     for t in people_rows:
-        people_on.setdefault(str(t["connection_id"]), set()).add(str(t["person_id"]))
+        people_on.setdefault(t.connection_id, set()).add(t.person_id)
     may = apps.connections.may_manage(who)
     now = apps.connections.clock()
     sandboxes = {str(a["id"]) for a in stored if a.get("sandbox")}
@@ -2137,7 +2139,11 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
         alone = sign_in == "person"
         if alone and own is not None:
             # Only its owner signs in to it, so its state is that sign-in's, never a team token it has none of.
-            state, why = person_state(own, now), own.get("refused_reason")
+            renews = bool(own.get("renews"))
+            state, why = (
+                person_state(own.get("refused_at"), own.get("expires_at"), renews, now),
+                own.get("refused_reason"),
+            )
         is_default = aid == default
         connected = state == "connected"
         mine_alone = alone and own is not None
@@ -2187,7 +2193,9 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
                 "mine": own is not None,
                 # Who signed in: the team's sign-in; on an account each person signs in to, the caller's own. A
                 # person's own sign-in on a team account is its own row below.
-                "account": (own or {}).get("account") if alone else (team_tokens.get(aid) or {}).get("account"),
+                "account": (own or {}).get("account")
+                if alone
+                else (team.account if (team := team_tokens.get(aid)) is not None else None),
                 "myDefault": None
                 if not several or aid in sandboxes
                 else pick is not None and str(pick["connection_id"]) == aid,
@@ -2213,7 +2221,7 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
     # may not manage the team's apps sees only their own; the team's account row stays above for everyone.
     teams = {str(r["id"]): r for r in out}
     for t in people_rows:
-        aid, pid = str(t["connection_id"]), str(t["person_id"])
+        aid, pid = t.connection_id, t.person_id
         if aid not in teams or teams[aid].get("owner", {}).get("kind") != "team":
             continue
         if not may:
@@ -2221,23 +2229,23 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
             # `me.signIns` counts theirs).
             continue
         row = teams[aid]
-        state = person_state(t, now)
+        state = person_state(t.refused_at, t.expires_at, t.renews, now)
         actions = (["reconnect"] + (["disconnect"] if state == "connected" else [])) if pid == mine else []
         out.append(
             {
                 **row,
                 "rowId": f"{aid}:{pid}",
                 "kind": "person",
-                "name": str(t.get("person_name") or t.get("account") or "A person"),
+                "name": str(t.person_name or t.account or "A person"),
                 "default": False,
                 "state": state,
                 "stateReason": None,
-                "owner": {"kind": "person", "name": str(t.get("person_name") or t.get("account") or "a person")},
+                "owner": {"kind": "person", "name": str(t.person_name or t.account or "a person")},
                 "actions": actions,
                 "mine": pid == mine,
-                "account": t.get("account"),
+                "account": t.account,
                 "myDefault": None,
-                "test": t.get("test"),
+                "test": t.test,
             }
         )
     if removed:

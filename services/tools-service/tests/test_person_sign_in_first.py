@@ -71,7 +71,9 @@ async def test_a_person_whose_own_sign_in_failed_is_asked_to_reconnect_not_given
         # James's sign-in ended and holds nothing to renew it with.
         await tokens.store_answer(tenant, conn, {"access_token": "at-old", "expires_in": 1}, JAMES.sub)
     held = await store.token(tenant, conn, JAMES.sub)
-    assert held is not None and held["expires_at"] < datetime.now(UTC) + timedelta(seconds=5)
+    assert (
+        held is not None and held.expires_at is not None and held.expires_at < datetime.now(UTC) + timedelta(seconds=5)
+    )
     with pytest.raises(AuthFailed) as e:
         await bearer(auth, tenant, conn, JAMES)
     assert e.value.code == "CONNECTION_NOT_LINKED" and e.value.details["reason"] == "refused", (

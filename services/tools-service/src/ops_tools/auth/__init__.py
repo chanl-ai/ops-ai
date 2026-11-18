@@ -28,7 +28,7 @@ from ..connections.account_events import CONNECTED, connected_key, needs_reconne
 from ..connections.records import EXPIRED, REFUSED
 from ..environments import LIVE
 from ..secrets import SecretMissing, SecretResolver
-from ..store.connections import SHARED, ConnectionStore
+from ..store.connections import SHARED, ConnectionStore, TokenRow
 from ..store.modules import Module, ModuleRef
 from .assertion import SigningError, read_certificate
 from .kinds import Kind, kind_of, origin
@@ -276,7 +276,7 @@ class Authenticator:
         person = SHARED if team_account else self._whose(conn, kind, acting_for, needs_person)
         # A call a person started is signed as them only, even where the team account backs runs nobody started: one
         # with no sign-in of their own is asked to connect rather than quietly acting as the team.
-        held_own: dict[str, Any] | None = None
+        held_own: TokenRow | None = None
         if person != SHARED and acting_for is not None:
             held_own = await self.connections.token(tenant_id, str(connection_id), person)
         missing = [
@@ -285,7 +285,7 @@ class Authenticator:
         if missing:
             raise AuthFailed("CONNECTION_NOT_SET", f"{name} has no {', '.join(missing)}.")
         settings = plain
-        if person != SHARED and acting_for is not None and held_own is not None and held_own.get("refused_at"):
+        if person != SHARED and acting_for is not None and held_own is not None and held_own.refused_at:
             # The system refused this key or sign-in before: ask for a new one rather than send it again.
             raise await self._not_linked(conn, acting_for, settings, scopes=list(scopes), reason="refused")
         if person != SHARED and kind.person_fields:
@@ -299,7 +299,7 @@ class Authenticator:
             prepared.values.extend(secret.values())
         if person != SHARED and acting_for is not None and scopes and kind.holds_token:
             held = await self.connections.token(tenant_id, str(connection_id), person)
-            granted = scope_list((held or {}).get("scopes"))
+            granted = scope_list(held.scopes if held is not None else None)
             if held is not None and not set(scopes) <= set(granted):
                 raise await self._not_linked(
                     conn, acting_for, settings, scopes=[*granted, *scopes], reason="insufficient_scope"
@@ -382,9 +382,9 @@ class Authenticator:
         tenant_id, connection_id, name = str(conn["tenant_id"]), str(conn["id"]), str(conn["name"])
         held = await self.connections.token(tenant_id, connection_id, SHARED)
         at = datetime.now(UTC)
-        ended: datetime | None = (held or {}).get("expires_at")
+        ended = held.expires_at if held is not None else None
         if e.side == "upstream":
-            state, why, since = REFUSED, str(e), (held or {}).get("refreshed_at")
+            state, why, since = REFUSED, str(e), (held.refreshed_at if held is not None else None)
         elif e.code == "NOT_SIGNED_IN" and ended is not None and ended <= at:
             state, why, since = EXPIRED, f"the team account's sign-in ended on {ended.day} {ended:%b %Y}.", ended
         else:
