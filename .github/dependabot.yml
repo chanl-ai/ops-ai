@@ -2,9 +2,11 @@
 # that a version is at least 30 days old before it is locked (pyproject.toml exclude-newer, pnpm-workspace.yaml
 # minimumReleaseAge). Security updates are not held back by the cooldown; they need Dependabot alerts and security
 # updates switched on in the repository settings.
+# target-branch: develop takes effect once this file reaches the default branch.
 version: 2
 updates:
   - package-ecosystem: uv
+    target-branch: develop
     directory: /
     schedule: { interval: weekly, day: monday }
     cooldown: { default-days: 30 }
@@ -15,6 +17,7 @@ updates:
         update-types: [minor, patch]
 
   - package-ecosystem: npm
+    target-branch: develop
     directory: /
     schedule: { interval: weekly, day: monday }
     cooldown: { default-days: 30 }
@@ -25,6 +28,7 @@ updates:
         update-types: [minor, patch]
 
   - package-ecosystem: github-actions
+    target-branch: develop
     directories: ["/", "/.github/actions/*"]
     schedule: { interval: weekly, day: monday }
     groups:
@@ -32,6 +36,7 @@ updates:
         patterns: ["*"]
 
   - package-ecosystem: docker
+    target-branch: develop
     directories: ["/deploy/fly", "/deploy/fly/mssql", "/.devcontainer"]
     schedule: { interval: weekly, day: monday }
     cooldown: { default-days: 30 }
