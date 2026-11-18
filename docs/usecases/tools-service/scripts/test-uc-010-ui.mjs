@@ -19,7 +19,7 @@ const signedIn = async (email, team) => {
 const HOST = 'statements.bank.test';
 const TAG = Math.random().toString(36).slice(2, 6);
 const OP = `get_statement_${TAG}`;
-const SHOTS = evidenceDir('027');
+const SHOTS = evidenceDir('010');
 // A wait armed before a click must not reject unhandled if the script fails first; that crash skips harness cleanup.
 const armed = (p) => (p.catch(() => undefined), p);
 const api = async (method, path, body, headers) => {

@@ -7,7 +7,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 
 import { AGENTS_PORT, PLATFORM_PORT, ROOT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
-const SHOTS = evidenceDir('150', 'screens');
+const SHOTS = evidenceDir('267', 'screens');
 
 async function step(name, body) {
   try {

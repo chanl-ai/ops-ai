@@ -95,7 +95,7 @@ await withUiStack(
       check('3 Assign to me takes it: it is under Assigned to me, and the sheet says it is hers', result.data?.updated?.includes(review.id) && sheet.includes(`Assigned to ${MAYA}`), { result: result.data, sheet: sheet.slice(0, 300) });
 
       // The card's visual record: the queue with the task taken, and its sheet, at desktop and phone width.
-      const shots = evidenceDir('074');
+      const shots = evidenceDir('225');
       mkdirSync(shots, { recursive: true });
       await page.getByTestId('review-sheet').waitFor({ state: 'visible', timeout: 10_000 });
       await page.waitForTimeout(500); // the sheet's slide-in

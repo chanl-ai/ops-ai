@@ -2,9 +2,11 @@
 // docs/usecases/console/embedded-chat-on-a-bank-page.md. The stack runs with platform sign-in and the embed app;
 // this script serves the bank's intranet page (which mints sessions on its own server with the deployment's mint key)
 // and a page on an origin the deployment does not list, then drives them in a browser. Each check stands alone.
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { join } from 'node:path';
 
-import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const HOST_PORT = 4621;
@@ -122,7 +124,10 @@ await withUiStack(
         await box.fill(HOLD);
         await chat.getByRole('button', { name: 'Send', exact: true }).click();
         const shown = await chat.getByTestId('approval-waiting-on').waitFor({ timeout: 120_000 }).then(() => true, () => false);
-        if (!shown && process.env.UC119_DUMP) (await import('node:fs')).writeFileSync(process.env.UC119_DUMP, await chat.content());
+        if (!shown) {
+          mkdirSync(evidenceDir('119'), { recursive: true });
+          writeFileSync(join(evidenceDir('119'), 'chat.html'), await chat.content());
+        }
         if (!shown) throw new Error(`no approval card; the chat reads: ${(await chat.locator('body').innerText()).slice(-600)}; console: ${consoleErrors.join(' | ').slice(0, 600)}; calls: ${widgetCalls.join(', ')}`);
         const buttons = await chat.getByRole('button', { name: /^(Approve|Reject)/ }).count();
         const attach = await chat.getByTestId('chat-attach').count();

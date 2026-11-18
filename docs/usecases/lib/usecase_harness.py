@@ -101,7 +101,25 @@ PLATFORM_PORT = int(os.environ.get("OPS_USECASE_PLATFORM_PORT", "8810"))
 PLATFORM_INTERNAL_PORT = int(os.environ.get("OPS_USECASE_PLATFORM_INTERNAL_PORT", "8811"))
 IDP_PORT = int(os.environ.get("OPS_USECASE_IDP_PORT", "8797"))
 DB = os.environ.get("OPS_USECASE_DB", "ops_usecase")
-LOG_DIR = Path(os.environ.get("OPS_LOG_DIR", ROOT / ".logs")) / "usecase"
+
+
+def evidence_dir(name: str, *parts: str) -> Path:
+    """The one place a use case writes anything (not created here): OPS_EVIDENCE_DIR, else .logs/usecases/, ignored by
+    git. `name` is the case's id; a leading `uc-` is dropped so `uc-224` and `224` are one folder, as in the Node
+    harness's evidenceDir(). scripts/check_usecase_outputs.py fails a use-case script that writes anywhere else."""
+    root = Path(os.environ.get("OPS_EVIDENCE_DIR", ROOT / ".logs" / "usecases"))
+    return root.joinpath(name.removeprefix("uc-"), *parts)
+
+
+def _case_id() -> str:
+    """The running script's case: `uc-NNN` in its file name, else the file name without its test- or evidence- prefix."""
+    stem = Path(sys.argv[0]).stem
+    found = re.search(r"uc-(\d+)", stem)
+    return found.group(1) if found else re.sub(r"^(test|evidence)-", "", stem) or "run"
+
+
+# The services' logs for this script; a script that reads a service's log reads it here.
+LOG_DIR = evidence_dir(_case_id(), "logs")
 # The dev user's own team, where the dev seeds put the fixture knowledge; a thread runs in the team it was made in.
 TEAM = {"X-Team-Id": "team_ops"}
 
@@ -336,7 +354,7 @@ def agents(
 
 @contextmanager
 def engine_worker(name: str, env: dict[str, str] | None = None) -> Generator[subprocess.Popen[bytes]]:
-    """The workflow worker on the use case database, polling every 0.2 s, logging to `.logs/usecase/worker-<name>.log`.
+    """The workflow worker on the use case database, polling every 0.2 s, logging to `worker-<name>.log` in LOG_DIR.
     `env` adds the services a use case's steps call (OPS_GATEWAY_URL, OPS_MODELS_URL, ...)."""
     full = _env() | {"OPS_DATABASE_URL": pg_url(), "OPS_ENGINE_POLL_SECONDS": "0.2"} | (env or {})
     LOG_DIR.mkdir(parents=True, exist_ok=True)

@@ -19,7 +19,11 @@ integration tests (pytest in the Python services); use cases only drive what a c
 | Register a new one | `make usecase-add AREA=<area> TITLE="<short title>" [LAYERS=api,sdk,cli]` (`usecase-new` is the older form) |
 | Every use case with its last run | `make usecase-list [AREA=<area>]`; the generated copy is `docs/usecases/index.md` (`make usecase-index`) |
 | What changed since the last green run | `make usecase-update UC=<id>` |
-| One use case, each step in plain words | `make usecase-run UC=<id> [LAYER=<layer>]`; full output in `.run/usecases/<id>-<layer>.log` |
+| One use case, each step in plain words | `make usecase-run UC=<id> [LAYER=<layer>]`; full output in `.logs/usecases/<id>/<layer>.log` |
+
+Every use case writes all its output (screenshots, logs, scratch files) under one root: `.logs/usecases/<id>/`, or
+`$OPS_EVIDENCE_DIR/<id>/` when that is set. `evidenceDir()` in the Node harness and `evidence_dir()` in the Python one
+return it, and `scripts/check_usecase_outputs.py` fails a script that writes elsewhere.
 
 Run make under your secrets manager as for the rest of the stack. The scripts do not need model keys and the runner
 removes them.

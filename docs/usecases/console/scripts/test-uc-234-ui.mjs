@@ -19,7 +19,7 @@ const json = async (r) => {
   if (body.data === undefined) throw new Error(`${r.url} answered ${r.status}: ${JSON.stringify(body).slice(0, 300)}`);
   return body.data;
 };
-const SHOTS = process.env.UC234_SHOTS ?? join(ROOT, 'docs/console/proposed/tasks');
+const SHOTS = evidenceDir('234', 'screens');
 // Words of the engine that belong under Details, never in the question, the evidence or the decision.
 const ENGINE_WORDS = /\bGate\b|Every paused step|Not scored|wfrun_|event:|Reviewers:|Runs \S+ on approval|team_ops/;
 
@@ -353,13 +353,13 @@ await withUiStack(
         const agreesElsewhere = await page.getByTestId('read-differs-0-court').count();
         await page.screenshot({ path: join(SHOTS, 'task-read-sources-1280.png') });
         // Screen evidence: the same check at 1280 and 400.
-        mkdirSync(evidenceDir('261', 'screens'), { recursive: true });
-        await page.screenshot({ path: join(evidenceDir('261', 'screens'), 'read-sources-1280.png') });
+        mkdirSync(evidenceDir('234', 'screens'), { recursive: true });
+        await page.screenshot({ path: join(evidenceDir('234', 'screens'), 'read-sources-1280.png') });
         await page.setViewportSize({ width: 400, height: 800 });
         // On a phone the sources sit in the Decide pane.
         await page.getByTestId('task-pane-decide').click();
         await page.waitForTimeout(400);
-        await page.screenshot({ path: join(evidenceDir('261', 'screens'), 'read-sources-400.png') });
+        await page.screenshot({ path: join(evidenceDir('234', 'screens'), 'read-sources-400.png') });
         await page.setViewportSize({ width: 1280, height: 800 });
         check(
           '9 a read combined with a second source shows each source in its own column and marks where they differ',

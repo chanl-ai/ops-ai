@@ -21,7 +21,7 @@ const RUN = Math.random().toString(36).slice(2, 6);
 const EMAIL = `ops-ai-evidence+${RUN}@example.com`;
 const STRIPE = 'https://api.stripe.com';
 const tools = `http://127.0.0.1:${TOOLS_PORT}/v1/tool-modules`;
-const shots = evidenceDir('591', 'stripe');
+const shots = evidenceDir('611', 'stripe');
 
 async function send(method, path, headers, body) {
   const r = await fetch(`${tools}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });

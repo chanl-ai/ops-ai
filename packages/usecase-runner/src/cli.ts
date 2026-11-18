@@ -1,7 +1,7 @@
 // Entry for scripts/usecase.mjs: list [area] | index | extract <id> | add <area> "<title>" | update <id> | run <id> [layer] | show <id> | test [--uc <id>] [--layer <layer>] | report [--uc <id>] |
 // coverage <service> | new <service> "<title>". Exit codes are in report.ts (EXIT).
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { coverage, formatCoverage } from './coverage.ts';
 import { deployedRefusal } from './deployed.ts';
 import { isLayer, LAYERS, type Layer } from './layers.ts';
@@ -9,7 +9,7 @@ import { findUseCase, parseRegistry, RegistryError, type UseCase } from './regis
 import { EXIT, exitFor, parseChecks, summary, verdict, type Outcome } from './report.ts';
 import { BASE_URL_VAR, DB_VAR, dropDatabase, isolate, rebuildIfStale, runDatabaseName, sweepFinished } from './isolation.ts';
 import { resolveScript, USECASE_DIR } from './resolve.ts';
-import { childEnv, commandFor, runScript } from './run.ts';
+import { childEnv, commandFor, pluginsRepoRefusal, runScript } from './run.ts';
 import { scaffold } from './scaffold.ts';
 import { extract, runPage } from './page.ts';
 import { execFileSync } from 'node:child_process';
@@ -116,6 +116,11 @@ async function runAll(
       console.log(`\n== ${uc.id} ${layer}: ${uc.title} (${r.path})`);
       outcomes.push(
         await databaseFor(async (env) => {
+          const noPlugins = r.kind === 'page' ? undefined : pluginsRepoRefusal(env, join(root, r.path));
+          if (noPlugins) {
+            console.log(noPlugins);
+            return { id: uc.id, layer, status: 'FAIL', detail: noPlugins };
+          }
           const { code, output } = r.kind === 'page' ? await runPage(root, r.path, layer, env) : await runScript(commandFor(root, r.path, r.runtime), env, root);
           const checks = parseChecks(output);
           const v = verdict(code, checks);
@@ -125,7 +130,7 @@ async function runAll(
           saveLog(root, uc.id, layer, output);
           const doc = r.kind === 'page' ? undefined : findDoc(root, uc);
           const steps = doc ? parseSteps(readFileSync(join(root, doc), 'utf8')) : [];
-          console.log(`\n${uc.id} ${layer}, step by step${r.kind === 'page' ? ': the PASS and FAIL lines above, one per step' : steps.length ? `\n${formatSteps(steps, checks)}` : ': this doc has no steps table'}\n  ${v.pass ? 'all checks passed' : `failed; full output in ${logPath(uc.id, layer)}`}`);
+          console.log(`\n${uc.id} ${layer}, step by step${r.kind === 'page' ? ': the PASS and FAIL lines above, one per step' : steps.length ? `\n${formatSteps(steps, checks)}` : ': this doc has no steps table'}\n  ${v.pass ? 'all checks passed' : `failed; full output in ${relative(root, logPath(root, uc.id, layer))}`}`);
           return {
             id: uc.id,
             layer,

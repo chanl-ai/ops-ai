@@ -1,7 +1,8 @@
 // Runs one resolved script and returns its exit code and output. Python scripts run in the agents-service uv project,
 // which holds the workspace packages they import; Node scripts run with the repo's node.
-import { spawn } from 'node:child_process';
-import { join } from 'node:path';
+import { execFileSync, spawn } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 
 const MODEL_KEYS = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY'];
 
@@ -19,7 +20,31 @@ export function childEnv(parent: NodeJS.ProcessEnv, root: string): { env: NodeJS
   // The ui harness starts this tree's services: from an export it would otherwise resolve, through the installed
   // package, to whichever tree node_modules points at.
   env.OPS_USECASE_ROOT = root;
+  const plugins = env.OPS_PLUGINS_REPO ? undefined : defaultPluginsRepo(root);
+  if (plugins) env.OPS_PLUGINS_REPO = plugins;
   return { env, realCalls };
+}
+
+/**
+ * ops-ai-plugins beside the main checkout. A linked worktree sits somewhere else, so the folder is found through git's
+ * common directory, which is the main checkout's `.git` from every worktree. Undefined when git cannot say.
+ */
+export function defaultPluginsRepo(root: string): string | undefined {
+  try {
+    const common = execFileSync('git', ['-C', root, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    const main = basename(common) === '.git' ? dirname(common) : common;
+    return join(dirname(main), 'ops-ai-plugins');
+  } catch {
+    return undefined;
+  }
+}
+
+/** The one line a run stops with when a script reads OPS_PLUGINS_REPO and the repo is not where it defaults to. */
+export function pluginsRepoRefusal(env: NodeJS.ProcessEnv, scriptPath: string): string | undefined {
+  const repo = env.OPS_PLUGINS_REPO;
+  if (!repo || existsSync(repo)) return undefined;
+  if (!/PLUGINS_REPO|ops-ai-plugins/.test(readFileSync(scriptPath, 'utf8'))) return undefined;
+  return `FAIL the plugins repository is not at ${repo}; clone ops-ai-plugins there or set OPS_PLUGINS_REPO to its folder`;
 }
 
 export function commandFor(root: string, path: string, runtime: 'python' | 'node'): string[] {

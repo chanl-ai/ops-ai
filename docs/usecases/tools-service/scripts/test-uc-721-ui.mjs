@@ -3,10 +3,10 @@
 // another member reading the thread sees no buttons. With "Ask a reviewer" the asker gets no decision and a reviewer
 // approves in Human Tasks. Walked as a member (James) and an admin (Priya) at 1440 and 390; screenshots go to SHOTS.
 import { mkdirSync } from 'node:fs';
-import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, consoleSignIn, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, TOOLS_PORT, check, chromium, consoleSignIn, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 import { JAMES, MAYA, PASSWORD, PRIYA, as, openHeldChatWrite, until } from '../../lib/workflow_ui.mjs';
 
-const SHOTS = process.env.SHOTS_DIR ?? 'docs/plans/ops-ai/test-results/approvals/chat';
+const SHOTS = evidenceDir('721', 'screens');
 mkdirSync(SHOTS, { recursive: true });
 const SAM = 's.adeyemi@harborpine.example';
 const NADIA = 'n.petrov@harborpine.example';

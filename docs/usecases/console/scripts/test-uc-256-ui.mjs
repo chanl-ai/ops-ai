@@ -10,7 +10,7 @@ const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const JAMES = 'j.richardson@harborpine.example';
 // Priya runs Operations, so she can decide its Human Tasks; James, a Builder, builds and starts the workflow.
 const PRIYA = 'p.shah@harborpine.example';
-const SHOTS = evidenceDir('292', 'screens');
+const SHOTS = evidenceDir('256', 'screens');
 const DEFINITION = `
 schemaVersion: 2
 id: uc256_fee_dispute

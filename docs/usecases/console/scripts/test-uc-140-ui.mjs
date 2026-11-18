@@ -2,9 +2,11 @@
 // (`make up AUTH=platform`, console on :3016, the chat alias on whatever model the stack serves), so every step is what
 // a person sees there. Each step reports on its own; one that fails does not hide the next.
 import { execFileSync } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { check, chromium, finish } from '@ops-ai/usecase-runner/harness';
+
+import { check, chromium, evidenceDir, finish } from '@ops-ai/usecase-runner/harness';
 
 const ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 const CONSOLE = `http://localhost:${process.env.OPS_CONSOLE_PORT ?? 3016}`;
@@ -25,7 +27,8 @@ const FROM = process.env.UC140_FROM ?? 'a';
 const ONLY = process.env.UC140_ONLY?.split(',');
 
 const pages = [];
-const SHOTS = process.env.UC140_SHOTS;
+const SHOTS = evidenceDir('140', 'screens');
+mkdirSync(SHOTS, { recursive: true });
 
 async function step(name, body) {
   if (name[0] < FROM || (ONLY && !ONLY.includes(name[0]))) return;
@@ -34,7 +37,7 @@ async function step(name, body) {
   } catch (e) {
     check(name, false, String(e).slice(0, 400));
     // Where each signed-in person's page stood when the step failed.
-    if (SHOTS) for (const [who, pg] of pages) await pg.screenshot({ path: `${SHOTS}/uc140-${name[0]}-${who.split('@')[0]}.png` }).catch(() => {});
+    for (const [who, pg] of pages) await pg.screenshot({ path: `${SHOTS}/uc140-${name[0]}-${who.split('@')[0]}.png` }).catch(() => {});
   }
 }
 

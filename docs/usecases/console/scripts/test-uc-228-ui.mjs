@@ -1,14 +1,14 @@
 // uc-228 Starting a run, and reading a run and a case, ui layer: docs/usecases/console/start-run-and-records.md.
-// Platform sign-in; James works in Operations. UC228_SHOTS names a folder to keep each surface's screenshot in, for a
+// Platform sign-in; James works in Operations. Each surface's screenshot is kept in the evidence folder, for a
 // side-by-side comparison before and after a refactor.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, PLATFORM_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const JAMES = 'j.richardson@harborpine.example';
-const SHOTS = process.env.UC228_SHOTS;
+const SHOTS = evidenceDir('228', 'screens');
 const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
 const json = async (r) => {
   const body = await r.json();
@@ -35,8 +35,8 @@ await withUiStack(
 
     const browser = await chromium.launch();
     const errors = [];
-    if (SHOTS) mkdirSync(SHOTS, { recursive: true });
-    const shot = async (page, name) => SHOTS && page.screenshot({ path: join(SHOTS, `${name}.png`), animations: 'disabled' });
+    mkdirSync(SHOTS, { recursive: true });
+    const shot = async (page, name) => page.screenshot({ path: join(SHOTS, `${name}.png`), animations: 'disabled' });
     try {
       const signIn = async (width) => {
         const page = await (await browser.newContext({ viewport: { width, height: 900 } })).newPage();

@@ -30,7 +30,7 @@ CHECKS = \
   store-inventory roles-matrix sbom k8s-base \
   ratchet-history lint-imports sdk-drift api-changelog api-changes-gap changelog-entries console-standards \
   downgrades token-lifetime cross-service standards service-standards service-standards-self-test \
-  ci-steps ci-steps-self-test
+  ci-steps ci-steps-self-test usecase-outputs
 
 # Access decided outside can(), the exceptions each lane may still hold, and the trailer a new line needs.
 CHECK_ACCESS_PATHS = ^(services|packages)/[^/]+/src/.*\.py$$|^apps/(console|embed)/src/|^access-exceptions-allowlist\.txt$$|^docs/architecture/roles-and-permissions\.md$$|^scripts/(check_access_exceptions\.py|access-baselines/)
@@ -112,6 +112,9 @@ check-paths.console-standards = ^apps/console/
 # A migration whose downgrade() does nothing, beyond scripts/downgrades-waiting.txt, which only shrinks.
 check-run.downgrades = $(PY) scripts/check_downgrades.py --all
 check-paths.downgrades = /migrations/versions/.*\.py$$|^scripts/(check_downgrades\.py|downgrades-waiting\.txt)$$
+# A use-case script that writes outside the one output root (evidenceDir / evidence_dir, or a temp dir).
+check-run.usecase-outputs = $(PY) scripts/check_usecase_outputs.py
+check-paths.usecase-outputs = ^docs/usecases/.*\.(mjs|js|ts|py|sh)$$|^scripts/check_usecase_outputs\.py$$
 # A test that mints a short-lived person token flakes under load; a service that imports another service.
 check-run.token-lifetime = $(PYTEST) scripts/tests/test_test_token_lifetime.py
 check-paths.token-lifetime = (^|/)tests/.*\.py$$

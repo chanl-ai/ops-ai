@@ -3,15 +3,15 @@
 // The account admin (Sam Adeyemi, admin of the Security team) with no model key sets chat up from the overview card in
 // three steps: provider, the OpenAI key (OPENAI_API_KEY) saved and tested, then a chat model from the key's list. At
 // 1440 and at 390 wide; each width starts with no key. Approvals then shows the makers' ask-first switch off.
-// SHOTS names the folder each step's screenshot goes to.
+// SHOTS is the folder each step's screenshot goes to.
 import { mkdirSync } from 'node:fs';
 
-import { check, chromium, consoleSignIn, finish } from '@ops-ai/usecase-runner/harness';
+import { check, chromium, consoleSignIn, evidenceDir, finish } from '@ops-ai/usecase-runner/harness';
 
 const CONSOLE = process.env.CONSOLE_URL ?? 'http://localhost:3016';
 const PLATFORM = process.env.PLATFORM_URL ?? 'http://localhost:8710';
 const MODELS = process.env.MODELS_URL ?? 'http://localhost:8730';
-const SHOTS = process.env.SHOTS ?? 'test-results/first-run';
+const SHOTS = evidenceDir('751', 'screens');
 const EMAIL = 's.adeyemi@harborpine.example';
 const PASSWORD = process.env.OPS_PLATFORM_DEMO_PASSWORD ?? 'northfield-demo';
 const KEY = process.env.OPENAI_API_KEY;

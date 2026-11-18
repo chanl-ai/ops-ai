@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-LOGS = ROOT / ".logs" / "usecases" / "batch"
+LOGS = Path(os.environ.get("OPS_EVIDENCE_DIR", ROOT / ".logs" / "usecases")) / "batch"
 
 
 STARTED_ENV = "OPS_SLOT_STARTED_FILE"

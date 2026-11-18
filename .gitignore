@@ -18,6 +18,7 @@ __pycache__/
 .logs/
 .run/
 .data/
+.serena/
 
 
 # Generated DBA scripts (make db-ddl, db-upgrade-sql, db-release); a release attaches them.

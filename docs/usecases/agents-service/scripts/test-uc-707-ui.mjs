@@ -1,7 +1,7 @@
 // uc-707 An account a workflow or agent names is not deleted until nothing names it, ui layer:
 // docs/usecases/agents-service/an-account-in-use-is-not-deleted.md. Salesforce has two team accounts (Retail org and EU
 // org) and an agent names EU org. Priya deletes EU org from its row's menu at 1440 and 390: the dialog says the delete
-// is refused and why, naming the agent, and the row stays. Screenshots go to OPS_USECASE_SHOTS when set.
+// is refused and why, naming the agent, and the row stays. Screenshots go to the evidence folder.
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -15,7 +15,7 @@ const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const PASSWORD = 'northfield-demo';
 const PRIYA = 'p.shah@harborpine.example';
 const MAYA = 'm.okafor@harborpine.example';
-const SHOTS = process.env.OPS_USECASE_SHOTS || evidenceDir('707', 'uc');
+const SHOTS = evidenceDir('707', 'uc');
 const SALESFORCE = join(process.env.OPS_PLUGINS_REPO || join(ROOT, '..', 'ops-ai-plugins'), 'plugins/salesforce/src/ops_plugin_salesforce');
 const LIB = join(ROOT, 'docs/usecases/lib');
 const APP = 'plugin:opsai.salesforce';
