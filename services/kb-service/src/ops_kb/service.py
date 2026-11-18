@@ -37,6 +37,7 @@ from ops_service_kit.http import JsonValue, options_page, options_window
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
+from ops_service_kit.narrow import json_object
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 from ops_store.listing import ListPage
@@ -418,7 +419,7 @@ class KnowledgeService:
         cfg: dict[str, Any] = dict(s.config or {})
         if kind_of(s) == "web":
             return WEB_SCHEDULE
-        return cast(dict[str, Any], cfg.get("schedule") or {"kind": "manual"})
+        return json_object(cfg.get("schedule")) or {"kind": "manual"}
 
     def freshness_of(self, s: SourceRow, now: datetime | None = None) -> str:
         """`fresh`, `stale` or `no_schedule` for the source (see `freshness`). The clock is the database's, read with
@@ -2210,7 +2211,7 @@ class KnowledgeService:
         if patch.get("tags") is not None:
             values["tags"] = patch["tags"]
         if patch.get("values") is not None:
-            values["config"] = await self._values_changed(who, s, cast(dict[str, Any], patch["values"]))
+            values["config"] = await self._values_changed(who, s, json_object(patch["values"]))
         given = {k: patch[k] for k in SETTINGS_KEYS if patch.get(k) is not None}
         before = self.settings_of(s)
         if given:
@@ -2233,7 +2234,7 @@ class KnowledgeService:
         if s.type != "tool":
             raise ValidationFailed("Only a source read through an app has settings of its own.")
         cfg: dict[str, Any] = dict(s.config or {})
-        merged = {**cast(dict[str, Any], cfg.get("values") or {}), **given}
+        merged = {**json_object(cfg.get("values")), **given}
         checked = await source_config(
             self.tools, who, {"plugin": cfg.get("plugin"), "source": cfg.get("source"), "values": merged}
         )
@@ -2331,7 +2332,7 @@ class KnowledgeService:
         """Lets the next sync take those addresses in again, if the source still lists them."""
         s = await self._changeable_source(who, source_id)
         cfg: dict[str, Any] = dict(s.config or {})
-        marks = cast(dict[str, Any], dict(cfg.get("tombstones") or {}))
+        marks = json_object(dict(cfg.get("tombstones") or {}))
         if missing := [i for i in ids if i not in marks]:
             raise NotFound(f"No tombstone for {missing[0]}.")
         cfg["tombstones"] = {k: v for k, v in marks.items() if k not in ids}
@@ -2616,7 +2617,7 @@ class KnowledgeService:
                 await self.store.update_source(who.tenant_id, source_id, {"type": "text"})
         put = await self.put_item(who, source_id, {"name": f"{_slug(title) or 'page'}.md", "title": title,
                                                             "text": text})  # fmt: skip
-        return cast(dict[str, Any], put["item"])
+        return json_object(put["item"])
 
     async def put_item(self, who: Who, source_id: str, i: dict[str, Any]) -> dict[str, Any]:
         """One item written into a typed text or push source, by its `name`: stored as a file through files-service
@@ -2760,7 +2761,7 @@ class KnowledgeService:
             for b in blocks:
                 if not dropped(b):
                     kinds[str(b.get("kind"))] = kinds.get(str(b.get("kind")), 0) + 1
-            quality = cast(dict[str, Any], page.get("ocr") or {})
+            quality = json_object(page.get("ocr"))
             out.append(
                 {
                     "number": page.get("number"),
@@ -3008,7 +3009,7 @@ def health_of(s: SourceRow) -> dict[str, Any]:
         **({"failingSince": _iso(since)} if since else {}),
         "daysFailing": (datetime.now(UTC) - since).days if since else 0,
         "failedRuns": int(s.failures_in_row or 0),
-        "tombstoned": len(cast(dict[str, Any], cfg.get("tombstones") or {})),
+        "tombstoned": len(json_object(cfg.get("tombstones"))),
     }
 
 
@@ -3026,7 +3027,7 @@ def scope_summary(s: SourceRow) -> str:
         n = len(s.file_ids)
         return f"{n} uploaded file" if n == 1 else f"{n} uploaded files"
     cfg = dict(s.config or {})
-    values = cast(dict[str, Any], cfg.get("values") or {})
+    values = json_object(cfg.get("values"))
     start = cast(list[Any], values.get("start") or [])
     if start:
         first = str(start[0]).split("://", 1)[-1].rstrip("/")
@@ -3362,7 +3363,7 @@ def settled(current: dict[str, dict[str, Any]], given: dict[str, Any]) -> dict[s
         patch = cast(dict[str, Any], sent)
         merged: dict[str, Any] = {**current[name], **patch}
         if name == "access" and isinstance(patch.get("mcp"), dict):
-            merged["mcp"] = {**current["access"]["mcp"], **cast(dict[str, Any], patch["mcp"])}
+            merged["mcp"] = {**current["access"]["mcp"], **json_object(patch["mcp"])}
         if name == "retrieval":
             checked_retrieval(merged)
         try:

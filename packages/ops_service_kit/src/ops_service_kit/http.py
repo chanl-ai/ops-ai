@@ -42,6 +42,10 @@ class In(BaseModel):
 # holds whatever a function or a document returned (a run's output). It is not `Any`: a value that is not JSON is
 # refused, its schema is the named `JsonValue`, and `contract.boundaries` counts it typed.
 type JsonValue = _Json
+# A JSON object and a JSON list. Plain aliases, not `type` statements: a model field typed with one keeps the inline
+# object or array schema it had, so no committed OpenAPI document gains a named component.
+Json = dict[str, JsonValue]
+JsonList = list[JsonValue]
 
 
 class Out(BaseModel):

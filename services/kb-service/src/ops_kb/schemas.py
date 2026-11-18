@@ -7,11 +7,10 @@ from typing import Annotated, Literal
 
 from pydantic import Field
 
-from ops_service_kit.http import In, JsonValue, ListResult, Out
+from ops_service_kit.http import In, Json, JsonValue, ListResult, Out
 
-# A body's section, patch or stage settings: keys checked as a whole by the service (settings sections, source stages),
-# so any JSON object here.
-Json = dict[str, JsonValue]
+# `Json` types a body's section, patch or stage settings: keys checked as a whole by the service (settings sections,
+# source stages), so any JSON object.
 
 
 class _Section(Out):

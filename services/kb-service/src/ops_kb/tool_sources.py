@@ -24,6 +24,7 @@ from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import Conflict, ValidationFailed
 from ops_service_kit.http import JsonValue
 from ops_service_kit.ids import new_id
+from ops_service_kit.narrow import json_object
 
 from .ai import spent_on
 from .files import FileNotScanned, Stored
@@ -200,9 +201,9 @@ class ToolReader:
             return Answer(False, code=str(e.code or "refused"), message=e.message)
         except ServiceUnreachable as e:
             return Answer(False, code="UPSTREAM_UNREACHABLE", message=str(e))
-        answer = cast(dict[str, Any], data or {})
+        answer = json_object(data)
         if not answer.get("ok"):
-            error = cast(dict[str, Any], cast(dict[str, Any], answer.get("output") or {}).get("error") or {})
+            error = json_object(json_object(answer.get("output")).get("error"))
             return Answer(False, code=str(error.get("code") or "TOOL_FAILED"), message=str(error.get("message") or ""))
         return Answer(True, answer.get("output"))
 
@@ -364,7 +365,7 @@ def _listing(out: Any) -> list[dict[str, Any]] | None:
     rows = cast(list[Any], items)
     if not all(isinstance(r, dict) and {"id", "updated_at"} <= set(cast(dict[str, Any], r)) for r in rows):
         return None
-    return [cast(dict[str, Any], r) for r in rows]
+    return [json_object(r) for r in rows]
 
 
 def _less_overlap(stamp: str) -> str:
@@ -443,8 +444,8 @@ async def sync_tool_source(
     pages, restarted, resumes = 0, False, False
     # The seconds between two fetches of this source's items: the source's own rate, or the slower pace its listing
     # names (a site's robots.txt Crawl-delay). Each fetch is its own call, so the plugin cannot pace them itself.
-    values = cast(dict[str, Any], cfg.get("values") or {})
-    pace = 1.0 / float(values["rate"]) if isinstance(values.get("rate"), int | float) and values["rate"] > 0 else 0.0
+    rate = json_object(cfg.get("values")).get("rate")
+    pace = 1.0 / float(rate) if isinstance(rate, int | float) and rate > 0 else 0.0
     while True:
         if pages >= MAX_PAGES:
             # The items listed so far are fetched now; the next run lists on from the saved cursor.
@@ -482,9 +483,10 @@ async def sync_tool_source(
             status, stopped = "failed", "The tool's answer is not a knowledge listing."
             errors.append({"phase": "list", "errorClass": "contract", "message": stopped})
             break
-        out = cast(dict[str, Any], page.output)
-        if isinstance(out.get("pace_s"), int | float):
-            pace = max(pace, float(out["pace_s"]))
+        out = json_object(page.output)
+        named = out.get("pace_s")
+        if isinstance(named, int | float):
+            pace = max(pace, float(named))
         for r in rows:
             item_id = str(r["id"])
             counts["listed"] += 1
@@ -724,7 +726,7 @@ async def _put(
         "parent_id": None,
         "url": item.get("url"),
         "folder": str(item["folder"])[:400] if item.get("folder") else None,
-        "fields": {str(k): str(v) for k, v in cast(dict[str, Any], item.get("metadata") or {}).items()} or None,
+        "fields": {str(k): str(v) for k, v in json_object(item.get("metadata")).items()} or None,
         "tag": str(item["marker"])[:200] if item.get("marker") else None,
         "gone_count": 0,
     }
