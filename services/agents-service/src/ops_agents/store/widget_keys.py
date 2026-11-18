@@ -8,11 +8,14 @@ each leave a row in widget_mint_key_audit, written in the same transaction as th
 
 from __future__ import annotations
 
-from typing import Any
+from typing import cast
 
 import sqlalchemy as sa
+from pydantic import BaseModel
 
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
+from ops_store.rows import one, rows
 from ops_store.schema import TENANT_SCOPED
 
 from .base import metadata
@@ -54,28 +57,63 @@ def _audit(deployment_id: str, key_id: str, action: str, actor: str, at: str) ->
     )
 
 
+class MintKeyRow(BaseModel):
+    """A `widget_mint_keys` row, every column."""
+
+    id: str
+    tenant_id: str
+    deployment_id: str
+    name: str
+    secret_hash: str
+    created_by: str
+    created_at: str
+    last_used_at: str | None
+    revoked_at: str | None
+    expires_at: str | None
+
+
+class KeyAuditRow(BaseModel):
+    """A `widget_mint_key_audit` row, every column."""
+
+    id: str
+    tenant_id: str
+    deployment_id: str
+    key_id: str
+    action: str
+    actor: str
+    at: str
+
+
 class WidgetKeys(RuntimeStore):
-    async def add(self, row: dict[str, Any]) -> None:
+    async def add(self, row: Json) -> None:
+        """`row` names the key's columns (the tenant is the acting one); its ids, author and time are strings."""
         async with self.tx() as c:
             await c.execute(widget_mint_keys.insert().values(**row))
-            await c.execute(_audit(row["deployment_id"], row["id"], "created", row["created_by"], row["created_at"]))
+            await c.execute(
+                _audit(
+                    cast(str, row["deployment_id"]),
+                    cast(str, row["id"]),
+                    "created",
+                    cast(str, row["created_by"]),
+                    cast(str, row["created_at"]),
+                )
+            )
 
-    async def get(self, key_id: str) -> dict[str, Any] | None:
+    async def get(self, key_id: str) -> MintKeyRow | None:
         q = widget_mint_keys.select().where(
             widget_mint_keys.c.id == key_id, widget_mint_keys.c.tenant_id == current_tenant()
         )
         async with self.tx() as c:
-            r = (await c.execute(q)).mappings().first()
-        return dict(r) if r is not None else None
+            return await one(c, q, MintKeyRow)
 
-    async def for_deployment(self, deployment_id: str) -> list[dict[str, Any]]:
+    async def for_deployment(self, deployment_id: str) -> list[MintKeyRow]:
         q = (
             widget_mint_keys.select()
             .where(widget_mint_keys.c.deployment_id == deployment_id, widget_mint_keys.c.tenant_id == current_tenant())
             .order_by(widget_mint_keys.c.created_at.desc())
         )
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, MintKeyRow)
 
     async def active_counts(self, deployment_ids: list[str]) -> dict[str, int]:
         """Unrevoked keys per deployment, for the deployments list; a deployment with none is absent."""
@@ -125,7 +163,7 @@ class WidgetKeys(RuntimeStore):
         async with self.tx() as c:
             await c.execute(_audit(deployment_id, "preview", "preview", actor, at))
 
-    async def audit(self, deployment_id: str) -> list[dict[str, Any]]:
+    async def audit(self, deployment_id: str) -> list[KeyAuditRow]:
         q = (
             widget_mint_key_audit.select()
             .where(
@@ -135,4 +173,4 @@ class WidgetKeys(RuntimeStore):
             .order_by(widget_mint_key_audit.c.at.desc())
         )
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, KeyAuditRow)

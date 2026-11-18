@@ -218,11 +218,11 @@ async def get_connectors(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     person and whether this chat uses it, then the apps the team has off."""
     async with isolation.request_transaction():
         row, agent, limits = await _thread(rt, me, thread_id)
-    apps = await _by_app(rt, me, str(row["team_id"]), agent.id, list(limits.switchable_tool_ids))
+    apps = await _by_app(rt, me, str(row.team_id), agent.id, list(limits.switchable_tool_ids))
     # As the thread stores them: overrides that are not an object fail at their first read.
-    stored = cast(Json, row.get("overrides") or {})
+    stored = cast(Json, row.overrides or {})
     chosen = chosen_accounts(agent=agent.accounts, chat=cast(dict[str, str], stored.get("accounts") or {}))
-    apps = await _with_accounts(rt, me, str(row["team_id"]), apps, chosen)
+    apps = await _with_accounts(rt, me, str(row.team_id), apps, chosen)
     return ok(_view(thread_id, apps, set(cast(list[str], stored.get("toolsOff") or []))))
 
 
@@ -232,7 +232,7 @@ async def set_connectors(rt: Rt, me: Me, thread_id: str, body: ConnectorsIn) -> 
     back on gets every tool back, and a tool the settings panel switched off one by one stays off while its app is
     on. 422 naming the app for one this chat does not hold."""
     row, agent, limits = await _thread(rt, me, thread_id)
-    apps = await _by_app(rt, me, str(row["team_id"]), agent.id, list(limits.switchable_tool_ids))
+    apps = await _by_app(rt, me, str(row.team_id), agent.id, list(limits.switchable_tool_ids))
     held = {str(a.card["id"]): a for a in apps if a.card["appGroup"] != ADMIN}
     if unknown := [a for a in body.off if a not in held]:
         raise Unprocessable(
@@ -241,7 +241,7 @@ async def set_connectors(rt: Rt, me: Me, thread_id: str, body: ConnectorsIn) -> 
             details={"appId": unknown[0]},
         )
     # As the thread stores them: overrides that are not an object fail at their first read.
-    stored = cast(Json, row.get("overrides") or {})
+    stored = cast(Json, row.overrides or {})
     before = set(cast(list[str], stored.get("toolsOff") or []))
     off = set(before)
     for app_id, app in held.items():
@@ -254,12 +254,14 @@ async def set_connectors(rt: Rt, me: Me, thread_id: str, body: ConnectorsIn) -> 
     off = sorted(off)
     accounts = cast(dict[str, str], stored.get("accounts") or {})
     if body.accounts is not None:
-        accounts = await _checked_accounts(rt, me, str(row["team_id"]), held, body.accounts)
-    merged = parse(merge(stored, {"toolsOff": off or None, "accounts": accounts or None}), "thread")
+        accounts = await _checked_accounts(rt, me, str(row.team_id), held, body.accounts)
+    # `accounts` is passed on as read (a stored value that is not an object reaches `parse`, which refuses it).
+    patch: Json = {"toolsOff": [*off] or None, "accounts": cast(Json, accounts) or None}
+    merged = parse(merge(stored, patch), "thread")
     resolve(limits, agent.default_kb_ids, thread=merged, widgets_per_turn=agent.widgets_per_turn)
     saved = (merged.model_dump(mode="json", by_alias=True, exclude_none=True) if merged else None) or None
     await graph_store(rt).set_overrides(thread_id, saved, updated_at=now_iso())
-    apps = await _with_accounts(rt, me, str(row["team_id"]), apps, chosen_accounts(agent=agent.accounts, chat=accounts))
+    apps = await _with_accounts(rt, me, str(row.team_id), apps, chosen_accounts(agent=agent.accounts, chat=accounts))
     return ok(_view(thread_id, apps, set(off)))
 
 

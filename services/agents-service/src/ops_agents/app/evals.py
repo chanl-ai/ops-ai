@@ -12,6 +12,7 @@ from ops_agents.domain.evals import (
     CHECK_UNKNOWN_CODE,
     EVAL_RUN_PREFIX,
     EVAL_STATUS_COMPLETE,
+    CaseOutcome,
     EvalCase,
     EvalCheck,
     score_case,
@@ -19,9 +20,11 @@ from ops_agents.domain.evals import (
     unknown_check_types,
 )
 from ops_service_kit.errors import Unprocessable
+from ops_service_kit.http import Json, JsonList
 from ops_service_kit.ids import new_id
+from ops_service_kit.narrow import json_object
 
-TurnFn = Callable[[str, tuple[str, ...]], Awaitable[dict[str, Any]]]
+TurnFn = Callable[[str, tuple[str, ...]], Awaitable[Json]]
 
 
 def parse_cases(raw: list[Any]) -> list[EvalCase]:
@@ -38,7 +41,7 @@ def parse_cases(raw: list[Any]) -> list[EvalCase]:
     return cases
 
 
-def _outcome(outcome: Any) -> dict[str, Any]:
+def _outcome(outcome: CaseOutcome) -> Json:
     return {
         "status": outcome.status,
         "reply": outcome.reply,
@@ -47,12 +50,10 @@ def _outcome(outcome: Any) -> dict[str, Any]:
     }
 
 
-async def run_eval(
-    agent_id: str, cases: list[EvalCase], turn: TurnFn, live_turn: TurnFn | None = None
-) -> dict[str, Any]:
+async def run_eval(agent_id: str, cases: list[EvalCase], turn: TurnFn, live_turn: TurnFn | None = None) -> Json:
     """Scores each case on the version `turn` runs; with `live_turn`, on the live version too, and a case that passes
     live but fails now is a regression."""
-    results: list[dict[str, Any]] = []
+    results: JsonList = []
     passed = regressions = 0
     for case in cases:
         outcome = score_case(case, turn_from_test(await turn(case.input, case.collections)))
@@ -79,13 +80,9 @@ async def run_eval(
     }
 
 
-def _mapping(item: Any) -> dict[str, Any]:
-    return cast(dict[str, Any], item) if isinstance(item, dict) else {}
-
-
 def _case(item: Any) -> EvalCase:
-    data = _mapping(item)
-    context = _mapping(data.get("context"))
+    data = json_object(item)
+    context = json_object(data.get("context"))
     raw_collections = context.get("collections")
     collections = cast(list[Any], raw_collections) if isinstance(raw_collections, list) else []
     raw_checks = data.get("checks")
@@ -99,7 +96,7 @@ def _case(item: Any) -> EvalCase:
 
 
 def _check(item: Any) -> EvalCheck:
-    data = _mapping(item)
+    data = json_object(item)
     tool = data.get("tool")
     text = data.get("text")
     return EvalCheck(

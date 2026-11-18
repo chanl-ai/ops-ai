@@ -8,11 +8,11 @@ check stops until the name is changed.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import Any, TypedDict, cast
+from typing import TypedDict, cast
 
 from ops_engine.store import DefinitionStore
 from ops_service_kit.errors import Unprocessable
-from ops_service_kit.http import Json
+from ops_service_kit.http import Json, JsonValue
 
 from ..activities.tool_directory import ToolsUnavailable
 from ..store.engine import EngineTransactions
@@ -32,7 +32,7 @@ class AccountUses(TypedDict):
     agents: list[str]
 
 
-def step_names(definition: Mapping[str, Any]) -> list[tuple[str, str, str]]:
+def step_names(definition: Mapping[str, JsonValue]) -> list[tuple[str, str, str]]:
     """(step label or id, app id, account name) for each account the definition's tool steps name."""
     out: list[tuple[str, str, str]] = []
     for node in cast(list[Json], definition.get("nodes") or []):
@@ -76,7 +76,7 @@ async def require_team_accounts(rt: Runtime, team: str, named: Iterable[tuple[st
         )
 
 
-def uses_of(definitions: Iterable[tuple[str, Mapping[str, Any]]], app: str, name: str) -> list[str]:
+def uses_of(definitions: Iterable[tuple[str, Mapping[str, JsonValue]]], app: str, name: str) -> list[str]:
     """The ids among `definitions` (id, definition) whose steps name `name` for `app`, compared trimmed and
     case-folded as tools-service compares them, for the rename warning's count."""
     key = name.strip().casefold()
