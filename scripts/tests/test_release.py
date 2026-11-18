@@ -88,7 +88,16 @@ def release_pr(
     gh = bin_dir / "gh"
     gh.write_text(FAKE_GH)
     gh.chmod(0o755)
-    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "V": "1.1.0", "FAKE_GH": json.dumps(gh_state)}
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir}:{os.environ['PATH']}",
+        "V": "1.1.0",
+        "FAKE_GH": json.dumps(gh_state),
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
     env.update(env_changes)
     return subprocess.run(
         [sys.executable, str(SCRIPT), command], cwd=work, capture_output=True, text=True, env=env, check=False

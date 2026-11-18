@@ -83,6 +83,8 @@ def with_version(sha: str, v: str) -> str:
     """sha itself when its version file says v, else a new commit on sha that sets it, made without a checkout."""
     if file_version(sha) == v:
         return sha
+    if subprocess.run(["git", "var", "GIT_COMMITTER_IDENT"], capture_output=True, check=False).returncode != 0:
+        raise Refusal("no git identity; set git user.name and user.email")
     blob = run("git", "hash-object", "-w", "--stdin", stdin=f"{v}\n").strip()
     with tempfile.TemporaryDirectory() as tmp:
         env = {**os.environ, "GIT_INDEX_FILE": os.path.join(tmp, "index")}
