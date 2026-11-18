@@ -12,7 +12,7 @@ answers: reading one widget (its team's display name) and requesting a publish (
 
 from __future__ import annotations
 
-from typing import Annotated, Any, TypeAlias, cast
+from typing import Annotated, Any, TypeAlias
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -20,7 +20,17 @@ from fastapi.responses import JSONResponse
 from ops_agent_kernel.layout import required_tools
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, In, OptionsPage, options_page, options_window, page_window, paged
+from ops_service_kit.http import (
+    Envelope,
+    In,
+    Json,
+    JsonValue,
+    OptionsPage,
+    options_page,
+    options_window,
+    page_window,
+    paged,
+)
 from ops_service_kit.listing import ListQuery
 from ops_store import isolation
 
@@ -103,7 +113,7 @@ async def list_widgets(rt: Rt, me: Reader, _: Tx, q: ListQuery) -> JSONResponse:
     shown = seeded[offset : offset + q.page_size]
     skip, room = max(0, offset - len(seeded)), q.page_size - len(shown)
     rows = await reg.page(teams, q.search or "", skip, room, q.ids) if room > 0 else []
-    return ok(paged(shown + [listed_view(r) for r in rows], total, page, q.page_size))
+    return ok(paged([dict(w) for w in [*shown, *(listed_view(r) for r in rows)]], total, page, q.page_size))
 
 
 @router.get("/v1/widgets/options", response_model=Envelope[OptionsPage])
@@ -124,15 +134,10 @@ async def widget_options(  # noqa: PLR0917 - FastAPI reads each query parameter 
     held = set(granted or [])
     q = search.strip().lower()
 
-    def option(w: dict[str, Any]) -> dict[str, Any]:
-        missing = [t for t in w["requiresTools"] if t not in held]
+    def option(widget_id: str, name: str, version: int, use_when: JsonValue, requires: list[str]) -> Json:
+        missing = [t for t in requires if t not in held]
         reason = f"Needs {', '.join(missing)}; grant it first." if missing else None
-        return {
-            "id": w["widgetId"],
-            "label": w["name"],
-            "hint": f"v{w['version']} · {w['useWhen']}",
-            "disabled": reason,
-        }
+        return {"id": widget_id, "label": name, "hint": f"v{version} · {use_when}", "disabled": reason}
 
     every = await seeded_widgets(rt)
     seeded = (
@@ -143,20 +148,12 @@ async def widget_options(  # noqa: PLR0917 - FastAPI reads each query parameter 
     offset, window = options_window(None if ids else cursor, limit)
     shown = seeded[offset : offset + window]
     rows = await picker(rt).pinnable(teams_of(me), search, max(0, offset - len(seeded)), window - len(shown), ids)
-    views: list[dict[str, Any]] = []
+    options = [option(w["widgetId"], w["name"], w["version"], w["useWhen"], w["requiresTools"]) for w in shown]
     for r in rows:
         content = r.content or {}
-        tree = cast(dict[str, Any], content.get("tree") or {})
-        views.append(
-            {
-                "widgetId": r.id,
-                "name": r.name,
-                "version": r.shown,
-                "useWhen": content.get("useWhen", ""),
-                "requiresTools": required_tools(tree),
-            }
-        )
-    return ok(options_page([option(w) for w in shown + views], offset, limit))
+        tree = content.get("tree") or {}
+        options.append(option(r.id, r.name, r.shown, content.get("useWhen", ""), required_tools(tree)))
+    return ok(options_page(options, offset, limit))
 
 
 @router.get("/v1/widgets/{widget_id}", response_model=Envelope[WidgetTemplateOut])

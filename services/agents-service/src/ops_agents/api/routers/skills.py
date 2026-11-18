@@ -20,7 +20,7 @@ from ops_access import can
 from ops_identity.fastapi import Tx
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, In, JsonList, JsonValue, OptionsPage, options_page, options_window
+from ops_service_kit.http import Envelope, In, Json, JsonList, JsonValue, OptionsPage, options_page, options_window
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
@@ -164,12 +164,12 @@ async def list_skills(
     a tool or knowledge base the agent lacks as `locked`, naming them in `needs`."""
     # Read from `q.filters`; declared so the document and the SDKs name them.
     del status, owner_team, origin, loading, knowledge_bases
-    spec: dict[str, Any] | None = None
+    spec: Json | None = None
     offered = None
     if agent_id is not None:
         agents = agent_registry(rt)
         agent_row = await agents.row(agent_id)
-        held: dict[str, Any] = (await agents.version(agent_id, agent_row.version)).spec
+        held = (await agents.version(agent_id, agent_row.version)).spec
         spec = held
         menu = str(held.get("skillMenu") or "team")
         # A chat's skills are its team's: the team the request acts in, else the agent's own.
@@ -197,7 +197,7 @@ async def skill_options(rt: Rt, _: Annotated[Principal, Depends(reader_of("skill
         ]
         specs = await newest_specs(rt.db)
         teams = sorted({r.owner_team for r in await skills(rt).rows()})
-    held: list[Any] = [k for s in specs for k in cast(list[Any], s.get("collections") or [])]
+    held = [k for s in specs for k in cast(JsonList, s.get("collections") or [])]
     kbs = sorted({str(k) for k in held})
     return ok({"teams": teams, "tools": tools, "knowledgeBases": kbs, "limits": LIMITS})
 
@@ -382,11 +382,11 @@ async def agent_skill_options(  # noqa: PLR0917 - FastAPI reads each query param
     keeps always-on or on-match skills, also in the query (the published version's mode is kept on the row)."""
     agents = agent_registry(rt)
     spec = (await agents.version(agent_id, (await agents.row(agent_id)).version)).spec
-    held = [str(p["skillId"]) for p in cast(list[dict[str, Any]], spec.get("skillPins") or [])]
+    held = [str(p["skillId"]) for p in cast(list[Json], spec.get("skillPins") or [])]
     reg = skills(rt)
     offset, window = options_window(None if ids else cursor, limit)
     rows = await reg.attachable(search, held, offset, window, ids=ids, loading=loading)
-    opts: list[dict[str, Any]] = []
+    opts: list[Json] = []
     for r in rows:
         v = await reg.version(r.id, r.published_version or r.version)
         content = v.content if v is not None else {}

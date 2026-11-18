@@ -42,11 +42,12 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
-from ops_service_kit.http import Envelope, In, JsonValue, Out
+from ops_service_kit.http import Envelope, In, Json, JsonValue, Out
 from ops_service_kit.ids import new_id
 from ops_service_kit.template_merge import FieldOutcome, Strictness, apply, merge
 
 from ...store.agent_registry import SPEC_FIELDS
+from ...store.guardrails import GuardrailConfig
 from ...store.skills import LABELS as SKILL_LABELS
 from ...store.template_copies import TemplateCopies, TemplateCopyRow
 from ...store.tenancy import current_team
@@ -560,9 +561,9 @@ async def _make_guardrail(rt: Runtime, me: Principal, team: str, t: dict[str, An
     )
 
 
-def _guardrail_config(t: dict[str, Any]) -> dict[str, Any]:
+def _guardrail_config(t: dict[str, Any]) -> GuardrailConfig:
     """The template's rule as a version holds it (check_config: normalised, refused when it could never fire)."""
-    return check_guardrail("blocked_topics", cast(dict[str, Any], t.get("body") or {}))
+    return check_guardrail("blocked_topics", cast(Json, t.get("body") or {}))
 
 
 def _pointed(definition: dict[str, Any], records: dict[str, str]) -> dict[str, Any]:
@@ -997,7 +998,7 @@ async def _template_body(rt: Runtime, team: str, kind: str, t: dict[str, Any], y
         model, bases = str(yours.get("model") or ""), list(yours.get("collections") or [])
         return _spec_of(t, str(yours["name"]), model, tools, bases)
     if kind == "guardrail":
-        return _guardrail_config(t)
+        return cast(Json, _guardrail_config(t))
     bases = list(yours.get("knowledgeBases") or [])
     return await _skill_content(rt, team, t, str(yours.get("name") or t["title"]), bases)
 
@@ -1142,7 +1143,7 @@ async def take_update(rt: Rt, me: Me, resource: str, copy: str, body: UpdateInpu
         # A reset is the template's body with the copy's bindings, dropping every edit the team made.
         merged = template_body if mode == "reset" else apply(yours, outcomes, cast(dict[str, Any], choices))
         if kind == "guardrail":
-            merged = check_guardrail("blocked_topics", merged)
+            merged = cast(Json, check_guardrail("blocked_topics", merged))
         if merged != yours:
             version = await _save(rt, me, kind, copy, merged, note=note)
         base = copy_base(kind, template_body)

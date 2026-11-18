@@ -9,7 +9,7 @@ these tables and is served beside them.
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import ClassVar, NotRequired, TypedDict, cast
 
 import sqlalchemy as sa
 from pydantic import BaseModel, JsonValue
@@ -76,6 +76,17 @@ registry_widget_versions = sa.Table(
     ),
     info={**TENANT_SCOPED, **team_owned_via("registry_widgets", "widget_id")},
 )
+
+
+class WidgetContent(TypedDict):
+    """A widget version's `content` as `api/widgets.check_content` writes it, in stored order. `sample` is optional:
+    a reader that found none read it as None."""
+
+    name: str
+    useWhen: str
+    tree: JsonValue
+    dataSchema: JsonValue
+    sample: NotRequired[JsonValue]
 
 
 class ListedWidget(BaseModel):
@@ -206,7 +217,7 @@ class WidgetRegistry(VersionedRegistry[WidgetRow, WidgetVersion]):
         owning team, never for showing the record."""
         return (await self.owner_teams(conn, registry_widgets, {widget_id}, OWNER)).get(widget_id)
 
-    async def create(self, widget_id: str, content: Json, *, team_id: str, by: str) -> None:
+    async def create(self, widget_id: str, content: WidgetContent | Json, *, team_id: str, by: str) -> None:
         at = now_iso()
         async with self.tx() as c:
             taken = sa.select(registry_widgets.c.id).where(
@@ -235,21 +246,21 @@ class WidgetRegistry(VersionedRegistry[WidgetRow, WidgetVersion]):
                     widget_id=widget_id,
                     version=1,
                     content=content,
-                    digest=digest_of(content),
+                    digest=digest_of(cast(Json, content)),
                     changes=["Created"],
                     saved_at=at,
                     saved_by=by,
                 )
             )
 
-    async def save_draft(self, widget_id: str, content: Json, *, by: str) -> int:
+    async def save_draft(self, widget_id: str, content: WidgetContent | Json, *, by: str) -> int:
         """Edits the newest version while it is an unpublished draft, or opens the next version on top of a published
         one. Published versions never change."""
         at = now_iso()
         async with self.tx() as c:
             n = (await self.row(widget_id, c)).version
             newest = await self.newest(c, widget_id, n)
-            values = {"content": content, "digest": digest_of(content), "saved_at": at, "saved_by": by}
+            values = {"content": content, "digest": digest_of(cast(Json, content)), "saved_at": at, "saved_by": by}
             if newest.published_at is None:
                 await c.execute(
                     registry_widget_versions.update()
@@ -258,13 +269,16 @@ class WidgetRegistry(VersionedRegistry[WidgetRow, WidgetVersion]):
                         registry_widget_versions.c.widget_id == widget_id,
                         registry_widget_versions.c.version == n,
                     )
-                    .values(**values, changes=changes_between(newest.content, content) or ["No change"])
+                    .values(**values, changes=changes_between(newest.content, cast(Json, content)) or ["No change"])
                 )
             else:
                 n += 1
                 await c.execute(
                     registry_widget_versions.insert().values(
-                        widget_id=widget_id, version=n, changes=changes_between(newest.content, content), **values
+                        widget_id=widget_id,
+                        version=n,
+                        changes=changes_between(newest.content, cast(Json, content)),
+                        **values,
                     )
                 )
             await c.execute(
