@@ -48,7 +48,7 @@ from ops_service_kit.template_merge import FieldOutcome, Strictness, apply, merg
 
 from ...store.agent_registry import SPEC_FIELDS
 from ...store.skills import LABELS as SKILL_LABELS
-from ...store.template_copies import TemplateCopies
+from ...store.template_copies import TemplateCopies, TemplateCopyRow
 from ...store.tenancy import current_team
 from ..agent_registry import GUARDRAILS, registry
 from ..auth import Principal, caller, reader_of, require_builder
@@ -294,9 +294,9 @@ async def _offered(rt: Runtime, team: str) -> list[dict[str, Any]]:
         raise ServiceUnavailable("tools-service did not answer with the team's templates. Try again shortly.") from e
 
 
-def _copy_view(row: dict[str, Any]) -> dict[str, Any]:
+def _copy_view(row: TemplateCopyRow) -> dict[str, Any]:
     keys = ("id", "kind", "record_id", "source", "template_id", "version", "detached_at")
-    return CopyRef.model_validate({k: row.get(k) for k in keys}).model_dump(by_alias=True)
+    return CopyRef.model_validate({k: getattr(row, k) for k in keys}).model_dump(by_alias=True)
 
 
 def _may_add(me: Principal, kind: str, team: str) -> bool:
@@ -386,14 +386,14 @@ async def list_templates(
         if source is not None and t["source"] != source:
             continue
         shipped.add((str(t["source"]), str(t["id"])))
-        mine = [c for c in held if c["source"] == t["source"] and c["template_id"] == t["id"]]
-        newest = max((int(c["version"]) for c in mine), default=None)
-        latest = max(mine, key=lambda c: (int(c["version"]), str(c["installed_at"])), default=None)
+        mine = [c for c in held if c.source == t["source"] and c.template_id == t["id"]]
+        newest = max((c.version for c in mine), default=None)
+        latest = max(mine, key=lambda c: (c.version, c.installed_at), default=None)
         installed = {
             "copies": len(mine),
             "version": newest,
             "newerAvailable": newest is not None and newest < t["version"],
-            "changed": latest is not None and bool(t.get("digest")) and latest.get("digest") != t.get("digest"),
+            "changed": latest is not None and bool(t.get("digest")) and latest.digest != t.get("digest"),
         }
         view = {k: t[k] for k in ("source", "plugin", "kind", "id", "version", "title", "requires")}
         out.append(
@@ -412,30 +412,30 @@ async def list_templates(
         )
     plugins = {str(t["source"]): t["plugin"] for t in offered}
     for c in held:
-        at = (str(c["source"]), str(c["template_id"]))
-        if at in shipped or kind not in (None, c["kind"]):
+        at = (c.source, c.template_id)
+        if at in shipped or kind not in (None, c.kind):
             continue
-        if source is not None and c["source"] != source:
+        if source is not None and c.source != source:
             continue
-        name = await _record_name(rt, str(c["kind"]), str(c["record_id"]))
+        name = await _record_name(rt, c.kind, c.record_id)
         if name is None:
             continue
         shipped.add(at)
-        installed = {"copies": 1, "version": int(c["version"]), "newerAvailable": False, "changed": False}
+        installed = {"copies": 1, "version": c.version, "newerAvailable": False, "changed": False}
         out.append(
             TemplateView.model_validate(
                 {
-                    "source": c["source"],
-                    "plugin": plugins.get(str(c["source"])) or _plugin_of(str(c["source"])),
-                    "kind": c["kind"],
-                    "id": c["template_id"],
-                    "version": int(c["version"]),
+                    "source": c.source,
+                    "plugin": plugins.get(c.source) or _plugin_of(c.source),
+                    "kind": c.kind,
+                    "id": c.template_id,
+                    "version": c.version,
                     "title": name,
                     "requires": {"tools": [], "bind": []},
                     "installed": installed,
-                    "state": "removed_upstream" if c["source"] in on_sources else "added",
+                    "state": "removed_upstream" if c.source in on_sources else "added",
                     "canAdd": False,
-                    "addCell": {"area": AREAS[str(c["kind"])], "action": "create"},
+                    "addCell": {"area": AREAS[c.kind], "action": "create"},
                     "removeCell": await _remove_cell(rt, c),
                     "copy": _copy_view(c),
                 }
@@ -444,10 +444,10 @@ async def list_templates(
     return ok(out)
 
 
-async def _remove_cell(rt: Runtime, copy: dict[str, Any]) -> dict[str, Any]:
+async def _remove_cell(rt: Runtime, copy: TemplateCopyRow) -> dict[str, Any]:
     """The cell the copy's delete route checks: an agent's or workflow's delete, and a skill's delete held on one's own
     skills, so the skill's creator is named."""
-    kind, record = str(copy["kind"]), str(copy["record_id"])
+    kind, record = copy.kind, copy.record_id
     if kind != "skill":
         return {"area": AREAS[kind], "action": "delete"}
     try:
@@ -648,10 +648,10 @@ async def _held_records(rt: Runtime, wanted: list[str]) -> dict[str, str]:
     held = await TemplateCopies(rt.db).of_team()
     for resource in wanted:
         source, template_id = resource_ref(resource)
-        mine = [c for c in held if c["source"] == source and c["template_id"] == template_id]
-        for c in sorted(mine, key=lambda c: (int(c["version"]), str(c["installed_at"])), reverse=True):
-            if await _record_exists(rt, str(c["kind"]), str(c["record_id"])):
-                out[resource] = str(c["record_id"])
+        mine = [c for c in held if c.source == source and c.template_id == template_id]
+        for c in sorted(mine, key=lambda c: (c.version, c.installed_at), reverse=True):
+            if await _record_exists(rt, c.kind, c.record_id):
+                out[resource] = c.record_id
                 break
     return out
 
@@ -726,11 +726,12 @@ async def copy_resource(rt: Rt, me: Maker, resource: str, body: InstallInput) ->
     _require_add(me, kind, team)
     copies = TemplateCopies(rt.db)
     # Any version: a copy follows its template across versions and takes a newer one through an update.
-    held = await copies.live(source, template_id)
-    if held is not None:
-        if await _record_exists(rt, kind, str(held["record_id"])):
+    live = await copies.live(source, template_id)
+    if live is not None:
+        held = TemplateCopyRow.model_validate(live)
+        if await _record_exists(rt, kind, held.record_id):
             return ok({"copy": _copy_view(held), "created": False, "needs": []})
-        await copies.removed(str(held["id"]))
+        await copies.removed(held.id)
     records = await _dependencies(rt, me, team, t, offered=offered, given=body.copies)
     name = body.name or str(cast(dict[str, Any], t.get("body") or {}).get("name") or t["title"])
     if name.casefold() in await _names_in_use(rt, kind):
@@ -795,7 +796,7 @@ async def plan_resources(rt: Rt, me: Me, body: PlanInput) -> JSONResponse:
     brought: dict[str, list[str]] = {r: [] for r in body.resources}
     queue = list(body.resources)
     held: dict[str, str] = {}
-    held_rows: dict[str, dict[str, Any]] = {}
+    held_rows: dict[str, TemplateCopyRow] = {}
     copies = await TemplateCopies(rt.db).of_team()
     documents: dict[str, str] | None = None
     while queue:
@@ -807,7 +808,7 @@ async def plan_resources(rt: Rt, me: Me, body: PlanInput) -> JSONResponse:
             found = await _held_records(rt, [r])
             if r in found:
                 held[r] = found[r]
-                held_rows[r] = next(c for c in copies if c["record_id"] == found[r])
+                held_rows[r] = next(c for c in copies if c.record_id == found[r])
         elif t["kind"] == "document_type":
             documents = documents if documents is not None else await _held_documents(rt, me, team)
             if r in documents:
@@ -1001,14 +1002,14 @@ async def _template_body(rt: Runtime, team: str, kind: str, t: dict[str, Any], y
     return await _skill_content(rt, team, t, str(yours.get("name") or t["title"]), bases)
 
 
-async def _legacy_base(rt: Runtime, kind: str, record_id: str, row: dict[str, Any]) -> dict[str, Any] | None:
+async def _legacy_base(rt: Runtime, kind: str, record_id: str, row: TemplateCopyRow) -> dict[str, Any] | None:
     """A link made before bases were kept: the record's version whose digest the link names is the copy as made, when
     it still exists; otherwise None, and every difference is a choice kept as the team's."""
     if kind == "agent":
         versions = await registry(rt).versions(record_id)
-        found = next((v.spec for v in versions if v.digest == row.get("record_digest")), None)
+        found = next((v.spec for v in versions if v.digest == row.record_digest), None)
         return copy_base(kind, found) if found is not None else None
-    held = next((v.content for v in await skills(rt).versions(record_id) if v.digest == row.get("record_digest")), None)
+    held = next((v.content for v in await skills(rt).versions(record_id) if v.digest == row.record_digest), None)
     return copy_base(kind, held) if held is not None else None
 
 
@@ -1022,7 +1023,7 @@ def _labelled(outcomes: list[FieldOutcome]) -> list[dict[str, Any]]:
 
 async def _review(
     rt: Runtime, me: Principal, team: str, resource: str, record_id: str
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], list[FieldOutcome], dict[str, Any] | None]:
+) -> tuple[TemplateCopyRow, dict[str, Any], dict[str, Any], list[FieldOutcome], dict[str, Any] | None]:
     """The copy's row, its template now, the review of taking it, the merge's outcomes, and the template's body now
     (for an agent or skill). 409 `detached` for a copy the team made its own."""
     source, template_id = resource_ref(resource)
@@ -1030,9 +1031,9 @@ async def _review(
     t = _template(offered, source, template_id)
     kind = cast(Kind, t["kind"])
     row = await TemplateCopies(rt.db).of_record(kind, record_id)
-    if row is None or row["source"] != source or row["template_id"] != template_id:
+    if row is None or row.source != source or row.template_id != template_id:
         raise NotFound(f"{record_id} is not the team's copy of {resource}.")
-    if row.get("detached_at"):
+    if row.detached_at:
         raise CopyDetached(
             f"Your team detached its copy of {t['title']}, so it takes no updates. Add the template again under "
             "another name for a fresh copy.",
@@ -1045,7 +1046,7 @@ async def _review(
     if kind in FIELDS:
         yours, draft_open = await _newest(rt, kind, record_id)
         template_body = await _template_body(rt, team, kind, t, yours)
-        base = row.get("base")
+        base = row.base
         if base is None:
             base = await _legacy_base(rt, kind, record_id, row)
         fields = [f for f in FIELDS[kind] if f in template_body or (base is not None and f in base)]
@@ -1053,17 +1054,17 @@ async def _review(
     elif kind in tt.TYPE_KINDS:
         yours, draft_open = await _newest_type(rt, kind, record_id)
         template_body = tt.body_of(kind, t)
-        base = row.get("base")
+        base = row.base
         keys = tt.order(kind, yours, template_body, base)
         outcomes = merge(tt.flat(kind, base), tt.flat(kind, yours) or {}, tt.flat(kind, template_body) or {}, keys)
     else:
         # A workflow's body is pointed at the team's copies, so it compares by digest as a whole definition.
-        edited = row.get("record_digest") != record_digest
-        changed = row.get("digest") != t.get("digest")
+        edited = row.record_digest != record_digest
+        changed = row.digest != t.get("digest")
         outcomes = [FieldOutcome("definition", "conflict" if edited else "taken", None, None)] if changed else []
     review = {
         "copy": _copy_view(row),
-        "fromVersion": int(row["version"]),
+        "fromVersion": row.version,
         "toVersion": int(t["version"]),
         "fields": _labelled(outcomes),
         "draftOpen": draft_open,
@@ -1148,7 +1149,7 @@ async def take_update(rt: Rt, me: Me, resource: str, copy: str, body: UpdateInpu
     elif kind in tt.TYPE_KINDS:
         assert template_body is not None
         yours, _ = await tt.newest(rt, kind, copy)
-        keys = tt.order(kind, yours, template_body, row.get("base"))
+        keys = tt.order(kind, yours, template_body, row.base)
         mine = tt.flat(kind, yours) or {}
         merged = (
             tt.flat(kind, template_body) or {}
@@ -1171,10 +1172,10 @@ async def take_update(rt: Rt, me: Me, resource: str, copy: str, body: UpdateInpu
     # team's edit still reads as edited and the same update is not offered again.
     saved = version is not None or kind in FIELDS or kind in tt.TYPE_KINDS
     await TemplateCopies(rt.db).updated(
-        str(row["id"]),
+        row.id,
         version=int(t["version"]),
         digest=cast(str | None, t.get("digest")),
-        record_digest=await _record_digest(rt, kind, copy) if saved else row.get("record_digest"),
+        record_digest=await _record_digest(rt, kind, copy) if saved else row.record_digest,
         base=base,
     )
     refreshed = await TemplateCopies(rt.db).of_record(cast(Kind, kind), copy)
@@ -1195,11 +1196,11 @@ async def detach_copy(rt: Rt, me: Me, _: Tx, resource: str, copy: str) -> JSONRe
         row = await copies.of_record(kind, copy)
         if row is not None:
             break
-    if row is None or row["source"] != source or row["template_id"] != template_id:
+    if row is None or row.source != source or row.template_id != template_id:
         raise NotFound(f"{copy} is not the team's copy of {resource}.")
-    kind = str(row["kind"])
+    kind = row.kind
     require_builder(me, area=AREAS[kind], team_id=team, action="edit", what="the team's copy")
-    detached = await copies.detach(str(row["id"]), by=me.email)
+    detached = await copies.detach(row.id, by=me.email)
     return ok(_copy_view(detached))
 
 

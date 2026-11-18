@@ -16,10 +16,12 @@ from __future__ import annotations
 from typing import Any, ClassVar, Literal
 
 import sqlalchemy as sa
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, NoResultFound
 
+from ops_service_kit.http import Json, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
+from ops_store.rows import one, rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
@@ -72,6 +74,27 @@ sa.Index(
 )
 
 
+class TemplateCopyRow(Out):
+    """One copy link, every column of `template_copies`."""
+
+    id: str
+    tenant_id: str
+    team_id: str
+    kind: str
+    record_id: str
+    source: str
+    template_id: str
+    version: int
+    digest: str | None
+    record_digest: str | None
+    base: Json | None
+    installed_by: str
+    installed_at: str
+    removed_at: str | None
+    detached_at: str | None
+    detached_by: str | None
+
+
 class TemplateCopies(RuntimeStore):
     requires: ClassVar[frozenset[Guarantee]] = frozenset()
 
@@ -83,11 +106,11 @@ class TemplateCopies(RuntimeStore):
             found = (await c.execute(q)).mappings().first()
         return dict(found) if found is not None else None
 
-    async def of_team(self) -> list[dict[str, Any]]:
+    async def of_team(self) -> list[TemplateCopyRow]:
         """Every live copy the acting team holds, for the template list's `installed`."""
         t = template_copies
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(sa.select(t).where(LIVE, team_visible(t)))).mappings()]
+            return await rows(c, sa.select(t).where(LIVE, team_visible(t)), TemplateCopyRow)
 
     async def add(
         self,
@@ -101,8 +124,8 @@ class TemplateCopies(RuntimeStore):
         by: str,
         digest: str | None = None,
         record_digest: str | None = None,
-        base: dict[str, Any] | None = None,
-    ) -> tuple[dict[str, Any], bool]:
+        base: Json | None = None,
+    ) -> tuple[TemplateCopyRow, bool]:
         """Records a new copy and answers it with True; when another install of the same template won the race, answers
         that one's row with False, and the caller drops the record it made. The base goes in the same insert, so the
         race loser's base never lands on the winner's row."""
@@ -127,22 +150,17 @@ class TemplateCopies(RuntimeStore):
             first = await self.live(source, template_id)
             if first is None:
                 raise
-            return first, False
-        return {
-            **row,
-            "tenant_id": current_tenant(),
-            "removed_at": None,
-            "detached_at": None,
-            "detached_by": None,
-        }, True
+            return TemplateCopyRow.model_validate(first), False
+        return TemplateCopyRow.model_validate(
+            {**row, "tenant_id": current_tenant(), "removed_at": None, "detached_at": None, "detached_by": None}
+        ), True
 
-    async def of_record(self, kind: Kind, record_id: str) -> dict[str, Any] | None:
+    async def of_record(self, kind: Kind, record_id: str) -> TemplateCopyRow | None:
         """The acting team's copy row of this record, detached or not, if the record is a copy."""
         t = template_copies
-        q = sa.select(t).where(t.c.kind == kind, t.c.record_id == record_id, KEPT, team_visible(t))
+        q = sa.select(t).where(t.c.kind == kind, t.c.record_id == record_id, KEPT, team_visible(t)).limit(1)
         async with self.tx() as c:
-            found = (await c.execute(q)).mappings().first()
-        return dict(found) if found is not None else None
+            return await one(c, q, TemplateCopyRow)
 
     async def updated(
         self,
@@ -151,7 +169,7 @@ class TemplateCopies(RuntimeStore):
         version: int,
         digest: str | None,
         record_digest: str | None,
-        base: dict[str, Any] | None,
+        base: Json | None,
     ) -> None:
         """The copy took its template's update: it now stands for that version and body, and `base` is the template
         body it was merged against (never the merged result)."""
@@ -160,7 +178,7 @@ class TemplateCopies(RuntimeStore):
         async with self.tx() as c:
             await c.execute(t.update().where(t.c.id == copy_id, team_visible(t)).values(**values))
 
-    async def detach(self, copy_id: str, *, by: str) -> dict[str, Any]:
+    async def detach(self, copy_id: str, *, by: str) -> TemplateCopyRow:
         """Makes the copy the team's own: it is offered no update or reset again. A second call answers the same row."""
         t = template_copies
         async with self.tx() as c:
@@ -169,7 +187,10 @@ class TemplateCopies(RuntimeStore):
                 .where(t.c.id == copy_id, t.c.detached_at.is_(None), team_visible(t))
                 .values(detached_at=now_iso(), detached_by=by)
             )
-            return dict((await c.execute(sa.select(t).where(t.c.id == copy_id, team_visible(t)))).mappings().one())
+            found = await one(c, sa.select(t).where(t.c.id == copy_id, team_visible(t)), TemplateCopyRow)
+        if found is None:
+            raise NoResultFound(f"template copy {copy_id} is not the acting team's")
+        return found
 
     async def removed(self, copy_id: str) -> None:
         """The copy's record is gone: its row stops counting, so the next install makes a new copy."""

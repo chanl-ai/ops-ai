@@ -53,8 +53,8 @@ async def test_one_live_copy_per_template_and_a_removed_one_lets_a_new_copy_in(e
             version=2,
             by="b",
         )
-        assert made and not made_again and again["id"] == first["id"] and again["record_id"] == "ag_1"
-        await store.removed(first["id"])
+        assert made and not made_again and again.id == first.id and again.record_id == "ag_1"
+        await store.removed(first.id)
         assert await store.live(SOURCE, "case-helper") is None
         fresh, made_fresh = await store.add(
             team_id="team_ops",
@@ -65,7 +65,7 @@ async def test_one_live_copy_per_template_and_a_removed_one_lets_a_new_copy_in(e
             version=2,
             by="c",
         )
-        assert made_fresh and fresh["record_id"] == "ag_3"
+        assert made_fresh and fresh.record_id == "ag_3"
         # A newer version is the same template: the live copy stands, and an update moves it.
         held, made_v3 = await store.add(
             team_id="team_ops",
@@ -76,7 +76,7 @@ async def test_one_live_copy_per_template_and_a_removed_one_lets_a_new_copy_in(e
             version=3,
             by="d",
         )
-        assert not made_v3 and held["record_id"] == "ag_3"
+        assert not made_v3 and held.record_id == "ag_3"
     with tenant_scope(tenant), isolation.scope(tenant, "team_platform"):
         assert await store.live(SOURCE, "case-helper") is None and await store.of_team() == []
 
@@ -89,12 +89,13 @@ async def test_a_detached_copy_keeps_its_row_and_lets_a_fresh_copy_in(engine: As
             team_id="team_ops", kind="skill", record_id="sk_1", source=SOURCE, template_id="cite-policy", version=1,
             by="a", base={"instructions": "Cite it."},
         )  # fmt: skip
-        assert row["base"] == {"instructions": "Cite it."}
-        first = await store.detach(row["id"], by="a")
-        again = await store.detach(row["id"], by="b")
-        assert first["detached_at"] and again["detached_at"] == first["detached_at"] and again["detached_by"] == "a"
+        assert row.base == {"instructions": "Cite it."}
+        first = await store.detach(row.id, by="a")
+        again = await store.detach(row.id, by="b")
+        assert first.detached_at and again.detached_at == first.detached_at and again.detached_by == "a"
         assert await store.live(SOURCE, "cite-policy") is None and await store.of_team() == []
-        assert (await store.of_record("skill", "sk_1") or {}).get("detached_at") == first["detached_at"]
+        kept = await store.of_record("skill", "sk_1")
+        assert kept is not None and kept.detached_at == first.detached_at
         _, fresh = await store.add(
             team_id="team_ops", kind="skill", record_id="sk_2", source=SOURCE, template_id="cite-policy", version=1,
             by="a",

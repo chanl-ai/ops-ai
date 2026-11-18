@@ -12,10 +12,11 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, replace
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NotRequired, TypedDict, cast
 
 from ops_agent_kernel.types import Skill as KernelSkill
 from ops_contracts.chat import SkillPick
+from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
 from ops_service_kit.logging import get_logger
 
@@ -115,11 +116,33 @@ async def check_content(rt: Runtime, fields: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _parts(raw: Any, tool_ids: list[str], loading: str) -> list[dict[str, Any]]:
+class SkillInputSpec(TypedDict):
+    """One input a skill or a part asks for, as a version stores it."""
+
+    name: str
+    type: str
+    description: str
+    required: bool
+
+
+class SkillPartSpec(TypedDict):
+    """One named part of a skill, as a version stores it; the keys a part was saved without are left out."""
+
+    slug: str
+    name: str
+    useWhen: str
+    instructions: str
+    inputs: NotRequired[list[SkillInputSpec]]
+    toolIds: NotRequired[list[str]]
+    budget: NotRequired[int]
+
+
+def _parts(raw: Any, tool_ids: list[str], loading: str) -> list[SkillPartSpec]:
     """The skill's named parts, each read with the shared instructions; a version saved without any keeps no key, so
-    its digest is unchanged. A part's tools are some of the skill's own, so picking a part never adds scope."""
-    parts: list[dict[str, Any]] = []
-    for f in cast(list[dict[str, Any]], raw or []):
+    its digest is unchanged. A part's tools are some of the skill's own, so picking a part never adds scope. What is
+    saved, so a part that is not an object, or parts that are a number, fail the save."""
+    parts: list[SkillPartSpec] = []
+    for f in (narrow.an_object(x, "part") for x in narrow.entries(raw)):
         slug = str(f.get("slug") or "").strip()
         name = str(f.get("name") or "").strip()
         use_when = str(f.get("useWhen") or "").strip()
@@ -130,13 +153,13 @@ def _parts(raw: Any, tool_ids: list[str], loading: str) -> list[dict[str, Any]]:
             raise ValidationFailed(f"Part {name} needs a use-when line.", code="no_use_when")
         if any(p["slug"] == slug for p in parts):
             raise ValidationFailed(f"Two parts are named {slug}; give each its own.", code="duplicate_part")
-        part_tools = list(dict.fromkeys(str(t) for t in cast(list[Any], f.get("toolIds") or [])))
+        part_tools = list(dict.fromkeys(str(t) for t in narrow.entries(f.get("toolIds"))))
         if outside := [t for t in part_tools if t not in tool_ids]:
             raise ValidationFailed(
                 f"Part {name} names {', '.join(outside)}, which the skill does not; add it to the skill's tools.",
                 code="part_tool_not_in_skill",
             )
-        budget = int(f.get("budget") or 0)
+        budget = int(cast(Any, f.get("budget")) or 0)
         if budget and not 0 < budget <= TOKEN_BUDGET:
             raise ValidationFailed(f"A part's budget is 1 to {TOKEN_BUDGET:,} tokens.", code="bad_part_budget")
         if budget and (len(instructions) + 3) // 4 > budget:
@@ -144,23 +167,20 @@ def _parts(raw: Any, tool_ids: list[str], loading: str) -> list[dict[str, Any]]:
                 f"Part {name} is longer than its own {budget:,}-token budget; shorten it or raise the budget.",
                 code="part_over_budget",
             )
-        parts.append(
-            {
-                "slug": slug,
-                "name": name,
-                "useWhen": use_when,
-                "instructions": instructions,
-                **({"inputs": inputs} if (inputs := _inputs(f.get("inputs"))) else {}),
-                **({"toolIds": part_tools} if part_tools else {}),
-                **({"budget": budget} if budget else {}),
-            }
-        )
+        part: SkillPartSpec = {"slug": slug, "name": name, "useWhen": use_when, "instructions": instructions}
+        if inputs := _inputs(f.get("inputs")):
+            part["inputs"] = inputs
+        if part_tools:
+            part["toolIds"] = part_tools
+        if budget:
+            part["budget"] = budget
+        parts.append(part)
     if len(parts) > MAX_PARTS:
         raise ValidationFailed(f"A skill has at most {MAX_PARTS} parts.", code="too_many_parts")
     return parts
 
 
-async def _check_overview(rt: Runtime, fields: dict[str, Any], slug: str, parts: list[dict[str, Any]]) -> None:
+async def _check_overview(rt: Runtime, fields: dict[str, Any], slug: str, parts: list[SkillPartSpec]) -> None:
     """A skill with parts: the shared text stays short, inputs sit on the parts, and no part's assistant prompt name
     (`<skill>-<part>`) is another skill's name."""
     if len(str(fields.get("instructions") or "").strip()) > OVERVIEW_MAX:
@@ -258,10 +278,11 @@ def _wire(content: dict[str, Any]) -> dict[str, Any]:
     return {**content, "parts": [{"inputs": [], **p} for p in content["parts"]]}
 
 
-def _inputs(raw: Any) -> list[dict[str, Any]]:
-    """The skill's inputs, each name once; a version saved without any keeps no key, so its digest is unchanged."""
-    out: dict[str, dict[str, Any]] = {}
-    for f in cast(list[dict[str, Any]], raw or []):
+def _inputs(raw: Any) -> list[SkillInputSpec]:
+    """The skill's inputs, each name once; a version saved without any keeps no key, so its digest is unchanged. What
+    is saved, so an input that is not an object, or inputs that are a number, fail the save."""
+    out: dict[str, SkillInputSpec] = {}
+    for f in (narrow.an_object(x, "input") for x in narrow.entries(raw)):
         name = str(f.get("name") or "").strip()
         if name and name not in out:
             out[name] = {
