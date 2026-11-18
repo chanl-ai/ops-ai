@@ -7,6 +7,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from ops_service_kit.http import Json
+from ops_tools.store.connections import AuditEvent
+
 from .test_app_accounts import (
     ID,
     World,
@@ -59,9 +62,14 @@ async def test_an_app_that_signs_in_with_a_key_has_no_app_credential(world: Worl
 async def test_the_status_is_the_last_test_with_my_account(world: World, tenant: str) -> None:  # noqa: F811
     conn = await connected(world, tenant)
     for status, shown in (("failed", "failing"), ("ok", "working")):
-        event = {"action": "credential_checked", "actor": "Priya Shah"}
-        detail = {"status": status, "account": None}
-        await world.store.note(tenant, conn, {**event, "at": datetime.now(UTC), "detail": detail})
+        detail: Json = {"status": status, "account": None}
+        event: AuditEvent = {
+            "action": "credential_checked",
+            "actor": "Priya Shah",
+            "at": datetime.now(UTC),
+            "detail": detail,
+        }
+        await world.store.note(tenant, conn, event)
         assert (await credentials(world, tenant))[0]["status"] == shown
 
 

@@ -31,7 +31,7 @@ from ops_tools.graph_mailbox import CursorSeal
 from ops_tools.plugins.executor import PluginExecutor
 from ops_tools.plugins.host import PluginHost
 from ops_tools.registry import Resolved, ToolRegistry
-from ops_tools.store.connections import SHARED, ConnectionStore
+from ops_tools.store.connections import SHARED, ConnectionStore, NewAccount
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
@@ -55,7 +55,7 @@ async def bind(engine: AsyncEngine, tenant: str, team: str, instance: str, conn:
     as the plugin's, in the team, holding `instance` as its own instance (the settings an account keeps)."""
     await PluginBindings(engine).put(tenant, team, ID, enabled=on, connection_id=conn, settings={}, by="test")
     store, now = ConnectionStore(engine), datetime.now(UTC)
-    row = {
+    row: NewAccount = {
         "tenant_id": tenant, "id": conn, "app_id": f"plugin:{ID}", "team_id": team, "name": "Desk",
         "auth_kind": "oauth2_auth_code", "sign_in": "team", "team_backup": False, "status": "healthy", "revision": 1,
         "created_by": "test", "created_at": now, "updated_by": "test", "updated_at": now,

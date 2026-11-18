@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
 from ops_plugin_sdk.loader import Loaded
+from ops_service_kit.http import Json
 from ops_service_kit.listing import ListParams
 from ops_service_kit.settings import Settings
 from ops_store import isolation
@@ -22,7 +23,7 @@ from ops_store.team_scope import acting_as
 from ops_tools.modules.seed import ensure_platform_tools, load
 from ops_tools.plugins.host import PluginHost
 from ops_tools.store.app_cards import AppCards
-from ops_tools.store.connections import ConnectionStore
+from ops_tools.store.connections import ConnectionStore, TokenWrite
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
@@ -234,8 +235,8 @@ async def _app(client: httpx.AsyncClient, tenant: str) -> tuple[dict[str, Any], 
     return card, next(a for a in page["accounts"] if a["kind"] == "team" if a["default"])
 
 
-def _token(**extra: Any) -> dict[str, Any]:
-    return {"access_ct": "ct", "scopes": [], "rotations": 0, "refreshed_at": datetime.now(UTC), **extra}
+def _token(**extra: Any) -> TokenWrite:
+    return TokenWrite(access_ct="ct", scopes=[], rotations=0, refreshed_at=datetime.now(UTC), **extra)
 
 
 async def test_an_app_turned_on_reads_not_signed_in_until_the_team_account_signs_in(
@@ -273,7 +274,7 @@ async def test_a_passing_test_with_no_token_reads_connected(
 ) -> None:
     """An API key or password signs in with no token row: Test connection passing is what shows it works."""
     conn = await _turned_on(client, tenant)
-    health = {
+    health: Json = {
         "status": "ok",
         "account": "team",
         "at": "2026-11-01T00:00:00Z",
@@ -539,7 +540,7 @@ async def test_the_connected_tab_follows_every_write_that_changes_an_apps_state(
     conn = await _turned_on(client, tenant)
     store, app, now = ConnectionStore(engine), f"plugin:{ID}", datetime.now(UTC)
     bindings = PluginBindings(engine)
-    _passed = {"status": "ok", "account": "team", "at": "2026-11-01T00:00:00Z", "by": "Priya Shah"}
+    _passed: Json = {"status": "ok", "account": "team", "at": "2026-11-01T00:00:00Z", "by": "Priya Shah"}
     steps: list[tuple[str, Callable[[], Coroutine[Any, Any, object]], str]] = [
         ("turned on", lambda: asyncio.sleep(0), "needs_sign_in"),
         ("team signs in", lambda: store.replace_token(tenant, conn, _token()), "connected"),

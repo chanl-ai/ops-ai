@@ -331,7 +331,7 @@ class Tokens:
                     return await self._token(tenant_id, again, key)
                 raise
             stored = await self.store.put_token(
-                tenant_id, connection_id, fresh.model_dump(), expected_rotations=read, person=person
+                tenant_id, connection_id, fresh.columns(), expected_rotations=read, person=person
             )
             if not stored:
                 await self._forget(tenant_id, key, fresh, keep=row)
@@ -478,7 +478,7 @@ class Tokens:
             rotations=held.rotations + 1 if held else 1,
             refreshed_at=self.clock(),
         )
-        await self.store.replace_token(tenant_id, connection_id, row.model_dump(), person)
+        await self.store.replace_token(tenant_id, connection_id, row.columns(), person)
         if held is not None:
             await self._forget(tenant_id, (connection_id, person), held, keep=row)
 
@@ -516,7 +516,7 @@ class Tokens:
         held = await self.store.token(tenant_id, connection_id, person)
         rotations = held.rotations + 1 if held else 1
         values = await self._row(tenant_id, key, answer, rotations, keep_refresh=None, requested=requested or [])
-        await self.store.replace_token(tenant_id, connection_id, values.model_dump(), person)
+        await self.store.replace_token(tenant_id, connection_id, values.columns(), person)
         if held is not None:
             await self._forget(tenant_id, key, held, keep=values)
         return await self._token(tenant_id, values, key)

@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from ops_store import isolation
+from ops_tools.store.connections import TokenWrite
 
 from .conftest import team_credential
 from .test_app_accounts import (
@@ -87,7 +88,7 @@ async def test_an_account_only_its_owner_signs_in_to_reads_that_sign_ins_state_a
         await world.store.change(
             tenant, account, revision, {"sign_in": "person"}, actor="Priya Shah", at=datetime.now(UTC)
         )
-    token: dict[str, Any] = {"access_ct": "sealed", "scopes": [], "rotations": 0, "refreshed_at": datetime.now(UTC)}
+    token: TokenWrite = {"access_ct": "sealed", "scopes": [], "rotations": 0, "refreshed_at": datetime.now(UTC)}
     with isolation.scope(tenant, TEAM):
         assert await world.store.put_token(tenant, account, token, expected_rotations=None, person="usr_priya")
     rows = {a["id"]: a for a in (await _page(world, admin(tenant)))["accounts"] if a["kind"] == "team"}
@@ -131,7 +132,7 @@ async def test_each_persons_own_sign_in_is_its_own_row_seen_by_admins_and_by_tha
 ) -> None:
     # A person's own account nested inside the team's row was not listable or filterable, and named nobody.
     account = await connected(world, tenant)
-    token: dict[str, Any] = {"access_ct": "sealed", "scopes": [], "rotations": 0, "refreshed_at": datetime.now(UTC)}
+    token: TokenWrite = {"access_ct": "sealed", "scopes": [], "rotations": 0, "refreshed_at": datetime.now(UTC)}
     with isolation.scope(tenant, TEAM):
         assert await world.store.put_token(tenant, account, token, expected_rotations=None, person="usr_marco")
         await world.store.name_person(tenant, account, "usr_marco", "Marco Ruiz")

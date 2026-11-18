@@ -17,13 +17,14 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import ActingForPerson, Auth, Identity, ServiceAuth, service_verifiers
+from ops_service_kit.http import Json
 from ops_service_kit.settings import Settings
 from ops_tools.auth import Authenticator, AuthFailed, NotLinkedReason, Prepared
 from ops_tools.auth.kinds import KINDS
 from ops_tools.auth.tokens import Tokens
 from ops_tools.connections.connect_links import ConnectLinks
 from ops_tools.executor import HttpExecutor
-from ops_tools.store.connections import ConnectionStore
+from ops_tools.store.connections import ConnectionStore, NewAccount
 
 from .conftest import CONSOLE_URL, build_app, credentials, response_checker
 from .test_plugin_sign_in import TEAM as PLUGIN_TEAM
@@ -42,7 +43,7 @@ BASE = "https://ledger.bank.test"
 JAMES = ActingForPerson(sub="usr_james", email="james@bank.example", name="James", team_id=TEAM)
 MAYA = ActingForPerson(sub="usr_maya", email="maya@bank.example", name="Maya", team_id=TEAM)
 # What each kind takes from the team (plain settings) when each person brings the secret part.
-PLAIN: dict[str, dict[str, str]] = {
+PLAIN: dict[str, Json] = {
     "api_key": {"baseUrl": BASE, "name": "X-Api-Key"},
     "basic": {"baseUrl": BASE},
     "bearer": {"baseUrl": BASE},
@@ -65,7 +66,7 @@ def _rig(engine: AsyncEngine) -> tuple[ConnectionStore, Tokens, Authenticator]:
 
 async def _connection(store: ConnectionStore, tenant: str, kind: str, sign_in: str = "person") -> str:
     now, cid = datetime.now(UTC), f"con_{kind}_{sign_in}"
-    row: dict[str, Any] = {
+    row: NewAccount = {
         "tenant_id": tenant,
         "id": cid,
         "app_id": cid,

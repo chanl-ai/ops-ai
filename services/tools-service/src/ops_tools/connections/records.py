@@ -17,7 +17,7 @@ from ops_service_kit.http import Json
 from ops_service_kit.narrow import an_object
 
 from ..environments import LIVE
-from ..store.connections import Account, OwnSignIn, TokenRow
+from ..store.connections import Account, NewAccount, OwnSignIn, TokenRow
 
 # A consent this close to its end shows as expiring.
 EXPIRING = timedelta(days=30)
@@ -200,7 +200,7 @@ def sign_in_of(stored: object) -> str:
     return OLD_SIGN_IN.get(value, value)
 
 
-def seed_rows(seed: dict[str, Any], tenant_id: str, team_id: str, now: datetime) -> list[dict[str, Any]]:
+def seed_rows(seed: dict[str, Any], tenant_id: str, team_id: str, now: datetime) -> list[NewAccount]:
     return [
         {
             "tenant_id": tenant_id,

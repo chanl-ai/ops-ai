@@ -38,6 +38,7 @@ from ..store.connections import (
     PLUGIN_APP,
     Account,
     AccountNameTaken,
+    AppCredentialRow,
     plugin_of,
     split_config,
 )
@@ -617,7 +618,7 @@ class PluginAccounts:
         keys.pop("clientId", None)
         if kind.holds_token:
             # A later turn-on that names no credential keeps the one the account has (`held`); else Ops AI's app.
-            if chosen and (cred is None or cred["team_id"] != who.team.id or cred["app_id"] != f"{PLUGIN_APP}{m.id}"):
+            if chosen and (cred is None or cred.team_id != who.team.id or cred.app_id != f"{PLUGIN_APP}{m.id}"):
                 raise ValidationFailed(
                     f"Pick one of the team's app credentials for {m.title}.",
                     code="credential_not_found",
@@ -633,7 +634,7 @@ class PluginAccounts:
                     )
             elif chosen != held:
                 client = {"credential_id": chosen}
-            scopes = str((cred or {}).get("scopes") or "") or " ".join(s.id for s in c.scopes)
+            scopes = str((cred.scopes if cred else None) or "") or " ".join(s.id for s in c.scopes)
             keys |= {"scopes": scopes}
             for key, template in (
                 ("authorizeUrl", c.authorize_url),
@@ -669,12 +670,12 @@ class PluginAccounts:
         return keys, secret, client, platform_id, mine
 
     async def config_values(
-        self, who: Caller, plugin: Plugin, cred: dict[str, Any] | None
+        self, who: Caller, plugin: Plugin, cred: AppCredentialRow | None
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """An auth config's (fixed, default) values: the team's app credential's, or with none the team's on Ops AI's
         app, which its binding of the plugin holds."""
         if cred is not None:
-            return split_config(cred.get("settings"), cred.get("setting_modes"))
+            return split_config(cred.settings, cred.setting_modes)
         b = await self.host.bindings.get(who.tenant_id, who.team.id, plugin.manifest.id)
         return split_config(b.config_settings if b else None, b.setting_modes if b else None)
 

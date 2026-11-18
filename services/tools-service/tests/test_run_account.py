@@ -18,7 +18,7 @@ from ops_service_kit.ids import new_id
 from ops_store import isolation
 from ops_tools.connections.records import account_for
 from ops_tools.modules.seed import load, open_connection
-from ops_tools.store.connections import Account, ConnectionStore
+from ops_tools.store.connections import Account, ConnectionStore, NewAccount
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.modules import ModuleStore
 
@@ -53,9 +53,10 @@ async def _module_on(engine: AsyncEngine, tenant: str, suffix: str, accounts: tu
         name=module["display_name"], base=ENDPOINT, me="test", at=now,
     )  # fmt: skip
     with isolation.scope(tenant, module["team_id"]):
-        await ConnectionStore(engine).create({**row, "sandbox": "live" not in accounts}, actor="test", at=now)
+        first: NewAccount = {**row, "sandbox": "live" not in accounts}
+        await ConnectionStore(engine).create(first, actor="test", at=now)
         if "live" in accounts and "sandbox" in accounts:
-            other = {**row, "id": f"{row['id']}_sbx", "sandbox": True, "account_name": "Sandbox"}
+            other: NewAccount = {**row, "id": f"{row['id']}_sbx", "sandbox": True, "account_name": "Sandbox"}
             await ConnectionStore(engine).create(other, actor="test", at=now)
     await ModuleStore(engine).put({**module, "connection_id": row["id"]}, expected_revision=None)
 

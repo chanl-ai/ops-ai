@@ -17,7 +17,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Mapping, Sequence
 from datetime import datetime
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, NotRequired, TypedDict, cast
 
 import sqlalchemy as sa
 from pydantic import JsonValue
@@ -338,7 +338,217 @@ class ConnectionInUse(RuntimeError):
         self.modules = modules
 
 
-Row = dict[str, Any]
+class AppCredentialRow(Out):
+    """One `app_credentials` row: a team's own OAuth client of an app."""
+
+    tenant_id: str
+    id: str
+    team_id: str
+    app_id: str
+    name: str
+    client_id: str
+    scopes: str | None
+    secret_name: str | None
+    settings: Json | None
+    setting_modes: Json | None
+    created_by: str
+    created_at: datetime
+    updated_by: str
+    updated_at: datetime
+
+
+class NewCredential(TypedDict):
+    """What a new app credential writes: its client, the secret it is held under and who made it when."""
+
+    tenant_id: str
+    id: str
+    team_id: str
+    app_id: str
+    name: str
+    client_id: str
+    scopes: str | None
+    secret_name: str | None
+    settings: Json | None
+    setting_modes: Json | None
+    created_by: str
+    created_at: datetime
+    updated_by: str
+    updated_at: datetime
+
+
+class CredentialChange(TypedDict, total=False):
+    """What an edit of an app credential may write."""
+
+    name: str
+    client_id: str
+    scopes: str
+    settings: Json | None
+    setting_modes: Json | None
+
+
+class AuditEvent(TypedDict):
+    """One audit row to write: what happened, who did it and when, and the names it touched (never a value)."""
+
+    action: str
+    actor: str
+    at: datetime
+    detail: NotRequired[Json]
+
+
+class ServiceEvent(TypedDict):
+    """A service event written to the outbox beside the change it reports (connections.account_events)."""
+
+    tenant_id: str
+    team_id: str
+    name: str
+    key: str
+    payload: Json
+
+
+class AuditRow(Out):
+    """One `connection_audit` row as stored."""
+
+    id: int
+    tenant_id: str
+    connection_id: str
+    team_id: str
+    action: str
+    environment: str | None
+    actor: str
+    at: datetime
+    detail: JsonValue
+
+
+class NewLink(TypedDict):
+    """A connect link to store; only the hash of its token is kept."""
+
+    tenant_id: str
+    token_hash: str
+    connection_id: str
+    team_id: str
+    person_id: str
+    email: str
+    scopes: str
+    reason: str
+    created_at: datetime
+    expires_at: datetime
+
+
+class LinkRow(Out):
+    """One `connect_links` row as stored."""
+
+    tenant_id: str
+    token_hash: str
+    connection_id: str
+    team_id: str
+    person_id: str
+    email: str
+    scopes: str
+    reason: str
+    created_at: datetime
+    expires_at: datetime
+    used_at: datetime | None
+
+
+class NewState(TypedDict):
+    """A sign-in in progress to store; the connection's team is read in the statement that writes it."""
+
+    tenant_id: str
+    state_hash: str
+    connection_id: str
+    person_id: str
+    verifier_ct: str
+    redirect_uri: str
+    expires_at: datetime
+    token_for: NotRequired[str]
+    scopes: NotRequired[str]
+
+
+class StateRow(Out):
+    """One `oauth_states` row as stored."""
+
+    tenant_id: str
+    state_hash: str
+    connection_id: str
+    team_id: str
+    person_id: str
+    verifier_ct: str
+    redirect_uri: str
+    expires_at: datetime
+    used_at: datetime | None
+    token_for: str
+    scopes: str
+
+
+class StateAccount(Out):
+    """The account a sign-in's state was sent out for and whose token it fills."""
+
+    connection_id: str
+    token_for: str
+
+
+class _OptionalColumns(TypedDict, total=False):
+    name: str
+    status: str
+    status_detail: str | None
+    expires_at: datetime | None
+    catalog_id: str | None
+    sign_in: str
+    team_backup: bool
+    health: Json | None
+    category: str | None
+    description: str | None
+    docs_url: str | None
+    app_id: str
+    sandbox: bool
+    account_name: str | None
+    account_key: str | None
+    owner_key: str
+    settings: Json
+    secrets: dict[str, str]
+    platform_app: str | None
+    credential_id: str | None
+    plugin_settings: Json | None
+    origin: str | None
+    revision: int
+    created_by: str
+    created_at: datetime
+    updated_by: str
+    updated_at: datetime
+
+
+class AccountColumns(_OptionalColumns, total=False):
+    """The `connections` columns an edit names, and an account being made as well."""
+
+    team_id: str
+    auth_kind: str
+
+
+class _Identity(TypedDict):
+    tenant_id: str
+    id: str
+    team_id: str
+    auth_kind: str
+
+
+class NewAccount(_Identity, _OptionalColumns):
+    """An account to make: its identity, and any of the other columns."""
+
+
+class TokenWrite(TypedDict, total=False):
+    """The `connection_tokens` columns a write names; a sign-in or a refresh writes the `TokenFields`, a new sign-in
+    also clears the refusal and the test."""
+
+    access_ct: str
+    refresh_ct: str | None
+    expires_at: datetime | None
+    scopes: JsonValue
+    account: str | None
+    rotations: int
+    refreshed_at: datetime
+    refused_at: datetime | None
+    refused_reason: str | None
+    test: Json | None
 
 
 class _AccountFields(Out):
@@ -426,6 +636,18 @@ class TokenFields(Out):
     account: str | None
     rotations: int
     refreshed_at: datetime
+
+    def columns(self) -> TokenWrite:
+        """The fields as the columns a write names."""
+        return {
+            "access_ct": self.access_ct,
+            "refresh_ct": self.refresh_ct,
+            "expires_at": self.expires_at,
+            "scopes": self.scopes,
+            "account": self.account,
+            "rotations": self.rotations,
+            "refreshed_at": self.refreshed_at,
+        }
 
 
 class TokenRow(TokenFields):
@@ -602,19 +824,19 @@ class ConnectionStore(Store):
 
     # ── Records ───────────────────────────────────────────────────────────
 
-    async def _credentials(self, c: AsyncConnection, tenant_id: str, ids: list[str]) -> dict[str, Row]:
+    async def _credentials(self, c: AsyncConnection, tenant_id: str, ids: list[str]) -> dict[str, AppCredentialRow]:
         if not ids:
             return {}
         t = app_credentials
         q = t.select().where(t.c.tenant_id == tenant_id, t.c.id.in_(ids), team_visible(t))
-        return {str(r["id"]): dict(r) for r in (await c.execute(q)).mappings()}
+        return {r.id: r for r in await rows(c, q, AppCredentialRow)}
 
-    async def credential(self, tenant_id: str, credential_id: str) -> Row | None:
+    async def credential(self, tenant_id: str, credential_id: str) -> AppCredentialRow | None:
         """The team's app credential; None when it is not the team's."""
         async with self.tx() as c:
             return (await self._credentials(c, tenant_id, [credential_id])).get(credential_id)
 
-    async def team_credentials(self, tenant_id: str, team_id: str, app_id: str | None = None) -> list[Row]:
+    async def team_credentials(self, tenant_id: str, team_id: str, app_id: str | None = None) -> list[AppCredentialRow]:
         """The team's app credentials, of one app when `app_id` is given, oldest first."""
         t = app_credentials.c
         where = [t.tenant_id == tenant_id, t.team_id == team_id, team_visible(app_credentials)]
@@ -622,16 +844,16 @@ class ConnectionStore(Store):
             where.append(t.app_id == app_id)
         q = app_credentials.select().where(*where).order_by(t.created_at, t.id)
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, AppCredentialRow)
 
-    async def add_credential(self, row: Row) -> None:
+    async def add_credential(self, row: NewCredential) -> None:
         """A new app credential: tenant, id, team, app, name, client id, scopes, secret name, who and when."""
         async with self.tx() as c:
             await c.execute(app_credentials.insert().values(**row))
             await forget_cards(c, row["tenant_id"], team_defaults.c.team_id == row["team_id"])
 
     async def change_credential(
-        self, tenant_id: str, credential_id: str, values: Row, *, actor: str, at: datetime
+        self, tenant_id: str, credential_id: str, values: CredentialChange, *, actor: str, at: datetime
     ) -> None:
         """Writes the credential's name, client id, permissions or settings, with who changed it and when."""
         t = app_credentials.c
@@ -661,7 +883,7 @@ class ConnectionStore(Store):
         """Records who changed the credential last, and with `secret_name` the team secret now holding its client
         secret: an account reads its secret through that name alone, so a secret stored under no name is never sent."""
         t = app_credentials.c
-        values: Row = {"updated_by": actor, "updated_at": at}
+        values: dict[str, str | datetime] = {"updated_by": actor, "updated_at": at}
         if secret_name is not None:
             values["secret_name"] = secret_name
         async with self.tx() as c:
@@ -690,7 +912,9 @@ class ConnectionStore(Store):
         """Ops AI's own OAuth client for a plugin, from the install config; None when the install set none."""
         return self.install_clients.get(plugin_id)
 
-    def _with_client(self, row: _AccountRow, creds: dict[str, Row], used: list[AccountUse] | None) -> Account:
+    def _with_client(
+        self, row: _AccountRow, creds: dict[str, AppCredentialRow], used: list[AccountUse] | None
+    ) -> Account:
         """The account as its readers see it: the client id of the OAuth client it signs in with in its settings, and
         the name of the client secret in its secrets, from the team's app credential or Ops AI's app."""
         settings: Json = dict(row.settings or {})
@@ -699,42 +923,58 @@ class ConnectionStore(Store):
         installed = self.install_clients.get(row.platform_app or "")
         fixed: Json | None = None
         if cred is not None:
-            held = dict(cred.get("settings") or {})
+            held = dict(cred.settings or {})
             if row.app_id.startswith(PLUGIN_APP):
                 # A plugin's fixed values, merged by the plugin host over the account's own (PluginHost.settings); a
                 # default one was the account's starting value and the account keeps its own.
-                fixed = split_config(held, cred.get("setting_modes"))[0]
+                fixed = split_config(held, cred.setting_modes)[0]
             else:
                 # A custom app's: the registration's addresses and certificate, over any the account was given.
                 settings |= held
-            settings["clientId"] = cred["client_id"]
-            if cred.get("scopes"):
+            settings["clientId"] = cred.client_id
+            if cred.scopes:
                 # The permissions the team's client asks for are the credential's, for every account on it.
-                settings["scopes"] = cred["scopes"]
-            if cred.get("secret_name"):
-                secrets["clientSecret"] = cred["secret_name"]
+                settings["scopes"] = cred.scopes
+            if cred.secret_name:
+                secrets["clientSecret"] = cred.secret_name
         elif installed is not None:
             settings["clientId"] = installed.id
         fields = row.model_dump(exclude={"settings", "secrets"})
         return Account(**fields, settings=settings, secrets=secrets, credential_settings=fixed, used_by=used)
 
     async def _put_client(
-        self, c: AsyncConnection, tenant_id: str, connection_id: str, fields: Row, *, actor: str, at: datetime
-    ) -> Row:
+        self,
+        c: AsyncConnection,
+        tenant_id: str,
+        connection_id: str,
+        fields: AccountColumns,
+        *,
+        actor: str,
+        at: datetime,
+    ) -> AccountColumns:
         """Takes the OAuth client out of an account being written: on Ops AI's app it keeps none; otherwise the client
         id and secret name go to the account's app credential (made on the first one) and the account keeps only its
         credential_id. A write that names no secrets (a sign-in saving the instance it read) keeps the client's
         secret as it is."""
         if "credential_id" in fields:
             # The account picks one of the team's credentials (or Ops AI's app): the client it reads is that one's.
-            for part, key in (("settings", "clientId"), ("secrets", "clientSecret")):
-                if part in fields:
-                    fields = {**fields, part: {k: v for k, v in dict(fields[part] or {}).items() if k != key}}
+            if "settings" in fields:
+                fields = {
+                    **fields,
+                    "settings": {k: v for k, v in dict(fields["settings"] or {}).items() if k != "clientId"},
+                }
+            if "secrets" in fields:
+                fields = {
+                    **fields,
+                    "secrets": {k: v for k, v in dict(fields["secrets"] or {}).items() if k != "clientSecret"},
+                }
             return fields
         named = "secrets" in fields
         settings, secrets = dict(fields.get("settings") or {}), dict(fields.get("secrets") or {})
         client_id, secret_name = settings.pop("clientId", None), secrets.pop("clientSecret", None)
-        fields = {**fields, "settings": settings, **({"secrets": secrets} if named else {})}
+        fields = {**fields, "settings": settings}
+        if named:
+            fields["secrets"] = secrets
         k = connections.c
         held = (
             await c.execute(
@@ -749,7 +989,7 @@ class ConnectionStore(Store):
         if platform or not client_id:
             return {**fields, "credential_id": None} if platform else fields
         t = app_credentials
-        values = {"client_id": str(client_id), "updated_by": actor, "updated_at": at}
+        values: dict[str, str | datetime | None] = {"client_id": str(client_id), "updated_by": actor, "updated_at": at}
         if named:
             values["secret_name"] = secret_name
         if held.credential_id:
@@ -854,10 +1094,10 @@ class ConnectionStore(Store):
         async with self.tx() as c:
             return await self._read(c, tenant_id, q)
 
-    async def create(self, row: Row, *, actor: str, at: datetime) -> bool:
+    async def create(self, row: NewAccount, *, actor: str, at: datetime) -> bool:
         """False when the id is taken (nothing written). `row` carries the account's settings and secret names; an
         OAuth client in them goes to the account's app credential."""
-        fields: Row = {"settings": row.get("settings") or {}, "secrets": row.get("secrets") or {}}
+        fields: AccountColumns = {"settings": row.get("settings") or {}, "secrets": row.get("secrets") or {}}
         owner = owner_key(row.get("created_by"), row.get("origin"))
         row = {**row, "account_key": name_key(row.get("account_name")), "owner_key": owner}
         async with self.tx() as c:
@@ -881,7 +1121,7 @@ class ConnectionStore(Store):
                 await c.execute(
                     connections.update().where(k.tenant_id == row["tenant_id"], k.id == row["id"]).values(**put)
                 )
-            event = {"action": "created", "actor": actor, "at": at, "detail": {"kind": row["auth_kind"]}}
+            event: AuditEvent = {"action": "created", "actor": actor, "at": at, "detail": {"kind": row["auth_kind"]}}
             await self._audit(c, row["tenant_id"], row["id"], event)
             await forget_cards(c, row["tenant_id"], team_defaults.c.team_id == row["team_id"])
         return True
@@ -891,12 +1131,12 @@ class ConnectionStore(Store):
         tenant_id: str,
         connection_id: str,
         expected_revision: int,
-        values: Row,
+        values: AccountColumns,
         *,
         actor: str,
         at: datetime,
         action: str = "changed",
-        detail: Row | None = None,
+        detail: Json | None = None,
     ) -> None:
         """Writes `values` (its settings and secret names, `platform_app` and `plugin_settings` among them) only
         against the revision read, with its audit row; StaleConnection otherwise. An OAuth client in the settings goes
@@ -913,7 +1153,7 @@ class ConnectionStore(Store):
                     connections.c.id == connection_id,
                     connections.c.revision == expected_revision,
                 )
-                .values(**values, revision=expected_revision + 1, updated_by=actor, updated_at=at)
+                .values(**{**values, "revision": expected_revision + 1, "updated_by": actor, "updated_at": at})
             )
             try:
                 async with self.attempt(c):
@@ -947,7 +1187,7 @@ class ConnectionStore(Store):
                     a = app_credentials
                     mine = sa.and_(a.c.tenant_id == tenant_id, a.c.id == cred)
                     await c.execute(a.update().where(mine).values(team_id=values["team_id"]))
-            event = {"action": action, "actor": actor, "at": at, "detail": detail or {}}
+            event: AuditEvent = {"action": action, "actor": actor, "at": at, "detail": detail or {}}
             await self._audit(c, tenant_id, connection_id, event)
 
     async def set_base(self, tenant_id: str, connection_id: str, base: str, *, actor: str, at: datetime) -> None:
@@ -964,7 +1204,7 @@ class ConnectionStore(Store):
                 .values(settings={**dict(held or {}), "baseUrl": base}, updated_by=actor, updated_at=at)
             )
             await _forget_account_cards(c, tenant_id, connection_id)
-            event = {"action": "changed", "actor": actor, "at": at, "detail": {"baseUrl": base}}
+            event: AuditEvent = {"action": "changed", "actor": actor, "at": at, "detail": {"baseUrl": base}}
             await self._audit(c, tenant_id, connection_id, event)
 
     async def delete(self, tenant_id: str, connection_id: str, *, actor: str, at: datetime) -> list[Held] | None:
@@ -998,12 +1238,12 @@ class ConnectionStore(Store):
                     oauth_states.c.tenant_id == tenant_id, oauth_states.c.connection_id == connection_id
                 )
             )
-            event = {"action": "deleted", "actor": actor, "at": at}
+            event: AuditEvent = {"action": "deleted", "actor": actor, "at": at}
             await self._audit(c, tenant_id, connection_id, event, team_id=str(found.team_id))
         return held
 
     async def _audit(
-        self, c: AsyncConnection, tenant_id: str, connection_id: str, event: Row, *, team_id: str | None = None
+        self, c: AsyncConnection, tenant_id: str, connection_id: str, event: AuditEvent, *, team_id: str | None = None
     ) -> None:
         """`event`: action, actor, at and detail (names only). The row takes its connection's team, read in the same
         statement, or `team_id` for a connection already deleted in this transaction."""
@@ -1017,7 +1257,7 @@ class ConnectionStore(Store):
             )
         )
 
-    async def audit(self, tenant_id: str, connection_id: str, *, limit: int = 50) -> list[Row]:
+    async def audit(self, tenant_id: str, connection_id: str, *, limit: int = 50) -> list[AuditRow]:
         q = (
             connection_audit.select()
             .where(
@@ -1029,7 +1269,7 @@ class ConnectionStore(Store):
             .limit(limit)
         )
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, AuditRow)
 
     async def newest(
         self, tenant_id: str, connection_ids: Sequence[str], action: str
@@ -1053,7 +1293,9 @@ class ConnectionStore(Store):
         async with self.tx() as c:
             return [(str(r.connection_id), r.at, cast(JsonValue, r.detail)) for r in await c.execute(q)]
 
-    async def note(self, tenant_id: str, connection_id: str, event: Row, *, report: Row | None = None) -> None:
+    async def note(
+        self, tenant_id: str, connection_id: str, event: AuditEvent, *, report: ServiceEvent | None = None
+    ) -> None:
         """An audit row on its own (a sign-in, a sign-out, a failed refresh): action, actor, at, detail. `report`: a
         service event (connections.account_events) written in the same transaction."""
         async with self.tx() as c:
@@ -1072,7 +1314,9 @@ class ConnectionStore(Store):
             await c.execute(q)
             await _forget_account_cards(c, tenant_id, connection_id)
 
-    async def needs_reconnect(self, tenant_id: str, connection_id: str, detail: str | None, event: Row) -> None:
+    async def needs_reconnect(
+        self, tenant_id: str, connection_id: str, detail: str | None, event: ServiceEvent
+    ) -> None:
         """The gateway's finding that the team account stopped working: with `detail`, what the system
         refused, the connection is marked needs_reconnect; `event` is the admins' notice (connections.account_events),
         written in the same transaction unless the outbox already holds one under its key, so a call made while the
@@ -1093,11 +1337,11 @@ class ConnectionStore(Store):
                 await add_event(c, service_outbox, **event)
 
     async def set_health(
-        self, tenant_id: str, connection_id: str, health: Row, status: tuple[str, str | None] | None = None
+        self, tenant_id: str, connection_id: str, health: Json, status: tuple[str, str | None] | None = None
     ) -> None:
         """A Test connection's result on the account and, with `status`, its status. A finding, so the revision
         stays."""
-        values: Row = {"health": health}
+        values: dict[str, Json | str | None] = {"health": health}
         if status is not None:
             values |= {"status": status[0], "status_detail": status[1]}
         async with self.tx() as c:
@@ -1108,7 +1352,7 @@ class ConnectionStore(Store):
             )
             await _forget_account_cards(c, tenant_id, connection_id)
 
-    async def set_plugin_settings(self, tenant_id: str, connection_id: str, values: Row) -> bool:
+    async def set_plugin_settings(self, tenant_id: str, connection_id: str, values: Json) -> bool:
         """Merges `values` into the account's plugin settings (a sign-in's instance); False when there is no such
         account. A finding of the sign-in, not a person's edit, so the revision stays."""
         k = connections.c
@@ -1168,7 +1412,7 @@ class ConnectionStore(Store):
         self,
         tenant_id: str,
         connection_id: str,
-        values: Row,
+        values: TokenWrite,
         *,
         expected_rotations: int | None,
         person: str = SHARED,
@@ -1203,7 +1447,7 @@ class ConnectionStore(Store):
                 await _forget_account_cards(c, tenant_id, connection_id)
             return True
 
-    async def replace_token(self, tenant_id: str, connection_id: str, values: Row, person: str = SHARED) -> None:
+    async def replace_token(self, tenant_id: str, connection_id: str, values: TokenWrite, person: str = SHARED) -> None:
         """A finished sign-in's token, whatever was held before; a refusal marked on the row before is cleared."""
         key = self._token_key(tenant_id, connection_id, person)
         # A new sign-in starts untested: the test that follows it writes its own outcome.
@@ -1246,7 +1490,7 @@ class ConnectionStore(Store):
         async with self.tx() as c:
             return (await c.execute(q.values(person_name=name[:200]))).rowcount > 0
 
-    async def set_token_test(self, tenant_id: str, connection_id: str, person: str, test: Row) -> bool:
+    async def set_token_test(self, tenant_id: str, connection_id: str, person: str, test: Json) -> bool:
         """The account's last test on its own row, the team's (SHARED) or a person's; False when it holds none."""
         q = connection_tokens.update().where(*self._token_key(tenant_id, connection_id, person))
         async with self.tx() as c:
@@ -1485,7 +1729,7 @@ class ConnectionStore(Store):
 
     # ── Connect links ─────────────────────────────────────────────────────
 
-    async def add_link(self, row: Row, *, now: datetime) -> None:
+    async def add_link(self, row: NewLink, *, now: datetime) -> None:
         """A link asking one person to sign in; the tenant's expired links go in the same transaction."""
         async with self.tx() as c:
             await c.execute(
@@ -1495,7 +1739,7 @@ class ConnectionStore(Store):
             )
             await c.execute(connect_links.insert().values(**row))
 
-    async def take_link(self, tenant_id: str, token_hash: str, *, now: datetime) -> Row | None:
+    async def take_link(self, tenant_id: str, token_hash: str, *, now: datetime) -> LinkRow | None:
         """The link under this hash, marked used in the statement that checks it is unused and unexpired; None when
         there is none, it was used or it expired."""
         k = connect_links.c
@@ -1507,28 +1751,25 @@ class ConnectionStore(Store):
             team_visible(connect_links),
         )
         async with self.tx() as c:
-            row = (await c.execute(connect_links.select().where(*where))).mappings().first()
+            row = (await rows(c, connect_links.select().where(*where).limit(1), LinkRow) or [None])[0]
             if row is None:
                 return None
             if (await c.execute(connect_links.update().where(*where).values(used_at=now))).rowcount != 1:
                 return None
-            return dict(row)
+            return row
 
-    async def link(self, tenant_id: str, token_hash: str) -> Row | None:
+    async def link(self, tenant_id: str, token_hash: str) -> LinkRow | None:
         """The link under this hash, used or not, for telling its owner apart from anyone else."""
         k = connect_links.c
         async with self.tx() as c:
-            found = await c.execute(
-                connect_links.select().where(
-                    k.tenant_id == tenant_id, k.token_hash == token_hash, team_visible(connect_links)
-                )
+            q = connect_links.select().where(
+                k.tenant_id == tenant_id, k.token_hash == token_hash, team_visible(connect_links)
             )
-            row = found.mappings().first()
-            return dict(row) if row else None
+            return (await rows(c, q.limit(1), LinkRow) or [None])[0]
 
     # ── Sign-in states ────────────────────────────────────────────────────
 
-    async def add_state(self, row: Row, *, now: datetime) -> list[HeldState]:
+    async def add_state(self, row: NewState, *, now: datetime) -> list[HeldState]:
         """Stores a sign-in in progress; expired ones of the tenant go in the same transaction, so the table holds only
         sign-ins under ten minutes old and the used ones not yet pruned. Returns the expired states (`held_of`)."""
         async with self.tx() as c:
@@ -1541,7 +1782,7 @@ class ConnectionStore(Store):
             await c.execute(oauth_states.insert().values(**row, team_id=team))
         return pruned
 
-    async def state_account(self, tenant_id: str, state_hash: str) -> Row | None:
+    async def state_account(self, tenant_id: str, state_hash: str) -> StateAccount | None:
         """The account and whose token a sign-in's state was sent out for, read without spending it: what the return
         page finishes, which `take_state` then checks and spends. None for an unknown state."""
         s = oauth_states.c
@@ -1549,12 +1790,11 @@ class ConnectionStore(Store):
             s.tenant_id == tenant_id, s.state_hash == state_hash, team_visible(oauth_states)
         )
         async with self.tx() as c:
-            row = (await c.execute(q)).mappings().first()
-            return dict(row) if row else None
+            return (await rows(c, q.limit(1), StateAccount) or [None])[0]
 
     async def take_state(
         self, tenant_id: str, state_hash: str, *, connection_id: str, person: str, now: datetime
-    ) -> Row | None:
+    ) -> StateRow | None:
         """The sign-in under this state, marked used in the same statement that checks it is this person's, for this
         connection, unused and unexpired; None otherwise, so another person's attempt never spends it."""
         s = oauth_states.c
@@ -1568,9 +1808,9 @@ class ConnectionStore(Store):
             team_visible(oauth_states),
         )
         async with self.tx() as c:
-            row = (await c.execute(oauth_states.select().where(*where))).mappings().first()
+            row = (await rows(c, oauth_states.select().where(*where).limit(1), StateRow) or [None])[0]
             if row is None:
                 return None
             if (await c.execute(oauth_states.update().where(*where).values(used_at=now))).rowcount != 1:
                 return None
-            return dict(row)
+            return row
