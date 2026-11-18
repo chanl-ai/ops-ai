@@ -23,7 +23,7 @@ from ops_service_kit.logging import get_logger
 
 from .auth import SIGNED_WITH, Authenticator
 from .environments import TEST
-from .executor import Executor, Trial, invalid_fields
+from .executor import ConsoleRan, ConsoleRefused, Executor, Trial, invalid_fields
 from .limits import amount_refusal
 from .modules.directory import Sees
 from .modules.policy import WriteApprovals, asker_refusal
@@ -283,7 +283,7 @@ class GatewayCalls:
         trial: Trial,
         secret_values: dict[str, str] | None,
         confirmed: bool = False,
-    ) -> dict[str, Any]:
+    ) -> ConsoleRan | ConsoleRefused:
         """A tool page's Real run as one gateway call, so it meets every rule an agent's call meets: approvals,
         limits, the egress policy, the team's account and the call log. The answer is plain data, so the module
         service needs no gateway types: {callId, ok, output} when it ran, {callId, status, code, reasons} when not."""
@@ -490,7 +490,7 @@ class GatewayCalls:
                 access=access,
                 setting=setting,
                 reviewer_role=setting_role,
-                approvers=(policy or {}).get("approvers") or 1,
+                approvers=(policy["approvers"] if policy else 0) or 1,
                 channel=(
                     "mcp"
                     if channel == MCP

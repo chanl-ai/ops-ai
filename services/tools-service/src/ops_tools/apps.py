@@ -54,7 +54,7 @@ from .modules.directory import Directory
 from .modules.policy import WriteApprovals, tool_mode
 from .modules.routes import ERRORS
 from .modules.schemas import ToolCallRow
-from .modules.seed import BUILT_IN, TOOL_ORIGIN, name_in_words, template_of, tool_title
+from .modules.seed import BUILT_IN, TOOL_ORIGIN, BuiltInApp, name_in_words, template_of, tool_title
 from .modules.service import Caller, ModuleService
 from .modules.tool_users import ToolUsers
 from .plugins.host import (
@@ -626,11 +626,11 @@ def setting_offer(s: Setting) -> dict[str, Any]:
     return out
 
 
-def _built_in(app: dict[str, Any], module: Module | CardModule) -> list[str]:
+def _built_in(app: BuiltInApp, module: Module | CardModule) -> list[str]:
     """The app's operations the module holds: all of them, or the ones the app names."""
     held = [o["name"] for o in module["operations"]]
-    wanted = app.get("operations")
-    return [n for n in held if wanted is None or n in wanted]
+    wanted = app["operations"]
+    return [n for n in held if n in wanted]
 
 
 # The card rows' shape (store/app_cards.py), in the stamp: rows built before a column was added are rebuilt.

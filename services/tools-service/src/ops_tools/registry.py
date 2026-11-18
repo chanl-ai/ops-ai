@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, TypedDict, cast
 
 from ops_access import tool_waits
 from ops_agents.activities.catalog import Catalog
@@ -43,7 +43,13 @@ WORKFLOW_TOOLS: dict[str, tuple[str, bool]] = {name: ("write", waits) for name, 
 SYSTEM_ONLY = frozenset(str(t["name"]) for t in PLATFORM_TOOLS if t.get("system"))
 
 
-def approval_policy(module: Module, op: Operation) -> dict[str, Any]:
+class ApprovalPolicy(TypedDict):
+    approvers: int
+    approver_team: str | None
+    step_up: bool
+
+
+def approval_policy(module: Module, op: Operation) -> ApprovalPolicy:
     """How a write to `op` is approved, as the gateway, OPA and the review service read it: `approvers` distinct people
     from `approverTeam`, and whether approving asks for a step-up (`stepUp`): set on the operation, or implied by two
     approvers. Whether the person who asked may approve is the tenant's `requesterMayDecide` policy."""
@@ -257,7 +263,7 @@ class ToolRegistry:
 
     async def described(
         self, tool: str, tenant_id: str, team_id: str | None = None
-    ) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None, float | None]:
+    ) -> tuple[str, ApprovalPolicy | None, dict[str, Any] | None, float | None]:
         """access_for, policy_for, output_schema_for and the deadline of `tool`, from one resolve: a review list asks
         this once per tool, and resolving three times read the tool's module three times."""
         resolved = await self.resolve(tool, tenant_id=tenant_id, team_id=team_id)
@@ -303,14 +309,14 @@ class ToolRegistry:
         definition = self.catalog.tool(tool)
         return _declared(definition.requires_approval if definition is not None else None), None
 
-    async def policy_for(self, tool: str, tenant_id: str, team_id: str | None = None) -> dict[str, Any] | None:
+    async def policy_for(self, tool: str, tenant_id: str, team_id: str | None = None) -> ApprovalPolicy | None:
         """The write approval policy of the tenant's operation `tool`; without a module store, the agents catalogue's
         (its `approvers`, no particular team). None for a tool neither holds."""
         if self.modules is None:
             return self._policy(tool, None)
         return self._policy(tool, await self.resolve(tool, tenant_id=tenant_id, team_id=team_id))
 
-    def _policy(self, tool: str, resolved: Resolved | None) -> dict[str, Any] | None:
+    def _policy(self, tool: str, resolved: Resolved | None) -> ApprovalPolicy | None:
         if self.modules is None:
             definition = self.catalog.tool(tool)
             if definition is None:

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from pydantic import TypeAdapter
@@ -19,8 +19,10 @@ from pydantic import TypeAdapter
 from ops_service_kit.http import Json, JsonValue
 
 from .egress import for_tenant
+from .modules.discovered import Discovered, DiscoveredOperation
 from .modules.openapi import NAME, kebab, snake
 from .modules.seed import fields_of
+from .store.modules import InputField
 
 # An operation's input fields as the JSON the discovery answer carries.
 JSON_LIST = TypeAdapter(list[JsonValue])
@@ -165,15 +167,15 @@ def tool_output(result: Json) -> tuple[bool, JsonValue]:
     return not result.get("isError"), output
 
 
-def discovered(tools: list[Json], url: str, server: Json) -> Json:
+def discovered(tools: list[Json], url: str, server: Json) -> Discovered:
     """The console's DiscoveryResult for an MCP server's tools. A tool's operation name is its name in snake case;
     the server's own name is kept as the operation's `path`, which the mcp executor calls. Every tool is
     discovered as a write, as OpenAPI operations are."""
     given = server.get("serverInfo")
     info: Json = given if isinstance(given, dict) else {}
     title = str(info.get("title") or info.get("name") or httpx.URL(url).host)
-    warnings: list[JsonValue] = []
-    operations: list[JsonValue] = []
+    warnings: list[str] = []
+    operations: list[DiscoveredOperation] = []
     seen: set[str] = set()
     for t in tools:
         original = str(t.get("name", ""))
@@ -183,18 +185,20 @@ def discovered(tools: list[Json], url: str, server: Json) -> Json:
             continue
         seen.add(name)
         schema = t.get("inputSchema")
-        operation: Json = {
+        operation: DiscoveredOperation = {
             "name": name,
             "description": str(t.get("description") or name),
             "access": "write",
             "method": None,
             "path": original,
             "group": "tools",
-            "input": JSON_LIST.validate_python(fields_of(schema if isinstance(schema, dict) else {})),
+            "input": cast(
+                "list[InputField]", JSON_LIST.validate_python(fields_of(schema if isinstance(schema, dict) else {}))
+            ),
             "headers": [],
         }
         operations.append(operation)
-    found: Json = {
+    found: Discovered = {
         "type": "mcp",
         "system": title,
         "suggestedName": kebab(title),

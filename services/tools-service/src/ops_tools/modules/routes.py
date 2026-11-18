@@ -49,7 +49,7 @@ from .schemas import (
     ToolRunIn,
     ToolRunResult,
 )
-from .service import Caller, ModuleService
+from .service import Caller, ModuleService, TestRun, test_run
 
 ERRORS = error_responses({501: "Not available on this service yet", 502: "The source could not be reached"})
 
@@ -147,12 +147,12 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
         body: ModuleSourceIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
         """Off the request transaction: it fetches the source, so no connection is held while it answers."""
-        return ok(await service.discover(who, body.model_dump()))
+        return ok(await service.discover(who, body))
 
     @r.post("/blank", response_model=Envelope[ToolModuleDetail], status_code=201, responses=HELD)
     async def create_blank_module(body: BlankModuleIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Off the request transaction: a host not yet listed is sent to Security in agents-service."""
-        return ok(await service.create_blank(who, body.model_dump()), 201)
+        return ok(await service.create_blank(who, body), 201)
 
     @r.post("/bulk-delete", response_model=Envelope[BulkResult])
     async def bulk_remove_modules(body: IdsIn, who: Annotated[Caller, Depends(caller)], _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
@@ -161,7 +161,7 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
     @r.post("", response_model=Envelope[ToolModuleDetail], status_code=201, responses=HELD)
     async def create_module(body: ModuleIn, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Off the request transaction: it may fetch the source and send a new host to Security."""
-        return ok(await service.create(who, body.model_dump()), 201)
+        return ok(await service.create(who, body), 201)
 
     # Before /{module_id}, which would otherwise read "grants" as a module id.
     @r.get("/grants", response_model=Envelope[ToolGrantList], dependencies=[Depends(reader_of("tools"))])
@@ -184,7 +184,7 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
     async def update_module_details(  # pyright: ignore[reportUnusedFunction]
         module_id: str, body: ModuleDetailsPatchIn, who: Annotated[Caller, Depends(caller)], _: Tx
     ) -> JSONResponse:
-        return ok(await service.update_details(who, module_id, body.model_dump()))
+        return ok(await service.update_details(who, module_id, body))
 
     @r.delete("/{module_id}", status_code=204, response_class=Response)
     async def remove_module(module_id: str, who: Annotated[Caller, Depends(caller)], _: Tx) -> Response:  # pyright: ignore[reportUnusedFunction]
@@ -196,31 +196,27 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
         module_id: str, body: HttpOperationIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Off the request transaction: a host not yet listed is sent to Security in agents-service."""
-        return ok(await service.add_operation(who, module_id, body.model_dump()))
+        return ok(await service.add_operation(who, module_id, body))
 
     @r.post("/{module_id}/functions", response_model=Envelope[ToolModuleDetail])
     async def add_function(
         module_id: str, body: CodeOperationIn, who: Annotated[Caller, Depends(caller)], _: Tx
     ) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Adds a Python function to a code module; it runs on runner-service when called."""
-        return ok(await service.add_function(who, module_id, body.model_dump()))
+        return ok(await service.add_function(who, module_id, body))
 
     @r.post("/{module_id}/operations/import", response_model=Envelope[ToolModuleDetail])
     async def import_operations(  # pyright: ignore[reportUnusedFunction]
         module_id: str, body: ImportOperationsIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
         """Off the request transaction: it fetches the source again before it adds the operations."""
-        return ok(await service.import_operations(who, module_id, body.model_dump()))
+        return ok(await service.import_operations(who, module_id, body))
 
     @r.patch("/{module_id}/operations/{operation_id}", response_model=Envelope[ToolModuleDetail])
     async def update_operation(  # pyright: ignore[reportUnusedFunction]
         module_id: str, operation_id: str, body: OperationPatchIn, who: Annotated[Caller, Depends(caller)], _: Tx
     ) -> JSONResponse:
-        patch = body.model_dump()
-        if body.binding is not None:
-            # Stored as the console sends it (bindTo), like the seeded bindings.
-            patch["binding"] = body.binding.model_dump(by_alias=True)
-        return ok(await service.update_operation(who, module_id, operation_id, patch, body.model_fields_set))
+        return ok(await service.update_operation(who, module_id, operation_id, body, body.model_fields_set))
 
     @r.put("/{module_id}/connection", response_model=Envelope[ToolModuleDetail])
     async def set_connection(
@@ -268,7 +264,7 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
         module_id: str, body: ApprovalRequestIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:
         """Off the request transaction: the workflow is read from agents-service."""
-        return ok(await service.request_approval(who, module_id, body.model_dump()), 201)
+        return ok(await service.request_approval(who, module_id, body), 201)
 
     @r.post("/{module_id}/approvals/revoke", response_model=Envelope[BulkResult])
     async def revoke_approvals(
@@ -288,8 +284,7 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
         module_id: str, body: ModuleTestIn, who: Annotated[Caller, Depends(caller)]
     ) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Off the request transaction: a real run calls the system, and a mock waits its delay."""
-        # Unset keys stay out, so a draft that leaves the mock or transform out uses the operation's own.
-        return ok(await service.test(who, module_id, body.model_dump(exclude_unset=True)))
+        return ok(await service.test(who, module_id, test_run(body)))
 
     @r.post("/{module_id}/operations/{operation}/run", response_model=Envelope[ToolRunResult])
     async def run_tool(  # pyright: ignore[reportUnusedFunction]
@@ -298,10 +293,16 @@ def modules_router(service: ModuleService, directory: Directory) -> APIRouter:
         """Off the request transaction: a Real run goes through the gateway to the system. The tool page's Run, in the
         screen's words: the test console's owner try, Mock on the stub's answer and
         Real as the gateway's call, so the two never decide differently."""
-        target = "stub" if body.mode == "mock" else "sandbox"
-        given = {"operation": operation, "context_id": "owner", "target": target, "input": body.input}
-        extra = {"environment": body.environment, "confirmed": body.confirmed}
-        out = await service.test(who, module_id, {**given, **extra})
+        target: Literal["stub", "sandbox"] = "stub" if body.mode == "mock" else "sandbox"
+        run: TestRun = {
+            "operation": operation,
+            "context_id": "owner",
+            "target": target,
+            "input": body.input,
+            "environment": body.environment,
+            "confirmed": body.confirmed,
+        }
+        out = await service.test(who, module_id, run)
         return ok({**out, "mocked": body.mode == "mock" or out.get("mockId") is not None})
 
     @r.get("/{module_id}/activity", response_model=Envelope[ModuleActivity])

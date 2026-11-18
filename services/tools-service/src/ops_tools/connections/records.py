@@ -7,9 +7,9 @@ headers apply as before until someone sets the connection up.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 from pydantic import JsonValue
 
@@ -156,8 +156,19 @@ def shown_status(conn: Account, state: str, now: datetime) -> str:
     return "error" if conn.status == "error" else "draft"
 
 
-def ref_of(conn: Account, now: datetime) -> dict[str, Any]:
-    out: dict[str, Any] = {
+class ConnectionView(TypedDict):
+    """A module's connection as the API shows it. `expiresAt` is left out of an account that does not expire."""
+
+    id: str
+    name: str
+    kind: str
+    status: str
+    baseUrl: str | None
+    expiresAt: NotRequired[str]
+
+
+def ref_of(conn: Account, now: datetime) -> ConnectionView:
+    out: ConnectionView = {
         "id": conn.id,
         "name": conn.name,
         "kind": conn.auth_kind,
@@ -174,7 +185,7 @@ def module_auth(conn: Account | None) -> dict[str, JsonValue]:
     return {"kind": conn.auth_kind if conn else "none"}
 
 
-def auth_of(stored: dict[str, Any]) -> dict[str, Any]:
+def auth_of(stored: Mapping[str, JsonValue]) -> Json:
     """A module's auth as the API shows it, in the connections' kind names whichever names it was stored with."""
     out = {k: v for k, v in stored.items() if v is not None}
     kind = str(out.get("kind") or "none")

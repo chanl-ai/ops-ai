@@ -28,10 +28,11 @@ import ssl
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 from urllib.parse import parse_qsl, quote, quote_plus, urlencode, urlsplit
 
 import httpx
+from pydantic import JsonValue
 
 from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ActingForPerson
@@ -226,6 +227,23 @@ class Trial:
 
     def note(self, message: str) -> None:
         self.log.append((round((time.perf_counter() - self.started) * 1000, 1), message))
+
+
+class ConsoleRan(TypedDict):
+    """A tool page's Real run that reached the executor: the call's id, whether it succeeded, and its answer."""
+
+    callId: str
+    ok: bool
+    output: JsonValue
+
+
+class ConsoleRefused(TypedDict):
+    """A tool page's Real run the gateway refused before it ran: why, in the gateway's words."""
+
+    callId: str
+    status: int
+    code: str
+    reasons: list[str]
 
 
 def secret_refs(headers: Sequence[Header], path: str | None) -> list[str]:

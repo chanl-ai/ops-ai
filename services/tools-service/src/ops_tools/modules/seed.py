@@ -392,7 +392,19 @@ def runtime_module(
 # Ops AI's own tools shown as Built in apps, and the team defaults tools-service provisions for every team:
 # each app is a module of the team's own holding `operations`, found again by its template id. `module` is the
 # app's older module name, read where a team has no copy of its own yet.
-BUILT_IN: list[dict[str, Any]] = [
+class BuiltInApp(TypedDict):
+    """An app of the platform's own tools: the module that holds them, which of its tools it shows, their titles."""
+
+    id: str
+    name: str
+    module: str
+    operations: list[str]
+    titles: dict[str, str]
+    description: str
+    href: str
+
+
+BUILT_IN: list[BuiltInApp] = [
     {
         "id": "knowledge",
         "name": "Knowledge bases",
@@ -459,7 +471,7 @@ def name_in_words(name: str) -> str:
     return words[:1].upper() + words[1:]
 
 
-def template_of(app: dict[str, Any]) -> str:
+def template_of(app: BuiltInApp) -> str:
     """The template id a built-in app's module is provisioned under in each team."""
     return f"builtin:{app['id']}"
 
@@ -522,7 +534,7 @@ def _local_op(fields: StoredOperation) -> Operation:
     return restored_operation(fields)
 
 
-def built_in_module(app: dict[str, Any], names: list[str], *, tenant_id: str, team_id: str, at: datetime) -> Aggregate:
+def built_in_module(app: BuiltInApp, names: list[str], *, tenant_id: str, team_id: str, at: datetime) -> Aggregate:
     """A built-in app's module for one team: the team's own published copy of the app's tools `names`, marked
     as the platform's (`system`) so a person cannot change it and the next defaults version can."""
     module_id = f"mod_builtin_{app['id']}_{team_id}"[:64]

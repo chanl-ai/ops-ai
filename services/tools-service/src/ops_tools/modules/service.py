@@ -18,7 +18,7 @@ import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, NotRequired, TypedDict, cast
+from typing import Any, Literal, NotRequired, TypedDict, cast
 from urllib.parse import urlsplit
 
 import httpx
@@ -27,6 +27,7 @@ from pydantic import JsonValue
 
 from ops_access import ANY_TEAM, Access, require_provisioner
 from ops_identity import Principal
+from ops_service_kit import narrow
 from ops_service_kit.errors import (
     ApiError,
     Conflict,
@@ -43,10 +44,18 @@ from ops_store import isolation
 
 from .. import mcp, transform
 from ..auth import Authenticator, AuthFailed, may_use
-from ..connections.records import auth_of, connection_base, module_auth, ref_of, sign_in_of, status_of
+from ..connections.records import (
+    ConnectionView,
+    auth_of,
+    connection_base,
+    module_auth,
+    ref_of,
+    sign_in_of,
+    status_of,
+)
 from ..egress import EgressDenied, EgressPolicy, egress_client, for_tenant
 from ..environments import TEST
-from ..executor import Trial, masked, secret_names
+from ..executor import ConsoleRan, ConsoleRefused, Trial, masked, secret_names
 from ..held_hosts import HostHeld, refused
 from ..limits import amount_refusal
 from ..mocks import MockAnswers
@@ -58,7 +67,6 @@ from ..store.mocks import MockStore
 from ..store.module_list import ModuleList, Window
 from ..store.modules import (
     APPROVAL,
-    CALL_SHAPE,
     REVIEWED,
     Aggregate,
     Approval,
@@ -91,10 +99,26 @@ from ..store.modules import (
 )
 from . import openapi
 from .directory import Directory, Team, owns_module
+from .discovered import Discovered, DiscoveredOperation, PublicDiscovered, PublicOperation
 from .executions import call_row
 from .policy import PublishPolicy, RequesterMayDecide, ToolsMode, WriteApprovals, own_request_refusal, tool_mode
 from .review_events import ACCESS_REQUESTED, access_event, policy_changed_event
 from .reviews import ReviewOpener
+from .schemas import (
+    ApprovalRequestIn,
+    BlankModuleIn,
+    CodeOperationIn,
+    CodeSettingsIn,
+    DiscoveredOperationIn,
+    HttpOperationIn,
+    ImportOperationsIn,
+    ModuleDetailsPatchIn,
+    ModuleIn,
+    ModuleSourceIn,
+    ModuleTestIn,
+    OperationPatchIn,
+    SchemaFieldIn,
+)
 from .seed import blank, kind_of, major_of, open_connection, tool_title
 from .tool_users import ToolUsers
 from .workflows import StaticWorkflows, WorkflowDirectory
@@ -112,6 +136,123 @@ class Rates(TypedDict):
 
 def _rates(t: CallStats) -> Rates:
     return {"calls24h": t.calls, "errorRate": t.errors / t.calls if t.calls else 0, "p95Ms": t.p95_ms}
+
+
+class Skip(TypedDict):
+    id: str
+    reason: str
+
+
+class BulkOutcome(TypedDict):
+    """What a bulk change did: the ids it changed and each one it left, with why."""
+
+    updated: list[str]
+    skipped: list[Skip]
+
+
+class CallShape(TypedDict, total=False):
+    """The call-shape fields of an operation an edit sets: a key is present only when the edit sent it."""
+
+    method: str | None
+    path: str | None
+    headers: list[Header] | None
+    body: str | None
+    body_encoding: str | None
+    response_transform: str | None
+    timeout_ms: int | None
+
+
+class TestDraft(TypedDict, total=False):
+    """The workbench's unsaved transform and mock: a key is present only when the caller sent it, and `None` sent
+    means no transform or the default mock."""
+
+    response_transform: str | None
+    stub: JsonValue
+
+
+class TestRun(TypedDict):
+    """One test of an operation. The optional keys are the ones the caller sent."""
+
+    operation: str
+    context_id: str
+    target: Literal["stub", "sandbox"]
+    input: dict[str, JsonValue]
+    simulate_approval: NotRequired[bool]
+    confirmed: NotRequired[bool]
+    draft: NotRequired[TestDraft | None]
+    secret_values: NotRequired[dict[str, str] | None]
+    environment: NotRequired[str | None]
+
+
+def test_run(body: ModuleTestIn) -> TestRun:
+    """A test request as `ModuleService.test` reads it: only the keys the caller sent, and in a draft only the keys it
+    sent, so a draft that leaves the mock out uses the operation's own."""
+    run: TestRun = {
+        "operation": body.operation,
+        "context_id": body.context_id,
+        "target": body.target,
+        "input": body.input,
+    }
+    sent = body.model_fields_set
+    if "simulate_approval" in sent:
+        run["simulate_approval"] = body.simulate_approval
+    if "confirmed" in sent:
+        run["confirmed"] = body.confirmed
+    if "secret_values" in sent:
+        run["secret_values"] = body.secret_values
+    if "environment" in sent:
+        run["environment"] = body.environment
+    if "draft" in sent:
+        draft: TestDraft | None = None
+        if body.draft is not None:
+            draft = {}
+            if "response_transform" in body.draft.model_fields_set:
+                draft["response_transform"] = body.draft.response_transform
+            if "stub" in body.draft.model_fields_set:
+                draft["stub"] = body.draft.stub
+        run["draft"] = draft
+    return run
+
+
+class BoundValue(TypedDict):
+    arg: str
+    value: JsonValue
+    source: str
+
+
+class InvalidInput(TypedDict):
+    field: str
+    message: str
+
+
+class TestLog(TypedDict):
+    atMs: float
+    message: str
+
+
+class TestResult(TypedDict, total=False):
+    """A test's answer as the console reads it. A refused one carries the reason; an allowed one the answer, and a
+    sandbox run the call it made. Keys are set in the order below."""
+
+    decision: Literal["allow", "deny", "invalid"]
+    denyReason: str
+    denyMessage: str
+    status: int
+    latencyMs: int
+    bound: list[BoundValue]
+    wouldPause: bool
+    invalid: list[InvalidInput]
+    output: JsonValue
+    masked: list[str]
+    callId: str
+    testApprovalToken: str
+    mockId: str
+    reachedHost: str | None
+    stubbed: bool
+    rawResponse: JsonValue
+    transformError: str
+    request: Json
+    log: list[TestLog]
 
 
 class WorkflowRef(TypedDict):
@@ -151,7 +292,7 @@ class ModuleRow(TypedDict):
     p95Ms: int
     reachable: bool
     drift: bool
-    connection: Json | None
+    connection: ConnectionView | None
     signIn: str
     updatedAt: str | None
     nextExpiry: NotRequired[str | None]
@@ -338,7 +479,7 @@ DENY_TEXT = {
 
 
 # A team's write approval levels as `WriteApprovals.levels` answers them: (team level, per-app levels).
-Levels = tuple[Any, dict[str, Any]]
+Levels = tuple[Json | None, Json]
 
 
 class NotYetAvailable(ApiError):
@@ -440,14 +581,14 @@ class _Provisioned(TypedDict, total=False):
     protection: str | None
 
 
-def _provisioned(who: Caller, i: dict[str, Any]) -> _Provisioned:
+def _provisioned(who: Caller, i: ModuleIn | BlankModuleIn | ModuleDetailsPatchIn) -> _Provisioned:
     """The template fields a create or patch carries, refused with `provisioner_only` unless the caller is a
     service token holding `tools:provision`: a person setting them could take a template's slot or lock others out."""
     fields: _Provisioned = {}
-    if i.get("template_id") is not None:
-        fields["template_id"] = i["template_id"]
-    if i.get("protection") is not None:
-        fields["protection"] = i["protection"]
+    if i.template_id is not None:
+        fields["template_id"] = i.template_id
+    if i.protection is not None:
+        fields["protection"] = i.protection
     if fields and who.principal is not None:
         require_provisioner(who.principal, "tools")
     return fields
@@ -464,42 +605,67 @@ def _provision(m: Module, fields: _Provisioned) -> None:
         m["protection"] = fields["protection"]
 
 
-def _code_settings(c: dict[str, Any]) -> CodeSettings:
-    """A code operation's settings as stored and sent to runner-service, from CodeSettingsIn's dump."""
-    limits = cast(dict[str, Any], c.get("limits") or {})
+def _code_settings(c: CodeSettingsIn) -> CodeSettings:
+    """A code operation's settings as stored and sent to runner-service."""
     return {
-        "source": c["source"],
-        "entry": c.get("entry") or "main",
-        "bindings": list(dict.fromkeys(c.get("bindings") or [])),
-        "secrets": list(dict.fromkeys(c.get("secrets") or [])),
-        "limits": {
-            "memoryMb": limits.get("memory_mb", 256),
-            "timeS": limits.get("time_s", 10),
-            "calls": limits.get("calls", 20),
-        },
+        "source": c.source,
+        "entry": c.entry or "main",
+        "bindings": list(dict.fromkeys(c.bindings or [])),
+        "secrets": list(dict.fromkeys(c.secrets or [])),
+        "limits": {"memoryMb": c.limits.memory_mb, "timeS": c.limits.time_s, "calls": c.limits.calls},
     }
 
 
-def _kind_of(i: dict[str, Any]) -> str:
+def _kind_of(i: ModuleIn) -> str:
     """A new module's kind: as given, else what its first operations are (the kind follows the executor)."""
-    if i.get("type"):
-        return str(i["type"])
-    if i.get("function"):
+    if i.type:
+        return str(i.type)
+    if i.function:
         return "code"
-    source = cast(dict[str, Any] | None, i.get("source"))
-    return str(source["kind"]) if source else "http"
+    return str(i.source.kind) if i.source else "http"
 
 
-def _code_operation(f: dict[str, Any]) -> dict[str, Any]:
-    """A new code operation from CodeOperationIn's dump."""
+def _input_field(f: SchemaFieldIn) -> InputField:
+    """A field as a request sends it: every key, an unset one as null."""
     return {
-        "name": f["name"],
-        "description": f["description"],
-        "access": f["access"],
+        "name": f.name,
+        "type": f.type,
+        "required": f.required,
+        "description": f.description,
+        "format": f.format,
+        "enum": f.enum,
+        "example": f.example,
+        "default": f.default,
+    }
+
+
+def _picked(o: DiscoveredOperationIn) -> DiscoveredOperation:
+    """An operation a caller listed in full, as a source describes one."""
+    return {
+        "name": o.name,
+        "description": o.description,
+        "access": o.access,
+        "method": o.method,
+        "path": o.path,
+        "group": o.group,
+        "input": [_input_field(f) for f in o.input],
+        "headers": [],
+    }
+
+
+def _code_operation(f: CodeOperationIn) -> DiscoveredOperation:
+    """A new code operation."""
+    return {
+        "name": f.name,
+        "description": f.description,
+        "access": f.access,
+        "method": None,
+        "path": None,
         "group": "functions",
-        "input": f["input"],
+        "input": [_input_field(x) for x in f.input],
+        "headers": [],
         "executor": "code",
-        "code": _code_settings(f["code"]),
+        "code": _code_settings(f.code),
     }
 
 
@@ -564,11 +730,6 @@ def _differs_from_published(m: Aggregate) -> bool:
     return False
 
 
-def _given(source: dict[str, Any]) -> dict[str, Any]:
-    """A source's fields the caller set; an unset connection leaves the module's in place."""
-    return {k: v for k, v in source.items() if v is not None}
-
-
 def _refuse_during_review(m: Aggregate, what: str) -> None:
     """While a version waits for Security, what it approves must be exactly what calls switch to: an edit, a discard
     or another version on top would ride along unreviewed or leave the approval deciding nothing."""
@@ -613,7 +774,7 @@ class ModuleService:
     installed_plugins: Callable[[], list[str]] | None = None
     # A tool page's Real run (`GatewayCalls.console_run`), set by create_gateway_app: Real goes through the gateway's
     # checks, never a path of its own.
-    real_runs: Callable[..., Awaitable[dict[str, Any]]] | None = None
+    real_runs: Callable[..., Awaitable[ConsoleRan | ConsoleRefused]] | None = None
     # The gateway's own reader of the team's approval settings, set by create_gateway_app: a test run waits exactly
     # when the same call from chat would. Left as is, the settings cannot be read and every write without its own
     # answer waits.
@@ -1318,7 +1479,7 @@ class ModuleService:
     # ── Creating modules ──────────────────────────────────────────────────
 
     @staticmethod
-    def _checked_headers(headers: list[dict[str, str]], problems: list[str]) -> list[dict[str, str]]:
+    def _checked_headers(headers: Sequence[Header], problems: list[str]) -> list[Header]:
         """A sign-in header is refused whatever it holds, a {{NAME}} reference too: every custom module is on a
         connection, which signs every call in, so the key has one home. Used by add and edit alike; each
         refusal joins `problems`."""
@@ -1352,7 +1513,7 @@ class ModuleService:
         return base, url[len(base) :] or "/"
 
     @classmethod
-    def _encoding_problem(cls, body: str | None, encoding: str | None, headers: list[dict[str, str]]) -> str | None:
+    def _encoding_problem(cls, body: str | None, encoding: str | None, headers: Sequence[Header]) -> str | None:
         """Why this body cannot be sent in its encoding, or None. JSON and form set Content-Type themselves, so
         a header naming another would contradict them; raw sends the text as typed, so it needs that header."""
         enc = encoding or "json"
@@ -1368,7 +1529,7 @@ class ModuleService:
             fields: object = json.loads(body) if body else {}
         except json.JSONDecodeError:
             fields = None
-        if not isinstance(fields, dict) or not all(isinstance(v, str) for v in cast(dict[str, Any], fields).values()):
+        if not isinstance(fields, dict) or not all(isinstance(v, str) for v in cast(Json, fields).values()):
             return "A form body is a set of fields, each a name and a text value such as {{email}}."
         return None
 
@@ -1390,41 +1551,41 @@ class ModuleService:
                 return f"Leave {{{{{name}}}}} out of quotes in the body: it is filled in as JSON, quotes included."
         return None
 
-    def _http_operation(self, h: dict[str, Any], endpoint: str = "") -> tuple[dict[str, Any], str]:
+    def _http_operation(self, h: HttpOperationIn, endpoint: str = "") -> tuple[DiscoveredOperation, str]:
         """One hand-built HTTP operation as a discovered one, and the base it calls. Every problem is found before
         any is reported, so one save lists them all."""
         problems: list[str] = []
-        headers = self._checked_headers(h.get("headers") or [], problems)
-        if not OPERATION_NAME.match(h["name"]):
+        headers = self._checked_headers([{"key": x.key, "value": x.value} for x in h.headers], problems)
+        if not OPERATION_NAME.match(h.name):
             problems.append("Name the operation in lower case letters, digits and underscores.")
         origin, path = "", "/"
         try:
-            origin, path = self._split_url(h["url"], endpoint)
+            origin, path = self._split_url(h.url, endpoint)
         except ValidationFailed as e:
             problems.append(e.message)
-        if problem := self._encoding_problem(h.get("body"), h.get("body_encoding"), headers):
+        if problem := self._encoding_problem(h.body, h.body_encoding, headers):
             problems.append(problem)
         refuse(problems)
-        names = [*URL_VAR.findall(h["url"]), *BODY_VAR.findall(h.get("body") or "")]
-        op = {
-            "name": h["name"],
-            "description": h["description"],
-            "access": h["access"],
-            "method": h["method"],
+        names = [*URL_VAR.findall(h.url), *BODY_VAR.findall(h.body or "")]
+        op: DiscoveredOperation = {
+            "name": h.name,
+            "description": h.description,
+            "access": h.access,
+            "method": h.method,
             "path": path,
             "group": "operations",
             "input": [_sample_field(n) for n in dict.fromkeys(names)],
             "headers": headers,
-            "body": h.get("body"),
-            "body_encoding": h.get("body_encoding"),
+            "body": h.body,
+            "body_encoding": h.body_encoding,
         }
         return op, origin
 
     @staticmethod
-    def _added(o: Operation | dict[str, Any], *, major: bool) -> Change:
+    def _added(o: Operation | DiscoveredOperation, *, major: bool) -> Change:
         return {"operation": o["name"], "kind": "added", "detail": f"New {o['access']} operation", "major": major}
 
-    def _new_op(self, module_id: str, index: int, o: dict[str, Any]) -> Operation:
+    def _new_op(self, module_id: str, index: int, o: DiscoveredOperation) -> Operation:
         return {
             **operation_defaults(),
             "id": f"{module_id}_op{index}",
@@ -1455,7 +1616,7 @@ class ModuleService:
             "code": o.get("code"),
         }
 
-    async def _names_free(self, who: Caller, ops: list[dict[str, Any]]) -> None:
+    async def _names_free(self, who: Caller, ops: Sequence[DiscoveredOperation]) -> None:
         taken = await self.store.names_taken(who.tenant_id, [o["name"] for o in ops], who.team.id)
         if taken:
             name = sorted(taken)[0]
@@ -1464,52 +1625,52 @@ class ModuleService:
     async def _name_free(self, who: Caller, name: str) -> bool:
         return name not in await self.store.names(who.tenant_id, who.team.id)
 
-    async def create(self, who: Caller, i: dict[str, Any]) -> ModuleDetail:
+    async def create(self, who: Caller, i: ModuleIn) -> ModuleDetail:
         _can(who, "tools", "create", what="tools")
         template = _provisioned(who, i)
-        base = _kebab(i["name"])
+        base = _kebab(i.name)
         if not base:
             raise ValidationFailed("Name the module.")
         name = base
-        if i.get("unique_name"):
+        if i.unique_name:
             n = 2
             while not await self._name_free(who, name):
                 name, n = f"{base}-{n}", n + 1
         if not await self._name_free(who, name):
             raise Conflict(f"A module named {name} already exists.")
-        if not i["display_name"].strip():
+        if not i.display_name.strip():
             raise ValidationFailed("Give the module a display name.")
-        conn = await self._usable_connection(who, i.get("connection_id"), i.get("sign_in"))
-        ops_in: list[dict[str, Any]] = list(i.get("operations") or [])
+        conn = await self._usable_connection(who, i.connection_id, i.sign_in)
+        ops_in: list[DiscoveredOperation] = [_picked(o) for o in i.operations or []]
         kind = _kind_of(i)
         if kind == "code":
             # A code module's functions run on runner-service: no endpoint and no egress host of its own.
-            if not i.get("function"):
+            if not i.function:
                 raise ValidationFailed("Write the module's first function.")
-            ops_in = [_code_operation(i["function"])]
-        endpoint: str = i["endpoint"]
-        if i.get("source") and ops_in:
+            ops_in = [_code_operation(i.function)]
+        endpoint: str = i.endpoint
+        if i.source and ops_in:
             # An MCP server behind sign-in lists its tools only with the connection's token.
-            found = await self._discover(who, {"connection_id": i.get("connection_id"), **_given(i["source"])})
+            found = await self._discover(who, i.source, i.connection_id)
             ops_in = self._chosen(found, ops_in)
             endpoint = found["endpoint"]
-        if i.get("http") and conn is not None:
+        if i.http and conn is not None:
             # A custom app's base address and key live on its connection only: one beside it is refused.
             if endpoint:
                 raise ValidationFailed(
                     f"The base address comes from the {conn.name} connection; leave the module's endpoint empty."
                 )
-            op, endpoint = self._http_operation(i["http"], connection_base(conn))
+            op, endpoint = self._http_operation(i.http, connection_base(conn))
             ops_in = [op]
-        elif i.get("http"):
-            op, endpoint = self._http_operation(i["http"])
+        elif i.http:
+            op, endpoint = self._http_operation(i.http)
             ops_in = [op]
         if not ops_in:
             raise ValidationFailed("Choose at least one operation to expose.")
         await self._names_free(who, ops_in)
-        await self.hold_unless_listed(who, urlsplit(endpoint).hostname, conn.name if conn else i["display_name"])
+        await self.hold_unless_listed(who, urlsplit(endpoint).hostname, conn.name if conn else i.display_name)
         if conn is None and kind != "code":
-            conn = await self._open_connection(who, i["display_name"], endpoint)
+            conn = await self._open_connection(who, i.display_name, endpoint)
         elif conn is not None and endpoint:
             await self._address_on(who, conn, endpoint)
         module_id = new_id("mod")
@@ -1526,15 +1687,15 @@ class ModuleService:
                 owner=owner,
                 me=who.name,
                 at=now,
-                input={"displayName": i["display_name"], "name": name, "type": kind},
+                input={"displayName": i.display_name, "name": name, "type": kind},
             ),
-            "system": i["system"].strip() or i["display_name"].strip(),
-            "description": f"{i['system'].strip() or i['display_name'].strip()} operations behind the data gateway.",
+            "system": i.system.strip() or i.display_name.strip(),
+            "description": f"{i.system.strip() or i.display_name.strip()} operations behind the data gateway.",
             "auth": module_auth(conn),
             "egress_hosts": [host] if host else [],
             "catalog_id": conn.catalog_id if conn else None,
             "connection_id": conn.id if conn else None,
-            "sign_in": sign_in_of(i.get("sign_in")),
+            "sign_in": sign_in_of(i.sign_in),
             "version": version,
             "operations": [self._new_op(module_id, n + 1, o) for n, o in enumerate(ops_in)],
         }
@@ -1637,18 +1798,18 @@ class ModuleService:
         conn = await self.connections.get(tenant_id, cid) if (cid := m["connection_id"]) else None
         return connection_base(conn) if conn else ""
 
-    async def create_blank(self, who: Caller, i: dict[str, Any]) -> ModuleDetail:
+    async def create_blank(self, who: Caller, i: BlankModuleIn) -> ModuleDetail:
         _can(who, "tools", "create", what="tools")
         template = _provisioned(who, i)
-        name = _kebab(i["name"])
-        if not i["display_name"].strip():
+        name = _kebab(i.name)
+        if not i.display_name.strip():
             raise ValidationFailed("Give the module a display name.")
         if not name:
             raise ValidationFailed("Give the module a name, e.g. servicenow.")
         if not await self._name_free(who, name):
             raise Conflict(f"A module named {name} already exists.")
         owner = self.dir.owner_group(who.team) or "Platform"
-        conn = await self._usable_connection(who, i.get("connection_id"), None)
+        conn = await self._usable_connection(who, i.connection_id, None)
         m = blank(
             module_id=new_id("mod"),
             tenant_id=who.tenant_id,
@@ -1656,7 +1817,7 @@ class ModuleService:
             owner=owner,
             me=who.name,
             at=self.clock(),
-            input={"displayName": i["display_name"], "name": name, "description": i.get("description") or ""},
+            input={"displayName": i.display_name, "name": name, "description": i.description or ""},
         )
         if conn is not None:
             # A custom app's tools are paths on its connection's base address: it is the module's only one.
@@ -1674,21 +1835,21 @@ class ModuleService:
 
     # ── Editing ───────────────────────────────────────────────────────────
 
-    async def update_details(self, who: Caller, module_id: str, patch: dict[str, Any]) -> ModuleDetail:
+    async def update_details(self, who: Caller, module_id: str, patch: ModuleDetailsPatchIn) -> ModuleDetail:
         _can(who, "tools", "edit", what="tools")
         levels = await self._levels(who.tenant_id, who.team)
         m = await self._changeable(who, module_id)
-        if patch.get("display_name") is not None:
-            if not patch["display_name"].strip():
+        if patch.display_name is not None:
+            if not patch.display_name.strip():
                 raise ValidationFailed("Give the module a display name.")
-            m["display_name"] = patch["display_name"].strip()
-        if patch.get("description") is not None:
-            m["description"] = patch["description"].strip()
-        if patch.get("sign_in") is not None:
+            m["display_name"] = patch.display_name.strip()
+        if patch.description is not None:
+            m["description"] = patch.description.strip()
+        if patch.sign_in is not None:
             conn = await self.connections.get(who.tenant_id, cid) if (cid := m["connection_id"]) else None
             if conn is not None:
-                sign_in_fits(str(patch["sign_in"]), conn)
-            m["sign_in"] = sign_in_of(patch["sign_in"])
+                sign_in_fits(str(patch.sign_in), conn)
+            m["sign_in"] = sign_in_of(patch.sign_in)
         _provision(m, _provisioned(who, patch))
         return await self._detail(await self._save(m), who.team, who, levels=levels)
 
@@ -1714,7 +1875,7 @@ class ModuleService:
         if m["baseline"] is None and ever_published:
             m["baseline"] = json.loads(json.dumps(m["operations"], default=str))
 
-    async def _append(self, who: Caller, m: Aggregate, ops_in: list[dict[str, Any]]) -> None:
+    async def _append(self, who: Caller, m: Aggregate, ops_in: list[DiscoveredOperation]) -> None:
         """Appends operations. A draft takes them straight into its first version; a published module stages them."""
         _refuse_during_review(m, "add operations")
         for o in ops_in:
@@ -1733,7 +1894,7 @@ class ModuleService:
         else:
             self._stage(m, changes)
 
-    async def add_operation(self, who: Caller, module_id: str, h: dict[str, Any]) -> ModuleDetail:
+    async def add_operation(self, who: Caller, module_id: str, h: HttpOperationIn) -> ModuleDetail:
         _can(who, "tools", "edit", what="tools")
         m = await self._changeable(who, module_id)
         conn = await self.connections.get(who.tenant_id, cid) if (cid := m["connection_id"]) else None
@@ -1786,9 +1947,9 @@ class ModuleService:
             raise Conflict(f"{', '.join(holders)} {verb} for this module. Revoke {them} first.")
         await self.store.delete(who.tenant_id, module_id)
 
-    async def bulk_remove(self, who: Caller, ids: list[str]) -> dict[str, Any]:
+    async def bulk_remove(self, who: Caller, ids: list[str]) -> BulkOutcome:
         _can(who, "tools", "delete", what="tools")
-        out: dict[str, Any] = {"updated": [], "skipped": []}
+        out: BulkOutcome = {"updated": [], "skipped": []}
         for module_id in ids:
             m = await self.store.get(who.tenant_id, module_id)
             if m is None or not self._sees(who, m) or not self._team_owns(who, m):
@@ -1817,7 +1978,7 @@ class ModuleService:
         return out
 
     async def update_operation(
-        self, who: Caller, module_id: str, op_id: str, patch: dict[str, Any], fields: set[str]
+        self, who: Caller, module_id: str, op_id: str, patch: OperationPatchIn, fields: set[str]
     ) -> ModuleDetail:
         """`fields` names the keys the caller sent, so `binding: null` (remove it) differs from leaving it out."""
         _can(who, "tools", "edit", what="tools")
@@ -1827,42 +1988,50 @@ class ModuleService:
         if o is None:
             raise NotFound("Operation")
         _refuse_during_review(m, "edit operations")
-        two = int(o.get("approvers") or 1) > 1 and patch.get("approvers") != 1
-        if patch.get("requires_approval") is False and two:
+        # Read through the dump: the attribute is deprecated, and reading it warns on every edit.
+        flag = patch.model_dump(include={"requires_approval"})["requires_approval"]
+        two = int(o.get("approvers") or 1) > 1 and patch.approvers != 1
+        if flag is False and two:
             raise Unprocessable("An operation two people approve always needs a person's approval.")
-        if (
-            patch.get("requires_approval") is not None
-            and "approval_mode" not in fields
-            and (patch.get("access") or o["access"]) == "write"
-        ):
+        if flag is not None and "approval_mode" not in fields and (patch.access or o["access"]) == "write":
             # The older flag still arrives from callers; the resolver reads only approval_mode, so it is stored as that:
             # true asks a reviewer, false hands the answer back to the app and team.
-            patch = {**patch, "approval_mode": "reviewer" if patch["requires_approval"] else None}
+            patch = patch.model_copy(update={"approval_mode": "reviewer" if flag else None})
             fields = fields | {"approval_mode"}
-        mode = patch.get("approval_mode") if "approval_mode" in fields else o.get("approval_mode")
-        if mode is not None and (patch.get("access") or o["access"]) != "write":
+        mode = patch.approval_mode if "approval_mode" in fields else o.get("approval_mode")
+        if mode is not None and (patch.access or o["access"]) != "write":
             raise Unprocessable("Only a write has an approval mode; a read never waits.")
-        if mode in ("none", "person") and int(patch.get("approvers") or o.get("approvers") or 1) > 1:
+        if mode in ("none", "person") and int(patch.approvers or o.get("approvers") or 1) > 1:
             raise Unprocessable("An operation two people approve always asks a reviewer.")
-        rate = patch.get("rate_limit_per_min")
+        rate = patch.rate_limit_per_min
         if rate is not None and not 1 <= rate <= 10_000:
             raise ValidationFailed("Set a rate limit between 1 and 10,000 calls a minute.")
-        amount = patch.get("amount_max")
+        amount = patch.amount_max
         if amount is not None and (o["access"] != "write" or amount <= 0):
             raise ValidationFailed("Only write operations take an amount limit, and it must be above zero.")
         if amount is not None and not any(f["name"] == "amount" for f in o["input"]):
             # The gateway reads the limit from the `amount` input; on an operation without one it could never hold.
             raise Unprocessable(f"{o['name']} has no amount input, so an amount limit would have nothing to check.")
-        approvers = patch.get("approvers")
+        approvers = patch.approvers
         if approvers is not None and approvers not in (1, 2):
             raise ValidationFailed("A write is approved by one person or by two different people.")
-        team = patch.get("approver_team")
+        team = patch.approver_team
         # The directory is the console seed. A platform team the token names (the demo team) is not in that
         # list; the caller naming their own team is enough (a record belongs to the acting team).
         if team is not None and self.dir.team_by_id(team) is None and team != who.team.id:
             raise Unprocessable(f"{team} is not a team in this workspace.")
-        binding = patch.get("binding")
-        new_input = self._field_list(patch["input"]) if "input" in fields and patch.get("input") is not None else None
+        # Stored as the console sends it (bindTo), like the seeded bindings.
+        binding: Binding | None = (
+            {
+                "arg": patch.binding.arg,
+                "bindTo": patch.binding.bind_to,
+                "mode": patch.binding.mode,
+                "required": patch.binding.required,
+            }
+            if patch.binding is not None
+            else None
+        )
+        new_input = self._field_list(patch.input) if "input" in fields and patch.input is not None else None
         names = {f["name"] for f in (new_input if new_input is not None else o["input"])}
         if binding and binding["arg"] not in names:
             raise ValidationFailed(f"{binding['arg']} is not an input of {o['name']}.")
@@ -1877,7 +2046,7 @@ class ModuleService:
                 body=shape.get("body", o.get("body")) if "body" in shape else o.get("body"),
                 binding=binding if "binding" in fields else o["binding"],
             )
-        access = patch.get("access")
+        access = patch.access
         answer_before = o.get("approval_mode")
         self._take_baseline(m)
         changes: list[Change] = self._shape_changes(o, shape)
@@ -1896,7 +2065,7 @@ class ModuleService:
             o["requires_approval"] = None if access == "write" else False
             if access == "read":
                 o["amount_max"] = None
-        if patch.get("enabled") is not None and patch["enabled"] != o["enabled"]:
+        if patch.enabled is not None and patch.enabled != o["enabled"]:
             # Hiding an operation a workflow is approved for breaks that workflow, so it is a major change.
             users = list(
                 dict.fromkeys(
@@ -1905,7 +2074,7 @@ class ModuleService:
                     if a["status"] == "approved" and name in a["operations"]
                 )
             )
-            if patch["enabled"]:
+            if patch.enabled:
                 changes.append({"operation": name, "kind": "added", "detail": "Exposed to workflows", "major": True})
             elif users:
                 verb = "calls" if len(users) == 1 else "call"
@@ -1914,13 +2083,11 @@ class ModuleService:
             else:
                 detail = "Hidden from workflows; no workflow is approved for it"
                 changes.append({"operation": name, "kind": "removed", "detail": detail, "major": False})
-            o["enabled"] = patch["enabled"]
-        flag_changed = patch.get("requires_approval") is not None and patch["requires_approval"] != o.get(
-            "requires_approval"
-        )
-        if patch.get("requires_approval") is not None:
+            o["enabled"] = patch.enabled
+        flag_changed = flag is not None and flag != o.get("requires_approval")
+        if flag is not None:
             # Kept as sent for older readers; the approval_mode change below is what is logged and enforced.
-            o["requires_approval"] = patch["requires_approval"]
+            o["requires_approval"] = flag
         if "approval_mode" in fields and mode != o.get("approval_mode"):
             before_mode = o.get("approval_mode")
             # Asking less than the app and team do, or handing the answer back to them, widens what runs unattended:
@@ -1933,8 +2100,8 @@ class ModuleService:
             # edit, so a script that re-sends it is not refused as "Nothing changed". No effect on calls, so minor.
             detail = f"Approval {_MODE_WORDS[o.get('approval_mode')]}"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": False})
-        if "reviewer_role" in fields and patch.get("reviewer_role") != o.get("reviewer_role"):
-            role = patch.get("reviewer_role")
+        if "reviewer_role" in fields and patch.reviewer_role != o.get("reviewer_role"):
+            role = patch.reviewer_role
             anyone = "anyone who can approve"
             detail = f"Reviewer role {o.get('reviewer_role') or anyone} → {role or anyone}"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": role is None})
@@ -1972,27 +2139,27 @@ class ModuleService:
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": True})
             o["approver_team"] = team
         # Part of the approval policy, which Security reviews either way (publish compares it with the baseline).
-        step_up = patch.get("step_up")
+        step_up = patch.step_up
         if step_up is not None and step_up != bool(o.get("step_up")):
             detail = "Approving asks for a step-up" if step_up else "Approving no longer asks for a step-up"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": True})
             o["step_up"] = step_up
         # Off lets a run with nobody behind it sign in with the team's backup account, so Security reviews it.
-        needs_person = patch.get("needs_person")
+        needs_person = patch.needs_person
         if needs_person is not None and needs_person != bool(o.get("needs_person")):
             detail = "Signs in as a person only" if needs_person else "No longer signs in as a person only"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": not needs_person})
             o["needs_person"] = needs_person
         # Not reviewed: a scope only asks the person for more consent, and the system decides what a token may do.
-        scopes = patch.get("scopes")
+        scopes = patch.scopes
         if scopes is not None and list(dict.fromkeys(scopes)) != list(o.get("scopes") or []):
             scopes = list(dict.fromkeys(scopes))
             detail = f"Needs the scopes {', '.join(scopes)}" if scopes else "Needs no scopes beyond the connection's"
             changes.append({"operation": name, "kind": "settings", "detail": detail, "major": False})
             o["scopes"] = scopes
-        if patch.get("description") is not None and patch["description"].strip() != o["description"]:
+        if patch.description is not None and patch.description.strip() != o["description"]:
             changes.append({"operation": name, "kind": "settings", "detail": "Description edited", "major": False})
-            o["description"] = patch["description"].strip()
+            o["description"] = patch.description.strip()
         if "binding" in fields and binding != o["binding"]:
             old = o["binding"]
             widened = not binding or (
@@ -2013,8 +2180,7 @@ class ModuleService:
         # Writes the operation's example mock under its old name, while the console still sends it; removed in D3c/D3d,
         # when the console writes the example through the mock routes.
         if "stub" in fields:
-            stub = patch.get("stub")
-            stub: JsonValue = {"ok": True} if stub is None else stub
+            stub: JsonValue = {"ok": True} if patch.stub is None else patch.stub
             if len(json.dumps(stub)) > MAX_STUB_BYTES:
                 raise ValidationFailed(f"Keep the mock response under {MAX_STUB_BYTES // 1000} KB.")
             if stub != o.get("stub"):
@@ -2023,8 +2189,8 @@ class ModuleService:
                     {"operation": name, "kind": "settings", "detail": "Mock response edited", "major": False}
                 )
                 o["stub"] = stub
-        if "code" in fields and patch.get("code") is not None:
-            changes.extend(self._code_changes(o, _code_settings(patch["code"])))
+        if "code" in fields and patch.code is not None:
+            changes.extend(self._code_changes(o, _code_settings(patch.code)))
         if not changes:
             raise ValidationFailed("Nothing changed.")
         answer_changed = o.get("approval_mode") != answer_before
@@ -2043,19 +2209,19 @@ class ModuleService:
         so Security reviews it; an edit to the source or the limits alone is minor."""
         if o["executor"] != "code":
             raise ValidationFailed(f"{o['name']} is not a code operation.")
-        before = cast(dict[str, Any], o.get("code") or {})
+        before = o.get("code")
         if code == before:
             return []
         added = [
-            *(set(code["bindings"]) - set(before.get("bindings") or [])),
-            *(set(code["secrets"]) - set(before.get("secrets") or [])),
+            *(set(code["bindings"]) - set((before.get("bindings") or []) if before else [])),
+            *(set(code["secrets"]) - set((before.get("secrets") or []) if before else [])),
         ]
         detail = f"May now use {', '.join(sorted(added))}" if added else "Function edited"
         o["code"] = code
         kind = "binding_changed" if added else "settings"
         return [{"operation": o["name"], "kind": kind, "detail": detail, "major": bool(added)}]
 
-    async def add_function(self, who: Caller, module_id: str, f: dict[str, Any]) -> ModuleDetail:
+    async def add_function(self, who: Caller, module_id: str, f: CodeOperationIn) -> ModuleDetail:
         """Adds a function to a code module."""
         _can(who, "tools", "edit", what="tools")
         levels = await self._levels(who.tenant_id, who.team)
@@ -2066,16 +2232,32 @@ class ModuleService:
         return await self._detail(await self._save(m), who.team, who, levels=levels)
 
     def _checked_shape(
-        self, m: Aggregate, o: Operation, patch: dict[str, Any], fields: set[str], base: str
-    ) -> dict[str, Any]:
+        self, m: Aggregate, o: Operation, patch: OperationPatchIn, fields: set[str], base: str
+    ) -> CallShape:
         """The call-shape fields this patch sets, validated as add validates them; nothing is applied here."""
-        sent = {k: patch.get(k) for k in CALL_SHAPE if k in fields}
+        sent: CallShape = {}
+        if "method" in fields:
+            sent["method"] = patch.method
+        if "path" in fields:
+            sent["path"] = patch.path
+        if "headers" in fields:
+            sent["headers"] = (
+                None if patch.headers is None else [{"key": h.key, "value": h.value} for h in patch.headers]
+            )
+        if "body" in fields:
+            sent["body"] = patch.body
+        if "body_encoding" in fields:
+            sent["body_encoding"] = patch.body_encoding
+        if "response_transform" in fields:
+            sent["response_transform"] = patch.response_transform
+        if "timeout_ms" in fields:
+            sent["timeout_ms"] = patch.timeout_ms
         if not sent:
             return {}
         if o["executor"] != "http":
             raise ValidationFailed(f"{o['name']} is not an HTTP operation; its call comes from its server or seed.")
         for k in ("method", "path", "headers"):
-            if k in sent and sent[k] is None:
+            if k in sent and sent.get(k) is None:
                 raise ValidationFailed(f"An HTTP operation keeps a {k}.")
         # Every problem is found before any is reported, so one save lists them all.
         problems: list[str] = []
@@ -2091,13 +2273,13 @@ class ModuleService:
                 except ValidationFailed as e:
                     problems.append(e.message)
         if "headers" in sent:
-            sent["headers"] = self._checked_headers(cast(list[dict[str, str]], sent["headers"]), problems)
+            sent["headers"] = self._checked_headers(sent["headers"] or [], problems)
         if "body" in sent:
             sent["body"] = (sent["body"] or "").strip() or None
-        if {"body", "body_encoding", "headers"} & sent.keys():
+        if "body" in sent or "body_encoding" in sent or "headers" in sent:
             body, encoding = sent.get("body", o.get("body")), sent.get("body_encoding", o.get("body_encoding"))
-            headers = cast(list[dict[str, str]], sent["headers"] if "headers" in sent else o.get("headers") or [])
-            if problem := self._encoding_problem(body, encoding, headers):
+            headers = sent["headers"] if "headers" in sent else o.get("headers") or []
+            if problem := self._encoding_problem(body, encoding, headers or []):
                 problems.append(problem)
         if "response_transform" in sent:
             sent["response_transform"] = (sent["response_transform"] or "").strip() or None
@@ -2107,10 +2289,25 @@ class ModuleService:
         if limit is not None and not 1_000 <= limit <= 120_000:
             problems.append("Set a timeout between 1 and 120 seconds (1000 to 120000 ms).")
         refuse(problems)
-        return {k: v for k, v in sent.items() if v != o.get(k)}
+        changed: CallShape = {}
+        if "method" in sent and sent["method"] != o.get("method"):
+            changed["method"] = sent["method"]
+        if "path" in sent and sent["path"] != o.get("path"):
+            changed["path"] = sent["path"]
+        if "headers" in sent and sent["headers"] != o.get("headers"):
+            changed["headers"] = sent["headers"]
+        if "body" in sent and sent["body"] != o.get("body"):
+            changed["body"] = sent["body"]
+        if "body_encoding" in sent and sent["body_encoding"] != o.get("body_encoding"):
+            changed["body_encoding"] = sent["body_encoding"]
+        if "response_transform" in sent and sent["response_transform"] != o.get("response_transform"):
+            changed["response_transform"] = sent["response_transform"]
+        if "timeout_ms" in sent and sent["timeout_ms"] != o.get("timeout_ms"):
+            changed["timeout_ms"] = sent["timeout_ms"]
+        return changed
 
     @staticmethod
-    def _shape_changes(o: Operation, shape: dict[str, Any]) -> list[Change]:
+    def _shape_changes(o: Operation, shape: CallShape) -> list[Change]:
         """Applies a validated call-shape edit to `o` and says what changed. A new method, path or body changes the
         contract a workflow was approved against, so it is major; headers, the transform and the timeout are minor."""
         if not shape:
@@ -2140,7 +2337,7 @@ class ModuleService:
         if "path" in shape:
             o["path"] = shape["path"]
         if "headers" in shape:
-            o["headers"] = shape["headers"]
+            o["headers"] = shape["headers"] or []
         if "body" in shape:
             o["body"] = shape["body"]
         if "body_encoding" in shape:
@@ -2156,24 +2353,27 @@ class ModuleService:
         return out
 
     @staticmethod
-    def _field_list(fields: list[dict[str, Any]]) -> list[InputField]:
+    def _field_list(fields: Sequence[SchemaFieldIn]) -> list[InputField]:
         """The input fields as stored: trimmed text, and unset optional parts left out."""
         out: list[InputField] = []
         for f in fields:
-            row: InputField = {"name": str(f["name"]).strip(), "type": f["type"], "required": bool(f["required"])}
-            for k in ("description", "format", "example"):
-                if f.get(k) not in (None, ""):
-                    row[k] = str(f[k]).strip()
-            if f.get("enum"):
-                row["enum"] = [str(v).strip() for v in f["enum"]]
-            if f.get("default") is not None:
-                row["default"] = f["default"]
+            row: InputField = {"name": str(f.name).strip(), "type": f.type, "required": bool(f.required)}
+            if f.description not in (None, ""):
+                row["description"] = str(f.description).strip()
+            if f.format not in (None, ""):
+                row["format"] = str(f.format).strip()
+            if f.example not in (None, ""):
+                row["example"] = str(f.example).strip()
+            if f.enum:
+                row["enum"] = [str(v).strip() for v in f.enum]
+            if f.default is not None:
+                row["default"] = f.default
             out.append(row)
         return out
 
     @staticmethod
     def _check_input(
-        o: Operation | dict[str, Any],
+        o: Operation,
         fields: list[InputField],
         *,
         path: str | None,
@@ -2430,13 +2630,13 @@ class ModuleService:
 
     # ── Workflow approvals ────────────────────────────────────────────────
 
-    async def request_approval(self, who: Caller, module_id: str, i: dict[str, Any]) -> ApprovalView:
+    async def request_approval(self, who: Caller, module_id: str, i: ApprovalRequestIn) -> ApprovalView:
         _can(who, "tools", "edit", what="tools")
         m = await self._find(who, module_id)
         _not_a_plugin(m)
         if m["status"] == "draft":
             raise Conflict("Submit the module for security review before workflows can request it.")
-        wf = (await self.workflows.all(who.tenant_id)).get(i["workflow_id"])
+        wf = (await self.workflows.all(who.tenant_id)).get(i.workflow_id)
         if wf is None:
             raise ValidationFailed("Choose a workflow.")
         if not wf.team_id:
@@ -2444,11 +2644,11 @@ class ModuleService:
             raise Unprocessable(f"{wf.name} belongs to no team, so no team can be granted access for it.")
         # The workflow's platform team, which the dev seed need not hold: the grant is for that team id.
         owner = self.dir.team(wf.team_id)
-        if not i["operations"]:
+        if not i.operations:
             raise ValidationFailed("Choose at least one operation.")
         # The default policy: the module's team decides, unless an operation asked for names its own approving team.
         decider = next(
-            (o["approver_team"] for o in m["operations"] if o["name"] in i["operations"] and o.get("approver_team")),
+            (o["approver_team"] for o in m["operations"] if o["name"] in i.operations and o.get("approver_team")),
             m["team_id"],
         )
         if decider is None:
@@ -2458,35 +2658,35 @@ class ModuleService:
                 f"{m['display_name']} belongs to no team: every team's workflows may already use it, so there is "
                 "nothing to request."
             )
-        production = i["environment"] == "production"
+        production = i.environment == "production"
         most = 365 if production else 90
-        if not 1 <= i["expires_in_days"] <= most:
+        if not 1 <= i.expires_in_days <= most:
             raise ValidationFailed(f"{'Production' if production else 'Test'} approvals last at most {most} days.")
-        if len(i["justification"].strip()) < 10:
+        if len(i.justification.strip()) < 10:
             raise ValidationFailed("Explain why the workflow needs these operations.")
         name = wf.name
-        if any(a["workflow_id"] == i["workflow_id"] and a["status"] == "requested" for a in self._approvals(m)):
+        if any(a["workflow_id"] == i.workflow_id and a["status"] == "requested" for a in self._approvals(m)):
             raise Conflict(f"{name} already has an open request for this module.")
         now = self.clock()
         approval_id = new_id("apr")
         a: Approval = {
             "id": approval_id,
-            "workflow_id": i["workflow_id"],
+            "workflow_id": i.workflow_id,
             "workflow_name": name,
             "workflow_team_id": owner.id,
-            "environment": i["environment"],
+            "environment": i.environment,
             "major": major_of(m["version"]),
-            "operations": i["operations"],
+            "operations": i.operations,
             "constraints": None,
             "requested_by": who.name,
             # Who asked, as the token names them: the requester rule compares it, never the display name.
             "requested_by_email": who.principal.email if who.principal else None,
-            "justification": i["justification"].strip(),
+            "justification": i.justification.strip(),
             "requested_at": now,
             "decided_by": None,
             "decided_at": None,
             "status": "requested",
-            "expires_at": now + timedelta(days=i["expires_in_days"]),
+            "expires_at": now + timedelta(days=i.expires_in_days),
             "reason": None,
             # Decided in Human Tasks by `decider`; who in that team may decide is can(reviews.decide), as for
             # any review.
@@ -2572,12 +2772,12 @@ class ModuleService:
         await self._save(m, touch=False)
         return self._approval_out(a)
 
-    async def revoke_approvals(self, who: Caller, module_id: str, ids: list[str], reason: str) -> dict[str, Any]:
+    async def revoke_approvals(self, who: Caller, module_id: str, ids: list[str], reason: str) -> BulkOutcome:
         _can(who, "tools", "decide", what="tool approvals")
         m = await self._owned(who, module_id)
         if not reason.strip():
             raise ValidationFailed("Give a reason.")
-        out: dict[str, Any] = {"updated": [], "skipped": []}
+        out: BulkOutcome = {"updated": [], "skipped": []}
         for approval_id in ids:
             a = next((x for x in m["approvals"] if x["id"] == approval_id), None)
             if a is None:
@@ -2597,7 +2797,7 @@ class ModuleService:
 
     # ── Test console ──────────────────────────────────────────────────────
 
-    async def test(self, who: Caller, module_id: str, i: dict[str, Any]) -> dict[str, Any]:
+    async def test(self, who: Caller, module_id: str, i: TestRun) -> TestResult:
         """What the gateway would decide for this call in this run context, and the answer when it allows. On the
         sandbox target, the console's Real, the call is a gateway call: the same approval, limits, egress,
         account choice and call log as an agent's, in the environment the person picked; on the stub target, Mock,
@@ -2623,7 +2823,7 @@ class ModuleService:
         call_id = new_id("test")
         sandbox = i["target"] == "sandbox"
 
-        def deny(reason: str) -> dict[str, Any]:
+        def deny(reason: str) -> TestResult:
             return {
                 "decision": "deny",
                 "denyReason": reason,
@@ -2648,8 +2848,8 @@ class ModuleService:
                 return deny("approval_expired" if any(a["status"] == "expired" for a in mine) else "no_approval")
             if not any(o["name"] in a["operations"] for a in active):
                 return deny("operation_not_approved")
-        args = dict(i["input"])
-        bound: list[dict[str, Any]] = []
+        args: Json = dict(i["input"])
+        bound: list[BoundValue] = []
         b = o["binding"]
         if b:
             value = ctx["bindings"].get(b["bindTo"]) if ctx else None
@@ -2675,7 +2875,7 @@ class ModuleService:
                 "bound": bound,
                 "wouldPause": False,
                 "invalid": [{"field": f, "message": "Required."} for f in missing],
-                "output": {"error": "invalid_input", "missing": missing},
+                "output": {"error": "invalid_input", "missing": [*missing]},
                 "masked": [],
                 "callId": call_id,
             }
@@ -2702,14 +2902,14 @@ class ModuleService:
             return deny("approval_token_missing")
         # The workbench's draft transform and mock run in place of the operation's for this test only: nothing
         # is staged, so what agents get changes only through staging and publishing.
-        draft: dict[str, Any] = i.get("draft") or {}
+        draft: TestDraft = i.get("draft") or {}
         if "stub" in draft and len(json.dumps(draft["stub"])) > MAX_STUB_BYTES:
             raise ValidationFailed(f"Keep the mock response under {MAX_STUB_BYTES // 1000} KB.")
         template = draft["response_transform"] if "response_transform" in draft else o.get("response_transform")
         mock = draft["stub"] if "stub" in draft and draft["stub"] is not None else o.get("stub")
         trial = Trial()
         trial.note("Input checked against the operation's schema")
-        out: dict[str, Any] = {
+        out: TestResult = {
             "decision": "allow",
             "status": 200,
             "latencyMs": 0,
@@ -2773,13 +2973,13 @@ class ModuleService:
         who: Caller,
         module: Module,
         op: Operation,
-        args: dict[str, Any],
+        args: Json,
         *,
         secret_values: dict[str, str] | None,
         trial: Trial,
         environment: str,
         confirmed: bool = False,
-    ) -> dict[str, Any]:
+    ) -> TestResult:
         """The Real run, as one gateway call: the gateway decides it as it decides an agent's call (approval,
         limits, egress, the team's account) in the environment the person chose, and logs it under them. `trial` comes
         back with the request as sent, secrets hidden; `secret_values` stand in for unset secrets for this call only.
@@ -2797,7 +2997,7 @@ class ModuleService:
             secret_values=secret_values,
             confirmed=confirmed,
         )
-        result: dict[str, Any] = {
+        result: TestResult = {
             "callId": ran["callId"],
             "latencyMs": round((time.perf_counter() - started) * 1000),
             "reachedHost": urlsplit(await self._address(str(module["tenant_id"]), module)).hostname,
@@ -2809,7 +3009,8 @@ class ModuleService:
             if code == "gateway_refused" and any("needs an approval token" in r for r in ran["reasons"]):
                 # A live-account test run waiting for the person's yes reads as a missing approval, like a workflow's.
                 code = "approval_token_missing"
-            return result | {
+            return {
+                **result,
                 "decision": "deny",
                 "denyReason": code,
                 "denyMessage": message,
@@ -2818,9 +3019,12 @@ class ModuleService:
             }
         result["output"] = ran["output"]
         if not ran["ok"]:
-            error = cast(dict[str, Any], cast(dict[str, Any], ran["output"]).get("error") or {})
+            answer = narrow.an_object(ran["output"], "A failed call's answer")
+            error = narrow.an_object(answer.get("error") or {}, "A failed call's error")
             # The upstream's own status when it answered; otherwise the gateway's, by whether the call timed out.
-            result["status"] = error.get("status") or (504 if "TIMEOUT" in str(error.get("code")) else 502)
+            result["status"] = narrow.field(error, "status", int) or (
+                504 if "TIMEOUT" in str(error.get("code")) else 502
+            )
         return result
 
     # ── Not in this card ──────────────────────────────────────────────────
@@ -2851,23 +3055,25 @@ class ModuleService:
             raise Unprocessable(f"The document from {host} is larger than {MAX_SPEC_BYTES // 1_000_000} MB.")
         return res.content
 
-    async def _discover(self, who: Caller, source: dict[str, Any]) -> dict[str, Any]:
-        await self._connection_ok(who.tenant_id, source.get("connection_id"))
-        if source["kind"] == "openapi":
-            if not source.get("spec_url"):
-                if source.get("file_id") or source.get("file_name"):
+    async def _discover(self, who: Caller, source: ModuleSourceIn, module_connection: str | None = None) -> Discovered:
+        """`source`, read now. Its own connection is used when it names one, else `module_connection`, the module's."""
+        connection_id = source.connection_id if source.connection_id is not None else module_connection
+        await self._connection_ok(who.tenant_id, connection_id)
+        if source.kind == "openapi":
+            if not source.spec_url:
+                if source.file_id or source.file_name:
                     raise NotYetAvailable("Importing an uploaded document is not available yet; give its URL.")
                 raise ValidationFailed("Add the spec as a URL.")
-            raw = await self._fetch(who, source["spec_url"])
+            raw = await self._fetch(who, source.spec_url)
             try:
                 text = raw.decode()
-                spec: Any = json.loads(text) if text.lstrip().startswith("{") else yaml.safe_load(text)
-                return openapi.discover(spec, source["spec_url"])
+                spec: JsonValue = json.loads(text) if text.lstrip().startswith("{") else yaml.safe_load(text)
+                return openapi.discover(spec, source.spec_url)
             except (UnicodeDecodeError, ValueError, yaml.YAMLError) as e:
                 raise ValidationFailed(f"The document could not be read: {e}"[:300]) from e
-        if not source.get("url"):
+        if not source.url:
             raise ValidationFailed("Enter the MCP server's https address.")
-        return await self._discover_mcp(who, source["url"], source.get("connection_id"))
+        return await self._discover_mcp(who, source.url, connection_id)
 
     async def _signed_in_headers(self, who: Caller, connection_id: str | None, url: str) -> tuple[dict[str, str], Any]:
         """A discovery's sign-in through the named connection, in the test environment: its headers and its
@@ -2892,7 +3098,7 @@ class ModuleService:
             ) from e
         return (prepared.headers, prepared.certificate) if prepared else ({}, None)
 
-    async def _discover_mcp(self, who: Caller, url: str, connection_id: str | None = None) -> dict[str, Any]:
+    async def _discover_mcp(self, who: Caller, url: str, connection_id: str | None = None) -> Discovered:
         if self.egress is None or self.http is None:
             raise NotYetAvailable("This service has no egress policy, so it reaches no MCP server.")
         headers, certificate = await self._signed_in_headers(who, connection_id, url)
@@ -2914,20 +3120,28 @@ class ModuleService:
         return mcp.discovered(tools, url, server)
 
     @staticmethod
-    def _public(result: dict[str, Any]) -> dict[str, Any]:
+    def _public(result: Discovered) -> PublicDiscovered:
         """The console's DiscoveryResult: an operation's headers stay on the service until import."""
-        ops = [
-            {k: v for k, v in o.items() if k not in ("headers", "stub", "output_shape", "response_schema")}
+        ops: list[PublicOperation] = [
+            {
+                "name": o["name"],
+                "description": o["description"],
+                "access": o["access"],
+                "method": o["method"],
+                "path": o["path"],
+                "group": o["group"],
+                "input": o["input"],
+            }
             for o in result["operations"]
         ]
         return {**result, "operations": ops}
 
-    async def discover(self, who: Caller, source: dict[str, Any]) -> dict[str, Any]:
+    async def discover(self, who: Caller, source: ModuleSourceIn) -> PublicDiscovered:
         _can(who, "tools", "create", what="tools")
         return self._public(await self._discover(who, source))
 
     @staticmethod
-    def _chosen(found: dict[str, Any], chosen: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _chosen(found: Discovered, chosen: Sequence[DiscoveredOperation]) -> list[DiscoveredOperation]:
         """The caller's picks as the source describes them: name and the confirmed access class from the caller,
         everything else from the source. A name the source does not list is refused."""
         listed = {o["name"]: o for o in found["operations"]}
@@ -2937,15 +3151,15 @@ class ModuleService:
         executor = "mcp" if found["type"] == "mcp" else "http"
         return [{**listed[o["name"]], "access": o["access"], "executor": executor} for o in chosen]
 
-    async def import_operations(self, who: Caller, module_id: str, i: dict[str, Any]) -> ModuleDetail:
+    async def import_operations(self, who: Caller, module_id: str, i: ImportOperationsIn) -> ModuleDetail:
         """Appends the chosen operations as the source describes them now; the caller picks which, and confirms each
         one's access class, but never supplies their method, path, inputs or headers."""
         _can(who, "tools", "create", what="tools")
         m = await self._changeable(who, module_id)
-        chosen: list[dict[str, Any]] = i["operations"]
+        chosen = [_picked(o) for o in i.operations]
         if not chosen:
             raise ValidationFailed("Choose at least one operation to import.")
-        found = await self._discover(who, {"connection_id": m["connection_id"], **_given(i["source"])})
+        found = await self._discover(who, i.source, m["connection_id"])
         fresh = [o for o in self._chosen(found, chosen) if not any(x["name"] == o["name"] for x in m["operations"])]
         if not fresh:
             raise Conflict("Every chosen operation is already in this module.")
