@@ -37,6 +37,7 @@ from urllib.parse import quote
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
+from database_url import asyncpg_url  # noqa: E402
 from stg_env import load as load_staging_env  # noqa: E402
 
 
@@ -352,9 +353,8 @@ def _database(db_file: Path, logins_file: Path) -> tuple[str, Callable[[str], st
     """The superuser DSN and a builder of each service's login DSN, both in SQLAlchemy's asyncpg form."""
     # `fly postgres attach` prints postgres://...?sslmode=disable; asyncpg takes no sslmode and the cluster is reached
     # over the private network.
-    url = db_file.read_text().strip().split("?")[0]
-    superuser = "postgresql+asyncpg://" + url.split("://", 1)[1]
-    host_and_db = url.rsplit("@", 1)[1]
+    superuser = asyncpg_url(db_file.read_text().strip())
+    host_and_db = superuser.rsplit("@", 1)[1]
     # One login per service (make db-ddl's roles.sql, applied to the cluster); passwords from `logins_file`.
     logins = _read_pairs(logins_file)
 
