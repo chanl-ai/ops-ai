@@ -130,6 +130,6 @@ async def test_the_page_query_holds_the_acting_team_when_every_team_is_let_throu
         await c.post("/v1/guardrails", json={**RULE, "name": name}, headers=headers)
     reg = GuardrailRegistry(_ENGINES[-1])
     with isolation.tenant_wide(OWNER, tenant_id="local"), acting_as("team_ops"):
-        names = [r["name"] for r in await reg.page("rule", 0, 10)]
+        names = [r.name for r in await reg.page("rule", 0, 10)]
         total = await reg.count("rule")
     assert (names, total) == (["Ops rule"], 1)

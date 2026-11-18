@@ -264,7 +264,11 @@ async def list_activity(rt: Rt, me: Me, q: Annotated[ActivityQuery, Query()]) ->
         calls = await Activity(rt.db).calls(found.rows)
         details = await Activity(rt.db).email_details(found.rows)
         runs = [str(r["row_id"]) for r in found.rows if r["kind"] == "workflow_run" and r["outcome"]]
-        ended = await outcome_texts(rt, await RunStore(EngineTransactions(rt.db)).many(runs)) if runs else {}
+        ended = (
+            await outcome_texts(rt, [r.model_dump() for r in await RunStore(EngineTransactions(rt.db)).many(runs)])
+            if runs
+            else {}
+        )
     who = await named_actors(rt, reads)
     told = await describe_calls(rt, calls)
     titles = case_said | {f"tool_call:{k}": str(v["sentence"]) for k, v in told.items()}

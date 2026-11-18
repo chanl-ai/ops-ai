@@ -241,7 +241,7 @@ async def test_a_scoped_key_sees_other_workflows_children_by_status_only(engine:
     rt: Any = SimpleNamespace(db=engine)
     with tenant_scope(w.tenant):
         run = await RunStore(w.tx).get(parent)
-        steps = run_story.steps_view(await RunStore(w.tx).steps(parent))
+        steps = run_story.steps_view(await RunStore(w.tx).step_rows(parent))
         story = await run_story.story(rt, run or {}, steps, scope=("workflow", "intake"), masking=False)
     assert [(c["label"], c["cases"], c["tasks"]) for c in story["children"]] == [("Debtor", [], [])] * 2
 

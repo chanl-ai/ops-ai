@@ -281,8 +281,8 @@ class EmailStarts:
         runs = RunStore(EngineTransactions(self.db))
         if (existing := await runs.by_key(b.workflow, key)) is not None:
             # A redelivery: its run exists, and its attachments are already in Files.
-            await self.record(b, msg, "duplicate", run_id=str(existing["id"]))
-            return Started(existing, False)
+            await self.record(b, msg, "duplicate", run_id=existing.id)
+            return Started(existing.model_dump(), False)
         cap = b.binding.daily_cap
         # One poller per binding holds its lease, so counting then starting cannot let two runs past the cap.
         if cap is not None and await self.events.started_since(b.workflow, today()) >= cap:

@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, cast
 
-from ops_engine.store import CHILD_PREFIX, DefinitionStore, RunStore
+from ops_engine.store import CHILD_PREFIX, DefinitionRow, DefinitionStore, RunStore
 
 from ..case_wording import entry
 from ..store.cases import CaseEventRecord, CaseRecord, CaseStore
@@ -66,9 +66,9 @@ async def origin_reads(rt: Runtime, row: CaseRecord) -> OriginReads:
     if opener is None or opener.get("team_id") != row.team_id:
         return OriginReads(_origin("other", "Opened by a workflow"), by, "other")
     first = await first_run(runs, opener)
-    stored = await DefinitionStore(tx).get(str(first["workflow_id"]), first.get("version")) or {}
+    stored = await DefinitionStore(tx).row(str(first["workflow_id"]), first.get("version"))
     nodes = nodes_of(stored)
-    workflow = str(stored.get("name") or first["workflow_id"])
+    workflow = (stored.name if stored else "") or str(first["workflow_id"])
     trigger = next((str(n.get("type")) for n in nodes.values() if str(n.get("type")).startswith("ops.trigger.")), "")
     run_id = str(first["id"])
     if trigger == EMAIL and (email := email_of(first, nodes)) is not None:
@@ -122,7 +122,7 @@ class FeedReads:
 
     runs: list[Row]
     steps: dict[str, list[Row]]
-    pinned: dict[tuple[str, int], Row]
+    pinned: dict[tuple[str, int], DefinitionRow]
     nodes: dict[str, dict[str, Row]]
     calls: dict[str, Row]
     started: dict[str, list[tuple[str, str]]]
@@ -161,18 +161,12 @@ async def feed_reads(rt: Runtime, row: CaseRecord, runs: list[Row], *, scope: An
     nodes = {str(r["id"]): nodes_of(pinned.get((str(r["workflow_id"]), int(r.get("version") or 0)))) for r in runs}
     calls = {f"{rid}|{k}": c for rid in steps for k, c in tool_calls(steps[rid], nodes[rid]).items()}
     started = {rid: _started(steps[rid], nodes[rid]) for rid in steps}
-    kids = [
-        c for c in await store.many([cid for pairs in started.values() for cid, _ in pairs]) if c["team_id"] == team
-    ]
-    seen = {str(c["id"]) for c in kids}
-    kid_keys = {(str(c["workflow_id"]), int(c["version"])) for c in kids if c.get("version") is not None}
+    kids = [c for c in await store.many([cid for pairs in started.values() for cid, _ in pairs]) if c.team_id == team]
+    seen = {c.id for c in kids}
+    kid_keys = {(c.workflow_id, c.version) for c in kids}
     kid_versions = await DefinitionStore(tx).pinned(kid_keys)
     kid_names = {
-        str(c["id"]): str(
-            (kid_versions.get((str(c["workflow_id"]), int(c.get("version") or 0))) or {}).get("name")
-            or c["workflow_id"]
-        )
-        for c in kids
+        c.id: (v.name if (v := kid_versions.get((c.workflow_id, c.version))) else "") or c.workflow_id for c in kids
     }
     events = await CaseStore(rt.db).events(str(row.id))
     return FeedReads(runs, steps, pinned, nodes, calls, started, seen, kid_names, events)
@@ -195,7 +189,7 @@ async def feed_view(
             nodes[rid],
             workflow=str(
                 r.get("workflow_name")
-                or (pinned.get((str(r["workflow_id"]), int(r.get("version") or 0))) or {}).get("name")
+                or (v.name if (v := pinned.get((str(r["workflow_id"]), int(r.get("version") or 0)))) else None)
                 or r["workflow_id"]
             ),
             team=team_name,

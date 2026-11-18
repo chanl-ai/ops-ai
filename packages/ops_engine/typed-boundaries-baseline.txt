@@ -1,4 +1,4 @@
-# 380 boundaries crossed without a model in packages/ops_engine (scripts/check_typed_boundaries.py). A row may only fall.
+# 365 boundaries crossed without a model in packages/ops_engine (scripts/check_typed_boundaries.py). A row may only fall.
 40 dict-any packages/ops_engine/src/ops_engine/ai_steps.py
 120 dict-any packages/ops_engine/src/ops_engine/compiler.py
 30 dict-any packages/ops_engine/src/ops_engine/definition.py
@@ -7,11 +7,11 @@
 20 dict-any packages/ops_engine/src/ops_engine/ports.py
 10 dict-any packages/ops_engine/src/ops_engine/shapes.py
 23 dict-any packages/ops_engine/src/ops_engine/starts.py
-11 dict-any packages/ops_engine/src/ops_engine/store/definitions.py
-10 store-dict packages/ops_engine/src/ops_engine/store/definitions.py
+9 dict-any packages/ops_engine/src/ops_engine/store/definitions.py
+8 store-dict packages/ops_engine/src/ops_engine/store/definitions.py
 6 dict-any packages/ops_engine/src/ops_engine/store/reconciler.py
-22 dict-any packages/ops_engine/src/ops_engine/store/runs.py
-14 store-dict packages/ops_engine/src/ops_engine/store/runs.py
+16 dict-any packages/ops_engine/src/ops_engine/store/runs.py
+9 store-dict packages/ops_engine/src/ops_engine/store/runs.py
 2 dict-any packages/ops_engine/src/ops_engine/store/work.py
 1 store-dict packages/ops_engine/src/ops_engine/store/work.py
 24 dict-any packages/ops_engine/src/ops_engine/worker.py

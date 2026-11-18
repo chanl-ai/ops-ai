@@ -227,7 +227,7 @@ async def test_two_tenants_hold_one_widget_id_and_one_deployment_id(engine: Asyn
             )
     for tenant in (a, b):
         with isolation.scope(tenant, "team_a"), acting_as("team_a"):
-            assert (await WidgetRegistry(engine).row(widget))["name"] == f"Card {tenant}"
+            assert (await WidgetRegistry(engine).row(widget)).name == f"Card {tenant}"
             found = await ChannelStore(engine).deployment(deployment)
             assert found is not None and found.graph == f"graph-{tenant}"
 

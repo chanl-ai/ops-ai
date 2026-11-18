@@ -10,6 +10,7 @@ from typing import Any
 from ops_agents.graphs.definition import WorkflowDefinition
 from ops_agents.store.agent_registry import registry_agents
 from ops_agents.store.review_sources import ReviewSources
+from ops_engine.store import DefinitionRow
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_store import isolation
 
@@ -66,7 +67,7 @@ async def view(
         }
     if req["kind"] == "skill":
         row = await skills(rt).row(req["subject_id"])
-        v = review_view(req, name=req["body"]["skillName"], slug=row["slug"], sla_hours=await sla_hours(rt))
+        v = review_view(req, name=req["body"]["skillName"], slug=row.slug, sla_hours=await sla_hours(rt))
         v.pop("publish", None)
         policy = {**v["policy"], "id": "gp_skill_publish", "name": "Skill publish"}
         return {
@@ -79,7 +80,7 @@ async def view(
     if req["kind"] == "guardrail":
         row = await guardrails(rt).row(req["subject_id"])
         # A guardrail publish shows as a publish request; the topics it would block are its reasoning.
-        v = review_view(req, name=row["name"], slug=row["slug"], sla_hours=await sla_hours(rt))
+        v = review_view(req, name=row.name, slug=row.slug, sla_hours=await sla_hours(rt))
         v.pop("publish", None)
         topics = req["body"]["config"]["topics"]
         policy = {**v["policy"], "id": "gp_guardrail_publish", "name": "Guardrail publish"}
@@ -128,7 +129,7 @@ async def in_acting_team(rt: Runtime, req: dict[str, Any], *, asked_from: bool =
 
 
 async def _owners(
-    rt: Runtime, requests: list[dict[str, Any]], versions: dict[tuple[str, int], dict[str, Any]]
+    rt: Runtime, requests: list[dict[str, Any]], versions: dict[tuple[str, int], DefinitionRow]
 ) -> list[str | None]:
     """subject_team of each request, with agents read in one query and workflows from the versions already read
     (`versions`, the requested versions), so a list's reads do not grow with its requests."""
@@ -140,8 +141,8 @@ async def _owners(
         if r["kind"] == "agent":
             out.append(agents.get(str(r["subject_id"])))
         elif r["kind"] == engine_lifecycle.KIND:
-            row = versions.get((str(r["subject_id"]), int(r["version"]))) or {}
-            out.append(str(row.get("team_id") or "") or None)
+            row = versions.get((str(r["subject_id"]), int(r["version"])))
+            out.append((row.team_id if row else None) or None)
         else:
             out.append(await subject_team(rt, r))
     return out
@@ -160,7 +161,7 @@ async def all_views(rt: Runtime) -> list[dict[str, Any]]:
     if acting is not None:
         owners = await _owners(rt, requests, versions)
         requests = [r for r, owner in zip(requests, owners, strict=True) if owner is None or owner == acting]
-    names = {k: str(row["name"]) for k, row in versions.items()}
+    names = {k: row.name for k, row in versions.items()}
     asked = {(str(r["subject_id"]), int(r["version"])) for r in requests if r["kind"] == "agent"}
     agents = await registry(rt).named_versions(asked)
     for req in requests:

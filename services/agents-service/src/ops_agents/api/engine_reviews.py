@@ -16,10 +16,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from ops_engine.store import RUN_PREFIX, DefinitionStore, RunStore
+from ops_engine.store import RUN_PREFIX, DefinitionRow, DefinitionStore, RunStore
 from ops_policy import input_hash
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ValidationFailed
 from ops_service_kit.logging import get_logger
+from ops_service_kit.narrow import json_list, json_object
 
 from ..store.cases import CaseNotFound, CaseStore
 from ..store.engine import DatabaseError, EngineTransactions
@@ -365,7 +366,7 @@ def _read_line(read: dict[str, Any]) -> tuple[str, str]:
 
 async def titles_of(rt: Runtime, run: dict[str, Any]) -> dict[str, Any]:
     """The run's workflow by its display name and each step by its own, from the version the run pinned."""
-    stored = await DefinitionStore(EngineTransactions(rt.db)).get(str(run["workflow_id"]), run.get("version"))
+    stored = await DefinitionStore(EngineTransactions(rt.db)).row(str(run["workflow_id"]), run.get("version"))
     return _titles(run, stored)
 
 
@@ -383,11 +384,11 @@ async def titles_by_run(rt: Runtime, runs: list[dict[str, Any]]) -> dict[str, di
     }
 
 
-def _titles(run: dict[str, Any], stored: dict[str, Any] | None) -> dict[str, Any]:
-    definition = cast(dict[str, Any], (stored or {}).get("definition") or {})
-    nodes = [cast(dict[str, Any], n) for n in cast(list[Any], definition.get("nodes") or []) if isinstance(n, dict)]
+def _titles(run: dict[str, Any], stored: DefinitionRow | None) -> dict[str, Any]:
+    definition = json_object(stored.definition if stored else None)
+    nodes = [json_object(n) for n in json_list(definition.get("nodes")) if isinstance(n, dict)]
     return {
-        "workflow": str((stored or {}).get("name") or run["workflow_id"]),
+        "workflow": (stored.name if stored else "") or str(run["workflow_id"]),
         "steps": {str(n.get("id")): str(n.get("name") or n.get("id")) for n in nodes},
     }
 

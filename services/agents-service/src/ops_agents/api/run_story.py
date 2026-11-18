@@ -16,8 +16,10 @@ from typing import Any, cast
 from ops_agent_kernel.pii import masked
 from ops_engine import default_registry
 from ops_engine.compiler import redacted
-from ops_engine.store import RunStore
+from ops_engine.store import DefinitionRow, RunRow, RunStep, RunStore
 from ops_engine.store.definitions import DefinitionStore
+from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.narrow import json_list, json_object
 
 from ..store.actor_names import UNNAMED_WORKFLOW
 from ..store.cases import CaseStore, CaseSummary
@@ -48,36 +50,36 @@ _KEEP = frozenset(
 )
 
 
-def steps_view(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def steps_view(rows: list[RunStep]) -> list[dict[str, Any]]:
     """Attempts grouped per node and iteration, in the order the steps started; each step shows its last attempt."""
-    grouped: dict[tuple[str, int], list[dict[str, Any]]] = {}
+    grouped: dict[tuple[str, int], list[RunStep]] = {}
     for r in rows:
-        grouped.setdefault((r["node_id"], r["iteration"]), []).append(r)
+        grouped.setdefault((r.node_id, r.iteration), []).append(r)
     out: list[dict[str, Any]] = []
     for (node, iteration), attempts in grouped.items():
-        attempts.sort(key=lambda a: a["attempt"])
+        attempts.sort(key=lambda a: a.attempt)
         last = attempts[-1]
         out.append(
             {
                 "nodeId": node,
                 "iteration": iteration,
-                "status": last["status"],
-                "port": last["port"],
-                "input": redacted(last["input"]),
-                "output": redacted(last["output"]),
-                "error": last["error"],
+                "status": last.status,
+                "port": last.port,
+                "input": redacted(last.input),
+                "output": redacted(last.output),
+                "error": last.error,
                 "attempts": [
                     {
-                        "attempt": a["attempt"],
-                        "status": a["status"],
-                        "effects": a["effects"],
-                        "key": a["key"],
-                        "port": a["port"],
-                        "input": redacted(a["input"]),
-                        "output": redacted(a["output"]),
-                        "error": a["error"],
-                        "startedAt": a["started_at"],
-                        "finishedAt": a["finished_at"],
+                        "attempt": a.attempt,
+                        "status": a.status,
+                        "effects": a.effects,
+                        "key": a.key,
+                        "port": a.port,
+                        "input": redacted(a.input),
+                        "output": redacted(a.output),
+                        "error": a.error,
+                        "startedAt": a.started_at,
+                        "finishedAt": a.finished_at,
                     }
                     for a in attempts
                 ],
@@ -138,9 +140,13 @@ def files_in(value: Any) -> list[dict[str, Any]]:
     return [{"id": i, "name": n} for i, n in found.items()]
 
 
-def nodes_of(stored: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
-    definition = cast(dict[str, Any], (stored or {}).get("definition") or {})
-    listed = [cast(dict[str, Any], n) for n in cast(list[Any], definition.get("nodes") or []) if isinstance(n, dict)]
+def nodes_of(stored: DefinitionRow | None) -> dict[str, Json]:
+    return nodes_in(stored.definition if stored else None)
+
+
+def nodes_in(definition: JsonValue) -> dict[str, Json]:
+    """A stored definition's nodes by id; a definition with no node list has none."""
+    listed = [json_object(n) for n in json_list(json_object(definition).get("nodes")) if isinstance(n, dict)]
     return {str(n["id"]): n for n in listed}
 
 
@@ -155,9 +161,9 @@ def _name(node: dict[str, Any] | None, fallback: str) -> str:
     return str((node or {}).get("name") or fallback)
 
 
-def workflow_name(stored: dict[str, Any] | None) -> str:
+def workflow_name(stored: DefinitionRow | None) -> str:
     """A pinned version's name as people read it; a version with none is "a workflow run", never its id."""
-    return str((stored or {}).get("name") or "").strip() or UNNAMED_WORKFLOW
+    return (stored.name if stored else "").strip() or UNNAMED_WORKFLOW
 
 
 def words(value: str) -> str:
@@ -166,7 +172,7 @@ def words(value: str) -> str:
     return text[:1].upper() + text[1:]
 
 
-async def outcome_reads(rt: Runtime, rows: list[Row]) -> tuple[dict[str, str], dict[tuple[str, int], Row]]:
+async def outcome_reads(rt: Runtime, rows: list[Row]) -> tuple[dict[str, str], dict[tuple[str, int], DefinitionRow]]:
     """The reads of `outcome_texts`: the End step of each run that ended and the versions they belong to."""
     ended = [r for r in rows if r.get("outcome") and r.get("status") in ("succeeded", "failed")]
     ends = await RunStore(EngineTransactions(rt.db)).ends([str(r["id"]) for r in ended])
@@ -185,7 +191,9 @@ async def outcome_texts(rt: Runtime, rows: list[Row]) -> dict[str, str]:
     return outcome_sentences(rows, ends, versions)
 
 
-def outcome_sentences(rows: list[Row], ends: dict[str, str], versions: dict[tuple[str, int], Row]) -> dict[str, str]:
+def outcome_sentences(
+    rows: list[Row], ends: dict[str, str], versions: dict[tuple[str, int], DefinitionRow]
+) -> dict[str, str]:
     """`outcome_texts` from its reads."""
     out: dict[str, str] = {}
     for r in rows:
@@ -196,8 +204,8 @@ def outcome_sentences(rows: list[Row], ends: dict[str, str], versions: dict[tupl
                 "Cancelled by the person who started it" if r["outcome"] == "by_user" else str(r["outcome"])
             )
             continue
-        stored = versions.get((str(r["workflow_id"]), int(r["version"]))) or {}
-        nodes = cast(list[dict[str, Any]], cast(dict[str, Any], stored.get("definition") or {}).get("nodes") or [])
+        stored = versions.get((str(r["workflow_id"]), int(r["version"])))
+        nodes = [json_object(n) for n in json_list(json_object(stored.definition if stored else None).get("nodes"))]
         end = ends.get(str(r["id"]))
         name = next((str(n.get("name")) for n in nodes if n.get("id") == end and n.get("name")), None)
         said = name or words(str(r["outcome"]))
@@ -368,9 +376,9 @@ class ChildReads:
 
     started: list[Row]
     more: int
-    found: dict[str, Row]
+    found: dict[str, RunRow]
     steps_by_run: dict[str, list[Row]]
-    pinned: dict[tuple[str, int], Row]
+    pinned: dict[tuple[str, int], DefinitionRow]
     on_case: dict[str, str]
     summaries: dict[str, CaseSummary]
     assigned: dict[str, str]
@@ -387,21 +395,21 @@ async def children_reads(rt: Runtime, run: Row, steps: list[Row], nodes: dict[st
     them: their runs, steps, pinned definitions, cases and who their open tasks wait for."""
     started, more = started_entries(steps, nodes)
     store = RunStore(EngineTransactions(rt.db))
-    found = {str(r["id"]): r for r in await store.many([c["runId"] for c in started])}
+    found = {r.id: r for r in await store.many([c["runId"] for c in started])}
     # A run of another team is never told, whatever started it.
-    started = [c for c in started if c["runId"] in found and found[c["runId"]]["team_id"] == run["team_id"]]
+    started = [c for c in started if c["runId"] in found and found[c["runId"]].team_id == run["team_id"]]
     ids = [c["runId"] for c in started]
     steps_by_run = {rid: steps_view(rows) for rid, rows in (await store.steps_of(ids)).items()}
     pinned = await DefinitionStore(EngineTransactions(rt.db)).pinned(
-        {(str(found[i]["workflow_id"]), int(found[i]["version"])) for i in ids}
+        {(found[i].workflow_id, found[i].version) for i in ids}
     )
     cases = CaseStore(rt.db)
     on_case = await cases.cases_of_runs(ids)
     summaries = await cases.summaries(list(dict.fromkeys(on_case.values())), [str(run["team_id"])])
-    open_reviews = [f"{rid}:{w['node']}:{w.get('iteration', 0)}" for rid in ids if (w := found[rid].get("waiting"))]
+    open_reviews = [f"{rid}:{w['node']}:{w.get('iteration', 0)}" for rid in ids if (w := found[rid].waiting)]
     assigned = await ReviewAssignments(rt.db).current(open_reviews)
     decided = {rid: decisions_in(rid, steps_by_run.get(rid, [])) for rid in ids}
-    own_nodes = nodes_of({"definition": {"nodes": list(nodes.values())}})
+    own_nodes = nodes_in({"nodes": list(nodes.values())})
     return ChildReads(started, more, found, steps_by_run, pinned, on_case, summaries, assigned, decided, own_nodes)
 
 
@@ -413,7 +421,7 @@ def children_view(reads: ChildReads, people: dict[str, Row], *, scope: Any) -> t
     rows: list[dict[str, Any]] = []
     for c in started:
         child = found[c["runId"]]
-        stored = pinned.get((str(child["workflow_id"]), int(child["version"])))
+        stored = pinned.get((child.workflow_id, child.version))
         child_nodes = nodes_of(stored)
         child_steps = steps_by_run.get(c["runId"], [])
         workflow = workflow_name(stored)
@@ -424,10 +432,12 @@ def children_view(reads: ChildReads, people: dict[str, Row], *, scope: Any) -> t
             "workflowName": workflow,
             "stepName": _name(own_nodes.get(c["nodeId"]), c["nodeId"]),
             "label": str(c["label"] or workflow),
-            "status": child["status"],
-            "outcome": child.get("outcome"),
+            "status": child.status,
+            "outcome": child.outcome,
         }
-        if scope is not None and scope != ("workflow", child["workflow_id"]):
+        # state_of reads a run's status and outcome only.
+        said = {"status": child.status, "outcome": child.outcome}
+        if scope is not None and scope != ("workflow", child.workflow_id):
             # A key scoped to one workflow reads another workflow's runs by status alone.
             rows.append(
                 row
@@ -436,7 +446,7 @@ def children_view(reads: ChildReads, people: dict[str, Row], *, scope: Any) -> t
                     "ending": None,
                     "cases": [],
                     "tasks": [],
-                    "state": state_of(child, None, None, False),
+                    "state": state_of(said, None, None, False),
                 }
             )
             continue
@@ -455,7 +465,7 @@ def children_view(reads: ChildReads, people: dict[str, Row], *, scope: Any) -> t
                     "state": f"{title}: {label}" + (f" by {by}" if by else ""),
                 }
             )
-        waiting = cast(dict[str, Any] | None, child.get("waiting"))
+        waiting = child.waiting
         open_task = bool(waiting) and executor_of(child_nodes.get(str((waiting or {}).get("node")))) == REVIEW
         if waiting and open_task:
             node = child_nodes.get(str(waiting["node"]))
@@ -478,8 +488,8 @@ def children_view(reads: ChildReads, people: dict[str, Row], *, scope: Any) -> t
         case_id = on_case.get(c["runId"])
         summary = summaries.get(case_id) if case_id else None
         row |= {
-            "ending": ending if child["status"] == "succeeded" else None,
-            "state": state_of(child, ending, last, open_task),
+            "ending": ending if child.status == "succeeded" else None,
+            "state": state_of(said, ending, last, open_task),
             "cases": [
                 {
                     "caseId": case_id,
@@ -516,7 +526,7 @@ async def channel_addresses(rt: Runtime, run: dict[str, Any]) -> set[str]:
     """The sender and mailbox of the email that started this run or, for a run another run started, its family's."""
     store, defs = RunStore(EngineTransactions(rt.db)), DefinitionStore(EngineTransactions(rt.db))
     for here in [run, *await runs_above(store, run)]:
-        email = email_of(here, nodes_of(await defs.get(str(here["workflow_id"]), here.get("version"))))
+        email = email_of(here, nodes_of(await defs.row(str(here["workflow_id"]), here.get("version"))))
         if email is not None:
             return {str(email[k]) for k in CHANNEL_FIELDS if email.get(k)}
     return set()
@@ -753,7 +763,7 @@ def lines(
 class StoryReads:
     """A run's story as the database holds it: the version it pinned, the runs it started and its email's addresses."""
 
-    stored: Row | None
+    stored: DefinitionRow | None
     children: ChildReads
     addresses: set[str]
 
@@ -764,7 +774,7 @@ class StoryReads:
 
 async def story_reads(rt: Runtime, run: Row, steps: list[Row]) -> StoryReads:
     """The reads of `story`, all local: run it in the route's transaction, then ask outside with none open."""
-    stored = await DefinitionStore(EngineTransactions(rt.db)).get(str(run["workflow_id"]), run.get("version"))
+    stored = await DefinitionStore(EngineTransactions(rt.db)).row(str(run["workflow_id"]), run.get("version"))
     children = await children_reads(rt, run, steps, nodes_of(stored))
     return StoryReads(stored, children, await channel_addresses(rt, run))
 

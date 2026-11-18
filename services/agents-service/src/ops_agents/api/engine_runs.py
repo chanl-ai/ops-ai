@@ -116,7 +116,7 @@ class WorkflowStarts:
         run_key = child_run_key(key)
         # A retried or re-run step finds its child even if the workflow has been paused since.
         if (found := await self.runs.by_key(workflow, run_key)) is not None:
-            return StartedRun(str(found["id"]), False)
+            return StartedRun(found.id, False)
         parent = await self.runs.get(parent_run_id)
         if parent is None:
             raise RunRefusedError(f"run {parent_run_id} is gone", "parent_gone")

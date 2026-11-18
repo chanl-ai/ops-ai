@@ -141,10 +141,10 @@ class RunStore:
             found = await self.by_key(str(run["workflow_id"]), str(run["run_key"]))
             if found is None:
                 raise
-            return found, False
+            return found.model_dump(), False
         return await self.get(str(run["id"])) or values, True
 
-    async def by_key(self, workflow_id: str, run_key: str) -> dict[str, Any] | None:
+    async def by_key(self, workflow_id: str, run_key: str) -> RunRow | None:
         q = engine_runs.select().where(
             engine_runs.c.tenant_id == self.tx.tenant(),
             team_visible(engine_runs),
@@ -152,8 +152,7 @@ class RunStore:
             engine_runs.c.run_key == run_key,
         )
         async with self.tx.tenant_tx() as c:
-            row = (await c.execute(q)).mappings().first()
-        return dict(row) if row else None
+            return await one(c, q, RunRow)
 
     async def row(self, run_id: str) -> RunRow | None:
         """The run as the engine reads it."""
@@ -168,7 +167,7 @@ class RunStore:
         found = await self.row(run_id)
         return found.model_dump() if found else None
 
-    async def many(self, run_ids: list[str]) -> list[dict[str, Any]]:
+    async def many(self, run_ids: list[str]) -> list[RunRow]:
         """The tenant's runs among `run_ids`, in one query (a step's started children, up to its item limit)."""
         if not run_ids:
             return []
@@ -176,7 +175,7 @@ class RunStore:
             engine_runs.c.id.in_(run_ids), engine_runs.c.tenant_id == self.tx.tenant(), team_visible(engine_runs)
         )
         async with self.tx.tenant_tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, RunRow)
 
     async def list(
         self,
@@ -466,7 +465,7 @@ class RunStore:
                 return status
         return None
 
-    async def cancel(self, run_id: str, *, reason: str = "by_user") -> tuple[dict[str, Any] | None, bool]:
+    async def cancel(self, run_id: str, *, reason: str = "by_user") -> tuple[RunRow | None, bool]:
         """Cancels a run that has not ended: status cancelled with `reason` as its outcome, its waiting step cleared
         (which withdraws its review), and its queued work dropped so no worker starts it. A worker already in a pass
         finishes and journals the step under way, and the next step's journal row is refused (SqlJournal.begin).
@@ -490,9 +489,9 @@ class RunStore:
                     .where(w.c.run_id == run_id, w.c.tenant_id == self.tx.tenant(), w.c.status == "queued")
                     .values(status="done", error=f"run cancelled ({reason})")
                 )
-        return await self.get(run_id), changed
+        return await self.row(run_id), changed
 
-    async def retry(self, run_id: str) -> tuple[dict[str, Any] | None, bool]:
+    async def retry(self, run_id: str) -> tuple[RunRow | None, bool]:
         """Queues a Stuck run again: its set-aside work rows are closed and one new row goes on under the
         current engine build. A run paused at a step is resumed at that step, which reads its state again; any other
         continues from its last checkpoint, where recorded steps return their record and a write reconciles by its
@@ -505,7 +504,7 @@ class RunStore:
             if found is None:
                 return None, False
             if found.status != "stuck":
-                return await self.get(run_id), False
+                return await self.row(run_id), False
             await c.execute(r.update().where(mine).values(status="queued", error=None, updated_at=at))
             await c.execute(
                 w.update()
@@ -519,7 +518,7 @@ class RunStore:
             await queue.enqueue(run_id, "resume", f"retry:{run_id}:{at}", payload)
         else:
             await queue.enqueue(run_id, "retry", f"retry:{run_id}:{at}")
-        return await self.get(run_id), True
+        return await self.row(run_id), True
 
     async def step_rows(self, run_id: str) -> list[RunStep]:
         """Every attempt of every node, in the order they started."""
@@ -535,8 +534,8 @@ class RunStore:
         """step_rows() as the mappings agents-service's callers still read, key for key the stored rows."""
         return [s.model_dump() for s in await self.step_rows(run_id)]
 
-    async def steps_of(self, run_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
-        """steps() for each of these runs in one query, so a list of runs does not read them one run at a time."""
+    async def steps_of(self, run_ids: list[str]) -> dict[str, list[RunStep]]:
+        """step_rows() for each of these runs in one query, so a list of runs does not read them one run at a time."""
         if not run_ids:
             return {}
         s = engine_steps
@@ -545,10 +544,10 @@ class RunStore:
             .where(s.c.run_id.in_(run_ids), s.c.tenant_id == self.tx.tenant())
             .order_by(s.c.started_at, s.c.node_id, s.c.attempt)
         )
-        out: dict[str, list[dict[str, Any]]] = {r: [] for r in run_ids}
+        out: dict[str, list[RunStep]] = {r: [] for r in run_ids}
         async with self.tx.tenant_tx() as c:
-            for row in (await c.execute(q)).mappings():
-                out[str(row["run_id"])].append(dict(row))
+            for step in await rows(c, q, RunStep):
+                out[step.run_id].append(step)
         return out
 
     async def work(self, run_id: str) -> list[dict[str, Any]]:

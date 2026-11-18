@@ -84,12 +84,12 @@ def _out(widget_id: str, version: int, content: dict[str, Any], **extra: Any) ->
 async def view(rt: Runtime, widget_id: str) -> dict[str, Any]:
     reg = widgets(rt)
     row = await reg.row(widget_id)
-    newest = await reg.version(widget_id, int(row["version"]))
+    newest = await reg.version(widget_id, row.version)
     assert newest is not None
     pending = any(r["status"] == "pending" for r in await _requests(rt, widget_id))
     return listed_view(
         ListedWidget.model_validate(
-            {**row, "content": newest["content"], "published_at": newest["published_at"], "pending": pending}
+            {**row.model_dump(), "content": newest.content, "published_at": newest.published_at, "pending": pending}
         )
     )
 
@@ -131,7 +131,7 @@ async def listed_one(rt: Runtime, teams: list[str], widget_id: str) -> dict[str,
     if seeded is not None:
         return seeded
     row = await widgets(rt).find(widget_id)
-    return await view(rt, widget_id) if row is not None and row["team_id"] in teams else None
+    return await view(rt, widget_id) if row is not None and row.team_id in teams else None
 
 
 async def published(rt: Runtime, widget_id: str, version: int | None) -> WidgetPinRule | None:
@@ -140,13 +140,13 @@ async def published(rt: Runtime, widget_id: str, version: int | None) -> WidgetP
     reg = widgets(rt)
     row = await reg.find(widget_id)
     if row is not None:
-        if row["retired_reason"] or row["published_version"] is None:
+        if row.retired_reason or row.published_version is None:
             return None
-        n = int(row["published_version"]) if version is None else version
+        n = row.published_version if version is None else version
         v = await reg.version(widget_id, n)
-        if v is None or v["published_at"] is None:
+        if v is None or v.published_at is None:
             return None
-        return WidgetPinRule.model_validate({"widgetId": widget_id, "version": n, **v["content"]})
+        return WidgetPinRule.model_validate({"widgetId": widget_id, "version": n, **v.content})
     return rt.catalog.widget(widget_id, version)
 
 

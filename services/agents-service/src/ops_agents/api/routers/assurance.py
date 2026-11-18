@@ -188,7 +188,7 @@ async def skill_cases(rt: Rt, _: Reader, __: Tx, skill_id: str) -> JSONResponse:
 @router.put("/v1/skills/{skill_id}/eval-cases", response_model=Envelope[SavedCases])
 async def save_skill_cases(rt: Rt, me: Me, _: Tx, skill_id: str, body: EvalCasesInput) -> JSONResponse:
     row = await SkillRegistry(rt.db).row(skill_id)
-    return await _save(rt, me, ASSET_SKILL, skill_id, team_id=row["team_id"], body=body)
+    return await _save(rt, me, ASSET_SKILL, skill_id, team_id=row.team_id, body=body)
 
 
 def active(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

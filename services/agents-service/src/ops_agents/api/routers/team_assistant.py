@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse
 from pydantic import Field
 
 from ops_access import can
+from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, ServiceUnavailable
 from ops_service_kit.http import Envelope, In, Out
 from ops_service_kit.ids import now_iso
@@ -155,8 +156,8 @@ async def _unpinned(rt: Runtime, shipped: list[dict[str, Any]], holds: set[str])
 
 async def _newest_digest(rt: Runtime, skill_id: str) -> tuple[int, str | None]:
     row = await skills(rt).row(skill_id)
-    found = await skills(rt).version(skill_id, int(row["version"]))
-    return int(row["version"]), (str(found["digest"]) if found else None)
+    found = await skills(rt).version(skill_id, row.version)
+    return row.version, (found.digest if found else None)
 
 
 async def _stale(rt: Runtime, held: dict[str, Any], t: dict[str, Any]) -> bool:
@@ -185,12 +186,14 @@ async def _skill_copies(
         if held is not None:
             sid = str(held["record_id"])
             row = await skills(rt).row(sid)
-            now = cast(dict[str, Any], (await skills(rt).versions(sid))[0]["content"])
-            name = str(now.get("name") or row.get("name") or tid)
+            now = (await skills(rt).versions(sid))[0].content
+            # A skill row holds no name of its own; the newest version's content names it.
+            name = str(now.get("name") or tid)
             if not await _stale(rt, held, t):
-                out.append((sid, name, int(row["published_version"] or row["version"]), False))
+                out.append((sid, name, row.published_version or row.version, False))
                 continue
-            content = await _skill_content(rt, team, t, name, list(now.get("knowledgeBases") or []))
+            kbs = [str(k) for k in narrow.a_list(now.get("knowledgeBases") or [], "knowledgeBases")]
+            content = await _skill_content(rt, team, t, name, kbs)
             note = f"Update from {cast(dict[str, Any], t.get('plugin') or {}).get('title') or source}"
             n = await skills(rt).save_draft(sid, content, by=me.email, note=note)
             await skills(rt).publish(sid, n, by=me.email, review_id="app_turn_on")

@@ -28,6 +28,7 @@ from ops_engine.store import (
     RunStore,
     WorkflowOwnedError,
 )
+from ops_engine.store import DefinitionRow as StoredDefinition
 from ops_engine.store.definitions import HUMAN_REVIEW
 from ops_files_client import FilesClient, FilesRefused
 from ops_identity.fastapi import ActingPerson, Tx
@@ -44,6 +45,7 @@ from ops_service_kit.http import Envelope, In, JsonValue, LabelledListResult, Li
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
+from ops_service_kit.narrow import json_object
 from ops_store import isolation
 
 from ...store.actor_names import UNNAMED_WORKFLOW
@@ -1254,7 +1256,7 @@ async def get_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     with names_asked_once():
         async with isolation.request_transaction():
             run = await visible_run(rt, run_id, me)
-            steps = steps_view(await store.steps(run_id))
+            steps = steps_view(await store.step_rows(run_id))
             decided = decisions_in(run_id, steps)
             reads = await run_story.story_reads(rt, run, steps)
             ends, versions = await run_story.outcome_reads(rt, [run])
@@ -1328,14 +1330,14 @@ async def started_runs(store: RunStore, steps: list[dict[str, Any]]) -> list[dic
             if isinstance(r, dict) and cast(dict[str, Any], r).get("runId"):
                 row = cast(dict[str, Any], r)
                 started.append((str(s["nodeId"]), int(row.get("index", i)), str(row["runId"])))
-    found = {r["id"]: r for r in await store.many([rid for _, _, rid in started])}
+    found = {r.id: r for r in await store.many([rid for _, _, rid in started])}
     return [
         {
             "nodeId": node,
             "index": index,
             "runId": rid,
-            "status": found[rid]["status"],
-            "outcome": found[rid].get("outcome"),
+            "status": found[rid].status,
+            "outcome": found[rid].outcome,
         }
         for node, index, rid in started
         if rid in found
@@ -1345,7 +1347,7 @@ async def started_runs(store: RunStore, steps: list[dict[str, Any]]) -> list[dic
 def run_result(
     run: dict[str, Any],
     steps: list[dict[str, Any]],
-    stored: Row | None,
+    stored: StoredDefinition | None,
     *,
     decided: list[dict[str, Any]] | None = None,
     names: dict[str, dict[str, Any]] | None = None,
@@ -1356,7 +1358,7 @@ def run_result(
     as [email]. `stored` is the version the run pinned (definitions.get), read by the caller."""
     if run["status"] == "cancelled" or run["outcome"] is None:
         return None
-    nodes = engine_lifecycle.nodes_of(stored["definition"] if stored else None)
+    nodes = engine_lifecycle.nodes_of(json_object(stored.definition) if stored else None)
     ends = [s for s in steps if nodes.get(s["nodeId"], {}).get("type") == "ops.flow.end" and s["status"] == "ok"]
     end = ends[-1]["nodeId"] if ends else None
     name = str(nodes[end].get("name") or end) if end else None
@@ -1385,10 +1387,12 @@ async def cancel_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     require_runs_cancel(me, team_id=str(run["team_id"]), started_by=str(run["created_by"]), what=f"run {run_id}")
     if run["status"] == "cancelled":
         return ok(await for_people(rt, run, await ended_view(rt, run)))
-    cancelled, changed = await runs(rt).cancel(run_id, reason="by_user")
-    if not changed or cancelled is None:
+    stored, changed = await runs(rt).cancel(run_id, reason="by_user")
+    if not changed or stored is None:
         raise Conflict(f"Run {run_id} has already {run['status']}.", code="run_finished")
-    await runs(rt).settle_parents(run_id, str(cancelled["created_by"]))
+    await runs(rt).settle_parents(run_id, stored.created_by)
+    # The reply is built from the stored row's fields, as every run read builds it.
+    cancelled = stored.model_dump()
     await EventLog(rt.db).append(
         thread_id=run_id, team_id=run["team_id"], run_id=run_id, type_="cancelled", node=None, data={"by": me.email}
     )
@@ -1403,9 +1407,10 @@ async def retry_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     No request transaction: the masking policy (platform-service) is asked after the write, with none open."""
     run = await visible_run(rt, run_id, me)
     require_runs_cancel(me, team_id=str(run["team_id"]), started_by=str(run["created_by"]), what=f"run {run_id}")
-    retried, changed = await runs(rt).retry(run_id)
-    if not changed or retried is None:
+    stored, changed = await runs(rt).retry(run_id)
+    if not changed or stored is None:
         raise Conflict("This run is no longer stuck, so there is nothing to retry.", code="run_not_stuck")
+    retried = stored.model_dump()
     await EventLog(rt.db).append(
         thread_id=run_id, team_id=run["team_id"], run_id=run_id, type_="retried", node=None, data={"by": me.email}
     )

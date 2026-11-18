@@ -196,7 +196,7 @@ def _called_step(review: dict[str, Any]) -> str | None:
 async def failed_calls(rt: Runtime, runs: list[dict[str, Any]]) -> set[str]:
     """The step keys of the case's runs' calls that answered an error, read in one query for every run."""
     steps = await RunStore(EngineTransactions(rt.db)).steps_of([str(r["id"]) for r in runs])
-    return {str(s["key"]) for rows in steps.values() for s in rows if s["status"] == "error"}
+    return {s.key for rows in steps.values() for s in rows if s.status == "error"}
 
 
 def actions_of(reviews: list[dict[str, Any]], failed: set[str]) -> list[dict[str, Any]]:

@@ -11,7 +11,7 @@ from pydantic import JsonValue
 
 from ops_service_kit.http import Out
 from ops_store import Guarantee
-from ops_store.rows import one
+from ops_store.rows import one, rows
 
 from .tables import engine_definitions, engine_runs, engine_steps
 from .tx import LIVE_WORKFLOWS, Transactions
@@ -160,17 +160,21 @@ class DefinitionStore:
             )
             return version, True
 
-    async def current(self, workflow_id: str, *, team: str | None = None) -> dict[str, Any] | None:
+    async def serving(self, workflow_id: str, *, team: str | None = None) -> DefinitionRow | None:
         """The version that serves the workflow, live or paused; None when no version has been approved."""
         t = engine_definitions
         q = t.select().where(
             t.c.workflow_id == workflow_id, t.c.tenant_id == self.tx.tenant(), t.c.stage.in_(CURRENT), _seen_by(team)
         )
         async with self.tx.tenant_tx() as c:
-            row = (await c.execute(q.order_by(t.c.version.desc()).limit(1))).mappings().first()
-        return dict(row) if row else None
+            return await one(c, q.order_by(t.c.version.desc()).limit(1), DefinitionRow)
 
-    async def currents(self, workflow_ids: set[str]) -> dict[str, dict[str, Any]]:
+    async def current(self, workflow_id: str, *, team: str | None = None) -> dict[str, Any] | None:
+        """serving() as the mapping agents-service's callers still read, key for key the stored row."""
+        found = await self.serving(workflow_id, team=team)
+        return found.model_dump() if found else None
+
+    async def currents(self, workflow_ids: set[str]) -> dict[str, DefinitionRow]:
         """current() for each of these workflows in one query, so a list of many runs reads the versions that serve
         their workflows together; a workflow with no approved version is left out."""
         if not workflow_ids:
@@ -180,9 +184,9 @@ class DefinitionStore:
             t.c.workflow_id.in_(sorted(workflow_ids)), t.c.tenant_id == self.tx.tenant(), t.c.stage.in_(CURRENT)
         )
         async with self.tx.tenant_tx() as c:
-            rows = (await c.execute(q.order_by(t.c.version))).mappings().all()
+            found = await rows(c, q.order_by(t.c.version), DefinitionRow)
         # Ascending, so each workflow keeps its highest version, as current() orders and takes the first.
-        return {str(r["workflow_id"]): dict(r) for r in rows}
+        return {r.workflow_id: r for r in found}
 
     async def live(self, workflow_id: str, *, team: str | None = None) -> dict[str, Any] | None:
         """The version a live run starts on; None when there is none or the workflow is paused."""
@@ -254,7 +258,7 @@ class DefinitionStore:
         found = await self.row(workflow_id, version, team=team)
         return found.model_dump() if found else None
 
-    async def pinned(self, keys: set[tuple[str, int]]) -> dict[tuple[str, int], dict[str, Any]]:
+    async def pinned(self, keys: set[tuple[str, int]]) -> dict[tuple[str, int], DefinitionRow]:
         """The versions at these (workflow_id, version) pairs in one query, so a page naming the workflows of many runs
         reads them together; a pair with no row is left out."""
         if not keys:
@@ -263,8 +267,8 @@ class DefinitionStore:
         # An OR of pairs, not a tuple IN, which SQL Server refuses.
         pairs = sa.or_(*(sa.and_(t.c.workflow_id == w, t.c.version == v) for w, v in sorted(keys)))
         async with self.tx.tenant_tx() as c:
-            rows = (await c.execute(t.select().where(t.c.tenant_id == self.tx.tenant(), pairs))).mappings().all()
-        return {(str(r["workflow_id"]), int(r["version"])): dict(r) for r in rows}
+            found = await rows(c, t.select().where(t.c.tenant_id == self.tx.tenant(), pairs), DefinitionRow)
+        return {(r.workflow_id, r.version): r for r in found}
 
     async def versions(self, workflow_id: str) -> list[dict[str, Any]]:
         t = engine_definitions

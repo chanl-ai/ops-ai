@@ -24,6 +24,7 @@ from ops_service_kit.http import Envelope, In, OptionsPage, options_page, option
 from ops_service_kit.listing import ListQuery
 from ops_store import isolation
 
+from ...store.widgets import WidgetRow
 from ..agent_registry import registry as agent_registry
 from ..auth import Principal, principal, reader_of, require_builder, teams_of
 from ..deps import Runtime, runtime
@@ -66,21 +67,21 @@ class RetireInput(In):
     reason: str
 
 
-async def _mine(rt: Runtime, me: Principal, widget_id: str, what: str) -> dict[str, Any]:
+async def _mine(rt: Runtime, me: Principal, widget_id: str, what: str) -> WidgetRow:
     """The registry row when the caller may change it; another team's widget answers 404, as if it did not exist, and a
     member of the owning team outside the builder and admin roles gets 403. A seeded library widget answers 409
     `seeded_widget`: it is not a permission (no role may change one, so `can()` has no cell to ask) but a record with
     no registry row that every team's list shows, and a 404 would deny a widget the caller was just shown."""
     row = await widgets(rt).find(widget_id)
     teams = teams_of(me)
-    if row is None or row["team_id"] not in teams:
+    if row is None or row.team_id not in teams:
         if rt.catalog.widget(widget_id) is not None:
             raise Conflict(
                 f"{widget_id} is a platform widget from the seeded library; it cannot be edited here.",
                 code="seeded_widget",
             )
         raise NotFound(f"Widget {widget_id}")
-    require_builder(me, area="widgets", team_id=row["team_id"], action=what, what="this widget")
+    require_builder(me, area="widgets", team_id=row.team_id, action=what, what="this widget")
     return row
 
 
@@ -186,7 +187,7 @@ async def save_widget(rt: Rt, me: Me, _: Tx, widget_id: str, body: WidgetInput) 
     """Edits the newest draft, or opens the next version on top of the published one. 409 while retired or in
     review."""
     row = await _mine(rt, me, widget_id, "save")
-    if row["retired_reason"]:
+    if row.retired_reason:
         raise Conflict("The widget is retired; it takes no new versions.", code="widget_retired")
     if any(r["status"] == "pending" for r in await agent_registry(rt).requests("widget", widget_id)):
         raise Conflict("The newest version is in review; decide the review first.", code="review_open")
@@ -201,17 +202,15 @@ async def request_widget_publish(rt: Rt, me: Me, widget_id: str, body: ReviewInp
     writes."""
     row = await _mine(rt, me, widget_id, "publish")
     reg = widgets(rt)
-    n = int(row["version"])
+    n = row.version
     v = await reg.version(widget_id, n)
     assert v is not None
-    if row["retired_reason"]:
+    if row.retired_reason:
         raise Conflict("The widget is retired.", code="widget_retired")
-    if v["published_at"] is not None:
+    if v.published_at is not None:
         raise Conflict(f"v{n} is already published; save a change to make a new version.", code="already_published")
-    live = await reg.version(widget_id, int(row["published_version"])) if row["published_version"] else None
-    decision = await decide(
-        rt, area="widgets", team_id=row["team_id"], old=live["content"] if live else None, new=v["content"]
-    )
+    live = await reg.version(widget_id, row.published_version) if row.published_version else None
+    decision = await decide(rt, area="widgets", team_id=row.team_id, old=live.content if live else None, new=v.content)
     approved = not decision.review_required
     req = await agent_registry(rt).open_request(
         "widget",
@@ -221,10 +220,10 @@ async def request_widget_publish(rt: Rt, me: Me, widget_id: str, body: ReviewInp
         by=me.email,
         body={
             "widgetId": widget_id,
-            "widgetName": v["content"]["name"],
-            "savedBy": v["saved_by"],
+            "widgetName": v.content["name"],
+            "savedBy": v.saved_by,
             **decision.record(),
-            "changes": v["changes"],
+            "changes": v.changes,
         },
         approved=approved,
     )

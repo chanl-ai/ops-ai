@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any, cast
 
 from ops_engine.compiler import resolve
+from ops_engine.store import DefinitionRow
+from ops_service_kit.narrow import json_list, json_object
 
 from .deps import Runtime
 from .engine_lifecycle import definitions
@@ -55,24 +57,23 @@ async def legacy_task(
     if options - DECIDED_BY:
         return None
     if live is NOT_READ:
-        live = await definitions(rt).current(str(run["workflow_id"]))
+        live = await definitions(rt).serving(str(run["workflow_id"]))
     reads = reads or TaskReads(rt, [run], [str(payload.get("step_id") or "")])
     ref, params = await _from_live_version(run, payload, live, reads) or _from_shape(payload, view)
     return await typed_task(rt, {"taskType": ref, "params": params, "step_id": payload.get("step_id")}, run, reads)
 
 
 async def _from_live_version(
-    run: dict[str, Any], payload: dict[str, Any], live: dict[str, Any] | None, reads: TaskReads
+    run: dict[str, Any], payload: dict[str, Any], live: DefinitionRow | None, reads: TaskReads
 ) -> tuple[dict[str, Any], dict[str, Any]] | None:
-    definition = cast(dict[str, Any], (live or {}).get("definition") or {})
-    nodes = cast(list[dict[str, Any]], definition.get("nodes") or [])
+    nodes = [json_object(n) for n in json_list(json_object(live.definition if live else None).get("nodes"))]
     node = next((n for n in nodes if n.get("id") == payload.get("node")), None)
     parameters = cast(dict[str, Any], (node or {}).get("parameters") or {})
     ref = parameters.get("taskType")
     if node is None or node.get("type") != "ops.flow.humanReview" or not isinstance(ref, dict):
         return None
     steps = await reads.steps(run)
-    outputs = {str(s["node_id"]): s.get("output") for s in steps if s.get("status") == "ok"}
+    outputs = {s.node_id: s.output for s in steps if s.status == "ok"}
     params = resolve(parameters.get("params") or {}, {"input": run.get("input"), "nodes": outputs})
     return cast(dict[str, Any], ref), cast(dict[str, Any], params)
 

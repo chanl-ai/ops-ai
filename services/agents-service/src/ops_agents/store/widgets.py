@@ -9,13 +9,14 @@ these tables and is served beside them.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import sqlalchemy as sa
 from pydantic import BaseModel, JsonValue
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from ops_service_kit.errors import Conflict, NotFound
+from ops_service_kit.errors import Conflict
+from ops_service_kit.http import Json, JsonList, Out
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee, isolation
 from ops_store.rows import rows
@@ -26,7 +27,8 @@ from ops_store.team_scope import any_team, team_visible
 from .agent_registry import digest_of, publish_requests
 from .base import metadata
 from .graphs import mine
-from .tenancy import OWNER, UNIQUE_KEY, RuntimeStore, current_tenant
+from .tenancy import OWNER, UNIQUE_KEY, current_tenant
+from .versioned import VersionedRegistry
 
 registry_widgets = sa.Table(
     "registry_widgets",
@@ -91,30 +93,55 @@ class ListedWidget(BaseModel):
     pending: bool
 
 
+class WidgetRow(Out):
+    """A widget's row: its team, newest name and version, newest published version, and why it was retired."""
+
+    tenant_id: str
+    id: str
+    team_id: str
+    name: str
+    version: int
+    published_version: int | None
+    retired_reason: str | None
+    created_at: str
+    updated_at: str
+    updated_by: str
+
+
+class WidgetVersion(Out):
+    """One saved version of a widget; `content` is its layout document."""
+
+    tenant_id: str
+    widget_id: str
+    version: int
+    content: Json
+    digest: str
+    changes: JsonList
+    saved_at: str
+    saved_by: str
+    published_at: str | None
+    published_by: str | None
+    review_id: str | None
+
+
 LABELS = {"name": "name", "useWhen": "use-when line", "tree": "layout", "dataSchema": "data schema", "sample": "sample"}
 
 
-def changes_between(old: dict[str, Any], new: dict[str, Any]) -> list[str]:
+def changes_between(old: Json, new: Json) -> list[str]:
     return [f"Changed {label}" for k, label in LABELS.items() if old.get(k) != new.get(k)]
 
 
-class WidgetRegistry(RuntimeStore):
+class WidgetRegistry(VersionedRegistry[WidgetRow, WidgetVersion]):
     # An id and a version number are unique keys (CAS); a save writes its version row and moves the widget in one
     # transaction, as does a publish (TRANSACTION).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION})
-
-    async def rows(self) -> list[dict[str, Any]]:
-        async with self.tx() as c:
-            return [
-                dict(r)
-                for r in (
-                    await c.execute(
-                        sa.select(registry_widgets)
-                        .where(mine(registry_widgets), team_visible(registry_widgets))
-                        .order_by(registry_widgets.c.id)
-                    )
-                ).mappings()
-            ]
+    head = registry_widgets
+    history = registry_widget_versions
+    subject = "widget_id"
+    noun = "Widget"
+    in_tenant = True
+    head_row = WidgetRow
+    version_row = WidgetVersion
 
     async def page(
         self, teams: list[str], search: str, offset: int, limit: int, ids: list[str] | None = None
@@ -179,48 +206,7 @@ class WidgetRegistry(RuntimeStore):
         owning team, never for showing the record."""
         return (await self.owner_teams(conn, registry_widgets, {widget_id}, OWNER)).get(widget_id)
 
-    async def find(self, widget_id: str, c: AsyncConnection | None = None) -> dict[str, Any] | None:
-        q = sa.select(registry_widgets).where(
-            registry_widgets.c.id == widget_id, mine(registry_widgets), team_visible(registry_widgets)
-        )
-        if c is not None:
-            r = (await c.execute(q)).mappings().first()
-        else:
-            async with self.tx() as conn:
-                r = (await conn.execute(q)).mappings().first()
-        return dict(r) if r else None
-
-    async def row(self, widget_id: str, c: AsyncConnection | None = None) -> dict[str, Any]:
-        r = await self.find(widget_id, c)
-        if r is None:
-            raise NotFound(f"Widget {widget_id}")
-        return r
-
-    async def version(self, widget_id: str, version: int) -> dict[str, Any] | None:
-        async with self.tx() as c:
-            q = sa.select(registry_widget_versions).where(
-                registry_widget_versions.c.widget_id == widget_id,
-                registry_widget_versions.c.version == version,
-                mine(registry_widget_versions),
-                team_visible(registry_widget_versions),
-            )
-            r = (await c.execute(q)).mappings().first()
-            return dict(r) if r else None
-
-    async def versions(self, widget_id: str) -> list[dict[str, Any]]:
-        async with self.tx() as c:
-            q = (
-                sa.select(registry_widget_versions)
-                .where(
-                    registry_widget_versions.c.widget_id == widget_id,
-                    mine(registry_widget_versions),
-                    team_visible(registry_widget_versions),
-                )
-                .order_by(registry_widget_versions.c.version.desc())
-            )
-            return [dict(r) for r in (await c.execute(q)).mappings()]
-
-    async def create(self, widget_id: str, content: dict[str, Any], *, team_id: str, by: str) -> None:
+    async def create(self, widget_id: str, content: Json, *, team_id: str, by: str) -> None:
         at = now_iso()
         async with self.tx() as c:
             taken = sa.select(registry_widgets.c.id).where(
@@ -256,21 +242,15 @@ class WidgetRegistry(RuntimeStore):
                 )
             )
 
-    async def save_draft(self, widget_id: str, content: dict[str, Any], *, by: str) -> int:
+    async def save_draft(self, widget_id: str, content: Json, *, by: str) -> int:
         """Edits the newest version while it is an unpublished draft, or opens the next version on top of a published
         one. Published versions never change."""
         at = now_iso()
         async with self.tx() as c:
-            n = int((await self.row(widget_id, c))["version"])
-            q = sa.select(registry_widget_versions).where(
-                registry_widget_versions.c.widget_id == widget_id,
-                registry_widget_versions.c.version == n,
-                mine(registry_widget_versions),
-                team_visible(registry_widget_versions),
-            )
-            newest = (await c.execute(q)).mappings().one()
+            n = (await self.row(widget_id, c)).version
+            newest = await self.newest(c, widget_id, n)
             values = {"content": content, "digest": digest_of(content), "saved_at": at, "saved_by": by}
-            if newest["published_at"] is None:
+            if newest.published_at is None:
                 await c.execute(
                     registry_widget_versions.update()
                     .where(
@@ -278,13 +258,13 @@ class WidgetRegistry(RuntimeStore):
                         registry_widget_versions.c.widget_id == widget_id,
                         registry_widget_versions.c.version == n,
                     )
-                    .values(**values, changes=changes_between(newest["content"], content) or ["No change"])
+                    .values(**values, changes=changes_between(newest.content, content) or ["No change"])
                 )
             else:
                 n += 1
                 await c.execute(
                     registry_widget_versions.insert().values(
-                        widget_id=widget_id, version=n, changes=changes_between(newest["content"], content), **values
+                        widget_id=widget_id, version=n, changes=changes_between(newest.content, content), **values
                     )
                 )
             await c.execute(
