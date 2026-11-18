@@ -36,6 +36,7 @@ from ops_agents.graphs.sla import review_loop
 from ops_agents.store.leases import Leases
 from ops_checkpointer import LeaseSupersededError
 from ops_policy import input_hash
+from ops_service_kit import narrow
 from ops_service_kit.ids import new_id
 from ops_service_kit.settings import Settings
 from tests.conftest import FakeGraphModels, fixture_knowledge, scripted, scripted_stream, sse_events
@@ -257,7 +258,8 @@ async def test_an_edit_after_approval_voids_the_old_token(adapter: Adapter) -> N
     assert store is not None
     assert await store.start_run(run_id, tid, "input", "2026-10-10T00:00:00Z", {"edit": True}, generation=generation)
     edited = [e async for e in execute(adapter.rt, row, graph, graph_input=None, run_id=run_id, kind="input")]
-    assert edited[-1]["data"]["status"] == "interrupted", edited[-2:]
+    end = narrow.an_object(edited[-1]["data"], "the end event's data")
+    assert end["status"] == "interrupted", edited[-2:]
     # The token minted before the edit cannot be used: a review is resumed only by decide, which mints from the
     # input the thread is waiting on now.
     stale = await adapter.http.post(

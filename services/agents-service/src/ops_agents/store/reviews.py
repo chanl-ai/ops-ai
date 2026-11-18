@@ -7,7 +7,7 @@ from typing import Any, ClassVar
 
 import sqlalchemy as sa
 
-from ops_service_kit.http import Out
+from ops_service_kit.http import Json, Out
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
 from ops_store.rows import rows
@@ -69,7 +69,7 @@ class DecisionOut(Out):
     reason: str | None
     decided_by: str
     decided_at: str
-    review: dict[str, Any]
+    review: Json
     attempts: int
     run_id: str | None
     resumed_at: str | None
@@ -125,7 +125,7 @@ class ReviewStore(RuntimeStore):
         decision: str,
         reason: str | None,
         by: str,
-        review: dict[str, Any],
+        review: Json,
         step_up_ref: str | None = None,
     ) -> None:
         async with self.tx() as c:

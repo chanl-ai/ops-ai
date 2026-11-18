@@ -53,8 +53,6 @@ from .tool_access import WritePolicy, policy_of
 
 log = get_logger("ops_agents.api.engine_reviews")
 
-# One run, or one decision of it, as the runner's store returns it.
-Row = dict[str, Any]
 
 # The stored shapes below are read with `ops_store.documents.stored`, which keeps keys they do not name, so a `waiting`
 # document read, changed and written back keeps what it held. Runs waiting now were paused by earlier releases, so
@@ -280,12 +278,12 @@ def connect_wait(payload: ReviewPayload) -> ConnectWait | None:
     }
 
 
-async def _connect_view(rt: Runtime, run: dict[str, Any], payload: ReviewPayload) -> ConnectView | None:
+async def _connect_view(rt: Runtime, run: Json, payload: ReviewPayload) -> ConnectView | None:
     """A connect wait as the task shows it: the app, and the person whose account it waits for (the run's starter)."""
     wait = connect_wait(payload)
     if wait is None:
         return None
-    above = await starters_of(_runs(rt), str(run.get("created_by") or ""), run.get("team_id"))
+    above = await starters_of(_runs(rt), str(run.get("created_by") or ""), cast(str | None, run.get("team_id")))
     person = person_of(above[-1].created_by if above else run.get("created_by"))
     return {
         "app": wait["app"],
@@ -304,7 +302,7 @@ def _runs(rt: Runtime) -> RunStore:
     return RunStore(EngineTransactions(rt.db))
 
 
-async def _visible(rt: Runtime, run_id: str) -> dict[str, Any]:
+async def _visible(rt: Runtime, run_id: str) -> Json:
     """The run behind a review, if the selected team may see it (routers/engine.visible_run); else not found."""
     from .routers.engine import visible_run  # noqa: PLC0415 - the router imports the Reviews facade's neighbours
 
@@ -320,7 +318,7 @@ def _options(payload: ReviewPayload) -> list[str]:
     return [str(o.get("name") if isinstance(o, dict) else o) for o in entries(payload.get("options"))]
 
 
-def step_id(run: dict[str, Any], payload: ReviewPayload) -> str:
+def step_id(run: Json, payload: ReviewPayload) -> str:
     """A v2 review's id: its step (run:node:iteration), so two review steps of one run are two reviews."""
     return str(payload.get("step_id") or run["id"])
 
@@ -591,28 +589,30 @@ def _read_line(read: ReadView) -> tuple[str, str]:
     return ", ".join(names), f"Read {count} record{'s' if count != 1 else ''}{of}{check}"
 
 
-async def titles_of(rt: Runtime, run: dict[str, Any]) -> dict[str, Any]:
+async def titles_of(rt: Runtime, run: Json) -> dict[str, Any]:
     """The run's workflow by its display name and each step by its own, from the version the run pinned."""
-    pinned = await DefinitionStore(EngineTransactions(rt.db)).row(str(run["workflow_id"]), run.get("version"))
+    pinned = await DefinitionStore(EngineTransactions(rt.db)).row(
+        str(run["workflow_id"]), cast(int | None, run.get("version"))
+    )
     return _titles(run, pinned)
 
 
-async def titles_by_run(rt: Runtime, runs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+async def titles_by_run(rt: Runtime, runs: list[Json]) -> dict[str, dict[str, Any]]:
     """titles_of for each run, the versions they pinned read in one query, with the version that now serves each run's
     workflow (`live`, read in one more) for a review older than typed steps (legacy_tasks)."""
-    keys = {(str(r["workflow_id"]), int(r["version"])) for r in runs if r.get("version") is not None}
+    keys = {(str(r["workflow_id"]), int(cast(int, r["version"]))) for r in runs if r.get("version") is not None}
     store = DefinitionStore(EngineTransactions(rt.db))
     pinned = await store.pinned(keys)
     serving = await store.currents({str(r["workflow_id"]) for r in runs})
     out: dict[str, dict[str, Any]] = {}
     for r in runs:
-        titles = _titles(r, pinned.get((str(r["workflow_id"]), int(r.get("version") or 0))))
+        titles = _titles(r, pinned.get((str(r["workflow_id"]), int(cast(int, r.get("version") or 0)))))
         titles["live"] = serving.get(str(r["workflow_id"]))
         out[str(r["id"])] = titles
     return out
 
 
-def _titles(run: dict[str, Any], row: DefinitionRow | None) -> dict[str, Any]:
+def _titles(run: Json, row: DefinitionRow | None) -> dict[str, Any]:
     definition = json_object(row.definition if row else None)
     nodes = [json_object(n) for n in json_list(definition.get("nodes")) if isinstance(n, dict)]
     return {
@@ -767,7 +767,7 @@ async def view(
         "calls": None,
         "error": None,
         "caseId": case_id or None,
-        "decidingTeam": await deciding_team(rt, run.get("team_id")),
+        "decidingTeam": await deciding_team(rt, cast(str | None, run.get("team_id"))),
         **typed,
     }
     if task := await typed_task(rt, json_object(payload), run, reads):
@@ -814,12 +814,12 @@ async def view(
     return out
 
 
-async def _decisions(rt: Runtime, run_id: str) -> list[dict[str, Any]]:
+async def _decisions(rt: Runtime, run_id: str) -> list[Json]:
     """The run's resume rows' payloads (ResumeRow), oldest first."""
     return [w["payload"] for w in await _runs(rt).work(run_id) if w["kind"] == "resume"]
 
 
-def _payload(run: dict[str, Any], decided: dict[str, Any] | ResumeRow | None) -> ReviewPayload:
+def _payload(run: Json, decided: Json | ResumeRow | None) -> ReviewPayload:
     """The step's payload as its review reads it: the decided call in place of the proposed one once decided."""
     waiting = WAITING(run.get("waiting") or {})
     payload = PAYLOAD((decided or {}).get("payload") or waiting.get("payload") or {})
@@ -835,7 +835,7 @@ def _risk(policies: list[WritePolicy]) -> str:
     return "medium" if any(p.access == "write" for p in policies) else "low"
 
 
-async def team_runs(rt: Runtime) -> list[dict[str, Any]]:
+async def team_runs(rt: Runtime) -> list[Json]:
     """The team's runs a task list reads, newest first: the newest 200, for the decided tasks they hold, and the
     newest `review_list_rows_per_source` runs waiting for a person, so an open task leaves the list only past that
     many waiting runs (logged as `review_source_capped`)."""
@@ -857,7 +857,7 @@ class RowReads:
     hold, so a route can ask tools-service about `tools` with nothing open before `build_rows`."""
 
     on_case: dict[str, str]
-    steps: list[tuple[Row, Row | None]]
+    steps: list[tuple[Json, Json | None]]
     payloads: list[ReviewPayload]
 
     @property
@@ -865,7 +865,7 @@ class RowReads:
         return sorted({str(c.get("tool")) for p in self.payloads for c in _calls(p) if c.get("tool")})
 
 
-def tools_of(steps: list[tuple[Row, Row | None]]) -> list[str]:
+def tools_of(steps: list[tuple[Json, Json | None]]) -> list[str]:
     """The tools the calls of these review steps (a run and its decision, None for the one it waits on) name."""
     return sorted({str(c.get("tool")) for run, d in steps for c in _calls(_payload(run, d)) if c.get("tool")})
 
@@ -884,7 +884,7 @@ async def read_rows(rt: Runtime) -> RowReads | None:
         return None
     on_case = await CaseStore(rt.db).cases_of_runs([str(r["id"]) for r in runs])
     decisions = await _runs(rt).resumes([str(r["id"]) for r in runs])
-    steps: list[tuple[Row, Row | None]] = []
+    steps: list[tuple[Json, Json | None]] = []
     for run in runs:
         steps += [(run, d) for d in decisions.get(str(run["id"]), [])]
         if run["status"] == "waiting" and run.get("waiting"):
@@ -980,7 +980,7 @@ async def all_places(rt: Runtime) -> list[dict[str, Any]]:
     return out
 
 
-def _decided_status(decided: dict[str, Any] | ResumeRow) -> str:
+def _decided_status(decided: Json | ResumeRow) -> str:
     resume = DECISION(decided.get("resume") or {})
     approved = resume.get("decision") in ("approved", "approve") and resume.get("option") != "reject"
     return "approved" if approved else "rejected"
@@ -998,7 +998,7 @@ async def get(rt: Runtime, review_id: str) -> dict[str, Any]:
         return await view(rt, run)
     decided = [
         d
-        for d in await _decisions(rt, run["id"])
+        for d in await _decisions(rt, cast(str, run["id"]))
         if review_id in (run["id"], step_id(run, PAYLOAD(RESUME_ROW(d).get("payload") or {})))
     ]
     if decided:
@@ -1006,7 +1006,7 @@ async def get(rt: Runtime, review_id: str) -> dict[str, Any]:
     raise NotFound("Review")
 
 
-async def _check_decider(rt: Runtime, approver: Principal, run: dict[str, Any], calls: list[Json]) -> None:
+async def _check_decider(rt: Runtime, approver: Principal, run: Json, calls: list[Json]) -> None:
     """Who may decide a run's review: a reviewer or admin of the run's team, whatever the writes it decides (`calls`)
     are, and not who started the run or whom the step names in requestedBy while requesterMayDecide is off.
     Anyone the step names in notDecidedBy is refused whatever the policy, such as whoever saved the version it
@@ -1019,7 +1019,7 @@ async def _check_decider(rt: Runtime, approver: Principal, run: dict[str, Any], 
         raise Forbidden("You are named as not deciding this review; another reviewer must.", code="not_decided_by")
     require_reviews_decide(review_teams(approver), str(run["team_id"]), "this review")
     # Who started the run, and whoever the step names as having asked (an event's requester), under the same policy.
-    asked = [run["created_by"], *(str(x) for x in entries(paused.get("requestedBy")))]
+    asked = [cast(str | None, run["created_by"]), *(str(x) for x in entries(paused.get("requestedBy")))]
     require_not_own(approver, asked, team=str(run["team_id"]), what="this run's review")
 
 
@@ -1178,7 +1178,7 @@ async def decide(
     await runs.update(run_id, status="queued", waiting=None)
     await EventLog(rt.db).append(
         thread_id=run_id,
-        team_id=run["team_id"],
+        team_id=cast(str, run["team_id"]),
         run_id=run_id,
         type_="decided",
         # enqueue_resume's key read `node` already, so it is there.
@@ -1222,7 +1222,7 @@ async def _approve_call(
     return {"step": str(call["step"]), "tool": tool, "inputHash": digest, "approvers": found}
 
 
-async def _typed_action(rt: Runtime, run: dict[str, Any], paused: ReviewPayload, port: str) -> Json:
+async def _typed_action(rt: Runtime, run: Json, paused: ReviewPayload, port: str) -> Json:
     """The task type's action that leads to `port`, from the type version the step names in the run's team; empty when
     it has none."""
     ref = an_object(paused.get("taskType"), "the step's taskType")

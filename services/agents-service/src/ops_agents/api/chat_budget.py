@@ -21,6 +21,7 @@ from ops_agents.graphs.metering import budget_from
 from ops_contracts.chat import BudgetAnswer
 from ops_metering import Budget
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, Unprocessable
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id, now_iso
 
 from ..store.events import EventLog
@@ -31,7 +32,7 @@ from .deps import Runtime
 from .runs import config, execute, graph_store, pending, resolve
 
 
-def allotment(agent: AgentDefinition) -> dict[str, Any]:
+def allotment(agent: AgentDefinition) -> Json:
     """What a conversation starts with and what each Continue adds, in the meter's field names."""
     return {"maxCalls": agent.max_conversation_calls, "maxCost": str(agent.max_conversation_cost)}
 
@@ -51,7 +52,7 @@ async def cap_at_agent(rt: Runtime, thread_id: str, agent: AgentDefinition) -> N
     if rt.usage is None:
         return
     row = await graph_store(rt).thread(thread_id)
-    if row is not None and cast(dict[str, Any], row["meta"] or {}).get("budgetAllotment"):
+    if row is not None and cast(Json, row["meta"] or {}).get("budgetAllotment"):
         return
     allot = allotment(agent)
     limit, given = budget_from(allot), await rt.usage.budget(thread_id)
@@ -67,16 +68,16 @@ async def cap_at_agent(rt: Runtime, thread_id: str, agent: AgentDefinition) -> N
     await update_meta(rt, thread_id, budgetAllotment=allot)
 
 
-def _budget_pause(snapshot: Any) -> tuple[str, dict[str, Any]] | None:
+def _budget_pause(snapshot: Any) -> tuple[str, Json] | None:
     """The interrupt id and payload of the budget pause the thread waits on, if any."""
     for p in pending(snapshot):
-        payload = cast(dict[str, Any], p["payload"]) if isinstance(p["payload"], dict) else {}
+        payload = p["payload"] if isinstance(p["payload"], dict) else {}
         if payload.get("kind") == "budget_exhausted":
             return str(p["id"]), payload
     return None
 
 
-def _caps(b: Budget) -> dict[str, Any]:
+def _caps(b: Budget) -> Json:
     return {"maxCalls": b.max_calls, "maxCost": str(b.max_cost) if b.max_cost is not None else None}
 
 
@@ -90,7 +91,7 @@ def _may(me: Principal, action: str, team: str, *, owner: str | None = None) -> 
     return True
 
 
-def _owner_or_manager(me: Principal, meta: dict[str, Any], team: str) -> bool:
+def _owner_or_manager(me: Principal, meta: Json, team: str) -> bool:
     owner = meta.get("ownerEmail")
     is_owner = _may(me, "view", team, owner=str(owner)) if owner else owned_by(meta, me)
     return is_owner or _may(me, "manage", team)
@@ -103,7 +104,7 @@ async def answer(rt: Runtime, me: Principal, thread_id: str, body: BudgetAnswer)
     row = await chat_row(rt, thread_id, None)
     if row is None or rt.usage is None:
         raise NotFound("Conversation")
-    meta: dict[str, Any] = dict(row["meta"] or {})
+    meta: Json = dict(row["meta"] or {})
     team = str(row["team_id"])
     if body.action == "continue" and not _owner_or_manager(me, meta, team):
         raise Forbidden("Only the person who started this conversation, or an admin, continues it.", code="not_owner")
@@ -119,7 +120,7 @@ async def answer(rt: Runtime, me: Principal, thread_id: str, body: BudgetAnswer)
         raise Conflict("A reply is already being written in this conversation.", code="run_active") from e
     try:
         new = await _answered_budget(rt, thread_id, meta, body)
-        resume = {"decision": "approved", "budget": _caps(new)}
+        resume: Json = {"decision": "approved", "budget": _caps(new)}
         if not await store.start_run(run_id, thread_id, "resume", now_iso(), {"resume": resume}, generation=generation):
             raise Conflict("That resume is already running.", code="run_active")
     except BaseException:
@@ -141,7 +142,7 @@ async def answer(rt: Runtime, me: Principal, thread_id: str, body: BudgetAnswer)
     await update_meta(rt, thread_id, lastMessageAt=now_iso())
 
 
-async def _answered_budget(rt: Runtime, thread_id: str, meta: dict[str, Any], body: BudgetAnswer) -> Budget:
+async def _answered_budget(rt: Runtime, thread_id: str, meta: Json, body: BudgetAnswer) -> Budget:
     """The caps the conversation goes on with, checked against the pause it waits on now."""
     assert rt.usage is not None
     _, graph = await resolve(rt, thread_id)
@@ -154,7 +155,7 @@ async def _answered_budget(rt: Runtime, thread_id: str, meta: dict[str, Any], bo
     spent = await rt.usage.totals(thread_id)
     current = await rt.usage.budget(thread_id) or Budget()
     if body.action == "continue":
-        allot = budget_from(cast(dict[str, Any], meta.get("budgetAllotment") or {}))
+        allot = budget_from(cast(Json, meta.get("budgetAllotment") or {}))
         calls = allot.max_calls or 0
         cost = allot.max_cost or Decimal(0)
         return Budget(
@@ -181,15 +182,13 @@ async def _answered_budget(rt: Runtime, thread_id: str, meta: dict[str, Any], bo
     return current.updated(Budget(max_calls=body.max_calls, max_cost=body.max_cost))
 
 
-async def run_api_answer(
-    rt: Runtime, me: Principal, row: dict[str, Any], pause: dict[str, Any], resume: dict[str, Any]
-) -> dict[str, Any]:
+async def run_api_answer(rt: Runtime, me: Principal, row: Json, pause: Json, resume: Json) -> Json:
     """The resume for a budget pause on a run-API thread (an `agent:` thread, a workflow case), under the chat's rules:
     stopping or continuing is the thread owner's or a team admin's; continuing adds the thread's allotment (its
     agent's caps); a resume that names caps is a raise, a team admin's, above what was spent and lifting the cap that
     paused it. The dev header caller acts as an admin."""
     assert rt.usage is not None
-    thread_id, meta = str(row["id"]), cast(dict[str, Any], row["meta"] or {})
+    thread_id, meta = str(row["id"]), cast(Json, row["meta"] or {})
     team = str(row["team_id"])
     admin = _may(me, "manage", team)
     owner = bool(meta.get("ownerEmail")) and _may(me, "view", team, owner=str(meta["ownerEmail"]))
@@ -203,7 +202,7 @@ async def run_api_answer(
     if raw:
         if not admin:
             raise Forbidden("Only an admin of this thread's team raises its budget.", code="admin_only")
-        given = budget_from(cast(dict[str, Any], raw))
+        given = budget_from(cast(Json, raw))
         limit = str(pause.get("limit") or "calls")
         lifted = given.max_calls if limit == "calls" else given.max_cost if limit == "cost" else None
         if lifted is None:
@@ -215,7 +214,7 @@ async def run_api_answer(
         return {"decision": "approved", "budget": _caps(current.updated(given))}
     if not (owner or admin):
         raise Forbidden("Only who started this thread, or an admin of its team, continues it.", code="not_owner")
-    allot = budget_from(cast(dict[str, Any], meta.get("budgetAllotment") or {}))
+    allot = budget_from(cast(Json, meta.get("budgetAllotment") or {}))
     if allot.max_calls is None and allot.max_cost is None:
         raise Unprocessable("This thread has no allotment to continue with; an admin raises it.", code="caps_required")
     calls, cost = allot.max_calls or 0, allot.max_cost or Decimal(0)

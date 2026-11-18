@@ -15,6 +15,7 @@ from ops_agents.api import hitl_facade
 from ops_agents.api.auth import step_up_signer
 from ops_agents.api.deps import Runtime
 from ops_policy import HmacSigner, mint_step_up
+from ops_service_kit.http import Json
 from ops_service_kit.settings import Settings
 from tests.api.test_graphs import EMAILS, run, thread
 from tests.conftest import SEED, FakeGraphModels, empty_engine, started, step_up
@@ -215,7 +216,7 @@ async def test_the_runs_list_builds_full_rows_for_its_page_only(
     built: list[str] = []
     full = hitl_facade.run_row
 
-    async def counting(row: dict[str, Any], *args: Any) -> dict[str, Any]:
+    async def counting(row: hitl_facade.SummaryRow, *args: Any) -> Json:
         built.append(row["id"])
         return await full(row, *args)
 

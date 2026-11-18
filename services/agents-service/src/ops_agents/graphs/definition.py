@@ -40,6 +40,7 @@ from ops_service_kit.ids import canonical_json, new_id
 
 from .common import (
     GraphDeps,
+    PendingApproval,
     agent_grants,
     approval_token,
     emit,
@@ -737,20 +738,21 @@ def compile_definition(
         Reviews, decide, the approval token and the gateway treat it like any other."""
 
         async def approval(state: WorkflowState) -> Json:
-            p = state.get("pending") or {}
-            definition = deps.catalog.tool(cast(str, p["tool"]))
+            # The paused turn as the agent step checkpointed it (common.pending_approval); a missing key raises.
+            p = cast(PendingApproval, state.get("pending") or {})
+            definition = deps.catalog.tool(p["tool"])
             tpl = definition.approval if definition else None
-            values = {k: str(v) for k, v in cast(Json, p["input"]).items()}
+            values = {k: str(v) for k, v in p["input"].items()}
             decision = interrupt(
                 {
                     "kind": "approval",
                     "node": nid,
-                    "review_id": f"REV-{cast(str, p['action_id'])[:6].upper()}",
+                    "review_id": f"REV-{p['action_id'][:6].upper()}",
                     "tool": p["tool"],
                     "action": fill(tpl.action, values) if tpl else p["needed"],
                     "input": p["input"],
                     "input_hash": p["input_hash"],
-                    "step_up": await needs_step_up(deps, cast(str, p["tool"])),
+                    "step_up": await needs_step_up(deps, p["tool"]),
                     "reviewers": tpl.reviewers if tpl else None,
                     "call": {"tool": p["tool"], "input": p["input"], "step": p["key"]},
                     "server": p["server"],

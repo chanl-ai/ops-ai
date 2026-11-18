@@ -39,6 +39,7 @@ from ops_service_kit.ids import new_id
 
 from .common import (
     GraphDeps,
+    PendingApproval,
     agent_grants,
     approval_token,
     interrupt_from_state,
@@ -237,23 +238,24 @@ def build(
         )
 
     async def approval(state: AgentState) -> Json:
-        p = state.get("pending") or {}
+        # The paused turn as the agent step checkpointed it (common.pending_approval); a key it lacks raises, as before.
+        p = cast(PendingApproval, state.get("pending") or {})
         op = next((o for o in await operations() if o.name == p["tool"]), None)
         # The person in the chat answers this one themselves (Allow, Deny, Allow for this chat): their app asks before
         # changes and no reviewer's approval holds the write.
         asks = bool(state.get("requested_by")) and asks_person(op, live=turn_environment(state) == LIVE)
-        definition = deps.catalog.tool(cast(str, p["tool"]))
+        definition = deps.catalog.tool(p["tool"])
         tpl = definition.approval if definition else None
-        values = {k: str(v) for k, v in cast(Json, p["input"]).items()}
+        values = {k: str(v) for k, v in p["input"].items()}
         decision = interrupt(
             {
                 "kind": "approval",
-                "review_id": f"REV-{cast(str, p['action_id'])[:6].upper()}",
+                "review_id": f"REV-{p['action_id'][:6].upper()}",
                 "tool": p["tool"],
                 "action": fill(tpl.action, values) if tpl else p["needed"],
                 "input": p["input"],
                 "input_hash": p["input_hash"],
-                "step_up": await needs_step_up(deps, cast(str, p["tool"])),
+                "step_up": await needs_step_up(deps, p["tool"]),
                 "reviewers": tpl.reviewers if tpl else None,
                 "call": {"tool": p["tool"], "input": p["input"], "step": p["key"]},
                 "server": p["server"],
