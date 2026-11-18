@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Literal, cast
+from typing import Any, Literal, Required, TypedDict, cast
 
 from ops_service_kit.errors import NotFound
+from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import new_id
 
 from ..auth import Principal
@@ -23,6 +24,36 @@ from ..task_type_seeds import task_type_store
 from ..typed_record_routes import store_team
 from . import case_types as case_routes
 from . import task_types as task_routes
+
+
+class OfferedPlugin(TypedDict):
+    id: str
+    title: str
+    version: str
+
+
+class OfferedNeeds(TypedDict, total=False):
+    tools: Required[list[str]]
+    # Each `{"knowledge_base": "<what>"}` or `{"model_alias": "<what>"}`.
+    bind: Required[list[dict[str, str]]]
+    resources: list[str]
+
+
+class OfferedTemplate(TypedDict, total=False):
+    """One template tools-service offers the team (`GET /v1/plugin-templates`, its PluginTemplate). The `body` is the
+    plugin's own document. Read as answered (cast, never rebuilt), so a body is copied and digested as it came."""
+
+    source: Required[str]
+    plugin: Required[OfferedPlugin]
+    kind: Required[str]
+    id: Required[str]
+    version: Required[int]
+    title: Required[str]
+    requires: Required[OfferedNeeds]
+    body: Json
+    digest: str | None
+    off: str | None
+
 
 TypeKind = Literal["case_type", "task_type"]
 TYPE_KINDS: tuple[TypeKind, ...] = ("case_type", "task_type")
@@ -43,9 +74,9 @@ async def _store(rt: Runtime, kind: str, team: str | None = None) -> Any:
     return await (case_type_store(rt, team) if kind == "case_type" else task_type_store(rt, team))
 
 
-def body_of(kind: str, t: dict[str, Any]) -> dict[str, Any]:
+def body_of(kind: str, t: OfferedTemplate) -> Json:
     """The template's body as the type's record holds it, without its id."""
-    b = cast(dict[str, Any], t.get("body") or {})
+    b = t.get("body") or {}
     keys = ("name", *TOP[kind], ITEMS[kind][0])
     out = {k: b[k] for k in keys if k in b}
     out.setdefault("name", t["title"])
@@ -56,7 +87,7 @@ def body_of(kind: str, t: dict[str, Any]) -> dict[str, Any]:
     return model.model_validate(out).model_dump(mode="json", exclude_none=True)
 
 
-async def make(rt: Runtime, me: Principal, kind: str, t: dict[str, Any], name: str) -> str:
+async def make(rt: Runtime, me: Principal, kind: str, t: OfferedTemplate, name: str) -> str:
     """What the type's create route runs: its role check, its field checks, draft version 1."""
     type_id = new_id(PREFIX[kind])
     body = {k: v for k, v in body_of(kind, t).items() if v is not None} | {"id": type_id, "name": name}
@@ -67,7 +98,7 @@ async def make(rt: Runtime, me: Principal, kind: str, t: dict[str, Any], name: s
     return type_id
 
 
-async def newest(rt: Runtime, kind: str, type_id: str) -> tuple[dict[str, Any], bool]:
+async def newest(rt: Runtime, kind: str, type_id: str) -> tuple[Json, bool]:
     """The type's newest record and whether that version is an unpublished draft."""
     v = (await (await _store(rt, kind)).get(type_id)).versions[0]
     return v.record, v.published_at is None
@@ -93,7 +124,7 @@ async def names_in_use(rt: Runtime, kind: str, team: str) -> set[str]:
     return {r.name.casefold() for r in await (await _store(rt, kind, team)).rows() if r.team_id == team}
 
 
-async def save(rt: Runtime, me: Principal, kind: str, type_id: str, record: dict[str, Any]) -> int:
+async def save(rt: Runtime, me: Principal, kind: str, type_id: str, record: Json) -> int:
     """What the type's save route runs: a published version opens the next one, a draft is saved over."""
     if kind == "case_type":
         await case_routes.save_type(rt, me, type_id, case_routes.Definition.model_validate(record))
@@ -102,44 +133,44 @@ async def save(rt: Runtime, me: Principal, kind: str, type_id: str, record: dict
     return (await (await _store(rt, kind, store_team(me))).get(type_id)).version
 
 
-def flat(kind: str, record: dict[str, Any] | None) -> dict[str, Any] | None:
+def flat(kind: str, record: Json | None) -> Json | None:
     """A record as the merge reads it: each item of the merged list under `<field|action>:<key>`."""
     if record is None:
         return None
     items, key = ITEMS[kind]
     out = {k: record.get(k) for k in TOP[kind]}
-    for item in cast(list[dict[str, Any]], record.get(items) or []):
+    for item in cast(list[Json], record.get(items) or []):
         out[f"{items[:-1]}:{item.get(key)}"] = item
     return out
 
 
-def order(kind: str, *records: dict[str, Any] | None) -> list[str]:
+def order(kind: str, *records: Json | None) -> list[str]:
     """The merge's field list: the top-level fields, then items in the team's order, then ones only the template or
     the base names."""
     items, key = ITEMS[kind]
     keys = list(TOP[kind])
     for r in records:
-        for item in cast(list[dict[str, Any]], (r or {}).get(items) or []):
+        for item in cast(list[Json], (r or {}).get(items) or []):
             if (k := f"{items[:-1]}:{item.get(key)}") not in keys:
                 keys.append(k)
     return keys
 
 
-def unflat(kind: str, merged: dict[str, Any], keys: list[str], name: str) -> dict[str, Any]:
+def unflat(kind: str, merged: Json, keys: list[str], name: str) -> Json:
     items, _ = ITEMS[kind]
     out = {k: merged.get(k) for k in TOP[kind] if merged.get(k) is not None}
     out[items] = [merged[k] for k in keys if k.startswith(f"{items[:-1]}:") and merged.get(k) is not None]
     return {"name": name, **out}
 
 
-def label(field: str, yours: Any, template: Any) -> str:
+def label(field: str, yours: JsonValue, template: JsonValue) -> str:
     if field in LABELS:
         return LABELS[field]
     noun, sep, key = field.partition(":")
     if not sep:
         # A field of an agent or guardrail with no label of its own reads as its name.
         return field
-    named = cast(dict[str, Any], yours or template or {})
+    named = cast(Json, yours or template or {})
     return f"{noun} {named.get('label') or named.get('name') or key}"
 
 

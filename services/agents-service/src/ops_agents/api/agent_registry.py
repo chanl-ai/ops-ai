@@ -11,9 +11,9 @@ the team's publish policy (api/publish_policy.py).
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any, Literal, Required, TypedDict, cast
 
 from ops_access import can
 from ops_agent_kernel.layout import required_tools
@@ -21,6 +21,7 @@ from ops_agents.activities.agent_limits import limits_of
 from ops_agents.activities.agent_limits import wire as wire_limits
 from ops_agents.activities.catalog import AgentDefinition, Catalog, Fragment, GuardrailRule, SkillPinRule, WidgetPinRule
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable
+from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.logging import get_logger
 from ops_store import isolation
 
@@ -41,8 +42,72 @@ from .review_text import requester
 log = get_logger("ops_agents.agent_registry")
 SEED_TEAM = "team_ops"
 
+
+class AgentCaps(TypedDict, total=False):
+    """A version's `guardrails`: the caps a turn and a conversation run under."""
+
+    redactPii: bool
+    maxToolCallsPerTurn: int | None
+    maxModelCallsPerTurn: int | None
+    maxModelCallsPerConversation: int | None
+    maxCostPerConversation: float | None
+    whenUnsure: str
+    blockedTopics: list[str]
+
+
+class AgentMemory(TypedDict):
+    enabled: bool
+    kinds: list[str]
+
+
+class AgentWidgets(TypedDict, total=False):
+    compose: bool
+    perTurn: int | None
+
+
+class GuardrailPin(TypedDict, total=False):
+    """A spec's `guardrailPins` entry: the pinned guardrail version, as resolved when the version was saved."""
+
+    guardrailId: Required[str]
+    version: Required[int]
+    name: Required[str]
+    topics: Required[list[str]]
+    enabled: bool
+
+
+class WidgetPin(TypedDict, total=False):
+    widgetId: Required[str]
+    version: Required[int]
+    name: Required[str]
+    tree: JsonValue
+
+
+class AgentSpec(TypedDict, total=False):
+    """An agent version's stored `spec`, as this module reads it. A view of the stored document (cast, never
+    rebuilt), so a version saved before a key existed reads exactly as it did."""
+
+    name: Required[str]
+    role: Required[str]
+    model: Required[str]
+    channels: list[str]
+    instructions: str
+    fragments: list[Json]
+    toolIds: list[str]
+    collections: list[str]
+    allTeamKnowledgeBases: bool
+    accounts: dict[str, str]
+    suggestions: list[str]
+    guardrails: AgentCaps
+    guardrailPins: list[GuardrailPin]
+    skillPins: list[Json]
+    widgetPins: list[WidgetPin]
+    widgets: AgentWidgets
+    memory: AgentMemory
+    skillMenu: Literal["team", "attached", "off"]
+
+
 # A new agent's caps are empty (no cap): a real agent can need many calls. Seeds set low ones.
-GUARDRAILS: dict[str, Any] = {
+GUARDRAILS: Json = {
     "redactPii": True,
     "maxToolCallsPerTurn": None,
     "maxModelCallsPerTurn": 50,
@@ -63,7 +128,7 @@ PLATFORM_CONVERSATION_COST = 5.0
 # What the runtime acts on, so the agent page offers only these. Chat is the one channel an agent talks
 # on; of the guardrail settings the tool-call and model-call caps reach a turn (definition_of), topics are blocked
 # through pinned guardrails; eval-runs score a dataset on the newest version.
-CONTROLS: dict[str, Any] = {
+CONTROLS: Json = {
     "channels": ["chat"],
     "guardrails": [
         # Masks personal data in what a turn shows and returns.
@@ -77,7 +142,7 @@ CONTROLS: dict[str, Any] = {
 }
 
 
-def spec_from_seed(a: AgentDefinition, model: str) -> dict[str, Any]:
+def spec_from_seed(a: AgentDefinition, model: str) -> Json:
     """A seeded agent's spec. Its instruction fragments are kept, so publishing it unchanged serves the same prompt."""
     return {
         "name": a.name,
@@ -100,64 +165,72 @@ def spec_from_seed(a: AgentDefinition, model: str) -> dict[str, Any]:
     }
 
 
-def _cap(spec: dict[str, Any], key: str, legacy: int | None) -> int | None:
+CapKey = Literal["maxToolCallsPerTurn", "maxModelCallsPerTurn", "maxModelCallsPerConversation"]
+
+
+def _cap(spec: AgentSpec, key: CapKey, legacy: int | None) -> int | None:
     """A per-turn cap from the version: a number, or None for no cap; `legacy` when the version predates the key."""
-    caps = cast(dict[str, Any], spec.get("guardrails") or {})
+    caps = spec.get("guardrails") or {}
     if key not in caps:
         return legacy
-    return None if caps[key] is None else int(caps[key])
+    if not isinstance(cast(object, caps), dict):
+        # A version whose `guardrails` is not an object fails as indexing it always has.
+        raise TypeError(f"guardrails is not an object: {caps!r}")
+    value = caps.get(key)
+    return None if value is None else int(value)
 
 
-def memory_of(spec: dict[str, Any]) -> dict[str, Any]:
+def memory_of(spec: Json) -> AgentMemory:
     """The agent's memory setting: on with every kind unless the spec says otherwise."""
-    return {"enabled": True, "kinds": ["fact", "preference", "episode"], **(spec.get("memory") or {})}
+    held = cast(AgentSpec, spec).get("memory") or {}
+    return cast(AgentMemory, {"enabled": True, "kinds": ["fact", "preference", "episode"], **held})
 
 
-def definition_of(agent_id: str, version: int, spec: dict[str, Any]) -> AgentDefinition:
+def definition_of(agent_id: str, version: int, spec: Json) -> AgentDefinition:
     """The catalogue definition the runtime serves for one version."""
-    text: str = spec.get("instructions") or ""
-    raw: list[dict[str, Any]] = spec.get("fragments") or []
+    s = cast(AgentSpec, spec)
+    text = s.get("instructions") or ""
+    raw = s.get("fragments") or []
     fragments = [Fragment.model_validate(f) for f in raw]
     if not fragments or "\n\n".join(f.text for f in fragments) != text:
-        fragments = [Fragment(text=text or f"You are {spec['name']}. {spec['role']}")]
-    widget_settings = cast(dict[str, Any], spec.get("widgets") or {})
-    caps = cast(dict[str, Any], spec.get("guardrails") or {})
+        fragments = [Fragment(text=text or f"You are {s['name']}. {s['role']}")]
+    widget_settings = s.get("widgets") or {}
+    caps = s.get("guardrails") or {}
     return AgentDefinition(
         id=agent_id,
-        name=spec["name"],
-        role=spec["role"],
+        name=s["name"],
+        role=s["role"],
         version=version,
         instructions=fragments,
-        tools=list(spec.get("toolIds") or []),
-        default_kb_ids=list(spec.get("collections") or []),
-        all_team_knowledge=bool(spec.get("allTeamKnowledgeBases")),
-        accounts={str(k): str(v) for k, v in dict(spec.get("accounts") or {}).items()},
-        suggestions=list(spec.get("suggestions") or []),
-        max_tool_calls=_cap(spec, "maxToolCallsPerTurn", None),
-        max_model_calls=_cap(spec, "maxModelCallsPerTurn", LEGACY_MODEL_CALLS) or PLATFORM_MODEL_CALLS,
-        max_conversation_calls=_cap(spec, "maxModelCallsPerConversation", None) or PLATFORM_CONVERSATION_CALLS,
+        tools=list(s.get("toolIds") or []),
+        default_kb_ids=list(s.get("collections") or []),
+        all_team_knowledge=bool(s.get("allTeamKnowledgeBases")),
+        accounts={str(k): str(v) for k, v in dict(s.get("accounts") or {}).items()},
+        suggestions=list(s.get("suggestions") or []),
+        max_tool_calls=_cap(s, "maxToolCallsPerTurn", None),
+        max_model_calls=_cap(s, "maxModelCallsPerTurn", LEGACY_MODEL_CALLS) or PLATFORM_MODEL_CALLS,
+        max_conversation_calls=_cap(s, "maxModelCallsPerConversation", None) or PLATFORM_CONVERSATION_CALLS,
         max_conversation_cost=float(caps.get("maxCostPerConversation") or PLATFORM_CONVERSATION_COST),
         redact_pii=bool(caps.get("redactPii", True)),
-        guardrails=[GuardrailRule.model_validate(p) for p in cast(list[Any], spec.get("guardrailPins") or [])],
-        skills=[SkillPinRule.model_validate(p) for p in cast(list[Any], spec.get("skillPins") or [])],
-        model_alias=spec.get("model") or None,
+        guardrails=[GuardrailRule.model_validate(p) for p in s.get("guardrailPins") or []],
+        skills=[SkillPinRule.model_validate(p) for p in s.get("skillPins") or []],
+        model_alias=s.get("model") or None,
         limits=limits_of(spec),
-        widgets=[WidgetPinRule.model_validate(p) for p in cast(list[Any], spec.get("widgetPins") or [])],
+        widgets=[WidgetPinRule.model_validate(p) for p in s.get("widgetPins") or []],
         compose=bool(widget_settings.get("compose", False)),
-        widgets_per_turn=cast(int | None, widget_settings.get("perTurn")),
+        widgets_per_turn=widget_settings.get("perTurn"),
         memory_enabled=bool(memory_of(spec)["enabled"]),
         memory_kinds=tuple(memory_of(spec)["kinds"]),
-        skill_menu=spec.get("skillMenu") or "team",
+        skill_menu=s.get("skillMenu") or "team",
     )
 
 
-def agent_review_body(
-    agent_id: str, spec: dict[str, Any], row: AgentRow, v: AgentVersionRow, *, note: str, by: str
-) -> dict[str, Any]:
+def agent_review_body(agent_id: str, spec: Json, row: AgentRow, v: AgentVersionRow, *, note: str, by: str) -> Json:
     """The body of an `agent_publish` review for version `v`."""
+    s = cast(AgentSpec, spec)
     return {
         "agentId": agent_id,
-        "agentName": spec["name"],
+        "agentName": s["name"],
         "version": v.version,
         "fromVersion": row.published_version,
         "note": note,
@@ -181,7 +254,7 @@ def agent_review_body(
                 "name": p["name"],
                 "enabled": p.get("enabled", True),
             }
-            for p in cast(list[dict[str, Any]], spec.get("guardrailPins") or [])
+            for p in s.get("guardrailPins") or []
         ],
     }
 
@@ -192,7 +265,7 @@ SEED_BY = "seed"
 async def seed_agent_version(
     rt: Runtime,
     agent_id: str,
-    change: Callable[[dict[str, Any]], Awaitable[dict[str, Any]]],
+    change: Callable[[Json], Awaitable[Json]],
     note: str,
     *,
     by: str = SEED_BY,
@@ -239,7 +312,7 @@ def registry(rt: Runtime) -> AgentRegistry:
     return AgentRegistry(rt.db)
 
 
-def go_live(rt: Runtime, agent_id: str, version: int, spec: dict[str, Any]) -> None:
+def go_live(rt: Runtime, agent_id: str, version: int, spec: Json) -> None:
     """Serves `version`: its definition in the catalogue and the agent's own graph under `agent:<id>`."""
     rt.catalog.put_agent(definition_of(agent_id, version, spec))
     if rt.agent_graph is not None:
@@ -330,12 +403,12 @@ async def follow_seed(rt: Runtime, a: AgentDefinition, row: AgentRow) -> None:
     if all(spec.get(k) == v for k, v in want.items()):
         return
 
-    async def change(s: dict[str, Any]) -> dict[str, Any]:
+    async def change(s: Json) -> Json:
         return {
             **s,
             **want,
             "guardrails": {
-                **(s.get("guardrails") or GUARDRAILS),
+                **cast(Json, s.get("guardrails") or GUARDRAILS),
                 "maxToolCallsPerTurn": a.max_tool_calls,
                 "maxModelCallsPerTurn": a.max_model_calls,
             },
@@ -416,22 +489,24 @@ def version_state(row: AgentRow, v: int, pending: PublishRequestRow | None, reje
     return "superseded" if v < row.version else "draft"
 
 
-def agent_view(row: dict[str, Any], spec: dict[str, Any], tasks: int) -> dict[str, Any]:
+def agent_view(row: Mapping[str, JsonValue], spec: Json, tasks: int) -> dict[str, Any]:
+    """An agent's reply. Returned loose: the agents route adds keys of its own (`staleToolIds`, `usedIn`) to it."""
+    s = cast(AgentSpec, spec)
     published = row["published_version"]
     availability = "paused" if row["paused"] else "published" if published is not None else "not_published"
     return {
         "id": row["id"],
-        "name": spec["name"],
+        "name": s["name"],
         "slug": row["slug"],
-        "role": spec["role"],
-        "instructions": spec.get("instructions") or "",
-        "model": spec["model"],
-        "channels": spec.get("channels") or [],
-        "toolIds": spec.get("toolIds") or [],
-        "collections": spec.get("collections") or [],
-        "allTeamKnowledgeBases": bool(spec.get("allTeamKnowledgeBases")),
-        "skillMenu": spec.get("skillMenu") or "team",
-        "accounts": dict(spec.get("accounts") or {}),
+        "role": s["role"],
+        "instructions": s.get("instructions") or "",
+        "model": s["model"],
+        "channels": s.get("channels") or [],
+        "toolIds": s.get("toolIds") or [],
+        "collections": s.get("collections") or [],
+        "allTeamKnowledgeBases": bool(s.get("allTeamKnowledgeBases")),
+        "skillMenu": s.get("skillMenu") or "team",
+        "accounts": dict(s.get("accounts") or {}),
         # The owning team comes from the creator's token; the console names it from its teams list.
         "teamId": row["team_id"],
         "paused": bool(row["paused"]),
@@ -443,7 +518,7 @@ def agent_view(row: dict[str, Any], spec: dict[str, Any], tasks: int) -> dict[st
         # Needs resolution outcomes per thread, which no table records yet.
         "autoResolvedRate": 0,
         "workflowIds": [],
-        "guardrails": spec.get("guardrails") or GUARDRAILS,
+        "guardrails": s.get("guardrails") or GUARDRAILS,
         "guardrailPins": [
             {
                 "guardrailId": p["guardrailId"],
@@ -452,7 +527,7 @@ def agent_view(row: dict[str, Any], spec: dict[str, Any], tasks: int) -> dict[st
                 "topics": p["topics"],
                 "enabled": bool(p.get("enabled", True)),
             }
-            for p in cast(list[dict[str, Any]], spec.get("guardrailPins") or [])
+            for p in s.get("guardrailPins") or []
         ],
         **({"wrapperWorkflowId": f"agent:{row['id']}"} if published is not None else {}),
         "limits": wire_limits(limits_of(spec)),
@@ -463,9 +538,9 @@ def agent_view(row: dict[str, Any], spec: dict[str, Any], tasks: int) -> dict[st
                 "name": p["name"],
                 "requiresTools": required_tools(p.get("tree")),
             }
-            for p in cast(list[dict[str, Any]], spec.get("widgetPins") or [])
+            for p in s.get("widgetPins") or []
         ],
-        "widgets": {"compose": False, "perTurn": None, **(spec.get("widgets") or {})},
+        "widgets": {"compose": False, "perTurn": None, **(s.get("widgets") or {})},
         "memory": memory_of(spec),
         "controls": CONTROLS,
         "usedIn": [],
