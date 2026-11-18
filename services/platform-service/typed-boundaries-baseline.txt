@@ -1,4 +1,4 @@
-# 54 boundaries crossed without a model in services/platform-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 33 boundaries crossed without a model in services/platform-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 reply audit_read_audit
 1 reply auth_introspect
 1 reply auth_jwks_document
@@ -16,9 +16,6 @@
 8 dict-any services/platform-service/src/ops_platform/api/schemas.py
 2 dict-any services/platform-service/src/ops_platform/audit_log.py
 1 dict-any services/platform-service/src/ops_platform/bootstrap.py
-2 dict-any services/platform-service/src/ops_platform/oauth/clients.py
 1 dict-any services/platform-service/src/ops_platform/oauth/metadata.py
-17 dict-any services/platform-service/src/ops_platform/signin_settings.py
 3 dict-any services/platform-service/src/ops_platform/sso.py
 2 dict-any services/platform-service/src/ops_platform/store/seeding.py
-2 dict-any services/platform-service/src/ops_platform/store/signin.py

@@ -13,12 +13,11 @@ from typing import TypedDict
 
 from ops_access import ANY_TEAM
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
-from ops_service_kit.http import Json
 from ops_service_kit.listing import ListParams
 from ops_store.listing import ListPage
 
 from .store.members import Actor
-from .store.teams import ACTIVE, ARCHIVED, TeamAdminStore, TeamNameTakenError
+from .store.teams import ACTIVE, ARCHIVED, TeamAdminStore, TeamNameTakenError, TeamRow
 from .store.workspace import TeamNotUsableError, WorkspaceStore
 from .teams import Members
 
@@ -31,6 +30,34 @@ class WorkspaceTeams(TypedDict):
 class WorkspaceName(TypedDict):
     id: str
     name: str
+
+
+class TeamReply(TypedDict):
+    """A team as the routes send it: `TeamRow` by alias, in its field order."""
+
+    id: str
+    name: str
+    status: str
+    scope: str
+    createdAt: str
+    archivedAt: str | None
+    memberCount: int
+    adminCount: int
+    security: bool
+
+
+def team_reply(t: TeamRow) -> TeamReply:
+    return {
+        "id": t.id,
+        "name": t.name,
+        "status": t.status,
+        "scope": t.scope,
+        "createdAt": t.created_at,
+        "archivedAt": t.archived_at,
+        "memberCount": t.member_count,
+        "adminCount": t.admin_count,
+        "security": t.security,
+    }
 
 
 def _iso(t: datetime) -> str:
@@ -84,7 +111,7 @@ class TeamAdmin:
         await self.members.require_admin(workspace(actor), "access", "view")
         return await self.store.page(actor.tenant_id, params, statuses=statuses)
 
-    async def create(self, actor: Actor, name: str, admin_email: str) -> Json:
+    async def create(self, actor: Actor, name: str, admin_email: str) -> TeamReply:
         await self.members.require_admin(workspace(actor), "access", "manage")
         try:
             team_id = await self.store.create(
@@ -101,7 +128,7 @@ class TeamAdmin:
             raise NotFound("person")
         return await self._read(actor, team_id)
 
-    async def rename(self, actor: Actor, team_id: str, name: str) -> Json:
+    async def rename(self, actor: Actor, team_id: str, name: str) -> TeamReply:
         await self.members.require_admin(workspace(actor), "access", "manage")
         try:
             done = await self.store.rename(
@@ -114,7 +141,7 @@ class TeamAdmin:
             raise NotFound("team")
         return await self._read(actor, team_id)
 
-    async def set_status(self, actor: Actor, team_id: str, archived: bool) -> Json:
+    async def set_status(self, actor: Actor, team_id: str, archived: bool) -> TeamReply:
         await self.members.require_admin(workspace(actor), "access", "manage")
         if archived and team_id == await self.store.security_team_of(actor.tenant_id):
             raise Conflict("The Security team decides workspace settings and cannot be archived.", code="security_team")
@@ -126,8 +153,8 @@ class TeamAdmin:
             raise NotFound("team")
         return await self._read(actor, team_id)
 
-    async def _read(self, actor: Actor, team_id: str) -> Json:
+    async def _read(self, actor: Actor, team_id: str) -> TeamReply:
         found = await self.store.one(actor.tenant_id, team_id)
         if found is None:
             raise NotFound("team")
-        return found.model_dump(by_alias=True)
+        return team_reply(found)

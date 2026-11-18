@@ -37,10 +37,11 @@ from ops_signin import (
     VerifiedIdentity,
 )
 from ops_signin.saml import sp_metadata
+from ops_store.documents import Reader, StoredShapeError
 
 from .auth import SSO_METHODS, Auth, Issued, StepUpIssued
 from .store.identity import IdentityStore
-from .store.signin import Flow, Provider, SignInStore, group_settings
+from .store.signin import OIDC_SIGN_IN, SAML_SIGN_IN, Flow, Provider, SignInStore, group_settings
 from .store.signin_secrets import SignInSecretStore
 
 log = get_logger(__name__)
@@ -64,6 +65,18 @@ def _hash(value: str) -> str:
 
 def _unix(iso: str) -> int:
     return int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp())
+
+
+def _sign_in_settings[S](shape: Reader[S], p: Provider) -> S:
+    """The provider's stored settings a sign-in uses, read as `shape`; a missing key or another type refuses the
+    sign-in as not configured, and the settings pages still show the provider so an admin can correct it."""
+    try:
+        return shape(p.stored)
+    except StoredShapeError as e:
+        log.warning("sso_settings_refused", provider=p.id, error=str(e))
+        raise ServiceUnavailable(
+            "The sign-in provider's settings are not valid; an admin can save them again.", code="sso_not_configured"
+        ) from e
 
 
 def _groups_source(p: Provider) -> str | None:
@@ -152,14 +165,14 @@ class Sso:
         return self.public_url.rstrip("/"), self.console_url.rstrip("/")
 
     async def _oidc(self, p: Provider) -> OidcClient:
-        c = p.config
+        c = _sign_in_settings(OIDC_SIGN_IN, p)
         ref = c.get("clientSecretRef")
         secret = await self.secrets.value(p.tenant_id, str(ref)) if ref else None
         if ref and secret is None:
             raise ServiceUnavailable("The sign-in provider's secret is not set.", code="sso_not_configured")
         config = OidcConfig(
-            issuer=str(c["issuer"]),
-            client_id=str(c["clientId"]),
+            issuer=c["issuer"],
+            client_id=c["clientId"],
             client_secret=secret,
             scopes=tuple(c.get("scopes") or ("openid", "email", "profile")),
             groups_claim=_groups_source(p),
@@ -188,15 +201,15 @@ class Sso:
 
     def _saml(self, p: Provider) -> SamlServiceProvider:
         public, _ = self._urls()
-        c = p.config
-        needs_key = bool(c.get("signRequests") or c.get("requireEncryption"))
+        c = _sign_in_settings(SAML_SIGN_IN, p)
+        needs_key = bool(p.stored.get("signRequests") or p.stored.get("requireEncryption"))
         if needs_key and self.sp_key is None:
             raise ServiceUnavailable("The service provider key is not set.", code="sso_not_configured")
         at = saml_addresses(public, p.sp_id)
         return SamlServiceProvider(
             SamlConfig(
-                idp_entity_id=str(c["idpEntityId"]),
-                idp_sso_url=str(c["ssoUrl"]),
+                idp_entity_id=c["idpEntityId"],
+                idp_sso_url=c["ssoUrl"],
                 idp_certificates=tuple(x.pem for x in p.certificates) or (str(c.get("certificate") or ""),),
                 sp_entity_id=at["entityId"],
                 acs_url=at["acsUrl"],
@@ -204,8 +217,8 @@ class Sso:
                 name_attribute=c.get("nameAttribute"),
                 groups_attribute=_groups_source(p),
                 sp_key=self.sp_key.get_secret_value() if self.sp_key else None,
-                sign_requests=bool(c.get("signRequests")),
-                require_encryption=bool(c.get("requireEncryption")),
+                sign_requests=bool(p.stored.get("signRequests")),
+                require_encryption=bool(p.stored.get("requireEncryption")),
             )
         )
 
