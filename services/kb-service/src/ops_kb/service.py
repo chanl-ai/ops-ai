@@ -34,7 +34,7 @@ from ops_ingest.strategies.faq import piece_digest
 from ops_ingest.text import approx_tokens
 from ops_service_kit import narrow
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
-from ops_service_kit.http import Json, JsonValue, options_page, options_window
+from ops_service_kit.http import Json, JsonValue, PageJSON, options_page, options_window
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
@@ -65,13 +65,17 @@ from .retrieval import Found, Lane, Passage, Retriever, Scope, Search
 from .schemas import (
     AccessSettings,
     AnswerSettings,
+    IndexJob,
     ItemReading,
+    PassageOut,
     PreviewIn,
     ReadingPage,
     RetrievalSettings,
     ScopesIn,
     ScopesPage,
+    SearchOut,
     SourceDefaults,
+    SourceHealth,
     SourcePreview,
     SyncSettings,
     Tombstone,
@@ -233,7 +237,7 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
 
 
-def pagination(total: int, page: int, page_size: int) -> dict[str, Any]:
+def pagination(total: int, page: int, page_size: int) -> PageJSON:
     """The pagination block for `total` rows, `page` held to the pages there are (a store pages the same way)."""
     total_pages = max(1, -(-total // page_size))
     page = max(1, min(page, total_pages))
@@ -414,13 +418,13 @@ class KnowledgeService:
         source whose items are a website's pages starts with a website's defaults."""
         return stored(kind_of(s), s.settings, ocr=self.ocr)
 
-    def schedule_of(self, s: SourceRow) -> dict[str, Any]:
+    def schedule_of(self, s: SourceRow) -> Json:
         """When the source syncs on its own: its saved schedule, else its plugin's for its kind of source, else a
         website's daily check, else manual."""
         saved = self.settings_of(s).schedule
         if saved is not None:
             return saved
-        cfg: dict[str, Any] = dict(s.config or {})
+        cfg: Json = dict(s.config or {})
         if kind_of(s) == "web":
             return WEB_SCHEDULE
         return json_object(cfg.get("schedule")) or {"kind": "manual"}
@@ -447,7 +451,7 @@ class KnowledgeService:
 
     def _source(self, s: SourceRow, used_by: list[str]) -> dict[str, Any]:
         tool = s.type == "tool"
-        cfg: dict[str, Any] = dict(s.config or {})
+        cfg: Json = dict(s.config or {})
         applied = wire(self.settings_of(s))
         return {
             "id": s.id,
@@ -484,7 +488,7 @@ class KnowledgeService:
             "aiCeiling": applied["aiCeiling"],
             "aiStepsWaiting": ai_steps_waiting(self.settings_of(s).ingest),
             # Hosts of the source's own site an admin has yet to approve; nothing is fetched until they are.
-            "waitingHosts": list(cfg.get("waitingHosts") or []) if tool else [],
+            "waitingHosts": list(json_list(cfg.get("waitingHosts"))) if tool else [],
             "tags": s.tags,
             "titleFrom": "heading",
             "permissions": {"mode": "workspace"},
@@ -494,7 +498,7 @@ class KnowledgeService:
                 if s.status == "active" and (n := next_run(schedule, s.last_sync_at, datetime.now(UTC)))
                 else {}
             ),
-            "health": health_of(s),
+            "health": health_of(s).model_dump(by_alias=True, exclude_unset=True),
             "deletedAtSource": "remove",
             "staleAfterDays": 365,
             "notifyOnFailure": True,
@@ -514,19 +518,19 @@ class KnowledgeService:
         rows = await self.store.sources(tenant)
         return {str(x.id): {**x.item_counts, "synced": x.last_sync_at, "freshness": self.freshness_of(x)} for x in rows}
 
-    async def _jobs(self, tenant: str, source_ids: list[str]) -> list[dict[str, Any]]:
+    async def _jobs(self, tenant: str, source_ids: list[str]) -> list[IndexJob]:
         """A knowledge base's recent index jobs: the newest runs of the sources it reads, as the Overview lists them."""
         runs = await self.store.runs(tenant, source_ids=source_ids, limit=10)
         return [
-            {
-                "id": r.id,
-                "startedAt": _iso(r.started_at),
-                "durationSec": r.duration_sec,
-                "processed": r.counts.get("upserted", 0),
-                "failed": r.counts.get("failed", 0),
-                "status": r.status,
-                "trigger": r.trigger,
-            }
+            IndexJob(
+                id=r.id,
+                started_at=r.started_at.astimezone(UTC).isoformat(),
+                duration_sec=r.duration_sec,
+                processed=r.counts.get("upserted", 0),
+                failed=r.counts.get("failed", 0),
+                status=r.status,
+                trigger=r.trigger,
+            )
             for r in runs
         ]
 
@@ -535,7 +539,7 @@ class KnowledgeService:
         b: BaseRow,
         source_ids: list[str],
         counts: dict[str, dict[str, Any]],
-        jobs: list[dict[str, Any]] | None = None,
+        jobs: list[IndexJob] | None = None,
     ) -> dict[str, Any]:
         mine = [counts.get(sid, {}) for sid in source_ids]
         # When the base was last read: its newest source sync, the same time each source row shows. Content changing
@@ -597,7 +601,7 @@ class KnowledgeService:
             "healthReasons": reasons,
             **({"lastRefreshedAt": _iso(b.last_refreshed_at)} if b.last_refreshed_at else {}),
             **({"lastSyncAt": _iso(synced)} if synced else {}),
-            "jobs": jobs or [],
+            "jobs": [j.model_dump(by_alias=True) for j in jobs or []],
             "createdAt": _iso(b.created_at),
         }
 
@@ -1228,10 +1232,10 @@ class KnowledgeService:
             return
         items = [i for i in await self.store.items(who.tenant_id, source_ids=[source_id]) if i.status == "indexed"]
         found = repeated([str(x) for x in i.lines] if i.lines is not None else None for i in items)
-        cfg: dict[str, Any] = dict(s.config or {})
-        if found == list(cfg.get("repeats") or []):
+        cfg: Json = dict(s.config or {})
+        if found == list(json_list(cfg.get("repeats"))):
             return
-        cfg["repeats"] = found
+        cfg["repeats"] = [*found]
         await self.store.update_source(who.tenant_id, source_id, {"config": cfg})
         await self.start_rebuild(who, s.model_copy(update={"config": cfg}))
 
@@ -2045,7 +2049,10 @@ class KnowledgeService:
             raise NotFound(f"No knowledge base with id {missing[0]}.")
         live = [k for k in dict.fromkeys(kb_ids) if k in readable]
         found = await self._retrieve(tenant, [readable[k] for k in live], question, limit=limit, collection=collection)
-        return {**found_out(found), "answers": {k: settings_of(readable[k])["answer"] for k in live}}
+        return {
+            **found_out(found).model_dump(by_alias=True, exclude_unset=True),
+            "answers": {k: settings_of(readable[k])["answer"] for k in live},
+        }
 
     async def _retrieve(
         self,
@@ -2166,7 +2173,7 @@ class KnowledgeService:
                 for n, p in enumerate(passages)
             ],
             **({"noAnswer": True} if not passages else {}),
-            **found_out(found),
+            **found_out(found).model_dump(by_alias=True, exclude_unset=True),
             "retrievalMs": int((datetime.now(UTC) - started).total_seconds() * 1000),
             "synthesisMs": 0,
             "shape": "chunks",
@@ -2237,7 +2244,7 @@ class KnowledgeService:
         saved ones and checked against what its plugin declares, as a create checks them."""
         if s.type != "tool":
             raise ValidationFailed("Only a source read through an app has settings of its own.")
-        cfg: dict[str, Any] = dict(s.config or {})
+        cfg: Json = dict(s.config or {})
         merged = {**json_object(cfg.get("values")), **given}
         checked = await source_config(
             self.tools, who, {"plugin": cfg.get("plugin"), "source": cfg.get("source"), "values": merged}
@@ -2338,8 +2345,8 @@ class KnowledgeService:
     async def lift_tombstones(self, who: Who, source_id: str, ids: list[str]) -> list[Tombstone]:
         """Lets the next sync take those addresses in again, if the source still lists them."""
         s = await self._changeable_source(who, source_id)
-        cfg: dict[str, Any] = dict(s.config or {})
-        marks = json_object(dict(cfg.get("tombstones") or {}))
+        cfg: Json = dict(s.config or {})
+        marks = dict(narrow.an_object(cfg.get("tombstones") or {}, "tombstones"))
         if missing := [i for i in ids if i not in marks]:
             raise NotFound(f"No tombstone for {missing[0]}.")
         cfg["tombstones"] = {k: v for k, v in marks.items() if k not in ids}
@@ -3008,7 +3015,7 @@ def _run(r: RunRow) -> dict[str, Any]:
     }
 
 
-def health_of(s: SourceRow) -> dict[str, Any]:
+def health_of(s: SourceRow) -> SourceHealth:
     """A source's health in one place: never synced, healthy, failing (since when, for how many days) or waiting for
     its connection to be signed in again."""
     cfg = dict(s.config or {})
@@ -3016,14 +3023,16 @@ def health_of(s: SourceRow) -> dict[str, Any]:
     good: datetime | None = s.last_good_sync_at
     reconnect = cfg.get("paused") == "needs_reconnect"
     state = "needs_reconnect" if reconnect else "failing" if since else "healthy" if good or s.last_sync_at else "never"
-    return {
-        "state": state,
-        **({"lastGoodSyncAt": _iso(good)} if good else {}),
-        **({"failingSince": _iso(since)} if since else {}),
-        "daysFailing": (datetime.now(UTC) - since).days if since else 0,
-        "failedRuns": int(s.failures_in_row or 0),
-        "tombstoned": len(json_object(cfg.get("tombstones"))),
-    }
+    return SourceHealth.model_validate(
+        {
+            "state": state,
+            **({"lastGoodSyncAt": _iso(good)} if good else {}),
+            **({"failingSince": _iso(since)} if since else {}),
+            "daysFailing": (datetime.now(UTC) - since).days if since else 0,
+            "failedRuns": int(s.failures_in_row or 0),
+            "tombstoned": len(json_object(cfg.get("tombstones"))),
+        }
+    )
 
 
 def kind_defaults(kind: str, ocr: str, *, plugin_schedule: dict[str, JsonValue] | None = None) -> dict[str, Any]:
@@ -3274,14 +3283,18 @@ def search_settings(bases: list[BaseRow], *, limit: int | None = None, collectio
     )
 
 
-def found_out(found: Found) -> dict[str, Any]:
-    return {
-        "passages": [passage_out(p) for p in found.passages],
-        "lanes": found.lanes_out(),
-        "cost": {"embeddingTokens": found.embedding_tokens},
-        **({"rewrite": found.rewrite} if found.rewrite is not None else {}),
-        **({"rerank": found.rerank} if found.rerank is not None else {}),
-    }
+def found_out(found: Found) -> SearchOut:
+    """The search reply without `answers`, which only the search route adds; dumped with `exclude_unset`, so a key
+    the search did not fill (a rewrite or rerank that was not asked for) is left out as before."""
+    return SearchOut.model_validate(
+        {
+            "passages": [passage_out(p) for p in found.passages],
+            "lanes": found.lanes_out(),
+            "cost": {"embeddingTokens": found.embedding_tokens},
+            **({"rewrite": found.rewrite} if found.rewrite is not None else {}),
+            **({"rerank": found.rerank} if found.rerank is not None else {}),
+        }
+    )
 
 
 def checked_retrieval(r: dict[str, Any]) -> dict[str, Any]:
@@ -3403,21 +3416,23 @@ def _refusal(section: str, e: ValidationError) -> str:
     return f"{section}.{where}: {first['msg']}"
 
 
-def passage_out(p: Passage) -> dict[str, Any]:
-    return {
-        "kbId": p.kb_id,
-        "itemId": p.item_id,
-        "version": f"v{p.version}",
-        "title": p.title,
-        "section": p.section,
-        **({"page": p.page} if p.page else {}),
-        "snippet": p.snippet,
-        "text": p.text,
-        "score": p.score,
-        **({"fileId": p.file_id} if p.file_id else {}),
-        **({"url": p.url} if p.url else {}),
-        "matched": p.matched,
-        "lanes": p.lanes,
-        "verified": p.verified,
-        **({"reranked": p.reranked} if p.reranked is not None else {}),
-    }
+def passage_out(p: Passage) -> PassageOut:
+    return PassageOut.model_validate(
+        {
+            "kbId": p.kb_id,
+            "itemId": p.item_id,
+            "version": f"v{p.version}",
+            "title": p.title,
+            "section": p.section,
+            **({"page": p.page} if p.page else {}),
+            "snippet": p.snippet,
+            "text": p.text,
+            "score": p.score,
+            **({"fileId": p.file_id} if p.file_id else {}),
+            **({"url": p.url} if p.url else {}),
+            "matched": p.matched,
+            "lanes": p.lanes,
+            "verified": p.verified,
+            **({"reranked": p.reranked} if p.reranked is not None else {}),
+        }
+    )

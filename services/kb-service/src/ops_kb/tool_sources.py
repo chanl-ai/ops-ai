@@ -16,15 +16,16 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, TypedDict, cast
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import Conflict, ValidationFailed
-from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import new_id
-from ops_service_kit.narrow import a_list, an_object, json_list, json_object
+from ops_service_kit.narrow import a_list, an_object, as_json, json_list, json_object
+from ops_store import documents
 
 from .ai import spent_on
 from .files import FileNotScanned, Stored
@@ -100,6 +101,43 @@ class Host(BaseModel):
 
 
 HOSTS = TypeAdapter(list[Host])
+
+
+class SourceConfig(TypedDict, total=False):
+    """A tool source's stored `config`: what `source_config` wrote at create, and what each sync keeps between runs
+    (where its listing got to, which items it saw and which it tombstoned). Every key is optional, since a source
+    made before a key existed lacks it, and each declared type admits the null an older writer may have stored."""
+
+    plugin: str | None
+    source: str | None
+    title: str | None
+    listTool: str | None
+    getTool: str | None
+    changesTool: str | None
+    scopesTool: str | None
+    previewTool: str | None
+    listsWhole: bool | None
+    # Read with int(); a string or float an older writer stored still reads.
+    fetchAtOnce: int | float | str | None
+    site: bool | None
+    getTakesTag: bool | None
+    connectionId: str | None
+    schedule: Json | None
+    values: Json | None
+    waitingHosts: JsonList | None
+    # `needs_reconnect` while the connection refuses its sign-in; a bool from older writers.
+    paused: bool | str | None
+    lastFullAt: str | None
+    watermark: JsonValue
+    cursor: JsonValue
+    changesCursor: JsonValue
+    seenSoFar: list[str] | None
+    tombstones: JsonValue
+    repeats: JsonValue
+
+
+# Read with the source row's `config`; a key holding another type fails the read (`StoredShapeError`).
+SOURCE_CONFIG = documents.stored(SourceConfig)
 
 
 def waiting_in(cfg: dict[str, JsonValue]) -> list[str]:
@@ -192,7 +230,9 @@ class ToolReader:
         )
         return list(answer or [])
 
-    async def call(self, tenant_id: str, team_id: str, tool: str, args: dict[str, JsonValue], *, act: str) -> Answer:
+    async def call(
+        self, tenant_id: str, team_id: str, tool: str | None, args: dict[str, JsonValue], *, act: str
+    ) -> Answer:
         body = {
             "tool": tool,
             "input": args,
@@ -397,7 +437,7 @@ async def sync_tool_source(
     trigger: str,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> RunWrite:
-    cfg: dict[str, Any] = dict(s.config or {})
+    cfg = SOURCE_CONFIG(s.config or {})
     tenant, team, source_id = who.tenant_id, str(s.team_id), str(s.id)
     act = f"kb-sync:{source_id}"
     if cfg.get("paused") == "needs_reconnect":
@@ -424,18 +464,23 @@ async def sync_tool_source(
     cursor = cfg.get("cursor") if trigger != "full" else None
     # The source's own settings go to every call; an incremental run lists only what changed when the plugin has a
     # changes tool and a cursor from the last run, else lists from the watermark.
-    given: Json = {"source": cfg["values"]} if cfg.get("values") else {}
+    given: Json = {"source": values} if (values := cfg.get("values")) else {}
     by_changes = bool(not full and cfg.get("changesTool") and cfg.get("changesCursor"))
-    list_tool = str(cfg["changesTool"] if by_changes else cfg["listTool"])
+    if by_changes:
+        list_tool = str(cfg.get("changesTool"))
+    elif "listTool" in cfg:
+        list_tool = str(cfg["listTool"])
+    else:
+        raise KeyError("listTool")
     if by_changes and not cursor:
-        cursor = cfg["changesCursor"]
+        cursor = cfg.get("changesCursor")
     removed_at_source: list[str] = []
-    tombstones = cast(dict[str, Any], cfg.setdefault("tombstones", {}))
+    tombstones = an_object(cfg.setdefault("tombstones", {}), "tombstones")
     gone_now: list[str] = []
     # Only a listing read from its first page sees every item, so only then is an unseen item removed. One longer than a
     # run's pages carries what it listed so far (`seenSoFar`) into the run that finishes it.
     from_start = cursor is None
-    carried = set(cast(list[str], cfg.get("seenSoFar") or [])) if cursor else set[str]()
+    carried = set(cfg.get("seenSoFar") or []) if cursor else set[str]()
     whole = from_start or "seenSoFar" in cfg
     if from_start:
         cfg.pop("seenSoFar", None)
@@ -450,7 +495,7 @@ async def sync_tool_source(
     watermark: str | None = None
 
     async def save() -> None:
-        await service.store.update_source(tenant, source_id, {"config": dict(cfg)})
+        await service.store.update_source(tenant, source_id, {"config": an_object(as_json(cfg), "source config")})
 
     pages, restarted, resumes = 0, False, False
     # The seconds between two fetches of this source's items: the source's own rate, or the slower pace its listing
@@ -555,6 +600,8 @@ async def sync_tool_source(
             tag = {"tag": held.tag} if cfg.get("getTakesTag") and held and held.tag else {}
             async with lock:
                 await paced.turn()
+                if "getTool" not in cfg:
+                    raise KeyError("getTool")
                 return await reader.call(tenant, team, cfg["getTool"], {**given, "id": item_id, **tag}, act=act)
 
         # An item the listing already read (a crawl following links) is not fetched again.
