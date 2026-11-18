@@ -35,6 +35,8 @@ A rollback (`make stg-rollback`, also run by `deploy-staging.yml` when a check f
 
 CI on a `release/*` or `hotfix/*` push runs in full whatever changed (every service and package, `checks`, release-proof and both databases), because the impact plan once skipped a job there and a failure reached develop untested; develop and pull requests keep the impact plan.
 
+Upgrades from a release before 874530fa use the online path (migrations at start-up), not the offline SQL; `docs/deploy/database.md` explains why, and release-proof starts from 874530fa when the last tag is older.
+
 The use cases and the owner's click-through are not recorded in the repository, so the script cannot check them. A
 branch is checked on every push (`ci.yml` lists `release/**` and `hotfix/**`), so each commit on it has a run; a
 branch's first push compares with `origin/main`, so the first run covers the whole release.

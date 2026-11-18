@@ -310,8 +310,13 @@ jobs:
         run: |
           last=$(git tag --list 'v20*' --sort=-v:refname | head -1)
           [ -n "$last" ] || { echo "::error title=No release tag::The upgrade proof needs the last release's tag."; exit 1; }
-          echo "upgrade from $last"
-          make db-scripts-proof FROM="$last"
+          floor=$(sed -n 's/^FLOOR=//p' deploy/database/proof.sh)
+          if git merge-base --is-ancestor "$floor" "$last"; then from=$last; else
+            from=$floor
+            echo "$last is before $floor, the offline-upgrade floor (docs/deploy/database.md); proving from $floor"
+          fi
+          echo "upgrade from $from"
+          make db-scripts-proof FROM="$from"
       - name: A fresh install
         run: make install-proof
 
