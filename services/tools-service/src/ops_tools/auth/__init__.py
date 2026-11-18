@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlsplit
 
 from ops_identity import ActingForPerson
+from ops_service_kit.http import Json
 
 from ..connections.account_events import CONNECTED, connected_key, needs_reconnect_event
 from ..connections.records import EXPIRED, REFUSED
@@ -397,7 +398,7 @@ class Authenticator:
         message = (
             f"{name} needs reconnecting: {why} An admin reconnects its team account under Apps, then runs it again."
         )
-        details = {
+        details: Json = {
             "connectionId": connection_id, "appId": str(conn.app_id), "app": name, "connection": name,
             "account": "team", "state": state,
             # What a run waits on until an admin signs the team account in again: that sign-in reports it.
@@ -430,7 +431,7 @@ class Authenticator:
             else f"{name} signs in as each person, and this call acts for nobody."
         )
         reason: NotLinkedReason = "needs_person" if backed else "no_person"
-        details = {
+        details: Json = {
             "connectionId": str(conn.id),
             "appId": str(conn.app_id),
             "connection": str(name),

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Literal, TypedDict, cast
 
 from ops_access import tool_waits
 from ops_agents.activities.catalog import Catalog
+from ops_service_kit.http import Json, JsonValue
 from ops_store.team_scope import acting_team
 
 from .connections.records import account_for
@@ -23,7 +24,16 @@ from .modules.policy import tool_mode
 from .modules.seed import PLATFORM_TOOLS, READ_TOOLS, SENDS, ensure_platform_tools, tool_title
 from .modules.seed import WORKFLOW_TOOLS as PLATFORM_MODULE_TOOLS
 from .store.connections import ConnectionStore
-from .store.modules import Aggregate, InputField, Module, ModuleStore, Operation, operation_defaults, served_operations
+from .store.modules import (
+    Aggregate,
+    CodeLimits,
+    InputField,
+    Module,
+    ModuleStore,
+    Operation,
+    operation_defaults,
+    served_operations,
+)
 from .store.team_defaults import TeamDefaults
 
 if TYPE_CHECKING:
@@ -61,12 +71,41 @@ def approval_policy(module: Module, op: Operation) -> ApprovalPolicy:
     }
 
 
-def input_schema(fields: list[InputField]) -> dict[str, Any]:
+class GrantableTool(TypedDict):
+    """One tool as the grant lists and the MCP adapter show it (`ToolRegistry.grantable`)."""
+
+    name: str
+    title: str | None
+    description: str
+    access: str
+    input_schema: Json
+    requires_approval: bool
+    setting: str | bool | None
+    setting_role: str | None
+    approvers: int
+    step_up: bool
+    output_shape: str | None
+    module_id: str | None
+    module_name: str | None
+
+
+class GrantableRow(GrantableTool, total=False):
+    """A grantable tool with what `/v1/grantable-operations` adds to it: whether the team added it, the approval answer
+    its setting, app and team give, and whether its app has a test account."""
+
+    added: bool
+    answer: str
+    reviewer_role: str | None
+    source: str
+    test_account: bool
+
+
+def input_schema(fields: list[InputField]) -> Json:
     """An operation's input fields as the JSON Schema a model is handed. Unknown arguments are refused at the gateway
     (`invalid_fields`), so the schema says so too."""
-    props: dict[str, Any] = {}
+    props: Json = {}
     for f in fields:
-        prop: dict[str, Any] = {"type": f["type"] if f["type"] in JSON_TYPES else "string"}
+        prop: Json = {"type": f["type"] if f["type"] in JSON_TYPES else "string"}
         if description := f.get("description"):
             prop["description"] = description
         if enum := f.get("enum"):
@@ -76,7 +115,7 @@ def input_schema(fields: list[InputField]) -> dict[str, Any]:
         if (default := f.get("default")) is not None:
             prop["default"] = default
         props[f["name"]] = prop
-    required = [f["name"] for f in fields if f.get("required")]
+    required: list[JsonValue] = [f["name"] for f in fields if f.get("required")]
     return {"type": "object", "properties": props, "required": required, "additionalProperties": False}
 
 
@@ -178,7 +217,7 @@ class ToolRegistry:
         definition = self.catalog.tool(tool)
         return definition.access if definition else "unknown"
 
-    async def grantable(self, tenant_id: str, sees: Sees | None = None) -> list[dict[str, Any]]:
+    async def grantable(self, tenant_id: str, sees: Sees | None = None) -> list[GrantableTool]:
         """The operations an agent may be granted: every enabled operation of a published module that has not drifted,
         the same conditions `/v1/calls` checks before it runs one. Without a module store, the agents catalogue.
         `sees` keeps the modules one team sees (the MCP adapter lists a team's tools)."""
@@ -204,7 +243,7 @@ class ToolRegistry:
         await self._platform_tools(tenant_id)
         if self.plugins is not None:
             await self.plugins.ensure(tenant_id, datetime.now(UTC))
-        rows: list[dict[str, Any]] = []
+        rows: list[GrantableTool] = []
         # A person's grant list reads their team's modules; another service's, every team's (`all_teams`).
         modules = await (self.modules.all(tenant_id) if sees is not None else self.modules.all_teams(tenant_id))
         # A tool the acting team holds in a module of its own (its built-in copy) is the one a call resolves to,
@@ -263,7 +302,7 @@ class ToolRegistry:
 
     async def described(
         self, tool: str, tenant_id: str, team_id: str | None = None
-    ) -> tuple[str, ApprovalPolicy | None, dict[str, Any] | None, float | None]:
+    ) -> tuple[str, ApprovalPolicy | None, Json | None, float | None]:
         """access_for, policy_for, output_schema_for and the deadline of `tool`, from one resolve: a review list asks
         this once per tool, and resolving three times read the tool's module three times."""
         resolved = await self.resolve(tool, tenant_id=tenant_id, team_id=team_id)
@@ -289,7 +328,8 @@ class ToolRegistry:
             return None
         op, module = resolved.operation, resolved.module
         if op.get("executor") == "code":
-            limits = cast(dict[str, Any], cast(dict[str, Any], op.get("code") or {}).get("limits") or {})
+            code = op.get("code")
+            limits: CodeLimits | dict[str, float] = (code.get("limits") if code else None) or {}
             return float(limits.get("timeS", 10)) + 15.0
         limit_ms = op.get("timeout_ms") or module.get("timeout_ms")
         return float(limit_ms) / 1000 + 5.0 if limit_ms else None
@@ -330,19 +370,19 @@ class ToolRegistry:
             return None
         return approval_policy(resolved.module, resolved.operation)
 
-    async def output_schema_for(self, tool: str, tenant_id: str, team_id: str | None = None) -> dict[str, Any] | None:
+    async def output_schema_for(self, tool: str, tenant_id: str, team_id: str | None = None) -> Json | None:
         """The shape of what the tenant's operation `tool` answers: its imported response schema, else one
         inferred from its example response (open, since an example may leave fields out), else None."""
         if self.modules is None:
             return None
         return self._output(await self.resolve(tool, tenant_id=tenant_id, team_id=team_id))
 
-    def _output(self, resolved: Resolved | None) -> dict[str, Any] | None:
+    def _output(self, resolved: Resolved | None) -> Json | None:
         if self.modules is None or resolved is None or resolved.operation is None:
             return None
         op = resolved.operation
         if isinstance(op.get("response_schema"), dict) and op["response_schema"]:
-            return cast(dict[str, Any], op["response_schema"])
+            return op["response_schema"]
         stub = op.get("stub")
         # {"ok": true} is the stub an import writes when the document gives no example.
         return inferred(stub) if stub not in (None, {"ok": True}) else None

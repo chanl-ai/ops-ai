@@ -4,10 +4,11 @@ the models validate them where the routes answer."""
 
 from typing import Literal, NotRequired, TypedDict
 
-from ops_service_kit.http import Json, JsonList, JsonValue
+from ops_service_kit.http import Json, JsonValue
 
 from .app_states import AppGroup
 from .connections.service import AccountView
+from .modules.executions import CallRowJson
 from .plugins.host import IdentityRow, SignInValueRow
 
 # An app credential's status, from the last Test with my account (connections.service check_credential).
@@ -329,4 +330,4 @@ class AppPageRow(TypedDict):
     authConfigs: list[AuthConfigRow]
     tools: list[ToolRow]
     skills: list[SkillRow]
-    usage: JsonList
+    usage: list[CallRowJson]

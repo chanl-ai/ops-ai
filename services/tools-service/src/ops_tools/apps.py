@@ -29,7 +29,7 @@ from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.manifest import Setting
 from ops_plugin_sdk.versions import tools_of
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
-from ops_service_kit.http import Envelope, In, Json, JsonList, JsonValue, ListResult, Out, ok
+from ops_service_kit.http import Envelope, In, Json, JsonValue, ListResult, Out, ok
 from ops_service_kit.listing import ListParams, ListQuery
 from ops_service_kit.narrow import an_object
 from ops_store import isolation
@@ -85,6 +85,7 @@ from .connections.service import (
 from .connectors import MyConnector, my_connectors
 from .defaults import DEFAULTS_VERSION, ensure_defaults
 from .modules.directory import Directory
+from .modules.executions import CallRowJson
 from .modules.policy import WriteApprovals, tool_mode
 from .modules.routes import ERRORS
 from .modules.schemas import ToolCallRow
@@ -2031,7 +2032,7 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> AppPageRow:
              "askedAtSignIn": t["askedAtSignIn"]}
             for t in await app_tools(apps, who, card)
         ]  # fmt: skip
-        usage: JsonList = []
+        usage: list[CallRowJson] = []
         if apps.calls is not None and card["moduleIds"]:
             # The latest calls name their callers, so they come only to whoever reads the call log (activity.view);
             # anyone else gets the page without them.
@@ -2052,7 +2053,8 @@ async def app_page(apps: Apps, who: Caller, app_id: str) -> AppPageRow:
         plugin = _plugin(apps, card)
         if plugin is not None:
             skills = [
-                {"kind": t.kind, "id": t.id, "title": view_of(plugin, t)["title"]} for t in plugin.manifest.templates
+                {"kind": t.kind, "id": t.id, "title": cast(str, view_of(plugin, t)["title"])}
+                for t in plugin.manifest.templates
             ]
         accounts = await _accounts(apps, who, card)
         page: AppPageRow = {

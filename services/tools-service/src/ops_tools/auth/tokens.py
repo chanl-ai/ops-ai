@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-from collections.abc import Awaitable, Callable, Iterable, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -21,6 +21,7 @@ import httpx
 from pydantic import JsonValue
 
 from ops_policy import CipherError, CredentialStore
+from ops_service_kit.http import Json
 
 from ..egress import EgressDenied, EgressPolicy, for_tenant
 from ..store.connections import SHARED, ConnectionStore, Held, TokenFields, TokenRow, held_of
@@ -44,7 +45,7 @@ class AuthFailed(Exception):
         message: str,
         side: str = "ours",
         status: int | None = None,
-        details: dict[str, Any] | None = None,
+        details: Json | None = None,
     ) -> None:
         super().__init__(message)
         self.code, self.side, self.status = code, side, status
@@ -76,7 +77,7 @@ class ClientProof:
     signed: list[str] = field(default_factory=list[str])
 
 
-def _claims(raw: Any) -> dict[str, Any]:
+def _claims(raw: Any) -> Json:
     """A JWT's claims, unverified; empty when `raw` is not one."""
     if not isinstance(raw, str) or raw.count(".") < 1:
         return {}
@@ -85,7 +86,7 @@ def _claims(raw: Any) -> dict[str, Any]:
         claims: Any = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
     except ValueError:
         return {}
-    return cast(dict[str, Any], claims) if isinstance(claims, dict) else {}
+    return cast(Json, claims) if isinstance(claims, dict) else {}
 
 
 # The key under which a plugin's sign-in hook hands back whom a lookup after sign-in named; never an account setting.
@@ -100,13 +101,13 @@ def person_named(doc: Any) -> str | None:
     if not isinstance(doc, dict):
         return None
     for name in PERSON_FIELDS:
-        value = cast(dict[str, Any], doc).get(name)
+        value = cast(Json, doc).get(name)
         if isinstance(value, str) and value.strip() and "://" not in value:
             return value.strip()
     return None
 
 
-def account_of(answer: dict[str, Any]) -> str | None:
+def account_of(answer: Mapping[str, JsonValue]) -> str | None:
     """Who signed in, from the token answer's id token when it names a person. The id token is not verified here;
     nothing is decided from it."""
     return person_named(_claims(answer.get("id_token")))
@@ -117,7 +118,7 @@ def scope_list(value: Any) -> list[str]:
     return [str(x) for x in cast(list[Any], value)] if isinstance(value, list) else []
 
 
-def granted_scopes(answer: dict[str, Any], requested: list[str]) -> list[str]:
+def granted_scopes(answer: Mapping[str, JsonValue], requested: list[str]) -> list[str]:
     """The scopes a token answer granted: its `scope`, else the access token's `scope` or `scp` claim, else the
     scopes asked for, as RFC 6749 5.1 says an answer that omits them granted. Unverified: it only decides whether a
     person is asked to sign in again; the system still refuses what the token was not granted."""
@@ -134,7 +135,7 @@ def granted_scopes(answer: dict[str, Any], requested: list[str]) -> list[str]:
 
 
 def _client(
-    form: dict[str, str], settings: dict[str, Any], proof: ClientProof | None
+    form: dict[str, str], settings: Mapping[str, JsonValue], proof: ClientProof | None
 ) -> tuple[dict[str, str], dict[str, str]]:
     """The form and headers of a request to the system's sign-in: the client sent in the body or as basic auth."""
     client_id = str(settings.get("clientId") or "")
@@ -156,7 +157,7 @@ def _client(
 
 
 def _signed(
-    settings: dict[str, Any], proof: ClientProof | None, *, subject: str | None, extra: dict[str, Any] | None = None
+    settings: Mapping[str, JsonValue], proof: ClientProof | None, *, subject: str | None, extra: Json | None = None
 ) -> str:
     """An assertion naming the client as its issuer and the token address as its audience (or the `audience` the
     system names, as DocuSign's account host), kept in `proof.signed` for the scrub set."""
@@ -205,12 +206,12 @@ class Tokens:
         tenant_id: str,
         url: str,
         form: dict[str, str],
-        settings: dict[str, Any],
+        settings: Mapping[str, JsonValue],
         proof: ClientProof | None,
         *,
         client: bool = True,
         hosts: Iterable[str] = (),
-    ) -> dict[str, Any]:
+    ) -> Json:
         """A token request: the form, with the client sent as `clientAuth` says, or not at all (`client` False, for a
         JWT grant). `hosts` are a plugin's own, reached unlisted. Raises AuthFailed naming the host and the system's
         error code, never the secret."""
@@ -231,12 +232,8 @@ class Tokens:
             answer: Any = res.json()
         except ValueError:
             answer = {}
-        if (
-            res.status_code >= 400
-            or not isinstance(answer, dict)
-            or not cast(dict[str, Any], answer).get("access_token")
-        ):
-            said = cast(dict[str, Any], answer) if isinstance(answer, dict) else {}
+        if res.status_code >= 400 or not isinstance(answer, dict) or not cast(Json, answer).get("access_token"):
+            said = cast(Json, answer) if isinstance(answer, dict) else {}
             error, description = said.get("error"), said.get("error_description")
             # Only an error code made of word characters is named back: it reaches a message a person reads.
             code = str(error) if isinstance(error, str) and error.isidentifier() else None
@@ -249,13 +246,13 @@ class Tokens:
             failed.provider_error = code
             failed.provider_description = str(description)[:500] if isinstance(description, str) else None
             raise failed
-        return cast(dict[str, Any], answer)
+        return cast(Json, answer)
 
     async def _row(
         self,
         tenant_id: str,
         key: tuple[str, str],
-        answer: dict[str, Any],
+        answer: Mapping[str, JsonValue],
         rotations: int,
         *,
         keep_refresh: str | None,
@@ -302,7 +299,7 @@ class Tokens:
         self,
         tenant_id: str,
         connection_id: str,
-        settings: dict[str, Any],
+        settings: Mapping[str, JsonValue],
         proof: ClientProof | None,
         *,
         grant: str,
@@ -363,7 +360,7 @@ class Tokens:
         tenant_id: str,
         key: tuple[str, str],
         row: TokenFields | None,
-        settings: dict[str, Any],
+        settings: Mapping[str, JsonValue],
         *,
         proof: ClientProof | None,
         grant: str,
@@ -404,7 +401,7 @@ class Tokens:
         self,
         tenant_id: str,
         key: tuple[str, str],
-        settings: dict[str, Any],
+        settings: Mapping[str, JsonValue],
         proof: ClientProof | None,
         rotations: int,
     ) -> TokenFields:
@@ -429,7 +426,7 @@ class Tokens:
         connection_id: str,
         row: TokenRow,
         *,
-        settings: dict[str, Any],
+        settings: Mapping[str, JsonValue],
         proof: ClientProof | None,
     ) -> bool:
         """Ends a held sign-in at the system's `revokeUrl` (RFC 7009): its refresh token, which ends the grant, else its
@@ -505,7 +502,7 @@ class Tokens:
         self,
         tenant_id: str,
         connection_id: str,
-        answer: dict[str, Any],
+        answer: Mapping[str, JsonValue],
         person: str = SHARED,
         *,
         requested: list[str] | None = None,

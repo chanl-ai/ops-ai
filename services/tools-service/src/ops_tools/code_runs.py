@@ -15,23 +15,43 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ActingForPerson, Principal, ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_policy import HmacSigner, TokenError, mint, verify
 from ops_service_kit.errors import Unauthorized, Unprocessable
+from ops_service_kit.http import Json
 
 from .executor import URL_VAR
 from .registry import Resolved
 from .secrets import SecretMissing, SecretResolver
-from .store.modules import Operation
+from .store.modules import CodeLimits, Operation
 from .tools import ToolCaller
 
 PURPOSE = "code-run"
 # How long past the function's own time limit its calls are still accepted.
 TOKEN_GRACE_S = 30
 SECRET = "$secret"
+
+
+class RunClaims(TypedDict):
+    """What `CodeExecutor.token` signs into a run's call token. Reads keep their `.get` defaults and `[]` raises, as
+    on the untyped dict."""
+
+    purpose: str
+    tenant_id: str
+    team_id: str | None
+    module_team_id: str | None
+    sub: str
+    kind: str
+    operation: str
+    access: str
+    bindings: list[str]
+    secrets: list[str]
+    key: str
+    environment: str | None
+    acting_for: dict[str, str] | None
 
 
 def failed(code: str, message: str, **more: Any) -> ToolOutcome:
@@ -52,15 +72,15 @@ class CodeExecutor:
     def token(
         self,
         op: Operation,
-        code: dict[str, Any],
+        code: Json,
         caller: ToolCaller,
         key: str,
         env: str | None,
         *,
         module_team: str | None,
     ) -> str:
-        limits = cast(dict[str, Any], code.get("limits") or {})
-        claims = {
+        limits = cast(CodeLimits | dict[str, float], code.get("limits") or {})
+        claims: RunClaims = {
             "purpose": PURPOSE,
             "tenant_id": caller.tenant_id,
             "team_id": caller.team_id,
@@ -70,8 +90,8 @@ class CodeExecutor:
             "kind": caller.kind,
             "operation": op["name"],
             "access": op["access"],
-            "bindings": list(code.get("bindings") or []),
-            "secrets": list(code.get("secrets") or []),
+            "bindings": list(cast(list[str], code.get("bindings") or [])),
+            "secrets": list(cast(list[str], code.get("secrets") or [])),
             "key": key,
             "environment": env,
             # The person the run's caller acts for, so a call the function makes acts for them too.
@@ -82,14 +102,14 @@ class CodeExecutor:
     async def run(
         self,
         op: Operation,
-        args: dict[str, Any],
+        args: Json,
         *,
         key: str,
         caller: ToolCaller,
         environment: str | None,
         module_team: str | None,
     ) -> ToolOutcome:
-        code = cast(dict[str, Any] | None, op.get("code"))
+        code = cast(Json | None, op.get("code"))
         if not code or not code.get("source"):
             return failed("code_missing", f"{op['name']} has no function to run.")
         if self.runner is None:
@@ -103,7 +123,7 @@ class CodeExecutor:
         }
         try:
             result = cast(
-                dict[str, Any],
+                Json,
                 await self.runner.post(
                     "/v1/runs", json=body, tenant=caller.tenant_id, team=caller.team_id, timeout=_timeout(code)
                 ),
@@ -115,16 +135,16 @@ class CodeExecutor:
         run = {k: result.get(k) for k in ("log", "calls", "createMs", "executeMs", "trace")}
         if result.get("ok"):
             return ToolOutcome(True, result.get("output"), view={"run": run})
-        error = cast(dict[str, Any], result.get("error") or {})
+        error = cast(Json, result.get("error") or {})
         return failed(str(error.get("code") or "runner_error"), str(error.get("message") or ""), run=run)
 
 
-def _timeout(code: dict[str, Any]) -> float:
-    limits = cast(dict[str, Any], code.get("limits") or {})
+def _timeout(code: Json) -> float:
+    limits = cast(CodeLimits | dict[str, float], code.get("limits") or {})
     return float(limits.get("timeS", 10)) + 15.0
 
 
-def run_claims(token: str | None, signer: HmacSigner) -> dict[str, Any]:
+def run_claims(token: str | None, signer: HmacSigner) -> RunClaims:
     """The claims of a call token this service minted for a run still in time; refused otherwise."""
     if not token:
         raise Unauthorized("A code run's call needs its call token.", code="code_run_token")
@@ -134,18 +154,19 @@ def run_claims(token: str | None, signer: HmacSigner) -> dict[str, Any]:
         raise Unauthorized("This code run's call token is not valid or has expired.", code="code_run_token") from e
     if claims.get("purpose") != PURPOSE:
         raise Unauthorized("This is not a code run's call token.", code="code_run_token")
-    return claims
+    # Minted by `token` above and checked by its signature, so its keys are the ones RunClaims names.
+    return cast(RunClaims, claims)
 
 
-def run_acting_for(claims: dict[str, Any]) -> ActingForPerson | None:
+def run_acting_for(claims: RunClaims) -> ActingForPerson | None:
     """The person a code run's calls act for, from its signed call token; None when the run acted for nobody."""
-    named = cast(dict[str, str] | None, claims.get("acting_for"))
+    named = claims.get("acting_for")
     return ActingForPerson(**named) if named else None
 
 
-def run_caller(claims: dict[str, Any]) -> Principal:
+def run_caller(claims: RunClaims) -> Principal:
     """The caller the run acts for, as the gateway decides each of its calls."""
-    team = cast(str | None, claims.get("team_id"))
+    team = claims.get("team_id")
     kind = str(claims.get("kind"))
     return Principal(
         kind=kind if kind in ("person", "api_key", "service") else "service",  # pyright: ignore[reportArgumentType]
@@ -161,25 +182,25 @@ def run_caller(claims: dict[str, Any]) -> Principal:
     )
 
 
-def handles_in(args: dict[str, Any]) -> dict[str, str]:
+def handles_in(args: Json) -> dict[str, str]:
     """Each top-level argument passed as a secret handle, argument name to secret name. A handle nested deeper is not
     placed anywhere, so it is refused."""
     found: dict[str, str] = {}
     for name, value in args.items():
         item: Any = value
         if isinstance(item, dict) and SECRET in item:
-            found[name] = str(cast(dict[str, Any], item)[SECRET])
+            found[name] = str(cast(Json, item)[SECRET])
         elif SECRET in json.dumps(item):
             raise Unprocessable("A secret handle is passed only as a whole argument.", code="secret_placement")
     return found
 
 
 async def resolve_handles(
-    claims: dict[str, Any],
+    claims: RunClaims,
     resolved: Resolved | None,
-    args: dict[str, Any],
+    args: Json,
     secrets: SecretResolver | None,
-) -> tuple[dict[str, Any], list[str]]:
+) -> tuple[Json, list[str]]:
     """`args` with each handle replaced by its secret's value, and the values to scrub from the answer. A handle is
     refused unless the operation binds the secret, the tool is a read over http, and the argument becomes a query
     value (not in the path, with no body template). A read function may not call a write: the gateway decided its own
@@ -204,7 +225,7 @@ async def resolve_handles(
     try:
         values = await secrets.lookup(
             str(claims["tenant_id"]),
-            cast(str | None, claims.get("module_team_id")),
+            claims.get("module_team_id"),
             sorted(set(handles.values())),
             tool=str(claims["operation"]),
             actor=str(claims["sub"]),

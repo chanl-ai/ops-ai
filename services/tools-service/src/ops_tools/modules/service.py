@@ -41,6 +41,7 @@ from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListParams
 from ops_store import isolation
+from ops_store.listing import ListPage
 
 from .. import mcp, transform
 from ..auth import Authenticator, AuthFailed, may_use
@@ -100,7 +101,7 @@ from ..store.modules import (
 from . import openapi
 from .directory import Directory, Team, owns_module
 from .discovered import Discovered, DiscoveredOperation, PublicDiscovered, PublicOperation
-from .executions import call_row
+from .executions import CallRowJson, DayJson, ModuleActivityJson, call_row
 from .policy import PublishPolicy, RequesterMayDecide, ToolsMode, WriteApprovals, own_request_refusal, tool_mode
 from .review_events import ACCESS_REQUESTED, access_event, policy_changed_event
 from .reviews import ReviewOpener
@@ -339,6 +340,33 @@ class ApprovalView(ApprovalCore, total=False):
     reason: str | None
     reviewId: str | None
     deciderTeam: str | None
+
+
+class ModuleListStats(TypedDict):
+    """The totals over every module the team sees, as the list's header shows them."""
+
+    modules: int
+    operations: int
+    calls24h: int
+    errorRate: float
+    expiringApprovals: int
+    expiringModules: int
+
+
+class ModuleListTotals(TypedDict):
+    stats: ModuleListStats
+    viewCounts: dict[str, int]
+
+
+class ModulePage(ListPage[ModuleRow], ModuleListTotals):
+    """A page of modules with the totals and each view's count beside it."""
+
+
+class GrantRow(ApprovalView):
+    """One row of the grants page: the approval and the module it is on."""
+
+    moduleId: str
+    moduleName: str
 
 
 class VersionView(TypedDict, total=False):
@@ -1263,7 +1291,7 @@ class ModuleService:
 
     # ── Reads ─────────────────────────────────────────────────────────────
 
-    async def grants(self, who: Caller, q: ListParams) -> dict[str, Any]:
+    async def grants(self, who: Caller, q: ListParams) -> ListPage[GrantRow]:
         """Every workflow's access to the modules the caller's team sees, newest request first, one page of the view
         `q` names (`all` when none), searched by workflow, module or requester; `facets.view` counts each view."""
         view = (q.filters.get("view") or ["all"])[-1]
@@ -1271,7 +1299,7 @@ class ModuleService:
             raise ValidationFailed(f"There is no view {view!r}: ask for one of {', '.join(GRANT_VIEWS)}.")
         views = grant_views(self.clock(), EXPIRING)
         page, counts = await self.store.grants(who.tenant_id, q, view=views[view], views=views)
-        page["data"] = [
+        granted: list[GrantRow] = [
             {
                 **self._approval_out(self._with_status(APPROVAL.validate_python(r))),
                 "moduleId": r["module_id"],
@@ -1279,9 +1307,9 @@ class ModuleService:
             }
             for r in page["data"]
         ]
-        return {**page, "facets": {"view": counts}}
+        return {**page, "data": granted, "facets": {"view": counts}}
 
-    async def list(self, who: Caller, q: ListParams) -> dict[str, Any]:
+    async def list(self, who: Caller, q: ListParams) -> ModulePage:
         """One page of the modules the caller's team sees, in the view `q` names (`all` when none), with each view's
         count, the facets and the totals of every module seen: chosen, counted and paged in SQL
         (store/module_list.py), then the page's modules read in full."""
@@ -1340,7 +1368,7 @@ class ModuleService:
         m = found if found is not None and not self._sees(who, found) else await self._find(who, module_id)
         return await self._detail(m, who.team, who, levels=levels)
 
-    async def activity(self, who: Caller, module_id: str) -> dict[str, Any]:
+    async def activity(self, who: Caller, module_id: str) -> ModuleActivityJson:
         """Calls per UTC day over the last 14 days from the call log, days without calls at zero, and the latest calls
         with their callers: the call log's view of one module, so read under activity.view as the log is."""
         _can(who, "activity", "view", what="the tool-call log")
@@ -1351,7 +1379,7 @@ class ModuleService:
             m["id"], first.isoformat(), tenant_id=who.tenant_id, team_ids=self._call_teams(who)
         )
         days = [
-            {"date": d, **logged.get(d, NO_CALLS).model_dump(by_alias=True)}
+            DayJson(date=d, **logged.get(d, NO_CALLS).model_dump(by_alias=True))
             for d in ((first + timedelta(days=i)).isoformat() for i in range(14))
         ]
         since = self._since(timedelta(days=1))
@@ -1384,7 +1412,7 @@ class ModuleService:
         link_id: str | None = None,
         since: str | None = None,
         until: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> ListPage[CallRowJson]:
         """Every call made in the caller's team, newest first, on the modules that team sees. `key` finds the calls
         sent under one idempotency key: how a workflow run reconciles a write after a crash. `call_id` lists that one
         call, so a chat's Open call link shows the call it was made from. The log names who called what, so it is read
@@ -1439,7 +1467,7 @@ class ModuleService:
         ]
         return {**page, "data": await self._named(who, listed)}
 
-    async def _named(self, who: Caller, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async def _named(self, who: Caller, rows: list[CallRowJson]) -> list[CallRowJson]:
         """The rows with each agent and workflow named as agents-service names them, read once for the tools on the
         page. Unanswered, the rows keep the ids they hold: the log still lists every call."""
         if self.users is None or not rows:
@@ -1456,7 +1484,7 @@ class ModuleService:
                 r["workflowName"] = named.get(("workflow", r["workflowId"]), r["workflowName"])
         return rows
 
-    async def execution(self, who: Caller, call_id: str) -> dict[str, Any]:
+    async def execution(self, who: Caller, call_id: str) -> CallRowJson:
         """One call from the gateway's log, so an Activity row opens to its call. The same scope as the list: another
         team's call, or one on a module the caller's team does not see, is not found, never a different answer."""
         _can(who, "activity", "view", what="the tool-call log")

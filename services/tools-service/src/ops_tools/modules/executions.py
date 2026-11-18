@@ -5,7 +5,7 @@ for comes from the subject when it is one, else from the actor."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import NotRequired, TypedDict
 
 from ..store.calls import GatewayCall
 from ..store.modules import ModuleColumns
@@ -28,33 +28,107 @@ SUBJECT_KINDS = {"user": "user", "workflow": "workflow", "process": "process"}
 ACTOR_KINDS = {"user": "user", "agent": "agent", "workflow": "workflow", "graph": "workflow"}
 
 
-def _identity(value: str, kinds: dict[str, str], names: dict[str, str]) -> dict[str, str]:
+class CallIdentityJson(TypedDict):
+    kind: str
+    id: str
+    name: str
+
+
+class CallApprovalJson(TypedDict):
+    kind: str
+    tokenId: NotRequired[str]
+    by: NotRequired[str]
+
+
+class CallRunAsJson(TypedDict):
+    kind: str
+    email: NotRequired[str | None]
+
+
+class CallRowJson(TypedDict):
+    """The JSON of one call-log row, keys as `ToolCallRow` names them (modules/schemas.py)."""
+
+    id: str
+    at: str
+    gateway: str
+    workflowId: str
+    workflowName: str
+    agentSlug: str
+    agentName: str
+    runId: str
+    target: str
+    system: str
+    title: str
+    app: str
+    operation: str
+    approval: CallApprovalJson
+    status: str
+    latencyMs: int
+    subject: CallIdentityJson
+    decision: str
+    outcome: str
+    effect: bool
+    # Set after the literal, in every row: only the key order puts it after `credential`.
+    runAs: NotRequired[CallRunAsJson]
+    actor: NotRequired[CallIdentityJson]
+    step: NotRequired[str]
+    approvalTokenId: NotRequired[str]
+    denyReason: NotRequired[str]
+    replayOf: NotRequired[str]
+    environment: NotRequired[str]
+    connectionId: NotRequired[str]
+    channel: NotRequired[str]
+    clientName: NotRequired[str]
+    clientId: NotRequired[str]
+    actingFor: NotRequired[str]
+    credential: NotRequired[str]
+    errorCode: NotRequired[str]
+    errorMessage: NotRequired[str]
+    failureSide: NotRequired[str]
+
+
+class DayJson(TypedDict):
+    """One UTC day of a module's calls (store/calls.DayStats by alias)."""
+
+    date: str
+    count: int
+    errors: int
+    p95Ms: int
+
+
+class ModuleActivityJson(TypedDict):
+    days: list[DayJson]
+    denied24h: int
+    recent: list[CallRowJson]
+
+
+def _identity(value: str, kinds: dict[str, str], names: dict[str, str]) -> CallIdentityJson:
     """`kind:id` principals name their kind; anything else is a service. Workflows show the name their approval
     recorded, or their id."""
     prefix, _, rest = value.partition(":")
     kind = kinds.get(prefix, "service")
     ident = rest if rest and prefix in kinds else value
     name = names.get(ident, ident) if kind == "workflow" else ident
-    return {"kind": kind, "id": ident, "name": name}
+    return CallIdentityJson(kind=kind, id=ident, name=name)
 
 
 def call_row(
     r: GatewayCall, names: dict[str, str], module: ModuleColumns | None, title: str | None = None
-) -> dict[str, Any]:
+) -> CallRowJson:
     """One call as the log shows it. `title` is the tool's display name (a plugin's manifest gives it); the row
     falls back to the tool's own name, so no reader shows a blank."""
     subject = _identity(r.sub, SUBJECT_KINDS, names)
     if r.caller_name:
         # The name the person or key had when the call was made; older rows keep showing the id.
-        subject = {**subject, "name": str(r.caller_name)}
+        subject = CallIdentityJson(kind=subject["kind"], id=subject["id"], name=str(r.caller_name))
     workflow_id = subject["id"] if subject["kind"] == "workflow" else ""
-    approval: dict[str, Any] = {"kind": "person" if r.approvers else "none"}
+    approval: CallApprovalJson = {"kind": "person" if r.approvers else "none"}
     if r.approval_token_id:
         approval["tokenId"] = r.approval_token_id
     if r.approvers:
         # The people the approval token names, so the log says who let the write through, not only that someone did.
         approval["by"] = ", ".join(str(a) for a in r.approvers)
-    row: dict[str, Any] = {
+    row: CallRowJson = {
         "id": r.id,
         "at": r.created_at,
         "gateway": "data",
@@ -121,6 +195,7 @@ def call_row(
         # address or a header value.
         row["errorCode"] = str(failed.get("code") or "")
         row["errorMessage"] = str(failed.get("message") or "")
-        if failed.get("side") in ("ours", "upstream"):
-            row["failureSide"] = failed["side"]
+        side = failed.get("side")
+        if isinstance(side, str) and side in ("ours", "upstream"):
+            row["failureSide"] = side
     return row

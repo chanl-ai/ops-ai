@@ -27,7 +27,9 @@ from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ACTING_FOR_HEADER, ActingForTokens, Principal, ServiceClient
 from ops_policy import Ed25519Signer
 from ops_service_kit.errors import ApiError
+from ops_service_kit.http import Json
 
+from .executor import Query
 from .registry import Resolved, platform_operation
 
 TIMEOUT = 15.0
@@ -42,11 +44,11 @@ PAGE, MAX_PAGES = 50, 80
 class Operation:
     name: str
     description: str
-    input_schema: dict[str, Any]
+    input_schema: Json
     service: str
     method: str
     # The route for the arguments, and the arguments it does not take into its path, sent as query (GET) or body.
-    route: Callable[[dict[str, Any]], tuple[str, dict[str, Any]]]
+    route: Callable[[Json], tuple[str, Json]]
     read_only: bool
     # The structured answer's key for a list, which MCP needs as an object.
     wrap: str | None = None
@@ -58,11 +60,11 @@ class Operation:
     draft: bool = False
 
 
-def _templates(args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+def _templates(args: Json) -> tuple[str, Json]:
     return "/v1/templates", {k: v for k, v in args.items() if k in ("kind", "source") and v}
 
 
-def _install(args: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+def _install(args: Json) -> tuple[str, Json]:
     rest = {k: v for k, v in args.items() if k != "resource"}
     return f"/v1/resources/{quote(str(args.get('resource') or ''), safe=':')}/copies", rest
 
@@ -84,7 +86,7 @@ OPERATIONS: tuple[Operation, ...] = (
         input_schema={
             "type": "object",
             "properties": {
-                "kind": {"type": "string", "enum": KINDS, "description": "Keep one kind."},
+                "kind": {"type": "string", "enum": [*KINDS], "description": "Keep one kind."},
                 "source": {"type": "string", "description": "Keep one pack or app, as plugin:<id>."},
             },
             "additionalProperties": False,
@@ -208,7 +210,7 @@ class PlatformTools:
             ),
         )
 
-    async def run(self, name: str, args: dict[str, Any], *, who: Principal, team: str) -> ToolOutcome:
+    async def run(self, name: str, args: Json, *, who: Principal, team: str) -> ToolOutcome:
         """One operation for the person: its answer, or {error: {code, message, status}} when the service refused it
         or could not be reached."""
         o = BY_NAME[name]
@@ -223,24 +225,24 @@ class PlatformTools:
                     o.method,
                     f"{self.bases[o.service]}{path}",
                     headers=headers,
-                    params=rest if get else None,
+                    params=cast(Query | None, rest if get else None),
                     json=None if get else rest,
                 )
         except (httpx.HTTPError, ApiError) as e:
             # Minting the acting-for token or reaching the service failed: nothing was made.
             return _failed("SERVICE_UNAVAILABLE", 503, f"{o.service}-service did not answer: {type(e).__name__}")
         raw: Any = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
-        body = cast(dict[str, Any], raw) if isinstance(raw, dict) else {"data": raw}
+        body = cast(Json, raw) if isinstance(raw, dict) else {"data": raw}
         if r.is_success:
             out: Any = body.get("data", body)
             return ToolOutcome(
                 True,
-                {o.wrap: out} if o.wrap else (cast(dict[str, Any], out) if isinstance(out, dict) else {"result": out}),
+                {o.wrap: out} if o.wrap else (cast(Json, out) if isinstance(out, dict) else {"result": out}),
             )
-        err = cast(dict[str, Any], body.get("error") or {})
+        err = cast(Json, body.get("error") or {})
         return _failed(str(err.get("code") or r.status_code), r.status_code, str(err.get("message") or r.reason_phrase))
 
-    async def start_workflow(self, workflow_id: str, args: dict[str, Any], *, who: Principal, team: str) -> ToolOutcome:
+    async def start_workflow(self, workflow_id: str, args: Json, *, who: Principal, team: str) -> ToolOutcome:
         """Starts the live version of a workflow an MCP link picked, as the person: agents-service decides with
         workflows.run, which the token carries only when the person holds it in the team. Returns the run's id and
         status; the run itself goes on in agents-service."""
@@ -258,30 +260,30 @@ class PlatformTools:
         except (httpx.HTTPError, ApiError) as e:
             return _failed("SERVICE_UNAVAILABLE", 503, f"agents-service did not answer: {type(e).__name__}")
         raw: Any = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
-        body = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
+        body = cast(Json, raw) if isinstance(raw, dict) else {}
         if r.is_success:
-            started = cast(dict[str, Any], body.get("data") or {})
+            started = cast(Json, body.get("data") or {})
             return ToolOutcome(True, {k: started.get(k) for k in ("runId", "workflowId", "version", "status")})
-        err = cast(dict[str, Any], body.get("error") or {})
+        err = cast(Json, body.get("error") or {})
         return _failed(str(err.get("code") or r.status_code), r.status_code, str(err.get("message") or r.reason_phrase))
 
-    async def _get(self, path: str, *, who: Principal, team: str, params: dict[str, Any] | None = None) -> Any:
+    async def _get(self, path: str, *, who: Principal, team: str, params: Json | None = None) -> Any:
         headers = self._headers(who, team, "agents", SKILLS_VIEW)
         async with _Client(self.http) as http:
-            r = await http.get(f"{self.bases['agents']}{path}", headers=headers, params=params)
+            r = await http.get(f"{self.bases['agents']}{path}", headers=headers, params=cast(Query | None, params))
         r.raise_for_status()
         body: Any = r.json()
-        return cast(dict[str, Any], body).get("data") if isinstance(body, dict) else body
+        return cast(Json, body).get("data") if isinstance(body, dict) else body
 
-    async def _skills(self, *, who: Principal, team: str) -> list[dict[str, Any]]:
+    async def _skills(self, *, who: Principal, team: str) -> list[Json]:
         """The team's published skills the caller can read, one call per page; each row describes its published
         version, with its inputs and parts, so no draft or retired skill is offered."""
-        out: list[dict[str, Any]] = []
+        out: list[Json] = []
         for n in range(1, MAX_PAGES + 1):
-            params: dict[str, Any] = {"page": n, "pageSize": PAGE, "view": "published"}
+            params: Json = {"page": n, "pageSize": PAGE, "view": "published"}
             page: Any = await self._get("/v1/skills", who=who, team=team, params=params)
-            body = cast(dict[str, Any], page) if isinstance(page, dict) else {}
-            rows = cast(list[dict[str, Any]], body.get("data") or [])
+            body = cast(Json, page) if isinstance(page, dict) else {}
+            rows = cast(list[Json], body.get("data") or [])
             out.extend(rows)
             total = body.get("total")
             if len(rows) < PAGE or (isinstance(total, int) and len(out) >= total):
@@ -341,13 +343,13 @@ class PlatformTools:
         except (httpx.HTTPError, ApiError) as e:
             return _failed("SKILLS_UNREADABLE", _status(e), f"The team's skills could not be read: {type(e).__name__}")
         raw: Any = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
-        body = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
+        body = cast(Json, raw) if isinstance(raw, dict) else {}
         if not r.is_success:
-            err = cast(dict[str, Any], body.get("error") or {})
+            err = cast(Json, body.get("error") or {})
             return _failed(
                 str(err.get("code") or r.status_code), r.status_code, str(err.get("message") or r.reason_phrase)
             )
-        rendered = cast(dict[str, Any], body.get("data") or {})
+        rendered = cast(Json, body.get("data") or {})
         return ToolOutcome(
             True,
             types.GetPromptResult(
@@ -362,16 +364,16 @@ class PlatformTools:
 
 
 def _prompt_names(
-    skills: list[dict[str, Any]],
-) -> dict[str, tuple[str, str | None, str, str, list[dict[str, Any]]]]:
+    skills: list[Json],
+) -> dict[str, tuple[str, str | None, str, str, list[Json]]]:
     """Prompt name -> (skill id, part slug, title, use-when, inputs): the skill's slug, or `<skill>-<part>` per part
     (MCP clients accept letters, digits and hyphens; agents-service refuses a part name that is another skill's)."""
-    out: dict[str, tuple[str, str | None, str, str, list[dict[str, Any]]]] = {}
+    out: dict[str, tuple[str, str | None, str, str, list[Json]]] = {}
     for s in skills:
         slug, title = str(s["slug"]), str(s.get("name") or s["slug"])
-        parts = cast(list[dict[str, Any]], s.get("parts") or [])
+        parts = cast(list[Json], s.get("parts") or [])
         if not parts:
-            inputs = cast(list[dict[str, Any]], s.get("inputs") or [])
+            inputs = cast(list[Json], s.get("inputs") or [])
             out[slug] = (str(s["id"]), None, title, str(s.get("useWhen") or ""), inputs)
         for p in parts:
             out[f"{slug}-{p['slug']}"] = (
@@ -379,7 +381,7 @@ def _prompt_names(
                 str(p["slug"]),
                 f"{title} · {p['name']}",
                 str(p.get("useWhen") or ""),
-                cast(list[dict[str, Any]], p.get("inputs") or []),
+                cast(list[Json], p.get("inputs") or []),
             )
     return out
 
