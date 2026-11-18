@@ -8,6 +8,7 @@ from typing import Any, cast
 import jsonschema
 
 from ops_extract.checks import answer_schema, records_schema
+from ops_extract.shapes import FieldDefinition
 from ops_service_kit.http import Json, JsonValue
 
 SYSTEM = (
@@ -54,12 +55,12 @@ def propose_prompt(texts: list[str], *, hint: str | None = None) -> str:
     return f"{said}Document:\n{document}"
 
 
-def schema_for(fields: list[Json], *, many: bool) -> Json:
+def schema_for(fields: list[FieldDefinition], *, many: bool) -> Json:
     return records_schema(fields) if many else answer_schema(fields)
 
 
 def user_prompt(
-    fields: list[Json],
+    fields: list[FieldDefinition],
     texts: dict[int, str],
     *,
     many: bool,
@@ -69,7 +70,7 @@ def user_prompt(
     the kind, then the document page by page."""
     wanted = "\n".join(
         f"- {f['key']} ({f.get('type') or 'text'}{', required' if f.get('required') else ''})"
-        f"{': ' + str(f['description']) if f.get('description') else ''}"
+        f"{': ' + str(f.get('description')) if f.get('description') else ''}"
         for f in fields
     )
     document = "\n\n".join(f"Page {n}:\n{t}" for n, t in sorted(texts.items()))
@@ -93,7 +94,7 @@ def taught(examples: list[Json] | None) -> str:
 
 
 def reread(
-    fields: list[Json],
+    fields: list[FieldDefinition],
     texts: dict[int, str],
     failures: dict[str, tuple[JsonValue, str]],
     examples: list[Json] | None = None,

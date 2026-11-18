@@ -1,15 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 chanl-ai
-"""The shapes ops_extract builds in process, named once: a file's layout, a field's box and a drafted template.
+"""The shapes ops_extract reads and builds, named once: a file's layout, a field's box, and what a team writes on a
+document type (a field, a check across fields, a layout template). A read's scored answer is still `Json`.
 
-What a team writes on a document type (its fields, templates and checks) and what is stored for a read (each field's
-result, the model's answer) are read as `Json` from `ops_service_kit.http` through `ops_service_kit.narrow`: a team
-may add keys this package does not read and a row stored before a key existed lacks it, and validating either into a
-TypedDict would drop or reject keys the stored JSON must keep."""
+A key a save check proves (`request_of`, `templates.problems`, `rules.problems`) has its type here; a key no check
+proves, or one a team defines the values of, stays `JsonValue` and is narrowed where it is read, so a document saved
+with an odd value is read and refused exactly as before. A stored document is read into these with
+`ops_store.documents.stored`, which keeps the keys a shape does not name, so writing one back loses nothing."""
 
 from __future__ import annotations
 
 from typing import NotRequired, TypedDict
+
+from ops_service_kit.http import JsonValue
 
 # [x0, top, x1, bottom] as fractions of the page from its top left, the reader's own boxes (`ops_ingest.reading`).
 Rect = list[float]
@@ -98,8 +101,71 @@ class TemplatePage(TypedDict):
 
 
 class Template(TypedDict):
-    """A layout template as `ops_extract.templates.suggest` drafts it. A saved one is the team's JSON on a document type
-    version, read key by key, as it may carry `needsRebuild` and keys added later."""
+    """A layout template as `ops_extract.templates.suggest` drafts it."""
 
     id: str
     pages: list[TemplatePage]
+
+
+class FieldDefinition(TypedDict):
+    """A field a document type version (or an extraction request) asks for. `request_of` proves the key is text when
+    it is saved. Its rules (`pattern`, `emptyWhen`, `keyField`, `clean`) are checked when saved too, but a type saved
+    before a rule was checked, or edited by hand, may hold another value, so they are narrowed where they are read
+    with the rest of the team's keys."""
+
+    key: str
+    label: NotRequired[JsonValue]
+    # One of FIELD_TYPES, or empty for text.
+    type: NotRequired[JsonValue]
+    description: NotRequired[JsonValue]
+    required: NotRequired[JsonValue]
+    alwaysReview: NotRequired[JsonValue]
+    keyField: NotRequired[JsonValue]
+    reviewBelow: NotRequired[JsonValue]
+    # MDY or DMY, set on every date field from its version.
+    dateOrder: NotRequired[JsonValue]
+    # An enum's values, the team's own.
+    options: NotRequired[JsonValue]
+    pattern: NotRequired[JsonValue]
+    emptyWhen: NotRequired[JsonValue]
+    clean: NotRequired[JsonValue]
+
+
+class Check(TypedDict):
+    """A check across a version's fields (`ops_extract.rules`): `rules.problems` proves the kind when it is saved."""
+
+    id: JsonValue
+    kind: str
+    # sum: the parts and the field they add up to.
+    fields: NotRequired[JsonValue]
+    equals: NotRequired[JsonValue]
+    tolerance: NotRequired[JsonValue]
+    # before: the field that must not come after the other.
+    earlier: NotRequired[JsonValue]
+    later: NotRequired[JsonValue]
+
+
+class SavedAnchor(TypedDict):
+    # Any value whose text is not blank; `templates.problems` reads it as text.
+    text: JsonValue
+    box: Rect
+    required: NotRequired[JsonValue]
+
+
+class SavedTemplatePage(TypedDict):
+    # Numbered from 1; a page without one is page 1.
+    page: NotRequired[int]
+    anchors: list[SavedAnchor]
+    # `templates.problems` reads any empty value as no zones ("", {}, 0, false), so each is read the same way; a zone
+    # is {field, box}.
+    zones: NotRequired[JsonValue]
+
+
+class SavedTemplate(TypedDict):
+    """A layout template saved on a document type version, as `templates.problems` lets it be saved. One carried to a
+    version that lacks a field it reads carries `needsRebuild` and is never matched."""
+
+    id: str
+    pages: list[SavedTemplatePage]
+    # Read for truth only, as every reader of a saved template reads it.
+    needsRebuild: NotRequired[JsonValue]

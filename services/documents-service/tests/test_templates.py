@@ -124,6 +124,22 @@ async def test_an_invoice_from_the_known_form_reads_from_its_zones_with_no_model
     assert await s.extractor.store.tokens_per_call("supplier_invoice") is None, "F5: no measured tokens"
 
 
+async def test_a_template_saved_with_empty_zones_text_matches_and_reads_no_zones(make: Make) -> None:
+    """`problems` saves `"zones": ""` as no zones; the stored template must still be read and matched, not refused."""
+    template = template_from(form(MASTER, INVOICE_LABELS))
+    template["pages"] = [{**p, "zones": ""} for p in template["pages"]]
+    optional = [{k: v for k, v in f.items() if k != "required"} for f in FIELDS]
+    models = NoModel()
+    s = make(models, Floor())
+    async with s.client as c:
+        body = {**INVOICE_TYPE, "fields": optional, "templates": [template]}
+        data(await c.post("/v1/document-types", json=body, headers=OPS), 201)
+        fid = await s.stored(form(OTHER, INVOICE_LABELS), name="inv.pdf", mime="application/pdf")
+        got = await read(c, fid)
+    assert models.calls == 0 and (got["path"], got["templateId"]) == ("template", "tpl_invoice_a"), got
+    assert all(v["value"] is None for v in got["fields"].values()), got["fields"]
+
+
 async def test_a_statement_of_another_layout_takes_the_model_path_with_the_miss(make: Make) -> None:
     models = NoModel()
     s = make(models, Floor())

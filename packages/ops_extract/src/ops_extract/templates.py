@@ -18,8 +18,19 @@ from dataclasses import dataclass, field
 
 from ops_extract.boxes import runs, tokens, union
 from ops_extract.checks import entries
-from ops_extract.shapes import Box, Layout, LayoutWord, Rect, TemplateAnchor, TemplatePage, TemplateZone
-from ops_service_kit.http import Json, JsonList, JsonValue
+from ops_extract.shapes import (
+    Box,
+    Layout,
+    LayoutWord,
+    Rect,
+    SavedAnchor,
+    SavedTemplate,
+    SavedTemplatePage,
+    Template,
+    TemplateAnchor,
+    TemplatePage,
+)
+from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.narrow import Malformed, a_list, an_object, json_object
 
 # How far a found anchor may sit from the box the template expects, as a fraction of the page, and the share of a
@@ -62,7 +73,7 @@ def _box(w: LayoutWord) -> Rect:
 
 
 def _rect(value: JsonValue) -> Rect:
-    """A saved template's box, [x0, top, x1, bottom]; `problems` refused any other when the version was saved."""
+    """A saved zone's box, [x0, top, x1, bottom]; `problems` refused any other when the version was saved."""
     rect: Rect = []
     for v in a_list(value, "box"):
         if not isinstance(v, int | float):
@@ -71,24 +82,24 @@ def _rect(value: JsonValue) -> Rect:
     return rect
 
 
-def _page_no(tpage: Json) -> int:
-    n = tpage.get("page") or 1
-    if not isinstance(n, int | float | str):
-        raise Malformed(f"template page {n!r} is not a number")
-    return int(n)
+def _zones(tpage: SavedTemplatePage | TemplatePage) -> list[Json]:
+    """A page's zones as saved: any empty value is none, as `problems` reads it."""
+    zones = tpage.get("zones")
+    held = zones if isinstance(zones, list) else entries(zones)
+    return [an_object(z, "a zone") for z in held]
 
 
-def _objects(value: JsonValue, what: str) -> list[Json]:
-    return [an_object(v, what) for v in entries(value)]
+def _page_no(tpage: SavedTemplatePage | TemplatePage) -> int:
+    return tpage.get("page") or 1
 
 
 def _near(found: Rect, expected: Rect, tolerance: float) -> bool:
     return abs(found[0] - expected[0]) <= tolerance and abs(found[1] - expected[1]) <= tolerance
 
 
-def _anchor(words: list[LayoutWord], anchor: Json, tolerance: float) -> Rect | None:
+def _anchor(words: list[LayoutWord], anchor: SavedAnchor | TemplateAnchor, tolerance: float) -> Rect | None:
     """The box of the anchor's words closest to where the template expects it, within the tolerance."""
-    expected = _rect(anchor["box"])
+    expected = anchor["box"]
     near = [
         b for b in (union(run) for run in runs(words, tokens(str(anchor["text"])))) if _near(b, expected, tolerance)
     ]
@@ -104,8 +115,8 @@ class _PageScore:
     missing: list[str]
 
 
-def _page_score(words: list[LayoutWord], tpage: Json, tolerance: float) -> _PageScore:
-    anchors = _objects(tpage.get("anchors"), "an anchor")
+def _page_score(words: list[LayoutWord], tpage: SavedTemplatePage | TemplatePage, tolerance: float) -> _PageScore:
+    anchors = tpage["anchors"]
     found: list[tuple[Rect, Rect]] = []
     missing: list[str] = []
     required_missing = False
@@ -115,21 +126,21 @@ def _page_score(words: list[LayoutWord], tpage: Json, tolerance: float) -> _Page
             missing.append(str(a["text"]))
             required_missing = required_missing or a.get("required", True) is not False
         else:
-            found.append((box, _rect(a["box"])))
+            found.append((box, a["box"]))
     share = len(found) / len(anchors) if anchors else 0.0
     dx = sum(f[0] - e[0] for f, e in found) / len(found) if found else 0.0
     dy = sum(f[1] - e[1] for f, e in found) / len(found) if found else 0.0
     return _PageScore(bool(found) and not required_missing and share >= MATCH_SHARE, share, dx, dy, missing)
 
 
-def match(template: Json, layout: Layout, *, tolerance: float = ANCHOR_TOLERANCE) -> Match | Miss:
+def match(template: SavedTemplate | Template, layout: Layout, *, tolerance: float = ANCHOR_TOLERANCE) -> Match | Miss:
     """The file pages the template's pages are printed on, each file page used once, or the best it managed on the
     first template page it could not place."""
     numbers = sorted({p["number"] for p in layout.get("pages") or []})
-    tid = str(template["id"])
+    tid = template["id"]
     taken: dict[int, tuple[int, float, float]] = {}
-    for tpage in _objects(template.get("pages"), "a template page"):
-        best = _PageScore(False, 0.0, 0.0, 0.0, [str(a["text"]) for a in _objects(tpage.get("anchors"), "an anchor")])
+    for tpage in template["pages"]:
+        best = _PageScore(False, 0.0, 0.0, 0.0, [str(a["text"]) for a in tpage["anchors"]])
         used = {t[0] for t in taken.values()}
         for n in numbers:
             if n in used:
@@ -159,14 +170,14 @@ def _reading(words: list[LayoutWord]) -> str:
     return "\n".join(" ".join(w["text"] for w in sorted(line, key=lambda w: _box(w)[0])) for line in lines)
 
 
-def read(template: Json, found: Match, layout: Layout) -> Json:
+def read(template: SavedTemplate | Template, found: Match, layout: Layout) -> Json:
     """Each zone's answer, keyed by field, in the shape the field checks score: {value, quote, page}. A zone with no
     words answers no value."""
     answers: Json = {}
-    for tpage in _objects(template.get("pages"), "a template page"):
+    for tpage in template["pages"]:
         page, dx, dy = found.pages[_page_no(tpage)]
         words = _words(layout, page)
-        for zone in _objects(tpage.get("zones"), "a zone"):
+        for zone in _zones(tpage):
             x0, top, x1, bottom = _rect(zone["box"])
             inside = [
                 w
@@ -341,23 +352,7 @@ def _one(read: Read) -> dict[int, TemplatePage]:
     return pages
 
 
-def _zone_json(z: TemplateZone) -> Json:
-    return {"field": z["field"], "box": [*z["box"]]}
-
-
-def _anchor_json(a: TemplateAnchor) -> Json:
-    return {"text": a["text"], "box": [*a["box"]]}
-
-
-def _page_json(p: TemplatePage) -> Json:
-    return {
-        "page": p["page"],
-        "anchors": [_anchor_json(a) for a in p["anchors"]],
-        "zones": [_zone_json(z) for z in p["zones"]],
-    }
-
-
-def suggest(reads: list[Read], *, template_id: str) -> Json:
+def suggest(reads: list[Read], *, template_id: str) -> Template:
     """A draft template from finished reads of one form. Zones cover every read's value; an anchor from the first read
     is kept only when every other read prints it within ANCHOR_TOLERANCE of the same place, so a header that changes
     between printings is not relied on. A page left with no anchor is dropped, since nothing could match it."""
@@ -377,11 +372,8 @@ def suggest(reads: list[Read], *, template_id: str) -> Json:
                     first[n]["zones"].append(z)
         for n, page in first.items():
             words = _words(other.layout, n)
-            page["anchors"] = [
-                a for a in page["anchors"] if _anchor(words, _anchor_json(a), ANCHOR_TOLERANCE) is not None
-            ]
-    kept: JsonList = [_page_json(p) for _, p in sorted(first.items()) if p["anchors"] and p["zones"]]
-    return {"id": template_id, "pages": kept}
+            page["anchors"] = [a for a in page["anchors"] if _anchor(words, a, ANCHOR_TOLERANCE) is not None]
+    return {"id": template_id, "pages": [p for _, p in sorted(first.items()) if p["anchors"] and p["zones"]]}
 
 
 def fingerprint(read: Read) -> str:

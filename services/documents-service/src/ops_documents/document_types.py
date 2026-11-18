@@ -22,7 +22,15 @@ from typing import Any, Protocol, TypedDict, cast
 
 from ops_contracts.field_values import DATE_ORDERS, DEFAULT_DATE_ORDER, normalise
 from ops_documents.errors import CreateNotAllowedError, DocumentTypeMissingError, InvalidRequestError, StateError
-from ops_documents.extraction import ALIAS, FALLBACK_ALIAS, PATH_TEMPLATE, Extractor, request_of
+from ops_documents.extraction import (
+    ALIAS,
+    FALLBACK_ALIAS,
+    FIELD,
+    PATH_TEMPLATE,
+    TEMPLATE,
+    Extractor,
+    request_of,
+)
 from ops_documents.files import Files, Who
 from ops_documents.pending import Pending
 from ops_documents.readings import READING_PROCESS
@@ -40,6 +48,7 @@ from ops_documents.store.document_types import (
 from ops_documents.store.extractions import ExtractionRow
 from ops_extract import boxes, rules, templates
 from ops_extract.checks import entries, fold
+from ops_extract.shapes import FieldDefinition
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_pii import mask
 from ops_service_kit.http import Json, JsonList, JsonValue, PageJSON
@@ -98,15 +107,19 @@ class ModelsPrices:
         return None
 
 
-def carried(template: dict[str, Any], keys: set[str]) -> dict[str, Any]:
-    """A template carried to a new version: valid while every field its zones read is still there, else flagged."""
-    pages = cast(list[dict[str, Any]], template.get("pages") or [])
-    read = {str(z["field"]) for p in pages for z in cast(list[dict[str, Any]], p.get("zones") or [])}
+def carried(template: Json, keys: set[str]) -> Json:
+    """A template carried to a new version: valid while every field its zones read is still there, else flagged. It
+    is read as posted input, since the new version's `templates.problems` refuses one that is wrongly shaped."""
+    read = {
+        str(an_object(z, "a zone")["field"])
+        for p in entries(template.get("pages"))
+        for z in entries(an_object(p, "a template page").get("zones"))
+    }
     kept = {k: v for k, v in template.items() if k != templates.NEEDS_REBUILD}
     return kept if read <= keys else {**kept, templates.NEEDS_REBUILD: True}
 
 
-def dated(fields: list[dict[str, Any]], order: str | None) -> list[dict[str, Any]]:
+def dated(fields: list[Json], order: str | None) -> list[Json]:
     """The version's fields with its date order on each date field, so reading and scoring agree on 03/04/2026."""
     return [{**f, "dateOrder": order or DEFAULT_DATE_ORDER} if f.get("type") == "date" else f for f in fields]
 
@@ -188,10 +201,10 @@ def example_view(e: ExampleRow) -> dict[str, Any]:
     }
 
 
-def matches(f: dict[str, Any], expected: Any, got: Any) -> bool:
+def matches(f: FieldDefinition, expected: Any, got: Any) -> bool:
     """A read value against the expected one, both normalised as the checks normalise a field (numbers, money,
     dates), and text compared folded (case, quotes, runs of space)."""
-    want, _ = normalise(f, expected) if expected is not None else (None, 0.0)
+    want, _ = normalise(dict(f), expected) if expected is not None else (None, 0.0)
     if want is None:
         want = expected
     if isinstance(want, str) and isinstance(got, str):
@@ -447,7 +460,7 @@ class DocumentTypes:
         reads = [await self._read_of(who, type_id, r, i) for r, i in zip(rows, ids, strict=True)]
         tid = f"tpl_{uuid.uuid4().hex[:10]}"
         draft = templates.suggest(reads, template_id=tid)
-        fields = cast(list[dict[str, Any]], version["fields"])
+        fields = [FIELD(f) for f in entries(version["fields"])]
         checks: list[dict[str, Any]] = []
         for row, read in zip(rows, reads, strict=True):
             assert row is not None and row.result is not None
@@ -458,9 +471,11 @@ class DocumentTypes:
                 saved = cast(dict[str, dict[str, Any]], row.result.get("fields") or {})
                 compared: dict[str, Any] = {}
                 for f in fields:
-                    key = str(f["key"])
+                    key = f["key"]
                     want = saved.get(key, {}).get("value")
-                    got = normalise(f, json_object(answers.get(key)).get("value"))[0] if answers.get(key) else None
+                    got = (
+                        normalise(dict(f), json_object(answers.get(key)).get("value"))[0] if answers.get(key) else None
+                    )
                     if want is not None or got is not None:
                         compared[key] = {"expected": want, "got": got, "match": matches(f, want, got)}
                 check["fields"] = compared
@@ -479,7 +494,7 @@ class DocumentTypes:
                 return None
             version = await self.resolve(who, type_id, None)
             recent = await store.recent_reads(who.team, type_id, last=TEMPLATE_OFFER_READS)
-        current = cast(list[dict[str, Any]], version.get("templates") or [])
+        current = entries(version.get("templates"))
         groups: dict[str, list[ExtractionRow]] = {}
         for row in recent:
             result = row.result or {}
@@ -497,7 +512,7 @@ class DocumentTypes:
                 continue
             # One layout per offered group, from the layout cache, to ask whether a current template reads it.
             layout = await self.extractor.layout_of(who, members[0])
-            if any(isinstance(templates.match(t, layout), templates.Match) for t in current):
+            if any(isinstance(templates.match(TEMPLATE(t), layout), templates.Match) for t in current):
                 continue
             offers.append({"fingerprint": fp, "extractionIds": [m.id for m in members], "count": len(members)})
         return sorted(offers, key=lambda o: -o["count"])
@@ -677,7 +692,7 @@ class DocumentTypes:
         try:
             await self.store.set_test(test_id, {"status": "running"})
             version = await self.resolve(who, test.type_id, test.version)
-            fields = cast(list[dict[str, Any]], version["fields"])
+            fields = [FIELD(f) for f in entries(version["fields"])]
             samples = (await self.store.samples(test.type_id))[:MAX_TEST_SAMPLES]
             rows: list[dict[str, Any]] = []
             for s in samples:
@@ -698,7 +713,9 @@ class DocumentTypes:
             await self.store.set_test(test_id, {"status": "failed", "error": str(e), "finished_at": self.clock()})
 
     @staticmethod
-    def _compare(fields: list[dict[str, Any]], many: bool, sample: SampleRow, answer: dict[str, Any]) -> dict[str, Any]:
+    def _compare(
+        fields: list[FieldDefinition], many: bool, sample: SampleRow, answer: dict[str, Any]
+    ) -> dict[str, Any]:
         expected = sample.expected
         out: dict[str, Any] = {
             "sampleId": sample.id,
@@ -720,7 +737,7 @@ class DocumentTypes:
         for i, want in enumerate(wanted):
             got = cast(dict[str, Any], got_records[i]["fields"]) if i < len(got_records) else {}
             for f in fields:
-                key = str(f["key"])
+                key = f["key"]
                 if key not in want:
                     continue
                 value = cast(dict[str, Any], got.get(key) or {}).get("value")
@@ -731,10 +748,10 @@ class DocumentTypes:
         return out
 
     @staticmethod
-    def _summary(fields: list[dict[str, Any]], rows: list[dict[str, Any]]) -> dict[str, Any]:
+    def _summary(fields: list[FieldDefinition], rows: list[dict[str, Any]]) -> dict[str, Any]:
         per: dict[str, dict[str, Any]] = {}
         for f in fields:
-            key = str(f["key"])
+            key = f["key"]
             seen = [c for r in rows for c in cast(dict[str, list[dict[str, Any]]], r["fields"]).get(key, [])]
             hit = sum(1 for c in seen if c["match"])
             per[key] = {

@@ -13,6 +13,7 @@ is what the one targeted re-read asks again."""
 from __future__ import annotations
 
 from ops_extract.checks import REJECTED_TYPE, entries
+from ops_extract.shapes import Check
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.narrow import an_object, json_object
 
@@ -29,8 +30,8 @@ REASONS = {
 }
 
 
-def named(check: Json) -> list[str]:
-    """The fields a check reads."""
+def named(check: Check | Json) -> list[str]:
+    """The fields a check reads, from a saved check or one posted and not yet checked."""
     if check.get("kind") == SUM:
         return [*(str(k) for k in entries(check.get("fields"))), str(check.get("equals") or "")]
     return [str(check.get("earlier") or ""), str(check.get("later") or "")]
@@ -40,7 +41,7 @@ def named(check: Json) -> list[str]:
 READS = {SUM: ("number", "money"), BEFORE: ("date",)}
 
 
-def problems(checks: JsonValue, keys: set[str], types: dict[str, str] | None = None) -> list[str]:
+def problems(checks: JsonValue | list[Check], keys: set[str], types: dict[str, str] | None = None) -> list[str]:
     """What is wrong with a version's checks, refused when it is saved: an id each, a known kind, only fields of the
     version, and (with the fields' `types`) fields of a type the kind reads."""
     if not isinstance(checks, list):
@@ -71,7 +72,7 @@ def _number(value: JsonValue) -> float:
     raise TypeError(f"{type(value).__name__} is not a number")
 
 
-def _fails(check: Json, values: Json) -> bool | None:
+def _fails(check: Check, values: Json) -> bool | None:
     """True when the check fails, False when it holds, None when a field it names has no value."""
     got = [values.get(k) for k in named(check)]
     if any(v is None for v in got):
@@ -85,7 +86,7 @@ def _fails(check: Json, values: Json) -> bool | None:
     return str(got[0]) > str(got[1])  # ISO dates compare in order
 
 
-def apply(fields: Json, checks: list[Json]) -> None:
+def apply(fields: Json, checks: list[Check]) -> None:
     """Marks the fields each failing check names: sent to review, with the check named unless a rule already was."""
     values: Json = {k: an_object(r, f"field {k}").get("value") for k, r in fields.items()}
     for check in checks:

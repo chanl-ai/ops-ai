@@ -8,10 +8,10 @@ from typing import Any
 
 from ops_extract.checks import score
 from ops_extract.rules import apply, failed, problems
-from ops_service_kit.http import Json
+from ops_extract.shapes import Check, FieldDefinition
 
-SUM: Json = {"id": "total_adds_up", "kind": "sum", "fields": ["subtotal", "tax"], "equals": "total"}
-ORDER: Json = {"id": "due_after_issue", "kind": "before", "earlier": "issued", "later": "due"}
+SUM: Check = {"id": "total_adds_up", "kind": "sum", "fields": ["subtotal", "tax"], "equals": "total"}
+ORDER: Check = {"id": "due_after_issue", "kind": "before", "earlier": "issued", "later": "due"}
 
 
 def read(**values: Any) -> dict[str, Any]:
@@ -37,7 +37,7 @@ def test_checks_that_hold_or_lack_a_field_leave_the_read_alone() -> None:
 
 
 def test_a_value_of_the_wrong_type_is_named_so_its_re_read_is_told_why() -> None:
-    field: Json = {"key": "due", "type": "date"}
+    field: FieldDefinition = {"key": "due", "type": "date"}
     got = score(field, {"value": "41/18/2026", "quote": "41/18/2026", "page": 1}, {1: "Due 41/18/2026"}, set(),
                 file_id="f", schema_below=None, floor=0.8)  # fmt: skip
     assert got["value"] is None and got["rejected"] == "type"

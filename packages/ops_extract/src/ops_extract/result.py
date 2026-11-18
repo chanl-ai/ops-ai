@@ -6,19 +6,20 @@ from __future__ import annotations
 from typing import Literal
 
 from ops_extract.checks import entries, score
+from ops_extract.shapes import FieldDefinition
 from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.narrow import an_object, json_object
 
 Status = Literal["ok", "review"]
 
 
-def asked(fields: list[Json]) -> list[Json]:
+def asked(fields: list[FieldDefinition]) -> list[Json]:
     """The fields asked for, so a person checking the read sees each one's label and type, not only its key. A field
     the document type marks `keyField` keeps the mark, so the check asks for it on its own."""
     out: list[Json] = []
     for f in fields:
         one: Json = {
-            "key": str(f["key"]),
+            "key": f["key"],
             "label": str(f.get("label") or f["key"]),
             "type": f.get("type"),
             "required": bool(f.get("required")),
@@ -34,7 +35,7 @@ def _flagged(results: Json) -> JsonList:
 
 
 def scored(
-    fields: list[Json],
+    fields: list[FieldDefinition],
     answer: JsonValue,
     texts: dict[int, str],
     ocr_pages: set[int],
@@ -50,7 +51,7 @@ def scored(
     def one(found: Json) -> Json:
         results: Json = {}
         for f in fields:
-            key = str(f["key"])
+            key = f["key"]
             said = found.get(key)
             results[key] = score(
                 f,

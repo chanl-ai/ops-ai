@@ -2,11 +2,11 @@
 be accepted with the rest), and a field the type did not mark gaining one."""
 
 from ops_extract.result import asked
-from ops_service_kit.http import Json
+from ops_extract.shapes import FieldDefinition
 
 
 def test_a_key_field_keeps_its_mark_and_an_unmarked_field_gets_none() -> None:
-    fields: list[Json] = [
+    fields: list[FieldDefinition] = [
         {"key": "total", "label": "Total", "type": "money", "required": True, "keyField": True},
         {"key": "notes", "label": "Notes", "type": "text"},
         # Only a real true marks a field; a string from a hand-edited type does not.

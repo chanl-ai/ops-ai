@@ -16,6 +16,7 @@ import regex
 
 # The value types and their canonical forms are shared with case types (ops_contracts.field_values).
 from ops_contracts.field_values import DEFAULT_DATE_ORDER, as_date, as_number, normalise
+from ops_extract.shapes import FieldDefinition
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.narrow import Malformed
 
@@ -74,7 +75,7 @@ def ground(quote: str | None, page: int | None, pages: dict[int, str]) -> float:
     return FOLDED if fold(quote) in fold(text) else 0.0
 
 
-def in_quote(field: Json, value: JsonValue, quote: str | None) -> bool:
+def in_quote(field: FieldDefinition, value: JsonValue, quote: str | None) -> bool:
     """Whether the value is what the quote says, so a true quote cannot carry an invented value: a number or money
     amount is one of the quote's numbers, a date is one of its dates, text and enum values appear in it."""
     if not quote or value is None:
@@ -103,7 +104,7 @@ def _date_candidates(text: str) -> list[str]:
     return [m for p in patterns for m in re.findall(p, text)]
 
 
-def threshold(field: Json, schema_below: float | None, floor: float) -> float:
+def threshold(field: FieldDefinition, schema_below: float | None, floor: float) -> float:
     """The confidence a field must reach: the highest of its own, the schema's and the workspace floor."""
     below = field.get("reviewBelow") or 0
     if not isinstance(below, int | float | str):
@@ -120,7 +121,7 @@ def quote_confidence(quote: str | None, words: dict[str, float] | None) -> float
     return sum(found) / len(found) if found else OCR_FACTOR
 
 
-def cleaned(field: Json, raw: JsonValue) -> tuple[JsonValue, list[str]]:
+def cleaned(field: FieldDefinition, raw: JsonValue) -> tuple[JsonValue, list[str]]:
     """The model's value after the field's cleanup rules, in the order the field lists them, and the rules that changed
     it. Anything but text is left as it is; so is a last four when the value has fewer than four digits."""
     if not isinstance(raw, str):
@@ -140,7 +141,7 @@ def cleaned(field: Json, raw: JsonValue) -> tuple[JsonValue, list[str]]:
     return text, changed
 
 
-def broken_rule(field: Json, raw: JsonValue) -> str | None:
+def broken_rule(field: FieldDefinition, raw: JsonValue) -> str | None:
     """Which of the field's own rules the model's value breaks: `emptyWhen`, phrases that mean the document
     gives no value ("Not supplied on this form"), or `pattern`, a regular expression the whole value must match (a
     full SSN, so a masked "***-**-4321" is not one). None when it keeps both."""
@@ -164,7 +165,7 @@ def broken_rule(field: Json, raw: JsonValue) -> str | None:
 
 
 def score(
-    field: Json,
+    field: FieldDefinition,
     answer: Json | None,
     pages: dict[int, str],
     ocr_pages: set[int],
@@ -203,7 +204,8 @@ def score(
             "needsReview": bool(field.get("required")) or bool(field.get("alwaysReview")),
             "citation": None,
         }
-    value, valid = normalise(field, raw)
+    # `normalise` is shared with case types, which read a field as a plain mapping.
+    value, valid = normalise(dict(field), raw)
     said = str(quote) if quote is not None else None
     # The quote must be on its page and must say the value: either failing means nothing backs the value.
     confidence = ground(said, page, pages) * valid * (1.0 if in_quote(field, value, said) else 0.0)
@@ -226,7 +228,7 @@ def score(
     return result
 
 
-def answer_schema(fields: list[Json]) -> Json:
+def answer_schema(fields: list[FieldDefinition]) -> Json:
     """The JSON Schema the model answers: per field its value as written, the exact quote it came from and the page."""
     item: Json = {
         "type": "object",
@@ -243,7 +245,7 @@ def answer_schema(fields: list[Json]) -> Json:
     return {"type": "object", "additionalProperties": False, "required": [*keys], "properties": properties}
 
 
-def records_schema(fields: list[Json]) -> Json:
+def records_schema(fields: list[FieldDefinition]) -> Json:
     """The answer for a document that names several of the thing (Extract many): one `answer_schema` object per
     record, in the order the document gives them."""
     return {

@@ -8,15 +8,16 @@ from typing import Any
 
 from ops_contracts.field_values import normalise
 from ops_extract.checks import answer_schema, ground, score
+from ops_extract.shapes import FieldDefinition
 
 PAGES = {1: "Invoice INV-2219\nDate: 17 October 2026", 2: "Amount due: $1,234.50\nDue 30 Nov 2026"}
-INVOICE: dict[str, Any] = {"key": "invoice_no", "type": "text", "required": True}
-AMOUNT: dict[str, Any] = {"key": "amount", "type": "money", "required": True}
-DUE: dict[str, Any] = {"key": "due_date", "type": "date", "required": True}
+INVOICE: FieldDefinition = {"key": "invoice_no", "type": "text", "required": True}
+AMOUNT: FieldDefinition = {"key": "amount", "type": "money", "required": True}
+DUE: FieldDefinition = {"key": "due_date", "type": "date", "required": True}
 
 
 def scored(
-    field: dict[str, Any],
+    field: FieldDefinition,
     answer: dict[str, Any] | None,
     *,
     ocr: set[int] | None = None,
@@ -42,13 +43,13 @@ def test_a_quote_found_only_after_folding_counts_for_less() -> None:
 
 
 def test_money_and_dates_in_other_formats_are_normalised_and_bad_ones_rejected() -> None:
-    assert normalise(AMOUNT, "$1,234.50") == (1234.5, 0.9)
-    assert normalise(AMOUNT, 1234.5) == (1234.5, 1.0)
-    assert normalise(AMOUNT, "1.234,50 €") == (1234.5, 0.9)
-    assert normalise(AMOUNT, "twelve") == (None, 0.0)
-    assert normalise(DUE, "30 Nov 2026") == ("2026-11-30", 0.9)
-    assert normalise(DUE, "2026-11-30") == ("2026-11-30", 1.0)
-    assert normalise(DUE, "31 Nov 2026") == (None, 0.0)
+    assert normalise(dict(AMOUNT), "$1,234.50") == (1234.5, 0.9)
+    assert normalise(dict(AMOUNT), 1234.5) == (1234.5, 1.0)
+    assert normalise(dict(AMOUNT), "1.234,50 €") == (1234.5, 0.9)
+    assert normalise(dict(AMOUNT), "twelve") == (None, 0.0)
+    assert normalise(dict(DUE), "30 Nov 2026") == ("2026-11-30", 0.9)
+    assert normalise(dict(DUE), "2026-11-30") == ("2026-11-30", 1.0)
+    assert normalise(dict(DUE), "31 Nov 2026") == (None, 0.0)
     bad = scored(DUE, {"value": "someday", "quote": "Due 30 Nov 2026", "page": 2})
     assert bad["confidence"] == 0 and bad["needsReview"]
 
@@ -117,7 +118,7 @@ CLEAN_PAGES = {
 }
 
 
-def clean_score(field: dict[str, Any], value: str, quote: str) -> dict[str, Any]:
+def clean_score(field: FieldDefinition, value: str, quote: str) -> dict[str, Any]:
     return score(field, {"value": value, "quote": quote, "page": 1}, CLEAN_PAGES, set(), **CLEAN_FLOOR)
 
 
