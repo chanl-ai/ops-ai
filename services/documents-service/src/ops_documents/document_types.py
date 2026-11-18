@@ -50,13 +50,13 @@ from ops_documents.store.document_types import (
 from ops_documents.store.extractions import ExtractionRow
 from ops_extract import boxes, rules, templates
 from ops_extract.checks import fold
-from ops_extract.shapes import FieldDefinition
+from ops_extract.shapes import FieldDefinition, Template
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_pii import mask
 from ops_service_kit.http import Json, JsonList, JsonValue, PageJSON
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
-from ops_service_kit.narrow import a_list, an_object, entries, json_list, json_object
+from ops_service_kit.narrow import a_list, an_object, entries, json_list, json_object, required
 from ops_service_kit.settings import Settings
 from ops_store import background, isolation
 
@@ -133,6 +133,21 @@ class TypeSummary(TypedDict):
     name: str
     description: str | None
     latestVersion: int
+
+
+class Suggestion(TypedDict):
+    """A draft template and how it reads each of the reads it was drawn from (`suggest_template`)."""
+
+    template: Template
+    checks: list[Json]
+
+
+class TemplateOffer(TypedDict):
+    """Reads of a type sharing one layout no template reads yet (`template_offers`)."""
+
+    fingerprint: str
+    extractionIds: list[str]
+    count: int
 
 
 class TypePage(TypedDict):
@@ -237,9 +252,10 @@ class DocumentTypes:
         """Refuses a role that cannot change the team's document types, before a route changes anything."""
         self._may_write(who)
 
-    async def create(self, who: Who, body: dict[str, Any]) -> dict[str, Any]:
+    async def create(self, who: Who, body: Json) -> Json:
         self._may_write(who, adding=True)
-        type_id = body.get("id") or f"dt_{uuid.uuid4().hex[:12]}"
+        # An id that is not a string fails the call, as matching it did.
+        type_id = required(body, "id", str) if body.get("id") else f"dt_{uuid.uuid4().hex[:12]}"
         if not _ID.fullmatch(type_id) and not type_id.startswith("dt_"):
             raise InvalidRequestError("id is 3 to 64 lowercase letters, digits and underscores, starting with a letter")
         name = str(body.get("name") or "").strip()
@@ -264,7 +280,7 @@ class DocumentTypes:
         assert found is not None
         return found
 
-    def _checked(self, body: dict[str, Any], *, carried_forward: bool = False) -> VersionOptions:
+    def _checked(self, body: Json, *, carried_forward: bool = False) -> VersionOptions:
         """The version's fields and options, checked as an extraction request checks them. Only a template this service
         carried forward may be flagged needsRebuild: a posted flag is dropped, so a posted zone naming a field the
         version lacks is refused rather than saved unchecked."""
@@ -315,7 +331,7 @@ class DocumentTypes:
         if version["page_images"] and not held and not who.manages:
             raise CreateNotAllowedError("Turning on page images needs someone who manages the team's documents.")
 
-    async def add_version(self, who: Who, type_id: str, body: dict[str, Any]) -> dict[str, Any] | None:
+    async def add_version(self, who: Who, type_id: str, body: Json) -> Json | None:
         self._may_write(who)
         if await self._own(who, type_id) is None:
             return None
@@ -446,7 +462,7 @@ class DocumentTypes:
             layout, {k: boxes.boxes_of(an_object(f, f"field {k}").get("boxes")) for k, f in located.items()}
         )
 
-    async def suggest_template(self, who: Who, type_id: str, extraction_ids: list[str]) -> dict[str, Any] | None:
+    async def suggest_template(self, who: Who, type_id: str, extraction_ids: list[str]) -> Suggestion | None:
         """A draft template from the team's finished reads of the type, and how it reads each of them. Nothing is
         saved: a builder saves the draft as a new version, so nothing goes live on its own."""
         self._may_write(who)
@@ -464,28 +480,28 @@ class DocumentTypes:
         tid = f"tpl_{uuid.uuid4().hex[:10]}"
         draft = templates.suggest(reads, template_id=tid)
         fields = [FIELD(f) for f in version["fields"]]
-        checks: list[dict[str, Any]] = []
+        checks: list[Json] = []
         for row, read in zip(rows, reads, strict=True):
             assert row is not None and row.result is not None
             found = templates.match(draft, read.layout) if draft["pages"] else templates.Miss(tid, 0.0, [])
-            check: dict[str, Any] = {"extractionId": row.id, "matched": isinstance(found, templates.Match)}
+            check: Json = {"extractionId": row.id, "matched": isinstance(found, templates.Match)}
             if isinstance(found, templates.Match):
                 answers = templates.read(draft, found, read.layout)
-                saved = cast(dict[str, dict[str, Any]], row.result.get("fields") or {})
-                compared: dict[str, Any] = {}
+                saved = an_object(row.result.get("fields") or {}, "a read's fields")
+                compared: Json = {}
                 for f in fields:
                     key = f["key"]
-                    want = saved.get(key, {}).get("value")
+                    want = an_object(saved.get(key, {}), f"field {key}").get("value")
                     got = normalise(f, json_object(answers.get(key)).get("value"))[0] if answers.get(key) else None
                     if want is not None or got is not None:
                         compared[key] = {"expected": want, "got": got, "match": matches(f, want, got)}
                 check["fields"] = compared
             else:
-                check["missingAnchors"] = found.missing
+                check["missingAnchors"] = [*found.missing]
             checks.append(check)
         return {"template": draft, "checks": checks}
 
-    async def template_offers(self, who: Who, type_id: str) -> list[dict[str, Any]] | None:
+    async def template_offers(self, who: Who, type_id: str) -> list[TemplateOffer] | None:
         """Groups of at least the version's offerAt checked model reads of the type that share a layout and that no
         template of the latest version reads: where suggesting a template pays."""
         store = self.extractor.store
@@ -507,7 +523,7 @@ class DocumentTypes:
                 fp = templates.fingerprint(await self._read_of(who, type_id, row, row.id))
                 await store.keep_fingerprint(row.id, fp)
             groups.setdefault(fp, []).append(row)
-        offers: list[dict[str, Any]] = []
+        offers: list[TemplateOffer] = []
         for fp, members in groups.items():
             if len(members) < version["offerAt"]:
                 continue
@@ -520,7 +536,7 @@ class DocumentTypes:
 
     # ── samples ──
 
-    async def add_sample(self, who: Who, type_id: str, body: dict[str, Any]) -> dict[str, Any] | None:
+    async def add_sample(self, who: Who, type_id: str, body: Json) -> Json | None:
         self._may_write(who)
         file_id = str(body.get("fileId") or "")
         expected = body.get("expected")
@@ -532,12 +548,13 @@ class DocumentTypes:
             latest = await self.store.version(type_id, row.latest_version)
         assert latest is not None
         keys = {str(f["key"]) for f in latest.fields}
-        records = cast(list[Any], expected) if latest.many and isinstance(expected, list) else [expected]
+        records: JsonList = expected if latest.many and isinstance(expected, list) else [expected]
         if (latest.many and not isinstance(expected, list)) or not all(isinstance(r, dict) for r in records):
             raise InvalidRequestError(
                 "expected is {field: value}, or a list of them for a type reading several records"
             )
-        unknown = sorted({k for r in records for k in cast(dict[str, Any], r)} - keys)
+        # Every record is an object by now, so each is read as itself.
+        unknown = sorted({k for r in records for k in json_object(r)} - keys)
         if unknown:
             raise InvalidRequestError(
                 f"expected names fields version {latest.version} does not have: {', '.join(unknown)}"

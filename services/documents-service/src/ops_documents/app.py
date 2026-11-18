@@ -260,9 +260,11 @@ def create_documents_app(
         return Health(status="ok")
 
     @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
-    async def health_background() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+    async def health_background() -> BackgroundHealthOut:  # pyright: ignore[reportUnusedFunction]
         """This service's background processes and their state; counts and error types only, no record's data."""
-        return {"processes": background_report(await LOCAL_BEATS.read(), "documents", time.time())}
+        return BackgroundHealthOut.model_validate(
+            {"processes": background_report(await LOCAL_BEATS.read(), "documents", time.time())}
+        )
 
     def found(value: Any, what: str) -> Any:
         if value is None:
