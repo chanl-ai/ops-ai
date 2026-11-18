@@ -3,10 +3,9 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, NotRequired, TypedDict
 
 import sqlalchemy as sa
-from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.errors import NotFound
@@ -90,12 +89,81 @@ registry_validations = sa.Table(
 )
 
 
-def summary_columns(summary: JsonValue) -> dict[str, int]:
-    """The list columns of a test run's summary; a count it does not name is 0."""
-    values = summary if isinstance(summary, dict) else {}
+class CheckOutcomeJSON(TypedDict):
+    """A compile check's `draft` outcome in a validation result, in reply order."""
+
+    passed: bool
+    paused: bool
+    toolsCalled: list[str]
+    reply: str
+    failure: NotRequired[str]
+
+
+class CheckResultJSON(TypedDict):
+    """One compile check as a validation run's result, in reply order."""
+
+    caseId: str
+    caseName: str
+    draft: CheckOutcomeJSON
+    live: None
+    regression: bool
+
+
+class ValidationSummaryJSON(TypedDict):
+    """A validation run's `summary`, in reply order."""
+
+    passed: int
+    total: int
+    regressions: int
+    checksFailing: int
+
+
+class NewValidation(TypedDict):
+    """A validation run as the validate route records it, in column order."""
+
+    id: str
+    workflow_id: str
+    ran_at: str
+    target: str
+    results: list[CheckResultJSON]
+    summary: ValidationSummaryJSON
+
+
+class NewWorkflow(TypedDict):
+    """A registry workflow's columns as a create or a seed writes them, in column order."""
+
+    id: str
+    team_id: str
+    name: str
+    description: str
+    trigger: str
+    status: str
+    published_version: int | None
+    draft: Json | None
+    draft_saved_at: str | None
+    draft_saved_by: str | None
+    created_at: str
+    updated_at: str
+
+
+class NewWorkflowVersion(TypedDict):
+    """A published version's columns as a publish or a seed writes them, in column order."""
+
+    workflow_id: str
+    version: int
+    graph: Json
+    note: str
+    changes: list[str]
+    published_at: str
+    published_by: str
+    review_id: str | None
+
+
+def summary_columns(summary: ValidationSummaryJSON) -> dict[str, int]:
+    """The list columns of a test run's summary; a count it does not name, or names as a non-number, is 0."""
 
     def count(key: str) -> int:
-        value = values.get(key)
+        value = summary.get(key)
         return int(value) if isinstance(value, int | float) else 0
 
     return {
@@ -213,7 +281,7 @@ class WorkflowRegistry(VersionedRegistry[RegistryWorkflowRow, WorkflowVersionRow
             raise NotFound(f"Workflow {record_id}")
         return r
 
-    async def create(self, row: dict[str, Any]) -> None:
+    async def create(self, row: NewWorkflow) -> None:
         async with self.tx() as c:
             await c.execute(registry_workflows.insert().values(**row))
 
@@ -225,7 +293,7 @@ class WorkflowRegistry(VersionedRegistry[RegistryWorkflowRow, WorkflowVersionRow
                 .values(**values, updated_at=now_iso())
             )
 
-    async def add_version(self, row: dict[str, Any]) -> None:
+    async def add_version(self, row: NewWorkflowVersion) -> None:
         async with self.tx() as c:
             exists = (
                 await c.execute(
@@ -244,7 +312,7 @@ class WorkflowRegistry(VersionedRegistry[RegistryWorkflowRow, WorkflowVersionRow
         await self.row(workflow_id)
         await self.update(workflow_id, status="deleted", draft=None)
 
-    async def save_validation(self, row: dict[str, Any]) -> None:
+    async def save_validation(self, row: NewValidation) -> None:
         async with self.tx() as c:
             await c.execute(registry_validations.insert().values(**row, **summary_columns(row["summary"])))
 

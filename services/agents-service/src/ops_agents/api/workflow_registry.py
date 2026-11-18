@@ -15,18 +15,17 @@ through the canvas.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, NotRequired, TypedDict
+from typing import NotRequired, Protocol, TypedDict, cast
 
 from pydantic import JsonValue
 
 from ops_agents.graphs.definition import InvalidDefinitionError, NodeKind, WorkflowDefinition, validate
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
-from ops_service_kit.http import Json
+from ops_service_kit.http import Json, JsonList
 from ops_service_kit.http import JsonValue as AnyJson
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
@@ -35,6 +34,9 @@ from ..store.agent_registry import PublishRequestRow
 from ..store.graphs import GraphStore
 from ..store.workflow_list import PendingPublish
 from ..store.workflow_registry import (
+    CheckOutcomeJSON,
+    CheckResultJSON,
+    NewWorkflow,
     RegistryWorkflowRow,
     WorkflowRegistry,
 )
@@ -56,26 +58,6 @@ def condition_targets(config: Json) -> list[tuple[str, str]]:
 
 
 # ── compile ──
-
-
-class CheckOutcomeJSON(TypedDict):
-    """A compile check's `draft` outcome in a validation result, in reply order."""
-
-    passed: bool
-    paused: bool
-    toolsCalled: list[str]
-    reply: str
-    failure: NotRequired[str]
-
-
-class CheckResultJSON(TypedDict):
-    """One compile check as a validation run's result, in reply order."""
-
-    caseId: str
-    caseName: str
-    draft: CheckOutcomeJSON
-    live: None
-    regression: bool
 
 
 @dataclass(frozen=True)
@@ -111,29 +93,30 @@ class Compiled:
         return sum(1 for c in self.checks if not c.passed)
 
 
-def compile_graph(name: str, graph: dict[str, Any], agents: dict[str, PinnedAgent | None]) -> Compiled:
+def compile_graph(name: str, graph: Json, agents: dict[str, PinnedAgent | None]) -> Compiled:
     """`agents` maps each slug the console knows to its published pin, or None for an agent with no published
-    version. Returns the definition (None when any check fails) and every check that ran."""
+    version. Returns the definition (None when any check fails) and every check that ran. The graph is what a person
+    drew: its nodes and edges are read as they always were, so a part of the wrong type raises as it did."""
     checks: list[Check] = []
-    nodes: list[dict[str, Any]] = list(graph.get("nodes") or [])
-    edges: list[dict[str, Any]] = list(graph.get("edges") or [])
-    out_nodes: list[dict[str, Any]] = []
+    nodes = cast(list[Json], list(cast(JsonList, graph.get("nodes") or [])))
+    edges = cast(list[Json], list(cast(JsonList, graph.get("edges") or [])))
+    out_nodes: list[Json] = []
     out_edges: list[tuple[str, str]] = []
     skip_edges: set[int] = set()
     slugs: list[str] = []
     entry: list[str] = []
     by_id = {str(n["id"]): n for n in nodes}
 
-    def outgoing(nid: str) -> list[tuple[int, dict[str, Any]]]:
+    def outgoing(nid: str) -> list[tuple[int, Json]]:
         return [(i, e) for i, e in enumerate(edges) if e["source"] == nid]
 
     for n in nodes:
-        nid, kind_of, data = str(n["id"]), str(n.get("type")), dict(n.get("data") or {})
+        nid, kind_of, data = str(n["id"]), str(n.get("type")), dict(cast(Json, n.get("data") or {}))
         label = str(data.get("label") or nid)
         passthrough = data.get("definition")
         if isinstance(passthrough, dict):
-            raw: dict[str, Any] = passthrough  # pyright: ignore[reportUnknownVariableType]
-            config: dict[str, Any] = dict(raw.get("config") or {})
+            raw: Json = passthrough
+            config: Json = dict(cast(Json, raw.get("config") or {}))
             out_nodes.append({"id": nid, "kind": raw["kind"], "config": config})
             if data.get("entry"):
                 entry.append(nid)
@@ -201,7 +184,7 @@ def compile_graph(name: str, graph: dict[str, Any], agents: dict[str, PinnedAgen
         pair = (str(e["source"]), str(e["target"]))
         if i not in skip_edges and pair not in out_edges and e.get("sourceHandle") != "timeout":
             out_edges.append(pair)
-    known = {n["id"] for n in out_nodes}
+    known = {cast(str, n["id"]) for n in out_nodes}
     reachable: set[str] = set()
     if len(entry) == 1:
         frontier = [entry[0]]
@@ -210,7 +193,9 @@ def compile_graph(name: str, graph: dict[str, Any], agents: dict[str, PinnedAgen
             nexts.setdefault(s, set()).add(t)
         for n in out_nodes:
             if n["kind"] == "condition":
-                nexts.setdefault(n["id"], set()).update(t for _, t in condition_targets(n["config"]))
+                nexts.setdefault(cast(str, n["id"]), set()).update(
+                    t for _, t in condition_targets(cast(Json, n["config"]))
+                )
         while frontier:
             cur = frontier.pop()
             if cur in reachable:
@@ -241,15 +226,13 @@ def compile_graph(name: str, graph: dict[str, Any], agents: dict[str, PinnedAgen
     return Compiled(d, [*checks, Check("definition", "Compiles to a definition", True)], slugs)
 
 
-def _route_condition(
-    nid: str, label: str, data: dict[str, Any], edges: list[tuple[int, dict[str, Any]]]
-) -> dict[str, Any] | Check:
+def _route_condition(nid: str, label: str, data: Json, edges: list[tuple[int, Json]]) -> Json | Check:
     """A branch with several routes as a `route` condition. Each outgoing edge leaves by a handle;
     `data.routes[handle]` is its comparison ({field, op, value}) and `data.defaultRoute` names the handle taken when
     none matches. The definition's validation checks the fields and operators."""
-    when_by_handle: dict[str, Any] = data.get("routes") or {}
+    when_by_handle = cast(Json, data.get("routes") or {})
     default_handle = data.get("defaultRoute")
-    routes: list[dict[str, Any]] = []
+    routes: JsonList = []
     default: str | None = None
     missing: list[str] = []
     for _, e in edges:
@@ -272,9 +255,9 @@ def _route_condition(
 CONSOLE_TYPE: dict[NodeKind, str] = {"human": "review", "end": "end", "condition": "branch"}
 
 
-def render_definition(d: WorkflowDefinition) -> dict[str, Any]:
+def render_definition(d: WorkflowDefinition) -> Json:
     """A definition as a console graph that compiles back to the same definition (each node passes through)."""
-    nodes = [
+    nodes: JsonList = [
         {
             "id": n.id,
             "type": CONSOLE_TYPE.get(n.kind, "step"),
@@ -290,25 +273,26 @@ def render_definition(d: WorkflowDefinition) -> dict[str, Any]:
         }
         for i, n in enumerate(d.nodes)
     ]
-    edges = [{"id": f"{e.source}-out-{e.target}", "source": e.source, "target": e.target} for e in d.edges]
+    edges: JsonList = [{"id": f"{e.source}-out-{e.target}", "source": e.source, "target": e.target} for e in d.edges]
     for n in d.nodes:
         if n.kind == "condition":
-            edges += [
+            routes: JsonList = [
                 {"id": f"{n.id}-{k}-{t}", "source": n.id, "target": t, "sourceHandle": k}
                 for k, t in condition_targets(n.config)
             ]
+            edges += routes
     return {"nodes": nodes, "edges": edges}
 
 
 # ── templates ──
 
 
-def _node(nid: str, kind: str, col: int, data: dict[str, Any], y: int = 200) -> dict[str, Any]:
-    base = {"label": nid.capitalize(), "description": "", "icon": "check", "category": "control"}
+def _node(nid: str, kind: str, col: int, data: Json, y: int = 200) -> Json:
+    base: Json = {"label": nid.capitalize(), "description": "", "icon": "check", "category": "control"}
     return {"id": nid, "type": kind, "position": {"x": col * 270, "y": y}, "data": {**base, **data}}
 
 
-def _edge(s: str, t: str, handle: str | None = None) -> dict[str, Any]:
+def _edge(s: str, t: str, handle: str | None = None) -> Json:
     return {
         "id": f"{s}-{handle or 'out'}-{t}",
         "source": s,
@@ -317,25 +301,25 @@ def _edge(s: str, t: str, handle: str | None = None) -> dict[str, Any]:
     }
 
 
-def template_graph(template: str, trigger: str, agent_slug: str | None) -> dict[str, Any]:
+def template_graph(template: str, trigger: str, agent_slug: str | None) -> Json:
     t = _node("t", "trigger", 0, {"label": trigger, "icon": "globe", "category": "trigger"})
     agent = (
         [_node("agent", "step", 1, {"label": "Agent", "icon": "brain", "category": "ai", "agentSlug": agent_slug})]
         if agent_slug
         else []
     )
-    first = agent[0]["id"] if agent else None
+    first = cast(str, agent[0]["id"]) if agent else None
     if template == "approval":
         review = _node("review", "review", 2, {"label": "Review", "icon": "user", "category": "human"})
         done = _node("done", "end", 3, {"label": "Approved"}, 100)
         stop = _node("stopped", "end", 3, {"label": "Rejected"}, 300)
-        nodes = [t, *agent, review, done, stop]
-        edges = [_edge("t", first or "review"), *([_edge(first, "review")] if first else [])]
+        nodes: JsonList = [t, *agent, review, done, stop]
+        edges: JsonList = [_edge("t", first or "review"), *([_edge(first, "review")] if first else [])]
         edges += [_edge("review", "done", "approved"), _edge("review", "stopped", "rejected")]
         return {"nodes": nodes, "edges": edges}
     done = _node("done", "end", 2 if agent else 1, {"label": "Done"})
     edges = [_edge("t", first or "done"), *([_edge(first, "done")] if first else [])]
-    return {"nodes": [t, *agent, done], "edges": edges}
+    return {"nodes": [t, *agent, done], "edges": [*edges]}
 
 
 # ── store ──
@@ -386,7 +370,7 @@ async def move_pointer(rt: Runtime, workflow_id: str, version: int) -> None:
 
 
 async def publish(
-    rt: Runtime, workflow_id: str, d: WorkflowDefinition, graph: dict[str, Any], *, note: str, by: str, review_id: str
+    rt: Runtime, workflow_id: str, d: WorkflowDefinition, graph: Json, *, note: str, by: str, review_id: str
 ) -> int:
     """Stores the definition as the next graph version (or the version already holding its digest), records the
     console graph beside it and points the workflow at it."""
@@ -411,12 +395,18 @@ async def publish(
     return version
 
 
-def _graph_changes(old: dict[str, Any], new: dict[str, Any]) -> list[str]:
-    before = {n["id"]: n for n in old.get("nodes", [])}
-    after = {n["id"]: n for n in new.get("nodes", [])}
-    out = [f"Added {after[i]['data'].get('label', i)}" for i in after if i not in before]
-    out += [f"Removed {before[i]['data'].get('label', i)}" for i in before if i not in after]
-    out += [f"Changed {after[i]['data'].get('label', i)}" for i in after if i in before and after[i] != before[i]]
+def _graph_changes(old: Json, new: Json) -> list[str]:
+    """What a publish changed, by node. The graphs are what a person drew, read as they always were: a part of the
+    wrong type raises as it did."""
+    before = {cast(str, n["id"]): n for n in cast(list[Json], old.get("nodes", []))}
+    after = {cast(str, n["id"]): n for n in cast(list[Json], new.get("nodes", []))}
+
+    def label(n: Json, i: str) -> JsonValue:
+        return cast(Json, n["data"]).get("label", i)
+
+    out = [f"Added {label(after[i], i)}" for i in after if i not in before]
+    out += [f"Removed {label(before[i], i)}" for i in before if i not in after]
+    out += [f"Changed {label(after[i], i)}" for i in after if i in before and after[i] != before[i]]
     if old.get("edges") != new.get("edges") and not out:
         out.append("Changed connections")
     return out or ["No changes"]
@@ -438,8 +428,10 @@ async def load(rt: Runtime, seed_dir: Path | None) -> None:
         latest = versions[-1]
         d = WorkflowDefinition.model_validate(latest.definition)
         await reg.create(
-            _row(name, name.replace("_", " ").capitalize(), "Seeded definition", "Email", at, status="live")
-            | {"published_version": latest.version}
+            {
+                **_row(name, name.replace("_", " ").capitalize(), "Seeded definition", "Email", at, status="live"),
+                "published_version": latest.version,
+            }
         )
         await reg.add_version(
             {
@@ -509,7 +501,7 @@ SEED_REQUESTER = "seed"
 
 
 async def _seed_for_review(
-    rt: Runtime, row: RegistryWorkflowRow, version: int, d: WorkflowDefinition, graph: dict[str, Any]
+    rt: Runtime, row: RegistryWorkflowRow, version: int, d: WorkflowDefinition, graph: Json
 ) -> None:
     """A changed seed outside dev: the draft and one publish request for its version, as a person's save and publish
     would leave them. A version that already has a request, pending or decided, is not asked again on each restart,
@@ -518,7 +510,7 @@ async def _seed_for_review(
     if any(int(r.version) == version for r in await agent_registry(rt).requests("workflow", name)):
         return
     note = "The seed's definition changed"
-    info: dict[str, Any] = {
+    info: Json = {
         "workflowId": name,
         "fromVersion": row.published_version or 0,
         "toVersion": version,
@@ -549,7 +541,7 @@ async def _seed_for_review(
     log.info("seed_waiting_for_review", workflow=name, seed=version, published_version=row.published_version)
 
 
-def _row(wid: str, name: str, description: str, trigger: str, at: str, *, status: str = "draft") -> dict[str, Any]:
+def _row(wid: str, name: str, description: str, trigger: str, at: str, *, status: str = "draft") -> NewWorkflow:
     return {
         "id": wid,
         "team_id": SEED_TEAM,
@@ -566,9 +558,10 @@ def _row(wid: str, name: str, description: str, trigger: str, at: str, *, status
     }
 
 
-def new_row(wid: str, name: str, trigger: str, *, team_id: str, draft: dict[str, Any], by: str) -> dict[str, Any]:
+def new_row(wid: str, name: str, trigger: str, *, team_id: str, draft: Json, by: str) -> NewWorkflow:
     at = now_iso()
-    return _row(wid, name, "", trigger, at) | {
+    return {
+        **_row(wid, name, "", trigger, at),
         "team_id": team_id,
         "draft": draft,
         "draft_saved_at": at,
@@ -609,24 +602,105 @@ def _shape(graph: Json) -> tuple[list[AnyJson], int, int]:
     return slugs, steps, gates
 
 
+class WorkflowHead(Protocol):
+    """What a workflow's view reads of its row: a registry row, or a row of the workflows list."""
+
+    @property
+    def id(self) -> str: ...
+    @property
+    def name(self) -> str: ...
+    @property
+    def description(self) -> str: ...
+    @property
+    def team_id(self) -> str | None: ...
+    @property
+    def trigger(self) -> str: ...
+    @property
+    def status(self) -> str: ...
+    @property
+    def updated_at(self) -> str: ...
+
+
+class PendingPublishJSON(TypedDict):
+    reviewId: str
+    toVersion: int
+    requestedBy: str
+
+
+class WorkflowStartJSON(TypedDict):
+    kind: AnyJson
+    byHand: bool
+    takesFiles: bool
+
+
+class WorkflowLeadJSON(TypedDict):
+    """The keys every `schemas.Workflow` row starts with, in reply order."""
+
+    id: str
+    name: str
+    description: str
+    teamId: str | None
+    trigger: str
+    agentSlugs: list[AnyJson]
+    stepCount: int
+    gateCount: int
+    runs24h: int
+    reviewed24h: int
+    openReviews: int
+    status: str
+    version: int
+    updatedAt: str
+
+
+class WorkflowJSON(TypedDict):
+    """`schemas.Workflow`; each builder writes the keys in reply order."""
+
+    id: str
+    name: str
+    description: str
+    teamId: str | None
+    trigger: str
+    agentSlugs: list[AnyJson]
+    stepCount: int
+    gateCount: int
+    runs24h: int
+    reviewed24h: int
+    openReviews: int
+    status: str
+    version: int
+    updatedAt: str
+    pendingPublish: NotRequired[PendingPublishJSON]
+    deploymentCount: int
+    kind: str
+    engine: str
+    start: NotRequired[WorkflowStartJSON]
+
+
+def pending_json(pending: PublishRequestRow | PendingPublish) -> PendingPublishJSON:
+    return {"reviewId": pending.id, "toVersion": pending.version, "requestedBy": pending.requested_by}
+
+
 def workflow_view(
-    row: Mapping[str, AnyJson],
-    live: Mapping[str, AnyJson] | None,
+    row: WorkflowHead,
+    *,
+    version: int | None,
+    live_graph: AnyJson,
+    draft: AnyJson,
     pending: PublishRequestRow | PendingPublish | None,
     runs: int,
     waiting: int,
-) -> Json:
-    """`schemas.Workflow` for a v1 workflow: `row` is a registry row's columns and `live` its live version's, as the
-    routes dump them. A graph that is not an object raises, as reading it did."""
-    graph = narrow.an_object((live or {}).get("graph") or row["draft"] or {"nodes": [], "edges": []}, "workflow graph")
+) -> WorkflowJSON:
+    """`schemas.Workflow` for a v1 workflow: the live version's graph when there is one, else the draft. A graph that
+    is not an object raises, as reading it did."""
+    graph = narrow.an_object(live_graph or draft or {"nodes": [], "edges": []}, "workflow graph")
     slugs, steps, gates = _shape(graph)
-    out: Json = {
-        "id": row["id"],
-        "name": row["name"],
-        "description": row["description"],
+    lead: WorkflowLeadJSON = {
+        "id": row.id,
+        "name": row.name,
+        "description": row.description,
         # The owning team comes from the creator's token; the console names it from its teams list.
-        "teamId": row["team_id"],
-        "trigger": row["trigger"],
+        "teamId": row.team_id,
+        "trigger": row.trigger,
         "agentSlugs": slugs,
         "stepCount": steps,
         "gateCount": gates,
@@ -634,18 +708,20 @@ def workflow_view(
         # A v1 thread keeps no record of reviews it has already had decided, so only open ones can be counted.
         "reviewed24h": 0,
         "openReviews": waiting,
-        "status": row["status"],
-        "version": row["published_version"] or 0,
-        "updatedAt": row["updated_at"],
+        "status": row.status,
+        "version": version or 0,
+        "updatedAt": row.updated_at,
     }
+    # In reply order: the pending publish, when there is one, before the keys that end every row.
     if pending:
-        out["pendingPublish"] = {
-            "reviewId": pending.id,
-            "toVersion": pending.version,
-            "requestedBy": pending.requested_by,
+        return {
+            **lead,
+            "pendingPublish": pending_json(pending),
+            "deploymentCount": 0,
+            "kind": "standard",
+            "engine": "v1",
         }
-    out |= {"deploymentCount": 0, "kind": "standard", "engine": "v1"}
-    return out
+    return {**lead, "deploymentCount": 0, "kind": "standard", "engine": "v1"}
 
 
 RUN_STATUS = {"done": "completed", "interrupted": "waiting_review", "error": "failed", "lease_lost": "failed"}
@@ -659,9 +735,45 @@ def _ms(a: str, b: str) -> int:
         return 0
 
 
+class RunStepJSON(TypedDict):
+    """`schemas.RunStep` as a run's journal shows it, in reply order."""
+
+    nodeId: str
+    label: str
+    kind: str
+    status: str
+    durationMs: int
+
+
+class RunLeadJSON(TypedDict):
+    """The keys every `schemas.WorkflowRun` starts with, in reply order."""
+
+    id: str
+    workflowId: str
+    version: int
+    subject: str
+    status: str
+    startedAt: str
+    durationMs: int
+
+
+class WorkflowRunJSON(TypedDict):
+    """`schemas.WorkflowRun`, in reply order."""
+
+    id: str
+    workflowId: str
+    version: int
+    subject: str
+    status: str
+    startedAt: str
+    durationMs: int
+    reviewId: NotRequired[str]
+    steps: list[RunStepJSON]
+
+
 async def run_rows(
     rt: Runtime, workflow_id: str, wanted: list[str], offset: int, limit: int
-) -> tuple[list[dict[str, Any]], int, dict[str, int]]:
+) -> tuple[list[WorkflowRunJSON], int, dict[str, int]]:
     """One page of the workflow's threads as the console's WorkflowRun, with the total and the count per status;
     `wanted` keeps those statuses. The page, the counts and the page's run journals are each one statement, so the
     reads stay the same however many runs the workflow has."""
@@ -677,11 +789,11 @@ async def run_rows(
     journals: dict[str, list[list[dict[str, JsonValue]]]] = {}
     for run in await store.run_events([t.id for t in threads]):
         journals.setdefault(run.thread_id, []).append(run.events)
-    out: list[dict[str, Any]] = []
+    out: list[WorkflowRunJSON] = []
     for t in threads:
         status = RUN_STATUS.get(t.status, "running")
         node_kinds = kinds.get(t.version or 0, {})
-        steps: list[dict[str, Any]] = []
+        steps: list[RunStepJSON] = []
         for events in journals.get(t.id, []):
             for e in events:
                 if e.get("event") == "node_start" and e.get("node") in node_kinds:
@@ -697,17 +809,18 @@ async def run_rows(
                     )
         if steps and status == "waiting_review":
             steps[-1]["status"] = "waiting"
-        out.append(
-            {
-                "id": t.id,
-                "workflowId": workflow_id,
-                "version": t.version or 0,
-                "subject": str(t.meta.get("subject") or f"Run {t.id}"),
-                "status": status,
-                "startedAt": t.created_at,
-                "durationMs": _ms(t.created_at, t.updated_at),
-                **({"reviewId": t.id} if status == "waiting_review" else {}),
-                "steps": steps,
-            }
-        )
+        lead: RunLeadJSON = {
+            "id": t.id,
+            "workflowId": workflow_id,
+            "version": t.version or 0,
+            "subject": str(t.meta.get("subject") or f"Run {t.id}"),
+            "status": status,
+            "startedAt": t.created_at,
+            "durationMs": _ms(t.created_at, t.updated_at),
+        }
+        # In reply order: the review, when the run waits on one, before the steps.
+        if status == "waiting_review":
+            out.append({**lead, "reviewId": t.id, "steps": steps})
+        else:
+            out.append({**lead, "steps": steps})
     return out, total, counted
