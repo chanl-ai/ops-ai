@@ -31,6 +31,12 @@ def test_a_listed_maintainers_approval_is_approved_and_a_comment_or_a_withdrawal
     assert r.status(withdrawn, LISTED) == "required"
 
 
+def test_a_listed_maintainers_own_pull_request_is_approved_without_a_review() -> None:
+    assert r.status([], LISTED, author="Maintainer") == "approved"
+    assert r.status([], LISTED, author="builder") == "required"
+    assert r.status([], LISTED, author=None) == "required"
+
+
 def test_the_script_proves_itself() -> None:
     assert r.self_test() == 0
 

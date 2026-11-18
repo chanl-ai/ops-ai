@@ -26,7 +26,7 @@ standardises on SQL Server needs no PostgreSQL at all. The design and inventory 
 |---|---|---|
 | Two databases in every test run | Each service's store tests run on PostgreSQL and SQL Server through `OPS_TEST_DATABASE_URL`; a pair that passes is green, a split is red | The matrix in verify-head and `make python-verify` |
 | Differences live in one place | Stores build statements with SQLAlchemy Core. Where the two databases differ (upsert, row lock, queue claim, app lock, database clock, tenant transaction, full-text; vectors later) a store calls `ops_store.dialect` | `scripts/check_portable_store.py --strict` in the commit gate and `make python-verify` |
-| The baseline only falls | `portable-baseline.txt` lists the code that does not run on SQL Server yet. A pull request that raises a row needs an approving review from a listed maintainer (`.github/standards-maintainers.txt`) | `check_portable_store.py --commits` |
+| The baseline only falls | `portable-baseline.txt` lists the code that does not run on SQL Server yet. A pull request that raises a row needs an approving review from a listed maintainer, or to be authored by one (`.github/standards-maintainers.txt`) | `check_portable_store.py --commits` |
 | One schema source | Store metadata is the schema; SQL Server DDL is compiled from it. Each chain gets a SQL Server baseline stamped at its current head, and every migration after it is written with Alembic operations that run on both | `deploy/database/tests/test_model_parity.py` and the SQL Server DDL tests |
 | Database code in stores only | Only a service's store package, `ops_store` and the checkpointer import a driver or SQLAlchemy | `lint-imports` (`.importlinter`) |
 

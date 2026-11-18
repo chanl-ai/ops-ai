@@ -8,7 +8,7 @@ The grid below is generated from `packages/ops_access` and checked by `make pyth
 line of `access-exceptions-allowlist.txt`, every line's row against this register (a resolved row holds no lines; a
 line added on a row with no decision fails, and the lines already on one are printed for review), and every
 exception line a pull request adds, which needs an approving review on it from a maintainer listed (by hash) in
-`.github/standards-maintainers.txt`; CI's `maintainer-review` job reads the review from GitHub, so no commit message
+`.github/standards-maintainers.txt`, or a pull request authored by one (GitHub refuses self-approval); CI's `maintainer-review` job reads the review from GitHub, so no commit message
 approves anything.
 
 ## How access is decided
