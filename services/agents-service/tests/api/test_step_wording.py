@@ -24,6 +24,7 @@ from ops_contracts.chat import ApprovalWidget, ChatMessage, WidgetEvent
 from ops_engine.journal import StepRow
 from ops_engine.store import RunStore, SqlJournal
 from ops_engine.store.tables import engine_definitions
+from ops_service_kit.http import Json
 from ops_store.team_scope import acting_as
 from tests.api.test_activity import activity
 from tests.api.test_case_routes import started_run
@@ -125,8 +126,8 @@ async def test_the_write_preview_carries_the_operations_labels(stack: Stack) -> 
     """The Human Task page drew a write's input keys made readable in the browser; the region now carries the
     operation's own labels and values, as the one describer words them."""
     _, rt = stack
-    call = {"tool": "place_hold", "input": {"accountId": "CHQ-2219", "amount": 2140.55}}
-    payload = {"taskType": {"id": "write_approval"}, "params": {"title": "Hold the funds", "call": call}}
+    call: Json = {"tool": "place_hold", "input": {"accountId": "CHQ-2219", "amount": 2140.55}}
+    payload: Json = {"taskType": {"id": "write_approval"}, "params": {"title": "Hold the funds", "call": call}}
     with tenant_scope(TENANT), acting_as("team_ops"):
         task: dict[str, Any] = await task_view.typed_task(rt, payload) or {}
         expected = await describe_call(rt, call, currency=None, money_key=None)
@@ -265,7 +266,7 @@ async def test_a_call_of_another_team_is_not_read(stack: Stack) -> None:  # noqa
         theirs = await EventLog(rt.db).append(
             thread_id="th_other", team_id="team_other", run_id=None, type_="tool_end", node="agent", data=data
         )
-        rows = [{"kind": "tool_call", "source_type": "chat", "row_id": theirs.id}]
+        rows: list[Json] = [{"kind": "tool_call", "source_type": "chat", "row_id": theirs.id}]
         with acting_as("team_ops"):
             seen = await Activity(rt.db).calls(rows)
         with acting_as("team_other"):

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import cast
 
 from ops_engine.store import RunStep, RunStore
 from ops_service_kit.http import Json, JsonValue
@@ -86,7 +86,7 @@ class TaskReads:
 
 
 async def typed_task(
-    rt: Runtime, payload: dict[str, Any], run: Json | None = None, reads: TaskReads | None = None
+    rt: Runtime, payload: Json, run: Json | None = None, reads: TaskReads | None = None
 ) -> Json | None:
     given = payload.get("taskType")
     if not given:

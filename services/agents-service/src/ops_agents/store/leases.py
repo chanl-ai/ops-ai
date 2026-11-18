@@ -124,7 +124,7 @@ class Leases(RuntimeStore):
         """Takes the lease and returns its generation, or raises LeaseHeldError with the live holder. Taking over an
         expired or released lease is how a dead owner's lease is reclaimed; either way the generation goes up."""
         now = db_now(self.engine)
-        values: dict[str, Any] = {
+        values = {
             "owner": self.owner,
             "run_id": run_id,
             "acquired_at": now,

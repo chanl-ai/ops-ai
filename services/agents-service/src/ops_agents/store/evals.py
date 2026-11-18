@@ -4,10 +4,11 @@ is only ever added. A workflow's test runs are `registry_validations` and are re
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import sqlalchemy as sa
 
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
@@ -67,9 +68,7 @@ eval_runs = sa.Table(
 class EvalStore(RuntimeStore):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION})
 
-    async def replace_cases(
-        self, kind: str, asset_id: str, team_id: str, cases: list[dict[str, Any]], *, by: str
-    ) -> None:
+    async def replace_cases(self, kind: str, asset_id: str, team_id: str, cases: list[Json], *, by: str) -> None:
         """Makes `cases` the asset's active set in one transaction; its draft cases are left."""
         t = eval_cases
         now = now_iso()
@@ -99,7 +98,7 @@ class EvalStore(RuntimeStore):
                     ],
                 )
 
-    async def cases(self, kind: str | None = None, asset_id: str | None = None) -> list[dict[str, Any]]:
+    async def cases(self, kind: str | None = None, asset_id: str | None = None) -> list[Json]:
         t = eval_cases
         q = sa.select(t).where(team_visible(t)).order_by(t.c.kind, t.c.asset_id, t.c.position)
         if kind:
@@ -109,11 +108,11 @@ class EvalStore(RuntimeStore):
         async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
-    async def add_run(self, row: dict[str, Any]) -> None:
+    async def add_run(self, row: Json) -> None:
         async with self.tx() as c:
             await c.execute(eval_runs.insert().values(**row))
 
-    async def runs(self, kind: str | None = None, asset_id: str | None = None) -> list[dict[str, Any]]:
+    async def runs(self, kind: str | None = None, asset_id: str | None = None) -> list[Json]:
         """The acting team's runs, newest first."""
         t = eval_runs
         q = sa.select(t).where(team_visible(t)).order_by(t.c.ran_at.desc(), t.c.id.desc())

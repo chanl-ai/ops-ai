@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Final, cast
 
+from ops_service_kit.http import Json
+
 CHECK_CALLS_TOOL: Final = "calls_tool"
 CHECK_REPLY_CONTAINS: Final = "reply_contains"
 CHECK_REFUSES: Final = "refuses"
@@ -131,7 +133,7 @@ def unknown_check_types(cases: list[EvalCase]) -> list[str]:
     return found
 
 
-def _list_field(data: dict[str, Any], *keys: str) -> list[Any]:
+def _list_field(data: Json, *keys: str) -> list[Any]:
     for key in keys:
         value = data.get(key)
         if isinstance(value, list):
@@ -139,20 +141,20 @@ def _list_field(data: dict[str, Any], *keys: str) -> list[Any]:
     return []
 
 
-def _map_field(data: dict[str, Any], *keys: str) -> dict[str, Any]:
+def _map_field(data: Json, *keys: str) -> Json:
     for key in keys:
         value = data.get(key)
         if isinstance(value, dict):
-            return cast(dict[str, Any], value)
+            return cast(Json, value)
     return {}
 
 
-def turn_from_test(data: dict[str, Any]) -> TurnView:
+def turn_from_test(data: Json) -> TurnView:
     """A test-turn dict as the scorer sees it: reply, tool names, blocked topic, latency."""
     names: list[str] = []
     for call in _list_field(data, "toolCalls", "tool_calls"):
         if isinstance(call, dict):
-            row = cast(dict[str, Any], call)
+            row = cast(Json, call)
             name = str(row.get("name") or row.get("tool") or "")
             if name:
                 names.append(name)
@@ -163,7 +165,7 @@ def turn_from_test(data: dict[str, Any]) -> TurnView:
         reply=str(data.get("reply") or ""),
         tool_names=tuple(names),
         blocked_topic=topic or None,
-        latency_ms=int(raw_latency or 0),
+        latency_ms=int(cast(int | float | str, raw_latency or 0)),
     )
 
 

@@ -13,6 +13,7 @@ from dataclasses import dataclass, replace
 from typing import Any, cast
 
 from ops_agent_kernel.ports import ToolExecutor, ToolOutcome
+from ops_service_kit.http import Json
 
 
 @dataclass(frozen=True)
@@ -85,17 +86,17 @@ APPS = {"search_knowledge": "the knowledge bases", "read_file": "Files", "read_d
 _CODE = re.compile(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b")
 
 
-def _object(value: Any) -> dict[str, Any] | None:
-    return cast(dict[str, Any], value) if isinstance(value, dict) else None
+def _object(value: Any) -> Json | None:
+    return cast(Json, value) if isinstance(value, dict) else None
 
 
-def _error(output: Any) -> dict[str, Any]:
+def _error(output: Any) -> Json:
     """The innermost error object of a failed outcome: the gateway's envelope may nest it once more."""
     err = _object((_object(output) or {}).get("error")) or {}
     return _object(err.get("error")) or err
 
 
-def app_name(tool: str, details: dict[str, Any]) -> str:
+def app_name(tool: str, details: Json) -> str:
     named = details.get("app") or details.get("appName") or details.get("connection")
     if named:
         return str(named)
@@ -119,7 +120,7 @@ def _said(output: Any) -> str | None:
     return inner if isinstance(inner, str) else None
 
 
-def worded(tool: str, output: Any) -> dict[str, Any] | None:
+def worded(tool: str, output: Any) -> Json | None:
     """What the model reads for a failed call of `tool`: `{what, next, retryable}`, plus the service's own message
     under `detail` when it has no code in it (an invalid input names the field to fix). None when the failure is
     already plain words ("The team has no file named …"), which the model reads as it is."""
@@ -132,7 +133,7 @@ def worded(tool: str, output: Any) -> dict[str, Any] | None:
         code = next((m.group(0) for m in _CODE.finditer(text or "") if m.group(0) in WORDS), "")
     words = WORDS.get(code, UNKNOWN)
     app = app_name(tool, _object(err.get("details")) or {})
-    out: dict[str, Any] = {
+    out: Json = {
         "what": words.what.format(app=app),
         "next": words.next.format(app=app),
         "retryable": words.retryable,
@@ -150,9 +151,7 @@ class WordedTools:
 
     inner: ToolExecutor
 
-    async def execute(
-        self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
-    ) -> ToolOutcome:
+    async def execute(self, tool: str, arguments: Json, *, key: str, approval_token: str | None) -> ToolOutcome:
         outcome = await self.inner.execute(tool, arguments, key=key, approval_token=approval_token)
         if outcome.ok or outcome.needs_review is not None or outcome.for_model is not None:
             return outcome

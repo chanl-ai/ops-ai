@@ -3,11 +3,10 @@ measured across processes (E2): each call logs `model_call thread=<id> node=<nod
 
 from __future__ import annotations
 
-from typing import Any
-
 from langgraph.config import get_config
 
 from ops_agents.graphs.models import Facts, Grade, GraphModels
+from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 
 log = get_logger("ops_agents.api.metering")
@@ -47,6 +46,6 @@ class CountingModels:
         self._log("grade")
         return await self._inner.grade(email, draft)
 
-    async def extract_records(self, schema: str, text: str) -> list[dict[str, Any]]:
+    async def extract_records(self, schema: str, text: str) -> list[Json]:
         self._log("extract_records")
         return await self._inner.extract_records(schema, text)

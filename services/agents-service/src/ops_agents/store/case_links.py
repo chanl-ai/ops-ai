@@ -4,13 +4,13 @@ query whatever the case holds, and capped, so a case with many runs reads as fas
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_engine.store.tables import engine_definitions, engine_runs
-from ops_service_kit.http import Out
+from ops_service_kit.http import Json, Out
 from ops_store import Guarantee
 from ops_store.rows import rows
 from ops_store.team_scope import team_visible
@@ -50,7 +50,7 @@ class CaseLinks:
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
 
-    async def runs(self, case_id: str, team_id: str) -> list[dict[str, Any]]:
+    async def runs(self, case_id: str, team_id: str) -> list[Json]:
         """The runs on the case's timeline, newest first, in the case's team, each with `workflow_name`."""
         e, r, d = case_events, engine_runs, engine_definitions
         named = r.outerjoin(

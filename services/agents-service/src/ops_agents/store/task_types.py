@@ -6,10 +6,11 @@ keeps the screen it was opened with (`published`, read by id and version, is wha
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import sqlalchemy as sa
 
+from ops_service_kit.http import Json
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 
 from .base import metadata
@@ -28,7 +29,7 @@ task_type_versions = sa.Table(
 _RECORD_KEYS = ("name", "description", "params", "regions", "actions", "defaults")
 
 
-def record_of(content: dict[str, Any]) -> dict[str, Any]:
+def record_of(content: Json) -> Json:
     return {k: content[k] for k in _RECORD_KEYS if k in content}
 
 

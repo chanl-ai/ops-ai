@@ -11,6 +11,7 @@ from typing import Any, cast
 
 from ops_contracts.field_values import FIELD_TYPES, normalise
 from ops_service_kit.errors import Unprocessable
+from ops_service_kit.http import Json
 
 CASE_FIELD_TYPES = (*FIELD_TYPES, "file", "link")
 KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}$")
@@ -35,7 +36,7 @@ def specs_of(raw: Any) -> list[FieldSpec]:
         raise Unprocessable(f"A case type holds at most {MAX_FIELDS} fields.", code="case_type_invalid")
     out: list[FieldSpec] = []
     for item in items:
-        f = cast(dict[str, Any], item) if isinstance(item, dict) else {}
+        f = cast(Json, item) if isinstance(item, dict) else {}
         key, kind = str(f.get("key") or ""), str(f.get("type") or "text")
         if not KEY.match(key) or key in {s.key for s in out}:
             raise Unprocessable(f"Field key {key!r} is missing, not a name, or used twice.", code="case_type_invalid")
@@ -67,11 +68,11 @@ def display(spec: FieldSpec, value: Any) -> str:
     return str(value)
 
 
-def fields_view(specs: list[FieldSpec] | None, values: dict[str, Any], edited: set[str]) -> list[dict[str, Any]]:
+def fields_view(specs: list[FieldSpec] | None, values: Json, edited: set[str]) -> list[Json]:
     """Every field in the type's order, then any value the type does not declare in the order it was set. A case
     with no type lists its values in the order they were set, as text."""
     declared = specs or []
-    out: list[dict[str, Any]] = []
+    out: list[Json] = []
     for s in declared:
         out.append(_one(s, values.get(s.key), s.key in edited, declared=True))
     known = {s.key for s in declared}
@@ -81,7 +82,7 @@ def fields_view(specs: list[FieldSpec] | None, values: dict[str, Any], edited: s
     return out
 
 
-def _one(spec: FieldSpec, value: Any, edited: bool, *, declared: bool) -> dict[str, Any]:
+def _one(spec: FieldSpec, value: Any, edited: bool, *, declared: bool) -> Json:
     return {
         "key": spec.key,
         "label": spec.label,

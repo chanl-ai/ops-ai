@@ -10,12 +10,13 @@ Cost is stored as integer millionths of the currency unit so sums are exact on S
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 
 from ops_metering import Budget, Totals
+from ops_service_kit.http import Json
 
 
-def budget_view(b: Budget | None) -> dict[str, Any] | None:
+def budget_view(b: Budget | None) -> Json | None:
     if b is None:
         return None
     return {
@@ -25,7 +26,7 @@ def budget_view(b: Budget | None) -> dict[str, Any] | None:
     }
 
 
-def totals_view(t: Totals) -> dict[str, Any]:
+def totals_view(t: Totals) -> Json:
     return {
         "calls": t.calls,
         "inputTokens": t.input_tokens,

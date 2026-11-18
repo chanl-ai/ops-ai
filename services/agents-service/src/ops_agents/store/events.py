@@ -9,7 +9,7 @@ from typing import Any, ClassVar
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
-from ops_service_kit.http import Out
+from ops_service_kit.http import Json, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
 from ops_store.rows import rows
@@ -58,7 +58,7 @@ class EventOut(Out):
     at: str
     data: Any
 
-    def wire(self) -> dict[str, Any]:
+    def wire(self) -> Json:
         return self.model_dump(by_alias=True, exclude={"position"})
 
 

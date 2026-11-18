@@ -132,7 +132,7 @@ class UsageLedger(RuntimeStore):
         return Budget(row.max_calls, row.max_tokens, cap)
 
     async def set_budget(self, thread_id: str, budget: Budget) -> None:
-        values: dict[str, Any] = {
+        values = {
             "thread_id": thread_id,
             "max_calls": budget.max_calls,
             "max_tokens": budget.max_tokens,

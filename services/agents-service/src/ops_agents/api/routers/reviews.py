@@ -183,7 +183,7 @@ async def list_reviews(rt: Rt, me: Me, q: Annotated[ReviewsQuery, Query()]) -> J
     return ok(rows)
 
 
-async def _with_can_decide(rt: Runtime, me: Principal, review: dict[str, Any]) -> dict[str, Any]:
+async def _with_can_decide(rt: Runtime, me: Principal, review: Json) -> Json:
     """The review with whether the caller may decide it now: the console shows Approve and Reject only then."""
     waiting = review.get("status") in ("pending", "in_review")
     return review | {"canDecide": waiting and await hitl_facade.can_decide(rt, me, str(review["id"]))}

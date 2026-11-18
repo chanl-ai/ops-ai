@@ -20,6 +20,7 @@ from ops_access import CHAT_USER
 from ops_identity import Principal as Caller
 from ops_policy import HmacSigner, TokenError, mint, verify
 from ops_service_kit.errors import ApiError, Forbidden, Unauthorized, ValidationFailed
+from ops_service_kit.http import Json, JsonList
 
 from .auth import Principal
 from .deps import Runtime
@@ -88,7 +89,7 @@ def _signer(rt: Runtime) -> HmacSigner:
     return HmacSigner.derived(rt.settings.review_key.get_secret_value(), "widget-session")
 
 
-def mint_session(rt: Runtime, deployment: dict[str, Any], origin: str, person: Principal) -> str:
+def mint_session(rt: Runtime, deployment: Json, origin: str, person: Principal) -> str:
     claims = {
         "typ": SESSION_TYPE,
         "dep": deployment["id"],
@@ -112,11 +113,11 @@ def claimed_tenant(token: str | None) -> str | None:
         claims: object = json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
     except (IndexError, ValueError):
         return None
-    tenant = cast(dict[str, object], claims).get("tenant") if isinstance(claims, dict) else None
+    tenant = cast(Json, claims).get("tenant") if isinstance(claims, dict) else None
     return tenant if isinstance(tenant, str) and tenant else None
 
 
-def read_session(rt: Runtime, token: str | None, deployment: dict[str, Any], origin: str | None) -> WidgetSession:
+def read_session(rt: Runtime, token: str | None, deployment: Json, origin: str | None) -> WidgetSession:
     """The session a widget request carries, refused unless it was minted for this deployment and this origin. The
     tenant and team come from the deployment row, never from the session's claims; claims naming another are refused."""
     if not token:
@@ -142,14 +143,14 @@ def read_session(rt: Runtime, token: str | None, deployment: dict[str, Any], ori
     )
 
 
-def allowed(deployment: dict[str, Any], origin: str | None) -> str:
+def allowed(deployment: Json, origin: str | None) -> str:
     """The request's origin when the deployment lists it; a request with none (a script or a server) is refused."""
     if not origin:
         raise Forbidden(
             "Widget requests come from a page; servers mint with the widget's mint key.", code="origin_required"
         )
     o = normal_origin(origin)
-    if o not in [str(x) for x in deployment["origins"]]:
+    if o not in [str(x) for x in cast(JsonList, deployment["origins"])]:
         raise Forbidden(f"{o} may not use this widget.", code="origin_not_allowed")
     return o
 

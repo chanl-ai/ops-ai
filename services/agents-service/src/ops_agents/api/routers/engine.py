@@ -639,7 +639,7 @@ async def restore_definition(rt: Rt, me: Me, _: Tx, workflow_id: str) -> JSONRes
     return ok(await _archived(rt, me, workflow_id, False))
 
 
-async def _archived(rt: Runtime, me: Principal, workflow_id: str, archived: bool) -> dict[str, Any]:
+async def _archived(rt: Runtime, me: Principal, workflow_id: str, archived: bool) -> Json:
     row = await definitions(rt).row(workflow_id, team=current_team())
     if row is None:
         raise NotFound(f"Workflow definition {workflow_id}")
@@ -729,7 +729,7 @@ async def request_definition_publish(rt: Rt, me: Me, workflow_id: str, body: Def
     return ok(await engine_lifecycle.request_publish(rt, me, workflow_id, body.version, body.note), status=201)
 
 
-async def set_paused(rt: Runtime, me: Principal, workflow_id: str, paused: bool) -> dict[str, Any]:
+async def set_paused(rt: Runtime, me: Principal, workflow_id: str, paused: bool) -> Json:
     row = await definitions(rt).row(workflow_id, team=current_team())
     if row is None:
         raise NotFound(f"Workflow definition {workflow_id}")

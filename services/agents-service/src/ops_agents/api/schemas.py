@@ -10,7 +10,7 @@ fails a test.
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import ConfigDict, Field
 from pydantic.alias_generators import to_camel
@@ -23,6 +23,7 @@ from ops_service_kit.http import (
     ErrorBody,  # noqa: F401  # pyright: ignore[reportUnusedImport]
     ErrorEnvelope,  # noqa: F401  # pyright: ignore[reportUnusedImport]
     ExternalOut,
+    Json,
     JsonValue,
     ListResult,
     Option,
@@ -929,7 +930,7 @@ class GraphPublished(Out):
 
 
 # The run stream: Server-Sent Events, one JSON event per `data:` line ({event, runId, seq, node?, data?}).
-SSE_RESPONSE: dict[int | str, dict[str, Any]] = {
+SSE_RESPONSE: dict[int | str, Json] = {
     200: {"description": "Server-Sent Events", "content": {"text/event-stream": {"schema": {"type": "string"}}}}
 }
 

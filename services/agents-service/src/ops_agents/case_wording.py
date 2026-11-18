@@ -6,6 +6,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ops_service_kit.http import Json
+
 FIELDS = {
     "status": "Status",
     "priority": "Priority",
@@ -25,7 +27,7 @@ def _said(actor: str, rest: str) -> str:
     return f"{actor} {rest}" if actor else rest[:1].upper() + rest[1:]
 
 
-def entry(kind: str, detail: dict[str, Any], actor: str = "", names: dict[str, str] | None = None) -> str | None:
+def entry(kind: str, detail: Json, actor: str = "", names: dict[str, str] | None = None) -> str | None:
     """The event in a sentence, led by who did it when `actor` is given (the case feed) and without, where the page
     shows who did it beside the sentence (Activity); None for an event another line already tells: a run added to the
     case is told by the run's own lines, and a decision by the Human Task step that took it."""

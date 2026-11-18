@@ -7,9 +7,11 @@ run once approved, and record each execution by idempotency key so a repeat retu
 from __future__ import annotations
 
 import re
-from typing import Any, Protocol
+from collections.abc import Mapping
+from typing import Protocol
 
 from ops_agent_kernel.ports import ToolOutcome
+from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import new_id, now_iso
 
 from .catalog import Catalog, ToolDefinition
@@ -17,7 +19,7 @@ from .catalog import Catalog, ToolDefinition
 PLACEHOLDER = re.compile(r"\{(\w+)\}")
 
 
-def fill(template: str, values: dict[str, Any]) -> str:
+def fill(template: str, values: Mapping[str, JsonValue]) -> str:
     """`{field}` placeholders filled from `values`; one with no value (an input the model left out) reads as nothing,
     so a reviewer never sees the template's own braces."""
     return PLACEHOLDER.sub(lambda m: str(values[m.group(1)]) if m.group(1) in values else "", template)
@@ -28,9 +30,7 @@ class LocalToolExecutor:
         self._catalog = catalog
         self._executed: dict[str, ToolOutcome] = {}
 
-    async def execute(
-        self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
-    ) -> ToolOutcome:
+    async def execute(self, tool: str, arguments: Json, *, key: str, approval_token: str | None) -> ToolOutcome:
         definition = self._catalog.tool(tool)
         if definition is None:
             return ToolOutcome(False, f"Tool {tool} is not granted to this agent.")
@@ -45,7 +45,7 @@ class LocalToolExecutor:
         self._executed[key] = outcome
         return outcome
 
-    def _lookup(self, d: ToolDefinition, arguments: dict[str, Any]) -> ToolOutcome:
+    def _lookup(self, d: ToolDefinition, arguments: Json) -> ToolOutcome:
         rows = self._catalog.datasets.get(d.dataset or "", [])
         needles = [str(v).strip().lower() for v in arguments.values() if str(v).strip()]
         match = next(
@@ -62,7 +62,7 @@ class LocalToolExecutor:
         }
         return ToolOutcome(True, {"found": True, **match}, view)
 
-    def _draft(self, d: ToolDefinition, arguments: dict[str, Any]) -> ToolOutcome:
+    def _draft(self, d: ToolDefinition, arguments: Json) -> ToolOutcome:
         reference = new_id("ref").upper().replace("REF_", "NB-")
         result = fill(d.approval.result, {**arguments, "reference": reference}) if d.approval else "Done."
         return ToolOutcome(

@@ -6,9 +6,10 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from typing import Any, cast
+from typing import cast
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 
 from ..store.tenancy import current_tenant
@@ -31,7 +32,7 @@ class PlatformPeopleNames:
         hit = self.cached.get(tenant)
         if hit is None or self.clock() - hit[1] >= CACHE_SECONDS or not emails <= set(hit[0]):
             try:
-                rows = cast(list[dict[str, Any]], await self.platform.get("/v1/people-names") or [])
+                rows = cast(list[Json], await self.platform.get("/v1/people-names") or [])
             except (ServiceCallError, ServiceUnreachable) as e:
                 log.warning("people's names unread; showing their emails", extra={"error": str(e)})
                 return dict(hit[0]) if hit else {}

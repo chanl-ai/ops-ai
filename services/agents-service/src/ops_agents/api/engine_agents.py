@@ -30,6 +30,7 @@ from ops_engine.ports import AgentRequest, AgentResult, PromptRequest
 from ops_identity import ServiceClient
 from ops_metering import PriceTable
 from ops_service_kit.errors import NotFound, Unprocessable
+from ops_service_kit.http import Json
 from ops_service_kit.settings import Settings
 
 from ..store.agent_registry import AgentRegistry
@@ -108,7 +109,7 @@ async def kernel_call(
     key: str,
     instructions: str,
     message: str,
-    schema: dict[str, Any],
+    schema: Json,
     model_alias: str,
     agent_id: str,
     redact_pii: bool = False,
@@ -227,7 +228,7 @@ class KernelModels:
     ports: KernelPorts
     model_alias: str
 
-    async def structured(self, system: str, user: str, schema: dict[str, Any], *, key: str) -> Any:
+    async def structured(self, system: str, user: str, schema: Json, *, key: str) -> Any:
         result = await kernel_call(
             self.ports,
             key=key,

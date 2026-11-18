@@ -12,6 +12,7 @@ from ops_agents.activities.tool_directory import grants_for
 from ops_agents.activities.tools import fill
 from ops_agents.graphs.common import needs_step_up
 from ops_service_kit.errors import ApiError, ServiceUnavailable
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
 
 from ..store.agent_registry import AgentRow
@@ -32,12 +33,12 @@ def model_refusal(result: TurnResult) -> ApiError | None:
     return error
 
 
-def _held(rt: Runtime, grant: ToolGrant) -> dict[str, Any]:
+def _held(rt: Runtime, grant: ToolGrant) -> Json:
     """A tool the tested agent holds: whether a call pauses for a review (the kernel gates every grant that is not
     read-only or a workflow) and, from its approval template, at which gate and for whom."""
     tool = rt.catalog.tool(grant.name)
     tpl = tool.approval if tool else None
-    out: dict[str, Any] = {"name": grant.name, "access": grant.access, "pauses": grant.gated}
+    out: Json = {"name": grant.name, "access": grant.access, "pauses": grant.gated}
     if grant.gated:
         out |= {"gate": tpl.gate if tpl else "Approval", "reviewers": tpl.reviewers if tpl else "a reviewer"}
     return out

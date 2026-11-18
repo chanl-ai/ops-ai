@@ -12,7 +12,7 @@ platform-service (and the page asks files-service and tools-service) after it en
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal, TypeAlias
+from typing import Annotated, Literal, TypeAlias
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -340,7 +340,7 @@ def _left(due: str, now: datetime) -> int:
     return int((datetime.fromisoformat(due.replace("Z", "+00:00")) - now).total_seconds())
 
 
-def _view(row: CaseRecord, now: datetime | None = None) -> dict[str, Any]:
+def _view(row: CaseRecord, now: datetime | None = None) -> Json:
     at = now or datetime.now(UTC)
     running = row.paused_since is None and row.status not in ("resolved", "closed")
     view = CaseView.model_validate(
@@ -360,7 +360,7 @@ async def _visible(store: CaseStore, me: Principal, case_id: str) -> CaseRecord:
         raise NotFound(f"Case {case_id}") from None
 
 
-async def _detail(store: CaseStore, row: CaseRecord) -> dict[str, Any]:
+async def _detail(store: CaseStore, row: CaseRecord) -> Json:
     events = [
         CaseEventView.model_validate(e.model_dump(include=set(CaseEventView.model_fields)))
         for e in await store.events(row.id)

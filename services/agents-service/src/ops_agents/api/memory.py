@@ -657,7 +657,7 @@ class MemoryReads:
             )
         ]
 
-    async def run(self, arguments: dict[str, Any]) -> ToolOutcome:
+    async def run(self, arguments: Json) -> ToolOutcome:
         person = TURN_PERSON.get()
         thread_id = str((get_config().get("configurable") or {}).get("thread_id") or "")
         thread = await graph_store(self.rt).thread(thread_id) if thread_id else None

@@ -18,7 +18,7 @@ from ops_access import can
 from ops_documents_client import DocumentNotFound, DocumentsClient
 from ops_engine import ai_steps, default_registry
 from ops_service_kit.errors import ServiceUnavailable, TooManyRequests, Unprocessable
-from ops_service_kit.http import Envelope, In, JsonValue, Out
+from ops_service_kit.http import Envelope, In, Json, JsonValue, Out
 from ops_service_kit.ids import new_id
 
 from ...store.tenancy import current_team, current_tenant
@@ -113,7 +113,7 @@ async def run_ai_step(rt: Rt, me: Me, step: Step, body: AiStepIn) -> JSONRespons
     return ok(AiStepOut(port=port, output=output).model_dump(by_alias=True))
 
 
-async def _with_fields(rt: Runtime, team: str, params: dict[str, Any]) -> dict[str, Any]:
+async def _with_fields(rt: Runtime, team: str, params: Json) -> Json:
     """A named document type's fields, read as the caller's team the way a step reads them as its run's (one lookup,
     ai_steps.resolve_fields), so the route and a step answer alike."""
     if not params.get("documentType") or params.get("fields"):

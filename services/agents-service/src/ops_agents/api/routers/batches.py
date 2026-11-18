@@ -23,7 +23,7 @@ from ops_files_client import FileNotFound, FilesClient
 from ops_identity.fastapi import Tx
 from ops_ingest.parsers.spreadsheet import spreadsheet_rows
 from ops_service_kit.errors import NotFound, ServiceUnavailable, Unprocessable
-from ops_service_kit.http import Envelope, In, JsonValue, Out
+from ops_service_kit.http import Envelope, In, Json, JsonValue, Out
 
 from ...store.batches import MAX_ROWS, Batches, BatchOut, BatchRowOut
 from ...store.tenancy import current_tenant
@@ -93,22 +93,22 @@ class Retried(Out):
     retried: int
 
 
-def _inputs(stored: DefinitionRow) -> dict[str, Any]:
+def _inputs(stored: DefinitionRow) -> Json:
     form = start_form(stored.definition, default_registry())
-    props = cast(dict[str, Any], (form or {}).get("schema") or {}).get("properties") if form else None
+    props = cast(Json, (form or {}).get("schema") or {}).get("properties") if form else None
     if form is None or form.get("kind") != "form" or not props:
         raise Unprocessable(
             "This workflow's Request trigger has no inputs a file's columns could name.", code="no_start_form"
         )
-    return cast(dict[str, Any], props)
+    return cast(Json, props)
 
 
-def _mapping(header: list[str], inputs: dict[str, Any]) -> tuple[dict[str, str], list[str]]:
+def _mapping(header: list[str], inputs: Json) -> tuple[dict[str, str], list[str]]:
     """Each column to the input it names, by key or by title, whatever the case."""
     names: dict[str, str] = {}
     for key, spec in inputs.items():
         names[key.strip().lower()] = key
-        title = cast(dict[str, Any], spec).get("title") if isinstance(spec, dict) else None
+        title = cast(Json, spec).get("title") if isinstance(spec, dict) else None
         if isinstance(title, str) and title.strip():
             names[title.strip().lower()] = key
     mapping = {h: names[h.strip().lower()] for h in header if h.strip().lower() in names}
@@ -140,12 +140,12 @@ async def start_batch(rt: Rt, me: Me, workflow_id: str, body: BatchIn) -> JSONRe
         )
     mapping, ignored = _mapping(header, inputs)
     if not mapping:
-        titles = ", ".join(str(cast(dict[str, Any], s).get("title") or k) for k, s in inputs.items())
+        titles = ", ".join(str(cast(Json, s).get("title") or k) for k, s in inputs.items())
         raise Unprocessable(
             f"No column in {info.name} names an input. Name the first row's columns {titles}.",
             code="batch_no_matching_columns",
         )
-    mapped = [{mapping[c]: v for c, v in r.items() if c in mapping and v != ""} for r in rows]
+    mapped: list[Json] = [{mapping[c]: v for c, v in r.items() if c in mapping and v != ""} for r in rows]
     if body.dry_run:
         dry = {"rows": len(mapped), "mapping": mapping, "ignored": ignored, "sample": mapped[:SAMPLE]}
         return ok(dry)

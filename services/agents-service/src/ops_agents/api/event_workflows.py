@@ -14,22 +14,24 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
+
+from ops_service_kit.http import Json
 
 EVENT_TRIGGER = "ops.trigger.event"
 
 SEED_FILE = Path(__file__).resolve().parents[3] / "seed" / "event_workflows.json"
-EVENT_WORKFLOWS: list[dict[str, Any]] = json.loads(SEED_FILE.read_text())
+EVENT_WORKFLOWS: list[Json] = json.loads(SEED_FILE.read_text())
 
 
-def event_of(definition: dict[str, Any]) -> str | None:
+def event_of(definition: Json) -> str | None:
     """The event a definition's Service event trigger names, if it has one."""
-    for node in cast(list[dict[str, Any]], definition.get("nodes") or []):
+    for node in cast(list[Json], definition.get("nodes") or []):
         if node.get("type") == EVENT_TRIGGER:
-            return str(cast(dict[str, Any], node.get("parameters") or {}).get("event") or "") or None
+            return str(cast(Json, node.get("parameters") or {}).get("event") or "") or None
     return None
 
 
-def handlers(items: list[dict[str, Any]]) -> dict[str, str]:
+def handlers(items: list[Json]) -> dict[str, str]:
     """Each event to the id of the workflow that handles it."""
     return {event: str(item["id"]) for item in items if (event := event_of(item))}

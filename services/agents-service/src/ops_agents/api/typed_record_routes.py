@@ -4,11 +4,9 @@ record is checked."""
 
 from __future__ import annotations
 
-from typing import Any
-
 from ops_access import can
 from ops_service_kit.errors import Unprocessable
-from ops_service_kit.http import JsonValue, Out
+from ops_service_kit.http import Json, JsonValue, Out
 
 from ..store.tenancy import current_team
 from ..store.typed_records import SEED, TypeDetail, TypeHead, VersionedRecords
@@ -42,12 +40,12 @@ class RecordVersionView(Out):
     published_at: str | None
 
 
-def view(row: TypeHead) -> dict[str, Any]:
+def view(row: TypeHead) -> Json:
     shown = RecordTypeView.model_validate(row.model_dump(include=set(RecordTypeView.model_fields)))
     return shown.model_dump(mode="json", by_alias=True)
 
 
-def detail(row: TypeDetail) -> dict[str, Any]:
+def detail(row: TypeDetail) -> Json:
     versions = [
         RecordVersionView.model_validate(v.model_dump(include=set(RecordVersionView.model_fields)))
         for v in row.versions
