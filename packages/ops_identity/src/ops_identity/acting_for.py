@@ -15,10 +15,11 @@ from __future__ import annotations
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from ops_policy import Ed25519Signer, mint
 from ops_service_kit.errors import Forbidden, ServiceUnavailable
+from ops_service_kit.http import Json
 from ops_service_kit.narrow import an_object
 
 if TYPE_CHECKING:
@@ -45,7 +46,7 @@ def refused(why: str) -> Forbidden:
     return Forbidden(f"The acting-for token is not valid: {why}.", code="acting_for_refused")
 
 
-def person_of(claims: dict[str, Any], *, service: str, tenant_id: str, team_id: str | None) -> ActingForPerson:
+def person_of(claims: Json, *, service: str, tenant_id: str, team_id: str | None) -> ActingForPerson:
     """The person a verified token's claims name, once they are this service's and this call's."""
     if claims.get("kind") != ACTING_FOR_KIND:
         raise refused("it is not an acting-for token")

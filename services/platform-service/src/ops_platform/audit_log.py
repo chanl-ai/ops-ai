@@ -9,6 +9,7 @@ from typing import Any
 from ops_access import ANY_TEAM
 from ops_access.catalogue import BUILTIN_ROLES, MEMBER_ROLE_TO_BUILTIN
 from ops_service_kit.errors import Forbidden
+from ops_service_kit.http import Json
 from ops_service_kit.listing import ListParams
 
 from .store.audit import EVERYTHING_BUT, KIND, VIEWS, AuditEntryRow, AuditLog
@@ -79,7 +80,7 @@ def summary(row: AuditEntryRow) -> str:
     return line() if line else str(d.get("summary") or row.action)
 
 
-def shown(row: AuditEntryRow) -> dict[str, Any]:
+def shown(row: AuditEntryRow) -> Json:
     return {
         "id": row.id,
         "teamId": row.team_id,

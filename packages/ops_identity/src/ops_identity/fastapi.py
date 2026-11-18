@@ -25,15 +25,15 @@ only. platform-service, the issuer, resolves its own sessions and does not use t
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable, Mapping
 from dataclasses import dataclass
-from typing import Annotated, Any
+from typing import Annotated
 
 import httpx
 from fastapi import Depends, FastAPI, Header, Request
 
 from ops_service_kit.errors import Forbidden
-from ops_service_kit.http import Json, mark_public
+from ops_service_kit.http import Json, JsonValue, mark_public
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 
@@ -108,7 +108,7 @@ class Auth:
         email: str,
         tenant_id: str = DEV_TENANT,
         team_id: str = DEV_TEAM,
-        policies: dict[str, Any] | None = None,
+        policies: Mapping[str, JsonValue] | None = None,
     ) -> Auth:
         """The fixed dev user; tests pass their own tenant so each runs on its own rows. `policies` stand in for the
         tenant's access policies a platform token would carry."""

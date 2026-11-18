@@ -14,6 +14,7 @@ import httpx
 import pytest
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable, dev_service_signer
+from ops_service_kit.narrow import a_list
 from ops_service_kit.settings import Settings
 
 
@@ -82,7 +83,9 @@ async def test_a_cursor_list_is_read_to_its_last_page() -> None:
         page = {None: {"items": [1, 2], "nextLink": "c2"}, "c2": {"items": [3], "deltaLink": "d"}}[cursor]
         return httpx.Response(200, json={"success": True, "data": page})
 
-    items = [i async for page in client(handler).pages("POST", "/v1/mailboxes/read") for i in page["items"]]
+    items = [
+        i async for page in client(handler).pages("POST", "/v1/mailboxes/read") for i in a_list(page["items"], "items")
+    ]
     assert items == [1, 2, 3]
 
 

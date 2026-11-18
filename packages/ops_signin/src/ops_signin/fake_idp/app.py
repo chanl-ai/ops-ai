@@ -19,7 +19,7 @@ import time
 import zlib
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, TypedDict
 from urllib.parse import parse_qs, unquote_plus, urlencode
 
 import jwt
@@ -47,6 +47,18 @@ _NS = {"samlp": PROTOCOL, "saml": ASSERTION}
 GROUPS_OVERAGE = "http://schemas.microsoft.com/claims/groups.link"
 
 
+class _Grant(TypedDict):
+    """What the provider keeps for an authorization code until the token request redeems it."""
+
+    client_id: str | None
+    redirect_uri: str | None
+    challenge: str | None
+    nonce: str | None
+    email: str
+    auth_time: int
+    groups: list[str]
+
+
 @dataclass
 class Idp:
     name: str
@@ -54,7 +66,7 @@ class Idp:
     cert_pem: str
     kid: str
     logins: dict[str, int] = field(default_factory=dict[str, int])
-    codes: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
+    codes: dict[str, _Grant] = field(default_factory=dict[str, _Grant])
     # What this provider knows of the service provider: its certificate, whether requests must be signed,
     # and how to encrypt assertions to it.
     sp: dict[str, Any] = field(default_factory=dict[str, Any])
