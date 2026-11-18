@@ -213,8 +213,17 @@ say "9. DBA mode against a separate PostgreSQL 17 (TLS, admin without superuser)
 [ -z "$(docker volume ls -q --filter "label=com.docker.compose.project=$PROJECT")" ] || fail "uninstall left volumes"
 say "uninstall: no container or volume of $PROJECT is left"
 DBA_ADMIN_PW=$(secret)
+# Containers reach the DBA's server and the model on the host. Docker Desktop names it host.docker.internal; Docker
+# Engine on Linux (the CI runner) has no such name, so there both listen on the bridge's gateway address instead.
+if [ "$(uname -s)" = Linux ]; then
+  HOST=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')
+  BIND=$HOST
+else
+  HOST=host.docker.internal
+  BIND=127.0.0.1
+fi
 docker rm -fv $PG $FAKE >/dev/null 2>&1 || true
-docker run -d --name $PG -e POSTGRES_PASSWORD="$(secret)" -p 127.0.0.1:$PG_PORT:5432 pgvector/pgvector:pg17 \
+docker run -d --name $PG -e POSTGRES_PASSWORD="$(secret)" -p "$BIND:$PG_PORT:5432" pgvector/pgvector:pg17 \
   -c ssl=on -c ssl_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem -c ssl_key_file=/etc/ssl/private/ssl-cert-snakeoil.key >/dev/null
 until docker exec $PG pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; do sleep 1; done
 # Azure's admin, who is not a superuser, may create pgvector because vector is in azure.extensions; marking it trusted
@@ -222,7 +231,7 @@ until docker exec $PG pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; do sl
 docker exec $PG sh -c 'echo "trusted = true" >>"$(pg_config --sharedir)/extension/vector.control"'
 docker exec $PG psql -q -U postgres -c "CREATE ROLE opsadmin LOGIN NOSUPERUSER CREATEDB CREATEROLE BYPASSRLS PASSWORD '$DBA_ADMIN_PW'"
 # An OpenAI-compatible endpoint on the host: the fake model from the published models image. It never calls a provider.
-docker run -d --name $FAKE -p 127.0.0.1:$FAKE_PORT:8746 -e FAKE_OPENAI_HOST=0.0.0.0 -e FAKE_OPENAI_PORT=8746 \
+docker run -d --name $FAKE -p "$BIND:$FAKE_PORT:8746" -e FAKE_OPENAI_HOST=0.0.0.0 -e FAKE_OPENAI_PORT=8746 \
   -w /app/services/models-service/scripts --entrypoint python "$PREFIX/models:$VERSION" \
   -m fake_openai /app/services/models-service/seed/demo-fake-openai >/dev/null
 git clone -q "$CLONE" "$CLONE_DBA"
@@ -233,9 +242,9 @@ PROJECT=$DBA_PROJECT
 ORG_NAME=Install proof DBA
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=$DBA_ADMIN2_PW
-DATABASE=postgresql://opsadmin@host.docker.internal:$PG_PORT/ops?sslmode=require
+DATABASE=postgresql://opsadmin@$HOST:$PG_PORT/ops?sslmode=require
 DB_MODE=dba
-MODEL=http://host.docker.internal:$FAKE_PORT/v1
+MODEL=http://$HOST:$FAKE_PORT/v1
 MODEL_NAME=fake-chat
 MODEL_API_KEY=proof-provider-key-$(secret)
 EOF
@@ -263,7 +272,7 @@ docker exec $PG psql -At -U postgres -d ops -c "SELECT 'schema owner of graph_th
 walk "http://localhost:$DBA_PORT" admin@example.com "$DBA_ADMIN2_PW"
 (cd "$CLONE_DBA" && ./install.sh upgrade) | tee "$LOG/upgrade-dba.txt" || fail "that step exited non-zero"
 grep -q "nothing changed" "$LOG/upgrade-dba.txt" || fail "DBA-mode upgrade to the same version changed something"
-printf 'postgresql://opsadmin:%s@host.docker.internal:%s/ops?sslmode=require\n' "$DBA_ADMIN_PW" "$PG_PORT" >"$WORK/admin-url"
+printf 'postgresql://opsadmin:%s@%s:%s/ops?sslmode=require\n' "$DBA_ADMIN_PW" "$HOST" "$PG_PORT" >"$WORK/admin-url"
 (cd "$CLONE_DBA" && ./install.sh backup --admin-url-file "$WORK/admin-url") | tee "$LOG/backup-dba.txt" || fail "that step exited non-zero"
 BACKUP_DBA=$(ls -t "$CLONE_DBA"/backups/*.tar.gz | head -n 1)
 (cd "$CLONE_DBA" && ./install.sh restore "$BACKUP_DBA" --admin-url-file "$WORK/admin-url") >"$LOG/restore-dba.txt" 2>&1 ||
