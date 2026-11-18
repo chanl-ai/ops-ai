@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal, NotRequired, Required, TypedDict, cast
+from typing import Literal, NotRequired, Required, TypedDict, cast
 
 from ops_access import can
 from ops_agent_kernel.layout import required_tools
@@ -510,62 +510,130 @@ def version_state(row: AgentRow, v: int, pending: PublishRequestRow | None, reje
     return "superseded" if v < row.version else "draft"
 
 
-def agent_view(row: Mapping[str, JsonValue], spec: Json, tasks: int) -> dict[str, Any]:
-    """An agent's reply. Returned loose: the agents route adds keys of its own (`staleToolIds`, `usedIn`) to it."""
+class WorkflowUse(TypedDict):
+    """A workflow that runs an agent: `own` marks the agent's own one-step workflow."""
+
+    workflowId: str
+    workflowName: str
+    pinnedVersion: int
+    status: str
+    own: NotRequired[bool]
+
+
+class GuardrailPinView(TypedDict):
+    guardrailId: str
+    version: int
+    name: str
+    topics: list[str]
+    enabled: bool
+
+
+class WidgetPinView(TypedDict):
+    widgetId: str
+    version: int
+    name: str
+    requiresTools: list[str]
+
+
+class AgentView(TypedDict):
+    """An agent's reply, in its keys' order. The row's own columns stay as the row holds them; the agents route adds
+    the keys marked not required, and fills `usedIn` and `workflowIds`."""
+
+    id: JsonValue
+    name: str
+    slug: JsonValue
+    role: str
+    instructions: str
+    model: str
+    channels: list[str]
+    toolIds: list[str]
+    collections: list[str]
+    allTeamKnowledgeBases: bool
+    skillMenu: str
+    accounts: dict[str, str]
+    teamId: JsonValue
+    paused: bool
+    availability: str
+    version: JsonValue
+    publishedVersion: JsonValue
+    updatedAt: JsonValue
+    tasks24h: int
+    autoResolvedRate: int
+    workflowIds: list[str]
+    guardrails: AgentCaps | Json
+    guardrailPins: list[GuardrailPinView]
+    wrapperWorkflowId: NotRequired[str]
+    limits: Json
+    widgetPins: list[WidgetPinView]
+    widgets: Json
+    memory: AgentMemory
+    controls: Json
+    usedIn: list[WorkflowUse]
+    staleToolIds: NotRequired[list[str]]
+    templateId: NotRequired[JsonValue]
+    protection: NotRequired[JsonValue]
+
+
+def agent_view(row: Mapping[str, JsonValue], spec: Json, tasks: int) -> AgentView:
+    """An agent's reply; the agents route adds keys of its own (`staleToolIds`, `usedIn`) to it."""
     s = cast(AgentSpec, spec)
     published = row["published_version"]
     availability = "paused" if row["paused"] else "published" if published is not None else "not_published"
-    return {
-        "id": row["id"],
-        "name": s["name"],
-        "slug": row["slug"],
-        "role": s["role"],
-        "instructions": s.get("instructions") or "",
-        "model": s["model"],
-        "channels": s.get("channels") or [],
-        "toolIds": s.get("toolIds") or [],
-        "collections": s.get("collections") or [],
-        "allTeamKnowledgeBases": bool(s.get("allTeamKnowledgeBases")),
-        "skillMenu": s.get("skillMenu") or "team",
-        "accounts": dict(s.get("accounts") or {}),
-        # The owning team comes from the creator's token; the console names it from its teams list.
-        "teamId": row["team_id"],
-        "paused": bool(row["paused"]),
-        "availability": availability,
-        "version": row["version"],
-        "publishedVersion": published,
-        "updatedAt": row["updated_at"],
-        "tasks24h": tasks,
-        # Needs resolution outcomes per thread, which no table records yet.
-        "autoResolvedRate": 0,
-        "workflowIds": [],
-        "guardrails": s.get("guardrails") or GUARDRAILS,
-        "guardrailPins": [
-            {
-                "guardrailId": p["guardrailId"],
-                "version": p["version"],
-                "name": p["name"],
-                "topics": p["topics"],
-                "enabled": bool(p.get("enabled", True)),
-            }
-            for p in s.get("guardrailPins") or []
-        ],
-        **({"wrapperWorkflowId": f"agent:{row['id']}"} if published is not None else {}),
-        "limits": wire_limits(limits_of(spec)),
-        "widgetPins": [
-            {
-                "widgetId": p["widgetId"],
-                "version": p["version"],
-                "name": p["name"],
-                "requiresTools": required_tools(p.get("tree")),
-            }
-            for p in s.get("widgetPins") or []
-        ],
-        "widgets": {"compose": False, "perTurn": None, **(s.get("widgets") or {})},
-        "memory": memory_of(spec),
-        "controls": CONTROLS,
-        "usedIn": [],
-    }
+    # Built as one literal so the keys keep their order; `wrapperWorkflowId` only once the agent is published.
+    return cast(
+        AgentView,
+        {
+            "id": row["id"],
+            "name": s["name"],
+            "slug": row["slug"],
+            "role": s["role"],
+            "instructions": s.get("instructions") or "",
+            "model": s["model"],
+            "channels": s.get("channels") or [],
+            "toolIds": s.get("toolIds") or [],
+            "collections": s.get("collections") or [],
+            "allTeamKnowledgeBases": bool(s.get("allTeamKnowledgeBases")),
+            "skillMenu": s.get("skillMenu") or "team",
+            "accounts": dict(s.get("accounts") or {}),
+            # The owning team comes from the creator's token; the console names it from its teams list.
+            "teamId": row["team_id"],
+            "paused": bool(row["paused"]),
+            "availability": availability,
+            "version": row["version"],
+            "publishedVersion": published,
+            "updatedAt": row["updated_at"],
+            "tasks24h": tasks,
+            # Needs resolution outcomes per thread, which no table records yet.
+            "autoResolvedRate": 0,
+            "workflowIds": [],
+            "guardrails": s.get("guardrails") or GUARDRAILS,
+            "guardrailPins": [
+                {
+                    "guardrailId": p["guardrailId"],
+                    "version": p["version"],
+                    "name": p["name"],
+                    "topics": p["topics"],
+                    "enabled": bool(p.get("enabled", True)),
+                }
+                for p in s.get("guardrailPins") or []
+            ],
+            **({"wrapperWorkflowId": f"agent:{row['id']}"} if published is not None else {}),
+            "limits": wire_limits(limits_of(spec)),
+            "widgetPins": [
+                {
+                    "widgetId": p["widgetId"],
+                    "version": p["version"],
+                    "name": p["name"],
+                    "requiresTools": required_tools(p.get("tree")),
+                }
+                for p in s.get("widgetPins") or []
+            ],
+            "widgets": {"compose": False, "perTurn": None, **(s.get("widgets") or {})},
+            "memory": memory_of(spec),
+            "controls": CONTROLS,
+            "usedIn": [],
+        },
+    )
 
 
 # Kept on a workflow request for its decision to publish, and left out of the Review the console reads.

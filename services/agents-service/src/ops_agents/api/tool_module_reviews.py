@@ -13,13 +13,14 @@ reaches the module."""
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import cast
 
 from fastapi import Request
 
 from ops_access import can
 from ops_identity import Principal as Caller
 from ops_service_kit.errors import Forbidden, ServiceUnavailable, Unauthorized, ValidationFailed
+from ops_service_kit.http import Json, JsonList
 from ops_service_kit.ids import now_iso
 
 from ..store.agent_registry import PublishRequestRow
@@ -45,12 +46,12 @@ async def tools_service(request: Request, header: str | None, tenant_id: str) ->
     return svc
 
 
-def _body(input_body: dict[str, Any], *, team: str, saved_by: str) -> dict[str, Any]:
+def _body(input_body: Json, *, team: str, saved_by: str) -> Json:
     return {
         "moduleId": input_body["subjectId"],
         "moduleName": input_body["moduleName"],
         "moduleVersion": input_body["moduleVersion"],
-        "changes": list(input_body.get("changes") or []),
+        "changes": list(cast(JsonList, input_body.get("changes") or [])),
         # What the version changes since the published one, as tools-service sent it at open; kept as asked.
         **({"diff": input_body["diff"]} if input_body.get("diff") else {}),
         "security": bool(input_body.get("security", True)),
@@ -59,7 +60,7 @@ def _body(input_body: dict[str, Any], *, team: str, saved_by: str) -> dict[str, 
     }
 
 
-async def open_review(rt: Runtime, me: Principal, input_body: dict[str, Any]) -> PublishRequestRow:
+async def open_review(rt: Runtime, me: Principal, input_body: Json) -> PublishRequestRow:
     """`me` is the person who asked, from their delegated credentials; the team is theirs, never the body's."""
     named = input_body.get("teamId")
     if named and named != me.team_id:
@@ -80,7 +81,7 @@ async def open_review(rt: Runtime, me: Principal, input_body: dict[str, Any]) ->
     )
 
 
-async def open_for(rt: Runtime, svc: Caller, input_body: dict[str, Any]) -> PublishRequestRow:
+async def open_for(rt: Runtime, svc: Caller, input_body: Json) -> PublishRequestRow:
     """A review a service opens with its own token for a person not on the call: tools-service's seed. Only a
     service holding `tools:publish`, which only tools-service's scope cap allows (Settings.service_scopes), and only a
     tool module of the team its token is scoped to. Who asked is the body's `requestedBy`, recorded as the requester

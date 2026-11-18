@@ -11,7 +11,7 @@ is one union of mailboxes, embeds and the local copy of platform's API keys, pag
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal, NotRequired, TypeAlias, TypedDict, cast
+from typing import Annotated, Literal, NotRequired, TypeAlias, TypedDict, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -32,6 +32,7 @@ from ...store.channel_list import (
     ChannelRecord,
     Counts,
     KindCount,
+    LiveDefinition,
     watched_address,
 )
 from ...store.mailboxes import MailboxStore
@@ -446,11 +447,13 @@ def _place(row: ChannelReply) -> PlaceReply:
     }
 
 
-def _steps(live: list[Json], node_type: str, param: str, target: str, version: int | None) -> list[PlaceReply]:
+def _steps(
+    live: list[LiveDefinition], node_type: str, param: str, target: str, version: int | None
+) -> list[PlaceReply]:
     """Each live workflow step that names `target`: it runs the published version, so it is never pinned."""
     out: list[PlaceReply] = []
     for d in live:
-        definition = cast(Json, d["definition"] or {})
+        definition = cast(Json, d.definition or {})
         for n in cast(list[Json], definition.get("nodes") or []):
             params = cast(Json, n.get("parameters") or {})
             if n.get("type") == node_type and params.get(param) == target:
@@ -459,8 +462,8 @@ def _steps(live: list[Json], node_type: str, param: str, target: str, version: i
                         "where": {
                             "kind": "workflow_step",
                             "id": str(n.get("id")),
-                            "name": f"{d['name'] or d['workflow_id']}: {n.get('name') or n.get('id')}",
-                            "workflowId": cast(str, d["workflow_id"]),
+                            "name": f"{d.name or d.workflow_id}: {n.get('name') or n.get('id')}",
+                            "workflowId": d.workflow_id,
                         },
                         "version": version,
                         "pinned": False,
@@ -506,13 +509,13 @@ async def workflow_live(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
     asked = _teams(me, "all")
     teams = tuple(t for t in asked if _may(me, "view", t))
     live = await ChannelList(rt.db).live_definitions()
-    mine = next((d for d in live if d["workflow_id"] == workflow_id), None)
-    if mine is None or mine["team_id"] not in teams:
+    mine = next((d for d in live if d.workflow_id == workflow_id), None)
+    if mine is None or mine.team_id not in teams:
         raise NotFound(f"Live workflow {workflow_id}")
-    latest = int(mine["version"])
-    address = watched_address(mine["definition"])
+    latest = mine.version
+    address = watched_address(mine.definition)
     now = datetime.now(UTC)
-    watching = await ChannelList(rt.db).rows(teams, now=now, mailbox=(str(mine["team_id"]), address)) if address else []
+    watching = await ChannelList(rt.db).rows(teams, now=now, mailbox=(str(mine.team_id), address)) if address else []
     rows = [_place(r) for r in await replies(rt, me, watching, now)]
     rows += _steps(live, "ops.action.workflow", "workflow", workflow_id, latest)
     return ok({"latestVersion": latest, "versions": _versions(rows, latest), "rows": rows})
@@ -561,17 +564,17 @@ async def update_channel(rt: Rt, me: Me, channel_id: str, body: ChannelPatch) ->
         require_builder(me, area="deployments", team_id=str(row["team_id"]), action="edit", what=WHAT)
         if row.get("retired_at"):
             raise Conflict("This embed is retired, so it cannot be changed.", code="widget_retired")
-        values: dict[str, Any] = {"updated_at": now}
+        values: Json = {"updated_at": now}
         if body.name is not None:
             values["name"] = body.name.strip()
         if body.paused is not None:
             values["paused"] = body.paused
         waits: str | None = None
-        changes: dict[str, Any] = {}
+        changes: Json = {}
         if body.origins is not None and (origins := sorted({normal_origin(o) for o in body.origins})) != list(
             row["origins"]
         ):
-            changes["origins"] = origins
+            changes["origins"] = [*origins]
         if body.serves is not None:
             if body.serves.kind != "agent" or body.serves.id != row["agent_id"]:
                 raise Unprocessable(

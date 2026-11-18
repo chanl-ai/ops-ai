@@ -23,7 +23,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Annotated, Any, TypeAlias, cast
+from typing import Annotated, TypeAlias, cast
 
 from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -45,8 +45,9 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
-from ops_service_kit.http import Envelope, In, Out
+from ops_service_kit.http import Envelope, In, Json, JsonList, Out
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.narrow import json_object
 from ops_store import isolation
 
 from ...store.agent_registry import AgentRow
@@ -199,23 +200,25 @@ def _store(rt: Runtime) -> WidgetDeployments:
 USAGE_DAYS = 7
 
 
-def _wire(reply: Out) -> dict[str, object]:
+def _wire(reply: Out) -> Json:
     return reply.model_dump(mode="json", by_alias=True)
 
 
-def _view(row: dict[str, Any]) -> WidgetDeploymentOut:
-    return WidgetDeploymentOut(
-        id=row["id"],
-        name=row["name"],
-        agent_id=row["agent_id"],
-        agent_version=row["agent_version"],
-        origins=list(row["origins"]),
-        paused=bool(row["paused"]),
-        retired_at=row.get("retired_at"),
-        team_id=row["team_id"],
-        created_by=row["created_by"],
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
+def _view(row: Json) -> WidgetDeploymentOut:
+    return WidgetDeploymentOut.model_validate(
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "agent_id": row["agent_id"],
+            "agent_version": row["agent_version"],
+            "origins": list(cast(JsonList, row["origins"])),
+            "paused": bool(row["paused"]),
+            "retired_at": row.get("retired_at"),
+            "team_id": row["team_id"],
+            "created_by": row["created_by"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
     )
 
 
@@ -228,14 +231,14 @@ async def _published(rt: Runtime, agent_id: str) -> tuple[AgentRow, int]:
     return row, int(row.published_version)
 
 
-async def served_version(rt: Runtime, row: dict[str, Any]) -> int:
+async def served_version(rt: Runtime, row: Json) -> int:
     """The agent version a deployment serves now: its pin, or on Latest the agent's newest published version."""
     if row["agent_version"] is not None:
-        return int(row["agent_version"])
+        return int(cast(int | str | float, row["agent_version"]))
     return (await _published(rt, str(row["agent_id"])))[1]
 
 
-async def make_deployment(rt: Runtime, me: Principal, body: WidgetDeploymentInput) -> dict[str, Any]:
+async def make_deployment(rt: Runtime, me: Principal, body: WidgetDeploymentInput) -> Json:
     """A chat channel: the agent pinned at its published version, on exact origins, in the caller's team. The one
     create both `POST /v1/channels` and its deprecated alias here use."""
     agent_row, version = await _published(rt, body.agent_id)
@@ -244,13 +247,13 @@ async def make_deployment(rt: Runtime, me: Principal, body: WidgetDeploymentInpu
     if agent_row.team_id and agent_row.team_id != team:
         raise Forbidden("Deploy an agent from the team that owns it.", code="team_forbidden")
     now = now_iso()
-    row = {
+    row: Json = {
         "id": new_id("wd"),
         "team_id": team,
         "name": body.name.strip(),
         "agent_id": body.agent_id,
         "agent_version": version,
-        "origins": sorted({normal_origin(o) for o in body.origins}),
+        "origins": [*sorted({normal_origin(o) for o in body.origins})],
         "paused": False,
         "created_by": me.email,
         "created_at": now,
@@ -279,7 +282,7 @@ async def list_deployments(
     return ok([_wire(r) for r in await _usage(rt, rows)])
 
 
-async def _usage(rt: Runtime, rows: list[dict[str, Any]]) -> list[WidgetDeploymentUsageOut]:
+async def _usage(rt: Runtime, rows: list[Json]) -> list[WidgetDeploymentUsageOut]:
     """Each deployment with its conversations started in the last USAGE_DAYS days, when one last changed, and its
     unrevoked keys, each counted in the database. A conversation counts for the deployment it was started on, in its
     team."""
@@ -298,7 +301,7 @@ async def _usage(rt: Runtime, rows: list[dict[str, Any]]) -> list[WidgetDeployme
     ]
 
 
-async def _owned(rt: Runtime, me: Principal, deployment_id: str) -> dict[str, Any]:
+async def _owned(rt: Runtime, me: Principal, deployment_id: str) -> Json:
     row = await _store(rt).get(deployment_id)
     if row is None or row["team_id"] not in me.team_ids:
         raise NotFound("Widget deployment")
@@ -323,21 +326,23 @@ def _key_store(rt: Runtime) -> WidgetKeys:
     return WidgetKeys(graph_store(rt).engine)
 
 
-async def _named_deployment(rt: Runtime, deployment_id: str) -> dict[str, Any] | None:
+async def _named_deployment(rt: Runtime, deployment_id: str) -> Json | None:
     """The deployment a widget credential names, in its tenant, whichever team owns it."""
     with isolation.tenant_wide(WIDGET_LOOKUP):
         return await _store(rt).get(deployment_id)
 
 
-def _key_view(k: dict[str, Any]) -> MintKeyOut:
-    return MintKeyOut(
-        id=k["id"],
-        name=k["name"],
-        created_by=k["created_by"],
-        created_at=k["created_at"],
-        last_used_at=k["last_used_at"],
-        revoked_at=k["revoked_at"],
-        expires_at=k.get("expires_at"),
+def _key_view(k: Json) -> MintKeyOut:
+    return MintKeyOut.model_validate(
+        {
+            "id": k["id"],
+            "name": k["name"],
+            "created_by": k["created_by"],
+            "created_at": k["created_at"],
+            "last_used_at": k["last_used_at"],
+            "revoked_at": k["revoked_at"],
+            "expires_at": k.get("expires_at"),
+        }
     )
 
 
@@ -348,7 +353,7 @@ async def create_mint_key(rt: Rt, me: Me, _: Tx, deployment_id: str, body: MintK
     require_builder(me, area="deployments", team_id=str(row["team_id"]), action="edit", what=WHAT)
     key_id, secret = new_id("wkk"), secrets.token_urlsafe(32)
     now = datetime.now(UTC)
-    record = {
+    record: Json = {
         "id": key_id,
         "deployment_id": deployment_id,
         "name": body.name.strip(),
@@ -415,7 +420,7 @@ def _key_refused() -> Forbidden:
 @dataclass(frozen=True)
 class MintKey:
     key_id: str
-    deployment: dict[str, Any]
+    deployment: Json
 
 
 async def mint_key_caller(rt: Rt, deployment_id: str, authorization: Annotated[str | None, Header()] = None) -> MintKey:
@@ -471,7 +476,7 @@ def _claimed_origin(token: str) -> str | None:
         claims: object = json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
     except (IndexError, ValueError):
         return None
-    origin = cast(dict[str, object], claims).get("origin") if isinstance(claims, dict) else None
+    origin = json_object(claims).get("origin")
     return origin if isinstance(origin, str) and origin else None
 
 
@@ -493,11 +498,11 @@ def _page_origin(request: Request, session_token: str | None, embed_origins: lis
 
 def _listed(
     request: Request,
-    row: dict[str, Any] | None,
+    row: Json | None,
     session_token: str | None = None,
     embed_origins: list[str] | None = None,
     console_origin: str | None = None,
-) -> dict[str, Any]:
+) -> Json:
     """The deployment with the page's origin on its list. The origin is marked allowed before anything else is checked,
     so an error that follows (an ended session, a pause) still reaches the page; an unlisted origin reads nothing. The
     team every widget request acts in is the deployment's. A session on the console's own origin (a preview, which only
@@ -512,7 +517,7 @@ def _listed(
     return row
 
 
-def _refuse_stopped(row: dict[str, Any]) -> None:
+def _refuse_stopped(row: Json) -> None:
     """No session or turn for an embed that is retired (for good) or paused (until resumed)."""
     if row.get("retired_at"):
         raise Conflict("This chat has been retired by the team that ran it.", code="widget_retired")
@@ -523,9 +528,7 @@ def _refuse_stopped(row: dict[str, Any]) -> None:
 SessionHeader: TypeAlias = Annotated[str | None, Header(alias="X-Widget-Session")]  # noqa: UP040
 
 
-async def listed_deployment(
-    rt: Rt, request: Request, deployment_id: str, session_token: SessionHeader = None
-) -> dict[str, Any]:
+async def listed_deployment(rt: Rt, request: Request, deployment_id: str, session_token: SessionHeader = None) -> Json:
     """The deployment a page route names, in the tenant its session names (`claimed_tenant`); a session for another
     tenant finds no deployment."""
     tenant = claimed_tenant(session_token)
@@ -537,13 +540,13 @@ async def listed_deployment(
     return _listed(request, row, session_token, rt.settings.embed_origins, console)
 
 
-Listed: TypeAlias = Annotated[dict[str, Any], Depends(listed_deployment)]  # noqa: UP040
+Listed: TypeAlias = Annotated[Json, Depends(listed_deployment)]  # noqa: UP040
 
 
 @dataclass(frozen=True)
 class WidgetCaller:
     session: WidgetSession
-    deployment: dict[str, Any]
+    deployment: Json
 
 
 async def widget_caller(rt: Rt, request: Request, row: Listed, session_token: SessionHeader = None) -> WidgetCaller:
@@ -583,14 +586,14 @@ async def page_session(
         session=mint_session(rt, row, str(request.state.widget_origin), me),
         expires_in=SESSION_TTL_S,
         agent_name=agent.name if agent else str(row["agent_id"]),
-        deployment_name=row["name"],
+        deployment_name=cast(str, row["name"]),
     )
     return ok(_wire(body), status=201)
 
 
 async def _widget_thread(rt: Runtime, session: WidgetSession, thread_id: str) -> None:
     row = await chat_row(rt, thread_id, session.principal())
-    meta = cast(dict[str, Any], row["meta"] or {}) if row is not None else {}
+    meta = cast(Json, row["meta"] or {}) if row is not None else {}
     if row is None or meta.get("deploymentId") != session.deployment_id:
         raise NotFound("Conversation")
 
@@ -686,8 +689,8 @@ async def public_config(
     agent = await pinned_definition(rt, str(row["agent_id"]), await served_version(rt, row))
     body = WidgetConfigOut(
         agent_name=agent.name if agent else str(row["agent_id"]),
-        deployment_name=row["name"],
-        allowed_origins=list(row["origins"]),
+        deployment_name=cast(str, row["name"]),
+        allowed_origins=list(cast(list[str], row["origins"])),
         # A retired embed reads as paused to the embed app, which then shows it offline, and says why.
         paused=bool(row["paused"]) or bool(row.get("retired_at")),
         retired=bool(row.get("retired_at")),

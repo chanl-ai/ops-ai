@@ -8,11 +8,11 @@ request and applied when it is approved; the deployment keeps serving as it was 
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import cast
 
 from ops_service_kit import narrow
 from ops_service_kit.errors import NotFound
-from ops_service_kit.http import Json
+from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import now_iso
 
 from ..store.agent_registry import PublishRequestRow
@@ -30,16 +30,17 @@ def _store(rt: Runtime) -> WidgetDeployments:
     return WidgetDeployments(graph_store(rt).engine)
 
 
-def as_policy(origins: list[str], version: int) -> dict[str, Any]:
+def as_policy(origins: list[str], version: int) -> Json:
     """A deployment as the publish policy reads it: origins are access, the pinned version is minor."""
-    return {"access": sorted(origins), "pinnedVersion": version}
+    return {"access": [*sorted(origins)], "pinnedVersion": version}
 
 
-def _words(changes: dict[str, Any], before: dict[str, Any]) -> list[str]:
+def _words(changes: Json, before: Json) -> list[str]:
     out: list[str] = []
     if "origins" in changes:
-        added = sorted(set(changes["origins"]) - set(before["origins"]))
-        removed = sorted(set(before["origins"]) - set(changes["origins"]))
+        asked, had = cast(list[str], changes["origins"]), cast(list[str], before["origins"])
+        added = sorted(set(asked) - set(had))
+        removed = sorted(set(had) - set(asked))
         out += [f"Allow {o}" for o in added] + [f"Stop allowing {o}" for o in removed]
     if changes.get("latest"):
         out.append(
@@ -50,28 +51,31 @@ def _words(changes: dict[str, Any], before: dict[str, Any]) -> list[str]:
     return out
 
 
-def _pin(changes: dict[str, Any]) -> int | None:
+def _pin(changes: Json) -> int | None:
     """The column a version change writes: None when the change is to follow Latest (`latest`), whose `agentVersion`
     is only the version Latest meant when it was asked for, so the policy can judge it."""
-    return None if changes.get("latest") else int(changes["agentVersion"])
+    return None if changes.get("latest") else int(cast(int | str | float, changes["agentVersion"]))
 
 
-async def change(rt: Runtime, row: dict[str, Any], changes: dict[str, Any], *, by: str) -> dict[str, Any]:
+async def change(rt: Runtime, row: Json, changes: Json, *, by: str) -> Json:
     """The columns to update now: every change when the policy needs no review, none when it does, in which case a
-    request holding them is opened."""
-    served = row["agent_version"]
+    request holding them is opened. `row` is the deployment as its store reads it."""
+    served: JsonValue = row["agent_version"]
     if served is None:  # on Latest: the version it serves now is the agent's published one
         served = (await registry(rt).row(str(row["agent_id"]))).published_version
     if served is None:  # on Latest with nothing published: refused as reading the version as a number was
         raise TypeError("the deployment's agent has no published version")
-    before: dict[str, Any] = {"origins": list(row["origins"]), "agentVersion": int(served)}
+    origins: list[str] = list(cast(list[str], row["origins"]))
+    version = int(cast(int | str | float, served))
+    before: Json = {"origins": [*origins], "agentVersion": version}
     decision = await decide(
         rt,
         area="agents",
         team_id=str(row["team_id"]),
-        old=as_policy(before["origins"], before["agentVersion"]),
+        old=as_policy(origins, version),
         new=as_policy(
-            changes.get("origins", before["origins"]), int(changes.get("agentVersion", before["agentVersion"]))
+            cast(list[str], changes.get("origins", before["origins"])),
+            int(cast(int | str | float, changes.get("agentVersion", before["agentVersion"]))),
         ),
     )
     if not decision.review_required:
@@ -89,7 +93,7 @@ async def change(rt: Runtime, row: dict[str, Any], changes: dict[str, Any], *, b
         "savedBy": by,
         **decision.record(),
     }
-    version = int(changes.get("agentVersion", before["agentVersion"]))
+    version = int(cast(int | str | float, changes.get("agentVersion", before["agentVersion"])))
     await registry(rt).open_request(KIND, str(row["id"]), version, note="", by=by, body=body, approved=False)
     return {}
 
@@ -128,7 +132,7 @@ async def apply(rt: Runtime, req: PublishRequestRow) -> None:
     if await store.get(str(req.subject_id)) is None:
         raise NotFound(f"Deployment {req.subject_id}")
     changes = narrow.an_object(req.body["changes"], "the requested changes")
-    values: dict[str, Any] = {}
+    values: Json = {}
     if "origins" in changes:
         values["origins"] = changes["origins"]
     if "agentVersion" in changes:

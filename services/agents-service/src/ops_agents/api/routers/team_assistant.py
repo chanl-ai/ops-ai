@@ -36,6 +36,7 @@ from ..ops_tools import ensure_ops_assistant
 from ..publish_policy import decide
 from ..skills import pin, skills
 from . import templates as template_routes
+from .template_types import OfferedTemplate
 from .templates import _offered, _skill_content  # pyright: ignore[reportPrivateUsage] - one rule for a copy's content
 
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
@@ -86,7 +87,7 @@ async def give_app_tools(rt: Runtime, me: Principal, module_ids: list[str]) -> A
     shipped = [
         t
         for t in await _shipped(rt, team)
-        if t.get("kind") == "skill" and (needs := set(cast(list[str], t["requires"]["tools"]))) and needs <= added
+        if t.get("kind") == "skill" and (needs := set(t["requires"]["tools"])) and needs <= added
     ]
     pinned: list[str] = []
 
@@ -135,22 +136,22 @@ async def give_app_tools(rt: Runtime, me: Principal, module_ids: list[str]) -> A
     return answer("in_review")
 
 
-async def _shipped(rt: Runtime, team: str) -> list[dict[str, Any]]:
+async def _shipped(rt: Runtime, team: str) -> list[OfferedTemplate]:
     """The templates of the team's plugins; none when tools-service cannot list them, so the tools are still given and
     the skills follow on the next turn-on."""
     if rt.tool_reviews is None:
         return []
     try:
-        return await _offered(rt, team)
+        return cast(list[OfferedTemplate], await _offered(rt, team))
     except ServiceUnavailable:
         log.warning("app_skills_unlisted", team=team)
         return []
 
 
-async def _unpinned(rt: Runtime, shipped: list[dict[str, Any]], holds: set[str]) -> list[dict[str, Any]]:
+async def _unpinned(rt: Runtime, shipped: list[OfferedTemplate], holds: set[str]) -> list[OfferedTemplate]:
     """The app's skills the team holds no pinned copy of yet, or whose copy the app's template has since changed."""
     copies = TemplateCopies(rt.db)
-    out: list[dict[str, Any]] = []
+    out: list[OfferedTemplate] = []
     for t in shipped:
         held = await copies.live(str(t["source"]), str(t["id"]))
         if held is None or held.record_id not in holds or await _stale(rt, held, t):
@@ -164,7 +165,7 @@ async def _newest_digest(rt: Runtime, skill_id: str) -> tuple[int, str | None]:
     return row.version, (found.digest if found else None)
 
 
-async def _stale(rt: Runtime, held: TemplateCopyRow, t: dict[str, Any]) -> bool:
+async def _stale(rt: Runtime, held: TemplateCopyRow, t: OfferedTemplate) -> bool:
     """Whether the team's copy was made from a template body the app has since changed, and the team has not edited
     the copy since, so taking the app's text overwrites nothing of theirs. A copy made with no record digest counts as
     edited once it has a version past its first."""
@@ -176,7 +177,7 @@ async def _stale(rt: Runtime, held: TemplateCopyRow, t: dict[str, Any]) -> bool:
 
 
 async def _skill_copies(
-    rt: Runtime, me: Principal, team: str, shipped: list[dict[str, Any]]
+    rt: Runtime, me: Principal, team: str, shipped: list[OfferedTemplate]
 ) -> list[tuple[str, str, int, bool]]:
     """The team's published copy of each of the app's skills, made on first turn-on as the template install makes a
     copy, through the skill's content checks; published at once, since the admin turning the app on chose to give it
@@ -198,16 +199,16 @@ async def _skill_copies(
                 continue
             kbs = [str(k) for k in narrow.a_list(now.get("knowledgeBases") or [], "knowledgeBases")]
             content = await _skill_content(rt, team, t, name, kbs)
-            note = f"Update from {cast(dict[str, Any], t.get('plugin') or {}).get('title') or source}"
+            note = f"Update from {cast(Json, t.get('plugin') or {}).get('title') or source}"
             n = await skills(rt).save_draft(sid, content, by=me.email, note=note)
             await skills(rt).publish(sid, n, by=me.email, review_id="app_turn_on")
             await copies.updated(
-                held.id, version=version, digest=cast(str | None, t.get("digest")),
+                held.id, version=version, digest=t.get("digest"),
                 record_digest=(await _newest_digest(rt, sid))[1], base=template_routes.copy_base("skill", content),
             )  # fmt: skip
             out.append((sid, name, n, True))
             continue
-        base = str(cast(dict[str, Any], t.get("body") or {}).get("name") or t["title"])
+        base = str((t.get("body") or {}).get("name") or t["title"])
         for n in range(1, 10):
             name = base if n == 1 else f"{base} {n}"
             content = await _skill_content(rt, team, t, name, [])
@@ -227,7 +228,7 @@ async def _skill_copies(
                 template_id=tid,
                 version=version,
                 by=me.email,
-                digest=cast(str | None, t.get("digest")),
+                digest=t.get("digest"),
                 record_digest=(await _newest_digest(rt, sid))[1],
                 base=template_routes.copy_base("skill", content),
             )

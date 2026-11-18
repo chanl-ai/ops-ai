@@ -22,7 +22,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal, cast
+from typing import Literal, cast
 
 import httpx
 
@@ -39,6 +39,7 @@ from ops_email import (
 from ops_engine.store import DefinitionRow, DefinitionStore, RunRow, RunStore
 from ops_files_client import FilesClient, FilesRefused
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable
+from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 from ops_store import background, isolation
 
@@ -85,12 +86,12 @@ class EmailBinding:
     daily_cap: int | None = None
 
 
-def binding_of(definition: dict[str, Any] | None) -> EmailBinding | None:
+def binding_of(definition: Json | None) -> EmailBinding | None:
     """The definition's email trigger, or None when it starts some other way."""
-    nodes = cast(list[dict[str, Any]], (definition or {}).get("nodes") or [])
+    nodes = cast(list[Json], (definition or {}).get("nodes") or [])
     for node in nodes:
         if node.get("type") == EMAIL_TRIGGER:
-            p = cast(dict[str, Any], node.get("parameters") or {})
+            p = cast(Json, node.get("parameters") or {})
             return EmailBinding(
                 mailbox=str(p.get("mailbox") or ""),
                 folder=str(p.get("folder") or "inbox"),
@@ -99,7 +100,7 @@ def binding_of(definition: dict[str, Any] | None) -> EmailBinding | None:
                     subject_contains=str(p.get("subjectContains") or ""),
                     has_attachment=bool(p.get("hasAttachment")),
                 ),
-                daily_cap=int(p["dailyCap"]) if p.get("dailyCap") else None,
+                daily_cap=int(cast(str | int | float, p["dailyCap"])) if p.get("dailyCap") else None,
             )
     return None
 
@@ -291,9 +292,9 @@ class EmailStarts:
             return Started(None, False)
         team = b.team
         sender = by or f"trigger:email:{b.binding.mailbox}"
-        attachments: list[dict[str, Any]] = []
+        attachments: list[Json] = []
         # Attachments not stored, with why: the run says what it did not get instead of the pass failing on them.
-        skipped: list[dict[str, Any]] = []
+        skipped: list[Json] = []
         for i, a in enumerate(msg.attachments):
             try:
                 data = a.data()
@@ -325,7 +326,7 @@ class EmailStarts:
             )
         # The text as a file too, so a workflow reads a body-only email through Extract from file like an attachment,
         # with places and corrections; the plain body stays on the input for workflows that use it.
-        body_file: dict[str, Any] | None = None
+        body_file: Json | None = None
         body_name = body_file_name(msg.subject, msg.sender)
         if msg.body and msg.body.strip():
             try:
@@ -381,7 +382,7 @@ class EmailStarts:
         outcome: Outcome,
         *,
         run_id: str | None = None,
-        detail: dict[str, Any] | None = None,
+        detail: Json | None = None,
         item: str | None = None,
     ) -> None:
         await self.events.add(
@@ -574,7 +575,7 @@ class EmailTriggers:
             result.first_sync = True
         else:
 
-            async def handle(item: dict[str, Any]) -> None:
+            async def handle(item: Json) -> None:
                 msg = source.parse(item)
                 if msg.removed:
                     result.skipped += 1
@@ -616,7 +617,7 @@ class EmailTriggers:
         if n < SET_ASIDE_AFTER:
             await self._record(b, msg, "start_failed", detail={"reason": reason, "attempt": n})
             return False
-        detail = {
+        detail: Json = {
             "reason": reason,
             "message": f"This email was set aside after {n} failed reads, so the mail after it is read. Run it again "
             "once the cause is fixed.",
@@ -636,7 +637,7 @@ class EmailTriggers:
         outcome: Outcome,
         *,
         run_id: str | None = None,
-        detail: dict[str, Any] | None = None,
+        detail: Json | None = None,
     ) -> None:
         await self.starts.record(b.target, msg, outcome, run_id=run_id, detail=detail)
 

@@ -13,7 +13,7 @@ ask models-service for the aliases, and the test, eval and job routes run the mo
 from __future__ import annotations
 
 import time
-from typing import Annotated, Any, Literal, NotRequired, TypeAlias, TypedDict, cast
+from typing import Annotated, Any, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import JSONResponse, Response
@@ -29,7 +29,7 @@ from ops_agents.domain.evals import TRIGGER_MANUAL
 from ops_identity.fastapi import Tx
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
-from ops_service_kit.http import Envelope, In, Json, ListResult, Out
+from ops_service_kit.http import Envelope, In, Json, JsonList, ListResult, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListQuery
 from ops_store import isolation
@@ -41,6 +41,8 @@ from ..account_names import require_team_accounts
 from ..agent_registry import (
     GUARDRAILS,
     AgentSpec,
+    AgentView,
+    WorkflowUse,
     a_day_ago,
     agent_review_body,
     agent_view,
@@ -248,20 +250,10 @@ def _stale(tool_ids: list[str], offered: set[str] | None) -> list[str]:
     return [t for t in tool_ids if not t.startswith(("workflow:", "agent:")) and t not in offered]
 
 
-def _agent_nodes(definition: dict[str, Any]) -> list[dict[str, Any]]:
+def _agent_nodes(definition: Json) -> list[Json]:
     """The agents a published v1 definition pins: each `agent_turn` node's snapshotted definition."""
-    nodes = cast(list[dict[str, Any]], definition.get("nodes") or [])
-    return [cast(dict[str, Any], n["config"]["agent"]) for n in nodes if n.get("kind") == "agent_turn"]
-
-
-class WorkflowUse(TypedDict):
-    """A workflow that runs an agent: `own` marks the agent's own one-step workflow."""
-
-    workflowId: str
-    workflowName: str
-    pinnedVersion: int
-    status: str
-    own: NotRequired[bool]
+    nodes = cast(list[Json], definition.get("nodes") or [])
+    return [cast(Json, cast(Json, n["config"])["agent"]) for n in nodes if n.get("kind") == "agent_turn"]
 
 
 async def used_in_all(rt: Runtime) -> dict[str, list[WorkflowUse]]:
@@ -300,23 +292,23 @@ async def used_in_all(rt: Runtime) -> dict[str, list[WorkflowUse]]:
         status = "paused" if w.status == "paused" else "live" if w.published_version is not None else "draft"
         if w.published_version is not None:
             v = await rt.graph_store.version(w.id, w.published_version)
-            for a in _agent_nodes(cast(dict[str, Any], v.definition) if v else {}):
-                add(str(a["id"]), w.id, w.name, int(a["version"]), status)
-        graph = cast(dict[str, Any], w.draft or {})
-        for node in cast(list[dict[str, Any]], graph.get("nodes") or []):
-            data = cast(dict[str, Any], node.get("data") or {})
+            for a in _agent_nodes(v.definition if v else {}):
+                add(str(a["id"]), w.id, w.name, int(cast(int | str | float, a["version"])), status)
+        graph = w.draft or {}
+        for node in cast(list[Json], graph.get("nodes") or []):
+            data = cast(Json, node.get("data") or {})
             if (slug := data.get("agentSlug")) and (row := by_slug.get(str(slug))):
                 add(row.id, w.id, w.name, published.get(row.id), "draft" if status == "draft" else status)
     for d in await engine_workflows(rt):
-        definition = cast(dict[str, Any], d["definition"] or {})
-        for node in cast(list[dict[str, Any]], definition.get("nodes") or []):
-            params = cast(dict[str, Any], node.get("parameters") or {})
+        definition = cast(Json, d["definition"] or {})
+        for node in cast(list[Json], definition.get("nodes") or []):
+            params = cast(Json, node.get("parameters") or {})
             if node.get("type") == "ops.ai.agent" and (aid := str(params.get("agent") or "")):
                 add(aid, d["workflow_id"], d["name"], published.get(aid), "live")
     return out
 
 
-async def _view(rt: Runtime, agent_id: str, *, directory: ToolRows | Literal["ask"] | None = "ask") -> dict[str, Any]:
+async def _view(rt: Runtime, agent_id: str, *, directory: ToolRows | Literal["ask"] | None = "ask") -> AgentView:
     """The agent's reply. A read that holds one transaction passes the `directory` it asked tools-service for first;
     otherwise it is asked here."""
     if directory == "ask":
@@ -330,9 +322,9 @@ async def _view(rt: Runtime, agent_id: str, *, directory: ToolRows | Literal["as
     return _decorated(listed, await _offered(rt, directory), (await used_in_all(rt)).get(agent_id, []))
 
 
-def _decorated(row: dict[str, Any], offered: set[str] | None, uses: list[WorkflowUse]) -> dict[str, Any]:
+def _decorated(row: Json, offered: set[str] | None, uses: list[WorkflowUse]) -> AgentView:
     """An agent's reply from its row joined to its newest version's `spec` and its `tasks_24h`."""
-    view = agent_view(row, row["spec"], int(row["tasks_24h"]))
+    view = agent_view(row, cast(Json, row["spec"]), int(cast(int | str | float, row["tasks_24h"])))
     view["staleToolIds"] = _stale(view["toolIds"], offered)
     view["usedIn"] = sorted(uses, key=lambda u: u["workflowName"])
     view["workflowIds"] = sorted({u["workflowId"] for u in uses if not u.get("own")})
@@ -433,11 +425,11 @@ async def create_agent(rt: Rt, me: Cl, body: AgentInput) -> JSONResponse:
     require_builder(me, area="agents", team_id=me.team_id, action="create", what="an agent")
     if body.template_id is not None or body.protection is not None:
         require_provisioner(caller_of(me), "agents")
-    spec: dict[str, Any] = {
+    spec: Json = {
         "name": body.name,
         "role": body.role,
         "model": body.model,
-        "channels": body.channels,
+        "channels": [*body.channels],
         "instructions": body.instructions or f"You are {body.name}. {body.role}",
         "toolIds": [],
         "collections": [],
@@ -457,7 +449,7 @@ async def get_agent(rt: Rt, me: Reader, agent_id: str) -> JSONResponse:
         view = await _view(rt, agent_id, directory=directory)
         rights_of = await rights(lambda action: changeable(rt, me, agent_id, action))
     # platform-service names the team with nothing open.
-    return ok({**view, **await team_name(rt, view.get("teamId")), **rights_of})
+    return ok({**view, **await team_name(rt, cast(str | None, view.get("teamId"))), **rights_of})
 
 
 @router.patch("/{agent_id}", response_model=Envelope[Agent])
@@ -468,7 +460,7 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
     if body.template_id is not None or body.protection is not None:
         require_provisioner(caller_of(me), "agents")
     # The draft as the patch below edits it, key by key.
-    spec: dict[str, Any] = dict((await reg.version(agent_id, row.version)).spec)
+    spec: Json = dict((await reg.version(agent_id, row.version)).spec)
     patch = body.model_dump(
         exclude_none=True,
         exclude={
@@ -485,9 +477,9 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
         by_alias=True,
     )
     if body.tool_ids is not None:
-        patch["toolIds"] = await _checked_tools(rt, body.tool_ids, list(spec.get("toolIds") or []))
+        patch["toolIds"] = await _checked_tools(rt, body.tool_ids, list(cast(list[str], spec.get("toolIds") or [])))
     if body.collections is not None:
-        await _check_knowledge(rt, body.collections, list(spec.get("collections") or []))
+        await _check_knowledge(rt, body.collections, list(cast(list[str], spec.get("collections") or [])))
     spec.update(patch)
     if body.guardrails is not None:
         spec["guardrails"] = body.guardrails.model_dump(by_alias=True)
@@ -495,11 +487,11 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
         check_pins_hold(cast(AgentSpec, spec))
     if body.guardrail_pins is not None:
         wanted = [p.model_dump(by_alias=True) for p in body.guardrail_pins]
-        spec["guardrailPins"] = await resolve_pins(rt, wanted, list(spec.get("guardrailPins") or []))
+        spec["guardrailPins"] = await resolve_pins(rt, wanted, list(cast(list[Json], spec.get("guardrailPins") or [])))
     if body.limits is not None:
         spec["limits"] = wire_limits(body.limits)
     if body.widget_pins is not None:
-        spec["widgetPins"] = await _widget_pins(rt, body.widget_pins)
+        spec["widgetPins"] = [*await _widget_pins(rt, body.widget_pins)]
     if body.widget_pins is not None or body.tool_ids is not None:
         _check_widget_tools(spec)
     if body.widgets is not None:
@@ -534,11 +526,11 @@ async def _check_knowledge(rt: Runtime, wanted: list[str], held: list[str]) -> N
         )
 
 
-def _check_widget_tools(spec: dict[str, Any]) -> None:
+def _check_widget_tools(spec: Json) -> None:
     """Every tool a pinned widget's buttons ask for is one the version grants (422 naming it), so a widget never offers
     an action the agent cannot take; the same holds when a tool is taken away from an agent that pins such a widget."""
-    granted = set(spec.get("toolIds") or [])
-    for pin in cast(list[dict[str, Any]], spec.get("widgetPins") or []):
+    granted = set(cast(list[str], spec.get("toolIds") or []))
+    for pin in cast(list[Json], spec.get("widgetPins") or []):
         missing = [t for t in required_tools(pin["tree"]) if t not in granted]
         if missing:
             raise Unprocessable(
@@ -549,10 +541,10 @@ def _check_widget_tools(spec: dict[str, Any]) -> None:
             )
 
 
-async def _widget_pins(rt: Runtime, wanted: list[WidgetPinInput]) -> list[dict[str, Any]]:
+async def _widget_pins(rt: Runtime, wanted: list[WidgetPinInput]) -> list[Json]:
     """Each wanted template snapshotted from the registry or the seeded library, so the version keeps exactly the tree
     it was reviewed with. An unknown, unpublished or retired template or version is refused naming it (422)."""
-    out: list[dict[str, Any]] = []
+    out: list[Json] = []
     for w in wanted:
         found = await published_widget(rt, w.widget_id, w.version)
         if found is None:
@@ -578,8 +570,11 @@ async def agent_users(rt: Runtime, agent_id: str) -> list[dict[str, str]]:
     for d in await team_workflows(rt):
         if d.get("archived_at"):
             continue
-        for node in cast(list[dict[str, Any]], dict(d.get("definition") or {}).get("nodes") or []):
-            if node.get("type") == "ops.ai.agent" and dict(node.get("parameters") or {}).get("agent") == agent_id:
+        for node in cast(list[Json], dict(d.get("definition") or {}).get("nodes") or []):
+            if (
+                node.get("type") == "ops.ai.agent"
+                and dict(cast(Json, node.get("parameters") or {})).get("agent") == agent_id
+            ):
                 add(str(d["workflow_id"]), str(d["name"]))
     return out
 
@@ -612,7 +607,7 @@ async def list_versions(rt: Rt, _: Reader, __: Tx, agent_id: str) -> JSONRespons
     pending = next((r for r in requests if r.status == "pending"), None)
     rejected = {int(r.version) for r in requests if r.status == "rejected"}
     asked = {int(r.version) for r in requests}
-    out: list[dict[str, Any]] = []
+    out: list[Json] = []
     for v in await reg.versions(agent_id):
         n = int(v.version)
         # History is what was published or put to a reviewer, plus the one draft; saves the per-save model
@@ -635,8 +630,8 @@ async def list_versions(rt: Rt, _: Reader, __: Tx, agent_id: str) -> JSONRespons
     return ok(out)
 
 
-def _meta(thread: dict[str, Any]) -> dict[str, Any]:
-    return cast(dict[str, Any], thread["meta"] or {})
+def _meta(thread: Json) -> Json:
+    return cast(Json, thread["meta"] or {})
 
 
 @router.get("/{agent_id}/runs", response_model=Envelope[list[AgentRun]])
@@ -791,7 +786,7 @@ async def create_eval_run(
     cases = parse_cases(raw)
 
     def turn_on(version: int) -> Any:
-        async def turn(message: str, collections: tuple[str, ...]) -> dict[str, Any]:
+        async def turn(message: str, collections: tuple[str, ...]) -> Json:
             return await one_test_turn(
                 rt, agent_id, message, row=row.model_copy(update={"version": version}), collections=collections or None
             )
@@ -806,7 +801,9 @@ async def create_eval_run(
         agent_id, cases, turn_on(int(row.version)), turn_on(live) if compare and live is not None else None
     )
     if saved:
-        results = run["results"]
+        # The run's own JSON (app.evals.run_eval), read as it was written there.
+        results = cast(JsonList, run["results"])
+        summary = cast(Json, run["summary"])
         await EvalStore(rt.db).add_run(
             {
                 "id": run["id"],
@@ -816,10 +813,12 @@ async def create_eval_run(
                 "version": int(row.version),
                 "live_version": live if compare else None,
                 "trigger": TRIGGER_MANUAL,
-                "passed": run["summary"]["passed"],
-                "total": run["summary"]["total"],
-                "live_passed": sum(1 for r in results if r["live"]["status"] == "pass") if compare else None,
-                "regressions": run["summary"]["regressions"],
+                "passed": summary["passed"],
+                "total": summary["total"],
+                "live_passed": sum(1 for r in results if cast(Json, cast(Json, r)["live"])["status"] == "pass")
+                if compare
+                else None,
+                "regressions": summary["regressions"],
                 "duration_ms": round((time.perf_counter() - started) * 1000),
                 "cost_usd": 0.0,
                 "results": results,
