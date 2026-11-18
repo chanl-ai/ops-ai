@@ -9,6 +9,7 @@ from pydantic_ai import Agent
 from pydantic_ai.models import Model
 
 from ops_metering import Usage
+from ops_service_kit.http import Json
 
 from .usage import report_usage
 
@@ -49,7 +50,7 @@ class GraphModels(Protocol):
     async def extract(self, category: str, name: str, text: str) -> Facts: ...
     async def draft(self, email: str, evidence: str, feedback: str | None) -> str: ...
     async def grade(self, email: str, draft: str) -> Grade: ...
-    async def extract_records(self, schema: str, text: str) -> list[dict[str, Any]]: ...
+    async def extract_records(self, schema: str, text: str) -> list[Json]: ...
 
 
 class PydanticAiModels:
@@ -108,7 +109,7 @@ class PydanticAiModels:
         )
         return await _run(agent, f"Email:\n{email}\n\nDraft:\n{draft}")
 
-    async def extract_records(self, schema: str, text: str) -> list[dict[str, Any]]:
+    async def extract_records(self, schema: str, text: str) -> list[Json]:
         """Every record of `schema` (RECORD_SCHEMAS) the text states, one dict per record, in the text's order."""
         output = RECORD_SCHEMAS.get(schema)
         if output is None:

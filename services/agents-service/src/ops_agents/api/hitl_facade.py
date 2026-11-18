@@ -11,19 +11,18 @@ the decision standing with `resumed_at` unset, and the next decide with the same
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 from langgraph.types import Command
-from pydantic import JsonValue
 
 from ops_access import can
 from ops_agents.graphs.definition import WorkflowDefinition, option_declarations, option_name
 from ops_service_kit import narrow
 from ops_service_kit.errors import ApiError, Conflict, NotFound, ValidationFailed
-from ops_service_kit.http import Json
+from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 from ops_store import isolation
@@ -68,6 +67,41 @@ def is_chat_graph(graph: str) -> bool:
     return graph in CASE_GRAPHS_EXCLUDED or graph.startswith("agent:")
 
 
+class ThreadCall(TypedDict, total=False):
+    """A write a paused thread step holds (`call`, an option's call, a `calls` entry): its operation, its input and the
+    step key its approval binds to. The graphs write it (graphs/common.reply_call, the approval nodes, definition's
+    levy calls); a workflow run's step holds the same keys (engine_reviews.ProposedCall), typed there for the stored
+    check this checkpoint value is not read through."""
+
+    tool: str
+    input: Json
+    step: str
+
+
+class ThreadPayload(TypedDict, total=False):
+    """What a paused thread step waits with (the interrupt's value in the LangGraph checkpoint): a workflow review
+    (definition's human node, complex_workflow.human), a chat or agent node's write approval (the approval nodes) or
+    an exhausted budget (metering.guard). A checkpoint can hold values that are not JSON and keys of any type, so the
+    fields name the shape the graphs write and nothing here checks it: each read below behaves as it did on a dict."""
+
+    kind: str
+    node: str
+    review_id: str
+    to: str
+    draft: JsonValue
+    score: float
+    attempts: int
+    customer: Json
+    error: JsonValue
+    call: ThreadCall
+    calls: dict[str, ThreadCall]
+    options: list[JsonValue]
+    ask_first: bool
+    requested_by: JsonValue
+    reviewer_role: JsonValue
+    step_up: bool
+
+
 STEP_KIND = {
     "human": "review",
     "send_reply": "action",
@@ -80,9 +114,10 @@ def _title(graph: str) -> str:
     return graph.replace("_", " ").capitalize()
 
 
-def _get(d: Any, key: str) -> Any:
-    """`d[key]` for a JSON object from the journal or an interrupt, None for anything else."""
-    return cast(dict[str, Any], d).get(key) if isinstance(d, dict) else None
+def _get(d: object, key: str) -> Any:
+    """`d[key]` for a JSON object from the journal or an interrupt, None for anything else. Unchecked: a checkpoint's
+    value need not be JSON, and each caller reads it as it reads any other value."""
+    return narrow.json_object(d).get(key)
 
 
 def _parse(ts: str | None) -> datetime | None:
@@ -136,7 +171,7 @@ async def _decisions(rt: Runtime, thread_ids: list[str] | None = None) -> dict[s
     return await ReviewStore(graph_store(rt).engine).latest_decisions(thread_ids)
 
 
-def requester_of(row: dict[str, Any], payload: dict[str, Any]) -> str:
+def requester_of(row: Json, payload: ThreadPayload | Json) -> str:
     """Who asked for the paused step: the person recorded on the interrupt when there is one, else the workflow
     itself (the process principal), which no person can be."""
     return str(payload.get("requested_by") or f"workflow:{row.get('graph')}")
@@ -145,10 +180,15 @@ def requester_of(row: dict[str, Any], payload: dict[str, Any]) -> str:
 CHAT_GRAPH = "agent_wrapper"
 
 
-def _is_chat(row: dict[str, Any]) -> bool:
+def _is_chat(row: Json) -> bool:
     """A chat thread (POST /chat/threads): its id is the conversation's, and its meta names the agent."""
-    meta: dict[str, Any] = row.get("meta") or {}
-    return bool(meta.get("chat"))
+    return bool(_meta(row).get("chat"))
+
+
+def _meta(row: Json) -> Json:
+    """A thread row's meta (a JSON object column; empty when unset). A value of another type fails the read, as
+    reading a key of it did."""
+    return narrow.an_object(row.get("meta") or {}, "a thread's meta")
 
 
 class OptionsUnresolved(Exception):
@@ -1087,7 +1127,7 @@ async def decide(
 
 
 async def check_thread_decider(
-    rt: Runtime, approver: Principal, row: dict[str, Any], payload: dict[str, Any], calls: list[dict[str, Any]]
+    rt: Runtime, approver: Principal, row: Json, payload: ThreadPayload | Json, calls: Sequence[object]
 ) -> None:
     """Who may decide a paused thread step: a reviewer or admin of the thread's team, whatever the writes it decides
     (`calls`) are, and not who asked for it while requesterMayDecide is off."""
@@ -1106,7 +1146,7 @@ async def check_thread_decider(
             "decide",
             team=team,
             from_any_team=True,
-            role=str(payload["reviewer_role"]),
+            role=str(payload.get("reviewer_role")),
             what="this review",
         )
     require_not_own(approver, [requester_of(row, payload)], team=team, what="this")
@@ -1128,7 +1168,8 @@ async def can_decide(rt: Runtime, approver: Principal, review_id: str) -> bool:
         waiting = pending(await (await resolve(rt, review_id))[1].aget_state(config(review_id)))
         if not waiting:
             return False
-        payload = cast(dict[str, Any], waiting[0]["payload"])
+        # The checkpoint's value as it is: held_calls and the decider read it unchecked.
+        payload = waiting[0]["payload"]
         await check_thread_decider(rt, approver, row, payload, held_calls(payload))
     except ApiError:
         return False

@@ -11,13 +11,14 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import operator
-from typing import Annotated, Any, Literal, NotRequired, TypedDict
+from typing import Annotated, Any, Literal, NotRequired, TypedDict, cast
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Send, interrupt
 
+from ops_service_kit.http import Json, JsonList
 from ops_service_kit.ids import canonical_json
 
 from .common import GraphDeps, approval_token, emit, reply_call
@@ -51,14 +52,14 @@ class DisputeState(TypedDict):
     category: NotRequired[str]
     attachments: NotRequired[list[Attachment]]
     dropped_attachments: NotRequired[int]
-    extractions: Annotated[list[dict[str, Any]], operator.add]
+    extractions: Annotated[list[Json], operator.add]
     evidence: NotRequired[str]
     draft: NotRequired[str]
     attempts: NotRequired[int]
     score: NotRequired[float]
     feedback: NotRequired[str]
     review_id: NotRequired[str]
-    decision: NotRequired[dict[str, Any]]
+    decision: NotRequired[Json]
     sent: NotRequired[str]
     status: NotRequired[str]
 
@@ -74,12 +75,12 @@ def _email_text(e: Email) -> str:
 
 
 def build(deps: GraphDeps, checkpointer: BaseCheckpointSaver[Any] | None) -> CompiledStateGraph[Any, Any, Any, Any]:
-    async def classify(state: DisputeState) -> dict[str, Any]:
+    async def classify(state: DisputeState) -> Json:
         atts = state["email"]["attachments"]
         category = await deps.models.classify(_email_text(state["email"]), LABELS)
         return {
             "category": category,
-            "attachments": atts[:MAX_ATTACHMENTS],
+            "attachments": cast(JsonList, atts[:MAX_ATTACHMENTS]),
             "dropped_attachments": max(0, len(atts) - MAX_ATTACHMENTS),
         }
 
@@ -93,7 +94,7 @@ def build(deps: GraphDeps, checkpointer: BaseCheckpointSaver[Any] | None) -> Com
             for a in atts
         ]
 
-    async def extract(task: ExtractTask) -> dict[str, Any]:
+    async def extract(task: ExtractTask) -> Json:
         a = task["attachment"]
         if task["delay_ms"]:
             await asyncio.sleep(task["delay_ms"] / 1000)
@@ -105,18 +106,18 @@ def build(deps: GraphDeps, checkpointer: BaseCheckpointSaver[Any] | None) -> Com
         facts = await deps.models.extract(task["category"], a["name"], text)
         return {"extractions": [{"name": a["name"], **facts.model_dump(exclude_none=True)}]}
 
-    async def collect(state: DisputeState) -> dict[str, Any]:
+    async def collect(state: DisputeState) -> Json:
         rows = sorted(state["extractions"], key=lambda x: str(x["name"]))
         evidence = "\n".join(f"- {r['name']}: {r.get('summary', '')}" for r in rows)
         return {"evidence": evidence or "No attachments."}
 
-    async def draft(state: DisputeState) -> dict[str, Any]:
+    async def draft(state: DisputeState) -> Json:
         attempts = state.get("attempts", 0) + 1
         text = await deps.models.draft(_email_text(state["email"]), state.get("evidence", ""), state.get("feedback"))
         emit("text", "draft", text)
         return {"draft": text, "attempts": attempts}
 
-    async def grade(state: DisputeState) -> dict[str, Any]:
+    async def grade(state: DisputeState) -> Json:
         attempts = state.get("attempts", 1)
         overrides = state.get("grade_overrides") or []
         if attempts <= len(overrides):
@@ -132,7 +133,7 @@ def build(deps: GraphDeps, checkpointer: BaseCheckpointSaver[Any] | None) -> Com
             return "human"
         return "draft"
 
-    async def human(state: DisputeState) -> dict[str, Any]:
+    async def human(state: DisputeState) -> Json:
         # Derived from the case, not Python's per-process hash(): this node re-runs on resume, possibly in a new
         # process, and the reviewer's id and the reply's idempotency key must not change.
         case = canonical_json([state["email"]["sender"], state["email"]["subject"], state["email"]["body"]])
@@ -153,14 +154,14 @@ def build(deps: GraphDeps, checkpointer: BaseCheckpointSaver[Any] | None) -> Com
     def after_review(state: DisputeState) -> Literal["send_reply", "close"]:
         return "send_reply" if (state.get("decision") or {}).get("decision") == "approved" else "close"
 
-    async def send_reply(state: DisputeState) -> dict[str, Any]:
+    async def send_reply(state: DisputeState) -> Json:
         call = reply_call(state["email"], state.get("draft", ""), state.get("review_id", ""))
         reference = await deps.replies.send(
             key=call["step"], approval_token=approval_token(state.get("decision")), **call["input"]
         )
         return {"sent": reference, "status": "replied"}
 
-    async def close(state: DisputeState) -> dict[str, Any]:
+    async def close(state: DisputeState) -> Json:
         return {"status": "closed"}
 
     g = StateGraph(DisputeState)
