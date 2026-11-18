@@ -30,6 +30,7 @@ from ops_plugin_sdk.versions import tools_of
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.http import Envelope, In, JsonValue, ListResult, Out, ok
 from ops_service_kit.listing import ListParams, ListQuery
+from ops_service_kit.narrow import a_list, an_object
 from ops_store import isolation
 from ops_store.listing import ListPage
 
@@ -1097,7 +1098,7 @@ class Apps:
         usable = [c for c in creds if c["app_id"] == card["id"] and (c["holds_secret"] or not kind.signs_in)]
         installed = self.connections.store.install_client(str(pid)) is not None
         any_usable = installed or bool(usable)
-        team_on = bool(cast(dict[str, Any], card["plugin"]).get("teamOn"))
+        team_on = bool(an_object(card["plugin"], "the card's plugin").get("teamOn"))
         if conn is None or not team_on:
             return "ok" if any_usable else "none"
         held = (
@@ -1304,7 +1305,7 @@ def app_state(
     acting for one); `pack`: a template pack, which has no account, so being on for the team is all it needs."""
     if card["kind"] in ("builtin", "module"):
         return "connected", None
-    plugin = cast(dict[str, Any] | None, card.get("plugin"))
+    plugin = an_object(p, "the card's plugin") if (p := card.get("plugin")) is not None else None
     if pack and plugin is not None:
         return ("connected", None) if plugin.get("teamOn") else ("off", None)
     # Only a plugin card the install no longer loads is drawn without its manifest's details.
@@ -1324,7 +1325,7 @@ def app_state(
             return "needs_sign_in", CONNECT_OWN
         if own.get("refused_at") is not None:
             return "needs_sign_in", "Your sign-in ended. Sign in again."
-        test = cast(dict[str, Any] | None, own.get("test"))
+        test = an_object(t, "the sign-in's test") if (t := own.get("test")) is not None else None
     else:
         if card.get("state") != CONNECTED:
             return "needs_sign_in", state_reason(
@@ -2116,7 +2117,7 @@ async def _accounts(apps: Apps, who: Caller, card: dict[str, Any]) -> list[dict[
     # With two or more, a call asks which until the caller saves one, so only a saved default is named here.
     several = len([t for t in own_rows if t.get("refused_at") is None]) > 1
     pick = next((t for t in own_rows if t.get("pinned") and t.get("refused_at") is None), None) if several else None
-    platform = bool(cast(dict[str, Any], card.get("plugin") or {}).get("platformApp"))
+    platform = bool(an_object(card.get("plugin") or {}, "the card's plugin").get("platformApp"))
     creds = await store.team_credentials(who.tenant_id, who.team.id, str(card["id"]))
     configs = len(creds) + int(platform)
     plugin = _plugin(apps, card)
@@ -2251,7 +2252,7 @@ async def _auth_configs(
     """The app's auth configs, each with the accounts signing in through it: Ops AI's own app where the install has
     one, then the team's own, oldest first. Only a team admin edits or deletes the team's own; a kind that signs in
     with no OAuth client has none."""
-    plugin = cast(dict[str, Any], card.get("plugin") or {})
+    plugin = an_object(card.get("plugin") or {}, "the card's plugin")
     store = apps.connections.store
     may = apps.connections.may_manage(who)
     configs: list[dict[str, Any]] = []
@@ -2313,7 +2314,7 @@ async def _auth_configs(
 
 def _place_of(config: dict[str, Any]) -> str | None:
     """Where a config's accounts sign in: its first sign-in value, or None when it leaves that to Connect."""
-    fields = cast(list[dict[str, Any]], config.get("fields") or [])
+    fields = [an_object(f, "a config field") for f in a_list(config.get("fields") or [], "the config's fields")]
     return next((str(f["value"]) for f in fields if f.get("value")), None)
 
 

@@ -17,9 +17,9 @@ import json
 import re
 import secrets as random
 import time
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any, NoReturn, cast
+from typing import Any, NoReturn, NotRequired, Required, TypedDict
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
 import httpx
@@ -29,8 +29,10 @@ from ops_identity import ActingForPerson, Principal
 from ops_plugin_sdk.manifest import PLATFORM_AUTHORIZE_PARAMS, SignInError
 from ops_policy import CredentialStore
 from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unprocessable, ValidationFailed
+from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import new_id
 from ops_service_kit.logging import get_logger
+from ops_service_kit.narrow import Malformed, an_object, json_list, json_object
 from ops_store import background
 
 from ..auth import Authenticator, AuthFailed, Prepared
@@ -77,12 +79,12 @@ OWN = "own"
 # Settings changes that make a held token wrong for the system: it is dropped, so the next call signs in again.
 # tenant, account, the token answer, and whether it is a person's own sign-in, which may not change what the
 # team's sign-in set -> account settings to add, or None. A ValueError with a `code` names why for the event.
-OnToken = Callable[[str, str, dict[str, Any], bool], Awaitable[dict[str, Any] | None]]
-OwnPlace = Callable[[Caller, dict[str, Any], dict[str, Any]], Awaitable[tuple[dict[str, Any], dict[str, Any]]]]
+OnToken = Callable[[str, str, Json, bool], Awaitable[Json | None]]
+OwnPlace = Callable[[Caller, dict[str, Any], Json], Awaitable[tuple[Json, Json]]]
 # tenant, account, who signed in -> after a finished sign-in: the account's app is turned on for its team.
 OnSignedIn = Callable[[str, str, str], Awaitable[None]]
 # tenant, account -> the plugin's settings on it as a person may read them.
-PluginSettings = Callable[[str, str], Awaitable[dict[str, Any]]]
+PluginSettings = Callable[[str, str], Awaitable[Json]]
 # tenant, account, the system's error code and description -> what the plugin behind the account says of that refusal,
 # or None for an account no plugin serves or a code its plugin does not name.
 SignInErrors = Callable[[str, str, str, str | None], Awaitable[SignInError | None]]
@@ -93,6 +95,61 @@ TOKEN_SETTINGS = (
     "subject", "scopeIn",
 )  # fmt: skip
 _NOT_UPPER = re.compile(r"[^A-Z0-9]+")
+
+
+class ClientPick(TypedDict):
+    """The OAuth client an account picks (`_client_of`): the team's app credential, or with none the plugin whose
+    install client is Ops AI's app; its client id, and the secret names it holds for the account."""
+
+    credential_id: str | None
+    platform_app: str | None
+    client_id: str
+    names: dict[str, str]
+
+
+class SecretState(TypedDict, total=False):
+    """Whether one secret part is set, and by whom and when; never its value."""
+
+    set: Required[bool]
+    setBy: str
+    setAt: str | None
+
+
+class TokenView(TypedDict):
+    """The team's sign-in on an account as a read shows it."""
+
+    account: str | None
+    since: str | None
+    expiresAt: str | None
+    scopes: list[str]
+
+
+class AccountKeys(TypedDict):
+    """An account read's settings, secret parts, team sign-in and OAuth app; `certificate` only when it holds one."""
+
+    settings: Json
+    secrets: dict[str, SecretState]
+    signedIn: TokenView | None
+    platformApp: str | None
+    credentialId: str | None
+    certificate: NotRequired[Json | None]
+
+
+class SignInLink(TypedDict):
+    """Where to send the person's browser to sign in, and the account it signs in to."""
+
+    authorizeUrl: str
+    redirectUri: str
+    expiresAt: str | None
+    connectionId: str
+    appId: str
+
+
+class PackageState(TypedDict):
+    """One package app a passing test checked: its title and the objects it needs that the system lacks."""
+
+    title: JsonValue
+    missing: list[str]
 
 
 def _details(i: dict[str, Any]) -> dict[str, Any]:
@@ -132,7 +189,7 @@ OPS_AI_APP = "Ops AI's app"
 MCP_LIST_TOOLS = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 
 
-def is_mcp_server(settings: dict[str, Any]) -> bool:
+def is_mcp_server(settings: Json) -> bool:
     """An MCP server added by its address: the token it takes is for the server itself (`resource` is its address),
     as `connect_mcp` sets it."""
     base, resource = str(settings.get("baseUrl") or ""), str(settings.get("resource") or "")
@@ -146,15 +203,15 @@ def mcp_error(res: httpx.Response) -> str | None:
     if "text/event-stream" in res.headers.get("content-type", ""):
         text = next((line[5:].strip() for line in text.splitlines() if line.startswith("data:")), "")
     try:
-        body = json.loads(text)
+        body: object = json.loads(text)
     except ValueError:
         return "its answer was not JSON-RPC"
+    answer = json_object(body)
     if not isinstance(body, dict):
         return "its answer was not JSON-RPC"
-    answer = cast(dict[str, Any], body)
-    error: Any = answer.get("error")
+    error = answer.get("error")
     if isinstance(error, dict):
-        return str(cast(dict[str, Any], error).get("message") or "an error")
+        return str(json_object(error).get("message") or "an error")
     if error is not None:
         return str(error)
     return None if "result" in answer else "its answer had no result"
@@ -166,7 +223,16 @@ ALREADY = "_alreadyConnectedAs"
 
 def _names(conn: dict[str, Any] | None) -> dict[str, str]:
     """An account's secret field to secret name map."""
-    return {str(k): str(v) for k, v in cast(dict[Any, Any], (conn or {}).get("secrets") or {}).items()}
+    return {str(k): str(v) for k, v in an_object((conn or {}).get("secrets") or {}, "the account's secrets").items()}
+
+
+def _count(uses: Json, key: str) -> int:
+    """A count in the agents service's in-use answer, read as `int(x or 0)` reads it: missing or null is 0, a number
+    or numeric text counts, anything else raises, so a delete guarded by it is refused."""
+    value = uses.get(key) or 0
+    if isinstance(value, str | int | float):
+        return int(value)
+    raise Malformed(f"{key} is not a count")
 
 
 def _not_found(what: str, code: str) -> NotFound:
@@ -252,10 +318,10 @@ class ConnectionService:
         self.sign_in_scopes: Callable[[str, str], Awaitable[list[str] | None]] | None = None
         # The package apps that run on an account's app and the path that checks each of their objects
         # (PluginHost.package_checks); a passing Test reads them. Set once the plugin host is up.
-        self.package_checks: Callable[[str, str], Awaitable[list[dict[str, Any]]]] | None = None
+        self.package_checks: Callable[[str, str], Awaitable[list[Json]]] | None = None
         # The team's workflows and agents that name an account of an app (ToolUsers.accounts, agents-service); a
         # delete is refused while any do. Set with the app routes (Apps).
-        self.account_users: Callable[[str, str, str, str], Awaitable[dict[str, Any]]] | None = None
+        self.account_users: Callable[[str, str, str, str], Awaitable[Json]] | None = None
         # Tests that run after a sign-in, held so the event loop keeps them until they finish.
 
     # ── Who may ───────────────────────────────────────────────────────────
@@ -276,7 +342,7 @@ class ConnectionService:
         reads; for an answer joined outside this service, such as the app credentials list."""
         self._can(who, action, what)
 
-    def _event(self, who: Caller, action: str, detail: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _event(self, who: Caller, action: str, detail: Mapping[str, JsonValue] | None = None) -> dict[str, Any]:
         return {
             "action": action,
             "actor": who.name,
@@ -308,12 +374,12 @@ class ConnectionService:
 
     def _keys(
         self, kind: Kind, conn: dict[str, Any], meta: dict[str, SecretMeta], token: dict[str, Any] | None
-    ) -> dict[str, Any]:
+    ) -> AccountKeys:
         """The account's settings, which secret parts are set (by whom and when, never a value), the team's sign-in and
         the signing certificate's view."""
         named = _names(conn)
         secret_fields = [f for f in (*kind.fields, *CERTIFICATE) if f.secret]
-        secrets: dict[str, Any] = {}
+        secrets: dict[str, SecretState] = {}
         for f in secret_fields:
             row = meta.get(named.get(f.name, ""))
             secrets[f.name] = (
@@ -321,7 +387,7 @@ class ConnectionService:
                 if row
                 else {"set": False}
             )
-        signed: dict[str, Any] | None = (
+        signed: TokenView | None = (
             {
                 "account": token.get("account"),
                 "since": _iso(token["refreshed_at"]),
@@ -331,8 +397,8 @@ class ConnectionService:
             if token
             else None
         )
-        settings: dict[str, Any] = dict(conn["settings"] or {})
-        out: dict[str, Any] = {
+        settings: Json = dict(conn["settings"] or {})
+        out: AccountKeys = {
             "settings": settings,
             "secrets": secrets,
             "signedIn": signed,
@@ -467,7 +533,7 @@ class ConnectionService:
         return await self.detail(who, connection_id)
 
     async def change(
-        self, who: Caller, connection_id: str, i: dict[str, Any], *, plugin_settings: dict[str, Any] | None = None
+        self, who: Caller, connection_id: str, i: dict[str, Any], *, plugin_settings: Json | None = None
     ) -> dict[str, Any]:
         """The account's name, sign-in, card details, sandbox flag, and its settings and secret parts. A secret part
         sent replaces the stored one; one left out keeps it. Settings merge the same way: one sent replaces the stored
@@ -502,7 +568,7 @@ class ConnectionService:
         drop = False
         detail: dict[str, Any] = {"fields": sorted(values)}
         action = "changed"
-        client: dict[str, Any] | None = None
+        client: ClientPick | None = None
         if "credential_id" in i:
             client = await self._client_of(who, conn, i["credential_id"])
         if i.get("settings") is not None or i.get("secret_values"):
@@ -515,7 +581,7 @@ class ConnectionService:
             detail |= {"settings": sorted(keys["settings"]), "secrets": sorted(i.get("secret_values") or {})}
             action = "secret_set" if sealed else "changed"
         if client is not None:
-            values |= {k: client[k] for k in ("credential_id", "platform_app")}
+            values |= {"credential_id": client["credential_id"], "platform_app": client["platform_app"]}
             detail["credentialId"] = client["credential_id"]
             drop = True
         if plugin_settings is not None:
@@ -540,17 +606,17 @@ class ConnectionService:
         self,
         who: Caller,
         conn: dict[str, Any],
-        given: dict[str, Any],
+        given: Json,
         secret_values: dict[str, str],
         *,
-        client: dict[str, Any] | None = None,
+        client: ClientPick | None = None,
     ) -> tuple[dict[str, Any], dict[str, str], bool]:
         """The account's settings and secret names after a save, the values to seal by secret name, and whether a held
         token is wrong for the system now (it is dropped, so the next call signs in again). `client`: the OAuth client
         the same save picks (`_client_of`), whose secret counts as held."""
         kind = kind_of(str(conn["auth_kind"]))
         each_person = (conn.get("sign_in") or "team") == "person"
-        stored = cast(dict[str, Any], conn.get("settings") or {})
+        stored = an_object(conn.get("settings") or {}, "the account's settings")
         held = {k: v for k, v in stored.items() if (f := kind.field(k)) and not f.secret}
         # A client the same save picks is the account's client id from now on, though the store keeps it on the
         # credential (or the install), never in the account's settings.
@@ -563,7 +629,7 @@ class ConnectionService:
                 raise ValidationFailed(f"{k} is not a secret part of {kind.label}.", details={"field": k})
         names = _names(conn)
         needs = kind.requires(settings, each_person=each_person)
-        held = names | (client or {}).get("names", {})
+        held = names | (client["names"] if client is not None else {})
         if client is not None and client["platform_app"]:
             # Ops AI's app proves itself with the install's secret, never one the team holds.
             held = held | {"clientSecret": ""}
@@ -583,7 +649,7 @@ class ConnectionService:
         )
         return row, {names[k]: v for k, v in values.items()}, drop
 
-    async def _client_of(self, who: Caller, conn: dict[str, Any], credential_id: str | None) -> dict[str, Any]:
+    async def _client_of(self, who: Caller, conn: dict[str, Any], credential_id: str | None) -> ClientPick:
         """The OAuth client an account picks: one of the team's app credentials for the account's app, or with none,
         Ops AI's app for a plugin's account when the install has one. Both columns are written, as a token exchange
         prefers Ops AI's app while `platform_app` is set."""
@@ -624,10 +690,10 @@ class ConnectionService:
                 f"{conn['name']} was changed by someone else. Reload it and try again.", code="stale_version"
             ) from e
 
-    def _checked(self, kind: Kind, settings: dict[str, Any], *, each_person: bool = False) -> dict[str, Any]:
+    def _checked(self, kind: Kind, settings: Json, *, each_person: bool = False) -> Json:
         """The account's plain settings, each a field of the kind or of the client certificate. `each_person`: the
         connection signs in as each person only, so a field each person gives (a username) is not asked of the team."""
-        out: dict[str, Any] = {}
+        out: Json = {}
         for k, v in settings.items():
             f = kind.field(k)
             if f is None:
@@ -652,9 +718,7 @@ class ConnectionService:
                 raise ValidationFailed(f"{k} must be an https address.", details={"field": k})
         return out
 
-    async def _pair_checked(
-        self, who: Caller, conn: dict[str, Any], settings: dict[str, Any], values: dict[str, str]
-    ) -> None:
+    async def _pair_checked(self, who: Caller, conn: dict[str, Any], settings: Json, values: dict[str, str]) -> None:
         """A signing key saved with a certificate it does not belong to fails every sign-in later, so it is refused
         here; when only the certificate changes, the key held is read (audited) and checked against it."""
         cert = settings.get("signingCertificate")
@@ -687,7 +751,7 @@ class ConnectionService:
             # A step or agent naming a deleted account is refused at its next call (ACCOUNT_NOT_FOUND), so the delete
             # waits until nothing names it.
             uses = await self.account_users(who.tenant_id, str(conn["team_id"]), str(conn["app_id"]), named)
-            published, drafts = int(uses.get("published") or 0), int(uses.get("drafts") or 0)
+            published, drafts = _count(uses, "published"), _count(uses, "drafts")
             if published or drafts:
                 raise Conflict(
                     f"{named} is named by {published} published and {drafts} draft workflow or agent "
@@ -696,8 +760,8 @@ class ConnectionService:
                     details={
                         "published": published,
                         "drafts": drafts,
-                        "workflows": list(uses.get("workflows") or []),
-                        "agents": list(uses.get("agents") or []),
+                        "workflows": json_list(uses.get("workflows")),
+                        "agents": json_list(uses.get("agents")),
                     },
                 )
         try:
@@ -800,7 +864,7 @@ class ConnectionService:
         scopes: list[str] | None = None,
         hint: str | None = None,
         check: bool = False,
-    ) -> dict[str, Any]:
+    ) -> SignInLink:
         """The address to send the person's browser to. The sign-in address must be https on a listed host, so the
         console never sends a person somewhere the tenant has not allowed. On a connection each person signs in to,
         the caller signs in their own account (OWN); the team's account needs connections.manage.
@@ -810,7 +874,7 @@ class ConnectionService:
         account = await self._which(who, found, account, first=True)
         personal = (found.get("sign_in") or "team") != "team" and account == "self" and not check
         conn = await self._signs_in(who, connection_id, right=OWN if personal else "manage")
-        settings: dict[str, Any] = dict(conn["settings"])
+        settings: Json = dict(conn["settings"])
         url = str(settings["authorizeUrl"])
         if self.egress is None:
             raise ServiceUnavailable("This service has no egress policy, so it starts no sign-in.")
@@ -896,7 +960,7 @@ class ConnectionService:
 
     async def _code_answer(self, who: Caller, taken: dict[str, Any], conn: dict[str, Any], code: str) -> dict[str, Any]:
         """The system's token answer for the code, through the account's app; raises AuthFailed."""
-        settings: dict[str, Any] = dict(conn["settings"])
+        settings: Json = dict(conn["settings"])
         proof = await self._client_proof(who, conn, f"sign-in {conn['name']}")
         # The state was taken once (used_at set), so its verifier is never read again.
         pkce = verifier_context(who.tenant_id, str(taken["state_hash"]))
@@ -932,7 +996,7 @@ class ConnectionService:
         connections.manage (`_taken`)."""
         taken, conn = await self._taken(who, connection_id, state, check=False)
         token_for = str(taken.get("token_for") or SHARED)
-        settings: dict[str, Any] = dict(conn["settings"])
+        settings: Json = dict(conn["settings"])
         try:
             answer = await self._code_answer(who, taken, conn, code)
         except AuthFailed as e:
@@ -943,7 +1007,7 @@ class ConnectionService:
                 raise await self._refused(who, conn, taken, *refusal, token_exchange=True) from e
             await self.store.note(who.tenant_id, connection_id, self._event(who, "sign_in_failed", {"code": e.code}))
             raise ValidationFailed(f"{conn['name']} did not finish the sign-in: {e}", code="sign_in_failed") from e
-        extra: dict[str, Any] = {}
+        extra: Json = {}
         if self.on_token is not None:
             try:
                 extra = await self.on_token(who.tenant_id, connection_id, answer, token_for != SHARED) or {}
@@ -1238,9 +1302,9 @@ class ConnectionService:
         who: Caller,
         connection_id: str,
         plugin_id: str,
-        settings: dict[str, Any],
+        settings: Json,
         *,
-        plugin_settings: dict[str, Any] | None = None,
+        plugin_settings: Json | None = None,
     ) -> None:
         """Puts a plugin's account on Ops AI's own OAuth app: the account's settings, and its
         `platform_app` naming the plugin, whose token exchange uses the install's client (plugin_clients), with no
@@ -1352,9 +1416,7 @@ class ConnectionService:
         first = await self.store.get(who.tenant_id, app_id)
         return str((first or row)["name"]), None
 
-    async def add_own_account(
-        self, who: Caller, connection_id: str, given: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    async def add_own_account(self, who: Caller, connection_id: str, given: Json | None = None) -> SignInLink:
         """Another account of the caller's own on the app of `connection_id`, signed in through the same auth config
         (the same app credential or Ops AI's app): a personal and an office login side by side. `given` names it
         (`name`, which no other account of the app in the team holds) and says where it signs in (`settings`, the
@@ -1388,7 +1450,7 @@ class ConnectionService:
         new = new_id("ca")
         settings = {k: v for k, v in dict(src.get("settings") or {}).items() if k not in ("clientId", "clientSecret")}
         name = str((given or {}).get("name") or "").strip() or f"{who.name}'s other account"
-        own_settings: dict[str, Any] | None = None
+        own_settings: Json | None = None
         if given is not None:
             # Names are unique within an owner: the team may hold a name this person's own account also takes.
             others = await self.store.accounts(who.tenant_id, who.team.id, str(src["app_id"]))
@@ -1398,7 +1460,9 @@ class ConnectionService:
         if self.own_place is not None and plugin_of(src) is not None:
             # A plugin's account signs in where `given` says, else where `src` does: its own sign-in address is kept,
             # so a company's own address (a My Domain) is not lost, and the hosts it reaches are rendered from it.
-            settings, own_settings = await self.own_place(who, src, dict((given or {}).get("settings") or {}))
+            settings, own_settings = await self.own_place(
+                who, src, dict(an_object((given or {}).get("settings") or {}, "the given settings"))
+            )
             settings = {k: v for k, v in settings.items() if k not in ("clientId", "clientSecret")}
         row: dict[str, Any] = {
             "tenant_id": who.tenant_id,
@@ -1474,7 +1538,7 @@ class ConnectionService:
         held = await self.store.token(who.tenant_id, str(conn["id"]), mine)
         if held is None:
             raise NotFound("Your sign-in")
-        settings: dict[str, Any] = dict(conn["settings"] or {})
+        settings: Json = dict(conn["settings"] or {})
         revoked = False
         if settings.get("revokeUrl"):
             proof = await self._client_proof(who, conn, f"disconnect {conn['name']}")
@@ -1483,7 +1547,7 @@ class ConnectionService:
         detail = {"own": True, "revoked": revoked}
         await self.store.note(who.tenant_id, str(conn["id"]), self._event(who, "disconnected", detail))
 
-    async def open_link(self, who: Caller, link: str) -> dict[str, Any]:
+    async def open_link(self, who: Caller, link: str) -> SignInLink:
         """Starts the sign-in a connect link asks for: only the person it was made for, in its team, once and
         within fifteen minutes; another person's attempt neither starts a sign-in nor spends the link."""
         found = await self.store.link(who.tenant_id, _hash(link))
@@ -1516,7 +1580,7 @@ class ConnectionService:
         self._can(who, OWN if own else "manage")
         if self.auth is None or self.http is None or self.egress is None:
             raise ServiceUnavailable("This service has no egress policy, so it tests no connection.")
-        settings: dict[str, Any] = dict(conn["settings"] or {})
+        settings: Json = dict(conn["settings"] or {})
         path = str(settings.get("testPath") or "")
         mcp = is_mcp_server(settings)
         if mcp:
@@ -1635,17 +1699,17 @@ class ConnectionService:
 
     async def _packages(
         self, tenant_id: str, connection_id: str, base: str, prepared: Prepared | None, hosts: list[str]
-    ) -> dict[str, dict[str, Any]]:
+    ) -> dict[str, PackageState]:
         """Which package apps running on the account are installed there: each required object read through the
         account's sign-in, as the test read was. A 404 or 400 marks the object missing; a package whose check could
         not run is left out, so it is neither refused nor shown as installed on a guess."""
         if self.package_checks is None or self.egress is None:
             return {}
-        out: dict[str, dict[str, Any]] = {}
+        out: dict[str, PackageState] = {}
         for package in await self.package_checks(tenant_id, connection_id):
             missing: list[str] = []
             try:
-                for name, path in dict(package["paths"]).items():
+                for name, path in an_object(package["paths"], "a package check's paths").items():
                     url = base.rstrip("/") + str(path)
                     await self.egress.check_url(tenant_id, url, hosts)
                     res = await self._probe(url, prepared, tenant_id, hosts)
