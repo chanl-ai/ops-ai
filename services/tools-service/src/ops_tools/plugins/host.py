@@ -36,7 +36,7 @@ from ..connections.records import account_for, choice_needed, default_sign_in
 from ..egress import EgressDenied, EgressPolicy, for_tenant
 from ..environments import LIVE
 from ..modules.seed import blank
-from ..store.connections import PERSON_ORIGIN, ConnectionStore, name_key, plugin_app, plugin_of
+from ..store.connections import PERSON_ORIGIN, Account, ConnectionStore, name_key, plugin_app, plugin_of
 from ..store.modules import (
     AccountChoice,
     AccountOption,
@@ -213,21 +213,23 @@ def offered(setting: Setting, value: object) -> bool:
     return bool(same) or (setting.other is not None and typed_host(setting.other, value) is not None)
 
 
-def missing_objects(conn: Mapping[str, Any] | None, package_id: str) -> list[str]:
+def missing_objects(conn: Account | None, package_id: str) -> list[str]:
     """The objects of a package app that the account's last Test found missing (`health.packages`). Empty when the
     package is installed there, and when the account was never checked for it: an account signed in before the
     package was installed keeps working until its next Test says otherwise."""
-    health = cast(dict[str, Any], (conn or {}).get("health") or {})
+    health = (conn.health if conn else None) or {}
     packages = cast(dict[str, Any], health.get("packages") or {})
     missing = cast(list[Any], cast(dict[str, Any], packages.get(package_id) or {}).get("missing") or [])
     return [str(n) for n in missing]
 
 
-def own_and_registration(conn: Mapping[str, Any] | None) -> dict[str, Any]:
+def own_and_registration(conn: Account | None) -> dict[str, Any]:
     """An account's own plugin settings with its app credential's over them (store.connections joins those in as
     `credential_settings`): what PluginHost.settings takes as the account's layer."""
-    held = {k: v for k, v in dict((conn or {}).get("credential_settings") or {}).items() if v not in (None, "")}
-    return {**dict((conn or {}).get("plugin_settings") or {}), **held}
+    if conn is None:
+        return {}
+    held = {k: v for k, v in dict(conn.credential_settings or {}).items() if v not in (None, "")}
+    return {**dict(conn.plugin_settings or {}), **held}
 
 
 def readable(manifest: Manifest, settings: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, bool]]:
@@ -632,11 +634,11 @@ class PluginHost:
 
     def display_of(self, app_id: str) -> tuple[str, str | None] | None:
         """A plugin app's title and logo from its manifest; None for any other app."""
-        pid = plugin_of({"app_id": app_id})
+        pid = plugin_of(app_id)
         plugin = self.plugins.get(pid) if pid else None
         return (plugin.manifest.title, plugin.manifest.display.logo) if plugin else None
 
-    def awaits_sign_in(self, module: ModuleColumns, conn: Mapping[str, Any]) -> bool:
+    def awaits_sign_in(self, module: ModuleColumns, conn: Account) -> bool:
         """Whether a plugin tool's address waits for its account's sign-in: the endpoint names a setting the token or
         the lookup after sign-in fills (Salesforce's instance), and the account holds none yet. Until then the
         account's address is the sign-in host, where its credentials go, not where its tools run."""
@@ -645,7 +647,7 @@ class PluginHost:
             return False
         c = plugin.manifest.connection
         filled = set(c.from_token) | ({c.after_sign_in.setting} if c.after_sign_in else set[str]())
-        held = dict(conn.get("plugin_settings") or {})
+        held = dict(conn.plugin_settings or {})
         return any(n in filled and held.get(n) in (None, "") for n in PLACE.findall(plugin.manifest.endpoint))
 
     async def ensure(self, tenant_id: str, at: datetime) -> None:
@@ -820,11 +822,11 @@ class PluginHost:
         if self.connections is None:
             return
         conn = await self.connections.get(tenant_id, connection_id)
-        pid = plugin_of(conn) if conn else None
+        pid = plugin_of(conn.app_id) if conn else None
         plugin = self.plugins.get(pid) if pid else None
         if conn is None or plugin is None:
             return
-        team = str(conn["team_id"])
+        team = str(conn.team_id)
         b = await self.bindings.get(tenant_id, team, plugin.manifest.id)
         held = b.connection_id if b else None
         if held is not None and await self.connections.get(tenant_id, str(held)) is None:
@@ -853,12 +855,12 @@ class PluginHost:
         if self.connections is None:
             return None
         conn = await self.connections.get(tenant_id, connection_id)
-        pid = plugin_of(conn) if conn else None
+        pid = plugin_of(conn.app_id) if conn else None
         plugin = self.plugins.get(pid) if pid else None
         if conn is None or plugin is None:
             return None
         m = plugin.manifest
-        on = tools_added(m, await self.bindings.get(tenant_id, str(conn["team_id"]), m.id))
+        on = tools_added(m, await self.bindings.get(tenant_id, str(conn.team_id), m.id))
         if on is None:
             return None
         needed = [s.id for s in m.connection.scopes if s.required]
@@ -882,14 +884,14 @@ class PluginHost:
         if b is not None or self.connections is None:
             return b
         conn = await self.connections.get(tenant_id, connection_id)
-        pid = plugin_of(conn) if conn else None
+        pid = plugin_of(conn.app_id) if conn else None
         if conn is None or pid is None:
             return None
-        return await self.bindings.get(tenant_id, str(conn["team_id"]), pid)
+        return await self.bindings.get(tenant_id, str(conn.team_id), pid)
 
     async def account_named(
         self, tenant_id: str, team_id: str, plugin: Plugin, name: str, *, person: str | None = None
-    ) -> dict[str, Any] | None:
+    ) -> Account | None:
         """The team's account of the app with this name, within the team only; None when there is none. A name is
         unique within its owner, so the team's account and a person's own may share it: the caller's own account of
         that name (`person`, their sign-in key) comes first, then the team's, then another person's own, which the
@@ -898,14 +900,14 @@ class PluginHost:
             return None
         wanted = name_key(name)
         found = await self.connections.accounts(tenant_id, team_id, plugin_app(plugin.manifest.id))
-        same = [a for a in found if wanted and name_key(a.get("account_name")) == wanted]
+        same = [a for a in found if wanted and name_key(a.account_name) == wanted]
         if person:
-            signed = await self.connections.own_sign_ins(tenant_id, person, [str(a["id"]) for a in same])
-            ids = {str(t["connection_id"]) for t in signed}
-            theirs = next((a for a in same if a.get("origin") == PERSON_ORIGIN and str(a["id"]) in ids), None)
+            signed = await self.connections.own_sign_ins(tenant_id, person, [str(a.id) for a in same])
+            ids = {str(t.connection_id) for t in signed}
+            theirs = next((a for a in same if a.origin == PERSON_ORIGIN and str(a.id) in ids), None)
             if theirs is not None:
                 return theirs
-        return next((a for a in same if a.get("origin") != PERSON_ORIGIN), same[0] if same else None)
+        return next((a for a in same if a.origin != PERSON_ORIGIN), same[0] if same else None)
 
     async def person_default(self, tenant_id: str, team_id: str, plugin: Plugin, person: str) -> str | None:
         """A person's default live account of the app: their pinned sign-in, else their newest one the system
@@ -913,9 +915,9 @@ class PluginHost:
         if self.connections is None:
             return None
         found = await self.connections.accounts(tenant_id, team_id, plugin_app(plugin.manifest.id))
-        ids = [str(a["id"]) for a in found if not a.get("sandbox")]
+        ids = [str(a.id) for a in found if not a.sandbox]
         pick = default_sign_in(await self.connections.own_sign_ins(tenant_id, person, ids))
-        return str(pick["connection_id"]) if pick is not None else None
+        return str(pick.connection_id) if pick is not None else None
 
     async def account_choice(self, tenant_id: str, team_id: str, plugin: Plugin, person: str) -> AccountChoice | None:
         """What a call must ask the person when they hold two or more live accounts of the app and chose no default:
@@ -923,22 +925,20 @@ class PluginHost:
         if self.connections is None:
             return None
         found = await self.connections.accounts(tenant_id, team_id, plugin_app(plugin.manifest.id))
-        live = {str(a["id"]): a for a in found if not a.get("sandbox")}
+        live = {str(a.id): a for a in found if not a.sandbox}
         mine = await self.connections.own_sign_ins(tenant_id, person, list(live))
         if not choice_needed(mine):
             return None
         accounts: list[AccountOption] = [
             {
-                "connectionId": str(t["connection_id"]),
-                "name": str(live[str(t["connection_id"])]["name"]),
-                "account": t.get("account"),
+                "connectionId": str(t.connection_id),
+                "name": live[t.connection_id].name,
+                "account": t.account,
                 # Where each points (its org, its server), so two accounts signed in as one person read apart.
-                "identity": account_identity(
-                    plugin.manifest, own_and_registration(live[str(t["connection_id"])]), t.get("account")
-                ),
+                "identity": account_identity(plugin.manifest, own_and_registration(live[t.connection_id]), t.account),
             }
             for t in mine
-            if t.get("refused_at") is None
+            if t.refused_at is None
         ]
         return {"app": plugin.manifest.title, "appId": plugin_app(plugin.manifest.id), "accounts": accounts}
 
@@ -955,19 +955,19 @@ class PluginHost:
         named = await self.account_named(tenant_id, team_id, plugin, name, person=person)
         if named is None or self.connections is None:
             return {"refused": {"account_missing": f"{title} has no account named {name} in this team."}}
-        if named.get("origin") == PERSON_ORIGIN:
-            mine = await self.connections.own_sign_ins(tenant_id, person, [str(named["id"])]) if person else []
+        if named.origin == PERSON_ORIGIN:
+            mine = await self.connections.own_sign_ins(tenant_id, person, [str(named.id)]) if person else []
             if not mine:
                 why = f"{title}'s account {name} is one person's own, so only their own calls use it."
                 return {"refused": {"account_not_yours": why}}
-        if run != LIVE and not named.get("sandbox"):
+        if run != LIVE and not named.sandbox:
             found = await self.connections.accounts(tenant_id, team_id, plugin_app(plugin.manifest.id))
             test = account_for(None, found, run)
             if test is None:
                 why = f"{title} has no test account, so a test run cannot use {name}, a live one."
                 return {"refused": {"sandbox_required": why}}
-            return {"id": test["id"]}
-        return {"id": named["id"]}
+            return {"id": test.id}
+        return {"id": named.id}
 
     async def _choose(
         self,
@@ -1008,9 +1008,9 @@ class PluginHost:
         if self.connections is not None:
             # A test run takes the app's sandbox account when the team has one (records.account_for).
             found = await self.connections.accounts(tenant_id, team_id, plugin_app(plugin.manifest.id))
-            default = next((a for a in found if str(a["id"]) == str(connection_id or "")), None)
+            default = next((a for a in found if str(a.id) == str(connection_id or "")), None)
             picked = account_for(default, found, run)
-            connection_id = picked["id"] if picked else connection_id
+            connection_id = picked.id if picked else connection_id
         return Chosen(connection_id)
 
     async def package_checks(self, tenant_id: str, connection_id: str) -> list[dict[str, Any]]:
@@ -1108,13 +1108,14 @@ class PluginHost:
             if self.connections and chosen.connection_id
             else None
         )
-        module = {**module, "sandbox": bool((conn or {}).get("sandbox"))}
+        module = {**module, "sandbox": bool(conn.sandbox if conn else None)}
         if signs is not plugin:
             missing = missing_objects(conn, plugin.manifest.id)
             if missing:
+                shown = (conn.account_name or conn.name) if conn else None
                 why = (
                     f"{plugin.manifest.title} is not installed in {signs.manifest.title}'s account "
-                    f"{(conn or {}).get('account_name') or (conn or {}).get('name')}: {', '.join(missing)} not found. "
+                    f"{shown}: {', '.join(missing)} not found. "
                     "Pick an account where it is installed, or install it there and run Test on the account."
                 )
                 return {**module, "package_missing": why, "connection_id": None, "egress_hosts": []}
@@ -1139,7 +1140,7 @@ class PluginHost:
             # No instance yet is not the plugin being off. On an app each person signs in to, the team
             # account is not required first: this person signs in to the account.
             connection_id = chosen.connection_id
-            sign_in = str((conn or {}).get("sign_in") or "team")
+            sign_in = str((conn.sign_in if conn else None) or "team")
             if sign_in != "team":
                 return {
                     **module,
@@ -1149,15 +1150,15 @@ class PluginHost:
                     "plugin_settings": settings,
                     "plugin_team": team_id,
                     "sign_in_needed": (
-                        f"{(conn or {}).get('name') or plugin.manifest.title} has no instance yet. "
+                        f"{(conn.name if conn else None) or plugin.manifest.title} has no instance yet. "
                         "Sign in with your own account first."
                     ),
                 }
             return {
                 **module,
                 "instance_missing": (
-                    f"{(conn or {}).get('name') or plugin.manifest.title} has no instance yet; a team admin signs in "
-                    "to it first."
+                    f"{(conn.name if conn else None) or plugin.manifest.title} has no instance yet; a team admin "
+                    "signs in to it first."
                 ),
                 # Named as an app off for the team is, so chat shows who signs the team account in.
                 "team_sign_in": {

@@ -155,7 +155,7 @@ async def test_one_persons_refused_refresh_leaves_the_connection_and_everyone_el
     with pytest.raises(AuthFailed):
         await bearer(auth, tenant, conn, JAMES)
     found = await store.get(tenant, conn)
-    assert found is not None and found["status"] == "healthy"
+    assert found is not None and found.status == "healthy"
     # Kept and marked refused, so Your connections says it expired; James's next call asks him to connect.
     held = await store.token(tenant, conn, JAMES.sub)
     assert held is not None and held.refused_at is not None

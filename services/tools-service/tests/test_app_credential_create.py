@@ -161,7 +161,7 @@ async def test_replacing_the_secret_changes_the_teams_own_client_only(world: Wor
     assert replaced.status_code == 200 and "bank-rotated-secret-2" not in replaced.text, replaced.text
     fresh = await world.store.get(tenant, conn)
     assert fresh is not None
-    assert fresh["settings"]["clientId"] == "bank-own-client" and fresh["credential_id"] == row["id"]
+    assert fresh.settings["clientId"] == "bank-own-client" and fresh.credential_id == row["id"]
     ops_ai = await world.client.put(
         f"/v1/app-credentials/ops-ai:{APP}/secret", json={"clientSecret": "x"}, headers=admin(tenant)
     )

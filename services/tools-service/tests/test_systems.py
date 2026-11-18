@@ -389,7 +389,7 @@ async def test_a_write_to_an_app_shows_on_the_next_list(
     store = ConnectionStore(engine)
     row = await store.get(tenant, app)
     assert row is not None
-    await store.change(tenant, app, int(row["revision"]), {"name": "Accounts payable"}, actor="t", at=datetime.now(UTC))
+    await store.change(tenant, app, int(row.revision), {"name": "Accounts payable"}, actor="t", at=datetime.now(UTC))
     ids, _ = await _ids(client, tenant)
     assert ids[0] == app, ids
     await store.delete(tenant, app, actor="t", at=datetime.now(UTC))
@@ -575,7 +575,7 @@ async def test_each_person_sees_their_own_sign_in_in_the_connected_tab(
     store, app = ConnectionStore(engine), f"plugin:{ID}"
     row = await store.get(tenant, conn)
     assert row is not None
-    await store.change(tenant, conn, int(row["revision"]), {"sign_in": "person"}, actor="t", at=datetime.now(UTC))
+    await store.change(tenant, conn, int(row.revision), {"sign_in": "person"}, actor="t", at=datetime.now(UTC))
     priya, maya = admin(tenant), person(tenant, "Maya Lee", {TEAM: "admin"})
     await store.replace_token(tenant, conn, _token(), person="usr_priya")
     assert await _tab(client, priya, app) == ("connected", "connected")

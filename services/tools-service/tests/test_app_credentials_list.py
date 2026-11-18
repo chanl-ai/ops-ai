@@ -33,7 +33,7 @@ async def test_the_teams_own_client_lists_its_app_permissions_accounts_and_statu
     assert held is not None
     [row] = await credentials(world, tenant)
     assert {k: row[k] for k in ("id", "name", "app", "appName", "type", "permissions", "accounts", "status")} == {
-        "id": held["credential_id"],
+        "id": held.credential_id,
         # Named by whose app it is, so it never reads as one of the app's accounts.
         "name": "Platform app",
         "app": f"plugin:{ID}",

@@ -8,7 +8,7 @@ so turning it on again needs nothing more."""
 
 # No `from __future__ import annotations`: FastAPI resolves the `Depends(caller)` annotations at import.
 
-from typing import Annotated, Any, Literal, Protocol, cast
+from typing import Annotated, Any, Literal, Protocol
 from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, Depends
@@ -32,7 +32,15 @@ from ..modules.directory import Directory
 from ..modules.routes import ERRORS
 from ..modules.service import Caller
 from ..modules.tool_users import ToolUsers
-from ..store.connections import DEFAULT_VALUE, PERSON_ORIGIN, PLUGIN_APP, AccountNameTaken, plugin_of, split_config
+from ..store.connections import (
+    DEFAULT_VALUE,
+    PERSON_ORIGIN,
+    PLUGIN_APP,
+    Account,
+    AccountNameTaken,
+    plugin_of,
+    split_config,
+)
 from ..store.plugin_bindings import PluginBinding
 from .host import (
     PluginHost,
@@ -320,9 +328,9 @@ class PluginAccounts:
         m = self.plugin(app_id).manifest
         before = await self.host.bindings.get(who.tenant_id, who.team.id, m.id)
         account = await self.connections.store.get(who.tenant_id, account_id)
-        if before is None or account is None or account["app_id"] != app_id or account["team_id"] != who.team.id:
+        if before is None or account is None or account.app_id != app_id or account.team_id != who.team.id:
             raise NotFound(f"Account {account_id}")
-        if account.get("sandbox"):
+        if account.sandbox:
             raise ValidationFailed(
                 "A sandbox account is used by test runs only, so it cannot be the default.", code="sandbox_default"
             )
@@ -348,7 +356,7 @@ class PluginAccounts:
         if not name:
             raise ValidationFailed("Name the account.", details={"field": "name"})
         held = await self.host.account_named(who.tenant_id, who.team.id, plugin, name)
-        if held is not None and held.get("origin") != PERSON_ORIGIN:
+        if held is not None and held.origin != PERSON_ORIGIN:
             raise AccountNameTaken(name)
         first = b.connection_id if b else None
         if first is None or await self.connections.store.get(who.tenant_id, str(first)) is None:
@@ -382,19 +390,19 @@ class PluginAccounts:
         if not body.sandbox:
             # Another live account signs in where the first does unless it names its own address; a sandbox, which
             # signs in elsewhere, names its own.
-            first = await self.connections.store.get(who.tenant_id, str(b.connection_id)) or {}
+            first = await self.connections.store.get(who.tenant_id, str(b.connection_id))
             c = m.connection
             # What the sign-in itself fills (an org's instance) is the first account's own, so it is never copied.
             filled = set(c.from_token) | ({c.after_sign_in.setting} if c.after_sign_in else set[str]())
-            held = dict(first.get("plugin_settings") or {})
+            held = dict((first.plugin_settings if first else None) or {})
             own = {**{k: v for k, v in held.items() if k in per_account(m) and k not in filled}, **own}
         # Whose account its calls use is the first account's unless the add says otherwise, so a second org of a
         # team that signs in as the team is not one each person must connect.
-        held_first = await self.connections.store.get(who.tenant_id, str(b.connection_id)) or {}
+        held_first = await self.connections.store.get(who.tenant_id, str(b.connection_id))
         given = TeamPluginIn(
             enabled=True,
             credential_id=body.credential_id,
-            sign_in=body.sign_in or held_first.get("sign_in"),
+            sign_in=body.sign_in or (held_first.sign_in if held_first else None),
             kind=body.kind,
             credentials=dict(body.credentials),
         )
@@ -531,22 +539,22 @@ class PluginAccounts:
         await self.connections.change(
             who,
             connection_id,
-            {"revision": int(conn["revision"]) if conn else 1, "settings": keys, "secret_values": secret, **client},
+            {"revision": int(conn.revision) if conn else 1, "settings": keys, "secret_values": secret, **client},
             plugin_settings=mine,
         )
 
     async def own_place(
-        self, who: Caller, src: dict[str, Any], given: dict[str, Any]
+        self, who: Caller, src: Account, given: dict[str, Any]
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """A person's second account of their own on the app of account `src`, signing in where `given` says (the
         app's per-account settings, such as a company server's address): its sign-in settings and its own plugin
         settings, rendered as the team's turn-on renders an account's, with the same auth config as `src`. What
         `src`'s sign-in filled (its org's instance) is never carried over. Raises for a setting that is the team's
         or a value the plugin does not offer."""
-        pid = plugin_of(src)
+        pid = plugin_of(src.app_id)
         plugin = self.host.plugins.get(pid) if pid else None
         if plugin is None:
-            raise ValidationFailed(f"{src['name']} is not a plugin's account, so it keeps its own address.")
+            raise ValidationFailed(f"{src.name} is not a plugin's account, so it keeps its own address.")
         m = plugin.manifest
         self._checked_settings(plugin, given)
         team, own = _split(plugin, given)
@@ -557,8 +565,10 @@ class PluginAccounts:
             )
         b = await self.host.bindings.get(who.tenant_id, who.team.id, m.id)
         settings = self._team_settings(plugin, dict(b.settings) if b else {}, {})
-        held = {k: v for k, v in dict(src.get("plugin_settings") or {}).items() if k in per_account(m)}
-        start = {**src, "plugin_settings": {k: v for k, v in held.items() if k not in filled_at_sign_in(m)}}
+        held = {k: v for k, v in dict(src.plugin_settings or {}).items() if k in per_account(m)}
+        start = src.model_copy(
+            update={"plugin_settings": {k: v for k, v in held.items() if k not in filled_at_sign_in(m)}}
+        )
         keys, _, _, _, mine = await self._rendered(who, plugin, start, settings, TeamPluginIn(enabled=True), own=own)
         return keys, mine
 
@@ -566,7 +576,7 @@ class PluginAccounts:
         self,
         who: Caller,
         plugin: Plugin,
-        conn: dict[str, Any] | None,
+        conn: Account | None,
         settings: dict[str, Any],
         body: TeamPluginIn,
         *,
@@ -577,7 +587,7 @@ class PluginAccounts:
         settings."""
         m = plugin.manifest
         c = m.connection
-        kind = kind_of(str(conn["auth_kind"])) if conn else self._kind(plugin, body)
+        kind = kind_of(conn.auth_kind) if conn else self._kind(plugin, body)
         if body.kind and body.kind != kind.id:
             raise ValidationFailed(
                 f"{m.title}'s account signs in with {kind.label}; its kind is chosen once, when it is made.",
@@ -585,20 +595,20 @@ class PluginAccounts:
                 details={"field": "kind"},
             )
         plain, secret = self._credentials(plugin, kind, body.credentials)
-        held = (conn or {}).get("credential_id") if not (conn or {}).get("platform_app") else None
+        held = (conn.credential_id if conn else None) if not (conn.platform_app if conn else None) else None
         chosen = body.credential_id if "credential_id" in body.model_fields_set else held
         cred = await self.connections.store.credential(who.tenant_id, chosen) if chosen and kind.holds_token else None
         # The account's own settings, those given over those it holds, over the auth config's defaults. A fixed value
         # of the config is every account's: a team credential's is read from it and never copied onto the account;
         # the team's on Ops AI's app (the install's client, with nowhere else to read it from) is written onto each.
         fixed, defaults = await self.config_values(who, plugin, cred)
-        mine = {**defaults, **dict((conn or {}).get("plugin_settings") or {}), **own}
+        mine = {**defaults, **dict((conn.plugin_settings if conn else None) or {}), **own}
         if cred is not None:
             mine = {k: v for k, v in mine.items() if k not in fixed}
         else:
             mine |= fixed
         merged = self.host.settings(plugin, settings, {**mine, **fixed})
-        before = cast(dict[str, Any], (conn or {}).get("settings") or {})
+        before = conn.settings if conn else {}
         keys: dict[str, Any] = dict(before)
         endpoint = render(m.endpoint, merged)
         platform_id: str | None = None
@@ -869,8 +879,8 @@ def plugins_router(
                         needs_connection=m.connection.kinds != ["none"],
                         schedule=s.schedule.model_dump(),
                         connection_id=b.connection_id if b else None,
-                        sign_in=(conn or {}).get("sign_in"),
-                        connection_status=(conn or {}).get("status"),
+                        sign_in=(conn.sign_in if conn else None),
+                        connection_status=(conn.status if conn else None),
                     ).model_dump(by_alias=True)
                 )
         return ok(out)

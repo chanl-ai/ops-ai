@@ -322,7 +322,7 @@ async def test_how_the_client_is_sent_and_the_sign_in_parameters_are_the_plugins
     assert on.status_code == 200, on.text
     conn = await store.get(tenant, str(on.json()["data"]["connectionId"]))
     assert conn is not None
-    keys = conn["settings"]
+    keys = conn.settings
     assert parse_qs(keys["authorizeParams"]) == {"audience": ["api.multi.test"], "prompt": ["consent"]}, keys
 
 

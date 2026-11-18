@@ -374,7 +374,7 @@ async def test_a_call_the_system_refuses_with_a_persons_key_asks_for_it_again_an
     assert cast(dict[str, Any], again.output)["error"]["details"]["reason"] == "refused" and seen == ["key-wrong"]
     assert (await executor.run(module, op, {}, environment="test", acting_for=MAYA)).ok
     found = await store.get(tenant, conn)
-    assert found is not None and found["status"] == "healthy"
+    assert found is not None and found.status == "healthy"
     # A new key clears the mark.
     await tokens.store_own(tenant, conn, JAMES.sub, OWN["api_key"][JAMES.sub])
     assert _signed("api_key", await _call(auth, tenant, conn, JAMES)) == "key-james"

@@ -30,10 +30,10 @@ async def test_a_write_of_settings_alone_keeps_the_teams_client_and_its_secret(
         held = await store.get(tenant, "ca_desk")
         assert held is not None
         # As a finished sign-in saves the instance its token named: the settings, nothing about secrets.
-        signed = {**held["settings"], "baseUrl": "https://acme.my.desk.test"}
+        signed = {**held.settings, "baseUrl": "https://acme.my.desk.test"}
         await store.change(tenant, "ca_desk", 1, {"settings": signed}, actor="t", at=now)
         after = await store.get(tenant, "ca_desk")
     assert after is not None
-    assert after["settings"]["baseUrl"] == "https://acme.my.desk.test"
-    assert after["settings"]["clientId"] == "team-app", after["settings"]
-    assert after["secrets"] == {"clientSecret": "CONN_CA_DESK_CLIENT_SECRET"}, after["secrets"]
+    assert after.settings["baseUrl"] == "https://acme.my.desk.test"
+    assert after.settings["clientId"] == "team-app", after.settings
+    assert after.secrets == {"clientSecret": "CONN_CA_DESK_CLIENT_SECRET"}, after.secrets

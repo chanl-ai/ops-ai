@@ -18,7 +18,6 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, cast
 
 from pydantic import JsonValue, TypeAdapter
 
@@ -29,7 +28,7 @@ from ops_store.database import open_database
 
 from .connections.records import module_auth
 from .modules.service import CREDENTIAL_HEADER
-from .store.connections import ConnectionStore
+from .store.connections import Account, ConnectionStore
 from .store.modules import Header, Module, ModuleStore, Operation, StoredOperation
 
 HEADER = TypeAdapter(Header)
@@ -60,14 +59,14 @@ def sign_in_headers(op: Operation | StoredOperation) -> list[Header]:
     ]
 
 
-def plan(module: Module, conn: dict[str, Any] | None) -> Move | str | None:
+def plan(module: Module, conn: Account | None) -> Move | str | None:
     """What moves for one module: a Move, the reason it is left alone, or None when its tools send no sign-in header."""
     pairs = {(h["key"].strip(), h["value"].strip()) for o in module["operations"] for h in sign_in_headers(o)}
     if not pairs:
         return None
-    if conn is None or conn["auth_kind"] != "none":
+    if conn is None or conn.auth_kind != "none":
         return "its connection already signs in another way"
-    if [u for u in cast(list[dict[str, Any]], conn.get("used_by") or []) if u["id"] != module["id"]]:
+    if [u for u in conn.used_by or [] if u.id != module["id"]]:
         return "its connection is shared with another module"
     if len({(k.lower(), v) for k, v in pairs}) > 1:
         return "its tools send different sign-in headers"
@@ -99,20 +98,18 @@ def _stored_without_sign_in(ops: list[dict[str, JsonValue]]) -> list[dict[str, J
     return out
 
 
-async def _apply(
-    modules: ModuleStore, connections: ConnectionStore, module: Module, conn: dict[str, Any], move: Move
-) -> None:
+async def _apply(modules: ModuleStore, connections: ConnectionStore, module: Module, conn: Account, move: Move) -> None:
     at = datetime.now(UTC)
     secrets = {"key": move.secret} if move.kind == "api_key" else {"token": move.secret}
-    settings = dict(conn.get("settings") or {})
+    settings = dict(conn.settings)
     if move.kind == "api_key":
         settings["name"] = move.header
     await connections.change(
-        str(module["tenant_id"]), str(conn["id"]), int(conn["revision"]),
+        str(module["tenant_id"]), conn.id, conn.revision,
         {"auth_kind": move.kind, "settings": settings, "secrets": secrets}, actor=MOVED_BY, at=at,
         detail={"header": move.header},
     )  # fmt: skip
-    moved = await connections.get(str(module["tenant_id"]), str(conn["id"])) or conn
+    moved = await connections.get(str(module["tenant_id"]), conn.id) or conn
     baseline = module.get("baseline")
     await modules.put(
         {

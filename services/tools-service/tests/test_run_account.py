@@ -18,7 +18,7 @@ from ops_service_kit.ids import new_id
 from ops_store import isolation
 from ops_tools.connections.records import account_for
 from ops_tools.modules.seed import load, open_connection
-from ops_tools.store.connections import ConnectionStore
+from ops_tools.store.connections import Account, ConnectionStore
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.modules import ModuleStore
 
@@ -32,7 +32,7 @@ HOLD = {"accountId": "CHQ-2219", "hours": 24}
 
 
 def test_a_test_run_uses_the_sandbox_account_else_the_default_and_a_live_run_the_default() -> None:
-    live, sandbox = {"id": "live", "sandbox": False}, {"id": "sbx", "sandbox": True}
+    live, sandbox = Account.model_construct(id="live", sandbox=False), Account.model_construct(id="sbx", sandbox=True)
     assert account_for(live, [live, sandbox], "test") == sandbox
     assert account_for(live, [live], "test") == live
     assert account_for(live, [live, sandbox], "live") == live

@@ -95,7 +95,7 @@ async def test_an_ended_grant_marks_the_account_for_a_reconnect(engine: AsyncEng
     await _held(engine, tokens, tenant, conn, "rt-ended-james", idle=IDLE, person="usr_james")
     assert await keepalive.once() == 0
     account = await store.get(tenant, conn)
-    assert account is not None and account["status"] == "needs_reconnect", account
+    assert account is not None and account.status == "needs_reconnect", account
     assert account_state(account, await store.token(tenant, conn), datetime.now(UTC)) == "refused"
     james = await store.token(tenant, conn, "usr_james")
     assert james is not None and james.refused_at is not None, james
@@ -111,7 +111,7 @@ async def test_a_passing_fault_leaves_the_account_and_the_pass_goes_on(engine: A
     assert await keepalive.once() == 1
     assert system.refreshed == ["rt-fine"], system.refreshed
     account = await store.get(tenant, flaky)
-    assert account is not None and account["status"] == "healthy", account
+    assert account is not None and account.status == "healthy", account
     held = await store.token(tenant, flaky)
     assert held is not None and held.refused_at is None, held
 

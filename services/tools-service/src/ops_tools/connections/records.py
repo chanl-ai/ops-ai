@@ -9,16 +9,15 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime, timedelta
-from typing import Any, cast
+from typing import Any
 
 from pydantic import JsonValue
 
+from ops_service_kit.http import Json
 from ops_service_kit.narrow import an_object
 
 from ..environments import LIVE
-from ..store.connections import TokenRow
-
-Row = dict[str, Any]
+from ..store.connections import Account, OwnSignIn, TokenRow
 
 # A consent this close to its end shows as expiring.
 EXPIRING = timedelta(days=30)
@@ -41,11 +40,11 @@ OLD_AUTH_KIND = {
 }
 
 
-def status_of(conn: dict[str, Any], now: datetime) -> str:
-    base = str(conn["status"])
+def status_of(conn: Account, now: datetime) -> str:
+    base = conn.status
     if base in ("draft", "revoked", "error"):
         return base
-    expires: datetime | None = conn.get("expires_at")
+    expires = conn.expires_at
     left = expires - now if expires else None
     if base == "needs_reconnect" or (left is not None and left < timedelta(0)):
         return "needs_reconnect"
@@ -57,33 +56,33 @@ def status_of(conn: dict[str, Any], now: datetime) -> str:
 CONNECTED, NOT_SIGNED_IN, EXPIRED, REFUSED, REVOKED = "connected", "not_signed_in", "expired", "refused", "revoked"
 
 
-def account_for(chosen: Row | None, accounts: Sequence[Row], run: str) -> Row | None:
+def account_for(chosen: Account | None, accounts: Sequence[Account], run: str) -> Account | None:
     """The account a call made in `run` signs in with: a test run uses the app's sandbox account when it has one, else
     `chosen` (the account a live call would use: one a step named, the person's default, or the app's default); a live
     run uses `chosen`. Every choice of a call's account between sandbox and live is made here. A live run on a sandbox
     account is refused where it signs in (Authenticator.prepare), and the gateway holds a test run's write on a live
     account for a person (gateway_calls)."""
     if run != LIVE:
-        sandbox = next((a for a in accounts if a.get("sandbox")), None)
+        sandbox = next((a for a in accounts if a.sandbox), None)
         if sandbox is not None:
             return sandbox
     return chosen
 
 
-def connection_base(conn: Row) -> str:
+def connection_base(conn: Account) -> str:
     """The app's base address a new tool's path hangs off; empty when the account names none."""
-    return str(cast(Row, conn.get("settings") or {}).get("baseUrl") or "")
+    return str(conn.settings.get("baseUrl") or "")
 
 
-def account_state(conn: dict[str, Any], team_token: TokenRow | None, now: datetime) -> str:
+def account_state(conn: Account, team_token: TokenRow | None, now: datetime) -> str:
     """The team account's state from its token, never from the saved settings: refused
     once the system refused it (the row's refused_at, or the connection marked by the gateway), expired once its
     token ended with no refresh token to renew it. With no token, a passing Test connection is what shows a key or
     password works."""
-    stored = str(conn.get("status") or "draft")
+    stored = conn.status or "draft"
     if stored == REVOKED:
         return REVOKED
-    if conn.get("auth_kind") == "none" and stored != "needs_reconnect":
+    if conn.auth_kind == "none" and stored != "needs_reconnect":
         # An app that needs no sign-in has no token and no key to test, so nothing else could ever show it connected.
         return CONNECTED
     if team_token is not None:
@@ -93,7 +92,7 @@ def account_state(conn: dict[str, Any], team_token: TokenRow | None, now: dateti
         if expires is not None and expires < now and not team_token.refresh_ct:
             return EXPIRED
         return CONNECTED
-    health = cast(Row, conn.get("health") or {})
+    health = conn.health or {}
     if stored == "needs_reconnect":
         return REFUSED
     return CONNECTED if health.get("status") == "ok" and health.get("account") != "own" else NOT_SIGNED_IN
@@ -109,42 +108,42 @@ def person_state(refused_at: datetime | None, expires_at: datetime | None, renew
     return CONNECTED
 
 
-def choice_needed(mine: Sequence[Row]) -> bool:
+def choice_needed(mine: Sequence[OwnSignIn]) -> bool:
     """Whether a call naming no account must ask the person which to use: two or more live sign-ins of their own to the
     app's accounts and none pinned as their default. Taking the newest would act in an org the person did not pick."""
-    live = [t for t in mine if t.get("refused_at") is None]
-    return len(live) > 1 and not any(t.get("pinned") for t in live)
+    live = [t for t in mine if t.refused_at is None]
+    return len(live) > 1 and not any(t.pinned for t in live)
 
 
-def default_sign_in(mine: Sequence[Row]) -> Row | None:
+def default_sign_in(mine: Sequence[OwnSignIn]) -> OwnSignIn | None:
     """A person's default among their own sign-ins to one app's accounts, given newest first with sandbox accounts
     left out: the one they pinned, else the newest the system has not refused. Calls naming no account use it."""
-    live = [t for t in mine if t.get("refused_at") is None]
-    return next((t for t in live if t.get("pinned")), None) or (live[0] if live else None)
+    live = [t for t in mine if t.refused_at is None]
+    return next((t for t in live if t.pinned), None) or (live[0] if live else None)
 
 
-def team_test(conn: dict[str, Any], team_token: TokenRow | None) -> dict[str, Any] | None:
+def team_test(conn: Account, team_token: TokenRow | None) -> Json | None:
     """The team account's last test: kept on its token row after a sign-in, else (a key or password, which has no
     token) the account's last test made as the team."""
     if team_token is not None and team_token.test:
         return an_object(team_token.test, "the team sign-in's test")
-    health = cast(Row, conn.get("health") or {})
+    health = conn.health or {}
     if health.get("account") != "team" or health.get("status") not in ("ok", "failed"):
         return None
     return {"status": health["status"], "message": health.get("message"), "at": health.get("at")}
 
 
-def state_reason(conn: dict[str, Any], team_token: TokenRow | None, state: str) -> str | None:
+def state_reason(conn: Account, team_token: TokenRow | None, state: str) -> str | None:
     """Why the team account is refused or expired: the system's words, or the day its sign-in ended."""
     if state == REFUSED:
         refused = team_token.refused_reason if team_token is not None else None
-        return str(refused or conn.get("status_detail") or "") or None
+        return str(refused or conn.status_detail or "") or None
     if state == EXPIRED and team_token is not None and (ended := team_token.expires_at) is not None:
         return f"The sign-in ended on {ended.day} {ended:%b %Y}."
     return None
 
 
-def shown_status(conn: dict[str, Any], state: str, now: datetime) -> str:
+def shown_status(conn: Account, state: str, now: datetime) -> str:
     """The status word today's screens read, from the state: Connected keeps healthy or expiring, a refused or expired
     account needs reconnecting, and an account never signed in stays a draft (or the error its last test found)."""
     if state == CONNECTED:
@@ -154,25 +153,25 @@ def shown_status(conn: dict[str, Any], state: str, now: datetime) -> str:
         return "needs_reconnect"
     if state == REVOKED:
         return REVOKED
-    return "error" if conn.get("status") == "error" else "draft"
+    return "error" if conn.status == "error" else "draft"
 
 
-def ref_of(conn: dict[str, Any], now: datetime) -> dict[str, Any]:
+def ref_of(conn: Account, now: datetime) -> dict[str, Any]:
     out: dict[str, Any] = {
-        "id": conn["id"],
-        "name": conn["name"],
-        "kind": conn["auth_kind"],
+        "id": conn.id,
+        "name": conn.name,
+        "kind": conn.auth_kind,
         "status": status_of(conn, now),
         # Where a module's paths go: the account's base address is their only one.
         "baseUrl": connection_base(conn) or None,
     }
-    if conn.get("expires_at"):
-        out["expiresAt"] = conn["expires_at"].isoformat()
+    if conn.expires_at:
+        out["expiresAt"] = conn.expires_at.isoformat()
     return out
 
 
-def module_auth(conn: dict[str, Any] | None) -> dict[str, JsonValue]:
-    return {"kind": str(conn["auth_kind"]) if conn else "none"}
+def module_auth(conn: Account | None) -> dict[str, JsonValue]:
+    return {"kind": conn.auth_kind if conn else "none"}
 
 
 def auth_of(stored: dict[str, Any]) -> dict[str, Any]:
