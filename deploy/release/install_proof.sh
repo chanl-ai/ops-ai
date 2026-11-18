@@ -74,7 +74,7 @@ walk() { # origin email password
   cat "$LOG/walk.txt"
   local ok bad
   ok=$(grep -c '^OK' "$LOG/walk.txt" || true)
-  bad=$(grep -vc '^OK' "$LOG/walk.txt" || true)
+  bad=$(grep -v '^walking [0-9]* sidebar links$' "$LOG/walk.txt" | grep -vc '^OK' || true)
   [ "$ok" -gt 0 ] && [ "$bad" -eq 0 ] || fail "walk on $1: $ok pages OK, $bad lines not OK"
   say "walk on $1: $ok pages OK, 0 failed"
 }
@@ -93,8 +93,13 @@ if [ "$BUILD" = 1 ]; then
   docker run -d --name $REG -p 127.0.0.1:$REG_PORT:5000 \
     registry:2.8.3@sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373 >/dev/null
   until curl -sf "http://localhost:$REG_PORT/v2/" >/dev/null; do sleep 1; done
-  IMAGE_PREFIX=$PREFIX sh "$CLONE/deploy/release/images.sh" "$SHA" "$VERSION" --push >"$LOG/images.txt" 2>&1 ||
+  # Loaded here, then pushed by the engine: images.sh --push writes index annotations, which a single-platform build
+  # on the default builder refuses.
+  IMAGE_PREFIX=$PREFIX sh "$CLONE/deploy/release/images.sh" "$SHA" "$VERSION" >"$LOG/images.txt" 2>&1 ||
     { cat "$LOG/images.txt"; fail "building the images"; }
+  for t in platform agents tools models kb files documents runner opa proxy console db-scripts; do
+    docker push -q "$PREFIX/$t:$VERSION" >>"$LOG/images.txt" 2>&1 || { cat "$LOG/images.txt"; fail "pushing $PREFIX/$t:$VERSION"; }
+  done
   say "built and pushed $(grep -c '^images:' "$LOG/images.txt") images in $(($(date +%s) - T0))s"
 fi
 say "2. no local copy of $PREFIX/*:$VERSION$([ "${SIGNED_IN:-0}" = 1 ] && [ "$BUILD" != 1 ] && echo ', pulled with this machine'"'"'s registry login (SIGNED_IN=1)' || echo ' and no registry login')"
@@ -212,6 +217,9 @@ docker rm -fv $PG $FAKE >/dev/null 2>&1 || true
 docker run -d --name $PG -e POSTGRES_PASSWORD="$(secret)" -p 127.0.0.1:$PG_PORT:5432 pgvector/pgvector:pg17 \
   -c ssl=on -c ssl_cert_file=/etc/ssl/certs/ssl-cert-snakeoil.pem -c ssl_key_file=/etc/ssl/private/ssl-cert-snakeoil.key >/dev/null
 until docker exec $PG pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1; do sleep 1; done
+# Azure's admin, who is not a superuser, may create pgvector because vector is in azure.extensions; marking it trusted
+# here gives opsadmin the same right, so the printed CREATE EXTENSION runs as it would there.
+docker exec $PG sh -c 'echo "trusted = true" >>"$(pg_config --sharedir)/extension/vector.control"'
 docker exec $PG psql -q -U postgres -c "CREATE ROLE opsadmin LOGIN NOSUPERUSER CREATEDB CREATEROLE BYPASSRLS PASSWORD '$DBA_ADMIN_PW'"
 # An OpenAI-compatible endpoint on the host: the fake model from the published models image. It never calls a provider.
 docker run -d --name $FAKE -p 127.0.0.1:$FAKE_PORT:8746 -e FAKE_OPENAI_HOST=0.0.0.0 -e FAKE_OPENAI_PORT=8746 \
@@ -246,7 +254,7 @@ for n in 1 2 3; do
 done
 wait $INSTALL_PID || { cat "$LOG/install-dba.txt"; fail "the DBA-mode install"; }
 grep -v '^ \(Container\|Volume\|Network\|Image\)\b' "$LOG/install-dba.txt"
-grep -q "model provider key stored in Secrets as MODEL_PROVIDER_KEY" "$LOG/install-dba.txt" || fail "the provider key was not stored through Secrets"
+grep -q "model provider key saved as MODEL_PROVIDER_KEY" "$LOG/install-dba.txt" || fail "the provider key was not saved through the API"
 grep -q MODEL_PROVIDER_KEY "$CLONE_DBA/ops-ai.env" && fail "the provider key name reached ops-ai.env"
 grep -q "proof-provider-key" "$CLONE_DBA/ops-ai.env" && fail "the provider key reached ops-ai.env"
 docker exec $PG psql -At -U postgres -d ops -c "SELECT DISTINCT 'connected: ' || usename || ' superuser=' || usesuper FROM pg_stat_activity JOIN pg_user USING (usename) WHERE datname = 'ops' ORDER BY 1" |
