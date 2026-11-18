@@ -80,7 +80,7 @@ run records and knowledge pages have no delete route, so they stay. Code: `sdk/p
 | `usecase.mk` | `usecase-test`, `usecase-report`, `usecase-list`, `usecase-show`, `usecase-coverage`, `usecase-new`, `usecase-reset`, `usecase-runner-test` |
 | `sdk.mk`, `docs.mk` | `openapi`, `sdk`, `sdk-verify`, `sdk-check`; `docs-verify`, `docs-guides-check` |
 | `db.mk`, `db-scripts.mk` | `db-up`, `db-down`, `db-shell`, `db-sweep`, `migrate`, `migration`; the DBA scripts ([deploy/CLAUDE.md](../deploy/CLAUDE.md)); `mssql-remote-*`, the shared SQL Server on Fly for tests from a Mac |
-| `release.mk`, `staging.mk`, `deps.mk`, `setup.mk`, `experiments.mk` | Releases, staging, dependency locks and mirrors, machine setup, agents-service experiments |
+| `release.mk` (`release-cut`, `release-pr`, `release-back-merge`, `hotfix-cut`: [docs/deploy/release.md](../docs/deploy/release.md)), `staging.mk`, `deps.mk`, `setup.mk`, `experiments.mk` | Releases, staging, dependency locks and mirrors, machine setup, agents-service experiments |
 | `services.mk` | The generated `<verb>-<svc>` pass-throughs, for example `test-tools` runs `make -C services/tools-service test` |
 
 ## Engineering standards
