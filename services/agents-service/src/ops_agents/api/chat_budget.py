@@ -51,8 +51,8 @@ async def cap_at_agent(rt: Runtime, thread_id: str, agent: AgentDefinition) -> N
     lower (a caller only lowers them; apis.md). Later turns keep whatever the thread has, so a Raise stays raised."""
     if rt.usage is None:
         return
-    row = await graph_store(rt).thread(thread_id)
-    if row is not None and cast(Json, row["meta"] or {}).get("budgetAllotment"):
+    row = await graph_store(rt).thread_row(thread_id)
+    if row is not None and row.meta_object().get("budgetAllotment"):
         return
     allot = allotment(agent)
     limit, given = budget_from(allot), await rt.usage.budget(thread_id)

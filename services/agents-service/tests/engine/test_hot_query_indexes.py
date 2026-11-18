@@ -171,7 +171,7 @@ async def test_a_teams_thread_list_and_event_poll_lead_with_the_tenant_and_team(
         await analyse(engine, "thread_events")
         with isolation.scope(current_tenant(), "team_1"):
             recorded.clear()
-            await GraphStore(engine).threads(None)
+            await GraphStore(engine).thread_rows(None)
             await EventLog(engine).team_events("team_1", 0)
         [listed] = await plans(EngineTransactions(engine), about(recorded, "graph_threads"))
         [polled] = await plans(EngineTransactions(engine), about(recorded, "thread_events"))

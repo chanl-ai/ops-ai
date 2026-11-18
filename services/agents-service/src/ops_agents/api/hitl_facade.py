@@ -525,9 +525,10 @@ async def summary_rows(rt: Runtime, now: datetime, only: str | None = None) -> l
     journal, timers per thread) for every thread made the list cost seconds with a thousand threads; `list_runs`
     builds them for the page only."""
     resolvable = await _resolvable(rt)
+    # As mappings: each summary row carries its thread as stored ("thread"), and the reads below take it by key.
     threads = [
         t
-        for t in await graph_store(rt).threads(None)
+        for t in [r.model_dump() for r in await graph_store(rt).thread_rows(None)]
         if not is_chat_graph(t["graph"]) and t["graph"] in resolvable and (only is None or t["id"] == only)
     ]
     runs = await graph_store(rt).run_summaries(only)
@@ -1118,9 +1119,10 @@ async def get_review(rt: Runtime, thread_id: str) -> Review:
 async def _thread_step(rt: Runtime, thread_id: str) -> tuple[Json, Json | None, DecisionOut | None]:
     """A graph thread's row, the step it waits on (None once decided) and its decision; not found when it holds no
     review."""
-    row = await graph_store(rt).thread(thread_id)
-    if row is None:
+    found = await graph_store(rt).thread_row(thread_id)
+    if found is None:
         raise NotFound("Review")
+    row = found.model_dump()
     _, graph = await resolve(rt, thread_id)
     waiting = pending(await graph.aget_state(config(thread_id)))
     d = (await _decisions(rt, [thread_id])).get(thread_id)
@@ -1192,9 +1194,10 @@ async def decide(
     from .routers.reviews import record_approval  # noqa: PLC0415 - the router imports this module
 
     store = graph_store(rt)
-    row = await store.thread(thread_id)
-    if row is None:
+    found = await store.thread_row(thread_id)
+    if found is None:
         raise NotFound("Review")
+    row = found.model_dump()
     _, graph = await resolve(rt, thread_id)
     waiting = pending(await graph.aget_state(config(thread_id)))
     recorded = (await _decisions(rt, [thread_id])).get(thread_id)
@@ -1318,9 +1321,10 @@ async def can_decide(rt: Runtime, approver: Principal, review_id: str) -> bool:
         if engine_reviews.is_engine_id(review_id):
             await engine_reviews.check_decider(rt, approver, review_id)
             return True
-        row = await graph_store(rt).thread(review_id)
-        if row is None:
+        found = await graph_store(rt).thread_row(review_id)
+        if found is None:
             return False
+        row = found.model_dump()
         waiting = pending(await (await resolve(rt, review_id))[1].aget_state(config(review_id)))
         if not waiting:
             return False

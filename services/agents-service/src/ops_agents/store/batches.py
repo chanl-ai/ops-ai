@@ -92,7 +92,7 @@ class BatchRowOut(Out):
 
     row: int
     attempt: int
-    input: dict[str, Any]
+    input: Json
     run_id: str | None
     row_status: str
     run_status: str | None
@@ -109,7 +109,7 @@ class PendingRowOut(Out):
     batch_id: str
     row: int
     attempt: int
-    input: dict[str, Any]
+    input: Json
     workflow_id: str
     version: int
     mode: Literal["live", "test"]

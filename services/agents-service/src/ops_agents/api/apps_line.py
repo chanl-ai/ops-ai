@@ -20,6 +20,7 @@ from langgraph.config import get_config
 from ops_agent_kernel.types import PromptFragment
 from ops_service_kit.http import Json, JsonList
 from ops_service_kit.logging import get_logger
+from ops_service_kit.narrow import an_object
 
 from ..activities.tool_directory import ToolsUnavailable
 from ..domain.accounts import chosen_accounts
@@ -120,8 +121,8 @@ class AppsLine:
             thread_id = str((get_config().get("configurable") or {}).get("thread_id") or "")
         except RuntimeError:
             return None  # not inside a graph run, so there is no turn
-        thread = await graph_store(self.rt).thread(thread_id) if thread_id else None
-        team = str(thread["team_id"]) if thread is not None else ""
+        thread = await graph_store(self.rt).thread_row(thread_id) if thread_id else None
+        team = thread.team_id if thread is not None else ""
         # The team's default agent only: an agent a builder made holds its own tools and needs no catalog of apps.
         if not team or await TeamDefaults(self.rt.db).agent(team) != agent_id:
             return None
@@ -143,13 +144,13 @@ class AppsLine:
             thread_id = str((get_config().get("configurable") or {}).get("thread_id") or "")
         except RuntimeError:
             return cards
-        thread = await graph_store(self.rt).thread(thread_id) if thread_id else None
-        overrides = cast(Json, (thread or {}).get("overrides") or {})
+        thread = await graph_store(self.rt).thread_row(thread_id) if thread_id else None
+        overrides = an_object((thread.overrides if thread is not None else None) or {}, "the chat's overrides")
         off = set(cast(list[str], overrides.get("toolsOff") or []))
         agent = await live_agent(self.rt, agent_id)
         if agent is not None:
             chosen = chosen_accounts(agent=agent.accounts, chat=cast(dict[str, str], overrides.get("accounts") or {}))
-            cards = await self._uses(cards, chosen, str((thread or {}).get("team_id") or ""))
+            cards = await self._uses(cards, chosen, thread.team_id if thread is not None else "")
         if not off or agent is None:
             return cards
         try:

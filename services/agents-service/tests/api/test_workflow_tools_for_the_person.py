@@ -48,7 +48,7 @@ async def test_a_viewer_is_neither_offered_nor_able_to_start_the_agents_workflow
         )
     assert not out.ok and out.output["code"] == "role_required", out.output
     assert rt.graph_store is not None
-    assert await rt.graph_store.threads("dispute_email") == [], "no child started"
+    assert await rt.graph_store.thread_rows("dispute_email") == [], "no child started"
     with acting_for(member("builder")):
         assert [o.name for o in await runs.offers(["workflow:dispute_email"])] == ["workflow__dispute_email"]
 
