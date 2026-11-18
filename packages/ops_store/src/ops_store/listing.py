@@ -33,14 +33,13 @@ from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, Generic, Never, NotRequired, TypedDict, cast
+from typing import Any, Never
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection
 from sqlalchemy.sql import operators
-from typing_extensions import TypeVar
 
-from ops_service_kit.http import PageJSON, page_window, paged
+from ops_service_kit.http import ListPage, page_window, paged
 from ops_service_kit.listing import ListParams
 
 from . import isolation
@@ -65,20 +64,6 @@ class Several:
 
     key: sa.ColumnElement[Any]
     values: Rows
-
-
-# A page's row: `list_page` answers each row as the dict of its columns; a store that names its rows' shape (a
-# TypedDict) says `ListPage[ThatRow]` and puts them in the page as they are.
-R = TypeVar("R", default=dict[str, Any])
-
-
-class ListPage(TypedDict, Generic[R]):
-    """The `ListResult` JSON (`ops_service_kit.http`), or `LabelledListResult` when the caller asked for labels."""
-
-    data: list[R]
-    pagination: PageJSON
-    facets: dict[str, dict[str, int]]
-    labels: NotRequired[dict[str, dict[str, str]]]
 
 
 async def list_page(
@@ -156,8 +141,7 @@ async def list_page(
 
     named = {name: await _labels(conn, read, sorted(counted.get(name, {}))) for name, read in labels.items()}
     data = [dict(r) for r in rows.mappings()]
-    out = paged(data, total, page, params.page_size, facets=counted, labels=named or None)
-    return cast(ListPage, out)
+    return paged(data, total, page, params.page_size, facets=counted, labels=named or None)
 
 
 def listed_rows(

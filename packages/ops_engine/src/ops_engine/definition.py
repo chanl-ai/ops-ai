@@ -172,11 +172,11 @@ def _ancestors(d: WorkflowDefinition, node_id: str) -> set[str]:
     return found
 
 
-def _approval_order(d: WorkflowDefinition, known: set[str]) -> list[dict[str, Any]]:
+def _approval_order(d: WorkflowDefinition, known: set[str]) -> list[Json]:
     """A review approves a write's call as it stands when the review opens, so everything the write's input reads must
     have run before the review, and the review must run before the write. Otherwise a value read as nothing would be
     approved, and the token bound to it."""
-    out: list[dict[str, Any]] = []
+    out: list[Json] = []
     for n in d.nodes:
         approved = [str(n.parameters["approves"])] if n.parameters.get("approves") else []
         approved += [
@@ -209,7 +209,7 @@ EVENT_TRIGGER = "ops.trigger.event"
 INPUT_FILE_PATH = re.compile(r"^\$\.input\.([A-Za-z0-9_]+)(?:\.fileId)?$")
 
 
-def _unmarked_file_inputs(d: WorkflowDefinition, registry: TypeRegistry) -> list[dict[str, Any]]:
+def _unmarked_file_inputs(d: WorkflowDefinition, registry: TypeRegistry) -> list[Json]:
     """`file_input_unmarked`: a step parameter its type marks `format: "file"` reads a start form's input that the
     trigger's schema does not declare a file field, so the form would ask for a file id in a text box. A
     Request trigger always has a form. A Service event trigger has one only when it declares an input schema. The
@@ -226,7 +226,7 @@ def _unmarked_file_inputs(d: WorkflowDefinition, registry: TypeRegistry) -> list
         return []
     schema = cast(Json, trigger.parameters.get("inputSchema") or {})
     props = cast(Json, schema.get("properties") or {})
-    out: list[dict[str, Any]] = []
+    out: list[Json] = []
     for n in d.nodes:
         t = registry.find(n.type, n.type_version)
         if t is None:
@@ -251,7 +251,7 @@ def _unmarked_file_inputs(d: WorkflowDefinition, registry: TypeRegistry) -> list
     return out
 
 
-def _check(node: str | None, code: str, message: str, field: str | None = None) -> dict[str, Any]:
+def _check(node: str | None, code: str, message: str, field: str | None = None) -> Json:
     return {"node": node, "level": "error", "code": code, "message": message, "field": field}
 
 
@@ -268,11 +268,11 @@ def _parameter(err: Any) -> str | None:
     return None
 
 
-def advise(d: WorkflowDefinition, registry: TypeRegistry) -> list[dict[str, Any]]:
+def advise(d: WorkflowDefinition, registry: TypeRegistry) -> list[Json]:
     """Warnings that never refuse a save. `fork_without_join`: a step other than a Join reached from two steps one port
     leads to runs once per branch that reaches it; a Join after the branches runs it once."""
     deferred = {n.id for n in d.nodes if (t := registry.find(n.type, n.type_version)) is not None and t.deferred}
-    out: list[dict[str, Any]] = []
+    out: list[Json] = []
     warned: set[str] = set()
     for source in {(c.source.node, c.source.port) for c in d.connections}:
         targets = d.targets(*source)
@@ -311,11 +311,11 @@ def _reach(d: WorkflowDefinition, start: str, *, stop: set[str]) -> set[str]:
     return seen
 
 
-def validate(d: WorkflowDefinition, registry: TypeRegistry) -> list[dict[str, Any]]:
+def validate(d: WorkflowDefinition, registry: TypeRegistry) -> list[Json]:
     """Per-node checks against the type registry; an empty list means the definition can be compiled. Each check is
     `{node, level, code, message, field}` with `node` None for one about the whole definition and `field` the top-level
     parameter a schema error names, else None."""
-    checks: list[dict[str, Any]] = []
+    checks: list[Json] = []
     ids = [n.id for n in d.nodes]
     for dup in sorted({i for i in ids if ids.count(i) > 1}):
         checks.append(_check(dup, "duplicate_node", f"Two nodes are named {dup}."))

@@ -98,7 +98,7 @@ class DocumentsClient:
         request: Mapping[str, JsonValue],
         *,
         idempotency_key: str,
-    ) -> dict[str, Any]:
+    ) -> Json:
         """The file's extraction: finished (done, unreadable or failed) for a small file, which is read at once, or
         queued or running for a larger one, read in the background; documents-service reports `extraction.finished`
         when it ends. A repeat with the same `idempotency_key` answers the same extraction as it is now."""
@@ -159,7 +159,7 @@ class DocumentsClient:
             raise _refused(e) from e
         return found
 
-    async def document_types(self, tenant: str, team: str) -> list[dict[str, Any]]:
+    async def document_types(self, tenant: str, team: str) -> list[Json]:
         """Every one of the team's document types (their newest versions), for finding one by name: the list is
         paged, so each page is read until the last."""
         page = await self._types_page(tenant, team, 1)
@@ -186,7 +186,7 @@ class DocumentsClient:
             raise _refused(e) from e
         return listed
 
-    async def extraction(self, tenant: str, team: str, extraction_id: str) -> dict[str, Any]:
+    async def extraction(self, tenant: str, team: str, extraction_id: str) -> Json:
         """An extraction as it is now: queued, running, or finished with its answer."""
         try:
             found = await self._documents.request(
@@ -196,7 +196,7 @@ class DocumentsClient:
             raise _refused(e) from e
         return found
 
-    async def purge(self, tenant: str, team: str, file_id: str) -> dict[str, Any]:
+    async def purge(self, tenant: str, team: str, file_id: str) -> Json:
         """Removes what documents-service read from a deleted file: {extractions, samples}; needs `documents:delete`."""
         try:
             done = await self._documents.request(

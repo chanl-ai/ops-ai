@@ -34,7 +34,7 @@ from ops_ingest.strategies.faq import piece_digest
 from ops_ingest.text import approx_tokens
 from ops_service_kit import narrow
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
-from ops_service_kit.http import Json, JsonValue, PageJSON, options_page, options_window
+from ops_service_kit.http import Json, JsonValue, OptionsJSON, PageJSON, options_page, options_window
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
@@ -711,7 +711,7 @@ class KnowledgeService:
 
     async def base_options(
         self, who: Who, *, search: str, cursor: str | None, limit: int, ids: list[str] | None
-    ) -> dict[str, Any]:
+    ) -> OptionsJSON[dict[str, str | None]]:
         """The agent page's knowledge picker: each base as an option storing its id, labelled by name, with its
         owner as the hint. `ids` resolves stored values to labels; one not found is left out."""
         offset, window = options_window(None if ids else cursor, limit)
@@ -1190,7 +1190,7 @@ class KnowledgeService:
         self._may_change(who, s.team_id, s.name, step)
         return s
 
-    async def upload(self, who: Who, source_id: str, data: bytes, *, name: str, mime: str) -> dict[str, Any]:
+    async def upload(self, who: Who, source_id: str, data: bytes, *, name: str, mime: str) -> Uploaded:
         """Stores bytes kb-service writes itself (a page, the demo seed) and adds them to the source under `name`.
         People add files through Files and `add_files`."""
         s = await self._changeable_source(who, source_id)
@@ -2335,7 +2335,7 @@ class KnowledgeService:
             rebuild = await self.start_rebuild(who, after)
         return {**self._source(after, by_source.get(source_id, [])), "rebuild": rebuild}
 
-    async def _values_changed(self, who: Who, s: SourceRow, given: dict[str, Any]) -> dict[str, Any]:
+    async def _values_changed(self, who: Who, s: SourceRow, given: dict[str, Any]) -> Json:
         """A plugin source's own settings (a site's start, include and exclude rules, depth, pace), merged over the
         saved ones and checked against what its plugin declares, as a create checks them."""
         if s.type != "tool":
@@ -2700,7 +2700,7 @@ class KnowledgeService:
         page["facets"]["status"] = shown
         return page
 
-    async def add_page(self, who: Who, kb_id: str, title: str, text: str) -> dict[str, Any]:
+    async def add_page(self, who: Who, kb_id: str, title: str, text: str) -> Json:
         """A page written in the console: a titled text, stored as a Markdown file in the base's own pages source
         (made and attached the first time), synced at once, and returned as its document. A page under a title the
         base already has is that page's next version."""
@@ -3131,7 +3131,24 @@ def health_of(s: SourceRow) -> SourceHealth:
     )
 
 
-def kind_defaults(kind: str, ocr: str, *, plugin_schedule: dict[str, JsonValue] | None = None) -> dict[str, Any]:
+class Uploaded(TypedDict):
+    """A file kb-service stored and added to a source, as `upload` answers it."""
+
+    fileId: str
+    name: str
+    mime: str
+    size: int
+    digest: str
+    deduplicated: bool
+
+
+class KindDefaults(TypedDict):
+    """What a new source of a kind starts with, as the source kinds list shows it."""
+
+    defaults: Json
+
+
+def kind_defaults(kind: str, ocr: str, *, plugin_schedule: dict[str, JsonValue] | None = None) -> KindDefaults:
     """A new source's settings for its kind and its schedule, as create applies them."""
     schedule = WEB_SCHEDULE if kind == "web" else plugin_schedule or {"kind": "manual"}
     return {"defaults": {**wire(defaults(kind, ocr=ocr)), "schedule": schedule}}

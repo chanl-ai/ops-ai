@@ -47,7 +47,7 @@ def notice(field: dict[str, Any] | None, *, read: str = "$.input.notice") -> dic
 
 
 def codes(d: dict[str, Any]) -> set[str]:
-    return {c["code"] for c in validate(parse(d), default_registry())}
+    return {str(c["code"]) for c in validate(parse(d), default_registry())}
 
 
 @pytest.mark.parametrize(
@@ -66,7 +66,8 @@ def test_the_refusal_names_the_field_for_a_person() -> None:
     found = list(validate(parse(notice({"type": "string", "title": "Notice"})), default_registry()))
     check = next(c for c in found if c["code"] == "file_input_unmarked")
     assert check["node"] == "start" and check["field"] == "inputSchema"
-    assert "Notice" in check["message"]
+    message = str(check["message"])
+    assert "Notice" in message
 
 
 @pytest.mark.parametrize(

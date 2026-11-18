@@ -256,7 +256,7 @@ async def add(
     team_id: str | None = None,
     name: str | None = None,
     key: str | None = None,
-    payload: dict[str, Any] | None = None,
+    payload: Mapping[str, object] | None = None,
     actor: str | None = None,
     now: float | None = None,
     due_at: float | None = None,

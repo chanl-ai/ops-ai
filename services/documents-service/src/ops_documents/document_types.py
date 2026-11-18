@@ -40,8 +40,12 @@ from ops_documents.store.document_types import (
     SINGLE,
     DocumentTypesStore,
     ExampleRow,
+    FieldCompared,
+    FieldScore,
     NameTakenError,
+    SampleCompared,
     SampleRow,
+    TestResult,
     TestRow,
     TypeRow,
     VersionOptions,
@@ -712,7 +716,7 @@ class DocumentTypes:
             version = await self.resolve(who, test.type_id, test.version)
             fields = [FIELD(f) for f in version["fields"]]
             samples = (await self.store.samples(test.type_id))[:MAX_TEST_SAMPLES]
-            rows: list[dict[str, Any]] = []
+            rows: list[SampleCompared] = []
             for s in samples:
                 # Keyed by test and sample, so a test resumed after a restart reads the extractions it already made.
                 _, answer = await self.extractor.ask(
@@ -731,11 +735,12 @@ class DocumentTypes:
             await self.store.set_test(test_id, {"status": "failed", "error": str(e), "finished_at": self.clock()})
 
     @staticmethod
-    def _compare(
-        fields: list[FieldDefinition], many: bool, sample: SampleRow, answer: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _compare(fields: list[FieldDefinition], many: bool, sample: SampleRow, answer: Json) -> SampleCompared:
+        # `expected` is the sample's stored JSON, read as it was written: a list of records for a type that reads
+        # many, else one record. The answer's records and fields are read as objects and lists, so an answer of
+        # another shape fails the test run.
         expected = sample.expected
-        out: dict[str, Any] = {
+        out: SampleCompared = {
             "sampleId": sample.id,
             "name": sample.name,
             "extractionId": answer.get("id"),
@@ -749,16 +754,18 @@ class DocumentTypes:
         if answer.get("status") != "done":
             out["fields"] = {}
             return out
-        wanted = cast(list[dict[str, Any]], expected) if many else [cast(dict[str, Any], expected)]
-        got_records = cast(list[dict[str, Any]], answer.get("records") or []) if many else [answer]
-        compared: dict[str, list[dict[str, Any]]] = {}
+        wanted: list[Any] = expected if many else [expected]
+        records: JsonValue = (answer.get("records") or []) if many else [answer]
+        compared: dict[str, list[FieldCompared]] = {}
         for i, want in enumerate(wanted):
-            got = cast(dict[str, Any], got_records[i]["fields"]) if i < len(got_records) else {}
+            got_records = a_list(records, "an extraction's records")
+            got = an_object(got_records[i], "an extraction's record")["fields"] if i < len(got_records) else {}
             for f in fields:
                 key = f["key"]
                 if key not in want:
                     continue
-                value = cast(dict[str, Any], got.get(key) or {}).get("value")
+                read = an_object(got, "a record's fields").get(key) or {}
+                value = an_object(read, f"the field {key}").get("value")
                 compared.setdefault(key, []).append(
                     {"expected": want[key], "got": value, "match": matches(f, want[key], value)}
                 )
@@ -766,11 +773,11 @@ class DocumentTypes:
         return out
 
     @staticmethod
-    def _summary(fields: list[FieldDefinition], rows: list[dict[str, Any]]) -> dict[str, Any]:
-        per: dict[str, dict[str, Any]] = {}
+    def _summary(fields: list[FieldDefinition], rows: list[SampleCompared]) -> TestResult:
+        per: dict[str, FieldScore] = {}
         for f in fields:
             key = f["key"]
-            seen = [c for r in rows for c in cast(dict[str, list[dict[str, Any]]], r["fields"]).get(key, [])]
+            seen = [c for r in rows for c in r.get("fields", {}).get(key, [])]
             hit = sum(1 for c in seen if c["match"])
             per[key] = {
                 "matches": hit,

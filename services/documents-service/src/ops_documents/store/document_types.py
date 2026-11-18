@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal, NotRequired, TypedDict
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
@@ -276,11 +276,46 @@ class _VersionValues(TypedDict):
     created_at: datetime
 
 
+class FieldCompared(TypedDict):
+    """One sample's expected value of a field against the value read."""
+
+    expected: JsonValue
+    got: JsonValue
+    match: bool
+
+
+class SampleCompared(TypedDict):
+    """One sample in a test result, keys in the order stored. `path` and `templateId` say how the sample was read,
+    when a layout template read it; `fields` is empty when the read did not finish."""
+
+    sampleId: str
+    name: str
+    extractionId: JsonValue
+    status: JsonValue
+    path: NotRequired[JsonValue]
+    templateId: NotRequired[JsonValue]
+    fields: NotRequired[dict[str, list[FieldCompared]]]
+
+
+class FieldScore(TypedDict):
+    matches: int
+    misses: int
+    accuracy: float | None
+
+
+class TestResult(TypedDict):
+    """A finished test run's result: each sample compared, then each field's score over them, then the overall one."""
+
+    samples: list[SampleCompared]
+    fields: dict[str, FieldScore]
+    accuracy: float | None
+
+
 class TestChange(TypedDict, total=False):
     """What a test run's progress changes on its row."""
 
     status: TestStatus
-    result: Json
+    result: TestResult
     error: str
     finished_at: datetime
 
