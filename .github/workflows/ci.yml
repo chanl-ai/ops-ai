@@ -37,6 +37,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       full: ${{ steps.plan.outputs.full }}
+      release: ${{ steps.plan.outputs.release }}
       services: ${{ steps.plan.outputs.services }}
       packages: ${{ steps.plan.outputs.packages }}
       console: ${{ steps.plan.outputs.console }}
@@ -57,7 +58,7 @@ jobs:
   checks:
     # The one list of checks (make/checks.mk), the same one `make verify`, verify-changed.sh and pre-commit run.
     needs: plan
-    if: needs.plan.outputs.full != 'true'
+    if: needs.plan.outputs.full != 'true' || needs.plan.outputs.release == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -298,9 +299,10 @@ jobs:
 
   release-proof:
     # A pull request into main is a release: the upgrade from the last tag's schema on a seeded database, and a fresh
-    # install through ./install.sh on the released images. Needs the whole history and its tags.
+    # install through ./install.sh on the released images. A push to a release or hotfix branch runs it too. Needs the
+    # whole history and its tags.
     needs: plan
-    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    if: (github.event_name == 'pull_request' && github.base_ref == 'main') || needs.plan.outputs.release == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:

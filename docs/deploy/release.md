@@ -31,6 +31,8 @@ variable `STAGING_HOLD` freezes staging the same way for any other reason.
 | The click walk ran and had no failures | The job's log line `click walk (N OK, N FAIL)` from `deploy/fly/stg_deploy.sh`; a skipped walk or a failure refuses | Names the line |
 | No PR from the branch is open | `gh pr list --base main --head <branch>` | Prints that PR and stops |
 
+CI on a `release/*` or `hotfix/*` push runs in full whatever changed (every service and package, `checks`, release-proof and both databases), because the impact plan once skipped a job there and a failure reached develop untested; develop and pull requests keep the impact plan.
+
 The use cases and the owner's click-through are not recorded in the repository, so the script cannot check them. A
 branch is checked on every push (`ci.yml` lists `release/**` and `hotfix/**`), so each commit on it has a run; a
 branch's first push compares with `origin/main`, so the first run covers the whole release.
