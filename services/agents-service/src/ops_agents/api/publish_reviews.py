@@ -8,9 +8,10 @@ from __future__ import annotations
 from typing import Any
 
 from ops_agents.graphs.definition import WorkflowDefinition
-from ops_agents.store.agent_registry import registry_agents
+from ops_agents.store.agent_registry import PublishRequestRow, registry_agents
 from ops_agents.store.review_sources import ReviewSources
 from ops_engine.store import DefinitionRow
+from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_store import isolation
 
@@ -39,23 +40,25 @@ def is_request_id(review_id: str) -> bool:
 
 async def view(
     rt: Runtime,
-    req: dict[str, Any],
+    req: PublishRequestRow,
     *,
     names: dict[tuple[str, int], str] | None = None,
     agents: dict[tuple[str, int], tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     """`names`: the workflow versions' names, and `agents` each agent version's name and slug (named_versions), read
     together by a list so a request reads none of its own."""
-    if req["kind"] == deployment_reviews.KIND:
+    if req.kind == deployment_reviews.KIND:
         return await deployment_reviews.view(rt, req)
-    if req["kind"] == tool_module_reviews.KIND:
+    if req.kind == tool_module_reviews.KIND:
         return await tool_module_reviews.view(rt, req)
-    if req["kind"] == tool_access_reviews.KIND:
+    if req.kind == tool_access_reviews.KIND:
         return await tool_access_reviews.view(rt, req)
-    if req["kind"] == egress_host_reviews.KIND:
+    if req.kind == egress_host_reviews.KIND:
         return await egress_host_reviews.view(rt, req)
-    if req["kind"] == "widget":
-        v = review_view(req, name=req["body"]["widgetName"], slug=req["subject_id"], sla_hours=await sla_hours(rt))
+    if req.kind == "widget":
+        v = review_view(
+            req, name=narrow.required(req.body, "widgetName", str), slug=req.subject_id, sla_hours=await sla_hours(rt)
+        )
         v.pop("publish", None)
         policy = {**v["policy"], "id": "gp_widget_publish", "name": "Widget publish"}
         return {
@@ -63,11 +66,13 @@ async def view(
             "workflowId": "",
             "actionTool": "publish_widget",
             "policy": policy,
-            "reasoning": req["body"]["changes"],
+            "reasoning": req.body["changes"],
         }
-    if req["kind"] == "skill":
-        row = await skills(rt).row(req["subject_id"])
-        v = review_view(req, name=req["body"]["skillName"], slug=row.slug, sla_hours=await sla_hours(rt))
+    if req.kind == "skill":
+        row = await skills(rt).row(req.subject_id)
+        v = review_view(
+            req, name=narrow.required(req.body, "skillName", str), slug=row.slug, sla_hours=await sla_hours(rt)
+        )
         v.pop("publish", None)
         policy = {**v["policy"], "id": "gp_skill_publish", "name": "Skill publish"}
         return {
@@ -75,29 +80,29 @@ async def view(
             "workflowId": "",
             "actionTool": "publish_skill",
             "policy": policy,
-            "reasoning": req["body"]["changes"],
+            "reasoning": req.body["changes"],
         }
-    if req["kind"] == "guardrail":
-        row = await guardrails(rt).row(req["subject_id"])
+    if req.kind == "guardrail":
+        row = await guardrails(rt).row(req.subject_id)
         # A guardrail publish shows as a publish request; the topics it would block are its reasoning.
         v = review_view(req, name=row.name, slug=row.slug, sla_hours=await sla_hours(rt))
         v.pop("publish", None)
-        topics = req["body"]["config"]["topics"]
+        topics = narrow.an_object(req.body["config"], "the guardrail's config")["topics"]
         policy = {**v["policy"], "id": "gp_guardrail_publish", "name": "Guardrail publish"}
         return {**v, "workflowId": "", "actionTool": "publish_guardrail", "policy": policy, "reasoning": topics}
-    if req["kind"] == "agent":
-        key = (str(req["subject_id"]), int(req["version"]))
+    if req.kind == "agent":
+        key = (str(req.subject_id), int(req.version))
         found = agents if agents is not None else await registry(rt).named_versions({key})
         if key not in found:
             raise NotFound(f"Agent {key[0]} version {key[1]}")
         name, slug = found[key]
         return review_view(req, name=name, slug=slug, sla_hours=await sla_hours(rt))
-    if req["kind"] == engine_lifecycle.KIND:
-        subject = str(req["subject_id"])
-        named = None if names is None else names.get((subject, int(req["version"])), subject)
+    if req.kind == engine_lifecycle.KIND:
+        subject = str(req.subject_id)
+        named = None if names is None else names.get((subject, int(req.version)), subject)
         return await engine_lifecycle.view(rt, req, name=named)
-    row = await workflow_registry(rt).find(req["subject_id"])
-    return review_view(req, name=row["name"] if row else req["subject_id"], slug="", sla_hours=await sla_hours(rt))
+    row = await workflow_registry(rt).find(req.subject_id)
+    return review_view(req, name=row["name"] if row else req.subject_id, slug="", sla_hours=await sla_hours(rt))
 
 
 async def get(rt: Runtime, request_id: str) -> dict[str, Any]:
@@ -112,7 +117,7 @@ async def get(rt: Runtime, request_id: str) -> dict[str, Any]:
         return await view(rt, req)
 
 
-async def in_acting_team(rt: Runtime, req: dict[str, Any], *, asked_from: bool = False) -> bool:
+async def in_acting_team(rt: Runtime, req: PublishRequestRow, *, asked_from: bool = False) -> bool:
     """A publish request is a task of the team that owns what it ships (`_owners`), as a run's review is its team's: it
     is listed and counted there, and in every team when no team owns it. A security change to a tool module is the
     Security team's. `asked_from` also lets the team that asked open it by id (a module's page shows its pending
@@ -121,27 +126,27 @@ async def in_acting_team(rt: Runtime, req: dict[str, Any], *, asked_from: bool =
     acting = isolation.team()
     if acting is None:
         return True
-    key = (str(req["subject_id"]), int(req["version"]))
-    versions = await engine_lifecycle.definitions(rt).pinned({key}) if req["kind"] == engine_lifecycle.KIND else {}
+    key = (str(req.subject_id), int(req.version))
+    versions = await engine_lifecycle.definitions(rt).pinned({key}) if req.kind == engine_lifecycle.KIND else {}
     [owner] = await _owners(rt, [req], versions)
-    asked = req["body"].get("teamId") if asked_from else None
+    asked = req.body.get("teamId") if asked_from else None
     return owner is None or acting in (owner, asked)
 
 
 async def _owners(
-    rt: Runtime, requests: list[dict[str, Any]], versions: dict[tuple[str, int], DefinitionRow]
+    rt: Runtime, requests: list[PublishRequestRow], versions: dict[tuple[str, int], DefinitionRow]
 ) -> list[str | None]:
     """subject_team of each request, with agents read in one query and workflows from the versions already read
     (`versions`, the requested versions), so a list's reads do not grow with its requests."""
-    reg, asked = registry(rt), {str(r["subject_id"]) for r in requests if r["kind"] == "agent"}
+    reg, asked = registry(rt), {str(r.subject_id) for r in requests if r.kind == "agent"}
     async with reg.tx() as c:
         agents = await reg.owner_teams(c, registry_agents, asked, "the team each publish request is a task of")
     out: list[str | None] = []
     for r in requests:
-        if r["kind"] == "agent":
-            out.append(agents.get(str(r["subject_id"])))
-        elif r["kind"] == engine_lifecycle.KIND:
-            row = versions.get((str(r["subject_id"]), int(r["version"])))
+        if r.kind == "agent":
+            out.append(agents.get(str(r.subject_id)))
+        elif r.kind == engine_lifecycle.KIND:
+            row = versions.get((str(r.subject_id), int(r.version)))
             out.append((row.team_id if row else None) or None)
         else:
             out.append(await subject_team(rt, r))
@@ -154,18 +159,18 @@ async def all_views(rt: Runtime) -> list[dict[str, Any]]:
     twice."""
     out: list[dict[str, Any]] = []
     capped = await ReviewSources(rt.db).publish_requests(rt.settings.review_list_rows_per_source)
-    requests = [r.model_dump() for r in capped]
-    pinned = {(str(r["subject_id"]), int(r["version"])) for r in requests if r["kind"] == engine_lifecycle.KIND}
+    requests = capped
+    pinned = {(str(r.subject_id), int(r.version)) for r in requests if r.kind == engine_lifecycle.KIND}
     versions = await engine_lifecycle.definitions(rt).pinned(pinned)
     acting = isolation.team()
     if acting is not None:
         owners = await _owners(rt, requests, versions)
         requests = [r for r, owner in zip(requests, owners, strict=True) if owner is None or owner == acting]
     names = {k: row.name for k, row in versions.items()}
-    asked = {(str(r["subject_id"]), int(r["version"])) for r in requests if r["kind"] == "agent"}
+    asked = {(str(r.subject_id), int(r.version)) for r in requests if r.kind == "agent"}
     agents = await registry(rt).named_versions(asked)
     for req in requests:
-        if req["kind"] == tool_access_reviews.KIND and req["status"] == "pending":
+        if req.kind == tool_access_reviews.KIND and req.status == "pending":
             continue
         try:
             out.append(await view(rt, req, names=names, agents=agents))
@@ -174,10 +179,10 @@ async def all_views(rt: Runtime) -> list[dict[str, Any]]:
     return out
 
 
-async def subject_team(rt: Runtime, req: dict[str, Any]) -> str | None:
+async def subject_team(rt: Runtime, req: PublishRequestRow) -> str | None:
     """The team that owns what a publish request would ship, which is the team that reviews it; None when no team owns
     it (a seeded record every team sees)."""
-    kind, subject = req["kind"], str(req["subject_id"])
+    kind, subject = req.kind, str(req.subject_id)
     # Read whoever is acting: the owning team decides who may review, so it must be found even from another team.
     if kind == "agent":
         return await registry(rt).owner_team(subject)
@@ -201,31 +206,33 @@ async def subject_team(rt: Runtime, req: dict[str, Any]) -> str | None:
     return await workflow_registry(rt).owner_team(subject)
 
 
-async def require_publish_reviewer(rt: Runtime, req: dict[str, Any], approver_teams: list[str]) -> None:
+async def require_publish_reviewer(rt: Runtime, req: PublishRequestRow, approver_teams: list[str]) -> None:
     """A reviewer or admin of the owning team decides a publish; one no team owns, a reviewer or admin of
     any team."""
     team = await subject_team(rt, req)
     if team is not None:
-        require_reviews_decide(approver_teams, team, f"the publish of {req['subject_id']}")
+        require_reviews_decide(approver_teams, team, f"the publish of {req.subject_id}")
     elif not approver_teams:
-        require_reviews_decide(approver_teams, "any team", f"the publish of {req['subject_id']}")
+        require_reviews_decide(approver_teams, "any team", f"the publish of {req.subject_id}")
 
 
-async def require_publish_decider(rt: Runtime, req: dict[str, Any], approver: Principal) -> None:
+async def require_publish_decider(rt: Runtime, req: PublishRequestRow, approver: Principal) -> None:
     """Who decides a publish: a reviewer or admin of the owning team, and not who asked for it or saved the version
     while requesterMayDecide is off."""
     await require_publish_reviewer(rt, req, review_teams(approver))
     await require_not_asker(rt, req, approver)
 
 
-async def require_not_asker(rt: Runtime, req: dict[str, Any], approver: Principal) -> None:
+async def require_not_asker(rt: Runtime, req: PublishRequestRow, approver: Principal) -> None:
     """Who asked for the publish or saved the version does not decide it while requesterMayDecide is off."""
-    saved = req["body"].get("savedBy") if req["kind"] in SAVED_KINDS else None
+    # A saver named as anything but a string is refused rather than read as nobody.
+    named = req.body.get("savedBy") if req.kind in SAVED_KINDS else None
+    saved = None if named is None else narrow.required(req.body, "savedBy", str)
     require_not_own(
         approver,
-        [req["requested_by"], saved],
+        [req.requested_by, saved],
         team=await subject_team(rt, req),
-        what=f"the publish of {req['subject_id']}",
+        what=f"the publish of {req.subject_id}",
     )
 
 
@@ -240,7 +247,7 @@ async def decide(
     """Decides a publish request as `approver`, from the teams where they hold reviews.decide (any team for dev)."""
     reg = registry(rt)
     req = await reg.request(request_id)
-    if req["kind"] == tool_access_reviews.KIND:
+    if req.kind == tool_access_reviews.KIND:
         raise Conflict(
             "Tool access requests are decided in their workflow run now; open it from the module's Access tab.",
             code="decided_in_workflow",
@@ -248,8 +255,8 @@ async def decide(
     await require_publish_reviewer(rt, req, review_teams(approver))
     if decision not in ("approved", "rejected", "returned"):
         raise ValidationFailed(f"Unknown decision {decision}.")
-    if req["status"] != "pending":
-        raise Conflict(f"{request_id} was already {req['status']}.", code="already_decided")
+    if req.status != "pending":
+        raise Conflict(f"{request_id} was already {req.status}.", code="already_decided")
     await require_not_asker(rt, req, approver)
     reason = (reason or "").strip() or None
     if decision != "approved" and reason is None:
@@ -259,39 +266,47 @@ async def decide(
     # The reviewer holds reviews.decide in the owning team, which need not be the team they act in: the publish reads
     # and writes the record as that team, as the record's own page would.
     with isolation.scope(isolation.tenant(), await subject_team(rt, req) or isolation.team()):
-        if req["kind"] == tool_module_reviews.KIND:
+        if req.kind == tool_module_reviews.KIND:
             # tools-service applies every decision, not only an approval: a no withdraws the version or returns it to
             # draft.
             await tool_module_reviews.apply(rt, req)
-        elif req["kind"] == egress_host_reviews.KIND:
+        elif req.kind == egress_host_reviews.KIND:
             await egress_host_reviews.apply(rt, req)
         elif decision == "approved":
             await _publish(rt, req, approver.email)
         return await view(rt, await reg.request(request_id))
 
 
-async def _publish(rt: Runtime, req: dict[str, Any], by: str) -> None:
-    subject, version = req["subject_id"], int(req["version"])
-    if req["kind"] == deployment_reviews.KIND:
+async def _publish(rt: Runtime, req: PublishRequestRow, by: str) -> None:
+    subject, version = req.subject_id, int(req.version)
+    if req.kind == deployment_reviews.KIND:
         await deployment_reviews.apply(rt, req)
         return
-    if req["kind"] == "guardrail":
+    if req.kind == "guardrail":
         await publish_guardrail(rt, req, by)
         return
-    if req["kind"] == "skill":
+    if req.kind == "skill":
         await publish_skill(rt, req, by)
         return
-    if req["kind"] == "widget":
+    if req.kind == "widget":
         await publish_widget(rt, req, by)
         return
-    if req["kind"] == engine_lifecycle.KIND:
+    if req.kind == engine_lifecycle.KIND:
         await engine_lifecycle.approve(rt, req)
         return
-    if req["kind"] == "agent":
+    if req.kind == "agent":
         reg = registry(rt)
-        await reg.publish(subject, version, by=by, review_id=req["id"])
-        if not (await reg.row(subject))["paused"]:
-            go_live(rt, subject, version, (await reg.version(subject, version))["spec"])
+        await reg.publish(subject, version, by=by, review_id=req.id)
+        if not (await reg.row(subject)).paused:
+            go_live(rt, subject, version, (await reg.version(subject, version)).spec)
         return
-    d = WorkflowDefinition.model_validate(req["body"]["definition"])
-    await publish_workflow(rt, subject, d, req["body"]["graph"], note=req["note"], by=by, review_id=req["id"])
+    d = WorkflowDefinition.model_validate(req.body["definition"])
+    await publish_workflow(
+        rt,
+        subject,
+        d,
+        narrow.an_object(req.body["graph"], "the workflow graph"),
+        note=req.note,
+        by=by,
+        review_id=req.id,
+    )

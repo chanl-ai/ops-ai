@@ -137,11 +137,9 @@ async def test_can_decide_is_no_for_whoever_saved_the_version_of_any_saved_kind(
             approved=False,
         )
     loose = person("maya", "team_ops", "approver", policies={"requesterMayDecide": True})
-    assert await flag(c, f"/reviews/{req['id']}", "canDecide", loose) is True
-    assert await flag(c, f"/reviews/{req['id']}", "canDecide", REVIEWER) is False, "off by default"
-    decided = await c.post(
-        f"/v1/publish-requests/{req['id']}/decision", json={"decision": "approved"}, headers=REVIEWER
-    )
+    assert await flag(c, f"/reviews/{req.id}", "canDecide", loose) is True
+    assert await flag(c, f"/reviews/{req.id}", "canDecide", REVIEWER) is False, "off by default"
+    decided = await c.post(f"/v1/publish-requests/{req.id}/decision", json={"decision": "approved"}, headers=REVIEWER)
     assert decided.status_code == 403, decided.text
 
 

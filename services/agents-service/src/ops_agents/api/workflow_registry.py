@@ -27,7 +27,9 @@ from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 
+from ..store.agent_registry import PublishRequestRow
 from ..store.graphs import GraphStore
+from ..store.workflow_list import PendingPublish
 from ..store.workflow_registry import (
     WorkflowRegistry,
 )
@@ -322,12 +324,8 @@ async def agent_pins(rt: Runtime) -> dict[str, PinnedAgent | None]:
     reg = agent_registry(rt)
     out: dict[str, PinnedAgent | None] = {}
     for r in await reg.rows():
-        v = r["published_version"]
-        out[r["slug"]] = (
-            PinnedAgent(r["id"], r["slug"], int(v), (await reg.version(r["id"], int(v)))["spec"])
-            if v is not None
-            else None
-        )
+        v = r.published_version
+        out[r.slug] = PinnedAgent(r.id, r.slug, v, (await reg.version(r.id, v)).spec) if v is not None else None
     return out
 
 
@@ -491,7 +489,7 @@ async def _seed_for_review(
     would leave them. A version that already has a request, pending or decided, is not asked again on each restart,
     so a rejected seed change stays rejected."""
     name = str(row["id"])
-    if any(int(r["version"]) == version for r in await agent_registry(rt).requests("workflow", name)):
+    if any(int(r.version) == version for r in await agent_registry(rt).requests("workflow", name)):
         return
     note = "The seed's definition changed"
     info: dict[str, Any] = {
@@ -580,7 +578,11 @@ def _shape(graph: dict[str, Any]) -> tuple[list[str], int, int]:
 
 
 def workflow_view(
-    row: dict[str, Any], live: dict[str, Any] | None, pending: dict[str, Any] | None, runs: int, waiting: int
+    row: dict[str, Any],
+    live: dict[str, Any] | None,
+    pending: PublishRequestRow | PendingPublish | None,
+    runs: int,
+    waiting: int,
 ) -> dict[str, Any]:
     graph: dict[str, Any] = (live or {}).get("graph") or row["draft"] or {"nodes": [], "edges": []}
     slugs, steps, gates = _shape(graph)
@@ -604,9 +606,9 @@ def workflow_view(
         **(
             {
                 "pendingPublish": {
-                    "reviewId": pending["id"],
-                    "toVersion": pending["version"],
-                    "requestedBy": pending["requested_by"],
+                    "reviewId": pending.id,
+                    "toVersion": pending.version,
+                    "requestedBy": pending.requested_by,
                 }
             }
             if pending

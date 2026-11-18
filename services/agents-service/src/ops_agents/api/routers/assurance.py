@@ -176,7 +176,7 @@ async def agent_cases(rt: Rt, _: Reader, __: Tx, agent_id: str) -> JSONResponse:
 async def save_agent_cases(rt: Rt, me: Me, _: Tx, agent_id: str, body: EvalCasesInput) -> JSONResponse:
     """Replaces the agent's active cases with these. An unknown check type is 422 and nothing changes."""
     row = await agent_registry(rt).row(agent_id)
-    return await _save(rt, me, ASSET_AGENT, agent_id, team_id=row["team_id"], body=body)
+    return await _save(rt, me, ASSET_AGENT, agent_id, team_id=row.team_id, body=body)
 
 
 @router.get("/v1/skills/{skill_id}/eval-cases", response_model=Envelope[SavedCases])

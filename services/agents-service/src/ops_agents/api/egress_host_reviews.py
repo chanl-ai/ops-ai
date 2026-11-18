@@ -12,9 +12,12 @@ from __future__ import annotations
 from typing import Any
 
 from ops_access import can
+from ops_service_kit import narrow
 from ops_service_kit.errors import ServiceUnavailable
+from ops_service_kit.http import Json
 from ops_service_kit.ids import now_iso
 
+from ..store.agent_registry import PublishRequestRow
 from .agent_registry import registry, review_view
 from .auth import Principal, caller_of
 from .deps import Runtime
@@ -24,7 +27,7 @@ from .team_names import security_team
 KIND = "egress_host"
 
 
-async def open_review(rt: Runtime, me: Principal, host: str, app: str) -> tuple[dict[str, Any], bool]:
+async def open_review(rt: Runtime, me: Principal, host: str, app: str) -> tuple[PublishRequestRow, bool]:
     """The request for `host` and whether it is new: the one still waiting, else the latest refusal, else a new one.
     `me` is the person setting the address, from their own credentials; the team is theirs, never the body's."""
     team = me.team_id or ""
@@ -32,9 +35,9 @@ async def open_review(rt: Runtime, me: Principal, host: str, app: str) -> tuple[
     can(caller_of(me), "tools", "create", team=team or None, what="an app's address")
     held = await registry(rt).requests(KIND, host)
     latest = held[0] if held else None
-    if latest is not None and latest["status"] in ("pending", "rejected"):
+    if latest is not None and latest.status in ("pending", "rejected"):
         return latest, False
-    body = {"host": host, "app": app, "teamId": team, "requestedBy": me.email}
+    body: Json = {"host": host, "app": app, "teamId": team, "requestedBy": me.email}
     made = await registry(rt).open_request(
         KIND, host, 1, note=f"{app} calls {host}", by=me.email, body=body, approved=False
     )
@@ -46,11 +49,11 @@ async def team(rt: Runtime) -> str | None:
     return await security_team(rt)
 
 
-async def view(rt: Runtime, req: dict[str, Any]) -> dict[str, Any]:
-    if req["body"].get("applyPending"):
+async def view(rt: Runtime, req: PublishRequestRow) -> dict[str, Any]:
+    if req.body.get("applyPending"):
         req = await _apply(rt, req)
-    body = req["body"]
-    v = review_view(req, name=body["app"], slug="", sla_hours=await sla_hours(rt))
+    body = req.body
+    v = review_view(req, name=narrow.required(body, "app", str), slug="", sla_hours=await sla_hours(rt))
     v.pop("publish", None)
     policy = {**v["policy"], "id": "gp_egress_host", "name": "New host", "reviewers": "Security"}
     return {
@@ -71,22 +74,22 @@ async def view(rt: Runtime, req: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def apply(rt: Runtime, req: dict[str, Any]) -> None:
+async def apply(rt: Runtime, req: PublishRequestRow) -> None:
     """Called once the request is decided: tells tools-service, or marks the request to try again."""
-    await _apply(rt, await registry(rt).request(str(req["id"])))
+    await _apply(rt, await registry(rt).request(str(req.id)))
 
 
-async def _apply(rt: Runtime, req: dict[str, Any]) -> dict[str, Any]:
-    if req["status"] != "approved":
+async def _apply(rt: Runtime, req: PublishRequestRow) -> PublishRequestRow:
+    if req.status != "approved":
         # A refusal changes nothing in tools-service: its reason stays on this request, read by the run key.
         return req
-    body = dict(req["body"])
+    body = dict(req.body)
     decision = {
-        "requestId": req["id"],
+        "requestId": req.id,
         "host": body["host"],
-        "decision": req["status"],
-        "reason": req.get("decision_reason"),
-        "by": req.get("decided_by"),
+        "decision": req.status,
+        "reason": req.decision_reason,
+        "by": req.decided_by,
     }
     try:
         if rt.tool_reviews is None:
@@ -96,5 +99,5 @@ async def _apply(rt: Runtime, req: dict[str, Any]) -> dict[str, Any]:
         body["appliedAt"] = now_iso()
     except Exception:
         body["applyPending"] = True
-    await registry(rt).set_body(str(req["id"]), body)
-    return {**req, "body": body}
+    await registry(rt).set_body(str(req.id), body)
+    return req.model_copy(update={"body": body})

@@ -189,7 +189,7 @@ async def save_widget(rt: Rt, me: Me, _: Tx, widget_id: str, body: WidgetInput) 
     row = await _mine(rt, me, widget_id, "save")
     if row.retired_reason:
         raise Conflict("The widget is retired; it takes no new versions.", code="widget_retired")
-    if any(r["status"] == "pending" for r in await agent_registry(rt).requests("widget", widget_id)):
+    if any(r.status == "pending" for r in await agent_registry(rt).requests("widget", widget_id)):
         raise Conflict("The newest version is in review; decide the review first.", code="review_open")
     await widgets(rt).save_draft(widget_id, check_content(body.model_dump(by_alias=True)), by=me.email)
     return ok(await view(rt, widget_id))

@@ -134,7 +134,7 @@ async def _view(
     versions = await reg.versions(workflow_id)
     live = next((v for v in versions if v["version"] == row["published_version"]), None)
     pending = next(
-        (r for r in await agent_registry(rt).requests("workflow", workflow_id) if r["status"] == "pending"), None
+        (r for r in await agent_registry(rt).requests("workflow", workflow_id) if r.status == "pending"), None
     )
     runs, waiting = counts or await counts_24h(rt)
     return workflow_view(row, live, pending, runs.get(workflow_id, 0), waiting.get(workflow_id, 0))
@@ -222,8 +222,7 @@ def _listed_row(r: WorkflowRow, more: PageExtra) -> dict[str, Any]:
     if r.source == "v1":
         row = {**r.model_dump(), "published_version": r.version, "draft": more.draft}
         live = {"graph": more.graph} if more.graph else None
-        request = pending.model_dump() if pending else None
-        return {**workflow_view(row, live, request, r.runs24h, more.waiting), "start": V1_START}
+        return {**workflow_view(row, live, pending, r.runs24h, more.waiting), "start": V1_START}
     stored = more.definition if isinstance(more.definition, dict) else {}
     raw = stored.get("nodes")
     nodes = [n for n in raw if isinstance(n, dict)] if isinstance(raw, list) else []
@@ -449,9 +448,9 @@ async def request_publish(rt: Rt, me: Me, workflow_id: str, body: PublishInput) 
     )
     if approved:
         version = await publish(
-            rt, workflow_id, compiled.definition, graph, note=body.note, by=req["decided_by"], review_id=req["id"]
+            rt, workflow_id, compiled.definition, graph, note=body.note, by=str(req.decided_by), review_id=req.id
         )
-        req = {**req, "version": version, "body": {**info, "toVersion": version}}
+        req = req.model_copy(update={"version": version, "body": {**info, "toVersion": version}})
     return ok(review_view(req, name=row["name"], slug="", sla_hours=await sla_hours(rt)), status=201)
 
 

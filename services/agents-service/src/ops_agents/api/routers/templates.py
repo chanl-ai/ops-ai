@@ -325,7 +325,7 @@ async def _record_name(rt: Runtime, kind: str, record_id: str) -> str | None:
     try:
         if kind == "agent":
             row = await registry(rt).row(record_id)
-            return str((await registry(rt).version(record_id, int(row["version"])))["spec"].get("name") or "")
+            return str((await registry(rt).version(record_id, row.version)).spec.get("name") or "")
         if kind == "skill":
             row = await skills(rt).row(record_id)
             found = await skills(rt).version(record_id, row.version)
@@ -346,7 +346,7 @@ async def _record_digest(rt: Runtime, kind: str, record_id: str) -> str | None:
     try:
         if kind == "agent":
             row = await registry(rt).row(record_id)
-            return str((await registry(rt).version(record_id, int(row["version"])))["digest"])
+            return (await registry(rt).version(record_id, row.version)).digest
         if kind == "skill":
             skill = await skills(rt).row(record_id)
             found = await skills(rt).version(record_id, skill.version)
@@ -472,7 +472,7 @@ async def _names_in_use(rt: Runtime, kind: str) -> set[str]:
     """The names the team's records of this kind carry now, folded for comparison."""
     if kind == "agent":
         rows = await registry(rt).rows()
-        named = await registry(rt).named_versions({(str(r["id"]), int(r["version"])) for r in rows})
+        named = await registry(rt).named_versions({(r.id, r.version) for r in rows})
         return {name.casefold() for name, _ in named.values()}
     if kind == "workflow":
         return {str(d["name"]).casefold() for d in await team_workflows(rt) if not d.get("archived_at")}
@@ -964,7 +964,7 @@ async def _newest(rt: Runtime, kind: str, record_id: str) -> tuple[dict[str, Any
     """The copy's newest body and whether that version is an unpublished draft."""
     if kind == "agent":
         v = (await registry(rt).versions(record_id))[0]
-        return cast(dict[str, Any], v["spec"]), v.get("published_at") is None
+        return v.spec, v.published_at is None
     if kind == "guardrail":
         held = (await guardrails(rt).versions(record_id))[0]
         return held.config, held.published_at is None
@@ -1006,8 +1006,8 @@ async def _legacy_base(rt: Runtime, kind: str, record_id: str, row: dict[str, An
     it still exists; otherwise None, and every difference is a choice kept as the team's."""
     if kind == "agent":
         versions = await registry(rt).versions(record_id)
-        found = next((v["spec"] for v in versions if v["digest"] == row.get("record_digest")), None)
-        return copy_base(kind, cast(dict[str, Any], found)) if found is not None else None
+        found = next((v.spec for v in versions if v.digest == row.get("record_digest")), None)
+        return copy_base(kind, found) if found is not None else None
     held = next((v.content for v in await skills(rt).versions(record_id) if v.digest == row.get("record_digest")), None)
     return copy_base(kind, held) if held is not None else None
 

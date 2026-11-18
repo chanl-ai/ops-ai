@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from ops_agents.store.agent_registry import AgentRegistry
 from ops_agents.store.knowledge_citations import KnowledgeCitations
 from ops_agents.store.tenancy import OWNER
+from ops_service_kit.http import Json
 from ops_store import isolation
 from ops_store.team_scope import acting_as
 
@@ -35,7 +36,7 @@ async def test_a_team_reads_only_its_own_agents_citing_the_bases_asked(engine: A
         ("b", "team_b", ["kb_x"]),
     ):
         with isolation.scope(tenant, team), acting_as(team):
-            spec = {"name": f"Agent {key}", "collections": collections}
+            spec: Json = {"name": f"Agent {key}", "collections": [*collections]}
             made[key] = await reg.create(spec, by="maya@x.example", team_id=team, published=True)
     with isolation.scope(tenant, "team_a"), acting_as("team_a"):
         # A newer draft that drops the base: the agent still serves version 1, which cites it.

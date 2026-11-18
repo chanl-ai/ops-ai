@@ -49,6 +49,7 @@ from ops_service_kit.http import Envelope, In, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import isolation
 
+from ...store.agent_registry import AgentRow
 from ...store.widget_deployments import WidgetDeployments
 from ...store.widget_keys import WidgetKeys
 from ..agent_registry import live_agent, pinned_definition, registry
@@ -218,13 +219,13 @@ def _view(row: dict[str, Any]) -> WidgetDeploymentOut:
     )
 
 
-async def _published(rt: Runtime, agent_id: str) -> tuple[dict[str, Any], int]:
+async def _published(rt: Runtime, agent_id: str) -> tuple[AgentRow, int]:
     row = await registry(rt).row(agent_id)
-    if row["published_version"] is None or row["paused"]:
+    if row.published_version is None or row.paused:
         raise Unprocessable(
             "Publish the agent, and resume it if it is paused, before deploying it as a widget.", code="not_published"
         )
-    return row, int(row["published_version"])
+    return row, int(row.published_version)
 
 
 async def served_version(rt: Runtime, row: dict[str, Any]) -> int:
@@ -238,9 +239,9 @@ async def make_deployment(rt: Runtime, me: Principal, body: WidgetDeploymentInpu
     """A chat channel: the agent pinned at its published version, on exact origins, in the caller's team. The one
     create both `POST /v1/channels` and its deprecated alias here use."""
     agent_row, version = await _published(rt, body.agent_id)
-    team = me.team_id or str(agent_row["team_id"])
+    team = me.team_id or str(agent_row.team_id)
     require_builder(me, area="deployments", team_id=team, action="create", what=WHAT)
-    if agent_row["team_id"] and agent_row["team_id"] != team:
+    if agent_row.team_id and agent_row.team_id != team:
         raise Forbidden("Deploy an agent from the team that owns it.", code="team_forbidden")
     now = now_iso()
     row = {

@@ -14,6 +14,7 @@ from ops_agents.graphs.common import needs_step_up
 from ops_service_kit.errors import ApiError, ServiceUnavailable
 from ops_service_kit.ids import new_id
 
+from ..store.agent_registry import AgentRow
 from .agent_registry import definition_of, registry
 from .deps import Runtime
 
@@ -47,14 +48,14 @@ async def one_test_turn(
     agent_id: str,
     message: str,
     *,
-    row: dict[str, Any],
+    row: AgentRow,
     collections: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     """The same one-turn harness POST /v1/agents/{id}/test uses. Eval-runs call this per case."""
     if rt.ports is None:
         raise ServiceUnavailable(rt.model_error or "No model is configured.", code="model_unavailable")
     reg = registry(rt)
-    defn = definition_of(agent_id, int(row["version"]), (await reg.version(agent_id, int(row["version"])))["spec"])
+    defn = definition_of(agent_id, row.version, (await reg.version(agent_id, row.version)).spec)
     req = TurnRequest(
         turn_id=new_id("turn"),
         run_id=new_id("run"),

@@ -22,6 +22,7 @@ from ops_engine.store.definitions import ListColumns
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable
 
+from ..store.agent_registry import PublishRequestRow
 from ..store.engine import EngineTransactions
 from ..store.mailboxes import MailboxStore
 from ..store.tenancy import current_team
@@ -47,14 +48,14 @@ def definitions(rt: Runtime) -> DefinitionStore:
     return DefinitionStore(EngineTransactions(rt.db), listed)
 
 
-async def pending(rt: Runtime, workflow_id: str) -> dict[str, Any] | None:
+async def pending(rt: Runtime, workflow_id: str) -> PublishRequestRow | None:
     """The workflow's open publish request, if any."""
-    return next((r for r in await registry(rt).requests(KIND, workflow_id) if r["status"] == "pending"), None)
+    return next((r for r in await registry(rt).requests(KIND, workflow_id) if r.status == "pending"), None)
 
 
-def stage_of(version: DefinitionRow | DefinitionVersion, request: dict[str, Any] | None) -> str:
+def stage_of(version: DefinitionRow | DefinitionVersion, request: PublishRequestRow | None) -> str:
     """A version's stage as the console shows it: its stored stage, or in_review for the draft a request names."""
-    if request is not None and version.stage == "draft" and int(request["version"]) == version.version:
+    if request is not None and version.stage == "draft" and int(request.version) == version.version:
         return "in_review"
     return version.stage
 
@@ -142,7 +143,7 @@ async def open_publish(
     by: str,
     team: str,
     note: str,
-) -> dict[str, Any]:
+) -> PublishRequestRow:
     """The publish request for a checked draft `row` over the live `current`, decided by the team's publishReview read
     now: approved and live at once where no review is needed, otherwise waiting in Reviews. A person's publish and a
     shipped system workflow's update (service_events) both open it here, so neither skips the policy."""
@@ -174,18 +175,18 @@ async def open_publish(
     return req
 
 
-async def view(rt: Runtime, req: dict[str, Any], *, name: str | None = None) -> dict[str, Any]:
+async def view(rt: Runtime, req: PublishRequestRow, *, name: str | None = None) -> dict[str, Any]:
     """The request as the console's Review, named after the version it publishes; `name` when a list read the
     versions together (publish_reviews.all_views)."""
     if name is None:
-        row = await definitions(rt).row(str(req["subject_id"]), int(req["version"]))
-        name = row.name if row else str(req["subject_id"])
+        row = await definitions(rt).row(str(req.subject_id), int(req.version))
+        name = row.name if row else str(req.subject_id)
     return review_view(req, name=name, slug="", sla_hours=await sla_hours(rt))
 
 
-async def approve(rt: Runtime, req: dict[str, Any]) -> None:
+async def approve(rt: Runtime, req: PublishRequestRow) -> None:
     """An approved request makes its version live and supersedes the one before; a paused workflow stays paused."""
     try:
-        await definitions(rt).go_live(str(req["subject_id"]), int(req["version"]))
+        await definitions(rt).go_live(str(req.subject_id), int(req.version))
     except LookupError as e:
-        raise Conflict(f"{req['subject_id']} v{req['version']} was deleted before it was approved.") from e
+        raise Conflict(f"{req.subject_id} v{req.version} was deleted before it was approved.") from e

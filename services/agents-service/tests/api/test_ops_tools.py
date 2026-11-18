@@ -163,9 +163,9 @@ async def test_a_team_with_no_default_gets_one_ops_assistant_and_the_tools_follo
         # meets the first's row and serves it instead of failing.
         rt.catalog.drop_agent(AID)
         second_made = await ensure_ops_assistant(rt, "team_ops")
-        rows = [r for r in await registry(rt).rows() if r["id"] == AID]
+        rows = [r for r in await registry(rt).rows() if r.id == AID]
     assert first_made.id == second_made.id == AID, "two first chats make one assistant"
-    assert len(rows) == 1 and rows[0]["team_id"] == "team_ops", rows
+    assert len(rows) == 1 and rows[0].team_id == "team_ops", rows
     first = (await start(c, VIEWER))["id"]
     ops = OpsReads(rt)
     with scope(TENANT, "team_ops"), acting_for(viewer()):

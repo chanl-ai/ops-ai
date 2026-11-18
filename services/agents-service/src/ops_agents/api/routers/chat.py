@@ -169,7 +169,7 @@ async def agents(rt: Rt, me: Me) -> JSONResponse:
     kb-service for the bases' names."""
     if not me.is_key:
         require_chat_use(me, team_id=me.team_id or None)
-    ours = {r["id"] for r in await registry(rt).rows()}
+    ours = {r.id for r in await registry(rt).rows()}
     try:
         names = {k.id: k.name for k in await rt.kbs().bases()}
     except ApiError:
@@ -382,12 +382,12 @@ async def _test_agent(rt: Runtime, me: Principal, agent_id: str, version: int | 
     cache keyed by a version number a draft keeps while it changes; or the saved version the thread was started on, for
     a compare. Refused unless the caller may test the agent."""
     row = await changeable(rt, me, agent_id, "test")
-    n = version if version is not None else int(row["version"])
+    n = version if version is not None else int(row.version)
     try:
         saved = await registry(rt).version(agent_id, n)
     except NotFound:
         raise Unprocessable(f"The agent has no version {n}.", code="unknown_version") from None
-    return definition_of(agent_id, n, saved["spec"])
+    return definition_of(agent_id, n, saved.spec)
 
 
 async def thread_agent(rt: Runtime, me: Principal, meta: dict[str, Any]) -> AgentDefinition | None:

@@ -158,10 +158,10 @@ class KernelAgents:
             row = await reg.row(request.agent_id)
         except NotFound as e:
             raise AgentUnavailableError(f"agent {request.agent_id} does not exist") from e
-        if row["published_version"] is None or row["paused"]:
+        if row.published_version is None or row.paused:
             raise AgentUnavailableError(f"agent {request.agent_id} is not published and live")
-        version = int(row["published_version"])
-        agent = definition_of(request.agent_id, version, (await reg.version(request.agent_id, version))["spec"])
+        version = int(row.published_version)
+        agent = definition_of(request.agent_id, version, (await reg.version(request.agent_id, version)).spec)
         try:
             settings = self._step_settings(agent, request)
         except Unprocessable as e:

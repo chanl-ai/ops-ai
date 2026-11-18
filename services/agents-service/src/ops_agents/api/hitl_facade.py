@@ -1117,7 +1117,7 @@ async def can_decide(rt: Runtime, approver: Principal, review_id: str) -> bool:
         if publish_reviews.is_request_id(review_id):
             req = await registry(rt).request(review_id)
             await publish_reviews.require_publish_decider(rt, req, approver)
-            return req["status"] == "pending"
+            return req.status == "pending"
         if engine_reviews.is_engine_id(review_id):
             await engine_reviews.check_decider(rt, approver, review_id)
             return True

@@ -6,36 +6,17 @@ pages (api/hitl_facade.list_reviews), so each source is bounded here rather than
 from __future__ import annotations
 
 import sqlalchemy as sa
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel
 
 from ops_service_kit.logging import get_logger
 from ops_store.rows import rows
 from ops_store.team_scope import team_visible
 
-from .agent_registry import publish_requests
+from .agent_registry import PublishRequestRow, publish_requests
 from .graphs import ThreadRow, graph_threads, mine
 from .tenancy import RuntimeStore, current_tenant
 
 log = get_logger(__name__)
-
-
-class PublishRequestRow(BaseModel):
-    """A `registry_publish_requests` row, every column."""
-
-    tenant_id: str
-    id: str
-    kind: str
-    subject_id: str
-    version: int
-    status: str
-    note: str
-    requested_by: str
-    created_at: str
-    decided_at: str | None
-    decided_by: str | None
-    decision_reason: str | None
-    body: dict[str, JsonValue]
-    team_id: str
 
 
 def capped[R: BaseModel](source: str, found: list[R], cap: int) -> list[R]:

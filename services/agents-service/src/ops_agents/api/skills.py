@@ -20,6 +20,7 @@ from ops_service_kit.errors import Conflict, NotFound, Unprocessable, Validation
 from ops_service_kit.logging import get_logger
 
 from ..activities.catalog import AgentDefinition, kernel_skills
+from ..store.agent_registry import PublishRequestRow
 from ..store.skill_list import pinning_agents, published_pinning
 from ..store.skills import SkillRegistry, SkillRow, SkillVersionRow, slug_of
 from .agent_registry import SEED_BY, SEED_TEAM, seed_agent_version
@@ -285,7 +286,7 @@ def missing_for(content: dict[str, Any], agent_spec: dict[str, Any]) -> list[str
     return [t for t in tool_ids(content) if t not in tools] + [k for k in named if k not in kbs]
 
 
-async def _requests(rt: Runtime, skill_id: str) -> list[dict[str, Any]]:
+async def _requests(rt: Runtime, skill_id: str) -> list[PublishRequestRow]:
     return await agent_registry(rt).requests("skill", skill_id)
 
 
@@ -325,24 +326,24 @@ async def workflows_pinning_each(rt: Runtime, field: str, key: str) -> dict[str,
     return out
 
 
-def _status(row: SkillRow, pending: dict[str, Any] | None) -> str:
+def _status(row: SkillRow, pending: PublishRequestRow | None) -> str:
     if row.deprecated_reason:
         return "deprecated"
-    if pending is not None and pending["version"] == row.version:
+    if pending is not None and pending.version == row.version:
         return "in_review"
     return "published" if row.published_version is not None else "draft"
 
 
-def _version_state(row: SkillRow, v: SkillVersionRow, requests: list[dict[str, Any]]) -> str:
+def _version_state(row: SkillRow, v: SkillVersionRow, requests: list[PublishRequestRow]) -> str:
     n, pub = v.version, row.published_version
     if v.published_at is not None:
         if row.deprecated_reason:
             return "deprecated"
         return "published" if n == pub else "superseded"
-    mine = [r for r in requests if r["version"] == n]
-    if any(r["status"] == "pending" for r in mine):
+    mine = [r for r in requests if r.version == n]
+    if any(r.status == "pending" for r in mine):
         return "in_review"
-    if any(r["status"] == "rejected" for r in mine):
+    if any(r.status == "rejected" for r in mine):
         return "rejected"
     return "draft"
 
@@ -399,7 +400,7 @@ async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
     users = await pinning_agents(rt.db, skill_id)
     versions = await reg.versions(skill_id)
     requests = await _requests(rt, skill_id)
-    pending = next((r for r in requests if r["status"] == "pending"), None)
+    pending = next((r for r in requests if r.status == "pending"), None)
     newest = versions[0]
     base = list_row(
         {
@@ -407,7 +408,7 @@ async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
             "content": newest.content,
             "tokens": newest.tokens,
             "status": _status(row, pending),
-            "pending_id": pending["id"] if pending else None,
+            "pending_id": pending.id if pending else None,
             "used_by": len(users),
             "live_agents": sum(1 for a in users if a.published_version is not None and not a.paused),
         }
@@ -418,7 +419,7 @@ async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
     elif newest.published_at is not None:
         blockers.append(f"v{newest.version} is already published; save a change to open a draft.")
     elif pending is not None:
-        blockers.append(f"{pending['id']} is already open for v{pending['version']}.")
+        blockers.append(f"{pending.id} is already open for v{pending.version}.")
     if too_long := over_budget(newest):
         blockers.append(too_long)
     latest = row.published_version
@@ -483,8 +484,8 @@ async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
         **(
             {
                 "pendingReview": {
-                    "id": pending["id"],
-                    "version": pending["version"],
+                    "id": pending.id,
+                    "version": pending.version,
                     "editClass": "re_test",
                     "approvals": 0,
                     "needed": 1,
@@ -502,8 +503,8 @@ async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
     }
 
 
-async def publish(rt: Runtime, req: dict[str, Any], by: str) -> None:
-    await skills(rt).publish(req["subject_id"], int(req["version"]), by=by, review_id=req["id"])
+async def publish(rt: Runtime, req: PublishRequestRow, by: str) -> None:
+    await skills(rt).publish(req.subject_id, int(req.version), by=by, review_id=req.id)
 
 
 def snapshot(skill_id: str, version: int, content: dict[str, Any], tokens: int, *, by: str, at: str) -> dict[str, Any]:
@@ -584,7 +585,7 @@ async def agent_skills(rt: Runtime, agent_id: str) -> dict[str, Any]:
     """The agent page's read model: the newest version's pins, and published skills with whether each attaches."""
     reg, agents = skills(rt), agent_registry(rt)
     arow = await agents.row(agent_id)
-    spec = (await agents.version(agent_id, int(arow["version"])))["spec"]
+    spec = (await agents.version(agent_id, arow.version)).spec
     pins = cast(list[dict[str, Any]], spec.get("skillPins") or [])
     rows = {r.id: r for r in await reg.rows()}
     out_pins: list[dict[str, Any]] = []

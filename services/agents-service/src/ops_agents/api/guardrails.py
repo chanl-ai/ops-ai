@@ -16,6 +16,7 @@ from pydantic import JsonValue
 
 from ops_service_kit.errors import Conflict, Unprocessable, ValidationFailed
 
+from ..store.agent_registry import PublishRequestRow
 from ..store.guardrails import GuardrailRegistry, GuardrailRow
 from ..store.pin_users import PinUsers
 from .agent_registry import SEED_TEAM, seed_agent_version
@@ -159,8 +160,8 @@ async def views(rt: Runtime, rows: list[GuardrailRow]) -> list[GuardrailView]:
     return out
 
 
-async def publish(rt: Runtime, req: dict[str, Any], by: str) -> None:
-    await guardrails(rt).publish(req["subject_id"], int(req["version"]), by=by, review_id=req["id"])
+async def publish(rt: Runtime, req: PublishRequestRow, by: str) -> None:
+    await guardrails(rt).publish(req.subject_id, int(req.version), by=by, review_id=req.id)
 
 
 async def decide(  # noqa: PLR0917 - the route passes each part of the decision
@@ -178,12 +179,12 @@ async def decide(  # noqa: PLR0917 - the route passes each part of the decision
     reg = agent_registry(rt)
     req = await reg.request(request_id)
     await require_publish_reviewer(rt, req, review_teams(approver))
-    if req["kind"] != "guardrail" or req["subject_id"] != guardrail_id:
+    if req.kind != "guardrail" or req.subject_id != guardrail_id:
         raise Unprocessable(f"{request_id} is not a publish request for {guardrail_id}.")
     if decision not in ("approved", "rejected"):
         raise ValidationFailed(f"Unknown decision {decision}.")
-    if req["status"] != "pending":
-        raise Conflict(f"{request_id} was already {req['status']}.", code="already_decided")
+    if req.status != "pending":
+        raise Conflict(f"{request_id} was already {req.status}.", code="already_decided")
     await require_not_asker(rt, req, approver)
     reason = (reason or "").strip() or None
     if decision == "rejected" and reason is None:

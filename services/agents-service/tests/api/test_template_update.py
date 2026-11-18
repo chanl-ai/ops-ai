@@ -184,7 +184,7 @@ async def test_an_agent_draft_under_review_is_never_rewritten(client: AsyncClien
     from ops_agents.api.agent_registry import registry  # noqa: PLC0415
 
     held = await registry(store(client)).versions(aid)
-    by_version = {v["version"]: v["spec"]["role"] for v in held}
+    by_version = {v.version: v.spec["role"] for v in held}
     assert by_version == {2: "Reads cases", 1: str(body["role"])}
 
 

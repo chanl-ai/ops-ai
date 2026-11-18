@@ -22,6 +22,7 @@ from ops_agents.api.engine_agents import KernelAgents, StepRules
 from ops_agents.store.agent_registry import AgentRegistry
 from ops_agents.store.base import metadata
 from ops_engine.ports import AgentRequest, PromptRequest
+from ops_service_kit.http import Json
 from tests.conftest import SEED, structured
 
 SCHEMA = {"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}
@@ -61,7 +62,7 @@ async def test_a_turn_without_its_answer_takes_the_error_port_without_a_retry(lo
     db = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with db.begin() as c:
         await c.run_sync(metadata.create_all)
-    spec = {"name": "Advisor", "role": "Summarises customers", "instructions": "", "collections": ["kb_people"]}
+    spec: Json = {"name": "Advisor", "role": "Summarises customers", "instructions": "", "collections": ["kb_people"]}
     aid = await AgentRegistry(db).create(spec, by="seed", team_id="team_ops", agent_id="ag_x", published=True)
     port = KernelAgents(
         db,
@@ -254,7 +255,7 @@ async def test_a_workflow_agent_step_searches_only_its_agents_bases_whatever_the
     db = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with db.begin() as c:
         await c.run_sync(metadata.create_all)
-    spec = {"name": "Advisor", "role": "Answers", "instructions": "", "toolIds": ["search_knowledge"],
+    spec: Json = {"name": "Advisor", "role": "Answers", "instructions": "", "toolIds": ["search_knowledge"],
             "collections": ["kb_people"]}  # fmt: skip
     aid = await AgentRegistry(db).create(spec, by="seed", team_id="team_ops", agent_id="ag_w", published=True)
     ports = KernelPorts(_streamed(reply), searches, NoKnowledge())

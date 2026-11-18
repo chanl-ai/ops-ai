@@ -20,7 +20,7 @@ from ops_access import can
 from ops_identity.fastapi import Tx
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, In, JsonValue, OptionsPage, options_page, options_window
+from ops_service_kit.http import Envelope, In, JsonList, JsonValue, OptionsPage, options_page, options_window
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
@@ -169,11 +169,11 @@ async def list_skills(
     if agent_id is not None:
         agents = agent_registry(rt)
         agent_row = await agents.row(agent_id)
-        held: dict[str, Any] = (await agents.version(agent_id, int(agent_row["version"])))["spec"]
+        held: dict[str, Any] = (await agents.version(agent_id, agent_row.version)).spec
         spec = held
         menu = str(held.get("skillMenu") or "team")
         # A chat's skills are its team's: the team the request acts in, else the agent's own.
-        team = caller.team_id or str(agent_row.get("team_id") or "")
+        team = caller.team_id or str(agent_row.team_id or "")
         offered = offered_by(agent_id, team=team, menu=menu)
     listed, counts = await skills_page(rt.db, q, view=view, offered=offered)
     body: dict[str, Any] = {**listed, "data": [list_row(r) for r in listed["data"]]}
@@ -292,7 +292,7 @@ async def _editable(rt: Runtime, me: Principal, skill_id: str, base_version: int
         raise Conflict("The skill is deprecated; it takes no new versions.", code="skill_deprecated")
     if base_version != row.version:
         raise Conflict(f"v{row.version} was saved after v{base_version}; reload and edit again.", code="stale_base")
-    if any(r["status"] == "pending" for r in await agent_registry(rt).requests("skill", skill_id)):
+    if any(r.status == "pending" for r in await agent_registry(rt).requests("skill", skill_id)):
         raise Conflict("The newest version is in review; decide the review first.", code="review_open")
     return row.version
 
@@ -381,7 +381,7 @@ async def agent_skill_options(  # noqa: PLR0917 - FastAPI reads each query param
     the query; one that needs a tool or knowledge base the agent lacks is offered disabled with the reason. `loading`
     keeps always-on or on-match skills, also in the query (the published version's mode is kept on the row)."""
     agents = agent_registry(rt)
-    spec = (await agents.version(agent_id, int((await agents.row(agent_id))["version"])))["spec"]
+    spec = (await agents.version(agent_id, (await agents.row(agent_id)).version)).spec
     held = [str(p["skillId"]) for p in cast(list[dict[str, Any]], spec.get("skillPins") or [])]
     reg = skills(rt)
     offset, window = options_window(None if ids else cursor, limit)
@@ -403,14 +403,14 @@ async def attach_skill(rt: Rt, me: Me, _: Tx, agent_id: str, skill_id: str, body
     version is published (spec 11 5.4)."""
     reg = agent_registry(rt)
     row = await agent_changeable(rt, me, agent_id, "attach a skill to")
-    spec = dict((await reg.version(agent_id, int(row["version"])))["spec"])
+    spec = dict((await reg.version(agent_id, row.version)).spec)
     version = body.version
     if version is None:
         found = await skills(rt).find(skill_id)
         if found is None or found.published_version is None:
             raise NotFound(f"Published skill {skill_id}")
         version = found.published_version
-    spec["skillPins"] = await pin(rt, spec, skill_id, version, by=me.email, at=now_iso())
+    spec["skillPins"] = [*await pin(rt, spec, skill_id, version, by=me.email, at=now_iso())]
     await reg.save(agent_id, spec, by=me.email, note=f"Attached {skill_id} v{version}")
     return ok(await agent_skills(rt, agent_id))
 
@@ -419,9 +419,10 @@ async def attach_skill(rt: Rt, me: Me, _: Tx, agent_id: str, skill_id: str, body
 async def detach_skill(rt: Rt, me: Me, _: Tx, agent_id: str, skill_id: str) -> JSONResponse:
     reg = agent_registry(rt)
     row = await agent_changeable(rt, me, agent_id, "detach a skill from")
-    spec = dict((await reg.version(agent_id, int(row["version"])))["spec"])
-    held: list[dict[str, Any]] = list(spec.get("skillPins") or [])
-    pins = [p for p in held if p["skillId"] != skill_id]
+    spec = dict((await reg.version(agent_id, row.version)).spec)
+    # A pin that is not an object, or names no skill, raises as indexing it did.
+    held = narrow.a_list(spec.get("skillPins") or [], "skill pins")
+    pins: JsonList = [p for p in held if narrow.an_object(p, "skill pin")["skillId"] != skill_id]
     if len(pins) == len(held):
         raise NotFound(f"Skill {skill_id} on {agent_id}")
     spec["skillPins"] = pins

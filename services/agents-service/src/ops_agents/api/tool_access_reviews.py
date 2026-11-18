@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..store.agent_registry import PublishRequestRow
 from .agent_registry import review_view
 from .deps import Runtime
 from .review_sla import sla_hours
@@ -14,15 +15,16 @@ KIND = "tool_access"
 ENVIRONMENTS = {"production": "Production", "test": "Test"}
 
 
-def team(req: dict[str, Any]) -> str | None:
+def team(req: PublishRequestRow) -> str | None:
     """The team whose reviewers decide it: the module's team, or the one an operation names as its approver."""
-    return str(req["body"].get("deciderTeam") or "") or None
+    return str(req.body.get("deciderTeam") or "") or None
 
 
-async def view(rt: Runtime, req: dict[str, Any]) -> dict[str, Any]:
+async def view(rt: Runtime, req: PublishRequestRow) -> dict[str, Any]:
     # A decision whose apply never reached tools-service left the request open there; the cut-over asks it again as
     # its run (review_copy), so nothing here retries it.
-    body = req["body"]
+    # The review body is read key by key into the reply, as stored.
+    body = req.model_dump()["body"]
     v = review_view(req, name=body["workflowName"], slug="", sla_hours=await sla_hours(rt))
     v.pop("publish", None)
     policy = {**v["policy"], "id": "gp_tool_access", "name": "Tool access", "reviewers": body["deciderTeam"]}

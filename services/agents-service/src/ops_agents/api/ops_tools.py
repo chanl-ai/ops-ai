@@ -125,14 +125,14 @@ async def follow_declared(rt: Runtime, aid: str) -> None:
     alone."""
     reg = registry(rt)
     row = await reg.row(aid)
-    if row["published_version"] is None:
+    if row.published_version is None:
         return
-    published = await reg.version(aid, int(row["published_version"]))
-    if published["saved_by"] != SYSTEM:
+    published = await reg.version(aid, int(row.published_version))
+    if published.saved_by != SYSTEM:
         return
     # The caps and the model too: the published version is the platform's, so nothing a person chose is replaced.
     want = {k: v for k, v in _declared(rt, aid).items() if k in (*SEED_FIELDS, "guardrails", "model")}
-    if all(published["spec"].get(k) == v for k, v in want.items()):
+    if all(published.spec.get(k) == v for k, v in want.items()):
         return
 
     async def change(s: dict[str, Any]) -> dict[str, Any]:

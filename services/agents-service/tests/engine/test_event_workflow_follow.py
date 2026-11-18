@@ -78,7 +78,7 @@ async def test_an_update_to_a_shipped_workflow_waits_for_publish_review(engine: 
         asked = await AgentRegistry(engine).requests(KIND, old["id"])
         updated = await ServiceEvents(engine).get(UPDATED, f"{old['id']}:{parse(new).digest()[:16]}")
     assert (live["version"], live["digest"]) == (1, parse(old).digest()), live
-    assert [(r["version"], r["status"], r["requested_by"]) for r in asked] == [(2, "pending", SEED)], asked
+    assert [(r.version, r.status, r.requested_by) for r in asked] == [(2, "pending", SEED)], asked
     assert updated is not None and updated["payload"]["status"] == "pending"
 
 
@@ -126,4 +126,4 @@ async def test_a_tenant_on_the_platform_owned_version_follows_the_seed_too(engin
     await provision(engine, tenant, new)
     with tenant_scope(tenant):
         asked = await AgentRegistry(engine).requests(KIND, old.id)
-    assert [(r["version"], r["status"]) for r in asked] == [(2, "pending")], asked
+    assert [(r.version, r.status) for r in asked] == [(2, "pending")], asked

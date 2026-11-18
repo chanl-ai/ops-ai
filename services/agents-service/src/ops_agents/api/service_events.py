@@ -106,9 +106,9 @@ async def _follow_seed(rt: Runtime, store: DefinitionStore, d: WorkflowDefinitio
             team_id="",
             source=SOURCE,
             actor=None,
-            payload={"workflowId": d.id, "version": version, "reviewId": req["id"], "status": req["status"]},
+            payload={"workflowId": d.id, "version": version, "reviewId": req.id, "status": req.status},
         )
-        log.info("event_workflow_updated", workflow=d.id, version=version, status=req["status"])
+        log.info("event_workflow_updated", workflow=d.id, version=version, status=req.status)
         return
     await events.record(
         name=UPDATE_AVAILABLE,

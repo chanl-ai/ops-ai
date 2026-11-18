@@ -15,6 +15,7 @@ from ops_agents.store.widget_picker import WidgetPicker
 from ops_agents.store.widgets import ListedWidget, WidgetRegistry
 from ops_service_kit.errors import Unprocessable
 
+from ..store.agent_registry import PublishRequestRow
 from .agent_registry import registry
 from .deps import Runtime
 
@@ -86,7 +87,7 @@ async def view(rt: Runtime, widget_id: str) -> dict[str, Any]:
     row = await reg.row(widget_id)
     newest = await reg.version(widget_id, row.version)
     assert newest is not None
-    pending = any(r["status"] == "pending" for r in await _requests(rt, widget_id))
+    pending = any(r.status == "pending" for r in await _requests(rt, widget_id))
     return listed_view(
         ListedWidget.model_validate(
             {**row.model_dump(), "content": newest.content, "published_at": newest.published_at, "pending": pending}
@@ -110,7 +111,7 @@ def listed_view(w: ListedWidget) -> dict[str, Any]:
     )
 
 
-async def _requests(rt: Runtime, widget_id: str) -> list[dict[str, Any]]:
+async def _requests(rt: Runtime, widget_id: str) -> list[PublishRequestRow]:
     return await registry(rt).requests("widget", widget_id)
 
 
@@ -150,6 +151,6 @@ async def published(rt: Runtime, widget_id: str, version: int | None) -> WidgetP
     return rt.catalog.widget(widget_id, version)
 
 
-async def publish(rt: Runtime, req: dict[str, Any], by: str) -> None:
+async def publish(rt: Runtime, req: PublishRequestRow, by: str) -> None:
     """An approved review's publish: the requested version becomes the one agents may pin."""
-    await widgets(rt).publish(req["subject_id"], int(req["version"]), by=by, review_id=req["id"])
+    await widgets(rt).publish(req.subject_id, int(req.version), by=by, review_id=req.id)

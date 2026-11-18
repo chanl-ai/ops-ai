@@ -26,6 +26,9 @@ from ops_store import isolation
 
 from ..store.agent_registry import (
     AgentRegistry,
+    AgentRow,
+    AgentVersionRow,
+    PublishRequestRow,
 )
 from ..store.graphs import GraphStore
 from ..store.tenancy import SERVE_PUBLISHED
@@ -149,17 +152,17 @@ def definition_of(agent_id: str, version: int, spec: dict[str, Any]) -> AgentDef
 
 
 def agent_review_body(
-    agent_id: str, spec: dict[str, Any], row: dict[str, Any], v: dict[str, Any], *, note: str, by: str
+    agent_id: str, spec: dict[str, Any], row: AgentRow, v: AgentVersionRow, *, note: str, by: str
 ) -> dict[str, Any]:
     """The body of an `agent_publish` review for version `v`."""
     return {
         "agentId": agent_id,
         "agentName": spec["name"],
-        "version": v["version"],
-        "fromVersion": row["published_version"],
+        "version": v.version,
+        "fromVersion": row.published_version,
         "note": note,
         "requestedBy": by,
-        "savedBy": v["saved_by"],
+        "savedBy": v.saved_by,
         "tier": "low",
         "tierReason": "No live workflow pins it",
         "approvalsNeeded": 1,
@@ -167,7 +170,7 @@ def agent_review_body(
         "published": None,
         "failing": 0,
         "blockers": [],
-        "changes": v["changes"],
+        "changes": v.changes,
         # The reviewer approves what callers may change along with the agent itself.
         "limits": wire_limits(limits_of(spec)),
         # And sees each pinned guardrail with its switch: one off is not checked once this version is live.
@@ -200,25 +203,25 @@ async def seed_agent_version(
     platform for a team's Ops Assistant."""
     reg = registry(rt)
     row = await reg.row(agent_id)
-    if row["published_version"] is None:
+    if row.published_version is None:
         return
-    newest = await reg.version(agent_id, int(row["version"]))
-    if row["version"] != row["published_version"] and newest["saved_by"] != by:
-        log.info("seed_agent_change_deferred", agent=agent_id, note=note, draft_saved_by=newest["saved_by"])
+    newest = await reg.version(agent_id, row.version)
+    if row.version != row.published_version and newest.saved_by != by:
+        log.info("seed_agent_change_deferred", agent=agent_id, note=note, draft_saved_by=newest.saved_by)
         return
-    if any(r["status"] == "pending" for r in await reg.requests("agent", agent_id)):
+    if any(r.status == "pending" for r in await reg.requests("agent", agent_id)):
         log.info("seed_agent_change_deferred", agent=agent_id, note=note, reason="review open")
         return
-    live = dict((await reg.version(agent_id, int(row["published_version"])))["spec"])
+    live = dict((await reg.version(agent_id, row.published_version)).spec)
     spec = await change(dict(live))
     n = await reg.save(agent_id, spec, by=by, note=note)
     # A seed's change follows the team's policy like a person's publish.
     from .publish_policy import decide  # noqa: PLC0415 - publish_policy imports this module's callers' layer
 
-    decision = await decide(rt, area="agents", team_id=row["team_id"], old=live, new=spec)
+    decision = await decide(rt, area="agents", team_id=row.team_id, old=live, new=spec)
     if not decision.review_required:
         await reg.publish(agent_id, n, by=by, review_id="seed")
-        if not row["paused"]:
+        if not row.paused:
             go_live(rt, agent_id, n, spec)
         return
     v = await reg.version(agent_id, n)
@@ -290,7 +293,7 @@ async def refuse_new_turns(rt: Runtime, agent_id: str) -> None:
         row = await registry(rt).row(agent_id)
     except NotFound:
         return
-    if row["paused"]:
+    if row.paused:
         name = rt.catalog.agent_in_flight(agent_id)
         label = name.name if name else agent_id
         raise Conflict(
@@ -312,18 +315,18 @@ SEED_FIELDS = (
 )
 
 
-async def follow_seed(rt: Runtime, a: AgentDefinition, row: dict[str, Any]) -> None:
+async def follow_seed(rt: Runtime, a: AgentDefinition, row: AgentRow) -> None:
     """A seeded agent whose published version the seed still owns (saved by the seed) takes the seed file's change as
     a new version, so editing the seed reaches a database seeded before it. Once a person has published a version the
     agent is theirs and the seed leaves it alone."""
-    if row["published_version"] is None:
+    if row.published_version is None:
         return
     reg = registry(rt)
-    published = await reg.version(a.id, int(row["published_version"]))
-    if published["saved_by"] != SEED_BY:
+    published = await reg.version(a.id, row.published_version)
+    if published.saved_by != SEED_BY:
         return
     want = {k: v for k, v in spec_from_seed(a, rt.settings.model_alias).items() if k in SEED_FIELDS}
-    spec = cast(dict[str, Any], published["spec"])
+    spec = published.spec
     if all(spec.get(k) == v for k, v in want.items()):
         return
 
@@ -347,7 +350,7 @@ async def load(rt: Runtime, seed: Catalog) -> None:
     slug already held outside the seed's tenant is skipped with a warning, and the service starts without it. Serving
     is `serve_published`, for every tenant."""
     reg = registry(rt)
-    have = {r["id"]: r for r in await reg.rows()}
+    have = {r.id: r for r in await reg.rows()}
     for a in list(seed.agents):
         if a.id not in have:
             spec = spec_from_seed(a, rt.settings.model_alias)
@@ -400,17 +403,17 @@ async def tasks_24h(rt: Runtime) -> dict[str, int]:
     return out
 
 
-def version_state(row: dict[str, Any], v: int, pending: dict[str, Any] | None, rejected: set[int]) -> str:
+def version_state(row: AgentRow, v: int, pending: PublishRequestRow | None, rejected: set[int]) -> str:
     if v in rejected:
         return "rejected"
-    if pending is not None and pending["version"] == v:
+    if pending is not None and pending.version == v:
         return "in_review"
-    pub = row["published_version"]
+    pub = row.published_version
     if v == pub:
         return "published"
     if pub is not None and v < pub:
         return "superseded"
-    return "superseded" if v < row["version"] else "draft"
+    return "superseded" if v < row.version else "draft"
 
 
 def agent_view(row: dict[str, Any], spec: dict[str, Any], tasks: int) -> dict[str, Any]:
@@ -473,34 +476,34 @@ def agent_view(row: dict[str, Any], spec: dict[str, Any], tasks: int) -> dict[st
 STORED_ONLY = frozenset({"definition", "graph"})
 
 
-def _sla_minutes(req: dict[str, Any], now: datetime, hours: float) -> int | None:
+def _sla_minutes(req: PublishRequestRow, now: datetime, hours: float) -> int | None:
     """Minutes left before the request is overdue, from when it was asked; negative once overdue, and None once
     decided, since a decided review has no deadline left."""
-    if req["status"] not in ("pending", "in_review"):
+    if req.status not in ("pending", "in_review"):
         return None
-    asked = datetime.fromisoformat(str(req["created_at"]).replace("Z", "+00:00"))
+    asked = datetime.fromisoformat(str(req.created_at).replace("Z", "+00:00"))
     return int((asked + timedelta(hours=hours) - now).total_seconds() // 60)
 
 
 def review_view(
-    req: dict[str, Any], *, name: str, slug: str, sla_hours: float, now: datetime | None = None
+    req: PublishRequestRow, *, name: str, slug: str, sla_hours: float, now: datetime | None = None
 ) -> dict[str, Any]:
     """A publish request as the console's Review, kind `agent_publish` or `publish_request`. `sla_hours` is the
     tenant's review deadline (`review_sla.sla_hours`). A decided one says who decided it, when and why."""
-    agent = req["kind"] == "agent"
-    body = req["body"]
+    agent = req.kind == "agent"
+    body = req.body
     return {
-        "id": req["id"],
-        "title": f"Publish {name} v{req['version']}",
-        "customer": f"Requested by {requester(str(req['requested_by']))}",
-        "workflowId": "" if agent else req["subject_id"],
+        "id": req.id,
+        "title": f"Publish {name} v{req.version}",
+        "customer": f"Requested by {requester(str(req.requested_by))}",
+        "workflowId": "" if agent else req.subject_id,
         "workflowName": name,
         "agentSlug": slug if agent else "",
         "agentName": name if agent else None,
         "kind": "agent_publish" if agent else "publish_request",
         "risk": body.get("tier", "low"),
         "confidence": 1,
-        "proposal": req["note"],
+        "proposal": req.note,
         "actionTool": "publish_agent" if agent else "publish_workflow",
         "currency": "CAD",
         "policy": {
@@ -513,20 +516,20 @@ def review_view(
             "fourEyes": False,
         },
         "slaMinutes": _sla_minutes(req, now or datetime.now(UTC), sla_hours),
-        "approvals": [req["decided_by"]] if req["decided_by"] else [],
-        **({"decidedBy": req["decided_by"]} if req["decided_by"] else {}),
-        "status": req["status"],
-        "createdAt": req["created_at"],
-        **({"decidedAt": req["decided_at"]} if req["decided_at"] else {}),
+        "approvals": [req.decided_by] if req.decided_by else [],
+        **({"decidedBy": req.decided_by} if req.decided_by else {}),
+        "status": req.status,
+        "createdAt": req.created_at,
+        **({"decidedAt": req.decided_at} if req.decided_at else {}),
         "reasoning": body.get("changes", []),
         "evidence": [],
         **({"agentPublish": body} if agent else {"publish": {k: v for k, v in body.items() if k not in STORED_ONLY}}),
-        **({"decisionReason": req["decision_reason"]} if req.get("decision_reason") else {}),
+        **({"decisionReason": req.decision_reason} if req.decision_reason else {}),
     }
 
 
-def require_newest_draft(row: dict[str, Any], version: int) -> None:
-    if version != row["version"]:
-        raise Unprocessable(f"v{version} is not the newest draft (v{row['version']}).", code="not_newest_draft")
-    if row["published_version"] == version:
+def require_newest_draft(row: AgentRow, version: int) -> None:
+    if version != row.version:
+        raise Unprocessable(f"v{version} is not the newest draft (v{row.version}).", code="not_newest_draft")
+    if row.published_version == version:
         raise Unprocessable(f"v{version} is already published.", code="already_published")

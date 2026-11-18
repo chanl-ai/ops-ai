@@ -27,12 +27,14 @@ from ops_agents.activities.tool_directory import ToolsUnavailable
 from ops_agents.app.evals import parse_cases, run_eval
 from ops_agents.domain.evals import TRIGGER_MANUAL
 from ops_identity.fastapi import Tx
+from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
 from ops_service_kit.http import Envelope, In, ListResult, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListQuery
 from ops_store import isolation
 
+from ...store.agent_registry import AgentRow
 from ...store.evals import EvalStore
 from ...store.template_copies import TemplateCopies
 from ..account_names import require_team_accounts
@@ -267,21 +269,21 @@ async def used_in_all(rt: Runtime) -> dict[str, list[WorkflowUse]]:
     its slug, and v2 workflows whose latest version has an agent step on it, which runs the agent's published version.
     The agent page's Settings and Deployments tabs both read this list, so they agree on where the agent runs."""
     agents = await registry(rt).rows()
-    by_slug = {r["slug"]: r for r in agents}
-    published = {r["id"]: r["published_version"] for r in agents}
+    by_slug = {r.slug: r for r in agents}
+    published = {r.id: r.published_version for r in agents}
     out: dict[str, list[WorkflowUse]] = {}
     for r in agents:
-        if r["published_version"] is not None:
+        if r.published_version is not None:
             use: WorkflowUse = {
-                "workflowId": f"agent:{r['id']}",
+                "workflowId": f"agent:{r.id}",
                 "workflowName": "Its own one-step workflow",
-                "pinnedVersion": int(r["published_version"]),
-                "status": "paused" if r["paused"] else "live",
+                "pinnedVersion": r.published_version,
+                "status": "paused" if r.paused else "live",
                 # Publishes with the agent, so it is never behind, never republished by hand, and deleting the agent
                 # takes it too: callers leave it out of those (and workflowIds lists only other workflows).
                 "own": True,
             }
-            out.setdefault(str(r["id"]), []).append(use)
+            out.setdefault(r.id, []).append(use)
 
     def add(agent_id: str, workflow_id: str, name: str, version: int | None, status: str) -> None:
         if version is None or any(u["workflowId"] == workflow_id for u in out.get(agent_id, [])):
@@ -303,7 +305,7 @@ async def used_in_all(rt: Runtime) -> dict[str, list[WorkflowUse]]:
         for node in cast(list[dict[str, Any]], graph.get("nodes") or []):
             data = cast(dict[str, Any], node.get("data") or {})
             if (slug := data.get("agentSlug")) and (row := by_slug.get(str(slug))):
-                add(row["id"], w["id"], w["name"], published.get(row["id"]), "draft" if status == "draft" else status)
+                add(row.id, w["id"], w["name"], published.get(row.id), "draft" if status == "draft" else status)
     for d in await engine_workflows(rt):
         definition = cast(dict[str, Any], d["definition"] or {})
         for node in cast(list[dict[str, Any]], definition.get("nodes") or []):
@@ -320,9 +322,10 @@ async def _view(rt: Runtime, agent_id: str, *, directory: ToolRows | Literal["as
         directory = await _directory(rt)
     reg = registry(rt)
     row = await reg.row(agent_id)
-    spec = (await reg.version(agent_id, int(row["version"])))["spec"]
+    spec = (await reg.version(agent_id, row.version)).spec
     tasks = (await tasks_24h(rt)).get(agent_id, 0)
-    listed = {**row, "spec": spec, "tasks_24h": tasks}
+    # The reply is built from the same keys a listed page row carries (`_decorated` reads both).
+    listed = {**row.model_dump(), "spec": spec, "tasks_24h": tasks}
     return _decorated(listed, await _offered(rt, directory), (await used_in_all(rt)).get(agent_id, []))
 
 
@@ -356,7 +359,7 @@ async def _checked_tools(rt: Runtime, tool_ids: list[str], granted: list[str]) -
                 row = await registry(rt).row(aid)
             except NotFound as exc:
                 raise ValidationFailed(f"Unknown tools: {t}.", code="unknown_tool") from exc
-            if row.get("published_version") is None:
+            if row.published_version is None:
                 raise ValidationFailed(
                     f"Agent {aid} is not published, so it cannot be granted.",
                     code="not_published",
@@ -404,17 +407,17 @@ async def list_agents(
     return ok({**listed, "data": views})
 
 
-async def changeable(rt: Runtime, me: Principal, agent_id: str, action: str) -> dict[str, Any]:
+async def changeable(rt: Runtime, me: Principal, agent_id: str, action: str) -> AgentRow:
     """The agent's row once the caller may change it (auth.require_builder: the roles grid, in the team that owns it or,
     for one no team owns, the team the request acts in)."""
     row = await registry(rt).row(agent_id)
     require_builder(
         me,
         area="agents",
-        team_id=row["team_id"],
+        team_id=row.team_id,
         action=action,
-        what=f"agent {row['slug']}",
-        protection=row.get("protection"),
+        what=f"agent {row.slug}",
+        protection=row.protection,
     )
     return row
 
@@ -463,7 +466,8 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
     row = await changeable(rt, me, agent_id, "edit")
     if body.template_id is not None or body.protection is not None:
         require_provisioner(caller_of(me), "agents")
-    spec = dict((await reg.version(agent_id, int(row["version"])))["spec"])
+    # The draft as the patch below edits it, key by key.
+    spec: dict[str, Any] = dict((await reg.version(agent_id, row.version)).spec)
     patch = body.model_dump(
         exclude_none=True,
         exclude={
@@ -604,27 +608,27 @@ async def list_versions(rt: Rt, _: Reader, __: Tx, agent_id: str) -> JSONRespons
     reg = registry(rt)
     row = await reg.row(agent_id)
     requests = await reg.requests("agent", agent_id)
-    pending = next((r for r in requests if r["status"] == "pending"), None)
-    rejected = {int(r["version"]) for r in requests if r["status"] == "rejected"}
-    asked = {int(r["version"]) for r in requests}
+    pending = next((r for r in requests if r.status == "pending"), None)
+    rejected = {int(r.version) for r in requests if r.status == "rejected"}
+    asked = {int(r.version) for r in requests}
     out: list[dict[str, Any]] = []
     for v in await reg.versions(agent_id):
-        n = int(v["version"])
+        n = int(v.version)
         # History is what was published or put to a reviewer, plus the one draft; saves the per-save model
         # left behind are not listed.
-        if not (v["published_at"] or n == row["version"] or n in asked):
+        if not (v.published_at or n == row.version or n in asked):
             continue
         out.append(
             {
                 "version": n,
-                "note": v["note"],
-                "changes": v["changes"],
-                "current": n == row["published_version"],
+                "note": v.note,
+                "changes": v.changes,
+                "current": n == row.published_version,
                 "state": version_state(row, n, pending, rejected),
-                "savedAt": v["saved_at"],
-                "savedBy": v["saved_by"],
-                **({"publishedAt": v["published_at"], "publishedBy": v["published_by"]} if v["published_at"] else {}),
-                **({"reviewId": v["review_id"]} if v["review_id"] else {}),
+                "savedAt": v.saved_at,
+                "savedBy": v.saved_by,
+                **({"publishedAt": v.published_at, "publishedBy": v.published_by} if v.published_at else {}),
+                **({"reviewId": v.review_id} if v.review_id else {}),
             }
         )
     return ok(out)
@@ -666,24 +670,24 @@ async def restore_version(rt: Rt, me: Me, agent_id: str, version: int) -> JSONRe
     reg = registry(rt)
     await changeable(rt, me, agent_id, "restore a version of")
     old = await reg.version(agent_id, version)
-    await reg.save(agent_id, dict(old["spec"]), by=me.email, note=f"Restored from v{version}")
+    await reg.save(agent_id, dict(old.spec), by=me.email, note=f"Restored from v{version}")
     return ok(await _view(rt, agent_id))
 
 
 async def _publish_decision(
     rt: Runtime,
     agent_id: str,
-    row: dict[str, Any],
+    row: AgentRow,
     version: int,
     document: Document | Literal["read"] | None = "read",
 ) -> Decision:
     """What the team's publish policy says about publishing `version`; the preview and the publish both ask here, so
     the dialog never promises what the publish does not do."""
     reg = registry(rt)
-    spec = (await reg.version(agent_id, version))["spec"]
-    live = await reg.version(agent_id, int(row["published_version"])) if row["published_version"] else None
+    spec = (await reg.version(agent_id, version)).spec
+    live = await reg.version(agent_id, int(row.published_version)) if row.published_version else None
     return await decide(
-        rt, area="agents", team_id=row["team_id"], old=live["spec"] if live else None, new=spec, document=document
+        rt, area="agents", team_id=row.team_id, old=live.spec if live else None, new=spec, document=document
     )
 
 
@@ -707,11 +711,11 @@ async def request_publish(rt: Rt, me: Me, agent_id: str, body: PublishRequestInp
     row = await changeable(rt, me, agent_id, "publish")
     require_newest_draft(row, body.version)
     v = await reg.version(agent_id, body.version)
-    spec = v["spec"]
+    spec = v.spec
     for alias in limits_of(spec).allowed_models:
         await require_known_alias(rt, alias)
     named = cast(dict[str, str], spec.get("accounts") or {})
-    await require_team_accounts(rt, str(row["team_id"] or ""), [("The agent", a, n) for a, n in named.items()])
+    await require_team_accounts(rt, str(row.team_id or ""), [("The agent", a, n) for a, n in named.items()])
     decision = await _publish_decision(rt, agent_id, row, body.version)
     approved = not decision.review_required
     review_body = {
@@ -731,10 +735,13 @@ async def request_publish(rt: Rt, me: Me, agent_id: str, body: PublishRequestInp
         replaces_older=True,
     )
     if approved:
-        await reg.publish(agent_id, body.version, by=req["decided_by"], review_id=req["id"])
-        if not row["paused"]:
+        await reg.publish(agent_id, body.version, by=req.decided_by, review_id=req.id)
+        if not row.paused:
             go_live(rt, agent_id, body.version, spec)
-    return ok(review_view(req, name=spec["name"], slug=row["slug"], sla_hours=await sla_hours(rt)), status=201)
+    return ok(
+        review_view(req, name=narrow.required(spec, "name", str), slug=row.slug, sla_hours=await sla_hours(rt)),
+        status=201,
+    )
 
 
 @router.post("/{agent_id}/paused", response_model=Envelope[Agent])
@@ -743,14 +750,14 @@ async def set_paused(rt: Rt, me: Me, agent_id: str, body: PausedInput) -> JSONRe
     admin of the owning team pauses, as for a workflow (engine_lifecycle)."""
     reg = registry(rt)
     row = await changeable(rt, me, agent_id, "pause" if body.paused else "resume")
-    published = row["published_version"]
+    published = row.published_version
     if body.paused and published is None:
         raise Conflict("This agent has never been published, so there is nothing to pause.", code="not_published")
     await reg.set_paused(agent_id, body.paused)
     if body.paused:
         take_down(rt, agent_id)
     elif published is not None:
-        go_live(rt, agent_id, int(published), (await reg.version(agent_id, int(published)))["spec"])
+        go_live(rt, agent_id, int(published), (await reg.version(agent_id, int(published))).spec)
     return ok(await _view(rt, agent_id))
 
 
@@ -773,7 +780,7 @@ async def create_eval_run(
     second run. With cases in the body it scores them and keeps nothing. Empty cases and an unknown check type are
     422."""
     row = await registry(rt).row(agent_id)
-    can(caller_of(me), "evals", "run", team=row["team_id"], what=f"agent {row['slug']}")
+    can(caller_of(me), "evals", "run", team=row.team_id, what=f"agent {row.slug}")
     saved = body.cases is None
     raw = (
         [x["body"] for x in await EvalStore(rt.db).cases("agent", agent_id) if x["status"] == "active"]
@@ -785,27 +792,27 @@ async def create_eval_run(
     def turn_on(version: int) -> Any:
         async def turn(message: str, collections: tuple[str, ...]) -> dict[str, Any]:
             return await one_test_turn(
-                rt, agent_id, message, row={**row, "version": version}, collections=collections or None
+                rt, agent_id, message, row=row.model_copy(update={"version": version}), collections=collections or None
             )
 
         return turn
 
-    published = row["published_version"]
+    published = row.published_version
     live = int(published) if published is not None else None
-    compare = saved and live is not None and live != int(row["version"])
+    compare = saved and live is not None and live != int(row.version)
     started = time.perf_counter()
     run = await run_eval(
-        agent_id, cases, turn_on(int(row["version"])), turn_on(live) if compare and live is not None else None
+        agent_id, cases, turn_on(int(row.version)), turn_on(live) if compare and live is not None else None
     )
     if saved:
         results = run["results"]
         await EvalStore(rt.db).add_run(
             {
                 "id": run["id"],
-                "team_id": row["team_id"],
+                "team_id": row.team_id,
                 "kind": "agent",
                 "asset_id": agent_id,
-                "version": int(row["version"]),
+                "version": int(row.version),
                 "live_version": live if compare else None,
                 "trigger": TRIGGER_MANUAL,
                 "passed": run["summary"]["passed"],

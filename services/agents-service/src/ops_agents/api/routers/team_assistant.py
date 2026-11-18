@@ -22,7 +22,7 @@ from pydantic import Field
 from ops_access import can
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, ServiceUnavailable
-from ops_service_kit.http import Envelope, In, Out
+from ops_service_kit.http import Envelope, In, Json, Out
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 
@@ -100,29 +100,32 @@ async def give_app_tools(rt: Runtime, me: Principal, module_ids: list[str]) -> A
         return answer("none")
     reg = registry(rt)
     row = await reg.row(agent.id)
-    published = row["published_version"]
-    live = dict((await reg.version(agent.id, int(published)))["spec"]) if published is not None else {}
+    published = row.published_version
+    live = dict((await reg.version(agent.id, int(published))).spec) if published is not None else {}
     held = [str(t) for t in cast(list[Any], live.get("toolIds") or [])]
     # A skill brings the tools it names, writes included once the team has added them; a write still waits for a
     # person's approval at the gate on every call.
     needed = [*reads, *(str(n) for t in shipped for n in cast(list[Any], t["requires"]["tools"]))]
-    holds = {str(p.get("skillId")) for p in cast(list[dict[str, Any]], live.get("skillPins") or [])}
+    # A pin that is not an object raises as reading it did.
+    holds = {
+        str(narrow.an_object(p, "skill pin").get("skillId")) for p in narrow.a_list(live.get("skillPins") or [], "pins")
+    }
     if set(needed) <= set(held) and not await _unpinned(rt, shipped, holds):
         return answer("already")
-    if row["version"] != published or any(r["status"] == "pending" for r in await reg.requests("agent", agent.id)):
+    if row.version != published or any(r.status == "pending" for r in await reg.requests("agent", agent.id)):
         return answer("waiting")
-    spec = {**live, "toolIds": [*held, *dict.fromkeys(t for t in needed if t not in held)]}
+    spec: Json = {**live, "toolIds": [*held, *dict.fromkeys(t for t in needed if t not in held)]}
     for skill_id, name, version, renewed in await _skill_copies(rt, me, team, shipped):
         if skill_id in holds and not renewed:
             continue
-        spec["skillPins"] = await pin(rt, spec, skill_id, version, by=me.email, at=now_iso())
+        spec["skillPins"] = [*await pin(rt, spec, skill_id, version, by=me.email, at=now_iso())]
         pinned.append(name)
     note = f"Given the read tools of {', '.join(module_ids)} when the app was turned on"
     n = await reg.save(agent.id, spec, by=me.email, note=note)
     decision = await decide(rt, area="agents", team_id=team, old=live, new=spec)
     if not decision.review_required:
         await reg.publish(agent.id, n, by=me.email, review_id="app_turn_on")
-        if not row["paused"]:
+        if not row.paused:
             go_live(rt, agent.id, n, spec)
         return answer("given")
     v = await reg.version(agent.id, n)

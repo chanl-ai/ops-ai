@@ -1,4 +1,4 @@
-# 1924 boundaries crossed without a model in services/agents-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 1836 boundaries crossed without a model in services/agents-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body agents_platform_event
 1 body forms_upload_public
 1 reply health_health
@@ -14,8 +14,8 @@
 8 dict-any services/agents-service/src/ops_agents/api/account_names.py
 3 dict-any services/agents-service/src/ops_agents/api/actors.py
 6 dict-any services/agents-service/src/ops_agents/api/agent_calls.py
-34 dict-any services/agents-service/src/ops_agents/api/agent_registry.py
-5 dict-any services/agents-service/src/ops_agents/api/agent_test.py
+25 dict-any services/agents-service/src/ops_agents/api/agent_registry.py
+4 dict-any services/agents-service/src/ops_agents/api/agent_test.py
 2 dict-any services/agents-service/src/ops_agents/api/app.py
 3 task services/agents-service/src/ops_agents/api/app.py
 14 dict-any services/agents-service/src/ops_agents/api/apps_line.py
@@ -28,9 +28,9 @@
 8 dict-any services/agents-service/src/ops_agents/api/chat_history.py
 19 dict-any services/agents-service/src/ops_agents/api/chat_threads.py
 33 dict-any services/agents-service/src/ops_agents/api/child_runs.py
-13 dict-any services/agents-service/src/ops_agents/api/deployment_reviews.py
+10 dict-any services/agents-service/src/ops_agents/api/deployment_reviews.py
 3 dict-any services/agents-service/src/ops_agents/api/deps.py
-6 dict-any services/agents-service/src/ops_agents/api/egress_host_reviews.py
+1 dict-any services/agents-service/src/ops_agents/api/egress_host_reviews.py
 9 dict-any services/agents-service/src/ops_agents/api/email_trigger.py
 1 task services/agents-service/src/ops_agents/api/email_trigger.py
 2 dict-any services/agents-service/src/ops_agents/api/engine_agents.py
@@ -39,7 +39,7 @@
 15 dict-any services/agents-service/src/ops_agents/api/engine_host.py
 1 gather services/agents-service/src/ops_agents/api/engine_host.py
 1 task services/agents-service/src/ops_agents/api/engine_host.py
-15 dict-any services/agents-service/src/ops_agents/api/engine_lifecycle.py
+10 dict-any services/agents-service/src/ops_agents/api/engine_lifecycle.py
 8 dict-any services/agents-service/src/ops_agents/api/engine_resume.py
 163 dict-any services/agents-service/src/ops_agents/api/engine_reviews.py
 1 gather services/agents-service/src/ops_agents/api/engine_reviews.py
@@ -49,7 +49,7 @@
 2 dict-any services/agents-service/src/ops_agents/api/event_log.py
 5 dict-any services/agents-service/src/ops_agents/api/event_workflows.py
 2 dict-any services/agents-service/src/ops_agents/api/file_names.py
-12 dict-any services/agents-service/src/ops_agents/api/guardrails.py
+11 dict-any services/agents-service/src/ops_agents/api/guardrails.py
 96 dict-any services/agents-service/src/ops_agents/api/hitl_facade.py
 20 dict-any services/agents-service/src/ops_agents/api/legacy_tasks.py
 6 dict-any services/agents-service/src/ops_agents/api/mailbox_gateway.py
@@ -64,10 +64,10 @@
 1 dict-any services/agents-service/src/ops_agents/api/people_names.py
 1 dict-any services/agents-service/src/ops_agents/api/platform_policies.py
 15 dict-any services/agents-service/src/ops_agents/api/publish_policy.py
-13 dict-any services/agents-service/src/ops_agents/api/publish_reviews.py
+5 dict-any services/agents-service/src/ops_agents/api/publish_reviews.py
 1 dict-any services/agents-service/src/ops_agents/api/review_sla.py
 16 dict-any services/agents-service/src/ops_agents/api/review_text.py
-27 dict-any services/agents-service/src/ops_agents/api/routers/agents.py
+26 dict-any services/agents-service/src/ops_agents/api/routers/agents.py
 4 dict-any services/agents-service/src/ops_agents/api/routers/ai_steps.py
 4 dict-any services/agents-service/src/ops_agents/api/routers/assurance.py
 4 dict-any services/agents-service/src/ops_agents/api/routers/background.py
@@ -81,7 +81,7 @@
 1 task services/agents-service/src/ops_agents/api/routers/chat.py
 12 dict-any services/agents-service/src/ops_agents/api/routers/chat_connectors.py
 7 dict-any services/agents-service/src/ops_agents/api/routers/chat_settings.py
-36 dict-any services/agents-service/src/ops_agents/api/routers/engine.py
+34 dict-any services/agents-service/src/ops_agents/api/routers/engine.py
 13 dict-any services/agents-service/src/ops_agents/api/routers/forms.py
 2 dict-any services/agents-service/src/ops_agents/api/routers/graph_list.py
 25 dict-any services/agents-service/src/ops_agents/api/routers/graphs.py
@@ -91,15 +91,15 @@
 7 dict-any services/agents-service/src/ops_agents/api/routers/reviews.py
 1 extra-allow services/agents-service/src/ops_agents/api/routers/run_resume.py
 2 dict-any services/agents-service/src/ops_agents/api/routers/service_events.py
-6 dict-any services/agents-service/src/ops_agents/api/routers/skills.py
+5 dict-any services/agents-service/src/ops_agents/api/routers/skills.py
 12 dict-any services/agents-service/src/ops_agents/api/routers/task_types.py
 6 dict-any services/agents-service/src/ops_agents/api/routers/tasks.py
-10 dict-any services/agents-service/src/ops_agents/api/routers/team_assistant.py
+9 dict-any services/agents-service/src/ops_agents/api/routers/team_assistant.py
 14 dict-any services/agents-service/src/ops_agents/api/routers/template_types.py
-65 dict-any services/agents-service/src/ops_agents/api/routers/templates.py
+63 dict-any services/agents-service/src/ops_agents/api/routers/templates.py
 11 dict-any services/agents-service/src/ops_agents/api/routers/tool_catalog.py
 3 dict-any services/agents-service/src/ops_agents/api/routers/tool_uses.py
-18 dict-any services/agents-service/src/ops_agents/api/routers/widget.py
+17 dict-any services/agents-service/src/ops_agents/api/routers/widget.py
 7 dict-any services/agents-service/src/ops_agents/api/routers/widgets.py
 17 dict-any services/agents-service/src/ops_agents/api/routers/workflows.py
 6 dict-any services/agents-service/src/ops_agents/api/routing.py
@@ -111,7 +111,7 @@
 1 dict-any services/agents-service/src/ops_agents/api/schemas.py
 2 extra-allow services/agents-service/src/ops_agents/api/schemas.py
 11 dict-any services/agents-service/src/ops_agents/api/service_events.py
-58 dict-any services/agents-service/src/ops_agents/api/skills.py
+54 dict-any services/agents-service/src/ops_agents/api/skills.py
 3 dict-any services/agents-service/src/ops_agents/api/step_shapes.py
 1 dict-any services/agents-service/src/ops_agents/api/sweeper.py
 14 dict-any services/agents-service/src/ops_agents/api/task_assist.py
@@ -120,14 +120,14 @@
 1 task services/agents-service/src/ops_agents/api/tenant_tasks.py
 23 dict-any services/agents-service/src/ops_agents/api/timers.py
 1 dict-any services/agents-service/src/ops_agents/api/tool_access.py
-3 dict-any services/agents-service/src/ops_agents/api/tool_access_reviews.py
-12 dict-any services/agents-service/src/ops_agents/api/tool_module_reviews.py
+1 dict-any services/agents-service/src/ops_agents/api/tool_access_reviews.py
+5 dict-any services/agents-service/src/ops_agents/api/tool_module_reviews.py
 2 dict-any services/agents-service/src/ops_agents/api/typed_record_routes.py
 2 dict-any services/agents-service/src/ops_agents/api/usage.py
 4 dict-any services/agents-service/src/ops_agents/api/widget_sessions.py
-13 dict-any services/agents-service/src/ops_agents/api/widgets.py
+11 dict-any services/agents-service/src/ops_agents/api/widgets.py
 3 task services/agents-service/src/ops_agents/api/worker.py
-44 dict-any services/agents-service/src/ops_agents/api/workflow_registry.py
+43 dict-any services/agents-service/src/ops_agents/api/workflow_registry.py
 6 dict-any services/agents-service/src/ops_agents/app/evals.py
 5 dict-any services/agents-service/src/ops_agents/case_fields.py
 1 dict-any services/agents-service/src/ops_agents/case_wording.py
@@ -141,8 +141,6 @@
 3 dict-any services/agents-service/src/ops_agents/graphs/simple_workflow.py
 5 dict-any services/agents-service/src/ops_agents/graphs/sla.py
 1 dict-any services/agents-service/src/ops_agents/store/activity.py
-22 dict-any services/agents-service/src/ops_agents/store/agent_registry.py
-10 store-dict services/agents-service/src/ops_agents/store/agent_registry.py
 2 dict-any services/agents-service/src/ops_agents/store/background.py
 1 store-dict services/agents-service/src/ops_agents/store/background.py
 3 dict-any services/agents-service/src/ops_agents/store/batches.py

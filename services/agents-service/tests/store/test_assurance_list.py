@@ -23,6 +23,7 @@ from ops_agents.store.agent_registry import AgentRegistry
 from ops_agents.store.assurance_list import Checks, runs_page, stats, suites_page
 from ops_agents.store.evals import EvalStore
 from ops_agents.store.tenancy import tenant_tx
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListParams
 from ops_service_kit.settings import Settings
@@ -65,7 +66,7 @@ def tenant() -> str:
 
 async def _agent(e: AsyncEngine, agent_id: str, name: str, team: str, *, passed: int | None) -> None:
     """An agent with one saved case and, unless `passed` is None, one run of it."""
-    spec = {"name": name, "role": "r", "model": "m"}
+    spec: Json = {"name": name, "role": "r", "model": "m"}
     await AgentRegistry(e).create(spec, by=BY, team_id=team, agent_id=agent_id)
     store = EvalStore(e)
     await store.replace_cases("agent", agent_id, team, [CASE], by=BY)

@@ -52,6 +52,7 @@ from ops_service_kit.narrow import json_object
 from ops_store import isolation
 
 from ...store.actor_names import UNNAMED_WORKFLOW
+from ...store.agent_registry import PublishRequestRow
 from ...store.definition_list import definitions_page
 from ...store.engine import DatabaseError, EngineTransactions
 from ...store.events import EventLog
@@ -477,13 +478,13 @@ async def list_definitions(
     return ok({**listed, "data": rows})
 
 
-async def pending_requests(rt: Runtime) -> dict[str, dict[str, Any]]:
+async def pending_requests(rt: Runtime) -> dict[str, PublishRequestRow]:
     """Open publish requests of v2 workflows, by workflow id."""
     rows = await agent_registry(rt).all_requests()
-    return {r["subject_id"]: r for r in rows if r["kind"] == engine_lifecycle.KIND and r["status"] == "pending"}
+    return {r.subject_id: r for r in rows if r.kind == engine_lifecycle.KIND and r.status == "pending"}
 
 
-def workflow_status(summary: DefinitionSummary, request: dict[str, Any] | None) -> str:
+def workflow_status(summary: DefinitionSummary, request: PublishRequestRow | None) -> str:
     """The workflow's stage on a list row: archived once archived, the serving version's (live or paused) once one is
     approved, else in_review while a request is open, else draft."""
     if summary.archived_at:
@@ -549,9 +550,9 @@ async def v2_workflow_rows(rt: Runtime, since: str) -> list[dict[str, Any]]:
                 **(
                     {
                         "pendingPublish": {
-                            "reviewId": request["id"],
-                            "toVersion": request["version"],
-                            "requestedBy": request["requested_by"],
+                            "reviewId": request.id,
+                            "toVersion": request.version,
+                            "requestedBy": request.requested_by,
                         }
                     }
                     if request
@@ -647,10 +648,10 @@ async def definition_view(rt: Runtime, workflow_id: str, version: int | None = N
         for v in await store.versions(workflow_id)
     ]
     review = request and {
-        "id": request["id"],
-        "version": request["version"],
-        "requestedBy": request["requested_by"],
-        "createdAt": request["created_at"],
+        "id": request.id,
+        "version": request.version,
+        "requestedBy": request.requested_by,
+        "createdAt": request.created_at,
     }
     return {
         "workflowId": workflow_id,
@@ -739,11 +740,8 @@ async def option_sources(rt: Rt, me: Me, source: OptionSource) -> JSONResponse:
             for m in found
         ]
     elif source == "agents":
-        agents = [a for a in await agent_registry(rt).rows() if a["published_version"] is not None]
-        options = [
-            {"value": a["id"], "label": a["slug"], "description": f"Published v{a['published_version']}"}
-            for a in agents
-        ]
+        agents = [a for a in await agent_registry(rt).rows() if a.published_version is not None]
+        options = [{"value": a.id, "label": a.slug, "description": f"Published v{a.published_version}"} for a in agents]
     elif source == "tools":
         tools = [t for t in await known_tools(rt) if not str(t["id"]).startswith("workflow:")]
         options = [

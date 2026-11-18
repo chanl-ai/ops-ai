@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_agents.api.agent_registry import review_view
 from ops_agents.api.review_sla import PlatformReviewSla
-from ops_agents.store.agent_registry import publish_requests
+from ops_agents.store.agent_registry import PublishRequestRow, publish_requests
 from ops_agents.store.tenancy import current_tenant, tenant_scope
 from ops_identity import ServiceClient, dev_service_signer
 from tests.api.test_action_roles import (
@@ -84,17 +84,20 @@ async def test_the_workspace_review_deadline_moves_the_clock() -> None:
         assert await sla.hours() == hours, "a second read within the minute is cached"
     assert hours == 24 and reads == ["/v1/policies/reviewSlaHours"]
     now = datetime.now(UTC)
-    req: dict[str, Any] = {
-        "id": "AGP-1",
-        "kind": "agent",
-        "version": 2,
-        "subject_id": "ag_x",
-        "requested_by": "james@harborpine.example",
-        "note": "",
-        "body": {},
-        "status": "pending",
-        "created_at": now.isoformat(),
-        "decided_by": None,
-        "decided_at": None,
-    }
+    req = PublishRequestRow(
+        tenant_id="t",
+        id="AGP-1",
+        kind="agent",
+        version=2,
+        subject_id="ag_x",
+        requested_by="james@harborpine.example",
+        note="",
+        body={},
+        status="pending",
+        created_at=now.isoformat(),
+        decided_by=None,
+        decided_at=None,
+        decision_reason=None,
+        team_id="",
+    )
     assert review_view(req, name="X", slug="x", sla_hours=hours, now=now)["slaMinutes"] == 24 * 60
