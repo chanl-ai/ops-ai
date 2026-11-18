@@ -100,6 +100,12 @@ Feedback button: run the ui-feedback collector (`node ~/.claude/skills/ui-feedba
 ## Environment
 
 Secrets come from the environment or from a gitignored `.env` at the root (copy `.env.example`); make loads it and exports every line to the services, the console and the use-case runner. A secrets-manager wrapper (`<wrapper> -- make up`) works the same way and wins over the file.
+
+| Optional: `OPS_SECRETS_CMD` | What it does |
+|---|---|
+| Set it to your secrets manager's export, one that prints `KEY=value` lines, for example `OPS_SECRETS_CMD="<your secrets manager> export --format dotenv"` | `make` runs it once per run and exports the keys. Order: your shell environment, then the command, then `.env`, then `.devcontainer/.env.local`. Unset: nothing changes. `OPS_NO_SECRETS_CMD=1` turns it off. A failing command prints one warning line and make goes on. `make print-env-check KEYS='A B'` shows which names are set, never values |
+
+`.env` still replaces a same-named key from your shell environment; keys from the command never do.
 Services read `OPS_*` (`packages/ops_service_kit/src/ops_service_kit/settings.py`); make sets the `OPS_*`
 values below. The prefix was `OPS_RUNTIME_` before the service rename: rename any `OPS_RUNTIME_*` variable in your
 shell or secrets manager to `OPS_*`.

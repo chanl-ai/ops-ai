@@ -55,14 +55,15 @@ class Refused(SystemExit):
 
 
 def env_values(path: Path, keys: tuple[str, ...]) -> dict[str, str]:
-    """The named keys from an env file (KEY=value lines), else from the environment; nothing else is read."""
+    """The named keys from the environment, else from an env file (KEY=value lines); nothing else is read. The
+    environment comes first so a secrets manager's keys need no file."""
     found: dict[str, str] = {}
     if path.is_file():
         for line in path.read_text().splitlines():
             name, sep, value = line.strip().partition("=")
             if sep and name.strip().removeprefix("export ").strip() in keys:
                 found[name.strip().removeprefix("export ").strip()] = value.strip().strip('"').strip("'")
-    return {k: found.get(k) or os.environ.get(k, "") for k in keys}
+    return {k: os.environ.get(k) or found.get(k, "") for k in keys}
 
 
 def missing_keys(values: dict[str, str]) -> list[str]:

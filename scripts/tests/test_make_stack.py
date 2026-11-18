@@ -184,3 +184,35 @@ def test_health_warns_for_a_service_whose_recorded_commit_is_not_head(stack_repo
     assert (
         f"WARNING: agents runs {older[:8]}, tree is at {head[:8]}; restart with make restart SVC=agents" in out.stdout
     )
+
+
+def fake_secrets(tmp_path: Path, *, fail: bool = False) -> dict[str, str]:
+    """OPS_SECRETS_CMD naming a fake export on PATH: dotenv lines, or a failure."""
+    tool = tmp_path / "fake-export"
+    tool.write_text("#!/bin/sh\n" + ("exit 1\n" if fail else "echo SEC_KEY=v1\necho 'SEC_TWO=\"v2\"'\n"))
+    tool.chmod(0o755)
+    return {"PATH": f"{tmp_path}:{os.environ['PATH']}", "OPS_SECRETS_CMD": "fake-export --format dotenv"}
+
+
+def env_check(env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    return make(ROOT, "-s", "print-env-check", "KEYS=SEC_KEY SEC_TWO", env=env)
+
+
+def test_secrets_command_keys_load_below_the_callers_environment(tmp_path: Path) -> None:
+    out = env_check({**fake_secrets(tmp_path), "SEC_TWO": ""})
+    assert (out.stdout, out.stderr) == ("SEC_KEY: set\nSEC_TWO: not set\n", ""), "the caller's value (even empty) wins"
+    assert not (ROOT / ".run" / "secrets.mk").exists(), "the secrets file does not outlive the make run"
+
+
+def test_secrets_command_is_skipped_when_unset_or_off_without_a_word(tmp_path: Path) -> None:
+    on = fake_secrets(tmp_path)
+    nothing = ("SEC_KEY: not set\nSEC_TWO: not set\n", "")
+    for env in ({**on, "OPS_NO_SECRETS_CMD": "1"}, {**on, "OPS_SECRETS_CMD": ""}, {"PATH": on["PATH"]}):
+        out = env_check(env)
+        assert (out.stdout, out.stderr) == nothing, env
+
+
+def test_a_failing_secrets_command_warns_once_and_make_goes_on(tmp_path: Path) -> None:
+    out = env_check(fake_secrets(tmp_path, fail=True))
+    assert out.returncode == 0 and out.stdout == "SEC_KEY: not set\nSEC_TWO: not set\n"
+    assert out.stderr == "OPS_SECRETS_CMD failed; using .env and the environment\n"
