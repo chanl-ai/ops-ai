@@ -246,3 +246,52 @@ async def test_a_case_read_brings_its_customer_due_date_and_notes(stack: Stack) 
         found = await ops.run("find_cases", {"search": "annual review"})
     for summary in (read.output["summary"], found.output["summary"]):
         assert "Okafor Family Trust" in summary and "Risk profile last refreshed 14 months ago." in summary, summary
+
+
+async def test_a_start_card_is_drawn_only_where_the_person_may_run_the_workflows_owning_team(stack: Stack) -> None:  # noqa: F811 - the shared fixture
+    # A builder in one team and a viewer in another: a workflow the second team owns is never drawn as a start card,
+    # acting in either team, while the first team's is.
+    from ops_agents.api.routers.engine import definitions  # noqa: PLC0415 - the routers import this module's neighbours
+
+    _, rt = stack
+    for workflow, team in (("wf_ops_start", "team_ops"), ("wf_fraud_start", "team_fraud")):
+        with scope(TENANT, team):
+            await definitions(rt).publish(
+                workflow,
+                name=workflow,
+                definition=CARD_DISPUTE,
+                digest=workflow,
+                now="2026-11-18T00:00:00Z",
+                by="seed@harborpine.example",
+                team=team,
+            )
+
+    def jane_in(team: str) -> Principal:
+        return Principal(
+            name="jane",
+            email="jane@harborpine.example",
+            team_id=team,
+            tenant_id=TENANT,
+            team_ids=("team_ops", "team_fraud"),
+            role="builder",
+            roles={"team_ops": "builder", "team_fraud": "viewer"},
+        )
+
+    async def drawn(team: str, workflow: str) -> dict[str, Any]:
+        call = ToolCall(
+            id="c1",
+            name="start_workflow_form",
+            server="ops",
+            input={},
+            output={"cards": [{"type": "start", "id": workflow}], "summary": ""},
+            status="success",
+            duration_ms=1,
+        )
+        message = ChatMessage(id="m1", role="assistant", content="", at="2026-11-18T00:00:00Z", tool_calls=[call])
+        with scope(TENANT, team):
+            await ops_tools.fill_cards(rt, jane_in(team), [message])
+        return cast(dict[str, Any], cast(dict[str, Any], call.output)["cards"][0])
+
+    assert "view" in await drawn("team_ops", "wf_ops_start"), "a builder of the owning team gets the form"
+    assert (await drawn("team_ops", "wf_fraud_start")).get("missing"), "another team's workflow is never drawn"
+    assert (await drawn("team_fraud", "wf_fraud_start")).get("missing"), "a viewer of the owning team may not run it"
