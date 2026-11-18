@@ -46,10 +46,10 @@ await withUiStack(
       page.setDefaultTimeout(60_000);
       page.on('pageerror', (e) => errors.push(e.message));
 
-      // 1. Access has a Tool access page, reached from the title's page menu, and each view's count is the server's.
+      // 1. Access has a Tool access page, reached from the section's page tabs under the title (one sidebar lists one
+      // link per section), and each view's count is the server's.
       await page.goto(`${consoleUrl}/access`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-      await page.getByTestId('title-switcher').click();
-      await page.getByTestId('title-switcher-access-tool-access').click();
+      await page.getByTestId('section-tab-govern-access-tool-access').click();
       await page.waitForURL('**/access/tool-access');
       const tabs = page.getByRole('tablist', { name: 'Tool access views' });
       await tabs.waitFor();
