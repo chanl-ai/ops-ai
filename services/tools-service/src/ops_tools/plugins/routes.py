@@ -124,6 +124,14 @@ class PluginUpdateView(Out):
     tools: list[ToolChange]
 
 
+class AppUserRow(TypedDict):
+    """An agent or workflow as the users answer gathers it, before it becomes an AppUser."""
+
+    id: str
+    name: str
+    tools: list[str]
+
+
 class AppUser(Out):
     id: str
     name: str
@@ -784,7 +792,7 @@ def plugins_router(
             raise ServiceUnavailable("This service cannot ask who uses a tool.", code="tool_users_unavailable")
         b = await host.bindings.get(who.tenant_id, who.team.id, plugin.manifest.id)
         tools = [plugin.manifest.operation(t) for t in _team_tools(plugin, b)]
-        found: dict[str, dict[str, dict[str, Any]]] = {"agent": {}, "workflow": {}}
+        found: dict[str, dict[str, AppUserRow]] = {"agent": {}, "workflow": {}}
         for tool, uses in (await users.of(who.tenant_id, who.team.id, tools)).items():
             for use in uses:
                 row = found[use["kind"]].setdefault(use["id"], {"id": use["id"], "name": use["name"], "tools": []})

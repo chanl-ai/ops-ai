@@ -11,6 +11,7 @@ from typing import Any, ClassVar, cast
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
+from ops_service_kit.http import Json
 from ops_store import Guarantee
 
 from .clock import db_now, now_iso
@@ -100,7 +101,7 @@ class WorkQueue:
             )
             rows = (await c.execute(q)).all()
         for r in rows:
-            p = cast(dict[str, Any], r.payload or {})
+            p = cast(Json, r.payload or {})
             if r.kind == "resume" and p.get("interruptId") in (None, interrupt_id):
                 return True
             if r.kind == "timeout" and (p.get("node"), p.get("iteration")) == (node, iteration):

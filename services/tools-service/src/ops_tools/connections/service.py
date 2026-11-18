@@ -629,7 +629,7 @@ class ConnectionService:
         ]
         return {**brief, **keys, **plugin_view, "redirectUri": redirect_uri, "people": people, "activity": activity}
 
-    def kinds(self) -> dict[str, Any]:
+    def kinds(self) -> Json:
         return views() | {"redirectUri": self._redirect() if self.console_url else None}
 
     async def detail(self, who: Caller, connection_id: str) -> AccountView:
@@ -736,7 +736,7 @@ class ConnectionService:
             raise ValidationFailed("The team account is a backup only when each person signs in, team as backup.")
         sealed: dict[str, str] = {}
         drop = False
-        detail: dict[str, Any] = {"fields": sorted(values)}
+        detail: dict[str, list[str] | str | None] = {"fields": sorted(values)}
         action = "changed"
         client: ClientPick | None = None
         if "credential_id" in i:
@@ -1126,7 +1126,7 @@ class ConnectionService:
         conn = await self._signs_in(who, connection_id, right=right)
         return taken, conn
 
-    async def _code_answer(self, who: Caller, taken: StateRow, conn: Account, code: str) -> dict[str, Any]:
+    async def _code_answer(self, who: Caller, taken: StateRow, conn: Account, code: str) -> Json:
         """The system's token answer for the code, through the account's app; raises AuthFailed."""
         settings: Json = dict(conn.settings)
         proof = await self._client_proof(who, conn, f"sign-in {conn.name}")

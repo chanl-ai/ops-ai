@@ -4,7 +4,7 @@ superseded), which only the transitions below change."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Annotated, Any, ClassVar, TypedDict
+from typing import Annotated, ClassVar, TypedDict
 
 import sqlalchemy as sa
 from pydantic import BeforeValidator, JsonValue
@@ -207,7 +207,7 @@ class DefinitionStore:
         async with self.tx.tenant_tx() as c:
             return await one(c, q.order_by(t.c.version.desc()).limit(1), DefinitionRow)
 
-    async def current(self, workflow_id: str, *, team: str | None = None) -> dict[str, Any] | None:
+    async def current(self, workflow_id: str, *, team: str | None = None) -> Json | None:
         """serving() as a mapping; only tests still read it, and it goes once they read serving()."""
         found = await self.serving(workflow_id, team=team)
         return found.model_dump() if found else None
@@ -288,9 +288,7 @@ class DefinitionStore:
         async with self.tx.tenant_tx() as c:
             return await one(c, q, DefinitionRow)
 
-    async def get(
-        self, workflow_id: str, version: int | None = None, *, team: str | None = None
-    ) -> dict[str, Any] | None:
+    async def get(self, workflow_id: str, version: int | None = None, *, team: str | None = None) -> Json | None:
         """row() as a mapping; only tests still read it, and it goes once they read row()."""
         found = await self.row(workflow_id, version, team=team)
         return found.model_dump() if found else None
