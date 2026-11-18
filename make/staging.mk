@@ -11,12 +11,12 @@ stg-deploy: ## Build and deploy REF (default HEAD) to your staging app (STG_APP)
 stg-deploy-ci: ## Deploy REF (default develop) to staging on GitHub (deploy-staging.yml) and watch the run; SKIP_WALK=1, REASON=; changes the live app
 	sh $(ROOT)/deploy/fly/stg_deploy_ci.sh
 
-stg-rollback: ## Redeploy the image of the release before the current one (or TO=<sha> of an earlier deploy), no build
+stg-rollback: ## Swap the machine back to the image of the release before the current one (or TO=<sha>) and check every process: no build, grants or walk
 	@. $(ROOT)/deploy/fly/stg_env.sh; ref="$(TO)"; [ -n "$$ref" ] || ref=$$(fly releases -a "$$STG_APP" --json | python3 -c \
 	  "import json,sys; r=[x for x in json.load(sys.stdin) if x['Status']=='complete']; print(r[1]['ImageRef'].rsplit(':',1)[1] if len(r)>1 else '')"); \
 	[ -n "$$ref" ] || { echo "stg-rollback: no earlier release"; exit 1; }; \
 	echo "stg-rollback: to $$ref (migrations stay applied; they only add)"; \
-	REF=$$ref SKIP_BUILD=1 sh $(ROOT)/deploy/fly/stg_deploy.sh
+	REF=$$ref STG_ROLLBACK=1 sh $(ROOT)/deploy/fly/stg_deploy.sh
 
 stg-health: ## Every process on the staging machine, up or down
 	@. $(ROOT)/deploy/fly/stg_env.sh; fly ssh console -a "$$STG_APP" -C "python3 /app/deploy/host/ops_host.py --check /app/deploy/fly/processes.toml"

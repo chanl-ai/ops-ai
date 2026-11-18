@@ -131,9 +131,9 @@ jobs:
           case "$SHA" in "$STG_PREVIOUS"*)
             echo "result=not possible: the release before was this same commit" >> "$GITHUB_OUTPUT"; exit 1 ;;
           esac
-          # The walk is left out: the rollback proves every process, OCR, plugins and the signed-in request.
-          if SKIP_WALK=1 make -s stg-rollback TO="$STG_PREVIOUS" 2>&1 | tee "$RUNNER_TEMP/stg-rollback.log"; then
-            echo "result=done: staging runs $STG_PREVIOUS again, checked" >> "$GITHUB_OUTPUT"
+          # A rollback swaps the image and waits for every process; it runs no grants, OCR, plugin, sign-in or walk step.
+          if make -s stg-rollback TO="$STG_PREVIOUS" 2>&1 | tee "$RUNNER_TEMP/stg-rollback.log"; then
+            echo "result=done: staging runs $STG_PREVIOUS again, every process up" >> "$GITHUB_OUTPUT"
           else
             echo "result=FAILED: staging may be down; run make stg-health" >> "$GITHUB_OUTPUT"; exit 1
           fi

@@ -22,6 +22,8 @@ While a release or hotfix branch exists, staging belongs to it: a develop push s
 the release branch deploys, and so does a deploy started by hand (`make stg-deploy-ci REF=<ref>`). The repository
 variable `STAGING_HOLD` freezes staging the same way for any other reason.
 
+A rollback (`make stg-rollback`, also run by `deploy-staging.yml` when a check fails after the machine changed) only updates every machine of the staging app to the previous image (`fly machine update`) and waits until every process is up. It does not run migrations (the release command is part of `fly deploy`, which a rollback does not call, and an older image cannot find a newer schema revision), nor a schema dump, grants, OCR, plugin, sign-in or click-walk step: migrations only add, so the older image runs on the newer schema, and the grants for the older commit are already applied.
+
 ## What `make release-pr` checks
 
 | Check | Source | Refusal |
