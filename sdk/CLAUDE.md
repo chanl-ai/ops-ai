@@ -49,7 +49,7 @@ what the package itself declares, as an outside developer's install would.
 | The documents are the source | A method is missing or wrong because the service's route or its `x-ops-public` marker is; fix the service and run `make openapi`, never the generated files |
 | Both languages move together | The hand-written nouns match one for one (`python/src/ops_ai/_words.py` and `typescript/src/words.ts` define the same classes); a noun or verb added to one is added to the other in the same change. The CLI is Python only |
 | No stack in unit tests | `python/tests` and `typescript/test` run without services; the live examples (`python/examples/seed_team.py`, `typescript/examples/run-and-decide.mjs`) run only under `make sdk-check` |
-| Publishing | `.github/workflows/sdk-publish.yml` builds and dry-runs both packages; it publishes only when the repository variable it names is set |
+| Publishing | `.github/workflows/sdk-publish.yml` runs on a `vX.Y.Z` tag or by hand, never on a branch push; it builds and dry-runs both packages and publishes only when the repository variable it names is set |
 
 Use cases drive these packages through their `sdk` and `cli` layers: `make usecase-test UC=<id> LAYER=sdk` (or
 `LAYER=cli`); `make usecase-list` shows each use case's layers ([registry](../docs/usecases/README.md)).

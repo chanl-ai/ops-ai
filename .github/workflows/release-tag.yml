@@ -1,6 +1,9 @@
-# Every merge to main is tagged `vYYYY-MM-DD.N` (What's new shows it) with `make release-tag`, which runs the same way
-# locally (DRY=1 prints the next name). Staging runs develop, so a merge to main does not touch it; to put a release or
-# any other commit on staging, run deploy-staging.yml by hand (`make stg-deploy-ci REF=<ref>`).
+# Every merge of a release/* or hotfix/* branch into main is tagged `vX.Y.Z` (the version in the branch name; What's new
+# shows it) with `make release-tag`, which runs the same way locally (DRY=1 prints the name). A push to main that is
+# no release or hotfix merge gets no tag. The tag push made with the workflow token starts no workflow of its own, so
+# this one starts sdk-publish.yml and release-images.yml on the new tag with workflow_dispatch, which the token may
+# start. Staging runs develop and the release branch under test, so a merge to main does not touch it; to put any
+# other commit on staging, run deploy-staging.yml by hand (`make stg-deploy-ci REF=<ref>`).
 name: release-tag
 
 on:
@@ -15,7 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      contents: write # pushes the date tag
+      contents: write # pushes the version tag
+      actions: write # starts sdk-publish.yml and release-images.yml on it
     concurrency:
       group: release-tag
       cancel-in-progress: false
@@ -24,6 +28,20 @@ jobs:
         with:
           fetch-depth: 0
       - name: Tag the merge
+        id: tag
         env:
           REF: ${{ github.sha }}
-        run: make -s release-tag
+        run: |
+          out=$(make -s release-tag)
+          echo "$out"
+          case "$out" in
+            *"pushed to"*) echo "tag=$(git tag --points-at "$REF" --list 'v[0-9]*.[0-9]*.[0-9]*' | head -1)" >> "$GITHUB_OUTPUT" ;;
+          esac
+      - name: Publish the SDKs and build the images for the new tag
+        if: steps.tag.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          gh workflow run sdk-publish.yml --ref "$TAG"
+          gh workflow run release-images.yml --ref "$TAG"

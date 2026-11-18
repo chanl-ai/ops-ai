@@ -127,15 +127,16 @@ is replaced by a newer one, a running one finishes). It starts two ways:
 
 | Trigger | When | Pin |
 |---|---|---|
-| A merge to `develop` | `ci.yml` job `staging` calls it once `ci-ok` passed for that commit | Skipped with a notice while staging is pinned |
+| A merge to `develop` | `ci.yml` job `staging` calls it once `ci-ok` passed for that commit | Skipped with a notice while a `release/*` or `hotfix/*` branch exists on origin, or `STAGING_HOLD` is set |
+| A push to `release/*` or `hotfix/*` | The same job | Not frozen: it is the release being tested |
 | By hand | `make stg-deploy-ci REF=<branch, tag or commit>` (`SKIP_WALK=1`, `REASON=`), or Actions, deploy-staging, Run workflow | Deploys anyway; the summary says which pin it overrode |
 
 | To | Do |
 |---|---|
 | Put another commit, tag or branch on staging | `make stg-deploy-ci REF=<ref>`; it starts the run and watches it to the end |
 | Keep it there through later merges | Set the repository variable `STAGING_HOLD` to the reason; merges are still checked but not deployed |
-| Test a release on staging | Open the release PR from `develop` into `main`; while it is open, merges to `develop` skip the deploy with a notice. Merge or close it to resume |
-| Go back to `develop` | Clear `STAGING_HOLD`, or merge the release PR; the next merge to `develop` deploys, or `make stg-deploy-ci` now |
+| Test a release on staging | Cut `release/X.Y.Z` (`make release-cut`, `docs/deploy/release.md`); each push to it deploys, and while it exists merges to `develop` skip the deploy with a notice |
+| Go back to `develop` | Delete the release or hotfix branch (after the back-merge) and clear `STAGING_HOLD`; the next merge to `develop` deploys, or `make stg-deploy-ci` now |
 
 `REF` is what is deployed; the workflow file runs from `develop` (`WORKFLOW_REF=` changes that). GitHub offers a
 hand-started run only for a workflow that is also on the default branch, `main`, so the button and `make stg-deploy-ci`
@@ -148,7 +149,7 @@ shows the commit, the trigger, the reason, any pin it overrode, the URL, each st
 rollback's result. A push to `main` (a release) is only tagged, by `release-tag.yml`.
 
 The local pin (`staging-pin` in the config folder, written by `repo.sh snapshot`) still stops `make stg-deploy` on the
-owner's machine; the runner has no such file, so it reads the open release PR and `STAGING_HOLD` instead.
+owner's machine; the runner has no such file, so it lists the release and hotfix branches on origin (`git ls-remote`) and reads `STAGING_HOLD` instead.
 
 The job runs in the GitHub environment `staging` (Settings, Environments) and fails, naming what is missing, while any of
 these is unset. The variables are the app names, written into `staging.env` on the runner; the secrets are written to
@@ -176,19 +177,19 @@ runs after merge.
 
 ### Production on GitHub: not built yet
 
-No workflow deploys production. A tag `vYYYY-MM-DD.N` is made by `release-tag.yml` on a merge to `main`; nothing deploys
+No workflow deploys production. A tag `vX.Y.Z` is made by `release-tag.yml` on the merge of a release or hotfix branch into `main`; nothing deploys
 it. A workflow that read a repository variable could not prove that a person approves each deploy, since the
 environment's reviewers and the place the deploy token lives are invisible to it. Before one returns, the owner sets up:
 
 | Item | Setting |
 |---|---|
-| Environment | A `production` environment (Settings, Environments) with required reviewers, and deployment tags limited to `v20*` |
+| Environment | A `production` environment (Settings, Environments) with required reviewers, and deployment tags limited to `v[0-9]*` |
 | Deploy token | `FLY_API_TOKEN` for the production app as a secret of that environment only, never a repository secret |
 | Other values | The production app's names as environment variables, and its database address and first-admin file as environment secrets |
 | Token for the tag push | A tag pushed with the repository's own token starts no workflow; a token that does, or a hand-started run with the tag |
 
 The workflow's first job, before the job that names the environment, reads the environment's protection rules through the
-API and stops unless required reviewers are set and the tag pattern is `v20*`. It then checks that the tag is on `main`
+API and stops unless required reviewers are set and the tag pattern is `v[0-9]*`. It then checks that the tag is on `main`
 and that a staging release ran the same tree. The deploy job is `.github/actions/stg-deploy` aimed at the production
 apps, so it runs migrations, grants, the process checks and the click walk as staging does.
 

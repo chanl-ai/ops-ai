@@ -2,8 +2,8 @@
 """The gitflow release commands behind `make release-cut`, `release-pr`, `release-back-merge` and `hotfix-cut`
 (docs/deploy/release.md). V=X.Y.Z names the version; DRY=1 (the default) prints what would happen and changes nothing.
 
-  cut         release/V from origin/develop, pushed, then deployed to staging with `make stg-deploy-ci`
-  hotfix-cut  hotfix/V from origin/main, pushed, then deployed to staging the same way
+  cut         release/V from origin/develop, pushed; the push deploys it to staging (ci.yml, job staging)
+  hotfix-cut  hotfix/V from origin/main, pushed; the push deploys it to staging the same way
   pr          release/V (or hotfix/V) into main; refuses unless ci.yml and the staging deploy with its click walk
               succeeded on the branch head; an open PR from that branch is printed instead of a second one
   back-merge  main into develop, after the tag vV exists on main
@@ -17,10 +17,8 @@ import re
 import subprocess
 import sys
 
-# A manual deploy-staging.yml run (make stg-deploy-ci) prints this line from deploy/fly/stg_deploy.sh when the walk ran.
+# deploy/fly/stg_deploy.sh prints this line when the walk ran.
 WALK = re.compile(r"click walk \((\d+) OK, (\d+) FAIL\)")
-# deploy-staging.yml's job `deploy`, called from ci.yml's job `staging` on a push to develop: "<caller> / <called>".
-CALLED_STAGING_JOB = "staging / deploy"
 
 
 class Refusal(Exception):
@@ -56,34 +54,40 @@ def branch_of(v: str) -> str:
     raise Refusal(f"neither release/{v} nor hotfix/{v} is on origin; make release-cut or hotfix-cut makes it")
 
 
+def runs_for(workflow: str, sha: str) -> list[dict]:
+    fields = "databaseId,conclusion,status"
+    return gh_json("run", "list", "--workflow", workflow, "--commit", sha, "--json", fields, "--limit", "10")
+
+
 def ci_status(sha: str) -> str:
-    runs = gh_json(
-        "run", "list", "--workflow", "ci.yml", "--commit", sha,
-        "--json", "databaseId,conclusion,status", "--limit", "10",
-    )  # fmt: skip
+    runs = runs_for("ci.yml", sha)
     if not runs:
         return "no ci.yml run"
-    return (
-        "success"
-        if any(r.get("conclusion") == "success" for r in runs)
-        else (runs[0].get("conclusion") or runs[0].get("status") or "unknown")
-    )
+    if any(r.get("conclusion") == "success" for r in runs):
+        return "success"
+    return runs[0].get("conclusion") or runs[0].get("status") or "unknown"
 
 
 def staging_problem(sha: str) -> str | None:
-    """Why the staging deploy of sha does not count, or None when it ran with a clean walk."""
-    runs = gh_json(
-        "run", "list", "--workflow", "deploy-staging.yml", "--commit", sha,
-        "--json", "databaseId,conclusion,status,event", "--limit", "10",
-    )  # fmt: skip
-    if not runs:
+    """Why the staging deploy of sha does not count, or None when it succeeded with a clean click walk.
+
+    The deploy is the `staging / deploy` job of the ci.yml run a push to the branch started, or the `deploy` job of a
+    deploy-staging.yml run started by hand (make stg-deploy-ci).
+    """
+    deploys = []
+    for workflow, job_name in (("ci.yml", "staging / deploy"), ("deploy-staging.yml", "deploy")):
+        for found in runs_for(workflow, sha):
+            jobs = gh_json("run", "view", str(found["databaseId"]), "--json", "jobs")["jobs"]
+            deploys += [j for j in jobs if j.get("name") == job_name]
+    if not deploys:
         return (
-            f"no deploy-staging.yml run for {sha[:8]}; make release-cut (or make stg-deploy-ci REF=<branch>) deploys it"
+            f"no staging deploy of {sha[:8]} (job 'staging / deploy' of ci.yml, or deploy-staging.yml): "
+            "push the branch or run make stg-deploy-ci REF=<branch>"
         )
-    latest = runs[0]
-    if latest.get("conclusion") != "success":
-        return f"the staging deploy of {sha[:8]} is {latest.get('conclusion') or latest.get('status')}, not success"
-    log = run("gh", "run", "view", str(latest["databaseId"]), "--log")
+    done = [j for j in deploys if j.get("conclusion") == "success"]
+    if not done:
+        return f"the staging deploy of {sha[:8]} is {deploys[0].get('conclusion') or 'not finished'}, not success"
+    log = run("gh", "run", "view", "--job", str(done[0]["databaseId"]), "--log")
     walk = WALK.search(log)
     if "click walk skipped" in log or not walk:
         return f"the staging deploy of {sha[:8]} did not run the click walk"
@@ -145,8 +149,8 @@ def release_body(v: str, branch: str, sha: str) -> str:
         lines.append(f"- {kind} {name} {old} -> {new}: {verdict}")
     lines += [
         "",
-        "Merge with a merge commit (no squash, no rebase). Then tag the merge commit "
-        f"v{v} and run make release-back-merge V={v}.",
+        f"Merge with a merge commit (no squash, no rebase). release-tag.yml then tags the merge v{v}; after that run "
+        f"make release-back-merge V={v}.",
     ]
     return "\n".join(lines)
 
@@ -178,14 +182,13 @@ def cut(dry: bool, source: str, prefix: str) -> int:
     sha = run("git", "rev-parse", f"origin/{source}").strip()
     print(f"release: {branch} from origin/{source} at {sha[:8]}; ci.yml on that commit: {ci_status(sha)}")
     print(f"release: then git push origin {sha}:refs/heads/{branch}")
-    print(f"release: then make stg-deploy-ci REF={branch} (deploy-staging.yml, started by hand, with the click walk)")
+    print("release: the push runs ci.yml, whose staging job deploys the branch with the click walk")
     if dry:
         print("release: dry run, nothing created (DRY=0 does it)")
         return 0
     run("git", "push", "origin", f"{sha}:refs/heads/{branch}")
-    print(f"release: pushed {branch}")
-    deploy = subprocess.run(["make", "stg-deploy-ci", f"REF={branch}", f"REASON=staging test of {branch}"], check=False)
-    return deploy.returncode
+    print(f"release: pushed {branch}; watch it with: gh run list --branch {branch}")
+    return 0
 
 
 def pr(dry: bool) -> int:

@@ -179,25 +179,28 @@ def test_update_url_in_a_git_checkout_without_version_starts_at_head(world: Worl
     assert refused.returncode != 0 and "compare" not in refused.stdout, refused.stdout
 
 
-def test_a_missing_target_is_the_latest_release_and_says_which(world: World) -> None:
+def test_a_missing_target_is_the_latest_release_and_an_old_date_tag_still_resolves(world: World) -> None:
     root = world.install("latest", with_git=False)
     (root / "VERSION").write_text(world.c1 + "\n")
     site = world.tmp / "site2"
     (site / "compare").mkdir(parents=True)
     (site / "releases.atom").write_text(
-        '<feed><entry><link href="https://x/releases/tag/v2026-11-12.2"/></entry>'
+        '<feed><entry><link href="https://x/releases/tag/v1.0.0"/></entry>'
         '<entry><link href="https://x/releases/tag/v2026-11-12.1"/></entry></feed>'
     )
-    (site / "compare" / f"{world.c1}...v2026-11-12.2.diff").write_text(
-        git(world.upstream, "diff", world.c1, world.c3) + "\n"
-    )
+    for tag in ("v1.0.0", "v2026-11-12.1"):
+        (site / "compare" / f"{world.c1}...{tag}.diff").write_text(
+            git(world.upstream, "diff", world.c1, world.c3) + "\n"
+        )
     env = {"UPDATE_BASE_URL": f"file://{site}"}
     url = run(root, "url", **env)
-    assert "...v2026-11-12.2.diff" in url.stdout and "v2026-11-12.2" in url.stdout.splitlines()[0], url.stdout
-    assert "latest release v2026-11-12.2" in url.stderr
+    assert "...v1.0.0.diff" in url.stdout and "latest release v1.0.0" in url.stderr, url.stderr
     down = run(root, "download", **env)
-    assert down.returncode == 0 and "latest release v2026-11-12.2" in down.stderr, down.stderr
-    assert list((root / ".run" / "updates").glob("*v2026-11-12.2.diff"))
+    assert down.returncode == 0 and "latest release v1.0.0" in down.stderr, down.stderr
+    assert list((root / ".run" / "updates").glob("*v1.0.0.diff"))
+    old = run(root, "download", "v2026-11-12.1", **env)
+    assert old.returncode == 0, old.stderr
+    assert list((root / ".run" / "updates").glob("*v2026-11-12.1.diff"))
 
 
 def test_update_download_saves_a_checked_diff_and_refuses_an_empty_or_misplaced_one(world: World) -> None:

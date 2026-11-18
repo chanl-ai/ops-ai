@@ -20,10 +20,11 @@ import json, os, sys
 args = sys.argv[1:]
 state = json.loads(os.environ["FAKE_GH"])
 if args[:2] == ["run", "list"]:
-    workflow = args[args.index("--workflow") + 1]
-    print(json.dumps(state["ci"] if workflow == "ci.yml" else state["staging"]))
-elif args[:2] == ["run", "view"]:
+    print(json.dumps(state["runs"][args[args.index("--workflow") + 1]]))
+elif args[:2] == ["run", "view"] and "--job" in args:
     print(state["log"])
+elif args[:2] == ["run", "view"]:
+    print(json.dumps({"jobs": state["jobs"][args[2]]}))
 elif args[:2] == ["pr", "list"]:
     print(json.dumps([]))
 else:
@@ -87,21 +88,31 @@ def release_pr(work: Path, tmp: Path, gh_state: dict) -> subprocess.CompletedPro
     )
 
 
+STAGING_JOB = {"name": "staging / deploy", "conclusion": "success", "databaseId": 11}
 READY = {
-    "ci": [{"databaseId": 1, "conclusion": "success", "status": "completed"}],
-    "staging": [{"databaseId": 2, "conclusion": "success", "status": "completed", "event": "workflow_dispatch"}],
+    "runs": {"ci.yml": [{"databaseId": 1, "conclusion": "success", "status": "completed"}], "deploy-staging.yml": []},
+    "jobs": {"1": [STAGING_JOB]},
     "log": "stg-deploy: click walk (41 OK, 0 FAIL)",
 }
-RED_CI = {"databaseId": 1, "conclusion": "failure", "status": "completed"}
+
+
+def ready(**changes: object) -> dict:
+    return {**READY, **changes}
 
 
 @pytest.mark.parametrize(
     ("state", "named"),
     [
-        ({**READY, "ci": [RED_CI]}, "ci.yml"),
-        ({**READY, "staging": []}, "deploy-staging.yml"),
-        ({**READY, "log": "stg-deploy: click walk skipped (SKIP_WALK=1)"}, "click walk"),
-        ({**READY, "log": "stg-deploy: click walk (40 OK, 1 FAIL)"}, "1 FAIL"),
+        (
+            ready(
+                runs={**READY["runs"], "ci.yml": [{"databaseId": 1, "conclusion": "failure", "status": "completed"}]}
+            ),
+            "ci.yml",
+        ),
+        (ready(jobs={"1": []}), "no staging deploy"),
+        (ready(jobs={"1": [{**STAGING_JOB, "conclusion": "failure"}]}), "failure"),
+        (ready(log="stg-deploy: click walk skipped (SKIP_WALK=1)"), "click walk"),
+        (ready(log="stg-deploy: click walk (40 OK, 1 FAIL)"), "1 FAIL"),
     ],
 )
 def test_it_refuses_unless_ci_and_the_staging_deploy_with_its_walk_succeeded(

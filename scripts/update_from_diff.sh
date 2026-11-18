@@ -37,7 +37,7 @@ installed() {
 target_or_latest() {
   if [ -n "${1:-}" ]; then printf '%s' "$1"; return; fi
   command -v curl >/dev/null 2>&1 || die "TO is missing and curl is not here to look up the latest release; pass TO=<release tag or commit>"
-  tag=$(curl -fsSL "$BASE/releases.atom" 2>/dev/null | grep -Eo 'releases/tag/v[0-9]{4}-[0-9]{2}-[0-9]{2}\.[0-9]+' | head -1 | sed 's|releases/tag/||') || tag=
+  tag=$(curl -fsSL "$BASE/releases.atom" 2>/dev/null | grep -Eo 'releases/tag/v([0-9]+\.[0-9]+\.[0-9]+|[0-9]{4}-[0-9]{2}-[0-9]{2}\.[0-9]+)' | head -1 | sed 's|releases/tag/||') || tag=
   [ -n "$tag" ] || die "TO is missing and no release was found at $BASE/releases; pass TO=<release tag or commit>"
   echo "Using the latest release $tag (pass TO= to choose another)" >&2
   printf '%s' "$tag"
@@ -45,11 +45,11 @@ target_or_latest() {
 
 need_target() {
   case "${1:-}" in
-    "") die "TO is missing: name the release or commit you are updating to, e.g. TO=v2026-11-12.1" ;;
+    "") die "TO is missing: name the release or commit you are updating to, e.g. TO=v1.2.0" ;;
     *[!0-9a-f]* | ??????) ;;
   esac
-  if printf '%s' "$1" | grep -Eq '^[0-9a-f]{7,40}$|^v[0-9]{4}-[0-9]{2}-[0-9]{2}\.[0-9]+$'; then return 0; fi
-  die "TO '$1' is not a release (vYYYY-MM-DD.N) or a commit; a branch name moves"
+  if printf '%s' "$1" | grep -Eq '^[0-9a-f]{7,40}$|^v[0-9]+\.[0-9]+\.[0-9]+$|^v[0-9]{4}-[0-9]{2}-[0-9]{2}\.[0-9]+$'; then return 0; fi
+  die "TO '$1' is not a release (vX.Y.Z, or the older vYYYY-MM-DD.N) or a commit; a branch name moves"
 }
 
 # Splits the diff in $1 into $WORK/text.diff (what can be applied), $WORK/binary.txt (paths a text diff cannot carry) and
