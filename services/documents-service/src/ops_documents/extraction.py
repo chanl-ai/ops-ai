@@ -35,15 +35,18 @@ from ops_documents.store import ExtractionRow, ExtractionsStore
 from ops_documents.store.document_types import SINGLE
 from ops_documents.store.extractions import file_read
 from ops_extract import boxes, classify, page_images, prompt, result, rules, templates
-from ops_extract.checks import CLEAN_RULES, DEFAULT_FLOOR, in_quote, threshold
+from ops_extract.checks import CLEAN_RULES, DEFAULT_FLOOR, entries, in_quote, threshold
 from ops_extract.floor import FloorUnreadError, PlatformFloor
 from ops_extract.layout import layout_of, page_text
 from ops_extract.pages import Pages
+from ops_extract.shapes import Box, Layout
 from ops_files_client import FileInfo
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_ingest.reading import Reading, read
+from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
+from ops_service_kit.narrow import Malformed, an_object
 from ops_service_kit.settings import Settings
 from ops_store import background, isolation
 from ops_store.listing import ListPage
@@ -312,15 +315,15 @@ class Pictures:
                 out.append(page_images.whole(n, image))
         return out
 
-    async def crops(self, boxed: dict[str, list[dict[str, Any]]]) -> dict[str, page_images.PageImage]:
+    async def crops(self, boxed: dict[str, list[Box]]) -> dict[str, page_images.PageImage]:
         """Per field, the part of its page around its boxes, or none when the policy says no."""
         if not boxed or not await self.allowed():
             return {}
         out: dict[str, page_images.PageImage] = {}
         for key, found in boxed.items():
-            page = int(found[0]["page"])
+            page = found[0]["page"]
             if (image := await self._page(page)) is not None:
-                out[key] = page_images.crop(page, image, [b for b in found if int(b["page"]) == page])
+                out[key] = page_images.crop(page, image, [boxes.box_json(b) for b in found if b["page"] == page])
         return out
 
 
@@ -328,10 +331,10 @@ class Pictures:
 LOW_CONFIDENCE = "was read with too little confidence to trust"
 
 
-def fingerprint_of(out: dict[str, Any], layout: dict[str, Any]) -> str:
+def fingerprint_of(out: Json, layout: Layout) -> str:
     """A single-record read's layout without its values, from the boxes its fields were found in."""
-    fields = cast(dict[str, dict[str, Any]], out.get("fields") or {})
-    found = {k: cast(list[dict[str, Any]], f.get("boxes") or []) for k, f in fields.items()}
+    fields = an_object(out.get("fields") or {}, "fields")
+    found = {k: boxes.boxes_of(an_object(f, f"field {k}").get("boxes")) for k, f in fields.items()}
     return templates.fingerprint(templates.Read(layout, found))
 
 
@@ -957,7 +960,7 @@ class Extractor:
         A matched template whose required zone reads nothing is a miss too (likely the wrong form), so the model reads
         the file rather than a part being saved; a zone that reads an invalid value is re-read alone."""
         assert pages.layout is not None
-        fields = cast(list[dict[str, Any]], row.request["fields"])
+        fields = [an_object(f, "a field") for f in entries(row.request["fields"])]
         floor = await self.floors.floor(row.tenant_id, row.team) if self.floors is not None else DEFAULT_FLOOR
         best: templates.Miss | None = None
         for template in layouts:
@@ -979,7 +982,9 @@ class Extractor:
             empty = [
                 str(f["key"])
                 for f in fields
-                if f.get("required") and out["fields"][str(f["key"])].get("extractedValue") is None
+                if f.get("required")
+                and an_object(an_object(out["fields"], "fields")[str(f["key"])], str(f["key"])).get("extractedValue")
+                is None
             ]
             if empty:
                 best = templates.Miss(found.template_id, 1.0, [f"zone {k} read nothing" for k in empty])
@@ -1001,27 +1006,32 @@ class Extractor:
     async def _ruled(
         self,
         row: ExtractionRow,
-        out: dict[str, Any],
+        out: Json,
         pages: Pages,
         usage: Usage,
         floor: float,
         *,
         pictures: Pictures | None = None,
-    ) -> tuple[result.Status, dict[str, Any]]:
+    ) -> tuple[result.Status, Json]:
         """The read after its checks: every field a rule rejected (its type, pattern, emptyWhen or a check
         across fields) is asked again in one model call naming only those fields and why; a value that now passes
         every rule replaces the first, and one that still fails goes to review with the rule named. When the read may
         show page images, a field read below its review threshold joins the re-read too, and each field
         whose words were found goes with a crop of the page around them."""
-        checks = cast(list[dict[str, Any]], row.request.get("checks") or [])
-        fields = cast(dict[str, dict[str, Any]], out["fields"])
+        checks = [an_object(c, "a check") for c in entries(row.request.get("checks"))]
+        fields = an_object(out["fields"], "fields")
         first = copy.deepcopy(fields)
         rules.apply(first, checks)
         failures = rules.failed(first)
         crops = await self._crops(row, first, failures, pages, floor=floor, pictures=pictures)
-        failures |= {k: (first[k].get("extractedValue"), LOW_CONFIDENCE) for k in crops if k not in failures}
+        failures |= {
+            k: (an_object(first[k], f"field {k}").get("extractedValue"), LOW_CONFIDENCE)
+            for k in crops
+            if k not in failures
+        }
         if failures and self.models is not None:
-            asked = [f for f in cast(list[dict[str, Any]], row.request["fields"]) if str(f["key"]) in failures]
+            requested = [an_object(f, "a field") for f in entries(row.request["fields"])]
+            asked = [f for f in requested if str(f["key"]) in failures]
             schema = prompt.schema_for(asked, many=False)
             try:
                 answer = await self.models.structured(
@@ -1032,24 +1042,26 @@ class Extractor:
                 )  # fmt: skip
             except ModelRefusedError:
                 answer = None
-            said = {k: v for k, v in cast(dict[str, Any], answer or {}).items() if k in failures}
+            # An answer that is not an object fails the read, as it always has.
+            said: Json = {k: v for k, v in an_object(answer or {}, "the re-read's answer").items() if k in failures}
             if answer is not None and not prompt.schema_errors(said, schema):
                 _, again = result.scored(
                     asked, said, pages.texts, pages.ocr, file_id=row.file_id, many=False,
                     review_below=row.request.get("reviewBelow"), floor=floor, word_confidence=pages.confidence,
                 )  # fmt: skip
-                for key, r in cast(dict[str, dict[str, Any]], again["fields"]).items():
+                for key, value in an_object(again["fields"], "fields").items():
+                    r = an_object(value, f"field {key}")
                     if not r.get("rejected") and r.get("value") is not None:
                         fields[key] = {**r, "reread": True}
         rules.apply(fields, checks)
-        out["needsReview"] = [k for k, r in fields.items() if r.get("needsReview")]
+        out["needsReview"] = [k for k, r in fields.items() if an_object(r, f"field {k}").get("needsReview")]
         return ("review" if out["needsReview"] else "ok"), out
 
     async def _crops(
         self,
         row: ExtractionRow,
-        fields: dict[str, dict[str, Any]],
-        failures: dict[str, tuple[Any, str]],
+        fields: Json,
+        failures: dict[str, tuple[JsonValue, str]],
         pages: Pages,
         *,
         floor: float,
@@ -1059,25 +1071,26 @@ class Extractor:
         words were found on the page. A doubtful field with no words found adds nothing an image could show."""
         if pictures is None or pages.layout is None or self.models is None:
             return {}
-        asked = {str(f["key"]): f for f in cast(list[dict[str, Any]], row.request["fields"])}
+        asked = {str(f["key"]): f for f in (an_object(x, "a field") for x in entries(row.request["fields"]))}
         below = row.request.get("reviewBelow")
-        doubtful = [
-            k
-            for k, r in fields.items()
-            if k in failures
-            or (
-                r.get("value") is not None
-                and r.get("confidence") is not None
-                and k in asked
-                and float(r["confidence"]) < threshold(asked[k], below, floor)
-            )
-        ]
-        boxed: dict[str, list[dict[str, Any]]] = {}
+        doubtful: list[str] = []
+        for k, value in fields.items():
+            r = an_object(value, f"field {k}")
+            confidence = r.get("confidence")
+            if k in failures:
+                doubtful.append(k)
+            elif r.get("value") is not None and confidence is not None and k in asked:
+                if not isinstance(confidence, int | float | str):
+                    raise Malformed(f"field {k}'s confidence {confidence!r} is not a number")
+                if float(confidence) < threshold(asked[k], below, floor):
+                    doubtful.append(k)
+        boxed: dict[str, list[Box]] = {}
         for k in doubtful:
-            citation = cast(dict[str, Any], fields[k].get("citation") or {})
-            found = boxes.locate(pages.layout, citation.get("page"), citation.get("quote"), boxes.printed(fields[k]))
-            if found and found.get("boxes"):
-                boxed[k] = cast(list[dict[str, Any]], found["boxes"])
+            r = an_object(fields[k], f"field {k}")
+            citation = an_object(r.get("citation") or {}, f"field {k}'s citation")
+            found = boxes.locate(pages.layout, citation.get("page"), citation.get("quote"), boxes.printed(r))
+            if found and found["boxes"]:
+                boxed[k] = found["boxes"]
         return await pictures.crops(boxed)
 
     def _pictures(self, row: ExtractionRow, file: FileInfo) -> Pictures | None:
@@ -1096,7 +1109,7 @@ class Extractor:
 
         return Pictures(load, file.mime, allow)
 
-    async def layout_of(self, who: Who, row: ExtractionRow) -> dict[str, Any]:
+    async def layout_of(self, who: Who, row: ExtractionRow) -> Layout:
         """The layout an extraction read: from the stored reading of its file's bytes, else read again from the file."""
         if self.readings is not None and row.file_digest:
             ocr = settings_of(bool(row.request.get("ocr")))

@@ -1838,6 +1838,7 @@ dependencies = [
     { name = "ops-contracts" },
     { name = "ops-identity" },
     { name = "ops-ingest" },
+    { name = "ops-service-kit" },
     { name = "pdfplumber" },
     { name = "regex" },
 ]
@@ -1848,6 +1849,7 @@ requires-dist = [
     { name = "ops-contracts", editable = "packages/contracts" },
     { name = "ops-identity", editable = "packages/ops_identity" },
     { name = "ops-ingest", editable = "packages/ops_ingest" },
+    { name = "ops-service-kit", editable = "packages/ops_service_kit" },
     { name = "pdfplumber", specifier = ">=0.11.4" },
     { name = "regex", specifier = ">=2024.11.6" },
 ]

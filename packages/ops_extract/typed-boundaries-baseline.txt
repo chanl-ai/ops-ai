@@ -1,12 +1,4 @@
-# 120 boundaries crossed without a model in packages/ops_extract (scripts/check_typed_boundaries.py). A row may only fall.
-23 dict-any packages/ops_extract/src/ops_extract/boxes.py
-12 dict-any packages/ops_extract/src/ops_extract/checks.py
+# 8 boundaries crossed without a model in packages/ops_extract (scripts/check_typed_boundaries.py). A row may only fall.
 5 dict-any packages/ops_extract/src/ops_extract/classify.py
 1 dict-any packages/ops_extract/src/ops_extract/floor.py
-10 dict-any packages/ops_extract/src/ops_extract/layout.py
 2 dict-any packages/ops_extract/src/ops_extract/page_images.py
-1 dict-any packages/ops_extract/src/ops_extract/pages.py
-9 dict-any packages/ops_extract/src/ops_extract/prompt.py
-11 dict-any packages/ops_extract/src/ops_extract/result.py
-7 dict-any packages/ops_extract/src/ops_extract/rules.py
-39 dict-any packages/ops_extract/src/ops_extract/templates.py

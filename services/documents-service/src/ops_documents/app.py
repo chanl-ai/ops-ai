@@ -65,7 +65,7 @@ from ops_documents.store import DocumentTypesStore, ExtractionsStore, NameTakenE
 from ops_documents.store.metadata import reachable
 from ops_documents.templates import templates_router
 from ops_documents.tools_client import PluginTemplates
-from ops_extract import page_images
+from ops_extract import page_images, shapes
 from ops_extract.layout import layout_of
 from ops_identity import Auth, CurrentCaller, Principal, install_auth
 from ops_identity.fastapi import Tx
@@ -587,7 +587,7 @@ def create_documents_app(
     return app
 
 
-def _page_of(layout: dict[str, Any], page: int) -> dict[str, Any]:
+def _page_of(layout: shapes.Layout, page: int) -> shapes.Layout:
     """One page of a layout: its page entry, blocks and words."""
     return {
         "engine": layout["engine"],

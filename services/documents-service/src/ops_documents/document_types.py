@@ -38,12 +38,13 @@ from ops_documents.store.document_types import (
 )
 from ops_documents.store.extractions import ExtractionRow
 from ops_extract import boxes, rules, templates
-from ops_extract.checks import fold
+from ops_extract.checks import entries, fold
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_pii import mask
-from ops_service_kit.http import PageJSON
+from ops_service_kit.http import Json, JsonList, JsonValue, PageJSON
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
+from ops_service_kit.narrow import an_object, json_list, json_object
 from ops_service_kit.settings import Settings
 from ops_store import background, isolation
 
@@ -260,17 +261,23 @@ class DocumentTypes:
         offer_at = body.get("offerAt") or DEFAULT_OFFER_AT
         if isinstance(offer_at, bool) or not isinstance(offer_at, int) or offer_at < MIN_OFFER_AT:
             raise InvalidRequestError(f"offerAt is a whole number of reads, at least {MIN_OFFER_AT}")
-        layouts = cast(list[dict[str, Any]], body.get("templates") or [])
+        given: JsonValue = body.get("templates") or []
+        layouts: JsonList = json_list(given)
         if not carried_forward:
-            layouts = [{k: v for k, v in t.items() if k != templates.NEEDS_REBUILD} for t in layouts]
+            # A template that is not an object is kept as it is, so `problems` refuses it by name.
+            layouts = [
+                {k: v for k, v in t.items() if k != templates.NEEDS_REBUILD} if isinstance(t, dict) else t
+                for t in layouts
+            ]
         if layouts and request["many"]:
             raise InvalidRequestError("templates read one record; a type reading several takes the model path")
         keys = {str(f["key"]) for f in request["fields"]}
-        if found := templates.problems(layouts, keys):
+        if found := templates.problems(layouts if isinstance(given, list) else given, keys):
             raise InvalidRequestError("; ".join(found[:5]))
-        checks = cast(list[dict[str, Any]], body.get("checks") or [])
+        held_checks: JsonValue = body.get("checks") or []
+        checks: JsonList = json_list(held_checks)
         types = {str(f["key"]): str(f.get("type") or "text") for f in request["fields"]}
-        if found := rules.problems(checks, keys, types):
+        if found := rules.problems(held_checks, keys, types):
             raise InvalidRequestError("; ".join(found[:5]))
         return {
             "fields": request["fields"],
@@ -296,16 +303,16 @@ class DocumentTypes:
         if await self._own(who, type_id) is None:
             return None
         latest = await self.resolve(who, type_id, None)
-        keys = {str(f["key"]) for f in cast(list[dict[str, Any]], body.get("fields") or [])}
+        keys = {str(an_object(f, "a field")["key"]) for f in entries(body.get("fields"))}
         carried_forward = body.get("templates") is None
         if carried_forward:
             # Templates a person saved are not lost to a new version that does not name them: each is carried forward,
             # and one reading a field the new version no longer has is flagged for a rebuild and never matched.
-            saved = cast(list[dict[str, Any]], latest.get("allTemplates") or [])
+            saved = [an_object(t, "a saved template") for t in entries(latest.get("allTemplates"))]
             body = {**body, "templates": [carried(t, keys) for t in saved]}
         if body.get("checks") is None:
             # Checks carry forward too; one naming a field the new version lacks is dropped, since it cannot run.
-            held = cast(list[dict[str, Any]], latest.get("checks") or [])
+            held = [an_object(c, "a saved check") for c in entries(latest.get("checks"))]
             body = {**body, "checks": [c for c in held if set(rules.named(c)) <= keys]}
         if body.get("pageImages") is None:
             body = {**body, "pageImages": latest["pageImages"]}
@@ -405,7 +412,7 @@ class DocumentTypes:
             raise DocumentTypeMissingError(f"extraction {extraction_id}")
         if row.status != "done" or row.result is None:
             raise StateError(f"{extraction_id} is {row.status}; a suggestion reads finished reads only")
-        doc_type = cast(dict[str, Any], row.request.get("documentType") or {})
+        doc_type = an_object(row.request.get("documentType") or {}, "documentType")
         if doc_type.get("id") != type_id:
             raise InvalidRequestError(f"{extraction_id} was not read as {type_id}")
         if "records" in row.result:
@@ -413,12 +420,14 @@ class DocumentTypes:
         layout = await self.extractor.layout_of(who, row)
         # Boxes found again from each quote with the current rules, so a read stored before a change to how boxes are
         # found (a date boxed with its label) still suggests the zone its value is printed in.
-        fields = {
-            k: {kk: vv for kk, vv in f.items() if kk not in ("boxes", "blocks")}
-            for k, f in cast(dict[str, dict[str, Any]], row.result.get("fields") or {}).items()
+        fields: Json = {
+            k: {kk: vv for kk, vv in an_object(f, f"field {k}").items() if kk not in ("boxes", "blocks")}
+            for k, f in an_object(row.result.get("fields") or {}, "fields").items()
         }
-        located = cast(dict[str, dict[str, Any]], boxes.with_boxes({"fields": fields}, layout)["fields"])
-        return templates.Read(layout, {k: cast(list[dict[str, Any]], f.get("boxes") or []) for k, f in located.items()})
+        located = an_object(boxes.with_boxes({"fields": fields}, layout)["fields"], "fields")
+        return templates.Read(
+            layout, {k: boxes.boxes_of(an_object(f, f"field {k}").get("boxes")) for k, f in located.items()}
+        )
 
     async def suggest_template(self, who: Who, type_id: str, extraction_ids: list[str]) -> dict[str, Any] | None:
         """A draft template from the team's finished reads of the type, and how it reads each of them. Nothing is
@@ -450,7 +459,7 @@ class DocumentTypes:
                 for f in fields:
                     key = str(f["key"])
                     want = saved.get(key, {}).get("value")
-                    got = normalise(f, answers.get(key, {}).get("value"))[0] if answers.get(key) else None
+                    got = normalise(f, json_object(answers.get(key)).get("value"))[0] if answers.get(key) else None
                     if want is not None or got is not None:
                         compared[key] = {"expected": want, "got": got, "match": matches(f, want, got)}
                 check["fields"] = compared

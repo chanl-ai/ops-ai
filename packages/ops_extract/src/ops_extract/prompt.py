@@ -8,6 +8,7 @@ from typing import Any, cast
 import jsonschema
 
 from ops_extract.checks import answer_schema, records_schema
+from ops_service_kit.http import Json, JsonValue
 
 SYSTEM = (
     "You read a document and fill the fields asked for. For each field give its value as the document writes it, "
@@ -23,7 +24,7 @@ PROPOSE_SYSTEM = (
     "Answer only with JSON for the schema."
 )
 # A proposal in the shape a document type's fields take, so it can be saved as one with no change.
-PROPOSAL_SCHEMA: dict[str, Any] = {
+PROPOSAL_SCHEMA: Json = {
     "type": "object",
     "required": ["name", "fields"],
     "properties": {
@@ -53,16 +54,16 @@ def propose_prompt(texts: list[str], *, hint: str | None = None) -> str:
     return f"{said}Document:\n{document}"
 
 
-def schema_for(fields: list[dict[str, Any]], *, many: bool) -> dict[str, Any]:
+def schema_for(fields: list[Json], *, many: bool) -> Json:
     return records_schema(fields) if many else answer_schema(fields)
 
 
 def user_prompt(
-    fields: list[dict[str, Any]],
+    fields: list[Json],
     texts: dict[int, str],
     *,
     many: bool,
-    examples: list[dict[str, Any]] | None = None,
+    examples: list[Json] | None = None,
 ) -> str:
     """The fields wanted, each with its type and description, the corrections people made on earlier documents of
     the kind, then the document page by page."""
@@ -76,7 +77,7 @@ def user_prompt(
     return f"Fields:\n{wanted}{each}{taught(examples)}\n\nDocument:\n{document}"
 
 
-def taught(examples: list[dict[str, Any]] | None) -> str:
+def taught(examples: list[Json] | None) -> str:
     """Corrections people made on earlier documents of this kind, each the field, the line it was printed on and the
     value it should have been, so the model reads the same kind of line the same way; nothing when there are none."""
     if not examples:
@@ -92,10 +93,10 @@ def taught(examples: list[dict[str, Any]] | None) -> str:
 
 
 def reread(
-    fields: list[dict[str, Any]],
+    fields: list[Json],
     texts: dict[int, str],
-    failures: dict[str, tuple[Any, str]],
-    examples: list[dict[str, Any]] | None = None,
+    failures: dict[str, tuple[JsonValue, str]],
+    examples: list[Json] | None = None,
 ) -> str:
     """The one targeted re-read: only the fields that failed a rule, each with what was read and why it
     failed, then the document again."""
@@ -112,6 +113,6 @@ def reask(user: str, errors: list[str]) -> str:
     return f"{user}\n\nYour last answer did not match the schema:\n" + "\n".join(errors)
 
 
-def schema_errors(answer: Any, schema: dict[str, Any]) -> list[str]:
+def schema_errors(answer: JsonValue, schema: Json) -> list[str]:
     validator = cast(Any, jsonschema.Draft202012Validator(schema))
     return [f"{'/'.join(str(p) for p in e.path) or '(root)'}: {e.message}" for e in validator.iter_errors(answer)][:20]

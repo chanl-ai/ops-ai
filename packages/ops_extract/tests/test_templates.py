@@ -12,7 +12,8 @@ from reportlab.pdfgen.canvas import Canvas
 
 from ops_extract.boxes import locate, runs, tokens, union
 from ops_extract.layout import build_layout
-from ops_extract.templates import Match, Miss, Read, fingerprint, match, read, suggest
+from ops_extract.shapes import Box, Layout
+from ops_extract.templates import Match, Miss, Read, fingerprint, match, problems, read, suggest
 
 LABELS = [("Case No.", "case_no"), ("Debtor", "debtor"), ("Amount due", "amount"), ("Served on", "served")]
 MASTER = {"case_no": "SYN-2026-0101", "debtor": "Morgan Example", "amount": "$1,250.00", "served": "03/04/2026"}
@@ -33,7 +34,7 @@ def form(values: dict[str, str], *, dx: float = 0, dy: float = 0, labels: list[t
     return buf.getvalue()
 
 
-def template_from(layout: dict[str, Any], values: dict[str, str]) -> dict[str, Any]:
+def template_from(layout: Layout, values: dict[str, str]) -> dict[str, Any]:
     """Anchors at the master's labels, zones around its values with a margin, as templates infer them."""
     words = [w for w in layout["words"] if w["page"] == 1]
     anchors: list[dict[str, Any]] = []
@@ -48,7 +49,7 @@ def template_from(layout: dict[str, Any], values: dict[str, str]) -> dict[str, A
 TEMPLATE = template_from(build_layout(form(MASTER), filename="m.pdf"), MASTER)
 
 
-def values(answers: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def values(answers: dict[str, Any]) -> dict[str, Any]:
     return {k: a["value"] for k, a in answers.items()}
 
 
@@ -56,7 +57,7 @@ def test_a_file_printed_from_the_form_matches_and_reads_each_zone() -> None:
     layout = build_layout(form(OTHER), filename="o.pdf")
     found = match(TEMPLATE, layout)
     assert isinstance(found, Match) and found.pages[1][0] == 1, found
-    answers = read(TEMPLATE, found, layout)
+    answers: dict[str, Any] = read(TEMPLATE, found, layout)
     assert values(answers) == OTHER and answers["case_no"]["page"] == 1, answers
 
 
@@ -76,7 +77,7 @@ def test_another_layout_misses_with_the_anchors_it_lacked() -> None:
 
 def test_a_required_anchor_missing_misses_even_when_the_share_is_reached() -> None:
     """Five anchors, four found (0.8, the share), but the one missing is required."""
-    template = {
+    template: dict[str, Any] = {
         **TEMPLATE,
         "pages": [
             {
@@ -85,7 +86,7 @@ def test_a_required_anchor_missing_misses_even_when_the_share_is_reached() -> No
             }
         ],
     }
-    optional = {
+    optional: dict[str, Any] = {
         **template,
         "pages": [
             {
@@ -104,7 +105,7 @@ def test_a_required_anchor_missing_misses_even_when_the_share_is_reached() -> No
 def read_of(pdf: bytes, vals: dict[str, str]) -> Read:
     """A finished read: the layout and each field's boxes, located from its value."""
     layout = build_layout(pdf, filename="r.pdf")
-    boxes: dict[str, list[dict[str, Any]]] = {}
+    boxes: dict[str, list[Box]] = {}
     for key, value in vals.items():
         found = locate(layout, 1, value, value)
         boxes[key] = found["boxes"] if found else []
@@ -113,7 +114,7 @@ def read_of(pdf: bytes, vals: dict[str, str]) -> Read:
 
 def test_a_suggestion_from_one_read_reads_another_printing_of_the_form() -> None:
     """Anchors are the labels, never a value, so the draft matches a file with other values."""
-    draft = suggest([read_of(form(MASTER), MASTER)], template_id="tpl_s")
+    draft: dict[str, Any] = suggest([read_of(form(MASTER), MASTER)], template_id="tpl_s")
     anchors = [a["text"] for a in draft["pages"][0]["anchors"]]
     assert anchors == [label for label, _ in LABELS], anchors
     other = build_layout(form(OTHER), filename="o.pdf")
@@ -123,7 +124,9 @@ def test_a_suggestion_from_one_read_reads_another_printing_of_the_form() -> None
 
 def test_an_anchor_one_printing_moves_is_dropped_and_the_rest_kept() -> None:
     moved = [("Case No.", "case_no"), ("Debtor", "debtor"), ("Amount due", "amount"), ("Date of service", "served")]
-    draft = suggest([read_of(form(MASTER), MASTER), read_of(form(OTHER, labels=moved), OTHER)], template_id="tpl_s")
+    draft: dict[str, Any] = suggest(
+        [read_of(form(MASTER), MASTER), read_of(form(OTHER, labels=moved), OTHER)], template_id="tpl_s"
+    )
     assert [a["text"] for a in draft["pages"][0]["anchors"]] == ["Case No.", "Debtor", "Amount due"], draft
 
 
@@ -158,3 +161,19 @@ def test_a_suggested_zone_stops_before_the_next_label_on_its_line() -> None:
     found = match(draft, other)
     assert isinstance(found, Match), draft
     assert values(read(draft, found, other)) == {"holder": "Quinn Caption", "balance": "$12,004.00"}
+
+
+def test_anchors_or_zones_given_as_one_object_instead_of_a_list_are_refused() -> None:
+    """A template whose page holds one anchor and one zone as objects would save and then read nothing."""
+    one: dict[str, Any] = {
+        "id": "t",
+        "pages": [
+            {
+                "page": 1,
+                "anchors": {"text": "x", "box": [0.1, 0.1, 0.2, 0.2]},
+                "zones": {"field": "a", "box": [0.3, 0.3, 0.4, 0.4]},
+            }
+        ],
+    }
+    found = problems([one], {"a"})
+    assert any("anchor" in p for p in found) and any("zone" in p for p in found), found

@@ -11,33 +11,31 @@ a format without page boxes (DOCX, HTML, spreadsheets, text) keeps whole paragra
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any, cast
 
 from ops_extract.checks import fold
 from ops_extract.pages import Pages
+from ops_extract.shapes import Layout, LayoutBlock, LayoutCell, LayoutPage, LayoutWord, Rect
 from ops_ingest.reading import READER_VERSION, Reading, ReadingSettings, WordOcr, read
 from ops_ingest.reading.pdf import OCR_RESOLUTION
 
 # Part of every stored layout's key: the reader's own version, so a change to how files are read reads them again.
 ENGINE = READER_VERSION
 
-Layout = dict[str, Any]
-
 __all__ = ["ENGINE", "OCR_RESOLUTION", "Layout", "build_layout", "layout_of", "page_text"]
 
 
 def layout_of(reading: Reading) -> Layout:
     """The reading as a layout: one block per title, heading, table and paragraph line, numbered in reading order."""
-    pages: list[dict[str, Any]] = []
-    blocks: list[dict[str, Any]] = []
-    words: list[dict[str, Any]] = []
+    pages: list[LayoutPage] = []
+    blocks: list[LayoutBlock] = []
+    words: list[LayoutWord] = []
     for page in reading.pages:
         n = page.number
         pages.append({"number": n, "width": page.width, "height": page.height, "source": page.source})
-        found: list[tuple[str, str, list[float] | None, list[dict[str, Any]] | None]] = []
+        found: list[tuple[str, str, Rect | None, list[LayoutCell] | None]] = []
         for b in page.blocks:
             if b.kind == "table":
-                cells = [
+                table_cells: list[LayoutCell] = [
                     {
                         "id": c.id,
                         "row": c.row,
@@ -49,14 +47,20 @@ def layout_of(reading: Reading) -> Layout:
                     }
                     for c in b.cells
                 ]
-                found.append(("table", b.text, b.box, cells))
+                found.append(("table", b.text, b.box, table_cells))
             elif b.kind == "paragraph" and b.lines:
                 found.extend(("line", line.text, line.box, None) for line in b.lines)
             else:
                 found.append((b.kind, b.text, b.box, None))
         for i, (kind, text, box, cells) in enumerate(found):
-            block: dict[str, Any] = {"id": f"p{n}.b{i}", "page": n, "kind": kind, "text": text, "box": box}
-            block["order"] = len(blocks)
+            block: LayoutBlock = {
+                "id": f"p{n}.b{i}",
+                "page": n,
+                "kind": kind,
+                "text": text,
+                "box": box,
+                "order": len(blocks),
+            }
             if cells is not None:
                 block["cells"] = cells
             blocks.append(block)
@@ -73,13 +77,11 @@ def build_layout(
     return layout_of(read(data, filename=filename, mime_type=mime, settings=settings, ocr_engine=engine))
 
 
-def _lines(block: dict[str, Any]) -> Iterable[str]:
+def _lines(block: LayoutBlock) -> Iterable[str]:
     if block["kind"] == "table":
-        cells = cast(list[dict[str, Any]], block.get("cells") or [])
-        for row in sorted({int(c["row"]) for c in cells}):
-            texts = [
-                str(c["text"]) for c in sorted(cells, key=lambda c: int(c["col"])) if c["row"] == row and c["text"]
-            ]
+        cells = block.get("cells") or []
+        for row in sorted({c["row"] for c in cells}):
+            texts = [c["text"] for c in sorted(cells, key=lambda c: c["col"]) if c["row"] == row and c["text"]]
             if len(texts) == 2:
                 # A label and its value on lines of their own: joined as "label | value" the model copied the whole
                 # row into the value (24 of the baseline's 35 misses).
@@ -95,17 +97,17 @@ def page_text(layout: Layout) -> Pages:
     """The text an extraction reads and quotes are checked against, one string per page in reading order, with the
     OCR'd pages and each OCR'd page's word confidences (folded word to its highest confidence on that page)."""
     texts: dict[int, list[str]] = {}
-    for block in cast(list[dict[str, Any]], layout["blocks"]):
-        texts.setdefault(int(block["page"]), []).extend(_lines(block))
+    for block in layout["blocks"]:
+        texts.setdefault(block["page"], []).extend(_lines(block))
     joined = {n: "\n".join(t) for n, t in texts.items() if any(s.strip() for s in t)}
     # A mixed page's text-layer words carry confidence 1.0, so only its OCR'd words count for less.
     read_by_ocr = ("ocr", "mixed")
-    ocr = {int(p["number"]) for p in layout["pages"] if p["source"] in read_by_ocr and int(p["number"]) in joined}
+    ocr = {p["number"] for p in layout["pages"] if p["source"] in read_by_ocr and p["number"] in joined}
     confidence: dict[int, dict[str, float]] = {}
-    for word in cast(list[dict[str, Any]], layout["words"]):
-        page = int(word["page"])
+    for word in layout["words"]:
+        page = word["page"]
         if page in ocr:
-            key = fold(str(word["text"]))
+            key = fold(word["text"])
             on_page = confidence.setdefault(page, {})
-            on_page[key] = max(on_page.get(key, 0.0), float(word["conf"]))
+            on_page[key] = max(on_page.get(key, 0.0), word["conf"])
     return Pages(joined, ocr, max(len(layout["pages"]), 1), confidence, layout)
