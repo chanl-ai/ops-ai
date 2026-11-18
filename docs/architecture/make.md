@@ -46,7 +46,7 @@ into it before reviewing it.
 | `make/db-scripts.mk` | `db-ddl`, `db-upgrade-sql`, `db-drift`, `db-release`, `db-scripts-proof`; `mssql-remote-up`, `-proxy`, `-test`, `-status`, `-sweep`, `-down` | The schema as scripts a DBA applies (`deploy/database/schema.py`, `docs/deploy/database.md`); the shared SQL Server on Fly for both-database tests from a Mac (`deploy/database/mssql_remote.sh`) |
 | `make/services.mk` | `<verb>-<svc>`, generated | `SERVICES`, each service's folder, `SERVICE_VERBS`; one rule template expanded per pair |
 | `make/console.mk` | `console-install`, `dev`, `dev-runtime`, `console-verify` | The console in the foreground |
-| `make/checks.mk` | `checks`, `checks-list` | The one list of standards checks (`CHECKS`): what `python-verify`, the CI `checks` job, `verify-changed.sh` and pre-commit (`STAGED=1`, with `STAGED_FILES=`) run; `PY`, `PYTEST` and `LINT_IMPORTS` name the tools |
+| `make/checks.mk` | `checks`, `checks-list`, `ci-local` | The one list of standards checks (`CHECKS`): what `python-verify`, the CI `checks` job, `verify-changed.sh` and pre-commit (`STAGED=1`, with `STAGED_FILES=`) run; `PY`, `PYTEST` and `LINT_IMPORTS` name the tools |
 | `make/python.mk` | `python-install`, `python-verify`, `test` | The uv workspace: ruff and pyright on `packages/`, then each service's verify with model keys unset |
 | `make/docs.mk` | `docs-verify`, `docs-guides-check` | `scripts/check-docs.mjs`, `scripts/check-guides.mjs` |
 | `make/sdk.mk` | `sdk`, `sdk-verify`, `sdk-check` | The SDKs in `sdk/`: regenerate, the drift check and both test suites (in `verify`), and the install smoke plus the examples on `make up` |
@@ -249,3 +249,7 @@ only against a local stack. A chat that saves really writes to the org, so use a
 | Secrets through a named wrapper inside make | Dropped: make never calls the wrapper; you run make under it | Keeps the repo free of a vendor name and works with any secrets manager |
 | `dashboard`, deploy, promote and release targets | Dropped | Nothing deploys from this repo yet |
 | Hand-written per-service pass-throughs | Replaced by generated `<verb>-<svc>` | Adding a service is one line |
+
+## Running CI's steps locally
+
+`make ci-local` runs the local twin of each `run:` step in `.github/workflows/ci.yml`, in workflow order, one at a time, and lists every failure at the end (`JOB=<job>` for one job, `PLAN=1` to print the commands only). The twins live in `scripts/ci_steps.json` beside a `no_local_twin` reason for each step that cannot run on a laptop (SQL Server container, release proof, the maintainer's review, the job summary). `scripts/ci_steps.py --check`, in `make checks`, fails when ci.yml and the list disagree.

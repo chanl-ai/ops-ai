@@ -2,7 +2,7 @@
 # check in verify-changed.sh and pre-commit (`make checks STAGED=1`) all run `make checks`, so a check added here runs
 # in every one of them and none can run a shorter list. A check is a name in CHECKS, the command that runs it and, for
 # pre-commit, the staged paths that can change its result. Each is proven red by its own test or `--self-test`.
-.PHONY: checks checks-list checks-history
+.PHONY: checks checks-list checks-history ci-local
 
 ##@ Checks
 
@@ -29,7 +29,8 @@ CHECKS = \
   isolation-markings isolation-sites \
   store-inventory roles-matrix sbom k8s-base \
   ratchet-history lint-imports sdk-drift api-changelog api-changes-gap changelog-entries console-standards \
-  downgrades token-lifetime cross-service standards service-standards service-standards-self-test
+  downgrades token-lifetime cross-service standards service-standards service-standards-self-test \
+  ci-steps ci-steps-self-test
 
 # Access decided outside can(), the exceptions each lane may still hold, and the trailer a new line needs.
 CHECK_ACCESS_PATHS = ^(services|packages)/[^/]+/src/.*\.py$$|^apps/(console|embed)/src/|^access-exceptions-allowlist\.txt$$|^docs/architecture/roles-and-permissions\.md$$|^scripts/(check_access_exceptions\.py|access-baselines/)
@@ -159,6 +160,15 @@ checks-history: ## The history checks alone, for the pull request's review job (
 	@rm -f $(CHECKS_FAILED)
 	@$(foreach c,$(CHECKS_HISTORY),echo "== $(c)"; $(ROOT)/scripts/keep_going.sh $(CHECKS_FAILED) $(check-run.$(c));)
 	@$(ROOT)/scripts/keep_going.sh --report $(CHECKS_FAILED)
+
+# Every `run:` step in ci.yml has a local twin or a stated reason it has none (scripts/ci_steps.json).
+check-run.ci-steps = $(PY) scripts/ci_steps.py --check
+check-paths.ci-steps = ^\.github/workflows/ci\.yml$$|^scripts/ci_steps\.(py|json)$$
+check-run.ci-steps-self-test = $(PY) scripts/ci_steps.py --self-test
+check-paths.ci-steps-self-test = ^scripts/ci_steps\.py$$
+
+ci-local: ## The local twin of each CI step (scripts/ci_steps.json), all failures listed at the end (JOB=<job> one job, PLAN=1 print only)
+	@uv run python scripts/ci_steps.py --run $(if $(JOB),--job $(JOB)) $(if $(PLAN),--plan)
 
 checks-list: ## Print each check on the list with the command it runs
 	@$(foreach c,$(CHECKS),printf '%s\t%s\n' '$(c)' '$(check-run.$(c))';)
