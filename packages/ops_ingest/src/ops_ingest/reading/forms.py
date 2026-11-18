@@ -9,7 +9,7 @@ up the parent chain; a field's full name is its parents' names joined with dots,
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Literal, TypedDict, cast
 
 from pdfminer.pdftypes import PDFObjRef, resolve1
 from pdfminer.psparser import PSLiteral
@@ -24,6 +24,20 @@ _PUSH_BUTTON = 1 << 16
 _MAX_DEPTH = 32
 
 
+class _Node(TypedDict, total=False):
+    """A widget annotation or form field dictionary (PDF 32000-1, 12.7.3), as pdfminer resolves it: the keys read
+    here, each value as the file holds it until `resolve1` or `_text` reads it."""
+
+    Parent: object
+    Subtype: object
+    T: object
+    FT: object
+    Ff: object
+    V: object
+    AS: object
+    Rect: object
+
+
 def _text(value: object) -> str:
     value = resolve1(value)
     if isinstance(value, bytes):
@@ -35,12 +49,12 @@ def _text(value: object) -> str:
     return "" if value is None else str(value)
 
 
-def _chain(widget: dict[str, Any], objid: int | None) -> list[dict[str, Any]]:
+def _chain(widget: _Node, objid: int | None) -> list[_Node]:
     """The widget, then its parent field, then that field's parent, up to the top. Each object is visited once and the
     walk is capped, so a malformed file whose parents loop still ends."""
-    out: list[dict[str, Any]] = []
+    out: list[_Node] = []
     seen: set[int] = set() if objid is None else {objid}
-    node: dict[str, Any] | None = widget
+    node: _Node | None = widget
     while node is not None and len(out) < _MAX_DEPTH:
         out.append(node)
         ref = node.get("Parent")
@@ -49,14 +63,14 @@ def _chain(widget: dict[str, Any], objid: int | None) -> list[dict[str, Any]]:
                 break
             seen.add(ref.objid)
         parent = resolve1(ref)
-        node = cast(dict[str, Any], parent) if isinstance(parent, dict) else None
+        node = cast(_Node, parent) if isinstance(parent, dict) else None
     return out
 
 
-def _inherited(chain: list[dict[str, Any]], key: str) -> object:
+def _inherited(chain: list[_Node], key: Literal["V", "FT", "Ff"]) -> object:
     for node in chain:
         if key in node:
-            return node[key]
+            return node.get(key)
     return None
 
 
@@ -78,7 +92,7 @@ def _kind(field_type: str, flags: int) -> FieldKind | None:
             return None
 
 
-def _value(kind: FieldKind, chain: list[dict[str, Any]]) -> str:
+def _value(kind: FieldKind, chain: list[_Node]) -> str:
     raw = _inherited(chain, "V")
     if kind == "checkbox":
         state = _text(raw if raw is not None else chain[0].get("AS"))
@@ -124,7 +138,7 @@ def page_fields(annots: object, number: int, *, width: float, height: float, rot
         data = resolve1(ref)
         if not isinstance(data, dict):
             continue
-        widget = cast(dict[str, Any], data)
+        widget = cast(_Node, data)
         if _text(widget.get("Subtype")) != "Widget":
             continue
         chain = _chain(widget, ref.objid if isinstance(ref, PDFObjRef) else None)

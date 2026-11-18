@@ -13,12 +13,15 @@ import base64
 import hashlib
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Protocol, cast
+from typing import Protocol
+
+from ops_service_kit.http import Json
+from ops_service_kit.narrow import json_object
 
 
 @dataclass(frozen=True)
 class DeltaPage:
-    items: list[dict[str, Any]]
+    items: list[Json]
     next_link: str | None
     delta_link: str | None
 
@@ -74,7 +77,7 @@ class MailSource(Protocol):
         start nothing for mail already there begins here."""
         ...
 
-    def parse(self, item: dict[str, Any]) -> InboundMessage: ...
+    def parse(self, item: Json) -> InboundMessage: ...
 
 
 class IdleSource(Protocol):
@@ -98,12 +101,13 @@ class CursorRefusedError(RuntimeError):
     arrived after that cursor cannot be read from it; the caller takes a fresh one and says what was skipped."""
 
 
-def text_at(d: Any, *path: str) -> str:
+def text_at(d: object, *path: str) -> str:
     """The string at `path` in a provider's JSON, or "" when a step is missing; Graph omits empty properties."""
     for step in path:
-        if not isinstance(d, dict):
+        node = json_object(d)
+        if node is not d:  # `d` is not an object, so `json_object` gave a new empty one
             return ""
-        d = cast(dict[str, Any], d).get(step)
+        d = node.get(step)
     return "" if d is None else str(d)
 
 
@@ -143,9 +147,7 @@ class EmailFilter:
         return None
 
 
-async def drain(
-    source: MailSource, link: str | None, handle: Callable[[dict[str, Any]], Awaitable[None]]
-) -> tuple[str, int]:
+async def drain(source: MailSource, link: str | None, handle: Callable[[Json], Awaitable[None]]) -> tuple[str, int]:
     """Hands every item from `link` to the end of the delta to `handle`, in order, and returns the cursor for the next
     poll with the number of pages read. The caller saves the cursor only after this returns: a poll that dies part-way
     starts again from the previous cursor, so `handle` must make a repeated item a no-op."""

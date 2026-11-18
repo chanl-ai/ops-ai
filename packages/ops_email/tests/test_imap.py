@@ -15,6 +15,7 @@ import pytest
 
 from ops_email import ImapMailSource, drain
 from ops_email.imap import PAGE
+from ops_service_kit.http import Json
 
 from .conftest import GREENMAIL_IMAP, GREENMAIL_SMTP
 
@@ -57,7 +58,7 @@ def key(n: int, user: str) -> str:
 async def collect(src: ImapMailSource, link: str | None) -> tuple[list[str], str]:
     keys: list[str] = []
 
-    async def handle(item: dict[str, object]) -> None:
+    async def handle(item: Json) -> None:
         keys.append(src.parse(item).key)
 
     cursor, _ = await drain(src, link, handle)
@@ -93,7 +94,7 @@ async def test_a_poll_that_dies_mid_page_reads_from_the_saved_cursor_again(green
     start = f"imap:{(await src.cursor_now()).split(':')[1]}:0"
     seen: list[str] = []
 
-    async def dies_at_second_page(item: dict[str, object]) -> None:
+    async def dies_at_second_page(item: Json) -> None:
         if len(seen) == PAGE:
             raise ConnectionError("lost")
         seen.append(src.parse(item).key)

@@ -27,6 +27,8 @@ from email.message import EmailMessage
 from email.utils import parseaddr, parsedate_to_datetime
 from typing import Any, cast
 
+from ops_service_kit.http import Json
+
 from .inbound import DeltaPage, InboundAttachment, InboundMessage, normalise_message_id, synthetic_key
 
 Connect = Callable[[], imaplib.IMAP4]
@@ -167,7 +169,7 @@ def parse_message(raw: bytes) -> InboundMessage:
     )
 
 
-def parse_item(item: dict[str, Any]) -> InboundMessage:
+def parse_item(item: Json) -> InboundMessage:
     """One item `ImapMailSource.delta` returned."""
     return parse_message(base64.b64decode(str(item["rfc822"])))
 
@@ -196,7 +198,9 @@ class ImapMailSource:
                 validity, last = at
             uids = s.uids_after(last)
             page = uids[:PAGE]
-            items = [{"uid": u, "uidValidity": validity, "rfc822": base64.b64encode(s.fetch(u)).decode()} for u in page]
+            items: list[Json] = [
+                {"uid": u, "uidValidity": validity, "rfc822": base64.b64encode(s.fetch(u)).decode()} for u in page
+            ]
             if len(uids) > PAGE:
                 return DeltaPage(items, f"imap:{validity}:{page[-1]}", None)
             return DeltaPage(items, None, f"imap:{validity}:{page[-1] if page else last}")
@@ -243,5 +247,5 @@ class ImapMailSource:
         """True as soon as the folder has mail after `link`, by IDLE; False after `seconds` with none."""
         return await asyncio.to_thread(self._wait, link, seconds)
 
-    def parse(self, item: dict[str, Any]) -> InboundMessage:
+    def parse(self, item: Json) -> InboundMessage:
         return parse_item(item)
