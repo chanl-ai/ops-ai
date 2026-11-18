@@ -20,7 +20,7 @@ from ops_engine.store import RunStore
 from ops_engine.store.definitions import DefinitionStore
 
 from ..store.actor_names import UNNAMED_WORKFLOW
-from ..store.cases import CaseStore
+from ..store.cases import CaseStore, CaseSummary
 from ..store.engine import EngineTransactions
 from ..store.review_assignments import ReviewAssignments
 from . import engine_reviews
@@ -372,7 +372,7 @@ class ChildReads:
     steps_by_run: dict[str, list[Row]]
     pinned: dict[tuple[str, int], Row]
     on_case: dict[str, str]
-    summaries: dict[str, Row]
+    summaries: dict[str, CaseSummary]
     assigned: dict[str, str]
     decided: dict[str, list[Row]]
     own_nodes: dict[str, Row]
@@ -483,9 +483,9 @@ def children_view(reads: ChildReads, people: dict[str, Row], *, scope: Any) -> t
             "cases": [
                 {
                     "caseId": case_id,
-                    "subject": summary["subject"],
-                    "customer": summary["customer"],
-                    "facts": _facts(summary["fields"]),
+                    "subject": summary.subject,
+                    "customer": summary.customer,
+                    "facts": _facts(summary.fields),
                 }
             ]
             if case_id and summary

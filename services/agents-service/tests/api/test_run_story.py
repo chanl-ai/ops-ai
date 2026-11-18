@@ -134,7 +134,7 @@ class World:
         with tenant_scope(self.tenant):
             store = CaseStore(self.engine)
             opened = await store.open(team_id=team, priority="high", by="a@x", **given)
-            case_id = str(opened.case["id"])
+            case_id = str(opened.case.id)
             await store.add_event(case_id, "run", ref=run_id, detail={}, by="a@x")
         return case_id
 

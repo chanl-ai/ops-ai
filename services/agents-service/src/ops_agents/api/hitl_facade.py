@@ -862,7 +862,8 @@ async def list_reviews(
         ids = sorted({str(r["caseId"]) for r in shown["data"] if r.get("caseId")})
         named = await CaseStore(rt.db).summaries(ids, teams)
         shown["data"] = [
-            r | {"caseTitle": (named.get(str(r.get("caseId"))) or {}).get("subject")} for r in shown["data"]
+            r | {"caseTitle": case.subject if (case := named.get(str(r.get("caseId")))) else None}
+            for r in shown["data"]
         ]
     if approver is not None:
         shown["data"] = [

@@ -336,7 +336,7 @@ async def reply_preview(rt: Runtime, team: str, draft: Any, call: dict[str, Any]
     subjects: dict[str, str] = {}
     for case_id in {c for c in on_case.values() if c}:
         with contextlib.suppress(CaseNotFound):
-            subjects[case_id] = str((await store.get(case_id, [team])).get("subject") or "")
+            subjects[case_id] = (await store.get(case_id, [team])).subject
     return {
         "to": str(args.get("to") or ""),
         "mailbox": str(args["mailbox"]) if args.get("mailbox") else None,

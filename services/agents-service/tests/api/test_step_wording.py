@@ -166,11 +166,11 @@ def test_a_chat_widget_names_its_tool_in_words() -> None:
 
 
 async def _opened(store: CaseStore) -> str:  # noqa: F811
-    return str((await store.open(team_id="team_ops", subject="Dispute W-1", priority="high", by="run:r1")).case["id"])
+    return str((await store.open(team_id="team_ops", subject="Dispute W-1", priority="high", by="run:r1")).case.id)
 
 
 async def _responded(store: CaseStore, case_id: str) -> str | None:  # noqa: F811
-    return (await store.get(case_id, ["team_ops"]))["responded_at"]
+    return (await store.get(case_id, ["team_ops"])).responded_at
 
 
 async def test_only_a_person_starts_the_first_response_clock(store: CaseStore) -> None:  # noqa: F811

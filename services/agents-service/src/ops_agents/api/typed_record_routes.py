@@ -11,7 +11,7 @@ from ops_service_kit.errors import Unprocessable
 from ops_service_kit.http import JsonValue, Out
 
 from ..store.tenancy import current_team
-from ..store.typed_records import SEED, VersionedRecords
+from ..store.typed_records import SEED, TypeDetail, TypeHead, VersionedRecords
 from .auth import Principal, caller_of
 
 
@@ -42,12 +42,16 @@ class RecordVersionView(Out):
     published_at: str | None
 
 
-def view(row: dict[str, Any]) -> dict[str, Any]:
-    return RecordTypeView(**{k: row[k] for k in RecordTypeView.model_fields}).model_dump(mode="json", by_alias=True)
+def view(row: TypeHead) -> dict[str, Any]:
+    shown = RecordTypeView.model_validate(row.model_dump(include=set(RecordTypeView.model_fields)))
+    return shown.model_dump(mode="json", by_alias=True)
 
 
-def detail(row: dict[str, Any]) -> dict[str, Any]:
-    versions = [RecordVersionView(**{k: v[k] for k in RecordVersionView.model_fields}) for v in row["versions"]]
+def detail(row: TypeDetail) -> dict[str, Any]:
+    versions = [
+        RecordVersionView.model_validate(v.model_dump(include=set(RecordVersionView.model_fields)))
+        for v in row.versions
+    ]
     return {**view(row), "versions": [v.model_dump(mode="json", by_alias=True) for v in versions]}
 
 
@@ -70,10 +74,10 @@ def by_of(me: Principal) -> str:
     return me.email or me.sub
 
 
-async def owned(store: VersionedRecords, me: Principal, type_id: str, action: str) -> dict[str, Any]:
+async def owned(store: VersionedRecords, me: Principal, type_id: str, action: str) -> TypeDetail:
     """The type, when the caller may `action` it. A seeded type is a system record: can() lets those who manage
     workflows (admins) change it, as any system record (register E05), and a team copies it to make its own."""
     row = await store.get(type_id)
-    protection = "system" if row["origin"] == SEED else None
-    can(caller_of(me), "workflows", action, team=row["team_id"], what=f"this {store.noun}", protection=protection)
+    protection = "system" if row.origin == SEED else None
+    can(caller_of(me), "workflows", action, team=row.team_id, what=f"this {store.noun}", protection=protection)
     return row

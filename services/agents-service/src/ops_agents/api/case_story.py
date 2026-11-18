@@ -10,7 +10,7 @@ from typing import Any, cast
 from ops_engine.store import CHILD_PREFIX, DefinitionStore, RunStore
 
 from ..case_wording import entry
-from ..store.cases import CaseStore
+from ..store.cases import CaseEventRecord, CaseRecord, CaseStore
 from ..store.engine import EngineTransactions
 from .actors import actors, started_by_of
 from .deps import Runtime
@@ -55,15 +55,15 @@ class OriginReads:
         return [] if self.told is not None else [self.who]
 
 
-async def origin_reads(rt: Runtime, row: Row) -> OriginReads:
+async def origin_reads(rt: Runtime, row: CaseRecord) -> OriginReads:
     """The reads of `origin`: the first run of the chain that opened the case, and its trigger."""
-    by = str(row["created_by"] or "")
+    by = str(row.created_by or "")
     if not by.startswith(CHILD_PREFIX):
         return OriginReads(None, by, "person")
     tx = EngineTransactions(rt.db)
     runs = RunStore(tx)
     opener = await runs.get(by[len(CHILD_PREFIX) :])
-    if opener is None or opener.get("team_id") != row["team_id"]:
+    if opener is None or opener.get("team_id") != row.team_id:
         return OriginReads(_origin("other", "Opened by a workflow"), by, "other")
     first = await first_run(runs, opener)
     stored = await DefinitionStore(tx).get(str(first["workflow_id"]), first.get("version")) or {}
@@ -77,7 +77,7 @@ async def origin_reads(rt: Runtime, row: Row) -> OriginReads:
     return OriginReads(None, started_by_of(first), "run", workflow, trigger, run_id)
 
 
-async def origin(rt: Runtime, row: Row) -> Row:
+async def origin(rt: Runtime, row: CaseRecord) -> Row:
     """`origin_view` after its reads, for a caller that asks for the names itself."""
     reads = await origin_reads(rt, row)
     return origin_view(reads, await actors(rt, reads.raws()))
@@ -128,28 +128,26 @@ class FeedReads:
     started: dict[str, list[tuple[str, str]]]
     seen: set[str]
     kid_names: dict[str, str]
-    events: list[Row]
+    events: list[CaseEventRecord]
 
     def raws(self) -> list[str]:
         """Everyone the lines and the case's own timeline mention, raw."""
         raws = [a for r in self.runs for a in actors_in(r, self.steps[str(r["id"])])]
         return (
-            raws
-            + [str(e["by"]) for e in self.events]
-            + [str(e["detail"].get("after")) for e in self.events if e["kind"] == "field"]
+            raws + [e.by for e in self.events] + [str(e.detail.get("after")) for e in self.events if e.kind == "field"]
         )
 
 
-async def feed_reads(rt: Runtime, row: Row, runs: list[Row], *, scope: Any) -> FeedReads:
+async def feed_reads(rt: Runtime, row: CaseRecord, runs: list[Row], *, scope: Any) -> FeedReads:
     """The reads of `feed`: a fixed number whatever the number of runs: their steps, their versions, the runs they
     started and the case's events. `runs` are the case's runs in its team (CaseLinks.runs); a key scoped to one workflow
     reads that workflow's runs only."""
-    team = str(row["team_id"])
+    team = str(row.team_id)
     tx = EngineTransactions(rt.db)
     store = RunStore(tx)
     # The runs that led to the case's own run (an email intake above a read), in its team: their lines are how the
     # matter began, which no link records on the case.
-    by = str(row["created_by"] or "")
+    by = str(row.created_by or "")
     opener = await store.get(by[len(CHILD_PREFIX) :]) if by.startswith(CHILD_PREFIX) else None
     if opener is not None and opener.get("team_id") == team:
         linked = {str(r["id"]) for r in runs}
@@ -176,7 +174,7 @@ async def feed_reads(rt: Runtime, row: Row, runs: list[Row], *, scope: Any) -> F
         )
         for c in kids
     }
-    events = await CaseStore(rt.db).events(str(row["id"]))
+    events = await CaseStore(rt.db).events(str(row.id))
     return FeedReads(runs, steps, pinned, nodes, calls, started, seen, kid_names, events)
 
 
@@ -209,15 +207,15 @@ async def feed_view(
     people = {raw: str(v.get("name") or raw) for raw, v in who.items()}
     told_runs = {f"{CHILD_PREFIX}{r['id']}" for r in runs}
     for e in reads.events:
-        if e["kind"] == "opened" and str(e["by"]) in told_runs:
+        if e.kind == "opened" and e.by in told_runs:
             continue  # the run's own "Opened a case" line says it
-        actor = who.get(str(e["by"])) or {}
-        name = str(actor.get("name") or e["by"])
-        said = entry(str(e["kind"]), cast(dict[str, Any], e["detail"]), name, people)
+        actor = who.get(e.by) or {}
+        name = str(actor.get("name") or e.by)
+        said = entry(e.kind, e.detail, name, people)
         if said:
             source = "person" if actor.get("kind", "person") == "person" else "automation"
-            href = f"/cases/{e['detail']['case']}" if e["kind"] == "link" and e["detail"].get("case") else None
-            told.append({"at": e["at"], "source": source, "actor": name, "text": said, "href": href})
+            href = f"/cases/{e.detail['case']}" if e.kind == "link" and e.detail.get("case") else None
+            told.append({"at": e.at, "source": source, "actor": name, "text": said, "href": href})
     told.sort(key=lambda x: x["at"] or "", reverse=True)
     if masking:
         # Where an email came from and arrived stays shown, as on the run page; everything else is masked.
@@ -226,10 +224,10 @@ async def feed_view(
     return {"lines": told[:FEED_CAP], "more": max(0, len(told) - FEED_CAP)}
 
 
-async def feed(rt: Runtime, row: Row, runs: list[Row], *, scope: Any, masking: bool = False) -> Row:
+async def feed(rt: Runtime, row: CaseRecord, runs: list[Row], *, scope: Any, masking: bool = False) -> Row:
     """`feed_view` after its reads, for a caller that asks for the names itself."""
     reads = await feed_reads(rt, row, runs, scope=scope)
     names = getattr(rt, "team_names", None)
-    team = str(row["team_id"])
+    team = str(row.team_id)
     team_name = (await names.name(team) if names is not None else None) or team
     return await feed_view(rt, reads, who=await actors(rt, reads.raws()), team_name=team_name, masking=masking)

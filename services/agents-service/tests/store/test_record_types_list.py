@@ -40,7 +40,7 @@ async def _type(e: AsyncEngine, team: str, type_id: str, name: str) -> None:
 
 
 async def _ids(e: AsyncEngine, **params: Any) -> list[str]:
-    return [str(r["id"]) for r in (await TaskTypeStore(e).page(ListParams(**params)))["data"]]
+    return [r.id for r in (await TaskTypeStore(e).page(ListParams(**params)))[1]]
 
 
 async def test_the_page_holds_the_acting_team_when_the_policy_lets_every_team_through(

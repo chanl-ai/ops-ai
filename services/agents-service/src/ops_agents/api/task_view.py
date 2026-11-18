@@ -13,7 +13,7 @@ from ops_store.team_scope import acting_team
 from .. import task_types as tt
 from ..store.cases import CaseStore
 from ..store.engine import EngineTransactions
-from ..store.task_assists import TaskAssistStore
+from ..store.task_assists import TaskAssistStore, WrittenAssist
 from ..store.task_types import TaskTypeNotFound
 from . import task_assist
 from .deps import Runtime
@@ -44,7 +44,7 @@ class TaskReads:
     def __init__(self, rt: Runtime, runs: list[dict[str, Any]], step_ids: list[str]) -> None:
         self.rt, self.runs, self.step_ids = rt, runs, step_ids
         self._types: dict[tuple[str | None, str, int | None], tuple[int, dict[str, Any]] | TaskTypeNotFound] = {}
-        self._assists: dict[str, tuple[dict[str, Any], str]] | None = None
+        self._assists: dict[str, WrittenAssist] | None = None
         self._cases: dict[str, list[dict[str, Any]]] | None = None
         self._steps: dict[str, list[dict[str, Any]]] = {}
 
@@ -61,7 +61,7 @@ class TaskReads:
             raise found
         return found
 
-    async def assist(self, step_id: str) -> tuple[dict[str, Any], str] | None:
+    async def assist(self, step_id: str) -> WrittenAssist | None:
         if self._assists is None:
             self._assists = await TaskAssistStore(self.rt.db).written_many(self.step_ids)
         return self._assists.get(step_id)

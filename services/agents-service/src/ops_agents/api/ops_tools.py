@@ -30,7 +30,7 @@ from ops_store import isolation
 from ..activities.catalog import AgentDefinition
 from ..activities.gateway import carded
 from ..graphs.common import OPS_SERVER
-from ..store.cases import CaseNotFound, CaseStore
+from ..store.cases import CaseEventRecord, CaseNotFound, CaseRecord, CaseStore
 from ..store.team_defaults import TeamDefaults
 from ..store.tenancy import ASSISTANT_CATCH_UP, current_tenant
 from . import hitl_facade
@@ -241,28 +241,28 @@ def _answer(cards: list[dict[str, str]], summary: str) -> ToolOutcome:
     return ToolOutcome(True, {"cards": cards, "summary": summary})
 
 
-def _brief(row: dict[str, Any], events: list[dict[str, Any]]) -> str:
+def _brief(row: CaseRecord, events: list[CaseEventRecord]) -> str:
     """One case for the model to answer from: subject and status, customer, when it is due, and its notes in order, so
     a "prep me" names the client and the points the case holds instead of making them up."""
-    notes = [str(e["detail"].get("text")) for e in events if e.get("kind") == "note" and e["detail"].get("text")]
-    parts = [f"{row['subject']} ({row['status']})"]
-    if row.get("customer_name"):
-        parts.append(f"customer {row['customer_name']}")
-    if row.get("resolution_due_at"):
-        parts.append(f"due {str(row['resolution_due_at'])[:16].replace('T', ' ')}")
+    notes = [str(e.detail.get("text")) for e in events if e.kind == "note" and e.detail.get("text")]
+    parts = [f"{row.subject} ({row.status})"]
+    if row.customer_name:
+        parts.append(f"customer {row.customer_name}")
+    if row.resolution_due_at:
+        parts.append(f"due {row.resolution_due_at[:16].replace('T', ' ')}")
     parts.append("notes: " + " | ".join(notes) if notes else "no notes")
     return "; ".join(parts)
 
 
-def _case_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+def _case_rows(rows: list[CaseRecord]) -> dict[str, Any]:
     """The cases as one table part: subject first, the id last, which the chat's table keeps behind its View menu."""
     data = [
         {
-            "subject": r["subject"],
-            "customer": r.get("customer_name") or "",
-            "status": str(r["status"]).replace("_", " "),
-            "due": str(r.get("resolution_due_at") or "")[:10],
-            "id": r["id"],
+            "subject": r.subject,
+            "customer": r.customer_name or "",
+            "status": r.status.replace("_", " "),
+            "due": r.resolution_due_at[:10],
+            "id": r.id,
         }
         for r in rows
     ]
@@ -346,16 +346,16 @@ class OpsReads:
             page=1,
             size=LIMIT,
         )
-        named = "; ".join(f"{r['subject']} ({r['status']})" for r in rows)
+        named = "; ".join(f"{r.subject} ({r.status})" for r in rows)
         summary = f"{total} case(s) match; showing {len(rows)}: {named}" if rows else "No case matches."
         if len(rows) == 1:
             # The one match is the case asked about: its brief saves a get_case call.
-            events = await CaseStore(self.rt.db).events(str(rows[0]["id"]))
+            events = await CaseStore(self.rt.db).events(rows[0].id)
             summary = f"1 case matches: {_brief(rows[0], events)}"
         if len(rows) >= TABLE_FROM:
             # The table is drawn in place of the cards, so the cases are shown once.
             return ToolOutcome(True, {"cards": [], "summary": summary}, {"part": _case_rows(rows)})
-        return _answer([{"type": "case", "id": str(r["id"])} for r in rows], summary)
+        return _answer([{"type": "case", "id": r.id} for r in rows], summary)
 
     async def _get_case(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
         case_id = str(args["caseId"])

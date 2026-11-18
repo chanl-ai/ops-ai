@@ -6,7 +6,7 @@ tool calls (tools-service) with none open."""
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, TypeAlias, cast
+from typing import Annotated, Any, Literal, TypeAlias
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -221,7 +221,7 @@ async def case_titles(rt: Runtime, rows: list[dict[str, Any]]) -> dict[str, str]
     out: dict[str, str] = {}
     for event_id, e in events.items():
         # The Activity table shows who did it in its own column, so the sentence starts with the verb.
-        said = entry(str(e["kind"]), cast(dict[str, Any], e["detail"]))
+        said = entry(e.kind, e.detail)
         if said:
             out[f"case:{event_id}"] = said
     return out
@@ -234,7 +234,7 @@ async def _case(rt: Runtime, scope: Scope, case_id: str) -> tuple[str, str]:
         row = await CaseStore(rt.db).get(case_id, list(teams))
     except CaseNotFound:
         raise NotFound(f"Case {case_id}") from None
-    return case_id, str(row["team_id"])
+    return case_id, row.team_id
 
 
 @router.get("", response_model=Envelope[ListResult[ActivityRow]])

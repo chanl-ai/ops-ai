@@ -35,7 +35,7 @@ async def _case(s: Stack, subject: str, team: str = "team_ops") -> str:
             assignee="james@harborpine.example",
             fields={},
         )
-    return str(opened.case["id"])
+    return str(opened.case.id)
 
 
 async def _waiting_on(s: Stack, case_id: str, tag: str, due_in_hours: float) -> str:

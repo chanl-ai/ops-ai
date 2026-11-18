@@ -38,10 +38,8 @@ async def test_a_reply_check_lists_the_cases_its_run_and_child_runs_opened(engin
     child = f"wfrun_{uuid4().hex[:10]}"
     with tenant_scope(tenant):
         cases = CaseStore(engine)
-        mine = (await cases.open(team_id="team_a", subject="Levy for Marcus Bell", priority="normal", by="a@x")).case[
-            "id"
-        ]
-        other = (await cases.open(team_id="team_a", subject="Levy for Ann Lee", priority="normal", by="a@x")).case["id"]
+        mine = (await cases.open(team_id="team_a", subject="Levy for Marcus Bell", priority="normal", by="a@x")).case.id
+        other = (await cases.open(team_id="team_a", subject="Levy for Ann Lee", priority="normal", by="a@x")).case.id
         await cases.add_event(mine, "run", ref=run_id, detail={}, by="a@x")
         await cases.add_event(other, "run", ref=child, detail={}, by="a@x")
         async with engine.begin() as c:

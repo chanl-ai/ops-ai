@@ -18,7 +18,7 @@ from ops_service_kit.logging import get_logger
 
 from .. import task_types as tt
 from ..store.engine import AsyncEngine
-from ..store.task_assists import TaskAssistStore
+from ..store.task_assists import TaskAssistStore, WrittenAssist
 from ..store.task_types import TaskTypeNotFound
 from ..store.tenancy import NoTenantError
 from .engine_agents import KernelAgents, KernelPrompts
@@ -38,14 +38,14 @@ FAILED: dict[str, Any] = {"failed": True}
 PENDING_LIMIT = timedelta(seconds=TIMEOUT_SECONDS * 3)
 
 
-def settled(written: tuple[dict[str, Any], str] | None, now: datetime) -> dict[str, Any] | None:
+def settled(written: WrittenAssist | None, now: datetime) -> dict[str, Any] | None:
     """The assist as a task shows it: a pending one older than PENDING_LIMIT as failed."""
     if written is None:
         return None
-    assist, at = written
-    if assist.get("pending") and datetime.fromisoformat(at.replace("Z", "+00:00")) < now - PENDING_LIMIT:
+    at = datetime.fromisoformat(written.created_at.replace("Z", "+00:00"))
+    if written.assist.get("pending") and at < now - PENDING_LIMIT:
         return FAILED
-    return assist
+    return written.assist
 
 
 SCHEMA: dict[str, Any] = {

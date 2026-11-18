@@ -154,11 +154,11 @@ async def overview(rt: Rt, me: Me) -> JSONResponse:
         ],
         cases_due=[
             OverviewCaseRow(
-                id=str(r["id"]),
-                subject=str(r["subject"]),
-                customer_name=r.get("customer_name"),
-                status=str(r["status"]),
-                resolution_due_at=r.get("resolution_due_at"),
+                id=r.id,
+                subject=r.subject,
+                customer_name=r.customer_name,
+                status=r.status,
+                resolution_due_at=r.resolution_due_at,
             )
             for r in due_rows
         ],

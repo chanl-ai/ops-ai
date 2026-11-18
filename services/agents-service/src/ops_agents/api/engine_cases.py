@@ -54,7 +54,7 @@ class RunCases:
             type_id=type_id,
             type_version=type_version,
         )
-        case_id = str(opened.case["id"])
+        case_id = opened.case.id
         if opened.created:
             await self.cases.add_event(case_id, "run", ref=run_id, detail={}, by=f"run:{run_id}")
         return OpenedCase(case_id, opened.created)
@@ -86,7 +86,7 @@ class RunCases:
         by = f"run:{run_id}"
         # A retried step finds its entry on the timeline already and adds nothing: the run's own entry the first time
         # it joins, a note of a later step of the same run by that step's key.
-        if not any(e["kind"] == "run" and e["ref"] == run_id for e in events):
+        if not any(e.kind == "run" and e.ref == run_id for e in events):
             await self.cases.add_event(case_id, "run", ref=run_id, detail={"text": note} if note else {}, by=by)
-        elif note and key and not any(e["kind"] == "note" and e["ref"] == key for e in events):
+        elif note and key and not any(e.kind == "note" and e.ref == key for e in events):
             await self.cases.add_event(case_id, "note", ref=key, detail={"text": note}, by=by)

@@ -88,8 +88,8 @@ def _checked(content: dict[str, Any]) -> dict[str, Any]:
 async def list_task_types(rt: Rt, me: Me, _: Tx, q: ListQuery) -> JSONResponse:
     """Every task type of the team on the shared list contract: the seeded ones first, then the team's own, each by
     name, then by id; `search` matches the name and description and `ids` names types."""
-    listed = await (await task_type_store(rt, store_team(me))).page(q)
-    return ok({**listed, "data": [view(r) for r in listed["data"]]})
+    listed, shown = await (await task_type_store(rt, store_team(me))).page(q)
+    return ok({**listed, "data": [view(r) for r in shown]})
 
 
 @router.get("/{type_id}", response_model=Envelope[TaskTypeDetail])
