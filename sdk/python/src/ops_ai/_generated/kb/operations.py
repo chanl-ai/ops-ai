@@ -189,7 +189,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/knowledge-bases",
         "pathParams": [],
-        "query": ["page", "pageSize", "search", "templateId"],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "knowledge_bases_lookups": {
@@ -333,7 +333,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/sources/{source_id}/items",
         "pathParams": ["source_id"],
-        "query": ["page", "pageSize", "search"],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "sources_list_plugin_sources": {
@@ -351,7 +351,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/sources/{source_id}/runs",
         "pathParams": ["source_id"],
-        "query": ["page", "pageSize"],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "sources_list_sources": {
@@ -360,7 +360,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/sources",
         "pathParams": [],
-        "query": ["page", "pageSize", "search"],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "sources_list_tombstones": {
@@ -488,14 +488,23 @@ class Operations:
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
-        template_id: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultKnowledgeBaseRow:
         "List Knowledge Bases"
         return self._t.call(
             SERVICE,
             OPERATIONS["knowledge_bases_list_knowledge_bases"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "templateId": template_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -655,14 +664,28 @@ class Operations:
         return self._t.call(SERVICE, OPERATIONS["sources_source_kinds"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     def sources_list_sources(
-        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultSourceRow:
         "List Sources"
         return self._t.call(
             SERVICE,
             OPERATIONS["sources_list_sources"],
             {},
-            {"page": page, "pageSize": page_size, "search": search},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -708,14 +731,29 @@ class Operations:
         return self._t.call(SERVICE, OPERATIONS["sources_add_files"], {"source_id": source_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     def sources_list_items(
-        self, source_id: str, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+        self,
+        source_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultItem:
         "List Items"
         return self._t.call(
             SERVICE,
             OPERATIONS["sources_list_items"],
             {"source_id": source_id},
-            {"page": page, "pageSize": page_size, "search": search},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -733,14 +771,29 @@ class Operations:
         return self._t.call(SERVICE, OPERATIONS["sources_resume_source"], {"source_id": source_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def sources_list_runs(
-        self, source_id: str, *, page: int | None = None, page_size: int | None = None
+        self,
+        source_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultSyncRun:
         "List Runs"
         return self._t.call(
             SERVICE,
             OPERATIONS["sources_list_runs"],
             {"source_id": source_id},
-            {"page": page, "pageSize": page_size},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -798,14 +851,23 @@ class AsyncOperations:
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
-        template_id: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultKnowledgeBaseRow:
         "List Knowledge Bases"
         return await self._t.call(
             SERVICE,
             OPERATIONS["knowledge_bases_list_knowledge_bases"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "templateId": template_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -969,14 +1031,28 @@ class AsyncOperations:
         return await self._t.call(SERVICE, OPERATIONS["sources_source_kinds"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def sources_list_sources(
-        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultSourceRow:
         "List Sources"
         return await self._t.call(
             SERVICE,
             OPERATIONS["sources_list_sources"],
             {},
-            {"page": page, "pageSize": page_size, "search": search},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -1026,14 +1102,29 @@ class AsyncOperations:
         return await self._t.call(SERVICE, OPERATIONS["sources_add_files"], {"source_id": source_id}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def sources_list_items(
-        self, source_id: str, *, page: int | None = None, page_size: int | None = None, search: str | None = None
+        self,
+        source_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultItem:
         "List Items"
         return await self._t.call(
             SERVICE,
             OPERATIONS["sources_list_items"],
             {"source_id": source_id},
-            {"page": page, "pageSize": page_size, "search": search},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -1051,14 +1142,29 @@ class AsyncOperations:
         return await self._t.call(SERVICE, OPERATIONS["sources_resume_source"], {"source_id": source_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def sources_list_runs(
-        self, source_id: str, *, page: int | None = None, page_size: int | None = None
+        self,
+        source_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultSyncRun:
         "List Runs"
         return await self._t.call(
             SERVICE,
             OPERATIONS["sources_list_runs"],
             {"source_id": source_id},
-            {"page": page, "pageSize": page_size},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]

@@ -1090,7 +1090,14 @@
             "type": "array"
           },
           "candidate": {
-            "title": "Candidate"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublishEvalSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "changes": {
             "items": {
@@ -1170,7 +1177,14 @@
             "title": "Policy"
           },
           "published": {
-            "title": "Published"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublishEvalSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "requestedBy": {
             "title": "Requestedby",
@@ -1510,8 +1524,7 @@
           },
           "skills": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/LoadedSkill"
             },
             "title": "Skills",
             "type": "array"
@@ -1684,7 +1697,9 @@
         "additionalProperties": false,
         "properties": {
           "output": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Output",
             "type": "object"
           },
@@ -2546,6 +2561,7 @@
         "type": "object"
       },
       "BatchIn": {
+        "additionalProperties": false,
         "properties": {
           "dryRun": {
             "default": false,
@@ -2593,7 +2609,9 @@
             "title": "Error"
           },
           "input": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Input",
             "type": "object"
           },
@@ -2609,7 +2627,7 @@
             "title": "Outcome"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "row": {
             "title": "Row",
@@ -3062,7 +3080,9 @@
           "fields": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -3208,7 +3228,9 @@
             "type": "string"
           },
           "detail": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Detail",
             "type": "object"
           },
@@ -3578,7 +3600,9 @@
           "fields": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -4001,7 +4025,9 @@
           "fields": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -4183,7 +4209,9 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -4488,14 +4516,12 @@
           "copiedFrom": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/CopiedFrom"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Copiedfrom"
+            ]
           },
           "description": {
             "title": "Description",
@@ -4610,7 +4636,9 @@
             "title": "Publishedat"
           },
           "record": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Record",
             "type": "object"
           },
@@ -4643,14 +4671,12 @@
           "copiedFrom": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/CopiedFrom"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Copiedfrom"
+            ]
           },
           "description": {
             "title": "Description",
@@ -4765,7 +4791,9 @@
           "fields": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -5399,6 +5427,25 @@
         "title": "ConnectWait",
         "type": "object"
       },
+      "CopiedFrom": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ],
+        "title": "CopiedFrom",
+        "type": "object"
+      },
       "CopyRef": {
         "additionalProperties": false,
         "properties": {
@@ -5714,7 +5761,9 @@
           "definition": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -5872,7 +5921,9 @@
           "steps": {
             "additionalProperties": {
               "additionalProperties": {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               "type": "object"
@@ -5999,7 +6050,9 @@
             "title": "Archivedat"
           },
           "definition": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Definition",
             "type": "object"
           },
@@ -6112,6 +6165,48 @@
         "title": "DefinitionWarning",
         "type": "object"
       },
+      "DeploymentBudget": {
+        "additionalProperties": false,
+        "description": "Caps for the thread a deployment starts; stored as the request gave them, so the names stay snake_case.",
+        "properties": {
+          "max_calls": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Calls"
+          },
+          "max_cost": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Cost"
+          },
+          "max_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Tokens"
+          }
+        },
+        "title": "DeploymentBudget",
+        "type": "object"
+      },
       "DeploymentInput": {
         "additionalProperties": false,
         "properties": {
@@ -6190,14 +6285,12 @@
           "budget": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/DeploymentBudget"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Budget"
+            ]
           },
           "channel": {
             "enum": [
@@ -6261,7 +6354,9 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/JsonValue"
+                  },
                   "type": "object"
                 },
                 "type": "array"
@@ -6424,7 +6519,9 @@
           },
           "sample": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "title": "Sample",
@@ -6663,7 +6760,7 @@
             "title": "Error"
           },
           "input": {
-            "title": "Input"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "iteration": {
             "title": "Iteration",
@@ -6674,7 +6771,7 @@
             "type": "string"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "port": {
             "anyOf": [
@@ -7332,6 +7429,25 @@
         "title": "Envelope[GraphPublished]",
         "type": "object"
       },
+      "Envelope_GuardrailList_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/GuardrailList"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[GuardrailList]",
+        "type": "object"
+      },
       "Envelope_Guardrail_": {
         "additionalProperties": false,
         "properties": {
@@ -7427,6 +7543,25 @@
         "title": "Envelope[JobArmed]",
         "type": "object"
       },
+      "Envelope_LabelledListResult_RunRow__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/LabelledListResult_RunRow_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[LabelledListResult[RunRow]]",
+        "type": "object"
+      },
       "Envelope_ListResult_ActivityRow__": {
         "additionalProperties": false,
         "properties": {
@@ -7484,6 +7619,25 @@
         "title": "Envelope[ListResult[CaseRow]]",
         "type": "object"
       },
+      "Envelope_ListResult_CaseTypeView__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ListResult_CaseTypeView_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ListResult[CaseTypeView]]",
+        "type": "object"
+      },
       "Envelope_ListResult_DefinitionRow__": {
         "additionalProperties": false,
         "properties": {
@@ -7503,11 +7657,11 @@
         "title": "Envelope[ListResult[DefinitionRow]]",
         "type": "object"
       },
-      "Envelope_ListResult_RunRow__": {
+      "Envelope_ListResult_FormView__": {
         "additionalProperties": false,
         "properties": {
           "data": {
-            "$ref": "#/components/schemas/ListResult_RunRow_"
+            "$ref": "#/components/schemas/ListResult_FormView_"
           },
           "success": {
             "const": true,
@@ -7519,7 +7673,45 @@
           "success",
           "data"
         ],
-        "title": "Envelope[ListResult[RunRow]]",
+        "title": "Envelope[ListResult[FormView]]",
+        "type": "object"
+      },
+      "Envelope_ListResult_TaskTypeView__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ListResult_TaskTypeView_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ListResult[TaskTypeView]]",
+        "type": "object"
+      },
+      "Envelope_ListResult_ThreadView__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ListResult_ThreadView_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ListResult[ThreadView]]",
         "type": "object"
       },
       "Envelope_ListResult_WorkflowRun__": {
@@ -8477,66 +8669,6 @@
         "title": "Envelope[Union[ValidationRun, NoneType]]",
         "type": "object"
       },
-      "Envelope_Union_list_Guardrail___GuardrailList__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/Guardrail"
-                },
-                "type": "array"
-              },
-              {
-                "$ref": "#/components/schemas/GuardrailList"
-              }
-            ],
-            "title": "Data"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[Union[list[Guardrail], GuardrailList]]",
-        "type": "object"
-      },
-      "Envelope_Union_list_WidgetTemplateOut___WidgetTemplateList__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/WidgetTemplateOut"
-                },
-                "type": "array"
-              },
-              {
-                "$ref": "#/components/schemas/WidgetTemplateList"
-              }
-            ],
-            "title": "Data"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[Union[list[WidgetTemplateOut], WidgetTemplateList]]",
-        "type": "object"
-      },
       "Envelope_UpdateReview_": {
         "additionalProperties": false,
         "properties": {
@@ -8592,6 +8724,25 @@
           "data"
         ],
         "title": "Envelope[ValidationRun]",
+        "type": "object"
+      },
+      "Envelope_WidgetTemplateList_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/WidgetTemplateList"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[WidgetTemplateList]",
         "type": "object"
       },
       "Envelope_WidgetTemplateOut_": {
@@ -8759,52 +8910,6 @@
           "data"
         ],
         "title": "Envelope[list[AgentVersion]]",
-        "type": "object"
-      },
-      "Envelope_list_CaseTypeView__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/CaseTypeView"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[list[CaseTypeView]]",
-        "type": "object"
-      },
-      "Envelope_list_FormView__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/FormView"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[list[FormView]]",
         "type": "object"
       },
       "Envelope_list_GraphInfo__": {
@@ -9060,29 +9165,6 @@
         "title": "Envelope[list[RunJournalEntry]]",
         "type": "object"
       },
-      "Envelope_list_TaskTypeView__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/TaskTypeView"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[list[TaskTypeView]]",
-        "type": "object"
-      },
       "Envelope_list_TemplateView__": {
         "additionalProperties": false,
         "properties": {
@@ -9104,29 +9186,6 @@
           "data"
         ],
         "title": "Envelope[list[TemplateView]]",
-        "type": "object"
-      },
-      "Envelope_list_ThreadView__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/ThreadView"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[list[ThreadView]]",
         "type": "object"
       },
       "Envelope_list_Version__": {
@@ -9556,7 +9615,9 @@
           "bySource": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -9592,14 +9653,14 @@
             "type": "boolean"
           },
           "extractedValue": {
-            "title": "Extractedvalue"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "needsReview": {
             "title": "Needsreview",
             "type": "boolean"
           },
           "value": {
-            "title": "Value"
+            "$ref": "#/components/schemas/JsonValue"
           }
         },
         "required": [
@@ -9631,10 +9692,10 @@
             "type": "string"
           },
           "template": {
-            "title": "Template"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "yours": {
-            "title": "Yours"
+            "$ref": "#/components/schemas/JsonValue"
           }
         },
         "required": [
@@ -9694,7 +9755,9 @@
         "additionalProperties": false,
         "properties": {
           "schema": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Schema",
             "type": "object"
           },
@@ -9717,6 +9780,7 @@
         "type": "object"
       },
       "FormIn": {
+        "additionalProperties": false,
         "properties": {
           "afterText": {
             "default": "",
@@ -9770,6 +9834,7 @@
         "type": "object"
       },
       "FormPatch": {
+        "additionalProperties": false,
         "properties": {
           "afterText": {
             "anyOf": [
@@ -9817,6 +9882,10 @@
           "afterText": {
             "title": "Aftertext",
             "type": "string"
+          },
+          "canEdit": {
+            "title": "Canedit",
+            "type": "boolean"
           },
           "dailyCap": {
             "title": "Dailycap",
@@ -9885,7 +9954,8 @@
           "expiresAt",
           "dailyCap",
           "paused",
-          "url"
+          "url",
+          "canEdit"
         ],
         "title": "FormView",
         "type": "object"
@@ -10115,7 +10185,9 @@
         "additionalProperties": true,
         "properties": {
           "data": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Data",
             "type": "object"
           },
@@ -11040,6 +11112,30 @@
         "title": "InboxPosted",
         "type": "object"
       },
+      "InjectionTally": {
+        "additionalProperties": false,
+        "properties": {
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "regressions": {
+            "title": "Regressions",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "passed",
+          "total",
+          "regressions"
+        ],
+        "title": "InjectionTally",
+        "type": "object"
+      },
       "InstallInput": {
         "additionalProperties": false,
         "properties": {
@@ -11269,6 +11365,7 @@
         "title": "JobInput",
         "type": "object"
       },
+      "JsonValue": {},
       "KindRow": {
         "additionalProperties": false,
         "properties": {
@@ -11365,6 +11462,49 @@
           "elsewhere"
         ],
         "title": "KnowledgeUsage",
+        "type": "object"
+      },
+      "LabelledListResult_RunRow_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/RunRow"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "labels": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Labels",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets",
+          "labels"
+        ],
+        "title": "LabelledListResult[RunRow]",
         "type": "object"
       },
       "LeftItem": {
@@ -11565,6 +11705,38 @@
         "title": "ListResult[CaseRow]",
         "type": "object"
       },
+      "ListResult_CaseTypeView_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/CaseTypeView"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets"
+        ],
+        "title": "ListResult[CaseTypeView]",
+        "type": "object"
+      },
       "ListResult_DefinitionRow_": {
         "additionalProperties": false,
         "properties": {
@@ -11597,12 +11769,12 @@
         "title": "ListResult[DefinitionRow]",
         "type": "object"
       },
-      "ListResult_RunRow_": {
+      "ListResult_FormView_": {
         "additionalProperties": false,
         "properties": {
           "data": {
             "items": {
-              "$ref": "#/components/schemas/RunRow"
+              "$ref": "#/components/schemas/FormView"
             },
             "title": "Data",
             "type": "array"
@@ -11626,7 +11798,71 @@
           "pagination",
           "facets"
         ],
-        "title": "ListResult[RunRow]",
+        "title": "ListResult[FormView]",
+        "type": "object"
+      },
+      "ListResult_TaskTypeView_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/TaskTypeView"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets"
+        ],
+        "title": "ListResult[TaskTypeView]",
+        "type": "object"
+      },
+      "ListResult_ThreadView_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ThreadView"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets"
+        ],
+        "title": "ListResult[ThreadView]",
         "type": "object"
       },
       "ListResult_WorkflowRun_": {
@@ -11833,6 +12069,61 @@
           "places"
         ],
         "title": "LiveVersion",
+        "type": "object"
+      },
+      "LoadedSkill": {
+        "additionalProperties": false,
+        "description": "A skill a turn loaded, as the kernel journals it (`skills.loaded_entry`); part and inputs are left out when\nthere are none.",
+        "properties": {
+          "inputs": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inputs"
+          },
+          "matched": {
+            "title": "Matched",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "part": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Part"
+          },
+          "skillId": {
+            "title": "Skillid",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "skillId",
+          "name",
+          "version",
+          "matched"
+        ],
+        "title": "LoadedSkill",
         "type": "object"
       },
       "MailboxIn": {
@@ -12482,7 +12773,9 @@
         "properties": {
           "audit": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "title": "Audit",
@@ -12840,7 +13133,9 @@
             "type": "array"
           },
           "parameters": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Parameters",
             "type": "object"
           },
@@ -12852,7 +13147,9 @@
             "type": "number"
           },
           "ui": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Ui",
             "type": "object"
           },
@@ -13009,12 +13306,14 @@
         "description": "One input a reviewer may set when choosing an option, declared from the operation's input schema.",
         "properties": {
           "default": {
-            "title": "Default"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "enum": {
             "anyOf": [
               {
-                "items": {},
+                "items": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "array"
               },
               {
@@ -13102,7 +13401,7 @@
             "type": "string"
           },
           "value": {
-            "title": "Value"
+            "$ref": "#/components/schemas/JsonValue"
           }
         },
         "required": [
@@ -13221,7 +13520,9 @@
           },
           "urgentReviews": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "title": "Urgentreviews",
@@ -13869,6 +14170,45 @@
         "title": "PublishDecisionFields",
         "type": "object"
       },
+      "PublishEvalSummary": {
+        "additionalProperties": false,
+        "description": "An eval run against one agent version, as a publish request shows it. Nothing sends one yet: both are null.",
+        "properties": {
+          "injection": {
+            "$ref": "#/components/schemas/InjectionTally"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "ranAt": {
+            "title": "Ranat",
+            "type": "string"
+          },
+          "regressions": {
+            "title": "Regressions",
+            "type": "integer"
+          },
+          "runId": {
+            "title": "Runid",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "runId",
+          "ranAt",
+          "passed",
+          "total",
+          "regressions",
+          "injection"
+        ],
+        "title": "PublishEvalSummary",
+        "type": "object"
+      },
       "PublishIn": {
         "additionalProperties": false,
         "properties": {
@@ -14140,7 +14480,9 @@
             ]
           },
           "evidence": {
-            "items": {},
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
             "title": "Evidence",
             "type": "array"
           },
@@ -14424,7 +14766,9 @@
             "type": "object"
           },
           "values": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Values",
             "type": "object"
           }
@@ -14893,7 +15237,9 @@
           "call": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -15449,7 +15795,9 @@
           "input": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -15485,7 +15833,7 @@
             "title": "Outcometext"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "result": {
             "anyOf": [
@@ -15758,7 +16106,9 @@
           "crashed": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -15938,7 +16288,7 @@
             "type": "string"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           }
         },
         "required": [
@@ -16016,7 +16366,9 @@
           "input": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -16052,7 +16404,7 @@
             "title": "Outcometext"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "startedBy": {
             "anyOf": [
@@ -16281,7 +16633,9 @@
             "type": "string"
           },
           "payload": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Payload",
             "type": "object"
           }
@@ -16299,8 +16653,7 @@
         "properties": {
           "checks": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SavedCaseCheck"
             },
             "title": "Checks",
             "type": "array"
@@ -16308,14 +16661,12 @@
           "context": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/SavedCaseContext"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Context"
+            ]
           },
           "createdAt": {
             "title": "Createdat",
@@ -16363,6 +16714,56 @@
           "createdAt"
         ],
         "title": "SavedCase",
+        "type": "object"
+      },
+      "SavedCaseCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "SavedCaseCheck",
+        "type": "object"
+      },
+      "SavedCaseContext": {
+        "additionalProperties": false,
+        "properties": {
+          "collections": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Collections",
+            "type": "array"
+          }
+        },
+        "title": "SavedCaseContext",
         "type": "object"
       },
       "SavedCases": {
@@ -16709,6 +17110,115 @@
         "title": "Skill",
         "type": "object"
       },
+      "SkillActivity": {
+        "additionalProperties": false,
+        "properties": {
+          "agents": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "loads30d": {
+            "title": "Loads30D",
+            "type": "integer"
+          },
+          "loadsPerDay": {
+            "items": {
+              "$ref": "#/components/schemas/SkillLoadsDay"
+            },
+            "title": "Loadsperday",
+            "type": "array"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/SkillTrace"
+            },
+            "title": "Samples",
+            "type": "array"
+          },
+          "successRate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Successrate"
+          }
+        },
+        "required": [
+          "agents",
+          "loadsPerDay",
+          "loads30d",
+          "successRate",
+          "samples"
+        ],
+        "title": "SkillActivity",
+        "type": "object"
+      },
+      "SkillCitation": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "href": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Href"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "document",
+              "case",
+              "run",
+              "chat",
+              "template",
+              "description"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "section": {
+            "title": "Section",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "section"
+        ],
+        "title": "SkillCitation",
+        "type": "object"
+      },
       "SkillContent": {
         "additionalProperties": false,
         "properties": {
@@ -16769,8 +17279,7 @@
           },
           "resources": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SkillResource"
             },
             "title": "Resources",
             "type": "array"
@@ -16923,9 +17432,7 @@
         "additionalProperties": false,
         "properties": {
           "activity": {
-            "additionalProperties": true,
-            "title": "Activity",
-            "type": "object"
+            "$ref": "#/components/schemas/SkillActivity"
           },
           "content": {
             "$ref": "#/components/schemas/SkillContent"
@@ -17032,14 +17539,12 @@
           "pendingReview": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/SkillPendingReview"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Pendingreview"
+            ]
           },
           "pendingReviewId": {
             "anyOf": [
@@ -17053,9 +17558,7 @@
             "title": "Pendingreviewid"
           },
           "provenance": {
-            "additionalProperties": true,
-            "title": "Provenance",
-            "type": "object"
+            "$ref": "#/components/schemas/SkillProvenance"
           },
           "publishCheck": {
             "$ref": "#/components/schemas/SkillPublishCheck"
@@ -17073,8 +17576,7 @@
           },
           "runs": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/JsonValue"
             },
             "title": "Runs",
             "type": "array"
@@ -17095,8 +17597,7 @@
           },
           "tests": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/JsonValue"
             },
             "title": "Tests",
             "type": "array"
@@ -17430,6 +17931,33 @@
         "title": "SkillList",
         "type": "object"
       },
+      "SkillLoadsDay": {
+        "additionalProperties": false,
+        "properties": {
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "counts",
+          "total"
+        ],
+        "title": "SkillLoadsDay",
+        "type": "object"
+      },
       "SkillOptions": {
         "additionalProperties": false,
         "properties": {
@@ -17619,6 +18147,72 @@
         "title": "SkillPartSummary",
         "type": "object"
       },
+      "SkillPendingReview": {
+        "additionalProperties": false,
+        "properties": {
+          "approvals": {
+            "title": "Approvals",
+            "type": "integer"
+          },
+          "editClass": {
+            "enum": [
+              "free",
+              "re_test",
+              "re_approval"
+            ],
+            "title": "Editclass",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "needed": {
+            "title": "Needed",
+            "type": "integer"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "editClass",
+          "approvals",
+          "needed"
+        ],
+        "title": "SkillPendingReview",
+        "type": "object"
+      },
+      "SkillProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/SkillCitation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "origin": {
+            "title": "Origin",
+            "type": "string"
+          }
+        },
+        "required": [
+          "origin",
+          "detail",
+          "citations"
+        ],
+        "title": "SkillProvenance",
+        "type": "object"
+      },
       "SkillPublishCheck": {
         "additionalProperties": false,
         "properties": {
@@ -17739,6 +18333,100 @@
         "title": "SkillRendered",
         "type": "object"
       },
+      "SkillResource": {
+        "additionalProperties": false,
+        "description": "A file or a text template kept on a skill version; a file is stored through the Files API.",
+        "properties": {
+          "addedAt": {
+            "title": "Addedat",
+            "type": "string"
+          },
+          "addedBy": {
+            "title": "Addedby",
+            "type": "string"
+          },
+          "blocked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "fileId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fileid"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "file",
+              "template"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "addedAt",
+          "addedBy"
+        ],
+        "title": "SkillResource",
+        "type": "object"
+      },
       "SkillToolRef": {
         "additionalProperties": false,
         "properties": {
@@ -17771,6 +18459,63 @@
           "access"
         ],
         "title": "SkillToolRef",
+        "type": "object"
+      },
+      "SkillTrace": {
+        "additionalProperties": false,
+        "properties": {
+          "agentName": {
+            "title": "Agentname",
+            "type": "string"
+          },
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input": {
+            "title": "Input",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "completed",
+              "handed_off",
+              "failed"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "tookMs": {
+            "title": "Tookms",
+            "type": "integer"
+          },
+          "toolCalls": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Toolcalls",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "at",
+          "agentName",
+          "version",
+          "input",
+          "outcome",
+          "toolCalls",
+          "tookMs"
+        ],
+        "title": "SkillTrace",
         "type": "object"
       },
       "SkillUsage": {
@@ -17959,16 +18704,8 @@
             "type": "string"
           },
           "testRun": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Testrun"
+            "title": "Testrun",
+            "type": "null"
           },
           "tokens": {
             "title": "Tokens",
@@ -17998,7 +18735,7 @@
         "additionalProperties": false,
         "properties": {
           "data": {
-            "title": "Data"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "event": {
             "title": "Event",
@@ -18145,7 +18882,9 @@
             "type": "string"
           },
           "schema": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Schema",
             "type": "object"
           },
@@ -18265,14 +19004,14 @@
             "title": "Finishedat"
           },
           "input": {
-            "title": "Input"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "key": {
             "title": "Key",
             "type": "string"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "port": {
             "anyOf": [
@@ -18792,6 +19531,7 @@
         "type": "object"
       },
       "SubmitIn": {
+        "additionalProperties": false,
         "properties": {
           "values": {
             "additionalProperties": true,
@@ -19002,7 +19742,9 @@
           },
           "inputs": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "title": "Inputs",
@@ -19150,7 +19892,9 @@
             "type": "boolean"
           },
           "data": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Data",
             "type": "object"
           },
@@ -19236,7 +19980,9 @@
           "values": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -19264,14 +20010,12 @@
           "copiedFrom": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/CopiedFrom"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Copiedfrom"
+            ]
           },
           "description": {
             "title": "Description",
@@ -19386,7 +20130,9 @@
             "title": "Publishedat"
           },
           "record": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Record",
             "type": "object"
           },
@@ -19419,14 +20165,12 @@
           "copiedFrom": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/CopiedFrom"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Copiedfrom"
+            ]
           },
           "description": {
             "title": "Description",
@@ -19951,8 +20695,7 @@
         "properties": {
           "restarted": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/TimerRestart"
             },
             "title": "Restarted",
             "type": "array"
@@ -20093,7 +20836,9 @@
           "calls": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -20243,7 +20988,9 @@
           "error": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -20358,7 +21105,9 @@
           "resume": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -20548,7 +21297,9 @@
           "interrupt": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -20583,7 +21334,9 @@
             "type": "string"
           },
           "values": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Values",
             "type": "object"
           },
@@ -20627,7 +21380,9 @@
             "type": "string"
           },
           "metadata": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Metadata",
             "type": "object"
           },
@@ -20665,6 +21420,30 @@
           "updatedAt"
         ],
         "title": "ThreadView",
+        "type": "object"
+      },
+      "TimerRestart": {
+        "additionalProperties": false,
+        "properties": {
+          "dueAt": {
+            "title": "Dueat",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "timerId": {
+            "title": "Timerid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timerId",
+          "kind",
+          "dueAt"
+        ],
+        "title": "TimerRestart",
         "type": "object"
       },
       "ToolApp": {
@@ -21018,7 +21797,9 @@
           "inputSchema": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -21117,7 +21898,9 @@
             "type": "string"
           },
           "inputSchema": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Inputschema",
             "type": "object"
           },
@@ -21357,7 +22140,7 @@
             "type": "string"
           },
           "raw": {
-            "title": "Raw"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "required": {
             "title": "Required",
@@ -21448,6 +22231,35 @@
         "title": "UpdateExpect",
         "type": "object"
       },
+      "UpdateExpectView": {
+        "additionalProperties": false,
+        "properties": {
+          "digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Digest"
+          },
+          "recordDigest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorddigest"
+          }
+        },
+        "title": "UpdateExpectView",
+        "type": "object"
+      },
       "UpdateInput": {
         "additionalProperties": false,
         "properties": {
@@ -21522,7 +22334,7 @@
             "type": "array"
           },
           "expect": {
-            "$ref": "#/components/schemas/UpdateExpect"
+            "$ref": "#/components/schemas/UpdateExpectView"
           },
           "fields": {
             "items": {
@@ -22101,7 +22913,9 @@
             "title": "Canpublish"
           },
           "dataSchema": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Dataschema",
             "type": "object"
           },
@@ -22119,7 +22933,9 @@
           "sample": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -22162,7 +22978,9 @@
             "title": "Teamname"
           },
           "tree": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Tree",
             "type": "object"
           },
@@ -23673,6 +24491,7 @@
     },
     "/health/background": {
       "get": {
+        "description": "This service's processes and their state, for `make health`. No request transaction: it has no caller, so no\ntenant to hold one in, and its one read is the heartbeat table.",
         "operationId": "background_health_background",
         "responses": {
           "200": {
@@ -23785,6 +24604,7 @@
     },
     "/reviews": {
       "get": {
+        "description": "Human Tasks: one page of every review the team may see, with counts per view, facets and stats. The page is cut\nafter merging three sources in Python (hitl_facade.list_reviews): graph threads waiting on a person, agent and\nworkflow publish requests, and workflow runs waiting on a review step. They live in different tables (a thread's\npending step is in its checkpoint, not a column), so no one query can sort and count them together, and the counts\nand facets cover every row, not the page. Each source therefore reads at most `review_list_rows_per_source` rows\n(Settings), newest first, logging `review_source_capped` at the cap; the decisions and policies read are those of\nthe rows kept. The route stays off `Tx`: building a review asks tools-service for its write policy, so it holds\ntwo transactions, 2 by design: one to read what the reviews name, then, once tools-service has answered with none\nopen, one to build the list.",
         "operationId": "reviews_list_reviews",
         "parameters": [
           {
@@ -26418,8 +27238,47 @@
     },
     "/v1/agents": {
       "get": {
+        "description": "One page of the team's agents on the shared list contract, by name: `search` matches the name, role and slug;\n`sortBy` is one of name, updatedAt, tasks24h, version, teamId and availability; the filters `availability`,\n`teamId` and `templateId` narrow the page, and the first two are counted in `facets`.",
         "operationId": "agents_list_agents",
         "parameters": [
+          {
+            "in": "query",
+            "name": "availability",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Availability"
+            }
+          },
+          {
+            "in": "query",
+            "name": "teamId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Teamid"
+            }
+          },
           {
             "in": "query",
             "name": "page",
@@ -26436,11 +27295,16 @@
             "name": "pageSize",
             "required": false,
             "schema": {
-              "default": 25,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
             }
           },
           {
@@ -26480,7 +27344,7 @@
             "name": "sortOrder",
             "required": false,
             "schema": {
-              "default": "asc",
+              "default": "desc",
               "enum": [
                 "asc",
                 "desc"
@@ -26491,18 +27355,22 @@
           },
           {
             "in": "query",
-            "name": "templateId",
+            "name": "ids",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "Templateid"
+              "title": "Ids"
             }
           },
           {
@@ -27894,15 +28762,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/EvalRunInput"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Body"
+                "$ref": "#/components/schemas/EvalRunInput"
               }
             }
           }
@@ -30632,7 +31492,7 @@
     },
     "/v1/ai-steps/{step}": {
       "post": {
-        "description": "One AI step's answer; 422 `ai_steps_off` where the team has AI steps off, `text_too_long` past the service's\nbound, `invalid_settings` naming a setting the step's type refuses, `document_type_not_found` for a document type\nthe team cannot read; 429 past the team's calls a minute; 503 with no model configured.",
+        "description": "One AI step's answer; 422 `ai_steps_off` where the team has AI steps off, `text_too_long` past the service's\nbound, `invalid_settings` naming a setting the step's type refuses, `document_type_not_found` for a document type\nthe team cannot read; 429 past the team's calls a minute; 503 with no model configured. No request transaction:\nit reads no row of its own, and documents-service and the model are called with none open.",
         "operationId": "workflows_run_ai_step",
         "parameters": [
           {
@@ -30836,7 +31696,7 @@
     },
     "/v1/assurance/gates": {
       "get": {
-        "description": "The publish checks of the team's publish requests: each step's result and whether the request is blocked.",
+        "description": "The publish checks of the team's publish requests, newest request first: each step's result and whether the\nrequest is blocked. Filters: `tier`, `result` (blocked, ready, decided).",
         "operationId": "assurance_list_gates",
         "parameters": [
           {
@@ -31092,7 +31952,7 @@
     },
     "/v1/assurance/runs": {
       "get": {
-        "description": "Every stored run of the team's agents and skills and every test run of its workflows, newest first.",
+        "description": "Every stored run of the team's agents and skills and every test run of its workflows, newest first, then by\nid. Filters: `kind`, `trigger`.",
         "operationId": "assurance_list_runs",
         "parameters": [
           {
@@ -31348,7 +32208,7 @@
     },
     "/v1/assurance/suites": {
       "get": {
-        "description": "One suite per agent, skill or workflow in the acting team that has saved cases or a run, with the latest\nresult of each case. Filters: `kind`, `tier`, `result` (failing, passing, not_run).",
+        "description": "One suite per agent, skill or workflow in the acting team that has saved cases or a run, with the latest\nresult of each case, by asset name then kind and id. Filters: `kind`, `tier`, `result` (failing, passing,\nnot_run); each facet counts under the search and the other filters. A page past the end answers the last page.",
         "operationId": "assurance_list_suites",
         "parameters": [
           {
@@ -32000,6 +32860,7 @@
     },
     "/v1/background": {
       "get": {
+        "description": "Every listed process of every service and the latest jobs, for an account admin. No request transaction: the\nother services' /health/background are read between this service's reads, with none open.",
         "operationId": "background_background_processes",
         "parameters": [
           {
@@ -32556,7 +33417,7 @@
     },
     "/v1/batches/{batch_id}/retry": {
       "post": {
-        "description": "A new attempt for each failed row only; the worker starts them. A row that succeeded is never run again.",
+        "description": "A new attempt for each failed row only; the worker starts them. A row that succeeded is never run again.\nNo request transaction: the rows are queued for the workflow worker, and committing them with the request's reads\nwould change when the worker sees them.",
         "operationId": "batches_retry_batch",
         "parameters": [
           {
@@ -32745,9 +33606,103 @@
     },
     "/v1/case-types": {
       "get": {
-        "description": "Every case type in the tenant: the seeded ones first, then the teams' own.",
+        "description": "Every case type of the team on the shared list contract: the seeded ones first, then the team's own, each by\nname, then by id; `search` matches the name and description and `ids` names types.",
         "operationId": "cases_list_case_types",
         "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -32818,7 +33773,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_CaseTypeView__"
+                  "$ref": "#/components/schemas/Envelope_ListResult_CaseTypeView__"
                 }
               }
             },
@@ -33695,7 +34650,7 @@
     },
     "/v1/cases": {
       "get": {
-        "description": "The acting team's cases, the soonest resolution deadline first. `overdue` keeps the open ones past it, leaving\nout a case that waits on the customer.",
+        "description": "The acting team's cases on the shared list contract, the soonest resolution deadline first, then by id.\n`search` keeps the cases holding every word in the subject, the customer's name or id; `status`, `priority`,\n`assignee` and `customerId` filter (declared here so a value outside a status or priority is refused); `overdue`\nkeeps the open ones past their deadline, leaving out a case that waits on the customer.",
         "operationId": "cases_list_cases",
         "parameters": [
           {
@@ -33703,18 +34658,25 @@
             "name": "status",
             "required": false,
             "schema": {
-              "items": {
-                "enum": [
-                  "open",
-                  "waiting_on_customer",
-                  "waiting_on_us",
-                  "resolved",
-                  "closed"
-                ],
-                "type": "string"
-              },
-              "title": "Status",
-              "type": "array"
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "open",
+                      "waiting_on_customer",
+                      "waiting_on_us",
+                      "resolved",
+                      "closed"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
             }
           },
           {
@@ -33722,17 +34684,24 @@
             "name": "priority",
             "required": false,
             "schema": {
-              "items": {
-                "enum": [
-                  "low",
-                  "normal",
-                  "high",
-                  "urgent"
-                ],
-                "type": "string"
-              },
-              "title": "Priority",
-              "type": "array"
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "low",
+                      "normal",
+                      "high",
+                      "urgent"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Priority"
             }
           },
           {
@@ -33779,23 +34748,6 @@
           },
           {
             "in": "query",
-            "name": "search",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 200,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Search"
-            }
-          },
-          {
-            "in": "query",
             "name": "page",
             "required": false,
             "schema": {
@@ -33810,11 +34762,82 @@
             "name": "pageSize",
             "required": false,
             "schema": {
-              "default": 25,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -34180,7 +35203,7 @@
     },
     "/v1/cases/{case_id}": {
       "get": {
-        "description": "The case assembled for its page: its timeline, oldest entry first, and who owns it, its clocks, what\nit waits on and the actions drafted there, its fields in its case type's order, what it links to, its newest\nactivity and what the caller may do.",
+        "description": "The case assembled for its page: its timeline, oldest entry first, and who owns it, its clocks, what\nit waits on and the actions drafted there, its fields in its case type's order, what it links to, its newest\nactivity and what the caller may do. Two transactions by design: the first reads the case, its runs and everything\nthe page names (a case the caller may not see is not found before any other service is asked); people's names, the\nmasking policy, file names and the tools-service policy of each Human Task's calls are then asked with none open;\nthe second builds the Human Task views, which need those policies.",
         "operationId": "cases_get_case",
         "parameters": [
           {
@@ -34960,7 +35983,7 @@
     },
     "/v1/channels": {
       "get": {
-        "description": "The channels of the selected team (`team=all`: every team the caller is in and may view channels of), filtered\nby type, health and a search over name and detail. `facets` count by type and health under the other filters;\n`kinds` describes every channel type, built or not, over the caller's whole list.",
+        "description": "The channels of the selected team (`team=all`: every team the caller is in and may view channels of), filtered\nby type, health and a search over name and detail, in the list's order (email, chat, then API, each by name), a\npage at a time from one statement over the three (store.channel_list); a page past the end answers the last page.\n`facets` count by type and health under the other filters; `kinds` describes every channel type, built or not,\nover the caller's whole list.",
         "operationId": "channels_list_channels",
         "parameters": [
           {
@@ -37568,7 +38591,7 @@
     },
     "/v1/events": {
       "get": {
-        "description": "Thread lifecycle events for the caller's team: started, waiting, waiting_review, decided, finished, failed.\nThe SSE `id` is the stream position to pass back as `after`.",
+        "description": "Thread lifecycle events for the caller's team: started, waiting, waiting_review, decided, finished, failed.\nThe SSE `id` is the stream position to pass back as `after`. No request transaction: a stream holds none while it\nstreams.",
         "operationId": "threads_team_stream",
         "parameters": [
           {
@@ -37768,7 +38791,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "Records the event and starts each listening system workflow's run, or returns the runs a repeat of it started.\nA repeat after a run failed starts the next attempt. 202 whether or not a workflow listens (`unhandled`): the\nreporting service never depends on who reacts.",
+        "description": "Records the event and starts each listening system workflow's run, or returns the runs a repeat of it started.\nA repeat after a run failed starts the next attempt. 202 whether or not a workflow listens (`unhandled`): the\nreporting service never depends on who reacts. No request transaction: the event starts or resumes runs the\nworker picks up, and folding those commits into one would change when the worker sees them.",
         "operationId": "workflows_emit_event",
         "parameters": [
           {
@@ -39103,6 +40126,7 @@
     },
     "/v1/graphs": {
       "get": {
+        "description": "Every graph the caller's tenant can run, with the input each needs.",
         "operationId": "graphs_list_graphs",
         "parameters": [
           {
@@ -39281,6 +40305,7 @@
     },
     "/v1/graphs/{name}/versions": {
       "get": {
+        "description": "The graph's stored versions, oldest first.",
         "operationId": "graphs_list_versions",
         "parameters": [
           {
@@ -39466,7 +40491,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "Stores the definition as the graph's next version and points new threads at it, with no review. A builder or\nadmin of the team that owns the graph's registry workflow publishes (the acting team for a graph the registry does\nnot hold). A registry workflow goes live through its review (POST /v1/workflows/{id}/publish-requests), so outside\nthe team's publish policy this route refuses one with 409 `review_required`.",
+        "description": "Stores the definition as the graph's next version and points new threads at it, with no review. A builder or\nadmin of the team that owns the graph's registry workflow publishes (the acting team for a graph the registry does\nnot hold). A registry workflow goes live through its review (POST /v1/workflows/{id}/publish-requests), so outside\nthe team's publish policy this route refuses one with 409 `review_required`. No request transaction: the\npublish policy is read from platform-service between its reads and its write.",
         "operationId": "graphs_publish_version",
         "parameters": [
           {
@@ -39664,12 +40689,23 @@
     },
     "/v1/guardrails": {
       "get": {
-        "description": "Every guardrail, which the agent page's pin picker reads whole; with `page`, one page of those whose name or\nowner matches `search`, as the Guardrails list reads it. The page and its count are queried, not sliced.",
+        "description": "One page of the guardrails the caller sees on the shared list contract, by name then id: `search` matches the\nname or owner, `ids` names guardrails exactly, whatever their state. The page and its count are queried, not\nsliced.",
         "operationId": "agents_list_guardrails",
         "parameters": [
           {
             "in": "query",
             "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
             "required": false,
             "schema": {
               "anyOf": [
@@ -39681,19 +40717,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Page"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": false,
-            "schema": {
-              "default": 25,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
+              "title": "Pagesize"
             }
           },
           {
@@ -39701,9 +40725,65 @@
             "name": "search",
             "required": false,
             "schema": {
-              "default": "",
-              "title": "Search",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -39776,7 +40856,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_Union_list_Guardrail___GuardrailList__"
+                  "$ref": "#/components/schemas/Envelope_GuardrailList_"
                 }
               }
             },
@@ -40866,7 +41946,7 @@
     },
     "/v1/guardrails/{guardrail_id}/publish-requests": {
       "post": {
-        "description": "Opens a publish request for the newest draft; approved at once under the dev auto-approve setting.",
+        "description": "Opens a publish request for the newest draft; approved at once under the dev auto-approve setting. Off the\nrequest transaction: the team's publish-review policy is read from platform-service between the reads and the\nwrites.",
         "operationId": "agents_request_guardrail_publish",
         "parameters": [
           {
@@ -41470,6 +42550,26 @@
       "get": {
         "operationId": "agents_knowledge_usage",
         "parameters": [
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -45636,7 +46736,7 @@
     },
     "/v1/runs": {
       "get": {
-        "description": "The selected team's runs, newest first, a page at a time; `status` repeats to keep several. `facets.status`\ncounts the runs per status under the other filters. A scoped API key lists its own workflow's runs only.",
+        "description": "The selected team's runs on the shared list contract, newest first, then by id; `workflowId` and `status`\nrepeat to keep several; `facets.status` and `facets.workflowId` count the runs per status\nand per workflow under the other filters, and `labels.workflowId` names each counted workflow, so the workflow\nfilter is filled from this reply. A scoped API key lists its own workflow's runs only.\nOne transaction for the runs, outcomes and actors read; people's names and the masking policy come from\nplatform-service with none open.",
         "operationId": "workflows_list_engine_runs",
         "parameters": [
           {
@@ -45646,7 +46746,10 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
                 },
                 {
                   "type": "null"
@@ -45657,31 +46760,21 @@
           },
           {
             "in": "query",
-            "name": "workflow_id",
+            "name": "status",
             "required": false,
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "deprecated": true,
-              "title": "Workflow Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "status",
-            "required": false,
-            "schema": {
-              "items": {
-                "type": "string"
-              },
-              "title": "Status",
-              "type": "array"
+              "title": "Status"
             }
           },
           {
@@ -45700,11 +46793,82 @@
             "name": "pageSize",
             "required": false,
             "schema": {
-              "default": 25,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -45777,7 +46941,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_ListResult_RunRow__"
+                  "$ref": "#/components/schemas/Envelope_LabelledListResult_RunRow__"
                 }
               }
             },
@@ -45881,7 +47045,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "Writes the run and its start work row in one transaction and returns at once: a worker runs it. With no worker\nrunning the run stays queued. A live run is refused (409) unless it pins the live version: `not_live` before a\nversion is approved or for another version, `workflow_paused` while the workflow is paused. An API key scoped to\none workflow starts that one only, on the version it pins when it pins one.",
+        "description": "Writes the run and its start work row in one transaction and returns at once: a worker runs it. With no worker\nrunning the run stays queued. A live run is refused (409) unless it pins the live version: `not_live` before a\nversion is approved or for another version, `workflow_paused` while the workflow is paused. An API key scoped to\none workflow starts that one only, on the version it pins when it pins one.\nNo request transaction: the run and its work row keep start_run's own transaction, which a worker claims from.",
         "operationId": "workflows_start_engine_run",
         "parameters": [
           {
@@ -46096,7 +47260,7 @@
     },
     "/v1/runs/set-aside-emails/{event_id}/run": {
       "post": {
-        "description": "Run again on an email the mailbox listener set aside: its run starts on the workflow's live version under\nthe email's own run key, as the person, and the kept copy of the email is dropped. Who may start the workflow may\nrun it; 404 when there is no such email in the team or it already ran, 503 when Files did not store an attachment\n(the email stays set aside).",
+        "description": "Run again on an email the mailbox listener set aside: its run starts on the workflow's live version under\nthe email's own run key, as the person, and the kept copy of the email is dropped. Who may start the workflow may\nrun it; 404 when there is no such email in the team or it already ran, 503 when Files did not store an attachment\n(the email stays set aside).\nNo request transaction: the email's attachments are stored in files-service between its reads and its write.",
         "operationId": "workflows_run_set_aside_email",
         "parameters": [
           {
@@ -46294,7 +47458,7 @@
     },
     "/v1/runs/start": {
       "post": {
-        "description": "Starts a run from the start form its trigger declares (`startForm` on the definition), through the same entry\nthe trigger's real source uses: a test email goes through the mailbox listener's own start, so its run gets the\ninput and steps a mailbox email gets; a form's values become the input. The run records the person and how they\nstarted it (`startedBy.via`). The same callers may start it as for POST /v1/runs; 422 `no_start_form` for a trigger\nonly its source starts, `email_filtered` for a test email the trigger's filters would skip.",
+        "description": "Starts a run from the start form its trigger declares (`startForm` on the definition), through the same entry\nthe trigger's real source uses: a test email goes through the mailbox listener's own start, so its run gets the\ninput and steps a mailbox email gets; a form's values become the input. The run records the person and how they\nstarted it (`startedBy.via`). The same callers may start it as for POST /v1/runs; 422 `no_start_form` for a trigger\nonly its source starts, `email_filtered` for a test email the trigger's filters would skip.\nNo request transaction: a test email's attachments go to files-service between its reads and its writes.",
         "operationId": "workflows_start_by_hand",
         "parameters": [
           {
@@ -46483,7 +47647,7 @@
     },
     "/v1/runs/{run_id}": {
       "get": {
-        "description": "The run with every step from the journal: per node its input, output, port, attempts and errors.",
+        "description": "The run with every step from the journal: per node its input, output, port, attempts and errors.\nNo request transaction. One transaction reads the run (a run the caller may not see is not found before any other\nservice is asked) and what it is told from; names, the masking policy and file names come from platform-service and\nfiles-service with none open; the reply is then built from those answers.",
         "operationId": "workflows_get_engine_run",
         "parameters": [
           {
@@ -46671,7 +47835,7 @@
     },
     "/v1/runs/{run_id}/cancel": {
       "post": {
-        "description": "Cancels a run that has not ended: a queued run never starts, a waiting run's review leaves Reviews, a running\npass finishes and journals the step under way and begins no other. Cancelling a cancelled run returns it; a run\nthat succeeded or failed is refused (409).",
+        "description": "Cancels a run that has not ended: a queued run never starts, a waiting run's review leaves Reviews, a running\npass finishes and journals the step under way and begins no other. Cancelling a cancelled run returns it; a run\nthat succeeded or failed is refused (409).\nNo request transaction: the masking policy (platform-service) is asked after the writes, with none open.",
         "operationId": "workflows_cancel_engine_run",
         "parameters": [
           {
@@ -46859,7 +48023,7 @@
     },
     "/v1/runs/{run_id}/events": {
       "get": {
-        "description": "The run's events with `seq` above `after`; the SSE `id` is the seq to resume from. With `follow` it keeps\npolling until the run ends or waits for a person.",
+        "description": "The run's events with `seq` above `after`; the SSE `id` is the seq to resume from. With `follow` it keeps\npolling until the run ends or waits for a person.\nNo request transaction: the masking policy comes from platform-service, and each frame's read opens its own.",
         "operationId": "workflows_engine_run_events",
         "parameters": [
           {
@@ -47070,7 +48234,7 @@
     },
     "/v1/runs/{run_id}/retry": {
       "post": {
-        "description": "Queues a Stuck run again from its last recorded step: recorded steps are not run again and a write\nwith a record at the gateway is never sent again. Who may cancel the run may retry it; a run that is not Stuck is\nrefused (409 run_not_stuck).",
+        "description": "Queues a Stuck run again from its last recorded step: recorded steps are not run again and a write\nwith a record at the gateway is never sent again. Who may cancel the run may retry it; a run that is not Stuck is\nrefused (409 run_not_stuck).\nNo request transaction: the masking policy (platform-service) is asked after the write, with none open.",
         "operationId": "workflows_retry_engine_run",
         "parameters": [
           {
@@ -47258,7 +48422,7 @@
     },
     "/v1/runs/{run_id}/steps/{step}/resume": {
       "post": {
-        "description": "Resumes the step parked on outside work with the posted result, which the step goes on with.",
+        "description": "Resumes the step parked on outside work with the posted result, which the step goes on with. No request\ntransaction: resuming queues the run for the worker, and folding that commit into the request's would change when\nthe worker sees it.",
         "operationId": "workflows_resume_step",
         "parameters": [
           {
@@ -47417,7 +48581,7 @@
     },
     "/v1/skills": {
       "get": {
-        "description": "The team's skills. `view=published` rows describe the published version, its inputs and parts, which is\nwhat chat and the MCP prompts use; every other view describes the newest version an editor sees.\n\nEvery view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.\nWith `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing\na tool or knowledge base the agent lacks as `locked`, naming them in `needs`.",
+        "description": "One page of the team's skills on the shared list contract, by name then id: `search` matches the name, use-when\nor slug, `ids` names skills exactly. `view=published` rows describe the published version, its inputs and parts,\nwhich is what chat and the MCP prompts use; every other view describes the newest version an editor sees. `status`,\n`ownerTeam`, `origin` and `loading` filter by facet; `knowledgeBases` keeps skills naming any base given. The view\ncounts and facets cover every skill the search leaves, before the view and the facet filters; the page, its counts\nand its facets are read in SQL (`store/skill_list.py`).\n\nEvery view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.\nWith `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing\na tool or knowledge base the agent lacks as `locked`, naming them in `needs`.",
         "operationId": "agents_list_skills",
         "parameters": [
           {
@@ -47437,45 +48601,6 @@
               ],
               "title": "View",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "required": false,
-            "schema": {
-              "default": 1,
-              "minimum": 1,
-              "title": "Page",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": false,
-            "schema": {
-              "default": 25,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "search",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Search"
             }
           },
           {
@@ -47509,6 +48634,195 @@
                 }
               ],
               "title": "Agentid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ownerTeam",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ownerteam"
+            }
+          },
+          {
+            "in": "query",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
+            }
+          },
+          {
+            "in": "query",
+            "name": "loading",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Loading"
+            }
+          },
+          {
+            "in": "query",
+            "name": "knowledgeBases",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Knowledgebases"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -47685,6 +48999,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
+        "description": "The tools the body names are checked against tools-service's directory before the transaction opens. With\n`requestReview` the publish request follows the commit, as `POST .../publish-requests` does.",
         "operationId": "agents_create_skill",
         "parameters": [
           {
@@ -47873,7 +49188,7 @@
     },
     "/v1/skills/options": {
       "get": {
-        "description": "What a skill may name: the tools the directory offers, the knowledge bases agents hold, and owner teams.",
+        "description": "What a skill may name: the tools the directory offers, the knowledge bases agents hold, and owner teams. The\ndirectory is read from tools-service first, with nothing open, then the rows in one transaction.",
         "operationId": "agents_skill_options",
         "parameters": [
           {
@@ -48616,7 +49931,7 @@
     },
     "/v1/skills/{skill_id}/draft": {
       "put": {
-        "description": "Edits the newest draft, or opens the next version on top of the published one. 409 when `baseVersion` is\nnot the newest version, or the skill is deprecated or in review.",
+        "description": "Edits the newest draft, or opens the next version on top of the published one. 409 when `baseVersion` is\nnot the newest version, or the skill is deprecated or in review. The checks run again in the transaction that\nwrites, after the tools are checked against tools-service with nothing open, so a save landing in between answers\n`stale_base`.",
         "operationId": "agents_save_skill_draft",
         "parameters": [
           {
@@ -49196,7 +50511,7 @@
     },
     "/v1/skills/{skill_id}/publish-requests": {
       "post": {
-        "description": "Opens a publish request for the newest draft, decided like an agent publish (by someone other than who asked\nor saved it); approved at once under the dev auto-approve setting.",
+        "description": "Opens a publish request for the newest draft, decided like an agent publish (by someone other than who asked\nor saved it); approved at once under the dev auto-approve setting. Off the request transaction: the team's\npublish-review policy is read from platform-service between the reads and the writes.",
         "operationId": "agents_request_skill_publish",
         "parameters": [
           {
@@ -49592,9 +50907,103 @@
     },
     "/v1/task-types": {
       "get": {
-        "description": "Every type in the tenant: the seeded general types first, then the teams' own.",
+        "description": "Every task type of the team on the shared list contract: the seeded ones first, then the team's own, each by\nname, then by id; `search` matches the name and description and `ids` names types.",
         "operationId": "reviews_list_task_types",
         "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -49665,7 +51074,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_TaskTypeView__"
+                  "$ref": "#/components/schemas/Envelope_ListResult_TaskTypeView__"
                 }
               }
             },
@@ -51525,6 +52934,7 @@
     },
     "/v1/threads": {
       "get": {
+        "description": "The threads the caller may read on the shared list contract, of one graph when `graph` is given: newest update\nfirst (`sortBy` updatedAt), then by id. Who reads which thread (`may_read_thread`) is decided in the\nlist's SQL (`store.thread_list`), so the page and its total count only readable threads.",
         "operationId": "threads_list_threads",
         "parameters": [
           {
@@ -51541,6 +52951,100 @@
                 }
               ],
               "title": "Graph"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -51613,7 +53117,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_ThreadView__"
+                  "$ref": "#/components/schemas/Envelope_ListResult_ThreadView__"
                 }
               }
             },
@@ -51717,6 +53221,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
+        "description": "A thread and its budget, written in the request transaction, so a failure between the two leaves no thread\nwithout its budget. Nothing here calls another service: the key admission port answers in this process.",
         "operationId": "threads_create_thread",
         "parameters": [
           {
@@ -52112,7 +53617,7 @@
     },
     "/v1/threads/{thread_id}/events": {
       "post": {
-        "description": "A channel event, as the mailbox adapter delivers it: a builder or admin of the thread's team, the role the\ninbox route takes, since restarting an SLA clock changes when the case escalates.",
+        "description": "A channel event, as the mailbox adapter delivers it: a builder or admin of the thread's team, the role the\ninbox route takes, since restarting an SLA clock changes when the case escalates. No request transaction: the\nre-armed timers are rows the poller claims, and folding their commit into the request's would change when they\nfire.",
         "operationId": "threads_thread_event",
         "parameters": [
           {
@@ -52310,6 +53815,7 @@
     },
     "/v1/threads/{thread_id}/inbox": {
       "get": {
+        "description": "The thread's channel messages, to a caller who may read the thread (`may_read_thread`, as the thread's own\nroutes): a teammate's chat, a scoped key's other target, and another team's or tenant's thread are not found.",
         "operationId": "threads_get_inbox",
         "parameters": [
           {
@@ -52693,7 +54199,7 @@
     },
     "/v1/threads/{thread_id}/migrate": {
       "post": {
-        "description": "Moves a paused thread to another version of its workflow. Allowed only while it waits on an interrupt, and only\nwhen every node it is waiting in exists under the same name in the target, so the resume lands on a real node.\nChoosing the version a run continues on is a builder's step: a builder or admin of the thread's team.",
+        "description": "Moves a paused thread to another version of its workflow. Allowed only while it waits on an interrupt, and only\nwhen every node it is waiting in exists under the same name in the target, so the resume lands on a real node.\nChoosing the version a run continues on is a builder's step: a builder or admin of the thread's team.\nNo request transaction: the thread's checkpoint is read through the checkpointer, which keeps its own.",
         "operationId": "threads_migrate",
         "parameters": [
           {
@@ -53277,6 +54783,7 @@
     },
     "/v1/threads/{thread_id}/runs/stream": {
       "post": {
+        "description": "A run of the thread, streamed as it goes. No request transaction: the run calls models and tools while it\nstreams, and each step's store call (the run's journal, the lease, the thread's status) commits on its own so a\nframe sent is a frame kept even if the stream breaks.",
         "operationId": "threads_stream_run",
         "parameters": [
           {
@@ -53477,7 +54984,7 @@
     },
     "/v1/threads/{thread_id}/runs/{run_id}/events": {
       "get": {
-        "description": "The run's events with `seq` above `after`, in the designed shape; the SSE `id` is the seq to resume from. Not\nfound for a run of a thread the caller may not read (`may_read_thread`).",
+        "description": "The run's events with `seq` above `after`, in the designed shape; the SSE `id` is the seq to resume from. Not\nfound for a run of a thread the caller may not read (`may_read_thread`). No request transaction: a run's stream\nholds none while it streams, and each poll reads the log afresh as the worker writes it.",
         "operationId": "threads_reattach",
         "parameters": [
           {
@@ -53697,6 +55204,7 @@
     },
     "/v1/threads/{thread_id}/state": {
       "get": {
+        "description": "One transaction for the thread, its checkpoint, timers and usage. The tool directory is asked after it, with\nnothing open, for the wording of a refused call and of a step's options; a step with options then reads its\nworkflow version in a second.",
         "operationId": "threads_thread_state",
         "parameters": [
           {
@@ -54910,12 +56418,23 @@
     },
     "/v1/widgets": {
       "get": {
-        "description": "The seeded library, then the caller's teams' widgets, newest version each, by name; the agent page's picker\nreads it whole. With `page`, one page of those whose name matches `search`: the seeded library's few matches come\nfirst, then the registry's, whose page and count are queried, not sliced.",
+        "description": "One page of the seeded library, then the caller's teams' widgets, newest version each, by name, on the shared\nlist contract: `search` matches the name and `ids` names widgets exactly. The seeded library is a fixed handful\nheld in memory (seed/widgets.json), so its matches are cut to the page here; the registry's page and count are\nqueried, not sliced.",
         "operationId": "agents_list_widgets",
         "parameters": [
           {
             "in": "query",
             "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
             "required": false,
             "schema": {
               "anyOf": [
@@ -54927,19 +56446,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Page"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": false,
-            "schema": {
-              "default": 25,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
+              "title": "Pagesize"
             }
           },
           {
@@ -54947,9 +56454,65 @@
             "name": "search",
             "required": false,
             "schema": {
-              "default": "",
-              "title": "Search",
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -55022,7 +56585,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_Union_list_WidgetTemplateOut___WidgetTemplateList__"
+                  "$ref": "#/components/schemas/Envelope_WidgetTemplateList_"
                 }
               }
             },
@@ -55314,7 +56877,7 @@
     },
     "/v1/widgets/options": {
       "get": {
-        "description": "The agent page's widget picker: the seeded library's matches first, then the caller's teams' published,\nunretired widgets, searched and limited in the query. A widget whose buttons need a tool outside `granted` (the\ndraft's tools) is offered disabled with the reason, as a pin of it is refused.",
+        "description": "The agent page's widget picker: the seeded library's matches first, then the caller's teams' published,\nunretired widgets with the content of the version a pin takes, searched and limited in one query. A widget whose\nbuttons need a tool outside `granted` (the draft's tools) is offered disabled with the reason, as a pin of it is\nrefused.",
         "operationId": "agents_widget_options",
         "parameters": [
           {
@@ -55569,6 +57132,7 @@
     },
     "/v1/widgets/{widget_id}": {
       "get": {
+        "description": "The rows and the caller's rights in one transaction; platform-service names the team after.",
         "operationId": "agents_get_widget",
         "parameters": [
           {
@@ -55952,7 +57516,7 @@
     },
     "/v1/widgets/{widget_id}/publish-requests": {
       "post": {
-        "description": "Opens a publish request for the newest draft; 409 when it is already published, in review or retired.",
+        "description": "Opens a publish request for the newest draft; 409 when it is already published, in review or retired. Off the\nrequest transaction: the team's publish-review policy is read from platform-service between the reads and the\nwrites.",
         "operationId": "agents_request_widget_publish",
         "parameters": [
           {
@@ -56527,7 +58091,7 @@
     },
     "/v1/workflows": {
       "get": {
-        "description": "The team's workflows of both engines, a page at a time. `startable` keeps those a person starts by hand (Start\nrun), `takesFiles` those whose start form takes a file (Files' \"Start a workflow with this file\"); each row's\n`start` says how it starts. `engine=current` leaves out the earlier engine's workflows before the page,\nthe total and the status counts are taken, since the console no longer shows them.",
+        "description": "The team's workflows of both engines, a page at a time, from one statement over both (store.workflow_list).\n`startable` keeps those a person starts by hand (Start run), `takesFiles` those whose start form takes a file\n(Files' \"Start a workflow with this file\"); each row's `start` says how it starts. `engine=current` leaves out the\nearlier engine's workflows, since the console no longer shows them. Sorted by the sort column (name unless one of\nSORTS), then by engine and id; a page past the end answers the last page.",
         "operationId": "workflows_list_workflows",
         "parameters": [
           {
@@ -56597,6 +58161,18 @@
               ],
               "title": "Sortorder",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Status",
+              "type": "array"
             }
           },
           {
@@ -56996,9 +58572,28 @@
     },
     "/v1/workflows/definitions": {
       "get": {
-        "description": "The team's v2 workflows, each at its latest version, with the shared list pattern: search over name and id,\nstatus facets (draft, in review, live, paused) before the status filter, sort and pages. v1 workflows stay on\n/v1/workflows.",
+        "description": "The team's v2 workflows on the shared list contract, each at its latest version: search over name and id,\n`status` facets (draft, in review, live, paused, archived) under the search and before the status filter, sorted\nby `sortBy` then by the key, a page at a time; an archived workflow is listed only when `status` asks for it.\nv1 workflows stay on /v1/workflows.",
         "operationId": "workflows_list_definitions",
         "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
           {
             "in": "query",
             "name": "page",
@@ -57015,11 +58610,16 @@
             "name": "pageSize",
             "required": false,
             "schema": {
-              "default": 25,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
             }
           },
           {
@@ -57066,6 +58666,26 @@
               ],
               "title": "Sortorder",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -57242,7 +58862,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "Stores the definition as the workflow's next version, once it passes every check; the same definition again\nreturns its version (200). A definition with failing checks is refused with them in `details.checks`. 403 unless\nthe caller is a builder or admin of the team that owns the workflow (the acting team for a new one).",
+        "description": "Stores the definition as the workflow's next version, once it passes every check; the same definition again\nreturns its version (200). A definition with failing checks is refused with them in `details.checks`. 403 unless\nthe caller is a builder or admin of the team that owns the workflow (the acting team for a new one).\nNo request transaction: the AI-steps policy (platform-service) and document types (documents-service) are asked\nbetween its reads and its write, with none open.",
         "operationId": "workflows_create_definition",
         "parameters": [
           {
@@ -57642,7 +59262,7 @@
     },
     "/v1/workflows/definitions/validate": {
       "post": {
-        "description": "Per-node checks against the type registry: unknown type or version, unknown port, an out port that leads\nnowhere (End has none), an unreachable node, parameters that do not match the type's schema; and warnings that\nnever refuse a save (level `warning`, e.g. a step two branches meet at without a Join). Saves nothing.",
+        "description": "Per-node checks against the type registry: unknown type or version, unknown port, an out port that leads\nnowhere (End has none), an unreachable node, parameters that do not match the type's schema; and warnings that\nnever refuse a save (level `warning`, e.g. a step two branches meet at without a Join). Saves nothing.\nNo request transaction: it reads no row, and documents-service is asked for field shapes.",
         "operationId": "workflows_validate_definition",
         "parameters": [
           {
@@ -58010,6 +59630,7 @@
         "x-ops-public": "sdk"
       },
       "get": {
+        "description": "One definition at a version (its newest when left out), its versions and its open review.",
         "operationId": "workflows_get_definition",
         "parameters": [
           {
@@ -58589,7 +60210,7 @@
     },
     "/v1/workflows/definitions/{workflow_id}/publish-requests": {
       "post": {
-        "description": "Opens a publish request for a draft in Reviews; the version goes live when a second person approves it (at once\nunder the dev auto-approve setting). 409 when the version is not a draft or a request is already open, 422 when it\nno longer passes its checks, 403 unless the caller is a builder or admin of the owning team (an admin for a\nworkflow no team owns). The request lists what each step acts on: its operation, agent and approver.",
+        "description": "Opens a publish request for a draft in Reviews; the version goes live when a second person approves it (at once\nunder the dev auto-approve setting). 409 when the version is not a draft or a request is already open, 422 when it\nno longer passes its checks, 403 unless the caller is a builder or admin of the owning team (an admin for a\nworkflow no team owns). The request lists what each step acts on: its operation, agent and approver.\nNo request transaction: the team's accounts (tools-service) and the review deadline (platform-service) are asked\nwith none open.",
         "operationId": "workflows_request_definition_publish",
         "parameters": [
           {
@@ -59163,7 +60784,7 @@
     },
     "/v1/workflows/definitions/{workflow_id}/versions/{version}/shapes": {
       "get": {
-        "description": "What each step of a saved version outputs, by port, before it has run: fixed by its type, built from\nits settings, or read from its document type or operation. A mapping picker reads it.",
+        "description": "What each step of a saved version outputs, by port, before it has run: fixed by its type, built from\nits settings, or read from its document type or operation. A mapping picker reads it.\nNo request transaction: the version is read, then documents-service is asked with none open.",
         "operationId": "workflows_definition_shapes",
         "parameters": [
           {
@@ -59360,7 +60981,7 @@
     },
     "/v1/workflows/node-types": {
       "get": {
-        "description": "Every registered node type at every version: ports with their connection types, parameters as JSON Schema with\nthe form generated from them, effects, retry and executor, and why the acting team cannot use one now.",
+        "description": "Every registered node type at every version: ports with their connection types, parameters as JSON Schema with\nthe form generated from them, effects, retry and executor, and why the acting team cannot use one now. No request\ntransaction: it reads no row, and the AI-steps policy comes from platform-service.",
         "operationId": "workflows_node_types",
         "parameters": [
           {
@@ -59539,7 +61160,7 @@
     },
     "/v1/workflows/option-sources": {
       "get": {
-        "description": "The choices a node form offers for a field with an option source (`ui.fields.*.source`): published agents,\nregistry operations, live v2 workflows, the acting team's mailboxes (Channels > Email). `steps` comes from\nthe definition being edited; `knowledge` is not served yet, since no built node type reads a knowledge base.",
+        "description": "The choices a node form offers for a field with an option source (`ui.fields.*.source`): published agents,\nregistry operations, live v2 workflows, the acting team's mailboxes (Channels > Email). `steps` comes from\nthe definition being edited; `knowledge` is not served yet, since no built node type reads a knowledge base.\nNo request transaction: the tools source is asked of tools-service.",
         "operationId": "workflows_option_sources",
         "parameters": [
           {
@@ -60473,7 +62094,7 @@
     },
     "/v1/workflows/{workflow_id}/batches": {
       "post": {
-        "description": "Reads the file's rows and either shows how they map (dryRun) or writes the batch, whose rows the workflow\nworker starts a few at a time (202).",
+        "description": "Reads the file's rows and either shows how they map (dryRun) or writes the batch, whose rows the workflow\nworker starts a few at a time (202). No request transaction: the file is read from Files between the workflow\nread and the batch write, with none open.",
         "operationId": "batches_start_batch",
         "parameters": [
           {
@@ -61054,6 +62675,7 @@
     },
     "/v1/workflows/{workflow_id}/forms": {
       "get": {
+        "description": "The workflow's forms in the caller's team on the shared list contract: newest first, then by id; `search`\nmatches the title and slug, `ids` names forms.",
         "operationId": "forms_workflow_forms",
         "parameters": [
           {
@@ -61063,6 +62685,100 @@
             "schema": {
               "title": "Workflow Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -61135,7 +62851,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_FormView__"
+                  "$ref": "#/components/schemas/Envelope_ListResult_FormView__"
                 }
               }
             },
@@ -62023,6 +63739,7 @@
     },
     "/v1/workflows/{workflow_id}/runs": {
       "get": {
+        "description": "The workflow's runs, most recently changed first then by id, a page at a time; `status` keeps those\nstatuses, and the status counts are over every run.",
         "operationId": "workflows_list_runs",
         "parameters": [
           {
@@ -62055,6 +63772,18 @@
               "minimum": 1,
               "title": "Pagesize",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Status",
+              "type": "array"
             }
           },
           {

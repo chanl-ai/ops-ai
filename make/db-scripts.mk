@@ -35,3 +35,26 @@ db-scripts-proof: ## The DBA scripts' proof on a throwaway PostgreSQL of its own
 
 uc-sql-server: ## uc-565 on the SQL Server test machine, from a runner beside it; starts and stops the machine
 	bash $(ROOT)/deploy/fly/mssql/run-usecases.sh
+
+# The shared SQL Server 2025 on Fly for the both-database tests from a Mac (deploy/database/mssql_remote.sh). CI's
+# store-mssql job stays the gate; this is for seeing a SQL Server failure before pushing.
+mssql-remote-up: ## Create or start the shared SQL Server test machine on Fly; waits until it answers through the proxy
+	bash $(ROOT)/deploy/database/mssql_remote.sh up
+
+mssql-remote-proxy: ## fly proxy to the shared SQL Server in the background; prints the local port
+	bash $(ROOT)/deploy/database/mssql_remote.sh proxy
+
+mssql-remote-test: ## One member's tests on the shared SQL Server (PKG=services/kb-service T="tests/test_x.py")
+	bash $(ROOT)/deploy/database/mssql_remote.sh test $(PKG) -q -rs $(T)
+
+mssql-sync-self-test: ## The SQL Server client's copy of the tree follows the host (a changed, deleted and image file are planted); needs Docker
+	bash $(ROOT)/deploy/database/mssql_local.sh sync-self-test
+
+mssql-remote-status: ## The shared SQL Server machine's state and the proxy's port
+	bash $(ROOT)/deploy/database/mssql_remote.sh status
+
+mssql-remote-sweep: ## Drop databases on the shared SQL Server left by killed runs (HOURS=2: older than that)
+	bash $(ROOT)/deploy/database/mssql_remote.sh sweep $(or $(HOURS),2)
+
+mssql-remote-down: ## Stop the proxy and the shared SQL Server machine; refuses while test databases exist (FORCE=1)
+	FORCE=$(FORCE) bash $(ROOT)/deploy/database/mssql_remote.sh down

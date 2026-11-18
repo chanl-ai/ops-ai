@@ -20,7 +20,7 @@ from ops_documents.store.extractions import service_outbox
 from ops_identity import ServiceClient
 from ops_service_kit.settings import Settings
 
-from .conftest import OPS, Make
+from .conftest import OPS, Make, tenant_outbox
 from .test_extractions import NOTICE, Floor
 
 FIELDS = [{"key": "invoice", "type": "text", "required": True}, {"key": "amount", "type": "money", "required": True}]
@@ -168,7 +168,7 @@ async def test_a_viewer_extracts_and_keeps_types_but_adds_none(make: Make) -> No
         listed = data(await c.get("/v1/document-types", headers=OPS))
         refused = await c.post("/v1/document-types", json={**TYPE, "id": "viewer_type"}, headers=OPS)
         kept = await c.post("/v1/document-types/invoice_notice/versions", json={"fields": FIELDS}, headers=OPS)
-    assert listed["canCreate"] is False and [t["id"] for t in listed["items"]] == ["invoice_notice"]
+    assert listed["canCreate"] is False and [t["id"] for t in listed["data"]] == ["invoice_notice"]
     assert (refused.status_code, refused.json()["error"]["code"]) == (403, "role_required"), refused.text
     assert kept.status_code in (200, 201), kept.text
 
@@ -182,8 +182,10 @@ async def test_the_estimate_prices_the_alias_with_the_callers_tenant_on_the_toke
         claims = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
         if not claims.get("tenant_id"):
             return httpx.Response(401, json={"success": False, "error": {"code": "unauthorized", "message": "no"}})
+        assert (request.url.path, request.url.params.get("ids")) == ("/v1/models/aliases", "extract")
         row = {"status": "current", "inputPerMillion": "0.250000", "outputPerMillion": "2.000000"}
-        return httpx.Response(200, json={"success": True, "data": [row]})
+        paging = {"page": 1, "pageSize": 20, "total": 1, "totalPages": 1, "hasNext": False, "hasPrev": False}
+        return httpx.Response(200, json={"success": True, "data": {"data": [row], "pagination": paging, "facets": {}}})
 
     http = httpx.AsyncClient(base_url="http://models", transport=httpx.MockTransport(models))
     prices = document_types.ModelsPrices(
@@ -286,12 +288,9 @@ async def test_a_correction_reports_the_newest_read_with_nothing_left_to_check_a
         data(await c.patch(f"/v1/documents/extractions/{newer['id']}/fields/amount", json=fix, headers=OPS))
         again = {"value": "INV-2208"}
         fixed = data(await c.patch(f"/v1/documents/extractions/{newer['id']}/fields/invoice", json=again, headers=OPS))
-    async with engine.connect() as conn:
-        o = service_outbox
-        rows = (
-            await conn.execute(sa.select(o).where(o.c.tenant_id == s.tenant, o.c.name == "extraction.corrected"))
-        ).mappings()
-        events: list[dict[str, Any]] = [dict(r) for r in rows]
+    o = service_outbox
+    q = sa.select(o).where(o.c.tenant_id == s.tenant, o.c.name == "extraction.corrected")
+    events = await tenant_outbox(engine, s.tenant, q)
     assert fixed["needsReview"] == [] and fixed["fields"]["amount"]["needsReview"] is False, fixed
     # Two corrections in a row send one event, the last, after the settle time; the first is superseded unsent, and is
     # never due again nor marked sent, so nothing reads it as delivered.
@@ -320,10 +319,10 @@ async def test_a_read_of_a_document_type_reports_what_the_file_was_read_as_and_a
         data(await c.post("/v1/document-types", json=TYPE, headers=OPS), 201)
         typed = data(await extract(c, fid, documentTypeId="invoice_notice"))
         data(await extract(c, fid, fields=FIELDS))
-    async with engine.connect() as conn:
-        o = service_outbox
-        q = sa.select(o).where(o.c.tenant_id == s.tenant, o.c.name == "extraction.read")
-        events: list[dict[str, Any]] = [dict(r) for r in (await conn.execute(q)).mappings()]
+    o = service_outbox
+    events = await tenant_outbox(
+        engine, s.tenant, sa.select(o).where(o.c.tenant_id == s.tenant, o.c.name == "extraction.read")
+    )
     [event] = events
     assert (event["event_key"], event["team_id"]) == (typed["id"], "team_ops"), event
     payload: dict[str, Any] = event["payload"]
@@ -354,3 +353,33 @@ async def test_a_key_field_is_kept_and_a_mark_that_is_not_true_or_false_is_refus
         )
     assert made["versions"][0]["fields"][0]["keyField"] is True and "keyField" not in made["versions"][0]["fields"][1]
     assert bad.status_code == 400 and "keyField is true or false" in bad.text, bad.text
+
+
+async def test_the_type_list_sorts_by_name_in_the_order_asked(make: Make) -> None:
+    """sortBy=name with sortOrder reorders the list; it was accepted and ignored, always by name ascending."""
+    s = make(Models(), Floor(), Prices())
+    async with s.client as c:
+        for key, name in (("lease", "Lease"), ("statement", "Bank statement"), ("notice", "Invoice notice")):
+            data(await c.post("/v1/document-types", json={**TYPE, "id": key, "name": name}, headers=OPS), 201)
+        down = data(await c.get("/v1/document-types?sortBy=name&sortOrder=desc", headers=OPS))
+    assert [t["name"] for t in down["data"]] == ["Lease", "Invoice notice", "Bank statement"], down
+
+
+async def test_the_type_list_sorts_by_latest_version_over_every_page(make: Make) -> None:
+    """sortBy=latestVersion orders the Document types table on the server; equal versions keep name order, so a page
+    never repeats or skips a type."""
+    s = make(Models(), Floor(), Prices())
+    async with s.client as c:
+        for key, name in (("lease", "Lease"), ("statement", "Bank statement"), ("notice", "Invoice notice")):
+            data(await c.post("/v1/document-types", json={**TYPE, "id": key, "name": name}, headers=OPS), 201)
+        more = [*FIELDS, {"key": "customer", "type": "text"}]
+        data(await c.post("/v1/document-types/notice/versions", json={"fields": more}, headers=OPS), 201)
+        seen: dict[str, list[str]] = {}
+        for order in ("asc", "desc"):
+            query = f"/v1/document-types?sortBy=latestVersion&sortOrder={order}&pageSize=2"
+            pages = [data(await c.get(f"{query}&page={n}", headers=OPS))["data"] for n in (1, 2)]
+            seen[order] = [t["name"] for page in pages for t in page]
+    assert seen == {
+        "asc": ["Bank statement", "Lease", "Invoice notice"],
+        "desc": ["Invoice notice", "Bank statement", "Lease"],
+    }, seen

@@ -28,12 +28,14 @@ from ops_contracts.field_values import DEFAULT_DATE_ORDER
 from ops_documents.document_types import DocumentTypes
 from ops_documents.extraction import request_of
 from ops_documents.files import Who
-from ops_documents.models import DocumentTypeIn, DocumentTypeVersionIn, Model
+from ops_documents.models import DocumentTypeIn, DocumentTypeVersionIn, Reply
 from ops_documents.store import NameTakenError, TemplateCopies
+from ops_documents.store.template_copies import CopyRow
 from ops_documents.tools_client import PluginTemplates
 from ops_identity import ServiceCallError, ServiceUnreachable
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import ApiError, Conflict, NotFound, ServiceUnavailable, ValidationFailed
-from ops_service_kit.http import Envelope, ok
+from ops_service_kit.http import Envelope, In, JsonValue, Out, ok
 from ops_service_kit.template_merge import FieldOutcome, apply, merge
 
 Kind = Literal["document_type"]
@@ -53,19 +55,19 @@ MERGED: dict[str, str] = {
 FIELD = "field:"
 
 
-class TemplatePlugin(Model):
+class TemplatePlugin(Out):
     id: str
     title: str
     version: str
 
 
-class TemplateRequires(Model):
+class TemplateRequires(Reply):
     tools: list[str]
     bind: list[dict[str, str]]
     resources: list[str] = Field(default_factory=list[str])
 
 
-class Installed(Model):
+class Installed(Reply):
     # Live copies the team holds of this template, the newest version among them, and whether the source ships a
     # newer one. A copy never changes by itself; updating one is a later card.
     copies: int
@@ -75,7 +77,7 @@ class Installed(Model):
     changed: bool = False
 
 
-class CopyRef(Model):
+class CopyRef(Reply):
     id: str
     kind: Kind
     record_id: str
@@ -86,13 +88,13 @@ class CopyRef(Model):
     detached_at: str | None = None
 
 
-class AddCell(Model):
+class AddCell(Out):
     # The roles grid cell a person needs to add this resource, so another service listing it says the same.
     area: str
     action: str
 
 
-class TemplateView(Model):
+class TemplateView(Reply):
     source: str
     plugin: TemplatePlugin
     kind: Kind
@@ -113,27 +115,33 @@ class TemplateView(Model):
     copy_: CopyRef | None = Field(default=None, alias="copy")
 
 
-class InstallInput(Model):
+class InstallInput(In):
     # The version listed now when left out; another one is 404 template_version_not_found.
     version: int | None = Field(default=None, ge=1)
     # The copy's name; the template's when left out. Unique in the team, as on create (409 name_taken).
     name: str | None = Field(default=None, min_length=1, max_length=200)
 
 
-class Installation(Model):
+class Installation(Out):
     copy_: CopyRef = Field(alias="copy")
     created: bool
     # Bindings the install left for the person; a document type template names none.
     needs: list[dict[str, str]]
 
 
-class UpdateExpect(Model):
+class UpdateExpect(In):
     # The template digest and the type's newest version digest the person reviewed; a take whose either moved is 409.
     digest: str | None = None
     record_digest: str | None = None
 
 
-class UpdateInput(Model):
+class ReviewedDigests(Reply):
+    # The digests a review read, as the take's `expect` names them back.
+    digest: str | None = None
+    record_digest: str | None = None
+
+
+class UpdateInput(In):
     # merge (the default) keeps the team's edits field by field; reset makes the next version from the template and
     # drops them. Left out with `confirm`, the call is a reset: an older console's "take the template as it is".
     mode: Literal["merge", "reset"] | None = None
@@ -145,16 +153,17 @@ class UpdateInput(Model):
     confirm: bool = False
 
 
-class FieldReview(Model):
+class FieldReview(Reply):
     field: str
     label: str
     # kept: only the team changed it; taken: only the template did; conflict: both did, the team's unless chosen.
     outcome: Literal["kept", "taken", "conflict"]
-    yours: Any = None
-    template: Any = None
+    # The field's definition as the team holds it and as the template ships it.
+    yours: JsonValue = None
+    template: JsonValue = None
 
 
-class UpdateReview(Model):
+class UpdateReview(Reply):
     copy_: CopyRef = Field(alias="copy")
     # The template version the copy was made from, and the one the app ships now.
     from_version: int
@@ -167,7 +176,7 @@ class UpdateReview(Model):
     # pinned keep reading as they were; a workflow saved after it pins the new one. The dialog says so first.
     applies_now: bool = True
     # What the take names back, so a template or type that moved since this review is refused.
-    expect: UpdateExpect = Field(default_factory=UpdateExpect)
+    expect: ReviewedDigests = Field(default_factory=ReviewedDigests)
     # For older consoles: the fields the update changes, and the fields the team's own edits hold.
     changes: list[str]
     edits: list[str]
@@ -186,9 +195,9 @@ class CopyDetached(ApiError):
     code = "detached"
 
 
-def _copy_view(row: dict[str, Any]) -> dict[str, Any]:
+def _copy_view(row: CopyRow) -> dict[str, Any]:
     keys = ("id", "kind", "record_id", "source", "template_id", "version", "detached_at")
-    return CopyRef.model_validate({k: row.get(k) for k in keys}).model_dump(by_alias=True)
+    return CopyRef.model_validate({k: getattr(row, k) for k in keys}).model_dump(by_alias=True)
 
 
 def shaped(version: dict[str, Any]) -> dict[str, Any]:
@@ -297,14 +306,14 @@ def templates_router(
         cell = {"area": "documents", "action": "edit"}
         for t in (x for x in everything if x.get("kind") == KIND):
             shipped.add((str(t["source"]), str(t["id"])))
-            mine = [c for c in held if c["source"] == t["source"] and c["template_id"] == t["id"]]
-            newest = max((int(c["version"]) for c in mine), default=None)
-            latest = max(mine, key=lambda c: (int(c["version"]), str(c["installed_at"])), default=None)
+            mine = [c for c in held if c.source == t["source"] and c.template_id == t["id"]]
+            newest = max((c.version for c in mine), default=None)
+            latest = max(mine, key=lambda c: (c.version, c.installed_at), default=None)
             installed = {
                 "copies": len(mine),
                 "version": newest,
                 "newerAvailable": newest is not None and newest < t["version"],
-                "changed": latest is not None and bool(t.get("digest")) and latest.get("digest") != t.get("digest"),
+                "changed": latest is not None and bool(t.get("digest")) and latest.digest != t.get("digest"),
             }
             state = (
                 "available"
@@ -325,28 +334,28 @@ def templates_router(
             out.append(TemplateView.model_validate(view | {"installed": installed} | extra).model_dump(by_alias=True))
         plugins = {str(t["source"]): t["plugin"] for t in everything}
         for c in held:
-            at = (str(c["source"]), str(c["template_id"]))
+            at = (c.source, c.template_id)
             if at in shipped:
                 continue
-            name = await document_types.name(who, str(c["record_id"]))
+            name = await document_types.name(who, c.record_id)
             if name is None:
                 continue
             shipped.add(at)
             view: dict[str, Any] = {
-                "source": c["source"],
-                "plugin": plugins.get(str(c["source"]))
+                "source": c.source,
+                "plugin": plugins.get(c.source)
                 or {
-                    "id": str(c["source"]).removeprefix("plugin:"),
-                    "title": str(c["source"]).removeprefix("plugin:"),
+                    "id": c.source.removeprefix("plugin:"),
+                    "title": c.source.removeprefix("plugin:"),
                     "version": "",
                 },
                 "kind": KIND,
-                "id": c["template_id"],
-                "version": int(c["version"]),
+                "id": c.template_id,
+                "version": c.version,
                 "title": name,
                 "requires": {"tools": [], "bind": []},
-                "installed": {"copies": 1, "version": int(c["version"]), "newerAvailable": False, "changed": False},
-                "state": "removed_upstream" if c["source"] in on_sources else "added",
+                "installed": {"copies": 1, "version": c.version, "newerAvailable": False, "changed": False},
+                "state": "removed_upstream" if c.source in on_sources else "added",
                 "canAdd": False,
                 "addCell": cell,
                 "removeCell": cell,
@@ -396,12 +405,13 @@ def templates_router(
         who: Annotated[Who, Depends(caller)],
         resource: str,
         body: InstallInput,
+        _: Tx,
     ) -> JSONResponse:
         """Add to team: makes the team's own copy of the document type, 201 with it, or 200 with the copy the team
         already holds of this version. `resource` is `<source>:<template id>`; the source has a colon of its own
         (`plugin:<id>`), so the template id follows the last one. 404 `template_not_found` when the team's apps bring
         no such resource, `template_version_not_found` for a version they do not ship."""
-        source, _, template_id = resource.rpartition(":")
+        source, template_id = resource.rpartition(":")[::2]
         t = next((x for x in await listed(request, who) if x["source"] == source and x["id"] == template_id), None)
         if t is None:
             raise TemplateNotFound(
@@ -414,13 +424,13 @@ def templates_router(
                 code="template_version_not_found",
             )
         held = await copies.live(source, template_id)
-        if held is not None and await document_types.get(who, str(held["record_id"])) is not None:
+        if held is not None and await document_types.get(who, held.record_id) is not None:
             return ok({"copy": _copy_view(held), "created": False, "needs": []})
         # The create path refuses a role that cannot change document types, before anything is written.
         record_id, base = await make_type(who, t, body)
         if held is not None:
             # The old copy's type is gone; its row stops counting so the new copy can be recorded.
-            await copies.removed(str(held["id"]))
+            await copies.removed(held.id)
         row, made = await copies.add(
             team=who.team,
             kind=KIND,
@@ -441,7 +451,7 @@ def templates_router(
 
     async def review(
         request: Request, who: Who, resource: str, type_id: str
-    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], list[FieldOutcome], list[str], dict[str, Any]]:
+    ) -> tuple[CopyRow, dict[str, Any], dict[str, Any], list[FieldOutcome], list[str], dict[str, Any]]:
         """The copy's row, its template now, the review of taking it, the merge's outcomes and field list, and the
         template's body shaped as a version. 409 `detached` for a copy the team made its own."""
         source, _, template_id = resource.rpartition(":")
@@ -452,9 +462,9 @@ def templates_router(
             )
         row = await copies.of_record(type_id)
         found = await document_types.get(who, type_id)
-        if row is None or found is None or row["source"] != source or row["template_id"] != template_id:
+        if row is None or found is None or row.source != source or row.template_id != template_id:
             raise NotFound(f"The team's copy {type_id} of {resource}")
-        if row.get("detached_at"):
+        if row.detached_at:
             raise CopyDetached(
                 f"Your team detached its copy of {t['title']}, so it takes no updates. Add the template again under "
                 "another name for a fresh copy."
@@ -476,17 +486,17 @@ def templates_router(
         versions = cast(list[dict[str, Any]], found.get("versions") or [])
         newest = max(versions, key=lambda v: int(v["version"]))
         yours = shaped(newest)
-        base = cast(dict[str, Any] | None, row.get("base"))
-        if base is None and row.get("record_version") is not None:
+        base = row.base
+        if base is None and row.record_version is not None:
             # A link made before bases were kept: the version the copy made is the copy as made, when it still exists;
             # otherwise every difference is a choice kept as the team's.
-            made = next((v for v in versions if int(v["version"]) == int(row["record_version"])), None)
+            made = next((v for v in versions if int(v["version"]) == row.record_version), None)
             base = shaped(made) if made is not None else None
         keys = _order(yours, template, base)
         outcomes = merge(_flat(base) if base is not None else None, _flat(yours), _flat(template), keys)
         view = {
             "copy": _copy_view(row),
-            "fromVersion": int(row["version"]),
+            "fromVersion": row.version,
             "toVersion": int(t["version"]),
             "fields": _labelled(outcomes),
             "appliesNow": True,
@@ -503,13 +513,13 @@ def templates_router(
         dependencies=[scope("view")],
     )
     async def review_update(  # pyright: ignore[reportUnusedFunction]
-        request: Request, who: Annotated[Who, Depends(caller)], resource: str, copy: str
+        request: Request, who: Annotated[Who, Depends(caller)], resource: str, copy: str, _: Tx
     ) -> JSONResponse:
         """Review update: field by field, what taking the app's current template does to the team's type (`copy` is the
         type's id): the team's edits kept, the template's changes taken, and the fields both changed, which keep the
         team's value unless the person chooses. Each extracted field is compared by its key. 409 `detached` for a copy
         the team made its own."""
-        _, _, view, _, _, _ = await review(request, who, resource, copy)
+        view = (await review(request, who, resource, copy))[2]
         return ok(UpdateReview.model_validate(view).model_dump(by_alias=True))
 
     @router.post(
@@ -519,7 +529,7 @@ def templates_router(
         dependencies=[scope("edit")],
     )
     async def take_update(  # pyright: ignore[reportUnusedFunction]
-        request: Request, who: Annotated[Who, Depends(caller)], resource: str, copy: str, body: UpdateInput
+        request: Request, who: Annotated[Who, Depends(caller)], resource: str, copy: str, body: UpdateInput, _: Tx
     ) -> JSONResponse:
         """Take update. `merge` (the default) makes the type's next version keeping every field the team edited,
         taking every field only the template changed, and writing the template's value on a conflict only where
@@ -565,10 +575,10 @@ def templates_router(
                 raise NotFound(f"Document type {copy}")
             version = int(made["version"])
         await copies.updated(
-            str(row["id"]),
+            row.id,
             version=int(t["version"]),
             digest=cast(str | None, t.get("digest")),
-            record_version=version if version is not None else int(row.get("record_version") or newest["version"]),
+            record_version=version if version is not None else row.record_version or int(newest["version"]),
             base=template,
         )
         refreshed = await copies.of_record(copy)
@@ -582,17 +592,17 @@ def templates_router(
         dependencies=[scope("edit")],
     )
     async def detach_copy(  # pyright: ignore[reportUnusedFunction]
-        who: Annotated[Who, Depends(caller)], resource: str, copy: str
+        who: Annotated[Who, Depends(caller)], resource: str, copy: str, _: Tx
     ) -> JSONResponse:
         """Detach: the team's type becomes its own, offered no update again, and the template is offered for a fresh
         copy. Its versions are unchanged. A second call answers the same copy. 404 when `copy` is not the team's copy
         of `resource`."""
-        source, _, template_id = resource.rpartition(":")
+        source, template_id = resource.rpartition(":")[::2]
         row = await copies.of_record(copy)
-        if row is None or row["source"] != source or row["template_id"] != template_id:
+        if row is None or row.source != source or row.template_id != template_id:
             raise NotFound(f"The team's copy {copy} of {resource}")
         # Detaching changes the team's type as an edit does: the same documents.edit check.
         document_types.may_change(who)
-        return ok(_copy_view(await copies.detach(str(row["id"]), by=who.actor)))
+        return ok(_copy_view(await copies.detach(row.id, by=who.actor)))
 
     return router

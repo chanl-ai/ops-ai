@@ -35,7 +35,6 @@ import { selectColumn } from '@/components/shared/select-column';
 import { serverPagination } from '@/components/shared/server-pagination';
 
 type Row = KnowledgeBaseRow & { onRowClick: (k: KnowledgeBaseRow) => void };
-const ALL = { page: 1, pageSize: 100 };
 const ACCESS: { value: 'members' | 'selected' | 'api' | 'mcp' | 'public'; label: string; icon: typeof Users; flag?: FlagName }[] = [
   { value: 'members', label: 'All members', icon: Users },
   { value: 'selected', label: 'Selected members', icon: Users },
@@ -183,7 +182,6 @@ export default function KnowledgeBasesPage() {
   const router = useRouter();
   const list = useListParams<KbFilters>('name');
   const query = useKnowledgeBases(list.params);
-  const allKbs = useKnowledgeBases(ALL);
   const create = useCreateKb();
   const { session } = useSession();
   const refresh = useRefreshKb();
@@ -284,7 +282,6 @@ export default function KnowledgeBasesPage() {
       <CreateKbDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        existingNames={(allKbs.data?.data ?? []).map((k) => k.name)}
         isPending={create.isPending}
         defaultOwner={session?.user.email ?? ''}
         onSubmit={async (input, fileIds) => {

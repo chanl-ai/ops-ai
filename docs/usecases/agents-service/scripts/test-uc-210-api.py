@@ -227,6 +227,7 @@ def main() -> None:
         # After the services on reserved ports: the bank's own port is the OS's next free one.
         core_bank() as bank,
         tools(
+            approval_rules=True,
             settings=bank["settings"]
             | {
                 "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}",

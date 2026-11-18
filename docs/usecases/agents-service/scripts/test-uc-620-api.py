@@ -34,6 +34,7 @@ from usecase_harness import (
     _env,  # pyright: ignore[reportPrivateUsage]
     agents,
     check,
+    every_page,
     fake_openai,
     finish,
     kb,
@@ -368,7 +369,7 @@ def chat_reads_an_attached_pdf(api: httpx.Client, files: httpx.Client) -> None:
     )  # fmt: skip
 
     # 7. Files lists it as a chat attachment; the person deletes it there, and the next turn says it is gone.
-    listed = (got(files.get("/v1/files", params={"purpose": "chat_attachment", "pageSize": 100})) or {}).get("data")
+    listed = every_page(files, "/v1/files", purpose="chat_attachment")
     row = next((f for f in listed or [] if f.get("id") == notice["fileId"]), {})
     deleted = files.delete(f"/v1/files/{notice['fileId']}")
     res, reply = ask(api, tid, "uc620 what did I attach?", [])

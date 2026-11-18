@@ -70,7 +70,7 @@ export default function GeneralSettingsPage() {
                     : undefined
             }
           >
-            <Select value={value && !gone ? value : undefined} disabled={!isAdmin} onValueChange={(id) => setPicked(agents.data.find((a) => a.id === id))}>
+            <Select value={value && !gone ? value : undefined} disabled={!isAdmin} onValueChange={(id) => id && setPicked(agents.data.find((a) => a.id === id))}>
               <SelectTrigger id="default-agent" className="w-full sm:w-72" data-testid="default-agent-select">
                 <SelectValue placeholder="Choose an agent" />
               </SelectTrigger>

@@ -41,12 +41,30 @@ export const notFound = (what: string): never => {
 export function list<T>(
   rows: T[],
   p: ListParams,
-  opts: { text: (r: T) => string; value: (r: T, key: string) => string | string[]; facetKeys: string[] },
+  opts: {
+    text: (r: T) => string;
+    value: (r: T, key: string) => string | string[];
+    facetKeys: string[];
+    /** The row's id, for `ids`; a list without it ignores `ids`. */
+    id?: (r: T) => string;
+    /** The value a `sortBy` column orders by; a column it does not name keeps the rows' order. */
+    sort?: (r: T, key: string) => string | number | undefined;
+  },
   m: Mode,
 ): ListResult<T> {
   const all = m === 'empty' ? [] : rows;
-  const q = p.search?.toLowerCase();
-  const searched = q ? all.filter((r) => opts.text(r).toLowerCase().includes(q)) : all;
+  const q = p.ids?.length ? undefined : p.search?.toLowerCase();
+  const named = p.ids?.length && opts.id ? all.filter((r) => p.ids!.includes(opts.id!(r))) : all;
+  const found = q ? named.filter((r) => opts.text(r).toLowerCase().includes(q)) : named;
+  const key = p.sortBy;
+  const searched =
+    key && opts.sort && found.some((r) => opts.sort!(r, key) !== undefined)
+      ? [...found].sort((a, b) => {
+          const x = opts.sort!(a, key) ?? '';
+          const y = opts.sort!(b, key) ?? '';
+          return (x < y ? -1 : x > y ? 1 : 0) * (p.sortOrder === 'desc' ? -1 : 1);
+        })
+      : found;
   const filters = Object.entries(p.filters ?? {}).filter(([, v]) => v?.length) as [string, string[]][];
   const valuesOf = (r: T, k: string) => [opts.value(r, k)].flat();
   const match = (r: T, skip?: string) => filters.every(([k, v]) => k === skip || valuesOf(r, k).some((x) => v.includes(x)));

@@ -82,8 +82,10 @@ async def test_an_open_access_request_is_handed_to_its_workflow_once_for_its_mod
     await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
     client, _ = _reviews()
     await hand_over(ReviewHandoffs(engine), client)
+    # The hand-over's events only: loading the seed reports each module to the catalogue copy (`tool.` events).
+    handed = (service_outbox.c.tenant_id == tenant, service_outbox.c.name.not_like("tool.%"))
     async with engine.connect() as c:
-        q = sa.select(service_outbox).where(service_outbox.c.tenant_id == tenant)
+        q = sa.select(service_outbox).where(*handed)
         events = [dict(r) for r in (await c.execute(q)).mappings()]
     assert events, "the seed has a workflow request waiting on a module"
     module = await ModuleStore(engine).get(tenant, str(events[0]["payload"]["moduleId"]))
@@ -93,9 +95,5 @@ async def test_an_open_access_request_is_handed_to_its_workflow_once_for_its_mod
     assert (a["status"], a["review_id"]) == ("requested", f"tool_access.requested:{a['id']}")
     await hand_over(ReviewHandoffs(engine), client)
     async with engine.connect() as c:
-        again = (
-            await c.execute(
-                sa.select(sa.func.count()).select_from(service_outbox).where(service_outbox.c.tenant_id == tenant)
-            )
-        ).scalar()
+        again = (await c.execute(sa.select(sa.func.count()).select_from(service_outbox).where(*handed))).scalar()
     assert again == len(events), "a request handed over is not sent twice"

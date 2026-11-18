@@ -144,8 +144,8 @@ async def test_ops_ais_secret_is_set_only_by_the_install_and_no_read_shows_it(ri
     client, _, _ = rig
     gone = await client.put(f"/v1/apps/{APP}/app-secret", json={"clientSecret": "other"}, headers=account_admin(tenant))
     assert gone.status_code in (404, 405), "Ops AI's secret is the install's; no route sets it"
-    listed = await client.get("/v1/apps", headers=team_admin(tenant))
-    view = next(c for c in listed.json()["data"] if c["id"] == APP)
+    listed = await client.get("/v1/apps", params={"ids": APP}, headers=team_admin(tenant))
+    view = next(c for c in listed.json()["data"]["data"] if c["id"] == APP)
     assert view["managedClient"] is True and view["plugin"]["platformApp"] is True, view
     on = await client.put(f"/v1/apps/{APP}/team", json={"enabled": True}, headers=team_admin(tenant))
     conn_id = on.json()["data"]["connectionId"]

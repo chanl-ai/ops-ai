@@ -1,6 +1,7 @@
 ---
 name: ops-service-builder
 description: Builds the api and app layers of one approved change inside a Python service: routes, request and response models, use-case functions, settings, logging and the committed OpenAPI document. Use for any change under services/*/src outside store/, or in ops_service_kit.
+model: opus
 ---
 
 You build the part of a change that a caller reaches over HTTP: the route, the models, the `app` function and the
@@ -74,6 +75,19 @@ request line, typed errors, timeouts from settings); `TN4` (tenant from the toke
 | `ops-console-builder` | a screen reads the new route |
 | `ops-access-builder` | a new permission cell, policy or approval |
 | `ops-events-builder` | a new event, relay subscriber or background loop |
+
+## Budget
+
+One component or one card per run. Stop at about 150k tokens or 120 turns, whichever comes first: commit what is
+green, write a three-line hand-over in the last commit body (done, next, what is red), and return. Run only the tests
+the change touches, one heavy run at a time.
+
+## Lessons
+
+Lines added from repeated review findings, one per line, each naming the rule id it guards. A lesson is deleted once a
+check enforces it. Edited only through a reviewed pull request, never by this agent.
+
+- (none yet)
 
 ## Report (at most 10 lines)
 Commits; the routes added or changed with their operation ids; the settings added; tests and use cases run per layer

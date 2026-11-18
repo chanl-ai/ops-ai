@@ -39,10 +39,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { useToolCall } from '@/hooks/governance-queries';
-import { useConnectionOptions } from '@/hooks/systems-queries';
 import { useCurrentPerson } from '@/hooks/auth-queries';
 import { useCanBuild, useNavAllows } from '@/hooks/me-queries';
-import { useWorkflows } from '@/hooks/queries';
 import {
   useAddOperation,
   useDecideModuleApproval,
@@ -63,7 +61,6 @@ import {
 import { useTabParam } from '@/hooks/use-tab-param';
 import { plural, shortDate } from '@/lib/format';
 import { TOOL_CALL_LOG } from '@/lib/nav';
-import type { IntegrationStatus } from '@/lib/types/integrations';
 import type { ModuleApproval, OperationPatch } from '@/lib/types/tool-modules';
 import { appPageHref } from '@/lib/app-links';
 
@@ -85,8 +82,6 @@ export default function ModulePage() {
   const query = useToolModule(id);
   const activity = useModuleActivity(id, tab === 'activity');
   const me = useCurrentPerson().ids;
-  // The workflows an approval can name are the registry's (agents-service), the same list the Workflows page shows.
-  const { data: approvalWorkflows } = useWorkflows({ page: 1, pageSize: 200 });
   const updateOp = useUpdateOperation();
   const publish = usePublishModuleVersion();
   const discard = useDiscardModuleChanges();
@@ -113,7 +108,6 @@ export default function ModulePage() {
   const importOps = useImportOperations();
   const discover = useDiscoverModule();
   const setConnection = useSetModuleConnection();
-  const connections = useConnectionOptions(tab === 'connection');
 
   if (query.isPending)
     return (
@@ -324,8 +318,8 @@ export default function ModulePage() {
                     testId="ops-empty"
                     title="No operations yet"
                     description="Build one request by hand, or import operations from an MCP server or an OpenAPI spec."
-                    action={{ label: 'Add operation', onClick: () => setAddOpOpen(true) }}
-                    secondaryAction={{ label: 'Import', onClick: () => setImportOpen(true) }}
+                    action={canBuild ? { label: 'Add operation', onClick: () => setAddOpOpen(true) } : undefined}
+                    secondaryAction={canBuild ? { label: 'Import', onClick: () => setImportOpen(true) } : undefined}
                   />
                 ))}
               </BuilderFieldset>
@@ -379,9 +373,7 @@ export default function ModulePage() {
                   </p>
                   <ConnectionSelect
                     value={m.connection}
-                    options={connections.data?.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
-                    loading={connections.isPending}
-                    disabled={setConnection.isPending}
+                    disabled={setConnection.isPending || !canBuild}
                     onChange={(v) =>
                       setConnection.mutate(
                         { id: m.id, connectionId: v },
@@ -536,7 +528,6 @@ export default function ModulePage() {
           <RequestApprovalDialog
             open={requestOpen}
             onOpenChange={setRequestOpen}
-            workflows={(approvalWorkflows?.data ?? []).map((w) => ({ id: w.id, name: w.name }))}
             operations={m.operations}
             major={m.major}
             isPending={request.isPending}

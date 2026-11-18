@@ -1,6 +1,12 @@
 #!/bin/sh
-# ops-ai hook: lint and format of the Python files the pushed commits change; the tests run in CI.
+# ops-ai hook: lint and format of the Python files the pushed commits change, and the console's whole unit suite when the
+# pushed commits change the console or embed app (the commit hook runs only the tests next to the staged files). A
+# checkpoint push reports a red suite and goes on: the head commit's message holds "[skip ci]", or OPS_CHECKPOINT_PUSH=1.
+# The other tests run in CI.
 cd "$(git rev-parse --show-toplevel)" || exit 1
+root=$PWD
+# OPS_RUFF names another ruff (scripts/tests/test_pre_push.py); by default the workspace's.
+ruff=${OPS_RUFF:-"uv run --quiet --project $root ruff"}
 refs=$(cat)
 d=$(git rev-parse --git-common-dir) || exit 1
 if [ -x "$d/hooks/pre-push.local" ]; then printf '%s\n' "$refs" | "$d/hooks/pre-push.local" "$@" || exit $?; fi
@@ -13,9 +19,35 @@ printf '%s\n' "$refs" | while read -r _local_ref local_sha _remote_ref remote_sh
     since=$(git merge-base "$local_sha" origin/main 2>/dev/null || true)
   fi
   [ -n "$since" ] || continue
-  files=$(git diff --name-only --diff-filter=ACMR "$since" "$local_sha" -- '*.py' | while read -r f; do [ -f "$f" ] && echo "$f"; done)
-  [ -n "$files" ] || continue
-  # shellcheck disable=SC2086
-  uv run --quiet ruff check $files && uv run --quiet ruff format --check $files \
-    || { echo "pre-push: lint or format failed on the files above; run uv run ruff format <file> and uv run ruff check --fix <file>"; exit 1; }
+  files=$(git diff --name-only --diff-filter=ACMR "$since" "$local_sha" -- '*.py')
+  console=$(git diff --name-only "$since" "$local_sha" -- apps/console apps/embed package.json pnpm-lock.yaml)
+  [ -n "$files" ] || [ -n "$console" ] || continue
+  # The pushed content, not the working tree: another builder's unfinished file must not block this push. The whole
+  # commit is exported because ruff tells first-party packages from third-party ones by the folders on disk; only the
+  # changed files are linted.
+  tmp=$(mktemp -d "${TMPDIR:-/tmp}/ops-pre-push.XXXXXX")
+  git archive "$local_sha" | tar -x -C "$tmp"
+  status=0
+  if [ -n "$files" ]; then
+    # shellcheck disable=SC2086
+    (cd "$tmp" && $ruff check $files && $ruff format --check $files)
+    status=$?
+  fi
+  if [ "$status" -eq 0 ] && [ -n "$console" ]; then
+    for dep in node_modules apps/console/node_modules apps/embed/node_modules sdk/typescript/node_modules; do
+      if [ -e "$root/$dep" ] && [ -d "$(dirname "$tmp/$dep")" ]; then ln -s "$root/$dep" "$tmp/$dep"; fi
+    done
+    if (cd "$tmp/apps/console" && node --test 'src/**/*.test.ts') >"$tmp/console-tests.log" 2>&1; then :; else
+      tail -40 "$tmp/console-tests.log"
+      if [ "${OPS_CHECKPOINT_PUSH:-}" = 1 ] || git log -1 --format=%B "$local_sha" | grep -qF '[skip ci]'; then
+        echo "pre-push: the console unit suite is RED (above); this is a checkpoint push, so it goes on. Fix it before the pull request."
+      else
+        rm -rf "$tmp"
+        echo "pre-push: the console unit suite failed on the pushed commit (above). Fix it, or for a checkpoint push put [skip ci] in the head commit message or set OPS_CHECKPOINT_PUSH=1."
+        exit 1
+      fi
+    fi
+  fi
+  rm -rf "$tmp"
+  [ "$status" -eq 0 ] || { echo "pre-push: lint or format failed on the pushed files above; run uv run ruff format <file> and uv run ruff check --fix <file>, commit, push again"; exit 1; }
 done

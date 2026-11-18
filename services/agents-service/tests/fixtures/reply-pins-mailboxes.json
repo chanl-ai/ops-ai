@@ -1,0 +1,453 @@
+{
+  "connect.graphIncomplete": {
+    "body": {
+      "error": {
+        "code": "mailbox_incomplete",
+        "message": "A Microsoft 365 mailbox needs the Microsoft tenant id, the app's client id.",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
+  "connect.taken": {
+    "body": {
+      "error": {
+        "code": "address_taken",
+        "message": "levy.intake@gmail.com is connected already in this workspace.",
+        "requestId": "<req>",
+        "status": 409
+      },
+      "success": false
+    },
+    "status": 409
+  },
+  "connect.unknownField": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "password"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "password: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "connect.viewer": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "create",
+          "area": "deployments",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot create a mailbox; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "edit": {
+    "body": {
+      "data": {
+        "address": "levy.intake@gmail.com",
+        "createdAt": "<timeZ>",
+        "createdBy": "james@harborpine.example",
+        "folder": "levies",
+        "fromAddress": null,
+        "graphClientId": null,
+        "graphTenantId": null,
+        "id": "<mbx>",
+        "imapHost": null,
+        "imapPort": null,
+        "imapTls": true,
+        "lastReadAt": null,
+        "name": "Levies",
+        "passwordSecret": "GMAIL_APP_PASSWORD",
+        "paused": false,
+        "provider": "gmail",
+        "sender": "none",
+        "senderSecret": null,
+        "smtpHost": null,
+        "smtpPort": null,
+        "smtpStarttls": true,
+        "teamId": "team_ops",
+        "updatedAt": "<timeZ>",
+        "username": null,
+        "workflows": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "edit.addressTaken": {
+    "body": {
+      "error": {
+        "code": "address_taken",
+        "message": "disputes@gmail.com is connected already in this workspace.",
+        "requestId": "<req>",
+        "status": 409
+      },
+      "success": false
+    },
+    "status": 409
+  },
+  "edit.unknownField": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "paused"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "paused: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "edit.viewer": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "edit",
+          "area": "deployments",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot edit this mailbox; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "get": {
+    "body": {
+      "data": {
+        "address": "levy.intake@gmail.com",
+        "createdAt": "<timeZ>",
+        "createdBy": "james@harborpine.example",
+        "folder": "inbox",
+        "fromAddress": null,
+        "graphClientId": null,
+        "graphTenantId": null,
+        "id": "<mbx>",
+        "imapHost": null,
+        "imapPort": null,
+        "imapTls": true,
+        "lastReadAt": null,
+        "name": "Levy intake",
+        "passwordSecret": "GMAIL_APP_PASSWORD",
+        "paused": false,
+        "provider": "gmail",
+        "sender": "none",
+        "senderSecret": null,
+        "smtpHost": null,
+        "smtpPort": null,
+        "smtpStarttls": true,
+        "teamId": "team_ops",
+        "updatedAt": "<timeZ>",
+        "username": null,
+        "workflows": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "get.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Mailbox mbx_missing1 was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "get.otherTeam": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Mailbox <first> was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "list": {
+    "body": {
+      "data": [
+        {
+          "address": "disputes@gmail.com",
+          "createdAt": "<timeZ>",
+          "createdBy": "james@harborpine.example",
+          "folder": "inbox",
+          "fromAddress": null,
+          "graphClientId": null,
+          "graphTenantId": null,
+          "id": "<mbx>",
+          "imapHost": null,
+          "imapPort": null,
+          "imapTls": true,
+          "lastReadAt": null,
+          "name": "Disputes",
+          "passwordSecret": "GMAIL_APP_PASSWORD",
+          "paused": false,
+          "provider": "gmail",
+          "sender": "none",
+          "senderSecret": null,
+          "smtpHost": null,
+          "smtpPort": null,
+          "smtpStarttls": true,
+          "teamId": "team_ops",
+          "updatedAt": "<timeZ>",
+          "username": null,
+          "workflows": []
+        },
+        {
+          "address": "levy.intake@gmail.com",
+          "createdAt": "<timeZ>",
+          "createdBy": "james@harborpine.example",
+          "folder": "inbox",
+          "fromAddress": null,
+          "graphClientId": null,
+          "graphTenantId": null,
+          "id": "<mbx>",
+          "imapHost": null,
+          "imapPort": null,
+          "imapTls": true,
+          "lastReadAt": null,
+          "name": "Levy intake",
+          "passwordSecret": "GMAIL_APP_PASSWORD",
+          "paused": false,
+          "provider": "gmail",
+          "sender": "none",
+          "senderSecret": null,
+          "smtpHost": null,
+          "smtpPort": null,
+          "smtpStarttls": true,
+          "teamId": "team_ops",
+          "updatedAt": "<timeZ>",
+          "username": null,
+          "workflows": []
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "list.address": {
+    "body": {
+      "data": [
+        {
+          "address": "disputes@gmail.com",
+          "createdAt": "<timeZ>",
+          "createdBy": "james@harborpine.example",
+          "folder": "inbox",
+          "fromAddress": null,
+          "graphClientId": null,
+          "graphTenantId": null,
+          "id": "<mbx>",
+          "imapHost": null,
+          "imapPort": null,
+          "imapTls": true,
+          "lastReadAt": null,
+          "name": "Disputes",
+          "passwordSecret": "GMAIL_APP_PASSWORD",
+          "paused": false,
+          "provider": "gmail",
+          "sender": "none",
+          "senderSecret": null,
+          "smtpHost": null,
+          "smtpPort": null,
+          "smtpStarttls": true,
+          "teamId": "team_ops",
+          "updatedAt": "<timeZ>",
+          "username": null,
+          "workflows": []
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "list.otherTeam": {
+    "body": {
+      "data": [],
+      "success": true
+    },
+    "status": 200
+  },
+  "list.search": {
+    "body": {
+      "data": [
+        {
+          "address": "disputes@gmail.com",
+          "createdAt": "<timeZ>",
+          "createdBy": "james@harborpine.example",
+          "folder": "inbox",
+          "fromAddress": null,
+          "graphClientId": null,
+          "graphTenantId": null,
+          "id": "<mbx>",
+          "imapHost": null,
+          "imapPort": null,
+          "imapTls": true,
+          "lastReadAt": null,
+          "name": "Disputes",
+          "passwordSecret": "GMAIL_APP_PASSWORD",
+          "paused": false,
+          "provider": "gmail",
+          "sender": "none",
+          "senderSecret": null,
+          "smtpHost": null,
+          "smtpPort": null,
+          "smtpStarttls": true,
+          "teamId": "team_ops",
+          "updatedAt": "<timeZ>",
+          "username": null,
+          "workflows": []
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "listAfter": {
+    "body": {
+      "data": [
+        {
+          "address": "disputes@gmail.com",
+          "createdAt": "<timeZ>",
+          "createdBy": "james@harborpine.example",
+          "folder": "inbox",
+          "fromAddress": null,
+          "graphClientId": null,
+          "graphTenantId": null,
+          "id": "<mbx>",
+          "imapHost": null,
+          "imapPort": null,
+          "imapTls": true,
+          "lastReadAt": null,
+          "name": "Disputes",
+          "passwordSecret": "GMAIL_APP_PASSWORD",
+          "paused": false,
+          "provider": "gmail",
+          "sender": "none",
+          "senderSecret": null,
+          "smtpHost": null,
+          "smtpPort": null,
+          "smtpStarttls": true,
+          "teamId": "team_ops",
+          "updatedAt": "<timeZ>",
+          "username": null,
+          "workflows": []
+        },
+        {
+          "address": "levy.intake@gmail.com",
+          "createdAt": "<timeZ>",
+          "createdBy": "james@harborpine.example",
+          "folder": "levies",
+          "fromAddress": null,
+          "graphClientId": null,
+          "graphTenantId": null,
+          "id": "<mbx>",
+          "imapHost": null,
+          "imapPort": null,
+          "imapTls": true,
+          "lastReadAt": null,
+          "name": "Levies",
+          "passwordSecret": "GMAIL_APP_PASSWORD",
+          "paused": false,
+          "provider": "gmail",
+          "sender": "none",
+          "senderSecret": null,
+          "smtpHost": null,
+          "smtpPort": null,
+          "smtpStarttls": true,
+          "teamId": "team_ops",
+          "updatedAt": "<timeZ>",
+          "username": null,
+          "workflows": []
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "test.noTools": {
+    "body": {
+      "data": {
+        "error": "No tools-service is configured, so no mailbox can be read.",
+        "newest": null,
+        "ok": false,
+        "steps": [
+          {
+            "state": "failed",
+            "title": "Sign in"
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "test.unsavedNoTools": {
+    "body": {
+      "data": {
+        "error": "No tools-service is configured, so no mailbox can be read.",
+        "newest": null,
+        "ok": false,
+        "steps": [
+          {
+            "state": "failed",
+            "title": "Sign in"
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  }
+}

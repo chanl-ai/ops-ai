@@ -4,14 +4,13 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { CircleCheck, Plug, Plus } from 'lucide-react';
+import { CircleCheck, Plug, Plus, PlugZap } from 'lucide-react';
 
 import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { PageLayout } from '@/components/page-layout';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
 import { AskAnAdmin } from '@/components/connections/ask-an-admin';
-import { EmptyState } from '@/components/shared/empty-state';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { SavedViewTabs } from '@/components/shared/saved-view-tabs';
 import { Badge } from '@/components/ui/badge';
@@ -20,8 +19,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { CardDescription } from '@/components/ui/card';
 import { APP_CARD_GRID, AppCard } from '@/components/connections/app-card';
 import { useCan } from '@/hooks/me-queries';
-import { type AppState, type SystemCard, useSystems } from '@/hooks/systems-queries';
-import { facetFilterFn } from '@/hooks/use-list-params';
+import { type AppFilters, type AppView, type SystemCard, useSystems } from '@/hooks/systems-queries';
+import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { initials, plural } from '@/lib/format';
 
 import type { ConnectMode } from './connect-system-dialog';
@@ -31,7 +30,6 @@ import { APP_STATE_LOOK, AppStateBadge } from '@/components/connections/app-stat
 import { AddAuthConfigButton, TurnOnButton } from '@/components/connections/app-actions';
 
 export type { ConnectMode };
-type View = 'all' | 'connected' | 'available';
 
 // An account whose sign-in ended (expired, refused or revoked) is signed in again with Reconnect, not Connect.
 const ENDED = new Set(['expired', 'refused', 'revoked']);
@@ -69,12 +67,6 @@ function NextAction({ card, onConnect }: { card: SystemCard; onConnect: (s: Syst
 /** The app's page, where its accounts, tools, skills, sign-ins, runs and settings are; a built-in app's is the console
  * page that manages it (its knowledge bases, its mailboxes). */
 export const appHref = (s: Pick<SystemCard, 'id' | 'href'>) => s.href ?? appPageHref(s.id);
-
-/**
- * Connected holds the apps that work (appGroup on) and a removed app, whose card says why its tools stopped; every
- * app someone still has to act on is under Available. The API's appGroup decides which.
- */
-const isConnected = (card: SystemCard) => card.appGroup === 'on' || card.appGroup === 'gone';
 
 /**
  * One app's card: logo, name, tools and how it signs in, one line, its category, its state and at most one action.
@@ -127,13 +119,12 @@ function SystemAppCard({ system, onConnect }: { system: SystemCard; onConnect: (
 
 type Row = SystemCard & { onRowClick: (s: SystemCard) => void; href: string };
 
-const STATE_OPTIONS = (Object.keys(STATE) as AppState[]).map((value) => ({ label: STATE[value].label, value }));
-
 const columns = (onConnect: (s: SystemCard, mode: ConnectMode) => void): ColumnDef<Row>[] => [
   {
-    // Holds every searched field, so the table's search matches an app by its name, line or category.
+    // The table's search box names this column; the text goes to the server, which matches the name and category.
     id: 'name',
-    accessorFn: (s) => `${s.name} ${s.description ?? ''} ${s.category ?? ''}`,
+    accessorFn: (s) => s.name,
+    enableSorting: false,
     header: ({ column }) => <DataTableColumnHeader column={column} title="App" />,
     cell: ({ row }) => (
       <div className="flex min-w-56 items-center gap-3" data-testid={`app-row-${row.original.id}`}>
@@ -149,9 +140,11 @@ const columns = (onConnect: (s: SystemCard, mode: ConnectMode) => void): ColumnD
     ),
     enableHiding: false,
   },
-  { accessorKey: 'category', header: ({ column }) => <DataTableColumnHeader column={column} title="Category" />, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{row.original.category}</span>, filterFn: facetFilterFn },
+  { accessorKey: 'category', header: ({ column }) => <DataTableColumnHeader column={column} title="Category" />, enableSorting: false, filterFn: facetFilterFn, cell: ({ row }) => <span className="whitespace-nowrap text-muted-foreground">{row.original.category}</span> },
   {
     accessorKey: 'appState',
+    enableSorting: false,
+    filterFn: facetFilterFn,
     header: ({ column }) => <DataTableColumnHeader column={column} title="State" />,
     cell: ({ row }) =>
       row.original.appState === 'connected' ? (
@@ -159,9 +152,10 @@ const columns = (onConnect: (s: SystemCard, mode: ConnectMode) => void): ColumnD
       ) : (
         <AppStateBadge card={row.original} />
       ),
-    filterFn: facetFilterFn,
   },
-  { accessorKey: 'toolsCount', header: ({ column }) => <DataTableColumnHeader column={column} title="Tools" />, cell: ({ row }) => <span className="tabular-nums">{row.original.toolsCount}</span> },
+  // Only the Kind filter reads this column; the server filters on it.
+  { accessorKey: 'kind', enableSorting: false, filterFn: facetFilterFn, header: 'Kind', cell: ({ row }) => <span className="text-muted-foreground">{row.original.kindLabel}</span> },
+  { accessorKey: 'toolsCount', enableSorting: false, header: ({ column }) => <DataTableColumnHeader column={column} title="Tools" />, cell: ({ row }) => <span className="tabular-nums">{row.original.toolsCount}</span> },
   {
     id: 'actions',
     meta: { className: 'w-28 text-right' },
@@ -171,28 +165,28 @@ const columns = (onConnect: (s: SystemCard, mode: ConnectMode) => void): ColumnD
 ];
 
 /**
- * The apps catalog on the console's standard list: search, Category and State filters, the Connected and Available
- * views, and a grid of cards or a table. Read from GET /v1/apps, each card already joined; the list is one team's apps,
- * so the table filters the rows it holds.
+ * The apps catalog on the console's standard list: search and a grid of cards or a table. One page of the team's
+ * apps is read from GET /v1/apps, each card already joined, searched and paged on the server (by name, then id).
+ * The tabs (All, Connected, Available) and the State, Category and Kind filters are sent to the route, which counts
+ * each tab and facet and lists connected apps first.
  */
 export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, mode: ConnectMode) => void; onNew: () => void }) {
   // Adding an app is managing the team's apps; a person who may not is offered no button, and each card says whom to ask.
   const mayAdd = useCan('connections', 'manage') === true;
   const router = useRouter();
-  const systems = useSystems();
-  const [view, setView] = React.useState<View>('all');
+  const list = useListParams<AppFilters>('name', 20);
+  const [view, setView] = React.useState<AppView>('all');
+  const systems = useSystems({ page: list.params.page, pageSize: list.params.pageSize, search: list.params.search, view, filters: list.params.filters });
+  const counts = systems.data?.viewCounts;
+  const facets = systems.data?.facets ?? {};
+  const facetOptions = (key: string, label: (v: string) => string) =>
+    Object.entries(facets[key] ?? {}).map(([value, count]) => ({ value, label: label(value), count }));
   const [filterResetKey, setFilterResetKey] = React.useState(0);
   const cols = React.useMemo(() => columns(onConnect), [onConnect]);
   const rows: Row[] = React.useMemo(
-    () =>
-      [...(systems.data ?? [])]
-        .filter((s) => view === 'all' || (view === 'connected') === isConnected(s))
-        // Connected apps first, then the installed plugins, then the apps a person added.
-        .sort((a, b) => Number(isConnected(b)) - Number(isConnected(a)) || Number(b.kind === 'plugin') - Number(a.kind === 'plugin'))
-        .map((app) => ({ ...app, href: appHref(app), onRowClick: (x: SystemCard) => router.push(appHref(x)) })),
-    [systems.data, view, router],
+    () => (systems.data?.data ?? []).map((app) => ({ ...app, href: appHref(app), onRowClick: (x: SystemCard) => router.push(appHref(x)) })),
+    [systems.data, router],
   );
-  const categories = [...new Set((systems.data ?? []).map((s) => s.category).filter((c): c is string => Boolean(c)))].sort();
   return (
     <PageLayout
       icon={Plug}
@@ -214,66 +208,68 @@ export function SystemsGrid({ onConnect, onNew }: { onConnect: (s: SystemCard, m
       {/* A first answer that failed shows the error with Retry at once, not a skeleton while the retries run. */}
       {!systems.data && (systems.isError || systems.failureCount > 0) ? (
         <QueryError what="your apps" error={systems.error ?? systems.failureReason} onRetry={() => systems.refetch()} retrying={systems.isFetching} />
-      ) : systems.isPending ? (
+      ) : systems.isPending || !systems.data ? (
         <PageSkeleton statCards={0} tableRows={6} />
       ) : (
-        <>
+        <div data-testid="systems-grid" className="flex flex-col gap-4">
           <SavedViewTabs
             ariaLabel="App views"
             presets={[
-              { id: 'all', label: 'All apps' },
-              { id: 'connected', label: 'Connected' },
-              { id: 'available', label: 'Available' },
+              { id: 'all', label: `All · ${counts?.all ?? 0}`, icon: Plug },
+              { id: 'connected', label: `Connected · ${counts?.connected ?? 0}`, icon: CircleCheck },
+              { id: 'available', label: `Available · ${counts?.available ?? 0}`, icon: PlugZap },
             ]}
             savedViews={[]}
             activePresetId={view}
             activeSavedViewId={null}
-            onSelectPreset={(id) => setView(id as View)}
+            onSelectPreset={(id) => {
+              setView(id as AppView);
+              list.reset();
+            }}
             onSelectSavedView={() => undefined}
             onSaveView={() => undefined}
             onDeleteView={() => undefined}
             canSave={false}
           />
-          <div data-testid="systems-grid" data-view={view}>
-            <DataTableWithViews
-              columns={cols}
-              data={rows}
-              getRowId={(r) => r.id}
-              defaultView="grid"
-              gridClassName={APP_CARD_GRID}
-              renderGridItem={(s) => <SystemAppCard system={s} onConnect={onConnect} />}
-              searchColumn="name"
-              searchPlaceholder="Search apps"
-              filters={[
-                { column: 'category', title: 'Category', options: categories.map((c) => ({ label: c, value: c })) },
-                { column: 'appState', title: 'State', options: STATE_OPTIONS },
-              ]}
-              filterResetKey={filterResetKey}
-              emptyState={
-                view === 'connected' && !(systems.data ?? []).some((s) => s.appGroup === 'on') ? (
-                  // The view itself empties the list when nothing is connected yet: that is said, not "No apps match".
-                  <EmptyState
-                    icon={Plug}
-                    title="No app is connected yet"
-                    description="Connect one from All apps; it shows here once it signs in."
-                    action={{ label: 'All apps', onClick: () => setView('all') }}
-                    testId="apps-none-connected"
-                  />
-                ) : (
-                  <ListEmpty
-                    icon={Plug}
-                    noun="apps"
-                    filtered={view !== 'all' || rows.length > 0}
-                    onClear={() => (setView('all'), setFilterResetKey((k) => k + 1))}
-                    createLabel={mayAdd ? 'Add custom app' : undefined}
-                    onCreate={mayAdd ? onNew : undefined}
-                    description={mayAdd ? 'Your platform admin installs apps; you can add your own app now.' : 'Your platform admin installs apps.'}
-                  />
-                )
-              }
-            />
-          </div>
-        </>
+          <DataTableWithViews
+            columns={cols}
+            data={rows}
+            getRowId={(r) => r.id}
+            defaultView="grid"
+            gridClassName={APP_CARD_GRID}
+            renderGridItem={(s) => <SystemAppCard system={s} onConnect={onConnect} />}
+            searchColumn="name"
+            searchPlaceholder="Search apps"
+            initialColumnVisibility={{ kind: false }}
+            filters={[
+              { column: 'appState', title: 'State', options: facetOptions('appState', (v) => APP_STATE_LOOK[v as keyof typeof APP_STATE_LOOK]?.label ?? v) },
+              { column: 'category', title: 'Category', options: facetOptions('category', (v) => v) },
+              { column: 'kind', title: 'Kind', options: facetOptions('kind', (v) => v.charAt(0).toUpperCase() + v.slice(1)) },
+            ]}
+            onColumnFiltersChange={list.onColumnFiltersChange}
+            filterResetKey={filterResetKey}
+            serverPagination={{
+              enabled: true,
+              total: systems.data.pagination.total,
+              page: list.pagination.page,
+              pageSize: list.pagination.pageSize,
+              totalPages: systems.data.pagination.totalPages,
+              onPaginationChange: list.setPagination,
+              isLoading: systems.isFetching && systems.isPlaceholderData,
+            }}
+            emptyState={
+              <ListEmpty
+                icon={Plug}
+                noun="apps"
+                filtered={list.isFiltered}
+                onClear={() => setFilterResetKey((k) => k + 1)}
+                createLabel={mayAdd ? 'Add custom app' : undefined}
+                onCreate={mayAdd ? onNew : undefined}
+                description={mayAdd ? 'Your platform admin installs apps; you can add your own app now.' : 'Your platform admin installs apps.'}
+              />
+            }
+          />
+        </div>
       )}
     </PageLayout>
   );

@@ -68,8 +68,6 @@ function createApi(): OpsApi {
   }
   // The chat loader and the iframe it opens are served by the embed app.
   if (embedUrl) api = { ...api, widgetDeployments: { ...api.widgetDeployments, scriptUrl: () => `${embedUrl.replace(/\/$/, '')}/embed/v1.js` } };
-  // A link form's page is the embed app's too.
-  if (embedUrl) api = { ...api, forms: { ...api.forms, pageUrl: (form) => `${embedUrl.replace(/\/$/, '')}${form.url}` } };
   if (toolsUrl) {
     // Activity (the tool-call log) is the gateway's own executions log; the audit log stays where it was.
     const { toolCalls, ...tools } = createToolsOnlyHttp(toolsUrl);
@@ -151,6 +149,10 @@ const AREAS: { prefix: string; served: boolean }[] = [
   // Tool access lists tools-service's grants.
   { prefix: '/govern/access/tool-access', served: Boolean(toolsUrl) },
   { prefix: '/govern/activity/audit', served: onPlatform },
+  // My account is GET /v1/me on platform-service; its security and connections pages are still sample data.
+  { prefix: '/settings/account', served: onPlatform },
+  { prefix: '/settings/account/security', served: false },
+  { prefix: '/settings/account/connections', served: false },
   { prefix: '/settings/account/memory', served: Boolean(chatUrl) },
   // A person's own sign-ins, a connection's sign-in setting and the sign-in pages are tools-service's.
   { prefix: '/settings/account/connectors', served: Boolean(toolsUrl) },
@@ -186,6 +188,8 @@ export const knowledgeOnService = Boolean(knowledgeUrl || baseUrl);
 export const filesOnService = Boolean(filesUrl) && !baseUrl;
 /** A signed form link opens on the embed app; without its origin Share as a form is members-only. */
 export const publicFormPage = Boolean(embedUrl);
+/** The embed app's origin, where a link form's page is served; undefined when the install has none. */
+export const embedPageOrigin = embedUrl?.replace(/\/$/, '');
 /** What's new and Coming next as the build read them (next.config.ts); lib/changelog.ts parses them. */
 export const changelogSource = process.env.OPS_CHANGELOG ?? '[]';
 export const roadmapSource = process.env.OPS_ROADMAP ?? '[]';

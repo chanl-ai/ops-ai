@@ -74,8 +74,8 @@ def scratch() -> Iterator[URL]:
         asyncio.run(_admin(server, drop))
 
 
-def _run(url: URL, check: Callable[[sa.Connection], list[str]]) -> list[str]:
-    async def go() -> list[str]:
+def _run[T](url: URL, check: Callable[[sa.Connection], T]) -> T:
+    async def go() -> T:
         engine = create_async_engine(url)
         try:
             async with engine.connect() as c:
@@ -145,3 +145,55 @@ def test_the_sql_server_system_principal_reads_what_postgresql_s_system_role_rea
         (t, p, col) for t, (privileges, columns) in reads.items() for p in privileges for col in (columns or ("",))
     }
     assert on_pg == declared
+
+
+# The role each chain's transactions switch to on PostgreSQL; on SQL Server its runtime user stands for it.
+TENANT_ROLES = {
+    "agents": "ops_runtime_tenant",
+    "tools": "ops_tools_tenant",
+    "models": "ops_models_tenant",
+    "kb": "ops_kb_tenant",
+    "platform": "ops_platform_tenant",
+    "files": "ops_files_tenant",
+    "documents": "ops_documents_tenant",
+}
+# Tables a store with no role writes as the service's login, which grants.sql gives DML on every table of its chain;
+# the tenant role holds none of them, so the runtime user keeps DML (ops_models.store: Aliases, KeySpend, ModelKeys,
+# Providers).
+AS_THE_LOGIN = {
+    "models": {"model_aliases", "model_calls_untenanted", "model_key_spend", "model_keys", "provider_connections"}
+}
+
+
+@pytest.mark.parametrize("chain", chains())
+def test_the_sql_server_runtime_user_holds_what_postgresql_s_tenant_role_holds(scratch: URL, chain: str) -> None:
+    """A table-wide or column grant the tenant role lacks is one the runtime user lacks, so a statement PostgreSQL
+    refuses a tenant's transaction SQL Server refuses too."""
+    role = TENANT_ROLES[chain]
+
+    def held(c: sa.Connection) -> list[tuple[str, str, str]]:
+        q = """SELECT t.table_name, p.p, '' FROM information_schema.tables t
+                 CROSS JOIN (VALUES ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE')) p(p)
+               WHERE t.table_schema = 'public' AND has_table_privilege(:r, 'public.' || t.table_name, p.p)
+               UNION ALL
+               SELECT table_name, privilege_type, column_name FROM information_schema.column_privileges
+               WHERE grantee = :r AND table_schema = 'public'"""
+        return [(str(t), str(p), str(col)) for t, p, col in c.execute(sa.text(q), {"r": role})]
+
+    found = _run(scratch, held)
+    whole = {(t, p) for t, p, col in found if not col}
+    on_sql_server = [t.name for t in mssql.chain_tables(chain, chain_metadata(chain)).tables]
+    login = AS_THE_LOGIN.get(chain, set())
+    on_pg = {(t, p, "") for t, p in whole if t in on_sql_server and t not in login} | {
+        (t, p, col) for t, p, col in found if col and (t, p) not in whole and t in on_sql_server
+    }
+    declared = {
+        (t, p, col)
+        for t in on_sql_server
+        if t not in login
+        for privileges, columns in [mssql.runtime_grants(chain, t)]
+        for p, col in [*((p, "") for p in privileges), *(("UPDATE", c) for c in columns)]
+    }
+    assert on_pg - declared == set(), f"{chain}: PostgreSQL's tenant role holds more: {sorted(on_pg - declared)}"
+    assert declared - on_pg == set(), f"{chain}: the SQL Server runtime user holds more: {sorted(declared - on_pg)}"
+    assert all(mssql.runtime_grants(chain, t) == (mssql.DML, ()) for t in login)

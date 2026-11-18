@@ -9,39 +9,21 @@ from typing import Any
 
 import httpx
 import pytest
-from httpx import ASGITransport, AsyncClient
-from langgraph.checkpoint.memory import InMemorySaver
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.pool import StaticPool
+from httpx import AsyncClient
 
 from ops_agents.api import hitl_facade
-from ops_agents.api.app import create_app
 from ops_agents.api.auth import step_up_signer
 from ops_agents.api.deps import Runtime
-from ops_agents.store.base import metadata
 from ops_policy import HmacSigner, mint_step_up
 from ops_service_kit.settings import Settings
 from tests.api.test_graphs import EMAILS, run, thread
-from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, step_up
+from tests.conftest import SEED, FakeGraphModels, empty_engine, started, step_up
 
 
 @pytest.fixture
-async def stack() -> AsyncIterator[tuple[AsyncClient, Runtime]]:
-    engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
-    async with engine.begin() as c:
-        await c.run_sync(metadata.create_all)
-    app = create_app(
-        Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED),
-        model=scripted_model(),
-        engine=engine,
-        checkpointer=InMemorySaver(),
-        graph_models=FakeGraphModels(),
-        knowledge=fixture_knowledge(),
-    )
-    async with (
-        app.router.lifespan_context(app),
-        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
-    ):
+async def stack(database_url: str) -> AsyncIterator[tuple[AsyncClient, Runtime]]:
+    settings = Settings(database_url=database_url, seed_dir=SEED)
+    async with empty_engine(database_url) as engine, started(engine, settings, FakeGraphModels()) as (app, client):
         yield client, app.state.runtime
 
 
@@ -208,25 +190,14 @@ async def test_a_thread_whose_graph_cannot_be_resolved_does_not_break_the_lists(
     assert reviews.json()["data"]["viewCounts"]["open"] == 1
 
 
-async def test_reviews_say_the_tools_service_is_down_instead_of_failing_obscurely() -> None:
+async def test_reviews_say_the_tools_service_is_down_instead_of_failing_obscurely(database_url: str) -> None:
     # With a gateway configured, tools-service decides a call's access class; unreachable, the review answers 503
     # with the reason rather than a 500, and never guesses a class that could lower the approvers needed.
-    engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
-    async with engine.begin() as c:
-        await c.run_sync(metadata.create_all)
     dead = httpx.AsyncClient(base_url="http://127.0.0.1:9", timeout=1)
-    app = create_app(
-        Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED),
-        model=scripted_model(),
-        engine=engine,
-        checkpointer=InMemorySaver(),
-        graph_models=FakeGraphModels(),
-        gateway=dead,
-        knowledge=fixture_knowledge(),
-    )
+    settings = Settings(database_url=database_url, seed_dir=SEED)
     async with (
-        app.router.lifespan_context(app),
-        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+        empty_engine(database_url) as engine,
+        started(engine, settings, FakeGraphModels(), gateway=dead) as (_, client),
     ):
         tid = await paused_dispute(client)
         res = await client.get(f"/reviews/{tid}")
@@ -244,9 +215,9 @@ async def test_the_runs_list_builds_full_rows_for_its_page_only(
     built: list[str] = []
     full = hitl_facade.run_row
 
-    async def counting(rt: Runtime, row: dict[str, Any], *args: Any) -> dict[str, Any]:
+    async def counting(row: dict[str, Any], *args: Any) -> dict[str, Any]:
         built.append(row["id"])
-        return await full(rt, row, *args)
+        return await full(row, *args)
 
     monkeypatch.setattr(hitl_facade, "run_row", counting)
     page = await data(client, "/runs?view=needs_person&page=1&pageSize=1")

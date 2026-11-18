@@ -43,4 +43,4 @@ def backend(request: pytest.FixtureRequest) -> Backend:
 
 
 async def test_team_rename_and_its_audit_entry_land_together(backend: Backend) -> None:
-    await audit_suite(backend, lambda: TeamNameAudit.open(backend.url))
+    await audit_suite(backend, lambda: TeamNameAudit.create(backend.url))

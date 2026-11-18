@@ -29,7 +29,8 @@ export function PublishModeEditor({ value, onChange, disabled }: { value: Record
           <Label htmlFor={`publish-${a.id}`} className="text-xs text-muted-foreground">
             {a.label}
           </Label>
-          <Select value={value[a.id] ?? DEFAULT_PUBLISH_MODE} onValueChange={(m) => onChange({ ...value, [a.id]: m })} disabled={disabled}>
+          {/* Inside a SettingCard's form, Radix's hidden native select can report '' for a select nobody touched; '' is no mode, so it is dropped rather than saved (the server refuses it). */}
+          <Select value={value[a.id] ?? DEFAULT_PUBLISH_MODE} onValueChange={(m) => m && onChange({ ...value, [a.id]: m })} disabled={disabled}>
             <SelectTrigger id={`publish-${a.id}`} className="w-full bg-card" aria-label={`${a.label} review`}>
               <SelectValue />
             </SelectTrigger>

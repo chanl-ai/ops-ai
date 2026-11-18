@@ -3,7 +3,8 @@
 # path that is gone is removed), built in a private index so nobody else's staged or unfinished work comes along.
 # Runs both repository hooks on that index, pre-commit and then commit-msg, which a private-index commit through
 # commit-tree skips: four feat commits reached HEAD with no changelog entry that way and blocked a release on 10-30.
-# The commit lands only if HEAD has not moved since it was read (a compare-and-swap update-ref); otherwise rerun.
+# Commits queue on one lock (commit-lock.sh). The commit lands only if HEAD has not moved since it was read (a
+# compare-and-swap update-ref, for a plain `git commit` that skips the lock); otherwise rerun.
 #   scripts/commit-paths.sh <message-file> <path>...
 set -euo pipefail
 [ $# -ge 2 ] || { echo "usage: scripts/commit-paths.sh <message-file> <path>..." >&2; exit 2; }
@@ -12,7 +13,12 @@ msg_in=$1; shift
 root=$(git rev-parse --show-toplevel)
 git_dir=$(git rev-parse --absolute-git-dir)
 work=$(mktemp -d "${TMPDIR:-/tmp}/commit-paths.XXXXXX")
-trap 'rm -rf "$work"' EXIT
+# One lock for read-HEAD -> hooks -> update-ref: concurrent commits queue instead of losing the swap below.
+# shellcheck source=commit-lock.sh
+. "$(dirname "${BASH_SOURCE[0]}")/commit-lock.sh"
+trap 'commit_lock_release; rm -rf "$work"' EXIT
+trap 'exit 130' INT TERM HUP
+commit_lock_acquire commit-paths || exit 1
 base=$(git -C "$root" rev-parse HEAD)
 export GIT_INDEX_FILE="$work/index"
 git -C "$root" read-tree "$base"

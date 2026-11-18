@@ -83,7 +83,7 @@ def acting_for_tokens(settings: Settings, http: httpx.AsyncClient) -> ActingForT
     service built for dev accepts."""
     if settings.auth_mode != "platform":
         return ActingForTokens.for_dev(service_signer(settings), service="agents")
-    internal = settings.platform_internal_url or f"http://127.0.0.1:{settings.platform_internal_port}"
+    internal = settings.endpoint("platform_internal").base
     del http
     platform = httpx.AsyncClient(base_url=internal, timeout=10)
     return ActingForTokens.from_platform(

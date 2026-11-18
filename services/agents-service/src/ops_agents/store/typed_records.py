@@ -19,13 +19,17 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import now_iso
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
+from ops_store.listing import ListPage, list_page
 from ops_store.team_scope import acting_as, acting_team, team_visible
 
 from .tenancy import current_tenant, tenant_tx
 
 SEED = "seed"
 TEAM = "team"
+# `page` sorts on origin and name joined, which orders by origin first only while both are one length.
+assert len(SEED) == len(TEAM)
 
 
 def head_columns() -> list[sa.Column[Any]]:
@@ -153,9 +157,30 @@ class VersionedRecords:
                 await c.execute(self.versions.insert().values(**version, published_at=at, published_by=SEED))
 
     async def rows(self) -> list[dict[str, Any]]:
+        h = self.head.c
         async with self._tx() as (c, _team):
-            q = sa.select(self.head).where(team_visible(self.head)).order_by(self.head.c.origin, self.head.c.name)
+            q = sa.select(self.head).where(team_visible(self.head)).order_by(h.origin, h.name, h.id)
             return [dict(r) for r in (await c.execute(q)).mappings()]
+
+    async def page(self, params: ListParams) -> ListPage:
+        """One page of the team's types on the shared list contract: the seeded ones first, then the team's own, each
+        by name, then by id; `search` matches the name and description, `ids` names types (the search is then not
+        applied)."""
+        h = self.head.c
+        async with self._tx() as (c, team):
+            q = sa.select(self.head).where(h.tenant_id == current_tenant(), h.team_id == team, team_visible(self.head))
+            if params.ids is not None:
+                # The key is (tenant, team, id), so the shared `ids` lookup, which needs a one-column key, is done here.
+                q = q.where(h.id.in_(params.ids))
+                params = params.model_copy(update={"ids": None, "search": None})
+            return await list_page(
+                c,
+                q,
+                params,
+                search=[h.name, h.description],
+                # Both origins are four letters ("seed", "team"), so origin and name joined sort as origin, then name.
+                default_sort=(h.origin + h.name).asc(),
+            )
 
     async def _row(self, c: AsyncConnection, type_id: str, *, lock: bool = False) -> dict[str, Any]:
         q = sa.select(self.head).where(self.head.c.id == type_id, team_visible(self.head))

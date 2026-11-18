@@ -170,7 +170,9 @@ async def test_an_install_with_no_public_address_answers_503_for_its_metadata_an
     database_url: str,
 ) -> None:
     store = IdentityStore.open(database_url)
-    bare = SignInOptions(password_iterations=1_000, password_min_length=12, flow_ttl_s=600, reset_ttl_s=3600)
+    bare = SignInOptions(
+        password_iterations=1_000, password_min_length=12, flow_ttl_s=600, reset_ttl_s=3600, http_timeout_s=15.0
+    )
     app = create_public_app(store, dev_signer(), demo_password=None, audiences=["platform"], signin=bare)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=PUBLIC_URL) as api:
         meta = await api.get("/.well-known/oauth-authorization-server")
@@ -214,7 +216,9 @@ async def test_callers_behind_the_proxy_are_counted_apart_and_every_replica_sees
     store = IdentityStore.open(database_url)
     replica = create_public_app(
         store, dev_signer(), demo_password=None, audiences=["platform"],
-        signin=SignInOptions(password_iterations=1_000, password_min_length=12, flow_ttl_s=600, reset_ttl_s=3600),
+        signin=SignInOptions(
+            password_iterations=1_000, password_min_length=12, flow_ttl_s=600, reset_ttl_s=3600, http_timeout_s=15.0
+        ),
     )  # fmt: skip
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=replica), base_url=PUBLIC_URL) as other:
         again = await other.post("/oauth/register", json=REGISTRATION, headers=caller_a)

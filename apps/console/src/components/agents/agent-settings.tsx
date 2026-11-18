@@ -25,12 +25,12 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { guardrailOptions, knowledgeBaseOptions, toolOptions, widgetOptionsFor } from '@/hooks/options-queries';
-import { useGuardrails } from '@/hooks/queries';
+import { useGuardrailsByIds, type Guardrail } from '@/hooks/guardrail-queries';
 import type { Lookups } from '@/lib/api';
 import { plural, relativeTime } from '@/lib/format';
 import type { ToolOptionsPage } from '@/lib/types/query';
 import type { WidgetPin, WidgetSettings } from '@/lib/types/widgets';
-import type { Agent, AgentControls, AgentGuardrails, AgentLimits, AgentPublicKeyOverride, AgentRun, AgentVersion, Channel, GrantableTool, Guardrail, MemorySettings, ModelAlias, SkillMenu } from '@/lib/types/domain';
+import type { Agent, AgentControls, AgentGuardrails, AgentLimits, AgentPublicKeyOverride, AgentRun, AgentVersion, Channel, GrantableTool, MemorySettings, ModelAlias, SkillMenu } from '@/lib/types/domain';
 
 import { modelHint, ModelSelect } from './model-select';
 import { teamLabel } from '@/components/shared/team-name';
@@ -320,7 +320,6 @@ function CapField({ id, label, value, onChange, hint, placeholder, decimal }: { 
 /** `shown` are the settings a turn acts on (`Agent.controls.guardrails`); the page offers no other. */
 export function GuardrailsSection({ draft, set, shown }: { draft: AgentDraft; set: Set; shown: AgentControls['guardrails'] }) {
   const g = draft.guardrails;
-  const library = useGuardrails();
   const put = (patch: Partial<AgentGuardrails>) => set('guardrails', { ...g, ...patch });
   const pinned = new Map(draft.guardrailPins.map((p) => [p.guardrailId, p.version]));
   const off = new Set(draft.guardrailPins.filter((p) => !p.enabled).map((p) => p.guardrailId));
@@ -329,7 +328,8 @@ export function GuardrailsSection({ draft, set, shown }: { draft: AgentDraft; se
   // A pin keeps its version; a new pin takes the published one. Deprecated guardrails take no new pins.
   // The picker adds and removes pins (searched on the server); the rows below are the pinned ones, with their
   // version and on/off. A new pin takes the published version on save (version 0 is sent as none).
-  const choices = (library.data ?? []).filter((x) => pinned.has(x.id));
+  const library = useGuardrailsByIds(draft.guardrailPins.map((p) => p.guardrailId));
+  const choices = library.data ?? [];
   const choose = (ids: string[]) =>
     set('guardrailPins', ids.map((id) => draft.guardrailPins.find((p) => p.guardrailId === id) ?? { guardrailId: id, version: 0, enabled: true }));
   // Any published version may be pinned; the guardrail's own page lists them all.

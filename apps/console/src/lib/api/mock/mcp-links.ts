@@ -37,7 +37,6 @@ export function createMcpLinksMock(): McpLinksApi {
   const all = () => (links ??= seed(Date.now()));
   const find = (lid: string) => all().find((l) => l.id === lid) ?? notFound(`MCP link ${lid}`);
   return {
-    list: () => respond((m) => (m === 'empty' ? [] : all())),
     get: (lid) => respond(() => find(lid)),
     create: (input) =>
       respond(() => {

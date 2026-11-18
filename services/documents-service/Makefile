@@ -13,7 +13,7 @@ install: ## uv sync for the workspace
 	uv sync --frozen
 
 run: ## Serve on :8760
-	uv run python -m ops_documents
+	$(call STACK_RUN,documents)
 
 migrate: ## Apply this service's own migrations (version table alembic_version_documents)
 	uv run alembic upgrade head
@@ -22,11 +22,11 @@ lint: ## ruff format check and lint
 	uv run ruff format --check $(PY_DIRS)
 	uv run ruff check $(PY_DIRS)
 
-typecheck: ## Strict pyright
-	uv run pyright $(PY_DIRS)
+typecheck: ## Strict pyright, test-file errors held to tests-typecheck-baseline.txt
+	uv run python $(ROOT)/scripts/check_tests_typecheck.py $(PY_DIRS)
 
 test: ## pytest on the test database (make db-up); T= runs only those files
-	$(TEST_DB) uv run pytest -rfs $(T)
+	$(TEST_DB) uv run pytest $(PYTEST_PAR) -rfs $(T)
 
 verify: lint typecheck test openapi-check ## lint, typecheck, test and the OpenAPI gate
 

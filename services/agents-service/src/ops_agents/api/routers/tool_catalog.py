@@ -1,6 +1,10 @@
 """GET /v1/tools: the tools an agent can be granted, from tools-service's registry (activities/tool_directory.py), so
 the console's agent page grants real, published operations. `known_tools` is the one lookup behind it and behind the
-agents routes' grant check."""
+agents routes' grant check.
+
+No route here takes the request transaction (`Tx`): each reads tools-service's operations or app cards between its
+reads of this service's rows, so each store call takes and returns its own connection and none is held while
+tools-service answers."""
 
 from __future__ import annotations
 
@@ -11,9 +15,11 @@ from fastapi.responses import JSONResponse
 
 from ops_service_kit.errors import NotFound
 from ops_service_kit.http import Envelope, options_page, options_window, page_window, paged
+from ops_store import isolation
 
 from ...activities.tool_directory import ToolsUnavailable
 from ...store.tenancy import current_team
+from ..agent_registry import registry
 from ..auth import Principal, principal, reader_of
 from ..child_runs import (
     EMAIL_SCHEMA,
@@ -31,9 +37,12 @@ router = APIRouter(prefix="/v1/tools", dependencies=[Depends(principal)])
 Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI reads Annotated aliases
 
 
-async def known_tools(rt: Runtime, *, fresh: bool = False) -> list[dict[str, Any]]:
-    """Registry operations, then the tenant's published workflows (from this service's own workflow registry) under
-    `workflow:<id>`: what an agent may be granted, and what search_tools finds among an agent's grants. `fresh` asks
+# Tool rows as the catalogue lists them (`id`, `name`, `server`, `access`, `inputSchema`, ...).
+ToolRows = list[dict[str, Any]]
+
+
+async def directory_tools(rt: Runtime, *, fresh: bool = False) -> ToolRows:
+    """The registry's operations as tool rows: the one call to tools-service, made with nothing open. `fresh` asks
     tools-service again past the 30 s list, for a grant naming a tool the kept list lacks."""
     # Only a directory that keeps a list has one to drop; a fixed catalogue or a test's list has none.
     if fresh and (forget := getattr(rt.directory(), "forget", None)) is not None:
@@ -56,6 +65,14 @@ async def known_tools(rt: Runtime, *, fresh: bool = False) -> list[dict[str, Any
                 "approval": template.title if template else None,
             }
         )
+    return rows
+
+
+async def known_tools(rt: Runtime, *, fresh: bool = False, listed: ToolRows | None = None) -> ToolRows:
+    """Registry operations, then the tenant's published workflows (from this service's own workflow registry) under
+    `workflow:<id>`: what an agent may be granted, and what search_tools finds among an agent's grants. `listed` is
+    the operations a caller already fetched with `directory_tools`, so its local reads can share one transaction."""
+    rows = list(listed) if listed is not None else await directory_tools(rt, fresh=fresh)
     v1 = {w["id"] for w in await published_workflows(rt)}
     for d in await engine_workflows(rt):
         if d["workflow_id"] in v1:
@@ -90,7 +107,9 @@ async def known_tools(rt: Runtime, *, fresh: bool = False) -> list[dict[str, Any
         )
     from ..agent_calls import QUESTION_SCHEMA  # noqa: PLC0415 - keep the catalog import cycle out of the module top
 
-    for a in rt.catalog.agents:
+    # The catalogue holds every tenant's agents; only the caller's tenant's are its tools.
+    ours = await registry(rt).tenant_owners({a.id for a in rt.catalog.agents})
+    for a in (a for a in rt.catalog.agents if a.id in ours):
         rows.append(
             {
                 "id": f"agent:{a.id}",
@@ -128,14 +147,16 @@ def _status_of(tool: dict[str, Any], card: dict[str, Any] | None) -> str:
 
 async def tool_rows(rt: Runtime, person: str | None, team: str | None) -> list[dict[str, Any]]:
     """Every tool the team may grant, one row each, joined in one read of tools-service's apps (for `person`) and one
-    of this service's own grants and workflow steps."""
+    of this service's own grants and workflow steps. tools-service is asked for the apps and the operations before
+    any statement, so the local reads that follow share one transaction with nothing called while it is open."""
     from .tool_uses import tool_uses  # noqa: PLC0415 - keep the catalog import cycle out of the module top
 
-    # A person's page reads the list fresh: a tool added to the team a moment ago shows at once.
-    tools = await known_tools(rt, fresh=True)
     cards = await rt.app_states.cards(person, team) if rt.app_states is not None else []
     by_module = {str(m): c for c in cards for m in cast(list[str], c.get("moduleIds") or [])}
-    uses = await tool_uses(rt, team or current_team(), [str(t["id"]) for t in tools])
+    async with isolation.request_transaction():
+        # A person's page reads the list fresh: a tool added to the team a moment ago shows at once.
+        tools = await known_tools(rt, fresh=True)
+        uses = await tool_uses(rt, team or current_team(), [str(t["id"]) for t in tools])
     rows: list[dict[str, Any]] = []
     for t in tools:
         module = t.get("moduleId")
@@ -202,7 +223,8 @@ async def list_tools(
     for c in FACETS:
         if wanted := request.query_params.getlist(c):
             rows = [r for r in rows if _facet(r, c) in wanted]
-    rows.sort(key=lambda r: (_app(r).get("name") or "~", str(r["title"]).lower()))
+    # The id last, so two tools of one app with one title keep their order from page to page.
+    rows.sort(key=lambda r: (_app(r).get("name") or "~", str(r["title"]).lower(), str(r["id"])))
     page_no, start = page_window(len(rows), page_no, page_size)
     # By name, the order the App filter lists them in.
     names = dict(sorted(names.items(), key=lambda kv: kv[1].lower()))
@@ -249,17 +271,17 @@ async def tool_options(
     # v2 workflows come scoped to the selected team already; v1 registry workflows carry a team, so another team's
     # are left out here. Operations are tenant-wide, as the grant check offers them.
     team = current_team()
-    others = {
-        f"workflow:{w['id']}"
-        for w in await published_workflows(rt)
-        if team and w.get("team_id") not in (None, "", team)
-    }
-    # The agent and workflow pickers read it fresh, so a tool just added to the team is offered at once.
-    tools = [
-        t
-        for t in await known_tools(rt, fresh=True)
-        if t["id"] not in others and (agents or not str(t["id"]).startswith("agent:"))
-    ]
+    # One transaction for the local reads: `known_tools` asks tools-service before its first statement, so nothing
+    # is called while it is open; the not-added line after it asks tools-service with it closed.
+    async with isolation.request_transaction():
+        # The agent and workflow pickers read it fresh, so a tool just added to the team is offered at once.
+        known = await known_tools(rt, fresh=True)
+        others = {
+            f"workflow:{w['id']}"
+            for w in await published_workflows(rt)
+            if team and w.get("team_id") not in (None, "", team)
+        }
+    tools = [t for t in known if t["id"] not in others and (agents or not str(t["id"]).startswith("agent:"))]
     if ids is not None:
         wanted = set(ids)
         hits = [t for t in tools if t["id"] in wanted]

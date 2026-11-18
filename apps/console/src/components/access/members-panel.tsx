@@ -118,10 +118,13 @@ const STATUS_OPTIONS = [
  * platform-service refuses the same writes from anyone else with 403 admin_required, keeps the last admin, and ends a
  * removed member's sessions at once. An invite's link is shown once, in a dialog, because no email is sent.
  */
+/** The columns platform-service orders members by (`sortBy` name, role, status or teamId). */
+const SORT_COLUMNS = { name: 'name', role: 'role', status: 'status', teamId: 'teamId' };
+
 export function MembersPanel({ inviteOpen, onInviteOpenChange }: { inviteOpen: boolean; onInviteOpenChange: (open: boolean) => void }) {
   const { team, teams } = useTeam();
   const canManage = useCan('access', 'manage') === true;
-  const list = useListParams<MemberFilters>('name', 20);
+  const list = useListParams<MemberFilters>('name', 20, undefined, SORT_COLUMNS);
   const query = useMembers(list.params);
   const facets = query.data?.facets ?? {};
   // A list from one team has one Team value on every row; the column and facet earn their width only when it varies.
@@ -174,6 +177,7 @@ export function MembersPanel({ inviteOpen, onInviteOpenChange }: { inviteOpen: b
               : undefined
           }
           serverPagination={serverPagination(list, query)}
+          serverSorting={list.serverSort}
           emptyState={<ListEmpty icon={Users} noun="members" filtered={list.isFiltered} createLabel={canManage ? 'Invite' : undefined} onCreate={() => onInviteOpenChange(true)} description="Invite the people who build, review and watch this team’s work." />}
         />
       )}

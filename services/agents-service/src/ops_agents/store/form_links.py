@@ -14,8 +14,10 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
 from ops_store.dialect import locked
+from ops_store.listing import ListPage, list_page
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
@@ -59,6 +61,9 @@ def source_of(form_id: str) -> str:
 
 
 class FormLinks:
+    """Every read names the tenant as well as the team: a link's token names its tenant, and a database without row
+    policies (SQLite) would otherwise open another tenant's form with the same id."""
+
     requires: ClassVar[frozenset[Guarantee]] = frozenset()
 
     def __init__(self, engine: AsyncEngine) -> None:
@@ -101,26 +106,46 @@ class FormLinks:
     async def get(self, form_id: str) -> dict[str, Any] | None:
         f = form_links
         async with tenant_tx(self.engine) as c:
-            found = (await c.execute(sa.select(f).where(f.c.id == form_id, team_visible(f)))).mappings().first()
+            found = (
+                (
+                    await c.execute(
+                        sa.select(f).where(f.c.tenant_id == current_tenant(), team_visible(f), f.c.id == form_id)
+                    )
+                )
+                .mappings()
+                .first()
+            )
         return dict(found) if found is not None else None
 
     async def by_slug(self, slug: str) -> dict[str, Any] | None:
         """The form at `slug` among the acting team's forms (a members-only page, read as a signed-in person)."""
         f = form_links
         async with tenant_tx(self.engine) as c:
-            found = (await c.execute(sa.select(f).where(f.c.slug == slug, team_visible(f)))).mappings().first()
+            found = (
+                (
+                    await c.execute(
+                        sa.select(f).where(f.c.tenant_id == current_tenant(), team_visible(f), f.c.slug == slug)
+                    )
+                )
+                .mappings()
+                .first()
+            )
         return dict(found) if found is not None else None
 
-    async def of_workflow(self, workflow_id: str) -> list[dict[str, Any]]:
+    async def page(self, workflow_id: str, params: ListParams) -> ListPage:
+        """One page of the workflow's forms in the acting team, newest first, then by id; `search` matches the title
+        and the slug, `ids` names forms."""
         f = form_links
-        q = sa.select(f).where(f.c.workflow_id == workflow_id, team_visible(f)).order_by(f.c.created_at.desc())
+        q = sa.select(f).where(f.c.tenant_id == current_tenant(), team_visible(f), f.c.workflow_id == workflow_id)
         async with tenant_tx(self.engine) as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await list_page(c, q, params, search=[f.c.title, f.c.slug], default_sort=f.c.created_at.desc())
 
     async def update(self, form_id: str, **values: Any) -> dict[str, Any] | None:
         f = form_links
         async with tenant_tx(self.engine) as c:
-            await c.execute(f.update().where(f.c.id == form_id, team_visible(f)).values(**values))
+            await c.execute(
+                f.update().where(f.c.tenant_id == current_tenant(), team_visible(f), f.c.id == form_id).values(**values)
+            )
         return await self.get(form_id)
 
     async def titles(self, form_ids: set[str]) -> dict[str, str]:
@@ -128,7 +153,7 @@ class FormLinks:
         if not form_ids:
             return {}
         f = form_links
-        q = sa.select(f.c.id, f.c.title).where(f.c.id.in_(form_ids), team_visible(f))
+        q = sa.select(f.c.id, f.c.title).where(f.c.tenant_id == current_tenant(), team_visible(f), f.c.id.in_(form_ids))
         async with tenant_tx(self.engine) as c:
             return {str(i): str(t) for i, t in (await c.execute(q)).all()}
 

@@ -11,7 +11,8 @@ from typing import Any, cast
 
 from ops_agent_kernel import layout
 from ops_agents.activities.catalog import WidgetPinRule
-from ops_agents.store.widgets import WidgetRegistry
+from ops_agents.store.widget_picker import WidgetPicker
+from ops_agents.store.widgets import ListedWidget, WidgetRegistry
 from ops_service_kit.errors import Unprocessable
 
 from .agent_registry import registry
@@ -22,6 +23,10 @@ MAX_WIDGET_ID = 64
 
 def widgets(rt: Runtime) -> WidgetRegistry:
     return WidgetRegistry(rt.db)
+
+
+def picker(rt: Runtime) -> WidgetPicker:
+    return WidgetPicker(rt.db)
 
 
 def widget_id_of(name: str) -> str:
@@ -62,14 +67,6 @@ def check_content(fields: dict[str, Any]) -> dict[str, Any]:
     return {"name": name, "useWhen": use_when, "tree": fields["tree"], "dataSchema": schema, "sample": sample}
 
 
-def _status(row: dict[str, Any], newest: dict[str, Any], pending: bool) -> str:
-    if row["retired_reason"]:
-        return "deprecated"
-    if pending:
-        return "in_review"
-    return "published" if newest["published_at"] is not None else "draft"
-
-
 def _out(widget_id: str, version: int, content: dict[str, Any], **extra: Any) -> dict[str, Any]:
     return {
         "widgetId": widget_id,
@@ -90,14 +87,26 @@ async def view(rt: Runtime, widget_id: str) -> dict[str, Any]:
     newest = await reg.version(widget_id, int(row["version"]))
     assert newest is not None
     pending = any(r["status"] == "pending" for r in await _requests(rt, widget_id))
+    return listed_view(
+        ListedWidget.model_validate(
+            {**row, "content": newest["content"], "published_at": newest["published_at"], "pending": pending}
+        )
+    )
+
+
+def listed_view(w: ListedWidget) -> dict[str, Any]:
+    """A widget's reply: its newest version's content, and its status (retired, in review, published or draft)."""
+    status = (
+        "deprecated"
+        if w.retired_reason
+        else "in_review"
+        if w.pending
+        else "draft"
+        if w.published_at is None
+        else "published"
+    )
     return _out(
-        widget_id,
-        int(row["version"]),
-        newest["content"],
-        status=_status(row, newest, pending),
-        teamId=row["team_id"],
-        updatedBy=row["updated_by"],
-        updatedAt=row["updated_at"],
+        w.id, w.version, w.content, status=status, teamId=w.team_id, updatedBy=w.updated_by, updatedAt=w.updated_at
     )
 
 
@@ -115,14 +124,14 @@ async def seeded_widgets(rt: Runtime) -> list[dict[str, Any]]:
     return sorted(out, key=lambda w: str(w["name"]))
 
 
-async def listed(rt: Runtime, teams: list[str]) -> list[dict[str, Any]]:
-    """The seeded library's latest versions, then the registry's widgets in the caller's teams, newest version each,
-    by name."""
-    out = await seeded_widgets(rt)
-    for row in await widgets(rt).rows():
-        if row["team_id"] in teams:
-            out.append(await view(rt, row["id"]))
-    return sorted(out, key=lambda w: str(w["name"]))
+async def listed_one(rt: Runtime, teams: list[str], widget_id: str) -> dict[str, Any] | None:
+    """The widget `widget_id` as the caller sees it, reading only that widget: the seeded library's latest version
+    first, else the registry's newest version when it is in the caller's teams."""
+    seeded = next((w for w in await seeded_widgets(rt) if w["widgetId"] == widget_id), None)
+    if seeded is not None:
+        return seeded
+    row = await widgets(rt).find(widget_id)
+    return await view(rt, widget_id) if row is not None and row["team_id"] in teams else None
 
 
 async def published(rt: Runtime, widget_id: str, version: int | None) -> WidgetPinRule | None:

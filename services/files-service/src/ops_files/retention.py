@@ -9,14 +9,17 @@ from ops_store import background
 
 from .tenant_files import TenantFiles
 
-EVERY_S = 3600.0
+KEY = "files_retention"
 
 
-async def keep_purging(files: TenantFiles, stop: asyncio.Event | None = None) -> None:
-    """The listed `files_retention` process: one pass an hour through the shared runner, reported on
-    /health/background."""
+async def keep_purging(files: TenantFiles, stop: asyncio.Event | None = None, *, every_s: float | None = None) -> None:
+    """The listed `files_retention` process, given its pass and run by `background.run_sweep`: one pass an hour (or
+    every `every_s`), reported on /health/background. The pass opens its own transactions, a tenant-wide read of
+    what is due and then each delete in its own tenant and team, so it is given none."""
 
-    async def once() -> int:
+    async def purge(_tx: background.Tx, _now: float) -> int:
+        # Looked up on each pass, and dated by the files' own clock, as the deletes it makes are.
         return await files.purge_released()
 
-    await background.run("files_retention", once, stop=stop or asyncio.Event(), store=background.LOCAL)
+    background.give_pass(KEY, purge, service="files")
+    await background.run_sweep(KEY, stop=stop or asyncio.Event(), every_s=every_s)

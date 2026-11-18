@@ -17,7 +17,7 @@ from .test_drop_publish_policies import ROOT, _sql  # pyright: ignore[reportPriv
 BEFORE = "0098_copies_record_digest"
 
 
-def test_a_service_opened_review_names_the_person_and_keeps_the_service(database_url: str) -> None:
+def test_a_service_opened_review_names_the_person_and_keeps_the_service(emptied_database: str) -> None:
     cfg = Config(str(ROOT / "alembic.ini"))
     command.downgrade(cfg, BEFORE)
     tenant, seeded, own = new_id("ten"), new_id("pr"), new_id("pr")
@@ -28,7 +28,7 @@ def test_a_service_opened_review_names_the_person_and_keeps_the_service(database
     body = json.dumps({"moduleId": "mod_x"})
     asyncio.run(
         _sql(
-            database_url,
+            emptied_database,
             (
                 row,
                 {"t": tenant, "id": seeded, "by": "tools-service on behalf of Anika Singh", "at": now_iso(), "b": body},
@@ -39,7 +39,7 @@ def test_a_service_opened_review_names_the_person_and_keeps_the_service(database
     command.upgrade(cfg, "head")
     (rows,) = asyncio.run(
         _sql(
-            database_url,
+            emptied_database,
             (
                 "SELECT id, requested_by, CAST(body AS text) FROM registry_publish_requests WHERE tenant_id = :t",
                 {"t": tenant},

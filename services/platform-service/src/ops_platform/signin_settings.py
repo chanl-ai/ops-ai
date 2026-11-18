@@ -37,7 +37,7 @@ from .store.signin import (
     TrustedCertificate,
     group_settings,
 )
-from .store.signin_secrets import SignInSecretStore
+from .store.signin_secrets import SecretMeta, SignInSecretStore
 from .teams import Members
 
 # The membership roles a first SSO sign-in may give; admin is never one.
@@ -160,14 +160,8 @@ def provider_out(p: Provider, public_url: str | None = None, console_url: str | 
     }
 
 
-def _secret_out(r: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "name": r["name"],
-        "version": r["version"],
-        "createdBy": r["created_by"],
-        "createdAt": r["created_at"],
-        "rotatedAt": r["rotated_at"],
-    }
+def _secret_out(r: SecretMeta) -> dict[str, Any]:
+    return r.model_dump(by_alias=True)
 
 
 @dataclass

@@ -156,8 +156,8 @@ def _threads(kind: Kind, scope: Scope) -> sa.Select[*tuple[Any, ...]]:
     is part of its parent's row, not one of its own."""
     t = graph_threads
     meta = t.c.meta
-    is_chat = meta["chat"].as_boolean().is_(True)
-    shown = sa.or_(meta["hidden"].as_boolean().is_(None), meta["hidden"].as_boolean().is_(False))
+    is_chat = meta["chat"].as_boolean() == sa.true()
+    shown = sa.or_(meta["hidden"].as_boolean().is_(None), meta["hidden"].as_boolean() == sa.false())
     status = sa.case(
         (t.c.status.in_(("busy", "running", "route", "resume", "input")), "running"),
         (t.c.status == "interrupted", "waiting"),

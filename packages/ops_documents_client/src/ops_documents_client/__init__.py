@@ -8,14 +8,23 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 import httpx
 
 from ops_identity import ServiceCallError, ServiceClient, segment
+from ops_service_kit.http import PageJSON
 from ops_service_kit.settings import Settings
 
 __all__ = ["READING", "READING_PENDING", "DocumentNotFound", "DocumentsClient", "DocumentsRefused", "reading_text"]
+
+
+class _TypesPage(TypedDict):
+    """One page of `GET /v1/document-types`, the shared list contract."""
+
+    data: list[dict[str, Any]]
+    pagination: PageJSON
+
 
 # An extraction in these states has not finished: a file over documents-service's synchronous size reads in the
 # background.
@@ -61,9 +70,9 @@ class DocumentsClient:
     def from_settings(
         cls, settings: Settings, *, service: str, timeout: float = 30, scopes: list[str] | None = None
     ) -> DocumentsClient:
-        """documents-service at `settings.documents_url`, or the local port, with this service's signing key; `scopes`
+        """documents-service at the documents endpoint, with this service's signing key; `scopes`
         are the `documents:<action>` grants the token claims, `documents:view` and `documents:run` unless given."""
-        base = settings.documents_url or f"http://127.0.0.1:{settings.documents_port}"
+        base = settings.endpoint("documents").base
         return cls(
             ServiceClient.for_settings(
                 settings,
@@ -147,14 +156,23 @@ class DocumentsClient:
         return found
 
     async def document_types(self, tenant: str, team: str) -> list[dict[str, Any]]:
-        """The team's document types (their newest versions), for finding one by name."""
+        """Every one of the team's document types (their newest versions), for finding one by name: the list is
+        paged, so each page is read until the last."""
+        page = await self._types_page(tenant, team, 1)
+        found = page["data"]
+        while page["pagination"]["hasNext"]:
+            page = await self._types_page(tenant, team, page["pagination"]["page"] + 1)
+            found = [*found, *page["data"]]
+        return found
+
+    async def _types_page(self, tenant: str, team: str, page: int) -> _TypesPage:
         try:
-            listed: dict[str, Any] = await self._documents.request(
-                "GET", "/v1/document-types", tenant=tenant, team=team
+            listed: _TypesPage = await self._documents.request(
+                "GET", "/v1/document-types", params={"page": page}, tenant=tenant, team=team
             )
         except ServiceCallError as e:
             raise _refused(e) from e
-        return list(listed.get("items") or [])
+        return listed
 
     async def template_copies(self, tenant: str, team: str) -> list[dict[str, Any]]:
         """The document types the team's apps bring, each with its state for the team and the team's copy."""

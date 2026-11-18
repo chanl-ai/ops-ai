@@ -4,6 +4,7 @@ the baseline warned about again."""
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
 import sys
 from collections import Counter
@@ -40,6 +41,10 @@ Q = text("SELECT id FROM kb_units WHERE kb_id = ANY(:ids)")
 R = text("SELECT count(*) FILTER (WHERE model = :m) FROM v")
 S = text("SELECT shared::float / total FROM hits")
 T = text("SELECT id FROM kb_units WHERE kb_id IN :ids AND CAST(shared AS FLOAT) > 0 AND url = 'http://[::1]'")
+U = select(t).where(t.c.on.is_(True), t.c.off.isnot(False), t.c.x.is_not(True), t.c.y.is_(False), t.c.z.is_(None))
+V = text("SELECT id FROM roles WHERE builtin IS FALSE AND hidden IS NOT TRUE")
+W = select(t).where(t.c.on == sa.true(), t.c.z.is_(None), t.c.n.is_(other))
+X = select(sa.func.count().filter(t.c.a == 1), sa.funcfilter(sa.func.max(t.c.n), t.c.b), q.filter(t.c.a == 1))
 '''
 
 
@@ -67,6 +72,10 @@ def test_each_postgres_only_construct_in_code_is_found() -> None:
         22: {"array parameter"},
         23: {"aggregate FILTER"},
         24: {"PostgreSQL cast"},
+        26: {"boolean IS"},
+        27: {"boolean IS"},
+        # `q.filter(...)` on a query is not an aggregate's.
+        29: {"aggregate FILTER"},
         4: {"dialect insert"},
     }, found
 
@@ -113,6 +122,10 @@ def test_a_baseline_row_raised_without_the_trailer_fails_and_with_it_passes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     base = tmp_path / "portable-baseline.txt"
+    (tmp_path / ".github").mkdir()
+    (tmp_path / ".github/standards-maintainers.txt").write_text(
+        f"# maintainers\n{hashlib.sha256(b'owner-login').hexdigest()}\n"
+    )
     _git(tmp_path, "init", "-q")
     base.write_text("# header\n2 sql a.py row lock\n")
     _git(tmp_path, "add", ".")
@@ -120,6 +133,7 @@ def test_a_baseline_row_raised_without_the_trailer_fails_and_with_it_passes(
     monkeypatch.setattr(c, "ROOT", tmp_path)
     monkeypatch.setattr(c, "BASELINE", base)
     monkeypatch.setattr(c, "BASELINE_BEGAN", _git(tmp_path, "rev-parse", "HEAD"))
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "required")
     base.write_text("# header\n1 sql a.py row lock\n")
     _git(tmp_path, "commit", "-qam", "a lock moved into ops_store: lowering needs no trailer")
     assert c.commit_problems() == []  # pyright: ignore[reportUnknownMemberType]
@@ -127,5 +141,95 @@ def test_a_baseline_row_raised_without_the_trailer_fails_and_with_it_passes(
     _git(tmp_path, "commit", "-qam", "a new upsert outside ops_store")
     [problem] = c.commit_problems()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
     assert "sql b.py ON CONFLICT (0 -> 1)" in problem
-    _git(tmp_path, "commit", "-q", "--amend", "-m", "an upsert\n\nStandards-exception: b.py upsert, approved by orch")
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "approved")
     assert c.commit_problems() == []  # pyright: ignore[reportUnknownMemberType]
+
+
+PLAIN_CUTS = """
+page = rows[start : start + size]
+more = hits[offset : offset + limit + 1]
+head = rows[:limit]
+tail = rows[start:]
+span = text[a : b + 1]
+"""
+MULTIPLIED_OR_CHAINED_CUTS = """
+by_page = out[(page - 1) * size : page * size]
+by_index = out[index * limit : (index + 1) * limit]
+chained = rows[offset:][:limit]
+fixed = rows[1:][:3]
+scaled = rows[a * 2 : b * 3]
+"""
+NAMED_CUTS = """
+from itertools import islice
+import itertools as it
+
+def page(rows, o, n, size):
+    end = o + n
+    a = rows[o:end]
+    b = list(islice(rows, o, o + n))
+    c = list(it.islice(rows, o, end))
+    tail = rows[o:]
+    d = tail[:n]
+    e = list(islice(rows, 3))
+    other = rows[1:]
+    f = other[:3]
+    g = rows[o:size]
+
+def elsewhere(rows, o):
+    end = 5
+    return rows[o:end]
+
+def counted(rows, p, n):
+    start = (p - 1) * n
+    return rows[start : start + n]
+"""
+
+
+@pytest.mark.parametrize(
+    ("code", "lines"),
+    [(PLAIN_CUTS, [2, 3]), (MULTIPLIED_OR_CHAINED_CUTS, [2, 3, 4]), (NAMED_CUTS, [7, 8, 9, 11, 23])],
+    ids=["plain", "multiplied-or-chained", "name-islice-two-statements"],
+)
+def test_a_page_cut_in_python_is_found_in_every_form_and_other_slices_are_not(code: str, lines: list[int]) -> None:
+    assert c.slice_findings(code) == lines  # pyright: ignore[reportUnknownMemberType]
+
+
+def test_the_list_slice_baseline_is_held_to_its_trailer_like_the_portable_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    portable, sliced = tmp_path / "portable-baseline.txt", tmp_path / "list-slice-baseline.txt"
+    _git(tmp_path, "init", "-q")
+    (tmp_path / ".github").mkdir()
+    (tmp_path / ".github/standards-maintainers.txt").write_text(
+        f"# maintainers\n{hashlib.sha256(b'owner-login').hexdigest()}\n"
+    )
+    portable.write_text("# header\n")
+    sliced.write_text("# header\n1 slice a.py list slice\n")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-qm", "the baselines begin")
+    began = _git(tmp_path, "rev-parse", "HEAD")
+    for name, value in {"ROOT": tmp_path, "BASELINE": portable, "SLICE_BASELINE": sliced}.items():
+        monkeypatch.setattr(c, name, value)
+    monkeypatch.setattr(c, "BASELINE_BEGAN", began)
+    monkeypatch.setattr(c, "SLICE_BASELINE_BEGAN", began)
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "required")
+    sliced.write_text("# header\n2 slice a.py list slice\n")
+    _git(tmp_path, "commit", "-qam", "a page cut in python")
+    [problem] = c.commit_problems()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+    assert "slice a.py list slice (1 -> 2)" in problem
+    monkeypatch.setenv("OPS_STANDARDS_REVIEW", "approved")
+    assert c.commit_problems() == []  # pyright: ignore[reportUnknownMemberType]
+
+
+def test_update_lowers_a_baseline_row_and_never_raises_or_adds_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sliced = tmp_path / "list-slice-baseline.txt"
+    sliced.write_text("# header\n3 slice services/x-service/src/m.py list slice\n")
+    now = Counter(
+        {"slice services/x-service/src/m.py list slice": 5, "slice services/x-service/src/n.py list slice": 1}
+    )
+    held = c.lowered(now, c.read_baseline(sliced.read_text()))  # pyright: ignore[reportUnknownMemberType]
+    assert held == {"slice services/x-service/src/m.py list slice": 3}
+    held = c.lowered(Counter({"slice services/x-service/src/m.py list slice": 1}), c.read_baseline(sliced.read_text()))  # pyright: ignore[reportUnknownMemberType]
+    assert held == {"slice services/x-service/src/m.py list slice": 1}

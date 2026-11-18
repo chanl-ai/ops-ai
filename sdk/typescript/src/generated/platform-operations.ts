@@ -48,7 +48,13 @@ export const platformOperations = {
     "pathParams": [],
     "query": [
       "targetKind",
-      "targetId"
+      "targetId",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -78,7 +84,11 @@ export const platformOperations = {
       "from",
       "to",
       "page",
-      "pageSize"
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -347,7 +357,13 @@ export const platformOperations = {
     "pathParams": [],
     "query": [
       "role",
-      "status"
+      "status",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -451,7 +467,14 @@ export const platformOperations = {
     "pathParams": [
       "person_id"
     ],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "people_take_role": {
@@ -536,7 +559,16 @@ export const platformOperations = {
     "method": "GET",
     "path": "/v1/roles",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "builtin",
+      "canDecideReviews",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "roles_read_role": {
@@ -580,7 +612,14 @@ export const platformOperations = {
     "pathParams": [
       "role_id"
     ],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "sign_in_providers_add_break_glass": {
@@ -797,9 +836,12 @@ export const platformOperations = {
     "pathParams": [],
     "query": [
       "status",
-      "search",
       "page",
-      "pageSize"
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },

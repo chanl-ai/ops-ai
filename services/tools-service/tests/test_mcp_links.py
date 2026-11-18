@@ -135,7 +135,7 @@ async def test_a_link_lists_and_runs_only_its_tools_and_lists_its_own_calls(stac
     assert other.is_error is True and _content(other).get("code") == "not_on_link"
     async with _rest(stack, "linker") as rest:
         calls = (await rest.get("/v1/executions", params={"link": link["id"]})).json()["data"]["data"]
-        listed_links = (await rest.get("/v1/mcp-links")).json()["data"]
+        listed_links = (await rest.get("/v1/mcp-links")).json()["data"]["data"]
     assert [(x["target"], x["channel"]) for x in calls] == [("lookup_case", "mcp")]
     assert (calls[0]["subject"]["name"], calls[0]["clientName"]) == ("linker", "pytest-assistant"), "names, not ids"
     assert listed_links[0]["lastCall"]["outcome"] == "ok"
@@ -172,6 +172,15 @@ async def test_a_link_takes_only_tools_the_team_can_run(stack: Stack) -> None:
     assert (r.status_code, r.json()["error"]["code"]) == (422, "tool_not_runnable"), r.text
 
 
+async def test_a_refused_link_keeps_the_teams_platform_tools(stack: Stack) -> None:
+    async with _rest(stack, "linker") as rest:
+        refused = await rest.post(
+            "/v1/mcp-links", json={"name": "Payroll", "tools": [{"id": "run_payroll", "label": "x"}]}
+        )
+        made = await rest.post("/v1/mcp-links", json={"name": "Cases", "tools": [{"id": "open_case", "label": "x"}]})
+    assert (refused.status_code, made.status_code) == (422, 201), made.text
+
+
 async def test_a_picked_workflow_starts_its_live_version_only_for_who_may_run_it(stack: Stack) -> None:
     picked = {
         "id": "workflow:wf_claims",
@@ -206,7 +215,7 @@ async def test_a_deleted_link_stops_answering_and_a_reader_cannot_delete(stack: 
     assert refused.status_code == 403, refused.text
     async with _rest(stack, "linker") as rest:
         assert (await rest.delete(f"/v1/mcp-links/{link['id']}")).status_code == 204
-        assert (await rest.get("/v1/mcp-links")).json()["data"] == []
+        assert (await rest.get("/v1/mcp-links")).json()["data"]["data"] == []
     body: dict[str, Any] = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
     async with (
         stack.app.router.lifespan_context(stack.app),

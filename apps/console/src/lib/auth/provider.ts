@@ -4,22 +4,17 @@
  * the API (`api.signInPolicy`), never decided by an adapter. Workflow identity is ADR-0005 and not covered here.
  */
 
-import type { MemberRole } from '@/lib/types/settings';
 import type { SignInOptions } from '@/lib/types/sign-in';
 
 export type { SignInOptions };
 
 export type AuthMethod = 'password' | 'sso' | 'google';
-export type WorkspaceRole = 'admin' | 'member' | 'viewer';
 
 export interface SessionUser {
   id: string;
   name: string;
   email: string;
   teamIds: string[];
-  role: WorkspaceRole;
-  /** The person's role on each team (platform sign-in only). Builder and approver differ: one may not decide what the other requested. */
-  teamRoles?: Record<string, MemberRole>;
 }
 
 export interface Session {

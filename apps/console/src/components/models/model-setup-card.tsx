@@ -19,10 +19,11 @@ const STEPS = ['Pick your provider: OpenAI, Azure OpenAI or Anthropic.', 'Paste 
  */
 export function ModelSetupCard() {
   const admin = useCan('settings', 'manage') === true;
-  const keys = useProviderKeys(admin);
+  // One row is enough: the page's total says whether any key exists.
+  const keys = useProviderKeys({ page: 1, pageSize: 1 }, admin);
   const [open, setOpen] = React.useState(false);
   // Saving the key in step two ends the need for this card; it stays until the dialog closes so step three can run.
-  if (!open && !needsModelSetup({ admin, keys: keys.data })) return null;
+  if (!open && !needsModelSetup({ admin, keyCount: keys.data?.pagination.total })) return null;
   return (
     <Card data-testid="model-setup">
       <CardHeader>

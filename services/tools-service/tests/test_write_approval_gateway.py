@@ -1,6 +1,7 @@
 """Which writes wait for approval at the gateway, by failure mode: open_case, declared to run at once, still
 refused without a token; a write that waits let through without one; a caller saying in its request that its write
-needs no approval; and a team that asks a reviewer (appChanges) letting open_case through. Decided by
+needs no approval; a team that asks a reviewer (appChanges) letting open_case through; and a write run with no
+platform-service to read the team's rules from. Decided by
 the real Rego in OPA, on a seeded tenant's registry."""
 
 from __future__ import annotations
@@ -102,3 +103,12 @@ async def test_a_caller_cannot_say_its_write_needs_no_approval(gateway: Call) ->
 async def test_a_team_that_asks_a_reviewer_holds_open_case_which_has_no_setting(strict: Call) -> None:
     r = await strict("open_case", CASE, "s4")
     assert (r.status_code, reasons(r)) == (403, ["write needs an approval token"]), r.text
+
+
+async def test_a_write_is_refused_without_platform_service(
+    engine: AsyncEngine, seed: dict[str, Any], tenant: str, catalog_tools: list[dict[str, Any]]
+) -> None:
+    # A dev stack started without OPS_PLATFORM_URL: the team's rules cannot be read, so the write never runs.
+    async for call in _gateway(engine, seed, tenant, catalog_tools, WriteApprovals(None)):
+        r = await call("open_case", CASE, "no-platform")
+        assert (r.status_code, r.json()["error"]["code"]) == (503, "approval_rules_unavailable"), r.text

@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- kb-service, stamped at kb_0024
+-- kb-service, stamped at kb_0029
 -- not on SQL Server yet: table kb_unit_vectors (PostgreSQL only)
 -- not on SQL Server yet: kb_units.tsv (TSVECTOR)
 CREATE TABLE kb_bases (
@@ -21,9 +21,12 @@ CREATE TABLE kb_bases (
 	template_id VARCHAR(120) NULL, 
 	protection VARCHAR(16) NULL, 
 	documents_source_id VARCHAR(64) NULL, 
+	revision INTEGER NOT NULL DEFAULT 0, 
 	CONSTRAINT kb_bases_pkey PRIMARY KEY (tenant_id, id), 
 	CONSTRAINT uq_kb_bases_name UNIQUE (tenant_id, team_id, name)
 );
+GO
+CREATE INDEX ix_kb_bases_template ON kb_bases (tenant_id, template_id);
 GO
 CREATE TABLE kb_sources (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -81,6 +84,7 @@ CREATE TABLE kb_changes (
 	detail NVARCHAR(max) NULL, 
 	decided_by VARCHAR(200) NULL, 
 	decided_at DATETIMEOFFSET NULL, 
+	decision_reason VARCHAR(500) NULL, 
 	CONSTRAINT kb_changes_pkey PRIMARY KEY (tenant_id, id)
 );
 GO
@@ -115,6 +119,8 @@ CREATE TABLE kb_base_sources (
 	CONSTRAINT fk_kb_link_base FOREIGN KEY(tenant_id, kb_id) REFERENCES kb_bases (tenant_id, id) ON DELETE CASCADE, 
 	CONSTRAINT fk_kb_link_source FOREIGN KEY(tenant_id, source_id) REFERENCES kb_sources (tenant_id, id) ON DELETE CASCADE
 );
+GO
+CREATE INDEX ix_kb_base_sources_source ON kb_base_sources (tenant_id, source_id);
 GO
 CREATE TABLE kb_items (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -213,6 +219,8 @@ CREATE TABLE kb_chunks (
 	CONSTRAINT fk_kb_chunk_item FOREIGN KEY(tenant_id, item_id) REFERENCES kb_items (tenant_id, id) ON DELETE CASCADE
 );
 GO
+CREATE INDEX ix_kb_chunks_item ON kb_chunks (tenant_id, item_id);
+GO
 CREATE TABLE kb_units (
 	tenant_id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
@@ -233,19 +241,19 @@ IF SCHEMA_ID(N'ops_security') IS NULL EXEC (N'CREATE SCHEMA ops_security AUTHORI
 GO
 CREATE FUNCTION ops_security.kb_tenant_read (@tenant_id VARCHAR(64))
 RETURNS TABLE WITH SCHEMABINDING AS RETURN
-SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64));
+SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) OR USER_NAME() = N'ops_kb_system';
 GO
 CREATE FUNCTION ops_security.kb_tenant_write (@tenant_id VARCHAR(64))
 RETURNS TABLE WITH SCHEMABINDING AS RETURN
-SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64));
+SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) OR USER_NAME() = N'ops_kb_system';
 GO
 CREATE FUNCTION ops_security.kb_team_read (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
 RETURNS TABLE WITH SCHEMABINDING AS RETURN
-SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64)));
+SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64))) OR USER_NAME() = N'ops_kb_system';
 GO
 CREATE FUNCTION ops_security.kb_team_write (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
 RETURNS TABLE WITH SCHEMABINDING AS RETURN
-SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64)));
+SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64))) OR USER_NAME() = N'ops_kb_system';
 GO
 CREATE SECURITY POLICY ops_security.kb_bases_isolation
     ADD FILTER PREDICATE ops_security.kb_team_read(tenant_id, team_id) ON dbo.kb_bases,
@@ -318,5 +326,5 @@ CREATE TABLE alembic_version_kb (
     CONSTRAINT alembic_version_kb_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_kb (version_num) VALUES ('kb_0024');
+INSERT INTO alembic_version_kb (version_num) VALUES ('kb_0029');
 GO

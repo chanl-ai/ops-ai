@@ -91,7 +91,8 @@ def account(connection_id: str) -> str:
 
 def card(gw: httpx.Client, who: dict[str, str]) -> dict[str, Any]:
     """The Salesforce card on the team's Apps grid."""
-    return next((c for c in data(gw.get("/v1/apps", headers=who)) or [] if c.get("id") == f"plugin:{PLUGIN}"), {})
+    listed = data(gw.get("/v1/apps", params={"ids": f"plugin:{PLUGIN}"}, headers=who)) or {}
+    return next((c for c in listed.get("data") or [] if c.get("id") == f"plugin:{PLUGIN}"), {})
 
 
 def sign_in_team(gw: httpx.Client, sf: dict[str, Any], who: dict[str, str], connection_id: str) -> httpx.Response:
@@ -222,7 +223,7 @@ with ExitStack() as stack:
     # 7. The OAuth client secret is kept as a reference: no answer about the connection or the plugin shows it.
     shown = (
         gw.get(account(connection_id), headers=priya).text
-        + gw.get("/v1/apps", headers=priya).text
+        + gw.get("/v1/apps", params={"ids": f"plugin:{PLUGIN}"}, headers=priya).text
         + gw.get(f"/v1/apps/plugin:{PLUGIN}", headers=priya).text
     )
     check("7 the client secret is never shown back", bool(shown) and CLIENT_SECRET not in shown)
@@ -402,8 +403,8 @@ required(chat.patch(f"/v1/agents/{helper.get('id')}", json={"instructions": "Fin
     # 24. Ops AI's own OAuth app is the install's: the card says the install's app signs teams in, no route sets its
     # secret, and no answer carries the secret.
     by_admin = gw.put(f"/v1/apps/plugin:{PLUGIN}/app-secret", json={"clientSecret": "other"}, headers=sam)
-    listed = gw.get("/v1/apps", headers=priya)
-    view = next((c for c in data(listed) or [] if c.get("id") == f"plugin:{PLUGIN}"), {})
+    listed = gw.get("/v1/apps", params={"ids": f"plugin:{PLUGIN}"}, headers=priya)
+    view = next((c for c in (data(listed) or {}).get("data") or [] if c.get("id") == f"plugin:{PLUGIN}"), {})
     check(
         "24 Ops AI's own OAuth app comes from the install config; no route sets its secret",
         by_admin.status_code in (404, 405)
@@ -451,10 +452,10 @@ required(chat.patch(f"/v1/agents/{helper.get('id')}", json={"instructions": "Fin
 
     # 28. No answer shows the platform's secret, to either team or to the platform admin.
     reads = [
-        gw.get("/v1/apps", headers=sam),
+        gw.get("/v1/apps", params={"ids": f"plugin:{PLUGIN}"}, headers=sam),
         gw.get(f"/v1/apps/plugin:{PLUGIN}", headers=wanjiru),
         gw.get(account(other_id), headers=wanjiru),
-        gw.get("/v1/apps", headers=wanjiru),
+        gw.get("/v1/apps", params={"ids": f"plugin:{PLUGIN}"}, headers=wanjiru),
     ]
     check(
         "28 the platform's secret is never shown back",

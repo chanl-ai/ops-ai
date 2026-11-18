@@ -59,6 +59,7 @@ from typing import Any
 from ops_ai import OpsAI
 from ops_ai._chat import action_body
 from ops_ai._io import load_data
+from ops_ai._transport import every_page
 
 from .common import client, short
 
@@ -235,8 +236,7 @@ def kb_ids(ops: OpsAI, wanted: list[str] | None) -> list[str] | None:
     """Knowledge bases by id or name: ids differ on every install, so a script names a base."""
     if not wanted:
         return None
-    found = ops.raw.kb.knowledge_bases_list_knowledge_bases(page_size=100)
-    rows: list[dict[str, Any]] = found if isinstance(found, list) else list(found.get("data") or [])
+    rows: list[dict[str, Any]] = every_page(ops.raw.kb.knowledge_bases_list_knowledge_bases)
     by = {str(r["id"]): str(r["id"]) for r in rows} | {str(r["name"]).lower(): str(r["id"]) for r in rows}
     missing = [w for w in wanted if w not in by and w.lower() not in by]
     if missing:

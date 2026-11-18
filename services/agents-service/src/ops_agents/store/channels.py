@@ -1,5 +1,5 @@
 """Tables for channels and deployments (E6): what a deployment runs, which inbound messages it has seen, where its
-delta sync stands, replies waiting on a thread, and attachment bytes kept out of graph state."""
+delta sync stands, and replies waiting on a thread."""
 
 from __future__ import annotations
 
@@ -7,23 +7,27 @@ from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
 
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql, sqlite
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.errors import Conflict
 from ops_store import Guarantee
-from ops_store.schema import TEAM_OWNED
+from ops_store.dialect import insert_ignore, upsert
+from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
 from .base import metadata
-from .graphs import graph_threads
-from .tenancy import tenant_tx
+from .graphs import graph_threads, mine
+from .tenancy import RuntimeStore, current_tenant
 
 Multitask = Literal["enqueue", "reject"]
 
 deployments = sa.Table(
     "deployments",
     metadata,
+    # The tenant the row belongs to, the caller's on insert, with no default (agents 0109). Leads the key
+    # (agents 0108): whoever creates a deployment names its id.
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("graph", sa.String(64), nullable=False),
     sa.Column("channel", sa.String(32), nullable=False),
@@ -36,12 +40,14 @@ deployments = sa.Table(
     sa.Column("budget", sa.JSON(), nullable=True),
     # The team that owns the deployment; empty when none does, which only an admin changes.
     sa.Column("team_id", sa.String(64), nullable=False, server_default=""),
-    info=TEAM_OWNED,
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 channel_messages = sa.Table(
     "channel_messages",
     metadata,
+    # The deployment's tenant (agents 0106), leading the key as the deployment's does (agents 0108).
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant),
     sa.Column("deployment_id", sa.String(64), primary_key=True),
     # Normalised Message-ID, or a synthetic key when the message has none.
     sa.Column("message_key", sa.String(512), primary_key=True),
@@ -51,19 +57,25 @@ channel_messages = sa.Table(
     sa.Column("status", sa.String(16), nullable=False),
     sa.Column("payload", sa.JSON),
     sa.Column("received_at", sa.String(32), nullable=False),
+    info=TENANT_SCOPED,
 )
 
 channel_cursors = sa.Table(
     "channel_cursors",
     metadata,
+    # The deployment's tenant (agents 0106), leading the key as the deployment's does (agents 0108).
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant),
     sa.Column("deployment_id", sa.String(64), primary_key=True),
     sa.Column("delta_link", sa.Text, nullable=False),
     sa.Column("updated_at", sa.String(32), nullable=False),
+    info=TENANT_SCOPED,
 )
 
 thread_inbox = sa.Table(
     "thread_inbox",
     metadata,
+    # The tenant the row belongs to, the caller's on insert, with no default (agents 0109).
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant),
     sa.Column("thread_id", sa.String(64), primary_key=True),
     sa.Column("message_key", sa.String(512), primary_key=True),
     sa.Column("seq", sa.BigInteger, nullable=False),
@@ -73,18 +85,7 @@ thread_inbox = sa.Table(
     sa.Column("status", sa.String(16), nullable=False),
     sa.Column("created_at", sa.String(32), nullable=False),
     sa.Column("delivered_at", sa.String(32)),
-)
-
-channel_files = sa.Table(
-    "channel_files",
-    metadata,
-    sa.Column("file_id", sa.String(64), primary_key=True),
-    sa.Column("name", sa.String(512), nullable=False),
-    sa.Column("content_type", sa.String(128), nullable=False),
-    sa.Column("size", sa.Integer, nullable=False),
-    sa.Column("sha256", sa.String(64), nullable=False),
-    # The files service stub: the bytes as text. Graph state carries only the file id (E4).
-    sa.Column("content", sa.Text, nullable=False),
+    info=TENANT_SCOPED,
 )
 
 
@@ -99,16 +100,10 @@ class Deployment:
     team_id: str = ""
 
 
-class ChannelStore:
+class ChannelStore(RuntimeStore):
     # A channel message is recorded once by its provider id and a cursor moves only forward (CAS); a delivery decides
     # and writes in one transaction (TRANSACTION).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION})
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
-
-    def _insert(self, table: sa.Table) -> Any:
-        return (postgresql.insert if self.engine.dialect.name == "postgresql" else sqlite.insert)(table)
 
     async def put_deployment(self, d: Deployment, now: str) -> None:
         """Creates the deployment, or changes it when `d.team_id` owns it. An id is unique in the tenant, so one
@@ -121,27 +116,35 @@ class ChannelStore:
             "budget": d.budget,
             "team_id": d.team_id,
         }
-        stmt = (
-            self._insert(deployments)
-            .values(id=d.id, created_at=now, **values)
-            .on_conflict_do_update(index_elements=["id"], set_=values, where=deployments.c.team_id == d.team_id)
-        )
-        async with self.engine.begin() as c:
-            if (await c.execute(stmt)).rowcount != 1:
-                raise Conflict(f"A deployment {d.id} exists; choose another id.", code="deployment_id_taken")
+        key = {"tenant_id": current_tenant(), "id": d.id}
+        taken = Conflict(f"A deployment {d.id} exists; choose another id.", code="deployment_id_taken")
+        async with self.tx() as c:
+            try:
+                async with self.attempt(c):
+                    stmt = insert_ignore(c, deployments, {**key, "created_at": now, **values}, keys=list(key))
+                    if (await c.execute(stmt)).rowcount == 1:
+                        return
+            except IntegrityError:
+                # SQL Server's existence check sees only the acting team's rows, so another team's id fails the key.
+                raise taken from None
+            own = sa.and_(mine(deployments), deployments.c.id == d.id, deployments.c.team_id == d.team_id)
+            if (await c.execute(deployments.update().where(own).values(**values))).rowcount != 1:
+                raise taken
 
     async def deployment(self, deployment_id: str) -> Deployment | None:
-        async with self.engine.connect() as c:
-            q = deployments.select().where(deployments.c.id == deployment_id, team_visible(deployments))
+        async with self.tx() as c:
+            q = deployments.select().where(
+                mine(deployments), deployments.c.id == deployment_id, team_visible(deployments)
+            )
             r = (await c.execute(q)).mappings().first()
         if r is None:
             return None
         return Deployment(r["id"], r["graph"], r["channel"], r["paused"], r["multitask"], r["budget"], r["team_id"])
 
     async def set_paused(self, deployment_id: str, paused: bool) -> bool:
-        async with self.engine.begin() as c:
-            mine = sa.and_(deployments.c.id == deployment_id, team_visible(deployments))
-            res = await c.execute(deployments.update().where(mine).values(paused=paused))
+        async with self.tx() as c:
+            own = sa.and_(mine(deployments), deployments.c.id == deployment_id, team_visible(deployments))
+            res = await c.execute(deployments.update().where(own).values(paused=paused))
             return res.rowcount == 1
 
     # ── the message ledger ──
@@ -150,9 +153,11 @@ class ChannelStore:
         if not keys:
             return {}
         q = channel_messages.select().where(
-            channel_messages.c.deployment_id == deployment_id, channel_messages.c.message_key.in_(keys)
+            mine(channel_messages),
+            channel_messages.c.deployment_id == deployment_id,
+            channel_messages.c.message_key.in_(keys),
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return {r["message_key"]: dict(r) for r in (await c.execute(q)).mappings()}
 
     async def record(
@@ -166,39 +171,42 @@ class ChannelStore:
         now: str,
         payload: Any = None,
     ) -> None:
+        keys = {"tenant_id": current_tenant(), "deployment_id": deployment_id, "message_key": key}
         values = {"thread_id": thread_id, "role": role, "status": status, "payload": payload}
-        stmt = (
-            self._insert(channel_messages)
-            .values(deployment_id=deployment_id, message_key=key, received_at=now, **values)
-            .on_conflict_do_update(index_elements=["deployment_id", "message_key"], set_=values)
-        )
-        async with self.engine.begin() as c:
-            await c.execute(stmt)
+        async with self.tx() as c:
+            await c.execute(
+                upsert(
+                    c, channel_messages, {**keys, "received_at": now, **values}, keys=list(keys), update=list(values)
+                )
+            )
 
     async def deferred(self, deployment_id: str) -> list[dict[str, Any]]:
         q = (
             channel_messages.select()
-            .where(channel_messages.c.deployment_id == deployment_id, channel_messages.c.status == "deferred")
+            .where(
+                mine(channel_messages),
+                channel_messages.c.deployment_id == deployment_id,
+                channel_messages.c.status == "deferred",
+            )
             .order_by(channel_messages.c.received_at)
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     # ── delta cursor ──
 
     async def cursor(self, deployment_id: str) -> str | None:
-        async with self.engine.connect() as c:
-            q = sa.select(channel_cursors.c.delta_link).where(channel_cursors.c.deployment_id == deployment_id)
+        async with self.tx() as c:
+            q = sa.select(channel_cursors.c.delta_link).where(
+                mine(channel_cursors), channel_cursors.c.deployment_id == deployment_id
+            )
             return (await c.execute(q)).scalar_one_or_none()
 
     async def save_cursor(self, deployment_id: str, delta_link: str, now: str) -> None:
-        stmt = (
-            self._insert(channel_cursors)
-            .values(deployment_id=deployment_id, delta_link=delta_link, updated_at=now)
-            .on_conflict_do_update(index_elements=["deployment_id"], set_={"delta_link": delta_link, "updated_at": now})
-        )
-        async with self.engine.begin() as c:
-            await c.execute(stmt)
+        keys = {"tenant_id": current_tenant(), "deployment_id": deployment_id}
+        values = {**keys, "delta_link": delta_link, "updated_at": now}
+        async with self.tx() as c:
+            await c.execute(upsert(c, channel_cursors, values, keys=list(keys)))
 
     # ── thread inbox ──
 
@@ -247,18 +255,18 @@ class ChannelStore:
         q = sa.select(graph_threads.c.id).where(
             graph_threads.c.external_key == external_key, team_visible(graph_threads)
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             found: Any = (await c.execute(q)).scalar_one_or_none()
         return str(found) if found is not None else None
 
     async def inbox(self, thread_id: str) -> list[dict[str, Any]]:
         q = thread_inbox.select().where(thread_inbox.c.thread_id == thread_id).order_by(thread_inbox.c.seq)
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def deliver_queued(self, thread_id: str, now: str) -> list[int]:
         """Marks the thread's queued messages delivered, in arrival order. Returns their positions."""
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             q = (
                 sa.select(thread_inbox.c.seq)
                 .where(thread_inbox.c.thread_id == thread_id, thread_inbox.c.status == "queued")

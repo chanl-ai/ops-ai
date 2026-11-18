@@ -6,12 +6,12 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
-from ops_service_kit.http import Out
+from ops_service_kit.http import ExternalOut, In, ListResult, Out, Passthrough
 
 
-class Health(BaseModel):
+class Health(Out):
     status: str
 
 
@@ -115,8 +115,10 @@ class KeySpend(Out):
     cost: str
 
 
-class CallPage(Out):
-    items: list[CallOut]
+class CallPage(ListResult[CallOut]):
+    """A page of calls on the shared list contract, and per key the count and cost of every call that matches,
+    whichever page it is on."""
+
     by_key: list[KeySpend]
 
 
@@ -125,11 +127,9 @@ class Admission(Out):
     remaining: str
 
 
-class ChatCompletionRequest(BaseModel):
+class ChatCompletionRequest(Passthrough):
     """OpenAI's chat completion request. Fields this service does not read (temperature, tool_choice and the rest) are
     kept and forwarded to the provider."""
-
-    model_config = ConfigDict(extra="allow")
 
     model: str
     messages: list[dict[str, Any]]
@@ -137,29 +137,40 @@ class ChatCompletionRequest(BaseModel):
     tools: list[dict[str, Any]] | None = None
 
 
-class _OpenAI(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class ToolFunction(ExternalOut):
+    """The function a tool call names and its arguments, a JSON string as the model wrote it."""
+
+    name: str
+    arguments: str
 
 
-class ChatMessage(_OpenAI):
+class ToolCall(ExternalOut):
+    """One tool call in OpenAI's reply format."""
+
+    id: str
+    type: Literal["function"]
+    function: ToolFunction
+
+
+class ChatMessage(ExternalOut):
     role: Literal["assistant"]
     content: str | None
-    tool_calls: list[dict[str, Any]] | None = None
+    tool_calls: list[ToolCall] | None = None
 
 
-class ChatChoice(_OpenAI):
+class ChatChoice(ExternalOut):
     index: int
     message: ChatMessage
     finish_reason: Literal["stop", "tool_calls"]
 
 
-class ChatUsage(_OpenAI):
+class ChatUsage(ExternalOut):
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
 
 
-class ChatCompletion(_OpenAI):
+class ChatCompletion(ExternalOut):
     id: str
     object: Literal["chat.completion"]
     created: int
@@ -168,29 +179,27 @@ class ChatCompletion(_OpenAI):
     usage: ChatUsage
 
 
-class EmbeddingsRequest(BaseModel):
+class EmbeddingsRequest(In):
     """OpenAI's embeddings request: the alias as `model`, one text or a list, and the width when the caller names
     one."""
-
-    model_config = ConfigDict(extra="forbid")
 
     model: str
     input: str | list[str]
     dimensions: int | None = Field(default=None, ge=1, le=4096)
 
 
-class EmbeddingRow(_OpenAI):
+class EmbeddingRow(ExternalOut):
     object: Literal["embedding"]
     index: int
     embedding: list[float]
 
 
-class EmbeddingsUsage(_OpenAI):
+class EmbeddingsUsage(ExternalOut):
     prompt_tokens: int
     total_tokens: int
 
 
-class Embeddings(_OpenAI):
+class Embeddings(ExternalOut):
     object: Literal["list"]
     model: str
     data: list[EmbeddingRow]

@@ -66,7 +66,7 @@ def main() -> None:
         mine = upload(files_url, OPS, "levy-uc613.pdf", body + b"\n%uc613")
         upload(files_url, RETAIL, "retail-only-uc613.pdf", body + b"\n%retail")
         with httpx.Client(base_url=documents_url, headers={"X-Team-Id": OPS}, timeout=30) as docs:
-            kinds = data(docs.get("/v1/document-types"))["items"]
+            kinds = data(docs.get("/v1/document-types"))["data"]
         levy_name = next(k["name"] for k in kinds if k["id"] == "tax_levy")
         reach = {"OPS_FILES_URL": files_url, "OPS_DOCUMENTS_URL": documents_url}
 

@@ -45,7 +45,7 @@ await withUiStack(
     const J = { Authorization: `Bearer ${(await signIn(JAMES)).token}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
     const S = { Authorization: `Bearer ${serviceToken(tenant)}`, 'Content-Type': 'application/json' };
     // The fake's root is the Azure resource's endpoint; its /v1 is OpenAI's path.
-    const endpoint = (await data(await fetch(`${models}/v1/models/providers`, { headers: S }))).find((p) => p.id === 'openai-local').baseUrl.replace(/\/v1$/, '');
+    const endpoint = (await data(await fetch(`${models}/v1/models/providers`, { headers: S }))).data.find((p) => p.id === 'openai-local').baseUrl.replace(/\/v1$/, '');
     await data(await fetch(`${models}/v1/provider-keys/${KEY}`, { method: 'PUT', headers: N, body: JSON.stringify({ value: FAKE_OPENAI_KEY }) }));
     const aliasOn = async (alias, providerId) => data(await fetch(`${models}/v1/models/aliases`, { method: 'POST', headers: S, body: JSON.stringify({ name: alias, kind: 'chat', providerId, modelId: 'claims-gpt4o', clearedSensitivity: 'confidential' }) }));
     const chat = (alias) =>
@@ -54,7 +54,7 @@ await withUiStack(
         headers: { Authorization: 'Bearer mk_dev_agents', 'X-Tenant-Id': tenant, 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: alias, messages: [{ role: 'user', content: 'Summarise claim CLM-77 for the adjuster.' }] }),
       });
-    const providerId = async (name) => (await data(await fetch(`${models}/v1/models/providers`, { headers: S }))).find((p) => p.name === name)?.id;
+    const providerId = async (name) => (await data(await fetch(`${models}/v1/models/providers?pageSize=50`, { headers: S }))).data.find((p) => p.name === name)?.id;
 
     const browser = await chromium.launch();
     const errors = [];

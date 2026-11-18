@@ -74,7 +74,9 @@
           "error": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -92,7 +94,7 @@
             "type": "string"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           }
         },
         "required": [
@@ -319,7 +321,9 @@
           "pluginSettings": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -474,7 +478,9 @@
             "title": "At"
           },
           "detail": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Detail",
             "type": "object"
           }
@@ -548,7 +554,9 @@
             "type": "boolean"
           },
           "settings": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Settings",
             "type": "object"
           },
@@ -686,7 +694,9 @@
           "settings": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -851,7 +861,9 @@
             "type": "string"
           },
           "settings": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Settings",
             "type": "object"
           }
@@ -1336,7 +1348,9 @@
             "title": "Secretends"
           },
           "settings": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Settings",
             "type": "object"
           },
@@ -1509,7 +1523,9 @@
             "title": "Secretends"
           },
           "settings": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Settings",
             "type": "object"
           },
@@ -1916,6 +1932,7 @@
         "type": "object"
       },
       "AppResource": {
+        "additionalProperties": false,
         "properties": {
           "canAdd": {
             "title": "Canadd",
@@ -2154,6 +2171,31 @@
           "workflows"
         ],
         "title": "AppUsers",
+        "type": "object"
+      },
+      "AppViewCounts": {
+        "additionalProperties": false,
+        "description": "How many of the searched and filtered cards each Apps tab holds.",
+        "properties": {
+          "all": {
+            "title": "All",
+            "type": "integer"
+          },
+          "available": {
+            "title": "Available",
+            "type": "integer"
+          },
+          "connected": {
+            "title": "Connected",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "all",
+          "connected",
+          "available"
+        ],
+        "title": "AppViewCounts",
         "type": "object"
       },
       "ApprovalRequestIn": {
@@ -2747,7 +2789,7 @@
             "type": "boolean"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "replayOf": {
             "anyOf": [
@@ -2761,7 +2803,7 @@
             "title": "Replayof"
           },
           "view": {
-            "title": "View"
+            "$ref": "#/components/schemas/JsonValue"
           }
         },
         "required": [
@@ -2835,6 +2877,91 @@
           "type"
         ],
         "title": "CardCredential",
+        "type": "object"
+      },
+      "CatalogEvent": {
+        "additionalProperties": false,
+        "description": "One event of the catalogue as the outbox would carry it; a consumer reads it as an `ops_store.outbox.Event`.\nThe team is null for a workspace-level module.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "payload": {
+            "discriminator": {
+              "mapping": {
+                "tool.module.published": "#/components/schemas/ToolPublished",
+                "tool.team_state.changed": "#/components/schemas/ToolTeamStateChanged"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ToolPublished"
+              },
+              {
+                "$ref": "#/components/schemas/ToolTeamStateChanged"
+              }
+            ],
+            "title": "Payload"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "teamId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teamid"
+          },
+          "tenantId": {
+            "title": "Tenantid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "tenantId",
+          "teamId",
+          "revision",
+          "payload"
+        ],
+        "title": "CatalogEvent",
+        "type": "object"
+      },
+      "CatalogPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogEvent"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "title": "CatalogPage",
         "type": "object"
       },
       "Change": {
@@ -4425,6 +4552,25 @@
         "title": "Envelope[CallResult]",
         "type": "object"
       },
+      "Envelope_CatalogPage_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CatalogPage"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[CatalogPage]",
+        "type": "object"
+      },
       "Envelope_Change_": {
         "additionalProperties": false,
         "properties": {
@@ -4539,6 +4685,25 @@
         "title": "Envelope[ExecutionList]",
         "type": "object"
       },
+      "Envelope_FenceResult_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/FenceResult"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[FenceResult]",
+        "type": "object"
+      },
       "Envelope_HeldHost_": {
         "additionalProperties": false,
         "properties": {
@@ -4575,6 +4740,25 @@
           "data"
         ],
         "title": "Envelope[HostList]",
+        "type": "object"
+      },
+      "Envelope_ListResult_McpLinkView__": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ListResult_McpLinkView_"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ListResult[McpLinkView]]",
         "type": "object"
       },
       "Envelope_McpLinkView_": {
@@ -4786,6 +4970,25 @@
         "title": "Envelope[PluginUpdateView]",
         "type": "object"
       },
+      "Envelope_SecretList_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SecretList"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[SecretList]",
+        "type": "object"
+      },
       "Envelope_SecretMeta_": {
         "additionalProperties": false,
         "properties": {
@@ -4862,6 +5065,25 @@
         "title": "Envelope[SignInStart]",
         "type": "object"
       },
+      "Envelope_SystemCardList_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/SystemCardList"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[SystemCardList]",
+        "type": "object"
+      },
       "Envelope_SystemCard_": {
         "additionalProperties": false,
         "properties": {
@@ -4898,6 +5120,25 @@
           "data"
         ],
         "title": "Envelope[TestOut]",
+        "type": "object"
+      },
+      "Envelope_ToolAccess_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ToolAccess"
+          },
+          "success": {
+            "const": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "data"
+        ],
+        "title": "Envelope[ToolAccess]",
         "type": "object"
       },
       "Envelope_ToolCallRow_": {
@@ -5000,36 +5241,6 @@
           "data"
         ],
         "title": "Envelope[Union[SendPolicyView, NoneType]]",
-        "type": "object"
-      },
-      "Envelope_Union_list_SecretMeta___SecretList__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/SecretMeta"
-                },
-                "type": "array"
-              },
-              {
-                "$ref": "#/components/schemas/SecretList"
-              }
-            ],
-            "title": "Data"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[Union[list[SecretMeta], SecretList]]",
         "type": "object"
       },
       "Envelope_WaitOut_": {
@@ -5189,29 +5400,6 @@
         "title": "Envelope[list[KnowledgeSourceView]]",
         "type": "object"
       },
-      "Envelope_list_McpLinkView__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/McpLinkView"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[list[McpLinkView]]",
-        "type": "object"
-      },
       "Envelope_list_MyAccount__": {
         "additionalProperties": false,
         "properties": {
@@ -5304,29 +5492,6 @@
         "title": "Envelope[list[SourceHost]]",
         "type": "object"
       },
-      "Envelope_list_SystemCard__": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/SystemCard"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "success": {
-            "const": true,
-            "title": "Success",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "success",
-          "data"
-        ],
-        "title": "Envelope[list[SystemCard]]",
-        "type": "object"
-      },
       "ErrorBody": {
         "additionalProperties": false,
         "properties": {
@@ -5391,7 +5556,9 @@
             "type": "object"
           },
           "values": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Values",
             "type": "object"
           }
@@ -5406,7 +5573,9 @@
         "additionalProperties": false,
         "properties": {
           "out": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Out",
             "type": "object"
           }
@@ -5469,6 +5638,25 @@
         "title": "FenceIn",
         "type": "object"
       },
+      "FenceResult": {
+        "additionalProperties": false,
+        "properties": {
+          "generation": {
+            "title": "Generation",
+            "type": "integer"
+          },
+          "thread": {
+            "title": "Thread",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread",
+          "generation"
+        ],
+        "title": "FenceResult",
+        "type": "object"
+      },
       "GrantableOperation": {
         "additionalProperties": false,
         "description": "A tool an agent may be granted: a published operation, with what a model needs to choose and call it.",
@@ -5496,7 +5684,9 @@
             "type": "string"
           },
           "inputSchema": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Inputschema",
             "type": "object"
           },
@@ -5634,6 +5824,38 @@
           "value"
         ],
         "title": "HeaderOut",
+        "type": "object"
+      },
+      "Health": {
+        "additionalProperties": false,
+        "description": "ok; or 503 degraded when the database is out of reach, or policy_drift when OPA holds another policy.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "const": "database",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "degraded",
+              "policy_drift"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Health",
         "type": "object"
       },
       "HeldHost": {
@@ -5939,6 +6161,7 @@
         "title": "InvalidField",
         "type": "object"
       },
+      "JsonValue": {},
       "KindField": {
         "additionalProperties": false,
         "properties": {
@@ -6115,7 +6338,9 @@
             "type": "string"
           },
           "inputs": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Inputs",
             "type": "object"
           },
@@ -6149,7 +6374,9 @@
             "title": "Previewtool"
           },
           "schedule": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Schedule",
             "type": "object"
           },
@@ -6276,6 +6503,38 @@
           "access"
         ],
         "title": "LinkTool",
+        "type": "object"
+      },
+      "ListResult_McpLinkView_": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/McpLinkView"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets"
+        ],
+        "title": "ListResult[McpLinkView]",
         "type": "object"
       },
       "ListedHost": {
@@ -6532,7 +6791,7 @@
         "additionalProperties": false,
         "properties": {
           "body": {
-            "title": "Body"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "createdBy": {
             "title": "Createdby",
@@ -6573,7 +6832,9 @@
             "type": "string"
           },
           "match": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Match",
             "type": "object"
           },
@@ -6619,7 +6880,7 @@
         "additionalProperties": false,
         "properties": {
           "body": {
-            "title": "Body"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "default": {
             "default": false,
@@ -6650,7 +6911,9 @@
             "type": "object"
           },
           "match": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Match",
             "type": "object"
           },
@@ -6681,6 +6944,7 @@
       },
       "MockList": {
         "additionalProperties": false,
+        "description": "One page of an operation's mocks, with the operation's name.",
         "properties": {
           "data": {
             "items": {
@@ -6689,14 +6953,29 @@
             "title": "Data",
             "type": "array"
           },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
           "operation": {
             "title": "Operation",
             "type": "string"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
           }
         },
         "required": [
-          "operation",
-          "data"
+          "data",
+          "pagination",
+          "facets",
+          "operation"
         ],
         "title": "MockList",
         "type": "object"
@@ -6705,7 +6984,7 @@
         "additionalProperties": false,
         "properties": {
           "body": {
-            "title": "Body"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "default": {
             "anyOf": [
@@ -6748,7 +7027,9 @@
           "match": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -7582,7 +7863,7 @@
             "type": "boolean"
           },
           "stub": {
-            "title": "Stub"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "timeoutMs": {
             "anyOf": [
@@ -7799,7 +8080,9 @@
             "type": "string"
           },
           "input": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Input",
             "type": "object"
           },
@@ -7933,10 +8216,10 @@
             "title": "Mockid"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "rawResponse": {
-            "title": "Rawresponse"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "reachedHost": {
             "anyOf": [
@@ -9067,7 +9350,7 @@
             "title": "Stepup"
           },
           "stub": {
-            "title": "Stub"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "timeoutMs": {
             "anyOf": [
@@ -9107,6 +9390,7 @@
         "type": "object"
       },
       "PageOut": {
+        "additionalProperties": false,
         "properties": {
           "deltaLink": {
             "anyOf": [
@@ -9121,7 +9405,9 @@
           },
           "items": {
             "items": {
-              "additionalProperties": true,
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
               "type": "object"
             },
             "title": "Items",
@@ -9339,7 +9625,9 @@
           "inputSchema": {
             "anyOf": [
               {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
                 "type": "object"
               },
               {
@@ -9429,6 +9717,7 @@
         "type": "object"
       },
       "PluginRef": {
+        "additionalProperties": false,
         "properties": {
           "id": {
             "title": "Id",
@@ -9542,9 +9831,12 @@
         "type": "object"
       },
       "PluginTemplate": {
+        "additionalProperties": false,
         "properties": {
           "body": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Body",
             "type": "object"
           },
@@ -9763,6 +10055,7 @@
         "type": "object"
       },
       "ResourceCopy": {
+        "additionalProperties": false,
         "properties": {
           "id": {
             "title": "Id",
@@ -9801,6 +10094,7 @@
         "type": "object"
       },
       "ResourceInstalled": {
+        "additionalProperties": false,
         "properties": {
           "changed": {
             "default": false,
@@ -10332,7 +10626,7 @@
       },
       "SecretList": {
         "additionalProperties": false,
-        "description": "GET /v1/secrets?page=: one page of the secrets' metadata.",
+        "description": "GET /v1/secrets: one page of the secrets' metadata.",
         "properties": {
           "data": {
             "items": {
@@ -11137,7 +11431,9 @@
             "type": "string"
           },
           "values": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Values",
             "type": "object"
           }
@@ -11526,6 +11822,43 @@
         "title": "SystemCard",
         "type": "object"
       },
+      "SystemCardList": {
+        "additionalProperties": false,
+        "description": "A page of the team's app cards, with each tab's count.",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/SystemCard"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "facets": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Facets",
+            "type": "object"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/Pagination"
+          },
+          "viewCounts": {
+            "$ref": "#/components/schemas/AppViewCounts"
+          }
+        },
+        "required": [
+          "data",
+          "pagination",
+          "facets",
+          "viewCounts"
+        ],
+        "title": "SystemCardList",
+        "type": "object"
+      },
       "SystemPlugin": {
         "additionalProperties": false,
         "properties": {
@@ -11596,7 +11929,9 @@
             "type": "boolean"
           },
           "values": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Values",
             "type": "object"
           }
@@ -11689,7 +12024,9 @@
             "type": "boolean"
           },
           "settings": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Settings",
             "type": "object"
           },
@@ -11712,6 +12049,7 @@
         "type": "object"
       },
       "TemplateRequires": {
+        "additionalProperties": false,
         "properties": {
           "bind": {
             "items": {
@@ -11761,7 +12099,7 @@
             "title": "Responsetransform"
           },
           "stub": {
-            "title": "Stub"
+            "$ref": "#/components/schemas/JsonValue"
           }
         },
         "title": "TestDraftIn",
@@ -11805,6 +12143,7 @@
         "type": "object"
       },
       "TestOut": {
+        "additionalProperties": false,
         "properties": {
           "error": {
             "anyOf": [
@@ -11889,6 +12228,7 @@
         "type": "object"
       },
       "TestStep": {
+        "additionalProperties": false,
         "properties": {
           "state": {
             "enum": [
@@ -11909,6 +12249,88 @@
           "state"
         ],
         "title": "TestStep",
+        "type": "object"
+      },
+      "ToolAccess": {
+        "additionalProperties": false,
+        "description": "A tool's access class, the one the policy decides on, and what a step reading it needs.",
+        "properties": {
+          "access": {
+            "title": "Access",
+            "type": "string"
+          },
+          "approval": {
+            "$ref": "#/components/schemas/ToolApproval"
+          },
+          "deadlineSeconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadlineseconds"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "outputSchema": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outputschema"
+          }
+        },
+        "required": [
+          "name",
+          "access",
+          "approval",
+          "outputSchema",
+          "deadlineSeconds"
+        ],
+        "title": "ToolAccess",
+        "type": "object"
+      },
+      "ToolApproval": {
+        "additionalProperties": false,
+        "properties": {
+          "approverTeam": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approverteam"
+          },
+          "approvers": {
+            "title": "Approvers",
+            "type": "integer"
+          },
+          "stepUp": {
+            "title": "Stepup",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "approvers",
+          "approverTeam",
+          "stepUp"
+        ],
+        "title": "ToolApproval",
         "type": "object"
       },
       "ToolCallRow": {
@@ -12570,6 +12992,17 @@
             "title": "Calls24H",
             "type": "integer"
           },
+          "canEdit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canedit"
+          },
           "connection": {
             "anyOf": [
               {
@@ -13128,6 +13561,188 @@
         "title": "ToolModuleDetail",
         "type": "object"
       },
+      "ToolOperation": {
+        "additionalProperties": false,
+        "description": "One operation a module serves, as a tools list shows it. Its input schema is read from tools-service by the\nmodule and this `id` when a screen opens the tool, which keeps an event under the receiver's payload limit.",
+        "properties": {
+          "access": {
+            "title": "Access",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "requiresApproval": {
+            "default": false,
+            "title": "Requiresapproval",
+            "type": "boolean"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "access"
+        ],
+        "title": "ToolOperation",
+        "type": "object"
+      },
+      "ToolPublished": {
+        "additionalProperties": false,
+        "description": "A tool module created, or a new version of it published, in tools-service.",
+        "properties": {
+          "app": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App"
+          },
+          "appCardId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appcardid"
+          },
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "tool.module.published",
+            "default": "tool.module.published",
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "operations": {
+            "items": {
+              "$ref": "#/components/schemas/ToolOperation"
+            },
+            "title": "Operations",
+            "type": "array"
+          },
+          "ownerTeam": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ownerteam"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "templateKind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "builtin",
+                  "plugin",
+                  "custom"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Templatekind"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "ToolPublished",
+        "type": "object"
+      },
       "ToolRunIn": {
         "additionalProperties": false,
         "description": "One run of one tool from its page: Mock answers from its mock and reaches nothing, Real is the gateway\ncall, with every check, in the environment picked.",
@@ -13153,7 +13768,9 @@
             "title": "Environment"
           },
           "input": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
             "title": "Input",
             "type": "object"
           },
@@ -13265,10 +13882,10 @@
             "type": "boolean"
           },
           "output": {
-            "title": "Output"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "rawResponse": {
-            "title": "Rawresponse"
+            "$ref": "#/components/schemas/JsonValue"
           },
           "reachedHost": {
             "anyOf": [
@@ -13345,6 +13962,71 @@
           "mocked"
         ],
         "title": "ToolRunResult",
+        "type": "object"
+      },
+      "ToolTeamStateChanged": {
+        "additionalProperties": false,
+        "description": "One team's state of a module, keyed by `id` (`<via>:<module id>`), so each kind orders its own events.\n\n`approval`: the team's grant of a module it does not own, at the module's revision; `deleted` when it ends.\n`added`: what the team turned on of the module and which of those wait for an answer, at the team state's own\nrevision (a team turning a tool on changes no module); `deleted` when the app is off for the team. No sender\nwrites `added` yet.",
+        "properties": {
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "expiresAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expiresat"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "tool.team_state.changed",
+            "default": "tool.team_state.changed",
+            "title": "Kind",
+            "type": "string"
+          },
+          "moduleId": {
+            "title": "Moduleid",
+            "type": "string"
+          },
+          "operations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Operations",
+            "type": "array"
+          },
+          "via": {
+            "enum": [
+              "approval",
+              "added"
+            ],
+            "title": "Via",
+            "type": "string"
+          },
+          "waits": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Waits",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "moduleId",
+          "via"
+        ],
+        "title": "ToolTeamStateChanged",
         "type": "object"
       },
       "ToolUsedBy": {
@@ -13500,6 +14182,7 @@
         "type": "object"
       },
       "WaitOut": {
+        "additionalProperties": false,
         "properties": {
           "changed": {
             "title": "Changed",
@@ -13522,15 +14205,28 @@
   "paths": {
     "/health": {
       "get": {
+        "description": "Off the request transaction: it asks the database and OPA whether they answer.",
         "operationId": "gateway_health",
         "responses": {
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
               }
             },
             "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "summary": "Health",
@@ -14863,7 +15559,7 @@
     },
     "/v1/apps": {
       "get": {
-        "description": "The team's apps for the Apps grid: its plugins and the apps a person added. `include=builtin` adds\nthe built-in apps, for the approval policy's app picker. A service asking for a person (X-Acting-For) reads\neach card's state as that person's.",
+        "description": "One page of the team's apps for the Apps grid on the shared list contract, by name ignoring case, then id:\nits plugins and the apps a person added. `search` matches the name and category, `ids` names cards exactly.\n`view` picks a tab (connected: appState connected, test_failed or removed; available: the rest), `appState`,\n`category` and `kind` filter, each repeatable; `facets` counts each, and `viewCounts` each tab, over the\nsearched and filtered cards; `accountId` (repeatable) keeps the cards those accounts belong to; `hasAccount`\nkeeps the cards with (true) or without (false) a default account.\n`sortBy=connected` puts the connected cards first, then by name. The view and filters are read from the shared\nlist query; they are named here for the document.\n`include=builtin` adds the built-in apps, for the approval policy's app picker. A service asking for a person\n(X-Acting-For) reads each card's state as that person's. The page and its count are queried, not sliced.",
         "operationId": "apps_list_apps",
         "parameters": [
           {
@@ -14881,6 +15577,219 @@
                 }
               ],
               "title": "Include"
+            }
+          },
+          {
+            "description": "all, connected or available: the Apps page's tabs",
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "description": "all, connected or available: the Apps page's tabs",
+              "title": "View",
+              "type": "string"
+            }
+          },
+          {
+            "description": "the cards' appState",
+            "in": "query",
+            "name": "appState",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "the cards' appState",
+              "title": "Appstate"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "description": "plugin, connection or builtin",
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "plugin, connection or builtin",
+              "title": "Kind"
+            }
+          },
+          {
+            "description": "the card each named account belongs to",
+            "in": "query",
+            "name": "accountId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "the card each named account belongs to",
+              "title": "Accountid"
+            }
+          },
+          {
+            "description": "true keeps the cards with a default account, false those without",
+            "in": "query",
+            "name": "hasAccount",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "true",
+                      "false"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "true keeps the cards with a default account, false those without",
+              "title": "Hasaccount"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -14969,7 +15878,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_SystemCard__"
+                  "$ref": "#/components/schemas/Envelope_SystemCardList_"
                 }
               }
             },
@@ -15093,7 +16002,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
-        "description": "A custom app, as its first account, which the answer is (its id is the app's): by name with a sign-in kind,\nor an MCP server by its address, whose sign-in is found from the server.",
+        "description": "A custom app, as its first account, which the answer is (its id is the app's): by name with a sign-in kind,\nor an MCP server by its address, whose sign-in is found from the server. No request transaction: the server is\nasked how it signs in.",
         "operationId": "apps_add_app",
         "parameters": [
           {
@@ -15302,7 +16211,7 @@
     },
     "/v1/apps/{app_id}": {
       "delete": {
-        "description": "Deletes a custom app with its accounts and their secrets; 409 app_in_use naming the tools and accounts\nwhile a tool still uses it.",
+        "description": "Deletes a custom app with its accounts and their secrets; 409 app_in_use naming the tools and accounts\nwhile a tool still uses it. No request transaction: agents-service is asked whether a workflow or agent names\neach account.",
         "operationId": "apps_delete_app",
         "parameters": [
           {
@@ -15508,7 +16417,7 @@
         "x-ops-public": "sdk"
       },
       "get": {
-        "description": "One app's page: its card, accounts, the caller's own sign-in, tools, skills and latest runs.",
+        "description": "One app's page: its card, accounts, the caller's own sign-in, tools, skills and latest runs. No request\ntransaction: the page is read in one, then agents-service is asked who uses each tool with none open.",
         "operationId": "apps_get_app",
         "parameters": [
           {
@@ -16394,7 +17303,7 @@
     },
     "/v1/apps/{app_id}/accounts/{account_id}": {
       "delete": {
-        "description": "409 connection_in_use while a module points at it.",
+        "description": "409 connection_in_use while a module points at it. No request transaction: agents-service is asked\nwhether a workflow or agent names the account.",
         "operationId": "apps_delete_account",
         "parameters": [
           {
@@ -18205,7 +19114,7 @@
     },
     "/v1/apps/{app_id}/resources": {
       "get": {
-        "description": "The app's Resources tab: every agent, skill, workflow, document type and knowledge source the app brings,\nand every copy the team holds of one it no longer ships or of an app turned off, each with its state, the\nteam's copy, and whether the caller may add it (with who can, when they cannot).",
+        "description": "The app's Resources tab: every agent, skill, workflow, document type and knowledge source the app brings,\nand every copy the team holds of one it no longer ships or of an app turned off, each with its state, the\nteam's copy, and whether the caller may add it (with who can, when they cannot). The copies are asked before\nany read, so the request's transaction opens only after both services answer.",
         "operationId": "plugins_list_app_resources",
         "parameters": [
           {
@@ -19490,7 +20399,7 @@
     },
     "/v1/apps/{app_id}/used-by": {
       "get": {
-        "description": "The team's agents and workflows that use the app's tools, each with the tools it uses: what turning the app\noff stops. A team admin's, as turning it off is.",
+        "description": "The team's agents and workflows that use the app's tools, each with the tools it uses: what turning the app\noff stops. A team admin's, as turning it off is. No request transaction: the binding is read and its\ntransaction ends before agents-service is asked, so nothing is held while it answers.",
         "operationId": "apps_app_users",
         "parameters": [
           {
@@ -19698,6 +20607,7 @@
     },
     "/v1/calls": {
       "post": {
+        "description": "Off the request transaction: the gateway asks OPA, then runs the tool against its system, and records the\ncall in short transactions of its own around that.",
         "operationId": "gateway_call",
         "parameters": [
           {
@@ -20011,7 +20921,7 @@
     },
     "/v1/code-runs/calls": {
       "post": {
-        "description": "Internal: one `ops.call` from a running code operation, sent by runner-service with the run's call\ntoken. Only a tool the operation binds is called, decided as the run's caller's own gateway call.",
+        "description": "Internal: one `ops.call` from a running code operation, sent by runner-service with the run's call\ntoken. Only a tool the operation binds is called, decided as the run's caller's own gateway call. Off the\nrequest transaction, as a gateway call.",
         "operationId": "gateway_code_run_call",
         "parameters": [
           {
@@ -20855,7 +21765,7 @@
     },
     "/v1/egress/hosts": {
       "get": {
-        "description": "The hosts, by name, a page at a time; `search` matches the host or its note, `templateId` the template slot\na provisioned host fills. The page and its count are queried, not sliced.",
+        "description": "The hosts, by name, a page at a time on the shared list contract; `search` matches the host or its note,\n`ids` names hosts, and the filter `templateId` keeps the hosts filling those template slots.",
         "operationId": "egress_list_hosts",
         "parameters": [
           {
@@ -20874,26 +21784,21 @@
             "name": "pageSize",
             "required": false,
             "schema": {
-              "default": 25,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
             }
           },
           {
             "in": "query",
             "name": "search",
-            "required": false,
-            "schema": {
-              "default": "",
-              "title": "Search",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "templateId",
             "required": false,
             "schema": {
               "anyOf": [
@@ -20904,7 +21809,57 @@
                   "type": "null"
                 }
               ],
-              "title": "Templateid"
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -21853,31 +22808,9 @@
     },
     "/v1/executions": {
       "get": {
+        "description": "The log on the shared list contract: `search` matches the tool's name, `result` and `assistant` narrow and\nare counted in `facets`, and the order is newest first, then by id. Off the request transaction: the\nservice reads in one and asks agents-service to name the agents and workflows after it.",
         "operationId": "executions_list_executions",
         "parameters": [
-          {
-            "in": "query",
-            "name": "page",
-            "required": false,
-            "schema": {
-              "default": 1,
-              "minimum": 1,
-              "title": "Page",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
-            }
-          },
           {
             "in": "query",
             "name": "tool",
@@ -22030,6 +22963,148 @@
                 }
               ],
               "title": "Until"
+            }
+          },
+          {
+            "description": "Keeps the calls with these results; counted in `facets.result`",
+            "in": "query",
+            "name": "result",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "Ran",
+                      "Running",
+                      "Refused",
+                      "Failed"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Keeps the calls with these results; counted in `facets.result`",
+              "title": "Result"
+            }
+          },
+          {
+            "description": "Keeps the calls made by these assistants; counted in `facets.assistant`",
+            "in": "query",
+            "name": "assistant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Keeps the calls made by these assistants; counted in `facets.assistant`",
+              "title": "Assistant"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -22624,7 +23699,7 @@
     },
     "/v1/fences": {
       "post": {
-        "description": "Internal (service token): agents-service calls it when it takes a thread over, so the new generation is\nthe fence before any write of the new owner, and a stalled old owner cannot write in between. Idempotent;\na lower generation than the fence is refused.",
+        "description": "Internal (service token): agents-service calls it when it takes a thread over, so the new generation is\nthe fence before any write of the new owner, and a stalled old owner cannot write in between. Idempotent;\na lower generation than the fence is refused with 409 `lease_superseded`, the fence's generation in the\nmessage.",
         "operationId": "gateway_raise_fence",
         "parameters": [
           {
@@ -22658,20 +23733,102 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_FenceResult_"
+                }
               }
             },
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
           },
           "422": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorEnvelope"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
           }
         },
         "summary": "Raise Fence",
@@ -22683,7 +23840,7 @@
     },
     "/v1/grantable-operations": {
       "get": {
-        "description": "The operations an agent of the caller's tenant may be granted, for a service holding `tools:view`.\nagents-service lists, grants and hands a run its tools from here; it keeps no catalogue of its own.",
+        "description": "The operations an agent of the caller's tenant may be granted, for a service holding `tools:view`.\nagents-service lists, grants and hands a run its tools from here; it keeps no catalogue of its own. The team's\nwrite approval levels are asked of platform-service before the first read, so no connection is held while it\nanswers.",
         "operationId": "gateway_grantable_operations",
         "parameters": [
           {
@@ -23013,7 +24170,7 @@
     },
     "/v1/knowledge-sources/hosts": {
       "post": {
-        "description": "The hosts a source's values would have its sync reach, each decided as any new outside address is: a\nperson's request (adding the source) lists it where the account lets them, asks the Security team, or is\nrefused under `block`; a service's (kb-service's beat) only reads whether each passes now. A source's hosts\nare never exempt from the account's list.",
+        "description": "The hosts a source's values would have its sync reach, each decided as any new outside address is: a\nperson's request (adding the source) lists it where the account lets them, asks the Security team, or is\nrefused under `block`; a service's (kb-service's beat) only reads whether each passes now. A source's hosts\nare never exempt from the account's list. No request transaction: each host's reads and writes take their\nown, so none is held while the platform's policy is read or the Security team is asked.",
         "operationId": "apps_knowledge_source_hosts",
         "parameters": [
           {
@@ -23222,7 +24379,7 @@
     },
     "/v1/mailboxes/read": {
       "post": {
-        "description": "One page of the folder after `cursor`, or with `now` and no cursor, the cursor at its end and no mail.",
+        "description": "One page of the folder after `cursor`, or with `now` and no cursor, the cursor at its end and no mail. Off\nthe request transaction: the mailbox is dialled, and it can take seconds to answer.",
         "operationId": "mailboxes_read",
         "parameters": [
           {
@@ -23283,7 +24440,7 @@
     },
     "/v1/mailboxes/test": {
       "post": {
-        "description": "Test connection: the secret and host checks, then sign-in and the folder's newest message, read without\nmarking it read. A refused check or failed sign-in is a result (ok false, the reason), not an error.",
+        "description": "Test connection: the secret and host checks, then sign-in and the folder's newest message, read without\nmarking it read. A refused check or failed sign-in is a result (ok false, the reason), not an error. Off the\nrequest transaction: the mailbox is dialled.",
         "operationId": "mailboxes_test",
         "parameters": [
           {
@@ -23344,7 +24501,7 @@
     },
     "/v1/mailboxes/wait": {
       "post": {
-        "description": "True as soon as the folder has mail after `cursor` (IDLE); false after `seconds` with none.",
+        "description": "True as soon as the folder has mail after `cursor` (IDLE); false after `seconds` with none. Off the request\ntransaction: it holds the mailbox open for up to `seconds`.",
         "operationId": "mailboxes_wait",
         "parameters": [
           {
@@ -23405,9 +24562,124 @@
     },
     "/v1/mcp-links": {
       "get": {
-        "description": "The links of every team the person belongs to and may see channels in, by name, each with its newest\ncall: an admin of several teams sees them on one page, as the Team filter needs. A key or service token reads\nits own team's only.",
+        "description": "The links of every team the caller may see channels in, by name ignoring case, a page at a time on the\nshared list contract (`search` on the name), each with its newest call; `teamId` (repeatable) keeps those\nteams' links and is counted in `facets`. A person reads the team they act in; the dev caller and a service\ntoken every team they may see, and a `teamId` outside those answers no rows.",
         "operationId": "mcp_links_list_mcp_links",
         "parameters": [
+          {
+            "description": "the links' team",
+            "in": "query",
+            "name": "teamId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "the links' team",
+              "title": "Teamid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
+            }
+          },
           {
             "in": "header",
             "name": "authorization",
@@ -23478,7 +24750,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_list_McpLinkView__"
+                  "$ref": "#/components/schemas/Envelope_ListResult_McpLinkView__"
                 }
               }
             },
@@ -25206,7 +26478,7 @@
     },
     "/v1/me/connections": {
       "get": {
-        "description": "The caller's connectors, Connectors (Mine): one row per app that acts as them, with what it can do, who it\nsigns in as, its appState and appGroup, and where it is used; an app the team has off is listed when each\nperson signs in to it.",
+        "description": "The caller's connectors, Connectors (Mine): one row per app that acts as them, with what it can do, who it\nsigns in as, its appState and appGroup, and where it is used; an app the team has off is listed when each\nperson signs in to it. No request transaction: the team's write approval policies and who uses each tool are\nasked of the platform and agents-service.",
         "operationId": "apps_my_connections",
         "parameters": [
           {
@@ -25771,64 +27043,9 @@
     },
     "/v1/secrets": {
       "get": {
-        "description": "The team's secrets' metadata, as scripts and earlier callers read it; with `page`, one page of those whose\nname matches `search`, as the Secrets list reads it. The page and its count are queried, not sliced.",
+        "description": "One page of the team's secrets' metadata on the shared list contract, by name: `search` matches the name,\n`ids` names secrets, the filter `templateId` keeps those filling a template slot and `readOnly` (true or false)\nthose an account or auth config holds. Pickers search or name\nwhat they need rather than loading every secret. The page and its count are queried, not sliced.",
         "operationId": "secrets_list_secrets",
         "parameters": [
-          {
-            "in": "query",
-            "name": "page",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "minimum": 1,
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Page"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pageSize",
-            "required": false,
-            "schema": {
-              "default": 25,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "search",
-            "required": false,
-            "schema": {
-              "default": "",
-              "title": "Search",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "templateId",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Templateid"
-            }
-          },
           {
             "in": "query",
             "name": "teamId",
@@ -25844,6 +27061,125 @@
                 }
               ],
               "title": "Teamid"
+            }
+          },
+          {
+            "description": "false keeps the secrets a header may name",
+            "in": "query",
+            "name": "readOnly",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "true",
+                      "false"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "false keeps the secrets a header may name",
+              "title": "Readonly"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -25916,7 +27252,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_Union_list_SecretMeta___SecretList__"
+                  "$ref": "#/components/schemas/Envelope_SecretList_"
                 }
               }
             },
@@ -27427,10 +28763,263 @@
         "x-ops-public": "sdk"
       }
     },
+    "/v1/tool-catalog": {
+      "get": {
+        "description": "One page of the token's tenant's modules, every team's, by id past `after`; `nextCursor` is the next\npage's `after`, null on the last.",
+        "operationId": "tool_catalog_tool_catalog",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CatalogPage_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not allowed"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflicts with the current state"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Refused by a rule"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Over a budget or rate limit"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service unavailable"
+          }
+        },
+        "summary": "Tool Catalog",
+        "tags": [
+          "tool-catalog"
+        ],
+        "x-ops-public": "internal"
+      }
+    },
     "/v1/tool-modules": {
       "get": {
+        "description": "The team's modules, one page of a view. The view and the filters are read from the shared list query; they\nare named here for the document. `sortBy` is displayName, name, calls24h, errorRate, updatedAt, operationCount\nor ownerTeam.",
         "operationId": "tool_modules_list_modules",
         "parameters": [
+          {
+            "description": "all, needs_approval, expiring, expired, failing or security_review",
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "description": "all, needs_approval, expiring, expired, failing or security_review",
+              "title": "View",
+              "type": "string"
+            }
+          },
+          {
+            "description": "http, code or mcp",
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "http, code or mcp",
+              "title": "Type"
+            }
+          },
+          {
+            "description": "read or write",
+            "in": "query",
+            "name": "access",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "read or write",
+              "title": "Access"
+            }
+          },
+          {
+            "in": "query",
+            "name": "approvalState",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Approvalstate"
+            }
+          },
+          {
+            "in": "query",
+            "name": "templateId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Templateid"
+            }
+          },
           {
             "in": "query",
             "name": "page",
@@ -27447,22 +29036,16 @@
             "name": "pageSize",
             "required": false,
             "schema": {
-              "default": 25,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "view",
-            "required": false,
-            "schema": {
-              "default": "all",
-              "pattern": "^(all|needs_approval|expiring|expired|failing|security_review)$",
-              "title": "View",
-              "type": "string"
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
             }
           },
           {
@@ -27502,21 +29085,18 @@
             "name": "sortOrder",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "pattern": "^(asc|desc)$",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
               ],
-              "title": "Sortorder"
+              "title": "Sortorder",
+              "type": "string"
             }
           },
           {
             "in": "query",
-            "name": "type",
+            "name": "ids",
             "required": false,
             "schema": {
               "anyOf": [
@@ -27524,67 +29104,14 @@
                   "items": {
                     "type": "string"
                   },
+                  "maxItems": 1000,
                   "type": "array"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "title": "Type"
-            }
-          },
-          {
-            "in": "query",
-            "name": "access",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Access"
-            }
-          },
-          {
-            "in": "query",
-            "name": "approvalState",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Approvalstate"
-            }
-          },
-          {
-            "in": "query",
-            "name": "templateId",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Templateid"
+              "title": "Ids"
             }
           },
           {
@@ -27781,6 +29308,7 @@
         "x-ops-public": "sdk"
       },
       "post": {
+        "description": "Off the request transaction: it may fetch the source and send a new host to Security.",
         "operationId": "tool_modules_create_module",
         "parameters": [
           {
@@ -27999,6 +29527,7 @@
     },
     "/v1/tool-modules/blank": {
       "post": {
+        "description": "Off the request transaction: a host not yet listed is sent to Security in agents-service.",
         "operationId": "tool_modules_create_blank_module",
         "parameters": [
           {
@@ -28425,6 +29954,7 @@
     },
     "/v1/tool-modules/discover": {
       "post": {
+        "description": "Off the request transaction: it fetches the source, so no connection is held while it answers.",
         "operationId": "tool_modules_discover",
         "parameters": [
           {
@@ -28633,18 +30163,47 @@
     },
     "/v1/tool-modules/grants": {
       "get": {
-        "description": "Every workflow's access to the modules the team sees: a page of one view, with each view's count.",
+        "description": "Every workflow's access to the modules the team sees: a page of one view, with each view's count. `view`\nis read from the shared list query's filters; it is named here for the document.",
         "operationId": "tool_modules_list_grants",
         "parameters": [
           {
+            "description": "active, expiring, requested, expired, ended or all",
             "in": "query",
             "name": "view",
             "required": false,
             "schema": {
               "default": "all",
-              "pattern": "^(active|expiring|requested|expired|ended|all)$",
+              "description": "active, expiring, requested, expired, ended or all",
               "title": "View",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
             }
           },
           {
@@ -28665,25 +30224,52 @@
           },
           {
             "in": "query",
-            "name": "page",
+            "name": "sortBy",
             "required": false,
             "schema": {
-              "default": 1,
-              "minimum": 1,
-              "title": "Page",
-              "type": "integer"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
             }
           },
           {
             "in": "query",
-            "name": "pageSize",
+            "name": "sortOrder",
             "required": false,
             "schema": {
-              "default": 25,
-              "maximum": 100,
-              "minimum": 1,
-              "title": "Pagesize",
-              "type": "integer"
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -29709,6 +31295,7 @@
     },
     "/v1/tool-modules/{module_id}/approvals": {
       "post": {
+        "description": "Off the request transaction: the workflow is read from agents-service.",
         "operationId": "tool_modules_request_approval",
         "parameters": [
           {
@@ -30143,6 +31730,7 @@
     },
     "/v1/tool-modules/{module_id}/approvals/{approval_id}/decide": {
       "post": {
+        "description": "Off the request transaction: platform-service says whether the requester may decide and which writes wait.",
         "operationId": "tool_modules_decide_approval",
         "parameters": [
           {
@@ -30804,6 +32392,7 @@
     },
     "/v1/tool-modules/{module_id}/operations": {
       "post": {
+        "description": "Off the request transaction: a host not yet listed is sent to Security in agents-service.",
         "operationId": "tool_modules_add_operation",
         "parameters": [
           {
@@ -31031,6 +32620,7 @@
     },
     "/v1/tool-modules/{module_id}/operations/import": {
       "post": {
+        "description": "Off the request transaction: it fetches the source again before it adds the operations.",
         "operationId": "tool_modules_import_operations",
         "parameters": [
           {
@@ -31248,7 +32838,7 @@
     },
     "/v1/tool-modules/{module_id}/operations/{op_id}/mocks": {
       "get": {
-        "description": "The operation's mock answers in the order a test call checks them, or (`environment=example`) its example\nanswer.",
+        "description": "The operation's mock answers in the order a test call checks them, a page at a time on the shared list\ncontract (`search` on the name), or (`environment=example`) its example answer.",
         "operationId": "tool_modules_list_mocks",
         "parameters": [
           {
@@ -31281,6 +32871,100 @@
               ],
               "title": "Environment",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Pagesize"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sortby"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sortOrder",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Sortorder",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 1000,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ids"
             }
           },
           {
@@ -32381,7 +34065,7 @@
     },
     "/v1/tool-modules/{module_id}/operations/{operation}/run": {
       "post": {
-        "description": "The tool page's Run, in the screen's words: the test console's owner try, Mock on the stub's answer and\nReal as the gateway's call, so the two never decide differently.",
+        "description": "Off the request transaction: a Real run goes through the gateway to the system. The tool page's Run, in the\nscreen's words: the test console's owner try, Mock on the stub's answer and\nReal as the gateway's call, so the two never decide differently.",
         "operationId": "tool_modules_run_tool",
         "parameters": [
           {
@@ -32985,6 +34669,7 @@
     },
     "/v1/tool-modules/{module_id}/reviews": {
       "post": {
+        "description": "Off the request transaction: the review opens in agents-service.",
         "operationId": "tool_modules_request_review",
         "parameters": [
           {
@@ -33202,6 +34887,7 @@
     },
     "/v1/tool-modules/{module_id}/test": {
       "post": {
+        "description": "Off the request transaction: a real run calls the system, and a mock waits its delay.",
         "operationId": "tool_modules_test_operation",
         "parameters": [
           {
@@ -33419,6 +35105,7 @@
     },
     "/v1/tool-modules/{module_id}/versions": {
       "post": {
+        "description": "Off the request transaction: platform-service gives the publish-review mode and a review opens in agents-\nservice.",
         "operationId": "tool_modules_publish_version",
         "parameters": [
           {
@@ -33636,7 +35323,7 @@
     },
     "/v1/tools/{name}": {
       "get": {
-        "description": "Internal (service token): a tool's access class from the gateway's registry, the one the policy decides\non. The review service asks here how many approvers a call needs instead of reading the registry itself.",
+        "description": "Internal (service token): a tool's access class from the gateway's registry, the one the policy decides\non. The review service asks here how many approvers a call needs instead of reading the registry itself. Read\nunder `tools:view`, as the grantable operations are; a tool of another team answers 404.",
         "operationId": "gateway_tool_access",
         "parameters": [
           {
@@ -33669,7 +35356,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ToolAccess_"
+                }
               }
             },
             "description": "Successful Response"

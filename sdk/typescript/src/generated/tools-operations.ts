@@ -272,7 +272,19 @@ export const toolsOperations = {
     "path": "/v1/apps",
     "pathParams": [],
     "query": [
-      "include"
+      "include",
+      "view",
+      "appState",
+      "category",
+      "kind",
+      "accountId",
+      "hasAccount",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -458,7 +470,9 @@ export const toolsOperations = {
       "page",
       "pageSize",
       "search",
-      "templateId"
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -498,8 +512,6 @@ export const toolsOperations = {
     "path": "/v1/executions",
     "pathParams": [],
     "query": [
-      "page",
-      "pageSize",
       "tool",
       "moduleId",
       "thread",
@@ -508,7 +520,15 @@ export const toolsOperations = {
       "call",
       "link",
       "since",
-      "until"
+      "until",
+      "result",
+      "assistant",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -576,7 +596,15 @@ export const toolsOperations = {
     "method": "GET",
     "path": "/v1/mcp-links",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "teamId",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "mcp_links_pause_mcp_link": {
@@ -641,11 +669,14 @@ export const toolsOperations = {
     "path": "/v1/secrets",
     "pathParams": [],
     "query": [
+      "teamId",
+      "readOnly",
       "page",
       "pageSize",
       "search",
-      "templateId",
-      "teamId"
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -842,9 +873,12 @@ export const toolsOperations = {
     "pathParams": [],
     "query": [
       "view",
-      "search",
       "page",
-      "pageSize"
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -858,7 +892,13 @@ export const toolsOperations = {
       "op_id"
     ],
     "query": [
-      "environment"
+      "environment",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -869,16 +909,17 @@ export const toolsOperations = {
     "path": "/v1/tool-modules",
     "pathParams": [],
     "query": [
-      "page",
-      "pageSize",
       "view",
-      "search",
-      "sortBy",
-      "sortOrder",
       "type",
       "access",
       "approvalState",
-      "templateId"
+      "templateId",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },

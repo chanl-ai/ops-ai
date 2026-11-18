@@ -9,12 +9,15 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Generator
+from contextlib import contextmanager
 from functools import cache
 from importlib.metadata import entry_points
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
+from urllib.parse import urlsplit, urlunsplit
 
-from pydantic import AliasChoices, BaseModel, Field, SecretStr, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, Field, HttpUrl, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from .flags import Flags
@@ -61,20 +64,104 @@ class PluginClient(BaseModel):
     secret: SecretStr
 
 
+class Endpoint(BaseModel):
+    """Another service as this process reaches it: where it is, how long one call may take, and how many more times
+    a read that failed in transport is tried."""
+
+    url: HttpUrl
+    timeout_s: float = Field(default=10.0, gt=0)
+    retries: int = Field(default=2, ge=0)
+
+    @property
+    def base(self) -> str:
+        """The address as a base URL, with no trailing slash."""
+        return str(self.url).rstrip("/")
+
+
+class ModelsEndpoint(Endpoint):
+    """models-service: one call waits for a model's whole answer (an extraction reads a document), so its default
+    timeout is a model's, not a quick read's."""
+
+    timeout_s: float = Field(default=120.0, gt=0)
+
+
+class FilesEndpoint(Endpoint):
+    """files-service: an upload or a download carries a file's bytes, and files-service hashes and may scan an upload
+    before it answers, so its default timeout is longer than a JSON call's."""
+
+    timeout_s: float = Field(default=30.0, gt=0)
+
+
+class RunnerWaits(BaseModel):
+    """How runner-service's host waits on a guest (OPS_RUNNER_WAITS__*): the epoch tick a run's time limit is counted
+    in, the grace after that limit for a guest that trapped but still holds its pipes, and how soon it looks again for
+    a guest that has not opened its end of a pipe (open) or has no writer on stdout yet (read)."""
+
+    tick_s: float = Field(default=0.1, gt=0)
+    grace_s: float = Field(default=2.0, gt=0)
+    open_poll_s: float = Field(default=0.005, gt=0)
+    read_poll_s: float = Field(default=0.01, gt=0)
+
+
+class PoolSettings(BaseModel):
+    """The database connection pool of one process: connections kept, connections opened beyond those under load, and
+    how long a request waits for one."""
+
+    size: int = Field(default=5, ge=1)
+    overflow: int = Field(default=10, ge=0)
+    wait_s: float = Field(default=30.0, gt=0)
+
+
+# The services a process reaches through an Endpoint. Each is set whole as OPS_<NAME>__URL (with __TIMEOUT_S and
+# __RETRIES beside it), or by its address alone as OPS_<NAME>_URL.
+ENDPOINTS = ("agents", "tools", "kb", "files", "documents", "models", "platform", "platform_internal")
+
+
 class Settings(BaseSettings):
     # An empty value is unset, so a compose file can name every setting and leave the ones a site does not use blank.
     model_config = SettingsConfigDict(
-        env_prefix="OPS_", extra="ignore", secrets_dir=_secrets_dir(), env_ignore_empty=True
+        env_prefix="OPS_",
+        env_nested_delimiter="__",
+        extra="ignore",
+        secrets_dir=_secrets_dir(),
+        env_ignore_empty=True,
     )
 
     environment: Literal["dev", "test", "production"] = "dev"
-    # dev: a fixed user, no sign-in. platform: every caller is resolved from a platform-service token or API key.
-    auth_mode: Literal["dev", "platform"] = "dev"
+    # dev: a fixed user, no sign-in, and only when a development stack or a test names it. platform: every caller is
+    # resolved from a platform-service token or API key. An unset value never opens a service.
+    auth_mode: Literal["dev", "platform"] = "platform"
+    # The database pool (OPS_DB__SIZE, OPS_DB__OVERFLOW, OPS_DB__WAIT_S).
+    db: PoolSettings = PoolSettings()
+    # How long a stopping process waits for its background loops to finish their pass. Below the smallest grace the
+    # platform gives a stopping process (deploy/fly kill_timeout, processes.toml grace_seconds), or the pass is killed.
+    stop_wait_s: float = Field(default=15.0, gt=0)
+    # How long a starting process waits for a service it needs at start (kb-service's seed uploads through
+    # files-service), and how long each probe of it may take: a short probe keeps the whole wait near ready_wait_s.
+    ready_wait_s: float = Field(default=60.0, gt=0)
+    ready_probe_s: float = Field(default=2.0, gt=0)
+    # Each service this process calls. None: this install does not run that service, or this process does not call it.
+    # A process names the ones it cannot run without in `require`, first thing in its __main__.
+    agents: Endpoint | None = None
+    tools: Endpoint | None = None
+    kb: Endpoint | None = None
+    files: FilesEndpoint | None = None
+    documents: Endpoint | None = None
+    # models-service (OPS_MODELS_URL), and platform-service's public port (OPS_PLATFORM_URL: floors, policies).
+    models: ModelsEndpoint | None = None
+    platform: Endpoint | None = None
+    # platform-service's internal port, which introspects API keys, mints acting-for tokens and keeps the audit log.
+    platform_internal: Endpoint | None = None
+    page_size_default: int = Field(default=20, ge=1)
+    page_size_max: int = Field(default=50, ge=1)
     database_url: str = "postgresql+asyncpg://ops:ops@localhost:5477/ops_runtime"
     # How long one attempt to open a database connection may take, and how many attempts are made before the connect
     # fails (ops_store.database). On a loaded host the first attempt has stalled for a minute with no reply.
     database_connect_timeout_s: float = 30.0
     database_connect_attempts: int = 3
+    # How long /health's database probe (ops_store.database.reachable) waits, connect included, before it answers
+    # unreachable; a health check is polled every few seconds and must not wait out the connect attempts above.
+    database_health_timeout_s: float = Field(default=2.0, gt=0)
     # The address every service's HTTP server listens on. A container sets 0.0.0.0 so other containers reach it; on a
     # host the default keeps each port local to the machine. `*` listens on every address, IPv4 and IPv6: a Fly
     # machine needs both (health checks arrive over IPv4, the private network is IPv6), and `::` alone is IPv6 only
@@ -260,6 +347,9 @@ class Settings(BaseSettings):
     runner_max_memory_mb: int = 1024
     runner_max_time_s: float = 60.0
     runner_max_calls: int = 100
+    # How long the one download of the WASI build may take (`make -C services/runner-service wasm`): about 25 MB.
+    runner_fetch_timeout_s: float = Field(default=120.0, gt=0)
+    runner_waits: RunnerWaits = RunnerWaits()
     # files-service's public base, path included (e.g. https://ops.example/api/files), when a proxy serves it under a
     # path it strips: every upload and download URL the service hands out is built on it. Unset, the request's base.
     files_public_url: str | None = None
@@ -285,6 +375,13 @@ class Settings(BaseSettings):
     # The chat-model alias kb-service reranks and rewrites questions on, for a knowledge base that names none of its
     # own (its retrieval's queryModel). Both steps are off on a base until its owner turns them on.
     kb_query_alias: str = "bank-standard"
+    # How long kb-service waits for agents-service's "used by" on a knowledge base list or page, asked once: the page
+    # answers without it (usage unknown) rather than hold the console for the agents endpoint's tries and timeout.
+    kb_used_by_timeout_s: float = Field(default=5.0, gt=0)
+    # The time one knowledge search's model steps share (rewrite, the question's embedding, rerank, in sequence); a
+    # step past it is skipped and the answer says so. Below the shortest wait of a caller of the search (tools-service
+    # 5 s, agents-service 10 s), so a slow model never fails the caller's request. Ingest-time embedding is not bound.
+    kb_search_wait_s: float = Field(default=4.0, gt=0)
     embedding_width: int = 1536
     # The share of saved eval cases a version must pass before a publish check passes (0-1); the check blocks the
     # publish at the risk tiers whose steps are blocking (agents-service domain.evals).
@@ -340,6 +437,8 @@ class Settings(BaseSettings):
     signin_fetch_ranges: list[str] = Field(default_factory=list[str])
     # Dev only: those fetches reach the local fake identity provider over plain http on loopback, unchecked.
     signin_fetch_local: bool = False
+    # How long one call to an identity provider may take: OIDC discovery and token exchange, SAML metadata.
+    signin_http_timeout_seconds: float = Field(default=15.0, gt=0, le=60)
     # Wrong passwords (sign-in and step-up together) a person may type in a window before both refuse them for the
     # lockout time, and reset links one person may be sent per window. A used reset link ends a lock.
     # The service provider's own key pair for SAML, PEM: it signs requests to identity providers that ask for
@@ -495,6 +594,11 @@ class Settings(BaseSettings):
     # The review service signs approval tokens with this HMAC key; the gateway hands it to OPA, which verifies them.
     review_key: SecretStr = SecretStr(_DEV_REVIEW_KEY)
     review_token_ttl_seconds: int = 900
+    # agents-service's Reviews list, Overview counts and a task's place merge three sources (graph threads, publish
+    # requests, waiting workflow runs) in Python before paging, so each source reads at most this many rows, newest
+    # first after the open ones; a source at the cap is logged as `review_source_capped`, and its older rows are left
+    # off the list. At most 1000: the kept threads' ids are one `IN` list, under SQL Server's 2100 parameters.
+    review_list_rows_per_source: int = Field(default=1000, ge=1, le=1000)
     # An expired approval token is renewed from its recorded approvals while they are younger than this; older, the
     # call needs a fresh review (durability-failure-and-audit.md, approval expiry).
     approval_renewal_max_age_seconds: int = 86400
@@ -506,6 +610,56 @@ class Settings(BaseSettings):
     # Dev only: the access policies the dev caller's identity carries, as a platform token would, e.g.
     # OPS_DEV_POLICIES='{"requesterMayDecide": true}'. Empty: every policy at its default.
     dev_policies: dict[str, Any] = Field(default_factory=dict[str, Any])
+
+    @model_validator(mode="before")
+    @classmethod
+    def _endpoints_from_addresses(cls, data: Any) -> Any:
+        # OPS_AGENTS_URL alone makes the agents endpoint, so a deploy that names only addresses keeps working; an
+        # endpoint's own URL wins when both are given.
+        if not isinstance(data, dict):
+            return data
+        values = cast(dict[str, Any], data)
+        for name in ENDPOINTS:
+            address, endpoint = values.get(f"{name}_url"), values.get(name)
+            if address and endpoint is None:
+                values[name] = {"url": address}
+            elif address and isinstance(endpoint, dict) and "url" not in endpoint:
+                values[name] = {**cast(dict[str, Any], endpoint), "url": address}
+        return values
+
+    @model_validator(mode="after")
+    def _addresses_from_endpoints(self) -> Settings:
+        # Code that still reads `<name>_url` sees an endpoint set the other way.
+        for name in ENDPOINTS:
+            endpoint: Endpoint | None = getattr(self, name)
+            if endpoint is not None and getattr(self, f"{name}_url") is None:
+                setattr(self, f"{name}_url", endpoint.base)
+        return self
+
+    def endpoint(self, name: str) -> Endpoint:
+        """The endpoint of a service this process calls. ValueError naming its setting when it is unset: an address
+        never falls back to this machine."""
+        if name not in ENDPOINTS:
+            raise ValueError(f"Settings has no endpoint {name!r}; the endpoints are {', '.join(ENDPOINTS)}")
+        found: Endpoint | None = getattr(self, name)
+        if found is None:
+            raise ValueError(f"{endpoint_env(name)} is not set")
+        return found
+
+    @property
+    def identity_endpoints(self) -> tuple[str, ...]:
+        """The endpoints a process needs to resolve its callers: platform-service's internal port when callers sign
+        in, none with the fixed dev user."""
+        return ("platform_internal",) if self.auth_mode == "platform" else ()
+
+    def require(self, *names: str) -> None:
+        """First call in every __main__: exits naming each endpoint that is unset, before anything opens."""
+        unknown = [n for n in names if n not in ENDPOINTS]
+        if unknown:
+            raise ValueError(f"Settings has no endpoint {', '.join(unknown)}")
+        missing = [endpoint_env(n) for n in names if getattr(self, n) is None]
+        if missing:
+            raise SystemExit(f"{', '.join(missing)} must be set: this process cannot run without the service it names")
 
     @field_validator("embedding_width")
     @classmethod
@@ -605,6 +759,11 @@ def _package_of(folder: Path) -> str:
     return found[0] if not (folder / "plugin.yaml").exists() and len(found) == 1 else folder.name
 
 
+def endpoint_env(name: str) -> str:
+    """The environment name that sets an endpoint's address."""
+    return f"OPS_{name.upper()}_URL"
+
+
 _PUBLIC_DEFAULTS = {"review_key": _DEV_REVIEW_KEY, "secrets_key": _DEV_SECRETS_KEY}
 
 
@@ -624,11 +783,77 @@ def require_keys(settings: Settings, *names: str) -> None:
 # one up would call the shared stack, so its result would depend on whether that stack is up: an agents test read the
 # publish policy from a stopped platform-service and held a publish it meant to apply, and a kb search test ranked by
 # the stack's embedding model found a page its keywords no longer held.
-STACK_SERVICE_ENV = ("OPS_PLATFORM_URL", "OPS_MODELS_URL", "OPS_MODELS_KEY")
+STACK_SERVICE_ENV = ("OPS_PLATFORM_URL", "OPS_PLATFORM_INTERNAL_URL", "OPS_MODELS_URL", "OPS_MODELS_KEY")
+
+
+def unanswered_endpoints(*names: str) -> None:
+    """Gives each named endpoint an address nothing answers on, for a test run or a script that builds an app to read
+    its routes: the app builds as it does on a stack, and a call it should never make fails at once instead of
+    reaching a service that happens to run on this machine."""
+    for name in names:
+        os.environ[endpoint_env(name)] = "http://127.0.0.1:1"
+
+
+# The live stack's database name; tests refuse it (testdb.refusal).
+LIVE_DATABASE = "ops_runtime"
+
+
+def migration_test_urls() -> tuple[str | None, str | None]:
+    """OPS_TEST_DATABASE_URL, which make test sets to the throwaway database, and OPS_DATABASE_URL, which a service's
+    Alembic env.py migrates whatever URL its caller holds (testdb.migration_refusal compares the two)."""
+    return os.environ.get("OPS_TEST_DATABASE_URL"), os.environ.get("OPS_DATABASE_URL")
+
+
+@contextmanager
+def migrating(database_url: str) -> Generator[None]:
+    """OPS_DATABASE_URL names `database_url` for the block, so a service's Alembic env.py migrates that database
+    (ops_store.testing.prove_chain runs each proof in an empty database beside the suite's)."""
+    before = os.environ.get("OPS_DATABASE_URL")
+    os.environ["OPS_DATABASE_URL"] = database_url
+    try:
+        yield
+    finally:
+        if before is None:
+            del os.environ["OPS_DATABASE_URL"]
+        else:
+            os.environ["OPS_DATABASE_URL"] = before
+
+
+def worker_url(test_url: str | None, database_url: str | None, worker: str | None) -> str | None:
+    """The pytest-xdist worker's copy of the test database, `<name>_<worker>` (scripts/test_db.py --workers), or None to
+    change nothing: outside a worker, on SQLite, on the live database, or when the two URLs name different databases,
+    so testdb.refusal still sees the pair it was given (a test that starts pytest inherits the worker's name)."""
+    if not worker or not test_url or not test_url.startswith("postgresql"):
+        return None
+    test, given = urlsplit(test_url), urlsplit(database_url or "")
+    name = test.path.lstrip("/")
+    same = (test.hostname, test.port, name) == (given.hostname, given.port, given.path.lstrip("/"))
+    if not same or name == LIVE_DATABASE:
+        return None
+    if not name.endswith(f"_{worker}"):
+        name = f"{name}_{worker}"
+    return urlunsplit(test._replace(path=f"/{name}"))
+
+
+def use_worker_database() -> str | None:
+    """Points OPS_DATABASE_URL and OPS_TEST_DATABASE_URL at this pytest-xdist worker's copy and returns it, or changes
+    nothing (worker_url). Called first in a conftest's pytest_configure. Here because this module is the one place the
+    environment is read or written (check_standards rule 4)."""
+    url = worker_url(
+        os.environ.get("OPS_TEST_DATABASE_URL"),
+        os.environ.get("OPS_DATABASE_URL"),
+        os.environ.get("PYTEST_XDIST_WORKER"),
+    )
+    if url is not None:
+        os.environ["OPS_TEST_DATABASE_URL"] = url
+        os.environ["OPS_DATABASE_URL"] = url
+    return url
 
 
 def isolate_from_stack() -> None:
-    """Drops the running stack's service addresses from the environment before a test run builds any Settings. Here
-    because this module is the one place the environment is read or written (check_standards rule 4)."""
+    """Drops the running stack's service addresses from the environment before a test run builds any Settings, and
+    names the fixed dev user for the run: no service takes it unless told to, and a test of sign-in asks for platform
+    itself. Here because this module is the one place the environment is read or written (check_standards rule 4)."""
     for name in STACK_SERVICE_ENV:
         os.environ.pop(name, None)
+    os.environ.setdefault("OPS_AUTH_MODE", "dev")

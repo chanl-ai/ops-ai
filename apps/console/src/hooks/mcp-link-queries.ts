@@ -3,6 +3,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
+import { sdk } from '@/lib/api/ops-sdk';
+import type { OpsAI } from '@chanl-ai/ops-ai';
+import { usePagedQuery } from './paged-query';
 import type { McpLinkInput } from '@/lib/types/mcp-links';
 import { useTeamQuery } from './team-query';
 
@@ -12,8 +15,16 @@ const mk = {
   one: (id: string) => ['mcp-links', 'one', id] as const,
 };
 
-/** The team's MCP links, each with its newest call. */
-export const useMcpLinks = () => useTeamQuery({ queryKey: mk.list(), queryFn: () => api.mcpLinks.list() });
+type Tools = OpsAI['raw']['tools'];
+/** One MCP link as the list answers it, with its newest call. */
+export type McpLinkRow = Awaited<ReturnType<Tools['mcp_links_list_mcp_links']>>['data'][number];
+
+/** One page of the MCP links of the teams the person works in (GET /v1/mcp-links), searched on the name and narrowed to teams (`teamId`), by name. */
+export const useMcpLinks = (p: { page: number; pageSize: number; search?: string; teamId?: string[] }) =>
+  usePagedQuery({
+    queryKey: [...mk.list(), p.page, p.pageSize, p.search ?? '', p.teamId ?? []],
+    queryFn: () => sdk((ops) => ops.raw.tools.mcp_links_list_mcp_links({ query: { page: p.page, pageSize: p.pageSize, search: p.search, teamId: p.teamId } })),
+  });
 
 export const useMcpLink = (id: string) => useTeamQuery({ queryKey: mk.one(id), queryFn: () => api.mcpLinks.get(id), enabled: !!id, retry: false });
 

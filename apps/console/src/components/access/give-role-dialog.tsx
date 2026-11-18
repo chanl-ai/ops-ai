@@ -6,8 +6,11 @@ import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { RoleSummary } from '@/lib/types/settings';
+import { RoleSelect } from '@/components/access/role-select';
+import { rolesWhere } from '@/hooks/me-queries';
+
+/** The workspace's own roles; a built-in role comes with a person's team role. */
+const customRoles = rolesWhere('role-give-options', [], { builtin: ['false'] });
 
 /**
  * Gives a person one of the workspace's custom roles in the team the console acts in (switch team to give it in
@@ -18,7 +21,6 @@ export function GiveRoleDialog({
   open,
   onOpenChange,
   personName,
-  roles,
   teamName,
   pending,
   onSubmit,
@@ -26,14 +28,11 @@ export function GiveRoleDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   personName: string;
-  /** Every role of the workspace; only the custom ones are offered. */
-  roles: RoleSummary[];
   /** The team the console acts in, where the role is given. */
   teamName: string;
   pending: boolean;
   onSubmit: (input: { roleId: string }) => Promise<unknown>;
 }) {
-  const custom = roles.filter((r) => !r.builtin);
   const [roleId, setRoleId] = React.useState('');
   const [error, setError] = React.useState('');
   React.useEffect(() => {
@@ -70,7 +69,7 @@ export function GiveRoleDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
               Cancel
             </Button>
-            <LoadingButton type="submit" isLoading={pending} loadingText="Giving…" disabled={!custom.length} data-testid="give-role-submit">
+            <LoadingButton type="submit" isLoading={pending} loadingText="Giving…" disabled={!roleId} data-testid="give-role-submit">
               Give role
             </LoadingButton>
           </div>
@@ -78,19 +77,8 @@ export function GiveRoleDialog({
       }
     >
       <div className="flex flex-col gap-4">
-        <FormField id="give-role" label="Role" hint={custom.length ? 'The workspace’s own roles; a built-in role comes with their team role.' : 'No custom roles yet: create one on Access › Roles.'}>
-          <Select value={roleId} onValueChange={(v) => (setRoleId(v), setError(''))} disabled={!custom.length}>
-            <SelectTrigger id="give-role" data-testid="give-role-role">
-              <SelectValue placeholder="Choose a role" />
-            </SelectTrigger>
-            <SelectContent>
-              {custom.map((r) => (
-                <SelectItem key={r.id} value={r.id}>
-                  {r.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <FormField id="give-role" label="Role" hint="The workspace’s own roles; a built-in role comes with their team role. Make one on Access › Roles.">
+          <RoleSelect source={customRoles} value={roleId} onChange={(v) => (setRoleId(v), setError(''))} placeholder="Choose a role" testId="give-role-role" className="w-full" />
         </FormField>
       </div>
     </DialogShell>

@@ -13,7 +13,8 @@ import type { AccountRef } from '@/lib/types/connections';
 import type { OpsAI } from '@chanl-ai/ops-ai';
 
 import { refreshAppState } from './app-state-refresh';
-import { useTeamQuery } from './team-query';
+import { usePagedQuery } from './paged-query';
+import { useTeamInfiniteQuery, useTeamQuery } from './team-query';
 
 type Tools = OpsAI['raw']['tools'];
 type Args<K extends keyof Tools> = NonNullable<Parameters<Tools[K]>[0]>;
@@ -21,7 +22,8 @@ type Data<K extends keyof Tools> = Awaited<ReturnType<Tools[K]>>;
 
 const path = (a: AccountRef) => ({ app_id: a.appId, account_id: a.accountId });
 
-export type SystemCard = Data<'apps_list_apps'>[number];
+export type SystemCardPage = Data<'apps_list_apps'>;
+export type SystemCard = SystemCardPage['data'][number];
 /** An app's state on its card, worded the same on the catalog and the app page; GET /v1/apps decides it. */
 export type AppState = SystemCard['appState'];
 export type AccountDetail = Data<'apps_get_account'>;
@@ -34,7 +36,35 @@ const SYSTEMS = ['systems'] as const;
 const ACCOUNTS = ['accounts'] as const;
 const APPS = ['apps'] as const;
 
-export const useSystems = () => useTeamQuery({ queryKey: SYSTEMS, queryFn: () => sdk((ops) => ops.raw.tools.apps_list_apps()) });
+/** The Apps page's tabs; the server decides which cards each holds and counts them in `viewCounts`. */
+export type AppView = 'all' | 'connected' | 'available';
+export interface AppFilters {
+  appState?: string[];
+  category?: string[];
+  kind?: string[];
+  [key: string]: string[] | undefined;
+}
+
+/** One page of the team's app cards, searched, filtered and sorted on the server (GET /v1/apps), connected apps first. */
+export const useSystems = (p: { page: number; pageSize: number; search?: string; view?: AppView; filters?: AppFilters; enabled?: boolean }) =>
+  usePagedQuery({
+    queryKey: [...SYSTEMS, 'page', p.page, p.pageSize, p.search ?? '', p.view ?? 'all', p.filters ?? {}],
+    queryFn: () =>
+      sdk((ops) =>
+        ops.raw.tools.apps_list_apps({
+          query: { page: p.page, pageSize: p.pageSize, search: p.search, view: p.view, sortBy: 'connected', ...p.filters },
+        }),
+      ),
+    enabled: p.enabled,
+  });
+/** One card by its id (`ids=` on the list route), for a screen that needs a single app's mark, name or plugin. */
+export const useSystemCard = (id: string | null | undefined) =>
+  useTeamQuery({
+    queryKey: [...SYSTEMS, 'card', id ?? ''],
+    queryFn: async () => (await sdk((ops) => ops.raw.tools.apps_list_apps({ query: { ids: [id ?? ''], include: 'builtin' } }))).data[0] ?? null,
+    enabled: Boolean(id),
+    staleTime: 60_000,
+  });
 
 function useSystemsMutation<I, O>(fn: (i: I) => Promise<O>) {
   const qc = useQueryClient();
@@ -79,18 +109,6 @@ export const useAccountDetail = (a: AccountRef | null) =>
     queryKey: [...ACCOUNTS, a?.appId, a?.accountId],
     queryFn: () => sdk((ops) => ops.raw.tools.apps_get_account({ path: path(a ?? { appId: '', accountId: '' }) })),
     enabled: Boolean(a),
-  });
-
-/**
- * The team's apps a module may sign in through, for the app picker: each card's default account, by the id a module
- * is bound to.
- */
-export const useConnectionOptions = (enabled = true) =>
-  useTeamQuery({
-    queryKey: [...SYSTEMS, 'options'],
-    queryFn: async () =>
-      (await sdk((ops) => ops.raw.tools.apps_list_apps())).flatMap((c) => (c.connectionId ? [{ id: c.connectionId, name: c.name, status: c.status ?? 'draft' }] : [])),
-    enabled,
   });
 
 /** A custom app with its first account (POST /v1/apps); the answer is that account, whose `appId` names the app. */
@@ -198,10 +216,13 @@ export function useSaveSendPolicy() {
 }
 
 const mocksKey = (moduleId: string, opId: string) => ['mocks', moduleId, opId] as const;
+/** The operation's mock answers in the order they are tried, 50 a page; the next page is asked for on request. */
 export const useMockAnswers = (moduleId: string, opId: string) =>
-  useTeamQuery({
+  useTeamInfiniteQuery({
     queryKey: mocksKey(moduleId, opId),
-    queryFn: () => sdk((ops) => ops.raw.tools.tool_modules_list_mocks({ path: { module_id: moduleId, op_id: opId } })),
+    queryFn: ({ pageParam }) => sdk((ops) => ops.raw.tools.tool_modules_list_mocks({ path: { module_id: moduleId, op_id: opId }, query: { page: pageParam, pageSize: 50 } })),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.pagination.hasNext ? last.pagination.page + 1 : undefined),
     enabled: Boolean(moduleId && opId),
   });
 function useMockMutation<I, O>(moduleId: string, opId: string, fn: (i: I) => Promise<O>) {

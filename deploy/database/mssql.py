@@ -37,12 +37,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from models import chain_metadata
 from schema import MIGRATOR, ONLINE_ONLY, Checkout, chains, exported, runtime_role, sha256, write_sums
 
-from ops_store.schema import MSSQL_SECURITY, mssql_full_text_ddl, security_ddl
+from ops_platform.store.lookups import LOOKUPS as PLATFORM_LOOKUPS
+from ops_platform.store.lookups import SYSTEM_USER as PLATFORM_SYSTEM_USER
+from ops_platform.store.lookups import Lookup, mssql_function
+from ops_store.schema import MSSQL_COLLATION, MSSQL_PRECONDITIONS, MSSQL_SECURITY, mssql_full_text_ddl, security_ddl
 from ops_store.schema import POSTGRES_ONLY as POSTGRES_ONLY_TABLE
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "mssql"
 OFFLINE_URL = "mssql+aioodbc://offline:offline@localhost:1/offline"
-COLLATION = "Latin1_General_100_BIN2_UTF8"
+COLLATION = MSSQL_COLLATION
 SECURITY = MSSQL_SECURITY
 # PostgreSQL's ops_runtime_system, the BYPASSRLS role agents-service's loops switch to before they know a thread's
 # tenant, as a database user without a login: ops_agents_runtime alone may impersonate it (EXECUTE AS USER in
@@ -72,6 +75,8 @@ SYSTEM_READS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "run_batch_rows": (("SELECT",), ()),
     # The start-up catch-up finds every team whose default agent is its Ops Assistant (agents 0096).
     "team_default_agents": (("SELECT",), ()),
+    # The start-up serving reload finds every tenant's published agents (agents 0107); never a name or a spec.
+    "registry_agents": (("SELECT",), ("tenant_id", "id", "published_version", "paused")),
 }
 Grants = dict[str, tuple[tuple[str, ...], tuple[str, ...]]]
 # Each chain's system principal (a user without a login its runtime user alone may impersonate) and what it reads, as
@@ -84,6 +89,47 @@ SYSTEM_USERS: dict[str, tuple[str, Grants]] = {
         "ops_files_system",
         {"files_outbox": (("SELECT", "UPDATE", "DELETE"), ()), "files": (("SELECT",), ())},
     ),
+    # tools: the team-default catch-up, review hand-over and sign-in keep-alive listings, the relay and the secret
+    # audit sweep (tools_0081).
+    "tools": (
+        "ops_tools_system",
+        {
+            # Columns only, as tools_0083 grants: a module's headers, sign-in and baseline can hold a credential.
+            "team_defaults": (("SELECT",), ("tenant_id", "team_id", "version")),
+            "tool_modules": (("SELECT",), ("tenant_id", "id", "team_id", "display_name")),
+            "module_versions": (
+                ("SELECT",),
+                ("tenant_id", "module_id", "version", "status", "review_id", "published_by"),
+            ),
+            "module_approvals": (
+                ("SELECT",),
+                (
+                    "tenant_id",
+                    "module_id",
+                    "id",
+                    "status",
+                    "review_id",
+                    "decider_team",
+                    "workflow_id",
+                    "workflow_name",
+                    "operations",
+                    "environment",
+                    "expires_at",
+                    "justification",
+                    "requested_by",
+                    "requested_by_email",
+                ),
+            ),
+            "service_outbox": (("SELECT", "UPDATE", "DELETE"), ()),
+            "secret_audit": (("SELECT", "DELETE"), ()),
+        },
+    ),
+    # kb: the relay, and the listing of every tenant holding a source that the schedule, the embedding backlog and the
+    # start-up move read (kb_0011, kb_0014, kb_0026).
+    "kb": (
+        "ops_kb_system",
+        {"kb_sources": (("SELECT",), ()), "kb_outbox": (("SELECT", "UPDATE", "DELETE"), ())},
+    ),
     "documents": (
         "ops_documents_system",
         {
@@ -94,6 +140,13 @@ SYSTEM_USERS: dict[str, tuple[str, Grants]] = {
         },
     ),
 }
+# A chain whose system user only its lookup functions run as (EXECUTE AS on each), with no login, no table grant and no
+# IMPERSONATE for anyone, and those functions: platform's pre-tenant lookups (platform 0042). The read predicates pass
+# the user; the runtime user gets SELECT on the functions alone, so it can name one exact key but list nothing across
+# tenants.
+LOOKUP_USERS: dict[str, tuple[str, tuple[Lookup, ...]]] = {"platform": (PLATFORM_SYSTEM_USER, PLATFORM_LOOKUPS)}
+
+
 # Where each chain's portable migrations begin (2026-10-19, each chain's head that day). Revisions up to and including
 # it are PostgreSQL history and never render for SQL Server; every later one is written with Alembic operations both
 # run. SQL Server upgrades start from the first release whose bundle installs, the release cut; the pins
@@ -103,10 +156,91 @@ BASELINE = {
     "tools": "tools_0030_call_channel",
     "models": "models_0006",
     "kb": "kb_0009",
-    "platform": "0025_connections_cells",
+    # 0026 holds PostgreSQL-only SQL (DISTINCT ON, md5, a SECURITY DEFINER function), so it is history here too.
+    "platform": "0026_workspace_owner",
     "files": "files_0009",
     "documents": "documents_0009",
 }
+# Foreign keys whose ON DELETE is NO ACTION on SQL Server, which refuses a table reached by two cascade paths from one
+# delete (error 1785). A sign-in provider's delete reaches signin_grants by its own key and through
+# signin_group_rules, so the rule key's SET NULL cannot stand there. The store clears a grant's rule before it deletes
+# the rule (ops_platform.store.signin._keep_rules), and a provider's delete takes its grants with its rules.
+NO_SECOND_CASCADE = {("signin_grants", "signin_grants_rule_id_fkey")}
+DML = ("SELECT", "INSERT", "UPDATE", "DELETE")
+_SI = ("SELECT", "INSERT")
+_SIU = ("SELECT", "INSERT", "UPDATE")
+_SID = ("SELECT", "INSERT", "DELETE")
+# The tables on which a chain's runtime user holds less than DML, as its PostgreSQL tenant role does at the chain's
+# head: (privileges, columns it may UPDATE alone). On PostgreSQL a transaction switches to the tenant role; SQL Server
+# has one user, so the tenant role's narrowing is that user's. Append-only logs (platform 0002, tools 0044 and 0055,
+# models 0012, agents 0021), no DELETE on a row a run or a person still points at, and agents' heartbeats written by
+# the system user alone. A table a store with no role writes as the login (models' install tables) keeps DML. Held equal
+# to PostgreSQL by test_model_parity.py.
+RUNTIME_GRANTS: dict[str, Grants] = {
+    "agents": {
+        "background_heartbeats": ((), ()),
+        "background_jobs": (_SID, ()),
+        "case_events": (_SI, ()),
+        "case_type_versions": (_SIU, ()),
+        "case_types": (_SIU, ()),
+        "cases": (_SIU, ()),
+        "chat_search": (_SID, ()),
+        "engine_runs": (_SIU, ()),
+        "engine_steps": (_SIU, ()),
+        "engine_waits": (_SID, ()),
+        "engine_work": (_SIU, ()),
+        "eval_cases": (_SID, ()),
+        "eval_runs": (_SI, ()),
+        "form_links": (_SIU, ()),
+        "message_memory_use": (_SI, ()),
+        # Rows no tenant can be named for (agents 0104): no store reads them, so no tenant transaction holds them.
+        "model_call_records_unattributed": ((), ()),
+        "ops_checkpoint_fences": (_SIU, ()),
+        "poll_cursors": (_SIU, ()),
+        "review_assignments": (_SI, ()),
+        "run_batch_rows": (_SIU, ()),
+        "run_batches": (_SIU, ()),
+        "service_events": (_SIU, ()),
+        "task_assists": (_SIU, ()),
+        "task_type_versions": (_SIU, ()),
+        "task_types": (_SIU, ()),
+        "team_default_agents": (_SIU, ()),
+        "template_copies": (_SIU, ()),
+        "thread_budgets_unattributed": ((), ()),
+        "thread_leases": (_SIU, ()),
+        "timers": (_SIU, ()),
+        # A trigger event is settled in place (agents 0089, 0091); what fired it is never rewritten.
+        "trigger_events": (_SI, ("detail", "item", "outcome", "run_id")),
+        "widget_deployments": (_SIU, ()),
+        "widget_mint_key_audit": (_SI, ()),
+        "widget_mint_keys": (_SIU, ()),
+    },
+    "documents": {"documents_template_copies": (_SIU, ())},
+    "models": {"model_call_log": (_SI, ()), "model_key_tenants": (_SIU, ())},
+    "platform": {"audit_entries": (_SI, ()), "policies": (_SIU, ())},
+    "tools": {"connection_audit": (_SI, ()), "secret_audit": (_SI, ()), "service_outbox": (_SI, ())},
+}
+
+
+def runtime_grants(chain: str, table: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """What `chain`'s runtime user holds on `table`: DML unless RUNTIME_GRANTS narrows it."""
+    return RUNTIME_GRANTS.get(chain, {}).get(table, (DML, ()))
+
+
+def _runtime_table_grants(chain: str, table: str, user: str) -> list[str]:
+    privileges, columns = runtime_grants(chain, table)
+    if privileges == DML and not columns:
+        return [f"GRANT {', '.join(DML)} ON dbo.{table} TO {user};"]
+    # grants.sql runs again on every upgrade, so a database granted DML by an earlier release loses the rest here; a
+    # table-wide REVOKE also takes the column grants, given back after it.
+    out = [f"REVOKE {', '.join(p for p in DML if p not in privileges)} ON dbo.{table} FROM {user};"]
+    if privileges:
+        out.append(f"GRANT {', '.join(privileges)} ON dbo.{table} TO {user};")
+    if columns:
+        out.append(f"GRANT UPDATE ON dbo.{table} ({', '.join(columns)}) TO {user};")
+    return out
+
+
 # Offline SQL holding one of these was written for PostgreSQL (op.execute text passes through unchanged).
 POSTGRES_ONLY = re.compile(
     r"DO \$\$|CREATE POLICY|ROW LEVEL SECURITY|current_setting|::\w|jsonb|SET LOCAL|\bRAISE\b", re.I
@@ -227,9 +361,11 @@ def chain_tables(chain: str, metadatas: Iterable[sa.MetaData]) -> Chain:
             if ix.unique:
                 # SQL Server lets one NULL into a unique index, PostgreSQL any number: filtering out rows where a key
                 # column is NULL enforces exactly the rows PostgreSQL enforces.
-                where = [*_not_null(ix.columns)]
+                twin = ix.dialect_options["mssql"]["where"]
+                # A column the twin already filters is not filtered twice, so the index matches the migration's.
+                said = re.sub(r'["\[\]]', "", str(twin)).lower() if twin is not None else ""
+                where = [w for w in _not_null(ix.columns) if f"{w.left.name.lower()} is not null" not in said]
                 if where:
-                    twin = ix.dialect_options["mssql"]["where"]
                     ix.dialect_options["mssql"]["where"] = sa.and_(*([twin] if twin is not None else []), *where)
         for con in list(t.constraints):
             columns = [c.name for c in con.columns] if isinstance(con, ColumnCollectionConstraint) else []
@@ -249,6 +385,8 @@ def chain_tables(chain: str, metadatas: Iterable[sa.MetaData]) -> Chain:
                 for action in ("ondelete", "onupdate"):
                     if str(getattr(con, action) or "").upper() == "RESTRICT":
                         setattr(con, action, "NO ACTION")
+                if (t.name, con.name) in NO_SECOND_CASCADE:
+                    con.ondelete = "NO ACTION"
                 _in_key_order(t, con)
             elif isinstance(con, sa.CheckConstraint) and con.name is None:
                 refused.append(f"{chain} {t.name}: a CHECK constraint without a name")
@@ -303,17 +441,7 @@ def batches(statements: Iterable[str]) -> str:
     return "".join(f"{s}\nGO\n" for s in statements)
 
 
-PRECONDITIONS = batches(
-    [
-        "SET XACT_ABORT ON;",
-        "IF CONVERT(nvarchar(128), DATABASEPROPERTYEX(DB_NAME(), 'Collation')) <> N'" + COLLATION + "'\n"
-        f"    THROW 50001, N'Ops AI needs the database collation {COLLATION}', 1;\n"
-        "IF NOT EXISTS (SELECT 1 FROM sys.databases WHERE name = DB_NAME() AND is_read_committed_snapshot_on = 1)\n"
-        "    THROW 50002, N'Ops AI needs READ_COMMITTED_SNAPSHOT ON', 1;\n"
-        "IF (SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME()) < 160\n"
-        "    THROW 50003, N'Ops AI needs compatibility level 160 or higher', 1;",
-    ]
-)
+PRECONDITIONS = batches(MSSQL_PRECONDITIONS)
 
 
 @dataclass
@@ -343,8 +471,12 @@ def compile_all(
         for t in c.tables:
             statements.append(_sql(CreateTable(t)) + ";")
             statements += [_sql(CreateIndex(ix)) + ";" for ix in sorted(t.indexes, key=lambda x: str(x.name))]
-        system = SYSTEM_USERS[chain][0] if chain in SYSTEM_USERS else None
+        lookup_user, lookups = LOOKUP_USERS.get(chain, (None, ()))
+        system = SYSTEM_USERS[chain][0] if chain in SYSTEM_USERS else lookup_user
+        if lookup_user:
+            statements.append(f"IF USER_ID(N'{lookup_user}') IS NULL CREATE USER {lookup_user} WITHOUT LOGIN;")
         statements += [f"{s};" for s in security_ddl(chain, c.tables, column_type=_column_type, system_user=system)]
+        statements += [f"{mssql_function(fn)};" for fn in lookups]
         # The bundle runs outside a transaction, as full-text DDL needs.
         statements += [s for t in c.tables for s in mssql_full_text_ddl(t)]
         statements += stamped
@@ -400,7 +532,8 @@ def roles_script(order: list[str]) -> str:
 def grants_script(chains_: list[dict[str, Any]]) -> str:
     out = [
         f"-- Run as {MIGRATOR} in the database after the bundle and after each upgrade; every statement runs again.\n",
-        "-- Each service's user: SELECT, INSERT, UPDATE, DELETE on its own tables and SELECT on its version table.\n",
+        "-- Each service's user: SELECT, INSERT, UPDATE, DELETE on its own tables, less where its PostgreSQL tenant\n",
+        "-- role holds less (an append-only log, a row never deleted), and SELECT on its version table.\n",
         "-- No other permission, so it can create, alter or drop nothing, read no other service's tables, and\n",
         "-- every security policy applies to it. A chain's user may also impersonate that chain's system user (no\n",
         "-- login), which reads every tenant's rows of the tables and columns granted to it below, as on PostgreSQL.\n",
@@ -413,9 +546,11 @@ def grants_script(chains_: list[dict[str, Any]]) -> str:
             f"IF USER_ID(N'{user}') IS NULL CREATE USER {user} FOR LOGIN {user} WITH DEFAULT_SCHEMA = dbo;"
         )
         statements.append(
-            "\n".join(f"GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.{t} TO {user};" for t in c["tables"])
+            "\n".join(s for t in c["tables"] for s in _runtime_table_grants(c["name"], t, user))
             + f"\nGRANT SELECT ON dbo.{c['versionTable']} TO {user};"
         )
+        if lookups := LOOKUP_USERS.get(c["name"], (None, ()))[1]:
+            statements.append("\n".join(f"GRANT SELECT ON dbo.{fn.name} TO {user};" for fn in lookups))
         if c["name"] in SYSTEM_USERS:
             system, reads = SYSTEM_USERS[c["name"]]
             statements.append(f"IF USER_ID(N'{system}') IS NULL CREATE USER {system} WITHOUT LOGIN;")
@@ -544,7 +679,7 @@ def steps(old: Checkout, new: Checkout) -> list[Step]:
 
 def guard(version_table: str, expected: str) -> str:
     return (
-        f"IF NOT EXISTS (SELECT 1 FROM dbo.{version_table} WHERE version_num = N'{expected}')\n"
+        f"IF NOT EXISTS (SELECT 1 FROM dbo.{version_table} WHERE version_num = N'{expected}')\n"  # noqa: S608 - version table and revision are the chain's own names
         f"    THROW 50010, N'this step needs {version_table} at {expected}', 1;\nGO\n"
     )
 
@@ -597,10 +732,15 @@ def here() -> Checkout:
 def run(a: argparse.Namespace) -> None:
     if a.cmd == "ddl":
         with exported(a.ref) as checkout:
-            # The export's own models, through its own environment: this file runs there as a subprocess.
+            # The export's own models, through its own environment and its own copy of this tool: this file's
+            # imports name modules an older ref may not have (ops_platform.store.lookups), and its compile rules may
+            # be newer than that ref's models.
             if checkout.root != here().root:
+                tool = checkout.root / "deploy" / "database" / "mssql.py"
+                if not tool.is_file():
+                    raise SystemExit(f"{checkout.ref} has no deploy/database/mssql.py: it has no SQL Server baseline")
                 done = subprocess.run(
-                    [str(checkout.root / ".venv" / "bin" / "python"), __file__, "ddl", str(a.out.resolve())],
+                    [str(checkout.root / ".venv" / "bin" / "python"), str(tool), "ddl", str(a.out.resolve())],
                     cwd=checkout.root,
                     env={**checkout.env(OFFLINE_URL), "OPS_REF": checkout.ref, "OPS_COMMIT": checkout.commit},
                     check=False,

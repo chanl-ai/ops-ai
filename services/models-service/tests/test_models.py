@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from ops_models.store import model_aliases, model_keys
 
-from .conftest import SERVICE, Models
+from .conftest import LOCAL, SERVICE, Models
 
 
 async def admit(m: Models, key_id: str, **extra: object) -> tuple[int, str | None]:
@@ -71,9 +71,9 @@ async def test_an_unregistered_identity_is_refused(models: Models) -> None:
 async def test_an_alias_not_cleared_for_the_data_is_refused(models: Models) -> None:
     # bank-reasoning is cleared for internal data; a confidential request must not reach it.
     key_id, secret = await models.key(budget="5")
-    r = await models.complete(secret, alias="bank-reasoning", **{"X-Data-Sensitivity": "confidential"})
+    r = await models.complete(secret, alias="bank-reasoning", **{"X-Data-Sensitivity": "confidential"}, **LOCAL)
     assert r.status_code == 403 and r.json()["error"]["code"] == "sensitivity_not_cleared"
-    ok = await models.complete(secret, alias="bank-standard", **{"X-Data-Sensitivity": "confidential"})
+    ok = await models.complete(secret, alias="bank-standard", **{"X-Data-Sensitivity": "confidential"}, **LOCAL)
     assert ok.status_code == 200
     assert [(c["outcome"], c["reason"]) for c in reversed(await models.calls(key_id))] == [
         ("denied", "sensitivity_not_cleared"),
@@ -87,7 +87,7 @@ async def test_an_image_reaches_only_an_alias_cleared_for_images_and_every_call_
     key_id, secret = await models.key(budget="5")
     page = {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgo="}}
     messages = [{"role": "user", "content": [{"type": "text", "text": "Fields: total"}, page]}]
-    auth = {"Authorization": f"Bearer {secret}"}
+    auth = {"Authorization": f"Bearer {secret}", **LOCAL}
     refused = await models.client.post(
         "/v1/models/chat/completions", json={"model": "bank-standard", "messages": messages}, headers=auth
     )
@@ -96,7 +96,7 @@ async def test_an_image_reaches_only_an_alias_cleared_for_images_and_every_call_
     alias = {"name": name, "providerId": "prov_scripted", "modelId": "scripted-pages", "clearedSensitivity": "internal"}
     made = await models.client.post("/v1/models/aliases", json={**alias, "images": True}, headers=SERVICE)
     assert made.status_code == 201, made.text
-    versions = (await models.client.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).json()["data"]
+    versions = (await models.client.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).json()["data"]["data"]
     assert [v["images"] for v in versions] == [True]
     sent = await models.client.post(
         "/v1/models/chat/completions", json={"model": name, "messages": messages}, headers=auth
@@ -117,8 +117,10 @@ async def test_an_image_reaches_only_an_alias_cleared_for_images_and_every_call_
 
 async def test_a_completion_writes_one_metadata_row_and_no_prompt_text(models: Models) -> None:
     key_id, secret = await models.key(budget="5")
-    r = await models.complete(secret, **{"X-Run-Id": "run_1", "X-Step-Id": "draft"})
+    r = await models.complete(secret, **{"X-Run-Id": "run_1", "X-Step-Id": "draft"}, **LOCAL)
     assert r.status_code == 200 and r.json()["object"] == "chat.completion"
+    # OpenAI omits the key on a reply without tool calls; some clients read a null as an empty call list.
+    assert "tool_calls" not in r.json()["choices"][0]["message"]
     rows = await models.calls(key_id)
     assert len(rows) == 1
     assert (rows[0]["outcome"], rows[0]["runId"], rows[0]["stepId"]) == ("ok", "run_1", "draft")
@@ -156,7 +158,7 @@ async def test_an_alias_name_may_contain_a_dot(models: Models) -> None:
     }
     r = await models.client.post("/v1/models/aliases", json=body, headers=SERVICE)
     assert r.status_code == 201, r.text
-    versions = (await models.client.get("/v1/models/aliases/gpt-5.5/versions", headers=SERVICE)).json()["data"]
+    versions = (await models.client.get("/v1/models/aliases/gpt-5.5/versions", headers=SERVICE)).json()["data"]["data"]
     assert versions[0]["modelId"] == "scripted-standard"
 
 
@@ -167,20 +169,20 @@ async def test_alias_versions_are_immutable_and_the_newest_serves(models: Models
     v2 = {"providerId": "prov_scripted", "modelId": "scripted-b", "clearedSensitivity": "internal"}
     r = await models.client.post(f"/v1/models/aliases/{name}/versions", json=v2, headers=SERVICE)
     assert r.json()["data"]["version"] == 2
-    versions = (await models.client.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).json()["data"]
+    versions = (await models.client.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).json()["data"]["data"]
     assert [v["modelId"] for v in versions] == ["scripted-a", "scripted-b"]
     key_id, secret = await models.key(budget="5")
-    assert (await models.complete(secret, alias=name)).status_code == 200
+    assert (await models.complete(secret, alias=name, **LOCAL)).status_code == 200
     assert (await models.calls(key_id))[0]["providerModel"] == "scripted-b"
 
 
 async def test_a_call_carries_the_callers_request_hash_and_is_found_by_thread(models: Models) -> None:
     key_id, secret = await models.key(budget="5")
     thread = f"th_{datetime.now(UTC).strftime('%H%M%S%f')}"
-    r = await models.complete(secret, **{"X-Thread-Id": thread, "X-Request-Hash": "a" * 64})
+    r = await models.complete(secret, **{"X-Thread-Id": thread, "X-Request-Hash": "a" * 64}, **LOCAL)
     assert r.status_code == 200
     rows = (await models.client.get("/v1/models/calls", params={"threadId": thread}, headers=SERVICE)).json()
-    assert [(c["keyId"], c["requestHash"]) for c in rows["data"]["items"]] == [(key_id, "a" * 64)]
+    assert [(c["keyId"], c["requestHash"]) for c in rows["data"]["data"]] == [(key_id, "a" * 64)]
 
 
 async def test_one_tenant_spending_its_share_of_a_shared_key_leaves_other_tenants_theirs(models: Models) -> None:
@@ -207,7 +209,7 @@ async def test_a_new_version_retires_the_one_serving_and_only_one_is_current(mod
     for model in ("scripted-b", "scripted-c"):
         v = {"providerId": "prov_scripted", "modelId": model, "clearedSensitivity": "internal"}
         assert (await models.client.post(f"/v1/models/aliases/{name}/versions", json=v, headers=SERVICE)).is_success
-    versions = (await models.client.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).json()["data"]
+    versions = (await models.client.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).json()["data"]["data"]
     assert [(v["modelId"], v["status"]) for v in versions] == [
         ("scripted-a", "retired"),
         ("scripted-b", "retired"),

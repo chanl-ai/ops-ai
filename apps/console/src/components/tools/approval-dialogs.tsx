@@ -3,6 +3,7 @@
 import * as React from 'react';
 
 import { DialogShell } from '@/components/shared/dialog-shell';
+import { EntityPicker } from '@/components/shared/entity-picker';
 import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { AccessBadge } from '@/components/status-badges';
@@ -10,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { workflowOptions } from '@/hooks/options-queries';
 import type { ApprovalRequestInput, Environment, ModuleOperation } from '@/lib/types/tool-modules';
 
 const EXPIRY: Record<Environment, number[]> = { production: [30, 90, 180, 365], test: [14, 30, 90], dev: [14, 30, 90] };
@@ -18,7 +20,6 @@ const EXPIRY: Record<Environment, number[]> = { production: [30, 90, 180, 365], 
 export function RequestApprovalDialog({
   open,
   onOpenChange,
-  workflows,
   operations,
   major,
   onSubmit,
@@ -26,7 +27,6 @@ export function RequestApprovalDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  workflows: { id: string; name: string }[];
   operations: ModuleOperation[];
   major: number;
   onSubmit: (input: ApprovalRequestInput) => Promise<unknown>;
@@ -91,18 +91,15 @@ export function RequestApprovalDialog({
         {error && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive-text">{error}</p>}
         <div className="grid gap-4">
           <FormField id="ra-wf" label="Workflow" error={touched ? errs.workflow : undefined}>
-            <Select value={workflowId} onValueChange={setWorkflowId}>
-              <SelectTrigger id="ra-wf" className="w-full" aria-invalid={touched && !!errs.workflow}>
-                <SelectValue placeholder="Choose a workflow" />
-              </SelectTrigger>
-              <SelectContent>
-                {workflows.map((w) => (
-                  <SelectItem key={w.id} value={w.id}>
-                    {w.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <EntityPicker
+              source={workflowOptions}
+              multiple={false}
+              value={workflowId ? [workflowId] : []}
+              onChange={(ids) => setWorkflowId(ids[0] ?? '')}
+              addLabel="Choose a workflow"
+              searchPlaceholder="Search workflows"
+              testId="ra-wf"
+            />
           </FormField>
           <FormField id="ra-env" label="Environment">
             <Select

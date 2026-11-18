@@ -1,9 +1,10 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { usePagedQuery } from '@/hooks/paged-query';
 import { api } from '@/lib/api';
+import { sdk } from '@/lib/api/ops-sdk';
 import type {
   DocumentFilters,
   ItemFilters,
@@ -21,6 +22,7 @@ import type {
 } from '@/lib/types/knowledge';
 import type { ListParams } from '@/lib/types/query';
 import { useTeamQuery } from './team-query';
+import { useDebounced } from './use-debounced';
 
 /** Every knowledge key starts with 'knowledge', so one invalidation refreshes lists, records and counts. */
 export const kk = {
@@ -77,7 +79,13 @@ export const useSourcePreview = (config: Record<string, unknown>, enabled: boole
 /** The caller's team's agents citing knowledge base `kbId`, from agents-service's knowledge usage. */
 /** `enabled` false for someone who may not read agents (a member), so the page asks nothing it would be refused. */
 export const useAgentsCiting = (kbId: string, enabled = true) =>
-  useTeamQuery({ queryKey: ['agents', 'knowledge-usage'], queryFn: api.agents.knowledgeUsage, staleTime: 60_000, enabled, select: (rows) => rows.find((r) => r.kbId === kbId)?.agents ?? [] });
+  useTeamQuery({
+    queryKey: ['agents', 'knowledge-usage', kbId],
+    queryFn: () => sdk((ops) => ops.raw.agents.agents_knowledge_usage({ query: { ids: [kbId] } })),
+    staleTime: 60_000,
+    enabled,
+    select: (rows) => rows.find((r) => r.kbId === kbId)?.agents ?? [],
+  });
 /** One kernel turn of an agent, as the Playground's answer: what the agent would say, nothing kept. */
 export const useAgentTurn = () => useMutation({ mutationFn: ({ agentId, message }: { agentId: string; message: string }) => api.agents.test(agentId, message) });
 export const useKnowledgeLookups = () => useTeamQuery({ queryKey: kk.lookups, queryFn: api.knowledge.lookups, staleTime: 60_000 });
@@ -128,3 +136,48 @@ export const usePauseSource = () => useWrite(({ id, paused }: { id: string; paus
 
 export const useVerifyItem = () => useWrite(({ id, verified }: { id: string; verified: boolean }) => api.knowledge.items.verify(id, verified));
 export const useSetItemOwner = () => useWrite(({ id, owner }: { id: string; owner: string }) => api.knowledge.items.setOwner(id, owner));
+
+/** What a screen needs of a knowledge base to name and colour it. */
+export interface KbName {
+  id: string;
+  name: string;
+  color: string;
+}
+
+/**
+ * Names and colours for the knowledge bases a screen holds ids of, asked of GET /v1/knowledge-bases by `ids` (pages of
+ * 50, following `hasNext`). With no ids nothing is asked: without `ids` the route returns its default page.
+ */
+export const useKnowledgeBaseNames = (ids: string[]) => {
+  const wanted = [...new Set(ids)].sort();
+  return useTeamQuery({
+    queryKey: ['knowledge', 'kb-names', wanted],
+    enabled: wanted.length > 0,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const found: KbName[] = [];
+      for (let page = 1; ; page++) {
+        const res = await sdk((ops) => ops.raw.kb.knowledge_bases_list_knowledge_bases({ query: { ids: wanted, page, pageSize: 50 } }));
+        found.push(...res.data.map((k) => ({ id: k.id, name: k.name, color: k.color })));
+        if (!res.pagination.hasNext) return found;
+      }
+    },
+  });
+};
+
+/**
+ * The knowledge bases whose name matches `search`, 20 at most, searched on the server once typing pauses. `within` limits
+ * the search to those ids (an agent's own list); an empty `within` asks nothing.
+ */
+export const useKnowledgeBaseSearch = (search: string, enabled = true, within?: string[]) => {
+  const text = useDebounced(search.trim(), 200);
+  return useTeamQuery({
+    queryKey: ['knowledge', 'kb-search', text, within ?? null],
+    enabled: enabled && (!within || within.length > 0),
+    placeholderData: keepPreviousData,
+    queryFn: async (): Promise<KbName[]> => {
+      const res = await sdk((ops) => ops.raw.kb.knowledge_bases_list_knowledge_bases({ query: { search: text || undefined, ids: within, pageSize: 20 } }));
+      return res.data.map((k) => ({ id: k.id, name: k.name, color: k.color }));
+    },
+  });
+};

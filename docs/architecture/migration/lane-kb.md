@@ -31,6 +31,7 @@ budgets file for 20 GET routes (0.5). One builder.
 | Route plumbing in `app.py`: every route takes `Tx`; list routes take `ListQuery`; bodies in `schemas.py` extend the kit's `In` (the local base deleted), replies `Out` | `retrieval.py`, `embedding.py`, `query_steps.py`, `search.py`, `tool_sources.py`, `files.py`, `schedule.py` (its loop registered with a health test) |
 | `__main__.py` endpoint fields and `require()`; the 7 clients onto `ServiceClient.for_settings`; 3 fallbacks and 12 timeouts deleted (`agents.py` and the files client among them) | `seed.py`, `origin.py`, `repeats.py` |
 | The outbox gains `kb.changed` (name, colour, revision) for the agents lane's `kb_labels` copy | |
+| Wired to `ops_store.copies`: `kb.changed` carries the knowledge base's `id` in its payload (`"deleted": true` when it goes), and an internal full list of every tenant's names, colours and revisions is what the agents lane's `resync` of `kb_labels` reads | |
 
 ## Target shapes
 
@@ -112,8 +113,15 @@ run_relay(relay(engine, outbox, routes={"kb.audit": ("platform",), "*": ("agents
 | Clients and settings | Zero fallbacks, timeouts and `httpx.AsyncClient` constructions; `__main__` exits naming an unset required endpoint |
 | Typed boundaries | 14 store functions return models; the local `In` gone; zero bare tasks |
 | Relay, event and loops | `event_relay.py` gone; `kb.changed` on the outbox and received by agents-service's `/v1/events`; every `PROCESSES` key has a `loop_reports_failure` test |
+| Relay and loop baselines | `packages/ops_store/tests/relay_sites/kb-service.txt` deleted; `packages/ops_store/tests/loop_health/kb.txt` emptied (`kb_embed`, `kb_relay`, `knowledge_schedule`) |
 | Budgets | 20 GET routes green at 5 and 50 rows on both databases |
 | Behaviour and staging | Tests, the seven use cases and `make verify` green on the merge commit; staging deployed with every process up and the console walk green; the Knowledge screens opened by hand, a sync run |
+
+## Exceptions
+
+| Site | Why it stays | Baseline rows kept |
+|---|---|---|
+| `app.py` `_models_http`: an `httpx.AsyncClient` for rerank, rewrite and embeddings; `ai.py` `models_clients`: an `httpx.Client` per sync run for likely questions | Both call models-service with kb-service's own model key (`models_key`), not a service token, so `ServiceClient.for_settings` does not fit. The kit's model clients (`ops_service_kit.model_calls.ModelCalls` and `IngestModel`) take the key but expect the caller to build the HTTP client; the kit has no constructor that builds one from the `models` endpoint. The address and timeout still come from `settings.models`, and a search's model steps are bound by `kb_search_wait_s`. The rows go when the kit gives `ModelCalls` and `IngestModel` a constructor from settings | `config-literals-baseline.txt`: `client` for `ai.py` and `app.py` |
 
 ## Branch and pull request
 

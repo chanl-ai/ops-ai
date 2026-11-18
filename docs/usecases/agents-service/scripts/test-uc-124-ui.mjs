@@ -87,8 +87,10 @@ await withUiStack(
     const ids = {};
     for (const [name, bytes] of Object.entries(pdfs)) ids[name] = await upload(J, `${name}.pdf`, bytes);
     const runOf = async (fileId) => {
-      const runId = await start(J, ID, { fileId }, { mode: 'live' });
-      await settled(J, runId);
+      // A policy change refuses every token issued before it (permissions_changed), so James signs in again per run.
+      const fresh = await as(JAMES);
+      const runId = await start(fresh, ID, { fileId }, { mode: 'live' });
+      await settled(fresh, runId);
       return runId;
     };
 

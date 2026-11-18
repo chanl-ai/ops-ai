@@ -8,6 +8,9 @@ nobody started in a chat (a schedule, a mailbox) never reads a thread's override
 The answer is joined here, so the picker makes one call: the agent's switchable tools grouped by the app their module
 belongs to (tools-service's cards, read for the person), each app's state for the person, and whether the thread has
 it off. An installed app the team has off is listed so the picker can offer its one action, and it never adds tools.
+
+No route here takes the request transaction (`Tx`): each reads the app cards and accounts from tools-service, so each
+store call takes and returns its own connection and none is held while tools-service answers.
 """
 
 from __future__ import annotations
@@ -19,11 +22,11 @@ from fastapi.responses import JSONResponse
 from pydantic import Field
 
 from ops_agents.activities.overrides import limits_for, parse, resolve
-from ops_contracts.chat import WireModel
 from ops_service_kit.errors import Unprocessable
-from ops_service_kit.http import Out
+from ops_service_kit.http import In, Out
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
+from ops_store import isolation
 
 from ...activities.tool_directory import ToolsUnavailable
 from ...domain.accounts import chosen_accounts
@@ -79,7 +82,7 @@ class ChatConnectors(Out):
     connectors: list[ChatConnector]
 
 
-class ConnectorsIn(WireModel):
+class ConnectorsIn(In):
     # The apps this chat leaves out, by id; every other app the agent holds is on.
     off: list[Annotated[str, Field(min_length=1, max_length=120)]] = Field(max_length=100)
     # The account each app's calls use in this chat, app id to account name, as the whole set; left out keeps the
@@ -178,12 +181,14 @@ async def new_chat_connectors(
 ) -> JSONResponse:
     """A new chat's connectors before it exists, for the picker on Chat's home: the agent's (the team's default when
     none is named), every one on. The chosen set goes onto the chat as soon as it is made, before its first message."""
-    named = agent_id or await TeamDefaults(rt.db).agent(me.team_id)
+    async with isolation.request_transaction():
+        named = agent_id or await TeamDefaults(rt.db).agent(me.team_id)
+        team = await agent_team(rt, named) if named else None
     agent = rt.catalog.agent(named) if named else None
     if named and agent is None:
         raise Unprocessable("That agent is not live, so it cannot be chatted with.")
     if agent is not None:
-        require_chat_use(me, team_id=await agent_team(rt, agent.id))
+        require_chat_use(me, team_id=team)
     held = list(limits_for(agent, rt.settings.model_alias).switchable_tool_ids) if agent is not None else []
     apps = await _by_app(rt, me, me.team_id, agent.id, held) if agent is not None else []
     # A new chat starts on the agent's accounts, else each app's default, so the picker names the one in use.
@@ -196,7 +201,8 @@ async def new_chat_connectors(
 async def get_connectors(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     """The chat's connectors for the composer's picker: each app the agent holds tools of, with its state for the
     person and whether this chat uses it, then the apps the team has off."""
-    row, agent, limits = await _thread(rt, me, thread_id)
+    async with isolation.request_transaction():
+        row, agent, limits = await _thread(rt, me, thread_id)
     apps = await _by_app(rt, me, str(row["team_id"]), agent.id, list(limits.switchable_tool_ids))
     stored = cast(dict[str, Any], row.get("overrides") or {})
     chosen = chosen_accounts(agent=agent.accounts, chat=cast(dict[str, str], stored.get("accounts") or {}))

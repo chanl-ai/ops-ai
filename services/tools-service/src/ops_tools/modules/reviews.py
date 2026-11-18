@@ -11,6 +11,7 @@ from typing import Any, Protocol
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import ApiError, ServiceUnavailable
 
+from ..store.modules import Change, Module
 from .policy import FORWARDED
 from .review_diff import review_diff
 
@@ -22,9 +23,9 @@ class ReviewOpener(Protocol):
         *,
         tenant_id: str,
         team_id: str,
-        module: dict[str, Any],
+        module: Module,
         version: str,
-        changes: list[dict[str, Any]],
+        changes: list[Change],
         note: str,
         security: bool = True,
     ) -> str: ...
@@ -46,9 +47,9 @@ class Reviews:
         *,
         tenant_id: str,
         team_id: str,
-        module: dict[str, Any],
+        module: Module,
         version: str,
-        changes: list[dict[str, Any]],
+        changes: list[Change],
         note: str,
         security: bool = True,
     ) -> str:

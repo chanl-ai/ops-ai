@@ -57,13 +57,13 @@ def body_of(kind: str, t: dict[str, Any]) -> dict[str, Any]:
 
 
 async def make(rt: Runtime, me: Principal, kind: str, t: dict[str, Any], name: str) -> str:
-    """The type's own create route, as a person's create runs it: its role check, its field checks, draft version 1."""
+    """What the type's create route runs: its role check, its field checks, draft version 1."""
     type_id = new_id(PREFIX[kind])
     body = {k: v for k, v in body_of(kind, t).items() if v is not None} | {"id": type_id, "name": name}
     if kind == "case_type":
-        await case_routes.create_case_type(rt, me, case_routes.TypeIn.model_validate(body))
+        await case_routes.create_type(rt, me, case_routes.TypeIn.model_validate(body))
     else:
-        await task_routes.create_task_type(rt, me, task_routes.TypeIn.model_validate(body))
+        await task_routes.create_type(rt, me, task_routes.TypeIn.model_validate(body))
     return type_id
 
 
@@ -94,11 +94,11 @@ async def names_in_use(rt: Runtime, kind: str, team: str) -> set[str]:
 
 
 async def save(rt: Runtime, me: Principal, kind: str, type_id: str, record: dict[str, Any]) -> int:
-    """The type's own save route: a published version opens the next one, a draft is saved over."""
+    """What the type's save route runs: a published version opens the next one, a draft is saved over."""
     if kind == "case_type":
-        await case_routes.save_case_type(rt, me, type_id, case_routes.Definition.model_validate(record))
+        await case_routes.save_type(rt, me, type_id, case_routes.Definition.model_validate(record))
     else:
-        await task_routes.save_task_type(rt, me, type_id, task_routes.Definition.model_validate(record))
+        await task_routes.save_type(rt, me, type_id, task_routes.Definition.model_validate(record))
     return int((await (await _store(rt, kind, store_team(me))).get(type_id))["version"])
 
 

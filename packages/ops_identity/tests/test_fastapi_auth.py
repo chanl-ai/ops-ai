@@ -44,9 +44,15 @@ def test_the_mode_comes_from_auth_mode_not_from_a_platform_url() -> None:
     dev = Auth.from_settings(settings(platform_url="http://127.0.0.1:8710"), audience="tools")
     assert dev.identity.dev_user is not None
     platform = Auth.from_settings(
-        settings(auth_mode="platform", platform_url="http://127.0.0.1:8710"), audience="tools"
+        settings(
+            auth_mode="platform", platform_url="http://127.0.0.1:8710", platform_internal_url="http://127.0.0.1:8711"
+        ),
+        audience="tools",
     )
     assert platform.identity.dev_user is None
+    # No internal address: refused at start, never introspected on this machine's port.
+    with pytest.raises(ValueError, match="PLATFORM_INTERNAL"):
+        Auth.from_settings(settings(auth_mode="platform", platform_url="http://127.0.0.1:8710"), audience="tools")
 
 
 async def test_dev_names_the_second_person_and_never_overrides_an_explicit_team() -> None:

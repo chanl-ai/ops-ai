@@ -23,32 +23,32 @@ def test_step_up_round_trip() -> None:
     assert verify_step_up(token, "dana@bank.test", KEY, now=NOW + 60).subject == "dana@bank.test"
 
 
-def test_forged_step_up_is_refused() -> None:
-    forged = mint_step_up("dana@bank.test", HmacSigner(b"guessed"), now=NOW)
-    assert reason(verify_step_up, forged, "dana@bank.test", KEY, now=NOW) == "signature"
+DANA = "dana@bank.test"
 
 
-def test_expired_step_up_is_refused() -> None:
-    token = mint_step_up("dana@bank.test", KEY, now=NOW)
-    assert reason(verify_step_up, token, "dana@bank.test", KEY, now=NOW + 301) == "expired"
+@pytest.mark.parametrize(
+    ("signer", "ttl_s", "subject", "after_s", "why"),
+    [
+        (HmacSigner(b"guessed"), 300, DANA, 0, "signature"),
+        (KEY, 300, DANA, 301, "expired"),
+        (KEY, 300, "omar@bank.test", 0, "subject"),
+        # Same secret, different purpose: an approval-token key never verifies a step-up.
+        (HmacSigner.derived("review-secret", "approval"), 300, DANA, 0, "signature"),
+        # A window shorter than the one minted is enforced.
+        (KEY, 3600, DANA, 400, "too_old"),
+    ],
+    ids=["forged", "expired", "another-subject", "another-purpose", "shorter-window"],
+)
+def test_a_step_up_that_proves_nothing_is_refused(
+    signer: HmacSigner, ttl_s: int, subject: str, after_s: int, why: str
+) -> None:
+    token = mint_step_up(DANA, signer, now=NOW, ttl_s=ttl_s)
+    assert reason(verify_step_up, token, subject, KEY, now=NOW + after_s) == why
 
 
-def test_step_up_for_another_subject_is_refused() -> None:
-    token = mint_step_up("dana@bank.test", KEY, now=NOW)
-    assert reason(verify_step_up, token, "omar@bank.test", KEY, now=NOW) == "subject"
-
-
-def test_token_for_another_purpose_is_refused() -> None:
-    # Same secret, different purpose: an approval-token key never verifies a step-up.
-    other = mint_step_up("dana@bank.test", HmacSigner.derived("review-secret", "approval"), now=NOW)
-    assert reason(verify_step_up, other, "dana@bank.test", KEY, now=NOW) == "signature"
-    not_step_up = mint({"sub": "dana@bank.test"}, KEY, ttl_s=300, now=NOW)
-    assert reason(verify_step_up, not_step_up, "dana@bank.test", KEY, now=NOW) == "type"
-
-
-def test_shorter_window_than_minted_is_enforced() -> None:
-    token = mint_step_up("dana@bank.test", KEY, now=NOW, ttl_s=3600)
-    assert reason(verify_step_up, token, "dana@bank.test", KEY, now=NOW + 400) == "too_old"
+def test_a_token_that_is_not_a_step_up_is_refused() -> None:
+    not_step_up = mint({"sub": DANA}, KEY, ttl_s=300, now=NOW)
+    assert reason(verify_step_up, not_step_up, DANA, KEY, now=NOW) == "type"
 
 
 def test_algorithm_none_is_refused() -> None:

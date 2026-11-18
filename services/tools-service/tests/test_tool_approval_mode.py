@@ -16,8 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_tools.modules.policy import WriteApprovals
 from ops_tools.modules.seed import load
-from ops_tools.store.event_relay import sender
 from ops_tools.store.modules import ModuleStore, service_outbox
+from ops_tools.store.relay import tools_relay
 
 from .conftest import Api, build_app, opa_client, response_checker, service_headers
 from .service_clients import fake_service
@@ -183,7 +183,7 @@ async def test_changing_a_tools_answer_tells_agents_to_drop_its_kept_tool_list(
         return httpx.Response(200, json={"success": True, "data": {"handled": True}})
 
     agents = fake_service(handler, "agents", ["events:emit", "agents:create"])
-    await sender(agents)(
+    await tools_relay(engine, agents).send(
         {"tenantId": tenant, "body": {"name": "policy.changed", "key": "k", "teamId": event["team_id"]}}
     )
     assert got == ["/v1/platform-events"]

@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- documents-service, stamped at documents_0018
+-- documents-service, stamped at documents_0019
 CREATE TABLE document_types (
 	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
@@ -13,6 +13,8 @@ CREATE TABLE document_types (
 	CONSTRAINT document_types_pkey PRIMARY KEY (tenant_id, id), 
 	CONSTRAINT uq_document_types_name UNIQUE (tenant_id, team, name)
 );
+GO
+CREATE INDEX ix_document_types_latest_version ON document_types (tenant_id, team, latest_version);
 GO
 CREATE TABLE document_type_versions (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -319,5 +321,5 @@ CREATE TABLE alembic_version_documents (
     CONSTRAINT alembic_version_documents_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_documents (version_num) VALUES ('documents_0018');
+INSERT INTO alembic_version_documents (version_num) VALUES ('documents_0019');
 GO

@@ -7,15 +7,19 @@ from typing import Any
 
 from ops_tools.modules.executions import call_row
 from ops_tools.modules.seed import tool_title
+from ops_tools.store.calls import GatewayCall
+
+BLANK = dict.fromkeys(GatewayCall.model_fields)
 
 
-def _row(**over: Any) -> dict[str, Any]:
-    return {
+def _row(**over: Any) -> GatewayCall:
+    return GatewayCall.model_validate({
+        **BLANK,
         "id": "gwc_1", "created_at": "2026-10-17T10:00:00Z", "tool": "place_hold", "access": "write",
         "outcome": "ok", "latency_ms": 12, "sub": "user:j.richardson@harborpine.example", "act": "agent:ag_branch",
         "thread_id": "th_abc", "step": "s1", "approvers": [], "approval_token_id": None, "decision": "allow",
-        "reasons": [], "effect": True, **over,
-    }  # fmt: skip
+        "reasons": [], "effect": True, "input_hash": "h", "idempotency_key": "k", "effect_scope": "none", **over,
+    })  # fmt: skip
 
 
 def test_an_approved_write_names_who_approved_it() -> None:

@@ -13,6 +13,7 @@ from uuid import uuid4
 import httpx
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_store import isolation
 from ops_tools.modules.seed import load
 from ops_tools.registry import approval_policy
 from ops_tools.store.modules import ModuleStore
@@ -231,7 +232,8 @@ async def test_the_seeded_wire_hold_is_approved_by_two_people_of_fraud_operation
     tenant = f"t_{uuid4().hex[:10]}"
     seed = json.loads((Path(__file__).parents[1] / "seed" / "tool_modules.json").read_text())
     await load(ModuleStore(engine), seed, tenant_id=tenant, now=datetime.now(UTC), catalog=catalog_tools)
-    found = await ModuleStore(engine).operation_named(tenant, "place_wire_hold")
+    with isolation.tenant_wide("TESTS", tenant_id=tenant):
+        found = await ModuleStore(engine).operation_named(tenant, "place_wire_hold")
     assert found is not None
     module, op = found
     assert approval_policy(module, op) == {

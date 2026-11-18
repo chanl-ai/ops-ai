@@ -50,7 +50,7 @@ await withUiStack(
     const agent = (await call('POST', `${agents}/v1/agents`, J, { name: `Closer ${RUN}`, role: 'Closes tickets' })).data;
     const granted = (await call('PATCH', `${agents}/v1/agents/${agent.id}`, J, { toolIds: [WRITE] })).data;
     await call('POST', `${agents}/v1/agents/${agent.id}/publish-requests`, J, { version: granted.version, note: 'uc-721' });
-    const rowsOf = async () => ((await call('GET', `${tools}/v1/executions?pageSize=200`, J)).data?.data ?? []).filter((r) => r.target === WRITE);
+    const rowsOf = async () => ((await call('GET', `${tools}/v1/executions?tool=${WRITE}`, J)).data?.data ?? []).filter((r) => r.target === WRITE);
     const ran = async () => (await rowsOf()).filter((r) => r.status === 'ok' || r.effect === true);
 
     // The admin's switch, as Govern > Approvals saves it: on, ask the person, test accounts asked too.

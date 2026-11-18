@@ -130,7 +130,11 @@ def dev_auto_approves(rt: Runtime) -> bool:
     return rt.settings.registry_auto_approve and rt.settings.environment == "dev"
 
 
-async def team_document(rt: Runtime) -> dict[str, Any] | None:
+# The workspace's publishReview document, `{team: {area: mode}}`.
+Document = dict[str, Any]
+
+
+async def team_document(rt: Runtime) -> Document | None:
     """The workspace's publishReview policy, `{team: {area: mode}}`, read live from platform-service on every decision
     so a change applies to the next publish. Empty without a platform URL or before a tenant is set
     (the start-up seed); None when platform-service cannot be read."""
@@ -146,10 +150,20 @@ async def team_document(rt: Runtime) -> dict[str, Any] | None:
     return cast(dict[str, Any], found) if isinstance(found, dict) else {}
 
 
-async def decide(rt: Runtime, *, area: Area, team_id: str, old: dict[str, Any] | None, new: dict[str, Any]) -> Decision:
+async def decide(
+    rt: Runtime,
+    *,
+    area: Area,
+    team_id: str,
+    old: dict[str, Any] | None,
+    new: dict[str, Any],
+    document: Document | Literal["read"] | None = "read",
+) -> Decision:
     """`old` is what is published now (None before a first publish), `new` what is being published. When the policy
-    cannot be read the publish opens a review, so nothing skips one because platform-service was down."""
-    document = await team_document(rt)
+    cannot be read the publish opens a review, so nothing skips one because platform-service was down. A caller that
+    holds a transaction passes the `document` it read from `team_document` first."""
+    if document == "read":
+        document = await team_document(rt)
     major = is_major(area, old, new)
     if document is None:
         return Decision(True, "always", major, "policy_unread")

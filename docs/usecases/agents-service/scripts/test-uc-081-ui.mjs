@@ -145,7 +145,7 @@ await withUiStack(
       await sheet.waitFor({ timeout: 15_000 });
       const attempts = await sheet.getByTestId('run-step-attempt').count();
       const sheetText = await sheet.innerText();
-      const calls = (await json(await fetch(`${tools}/v1/executions?thread=${runId}&pageSize=200`, { headers: H }))).data.filter((r) => r.target === 'get_customer');
+      const calls = (await json(await fetch(`${tools}/v1/executions?thread=${runId}&tool=get_customer`, { headers: H }))).data.filter((r) => r.target === 'get_customer');
       check('the tool step shows one attempt with its port and output, and the gateway saw one call', attempts === 1 && /\bok\b/.test(sheetText) && /Marcus Bell|CUS-1001/.test(sheetText) && calls.length === 1, { attempts, calls: calls.length, port: /\bok\b/.test(sheetText) });
       await second.stop();
 

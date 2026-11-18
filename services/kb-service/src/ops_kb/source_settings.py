@@ -11,16 +11,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Literal, cast
+from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pydantic.alias_generators import to_camel
 
 from ops_ingest import IngestSettings, InvalidIngestError, validate_settings
 from ops_ingest.metadata import MappingError, MetadataMapping, validate_mapping
-from ops_ingest.models import AI_STEPS
+from ops_ingest.models import AI_STEPS, IngestStrategy
 from ops_ingest.rules import Rule
 from ops_ingest.split import preset_for
+from ops_service_kit.http import JsonValue
 from ops_store.schedule import InvalidSchedule, checked
 
 OcrMode = Literal["off", "auto", "always"]
@@ -55,7 +56,7 @@ class SourceSettings(_Model):
     rules: list[Rule] = Field(default_factory=list[Rule])
     metadata_mapping: list[MetadataMapping] = Field(default_factory=list[MetadataMapping])
     # When it syncs on its own (ops_store.schedule); None: the kind's default (a plugin's own schedule for its source).
-    schedule: dict[str, Any] | None = None
+    schedule: dict[str, JsonValue] | None = None
     # The most one sync or rebuild may spend on model calls for its AI steps, in the environment's currency;
     # models-service refuses past it from what it recorded, and the rest of the pieces are indexed without them.
     ai_ceiling: float = Field(default=5.0, ge=0.1, le=500.0)
@@ -67,7 +68,7 @@ class InvalidSettings(ValueError):
 
 # Splitting at headings with the title and section path on each piece: what every file source was indexed with
 # before settings could be saved, so an existing source's pieces stay as they were.
-FILE_SPLIT = ["structure", "context_headers"]
+FILE_SPLIT: list[IngestStrategy] = ["structure", "context_headers"]
 # Kinds whose content is pages of a site or an app, where menus, footers and banners are noise.
 WEB_KINDS = ("web",)
 CONNECTOR_KINDS = ("tool",)
@@ -77,10 +78,10 @@ def defaults(kind: str, *, ocr: str = "auto", model: str = "bank-standard") -> S
     """A new source's settings for its kind; `ocr` is the environment's default (kb_ocr)."""
     web = kind in WEB_KINDS
     connector = kind in CONNECTOR_KINDS
-    strategies = ["clean", "structure", "context_headers"] if web else FILE_SPLIT
+    strategies: list[IngestStrategy] = ["clean", "structure", "context_headers"] if web else FILE_SPLIT
     ingest = IngestSettings.model_validate(
         {
-            "preset": preset_for(cast(Any, strategies)),
+            "preset": preset_for(strategies),
             "strategies": strategies,
             "size": 400,
             "overlap": 40,
@@ -93,7 +94,7 @@ def defaults(kind: str, *, ocr: str = "auto", model: str = "bank-standard") -> S
     return SourceSettings(parsing=Parsing(ocr=cast(OcrMode, ocr)), cleaning=cleaning, ingest=ingest)
 
 
-def stored(kind: str, raw: dict[str, Any] | None, *, ocr: str = "auto") -> SourceSettings:
+def stored(kind: str, raw: dict[str, JsonValue] | None, *, ocr: str = "auto") -> SourceSettings:
     """The source's saved settings over its kind's defaults."""
     base = defaults(kind, ocr=ocr)
     if not raw:
@@ -105,15 +106,15 @@ def stored(kind: str, raw: dict[str, Any] | None, *, ocr: str = "auto") -> Sourc
     return out.model_copy(update={"ingest": ingest})
 
 
-def wire(s: SourceSettings) -> dict[str, Any]:
+def wire(s: SourceSettings) -> dict[str, JsonValue]:
     return s.model_dump(by_alias=True, mode="json")
 
 
 # A website is checked once a day by default; files sync when someone asks.
-WEB_SCHEDULE: dict[str, Any] = {"kind": "daily", "time": "02:00", "tz": "UTC"}
+WEB_SCHEDULE: dict[str, JsonValue] = {"kind": "daily", "time": "02:00", "tz": "UTC"}
 
 
-def merged(current: SourceSettings, patch: dict[str, Any]) -> SourceSettings:
+def merged(current: SourceSettings, patch: dict[str, JsonValue]) -> SourceSettings:
     """`current` with the parts `patch` names replaced (a nested part merged key by key), validated as a whole.
     The AI-step approval is the knowledge owner's decision on its own route, so a settings save never changes it;
     an AI step added since the approval waits for it again."""
@@ -122,16 +123,19 @@ def merged(current: SourceSettings, patch: dict[str, Any]) -> SourceSettings:
         if key == "schedule":
             # A schedule is replaced whole: a daily one's time means nothing to an hourly one.
             data[key] = value
-        elif isinstance(value, dict) and isinstance(data.get(key), dict):
-            data[key] = {**cast(dict[str, Any], data[key]), **cast(dict[str, Any], value)}
+        elif isinstance(value, dict) and isinstance(part := data.get(key), dict):
+            data[key] = {**part, **value}
         else:
             data[key] = value
-    if isinstance(data.get("ingest"), dict):
-        ingest = cast(dict[str, Any], data["ingest"])
-        ingest["approval"] = wire(current)["ingest"]["approval"]
-        ingest["preset"] = preset_for(cast(Any, ingest.get("strategies") or []))
+    if isinstance(ingest := data.get("ingest"), dict):
+        ingest["approval"] = current.ingest.approval.model_dump(by_alias=True, mode="json")
+        ingest.pop("preset", None)
     try:
         out = SourceSettings.model_validate(data)
+        # The preset is read from the steps, as `stored` does.
+        out = out.model_copy(
+            update={"ingest": out.ingest.model_copy(update={"preset": preset_for(out.ingest.strategies)})}
+        )
     except ValidationError as e:
         first = e.errors()[0]
         where = ".".join(str(p) for p in first["loc"])
@@ -157,7 +161,7 @@ def split_settings(s: SourceSettings) -> IngestSettings:
     return s.ingest
 
 
-def _digest(value: Any) -> str:
+def _digest(value: object) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:16]
 
 

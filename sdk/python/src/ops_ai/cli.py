@@ -11,6 +11,7 @@ from collections.abc import Callable, Sequence
 from . import __version__
 from ._cli.agents import main as agents_main
 from ._cli.apps import main as apps_main
+from ._cli.catalog import guardrails_main, skills_main, threads_main, widgets_main
 from ._cli.chat import main as chat_main
 from ._cli.connectors import main as connectors_main
 from ._cli.kb import main as kb_main
@@ -55,6 +56,10 @@ AREAS: dict[str, tuple[Area, str]] = {
         templates_main,
         "what a team can start from, by kind: list, install",
     ),
+    "skills": (skills_main, "skills: list, show"),
+    "guardrails": (guardrails_main, "guardrails: list, show"),
+    "widgets": (widgets_main, "widget templates: list, show"),
+    "threads": (threads_main, "threads: list, show, inbox"),
     "kb": (kb_main, "knowledge: bases, sources, items, add-file, add-text, sync, search, changes"),
     "apps": (apps_main, "apps: list, show, add-tool, accounts, mine, connect, test, auth-configs"),
     "connectors": (connectors_main, "your connectors, one row per app that acts as you: list, disconnect"),
@@ -63,8 +68,8 @@ AREAS: dict[str, tuple[Area, str]] = {
     "egress": (egress_main, "the hosts and ranges tools may reach: list, allow-host, allow-range"),
     "policies": (policies_main, "the team's policies: get, set"),
     "runs": (runs_main, "workflow runs: list, start, show, events, cancel, retry"),
-    "tasks": (tasks_main, "Human Tasks: list, show, decide, approve"),
-    "cases": (cases_main, "cases: list, show, note"),
+    "tasks": (tasks_main, "Human Tasks: list, types, show, decide, approve"),
+    "cases": (cases_main, "cases: list, types, show, note"),
     "files": (files_main, "files: list, show, upload, limits"),
     "documents": (documents_main, "document types and extractions"),
     "people": (people_main, "members, invites (printed unless --send), roles, me"),

@@ -93,5 +93,5 @@ async def test_a_teams_tools_are_listed_once_beside_an_older_workspace_copy(
     await store.insert_if_missing(platform_module(["read_file", "open_case"], tenant_id=tenant, at=NOW))
     registry = ToolRegistry(local_catalog, store)
     with acting_as(OPS):
-        names = [t["name"] for t in await registry.grantable(tenant, lambda _: True)]
+        names = [t["name"] for t in await registry.grantable(tenant, lambda m, operation=None: True)]
     assert names.count("read_file") == 1 and "open_case" in names, names

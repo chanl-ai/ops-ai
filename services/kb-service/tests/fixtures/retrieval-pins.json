@@ -1,0 +1,811 @@
+{
+  "both:eligibility": {
+    "lanes": {
+      "asked": [
+        "keyword",
+        "meaning"
+      ],
+      "ran": [
+        "keyword",
+        "meaning"
+      ],
+      "skipped": []
+    },
+    "passages": [
+      {
+        "document": "Mortgage Hardship Policy",
+        "kb": "Lending",
+        "lanes": {
+          "keyword": 1.0,
+          "meaning": 0.992
+        },
+        "page": 1,
+        "score": 0.01639,
+        "section": "1 Eligibility",
+        "version": "v1"
+      },
+      {
+        "document": "Mortgage Hardship Policy",
+        "kb": "Lending",
+        "lanes": {
+          "meaning": 0.99
+        },
+        "page": 2,
+        "score": 0.00968,
+        "section": "2 Interest",
+        "version": "v1"
+      },
+      {
+        "document": "Rate Sheet",
+        "kb": "Lending",
+        "lanes": {
+          "meaning": 0.983
+        },
+        "page": 1,
+        "score": 0.00952,
+        "section": "1 Fixed rates",
+        "version": "v1"
+      }
+    ]
+  },
+  "both:keyword": {
+    "lanes": {
+      "asked": [
+        "keyword",
+        "meaning"
+      ],
+      "ran": [
+        "keyword",
+        "meaning"
+      ],
+      "skipped": []
+    },
+    "passages": [
+      {
+        "document": "Rate Sheet",
+        "kb": "Lending",
+        "lanes": {
+          "keyword": 1.0,
+          "meaning": 0.991
+        },
+        "page": 1,
+        "score": 0.01639,
+        "section": "1 Fixed rates",
+        "version": "v1"
+      },
+      {
+        "document": "Mortgage Hardship Policy",
+        "kb": "Lending",
+        "lanes": {
+          "meaning": 0.989
+        },
+        "page": 1,
+        "score": 0.00968,
+        "section": "1 Eligibility",
+        "version": "v1"
+      },
+      {
+        "document": "Mortgage Hardship Policy",
+        "kb": "Lending",
+        "lanes": {
+          "meaning": 0.988
+        },
+        "page": 2,
+        "score": 0.00952,
+        "section": "2 Interest",
+        "version": "v1"
+      }
+    ]
+  },
+  "both:mixed": {
+    "lanes": {
+      "asked": [
+        "keyword",
+        "meaning"
+      ],
+      "ran": [
+        "keyword",
+        "meaning"
+      ],
+      "skipped": []
+    },
+    "passages": [
+      {
+        "document": "Rate Sheet",
+        "kb": "Lending",
+        "lanes": {
+          "meaning": 0.721
+        },
+        "page": 1,
+        "score": 0.00984,
+        "section": "1 Fixed rates",
+        "version": "v1"
+      },
+      {
+        "document": "Mortgage Hardship Policy",
+        "kb": "Lending",
+        "lanes": {
+          "meaning": 0.707
+        },
+        "page": 2,
+        "score": 0.00968,
+        "section": "2 Interest",
+        "version": "v1"
+      },
+      {
+        "document": "Mortgage Hardship Policy",
+        "kb": "Lending",
+        "lanes": {
+          "meaning": 0.706
+        },
+        "page": 1,
+        "score": 0.00952,
+        "section": "1 Eligibility",
+        "version": "v1"
+      },
+      {
+        "document": "Customer help",
+        "kb": "Help",
+        "lanes": {
+          "meaning": 0.499
+        },
+        "page": 3,
+        "score": 0.00937,
+        "section": "Late fees",
+        "version": "v1"
+      },
+      {
+        "document": "Customer help",
+        "kb": "Help",
+        "lanes": {
+          "meaning": 0.475
+        },
+        "page": 2,
+        "score": 0.00923,
+        "section": "Early repayment",
+        "version": "v1"
+      }
+    ]
+  },
+  "both:nothing": {
+    "lanes": {
+      "asked": [
+        "keyword",
+        "meaning"
+      ],
+      "ran": [
+        "keyword",
+        "meaning"
+      ],
+      "skipped": []
+    },
+    "passages": []
+  },
+  "both:paraphrase": {
+    "lanes": {
+      "asked": [
+        "keyword",
+        "meaning"
+      ],
+      "ran": [
+        "keyword",
+        "meaning"
+      ],
+      "skipped": []
+    },
+    "passages": [
+      {
+        "document": "Customer help",
+        "kb": "Help",
+        "lanes": {
+          "meaning": 0.863
+        },
+        "page": 2,
+        "score": 0.00984,
+        "section": "Early repayment",
+        "version": "v1"
+      },
+      {
+        "document": "Rate Sheet",
+        "kb": "Lending",
+        "lanes": {
+          "meaning": 0.501
+        },
+        "page": 1,
+        "score": 0.00968,
+        "section": "1 Fixed rates",
+        "version": "v1"
+      },
+      {
+        "document": "Mortgage Hardship Policy",
+        "kb": "Lending",
+        "lanes": {
+          "meaning": 0.497
+        },
+        "page": 2,
+        "score": 0.00952,
+        "section": "2 Interest",
+        "version": "v1"
+      },
+      {
+        "document": "Mortgage Hardship Policy",
+        "kb": "Lending",
+        "lanes": {
+          "meaning": 0.496
+        },
+        "page": 1,
+        "score": 0.00937,
+        "section": "1 Eligibility",
+        "version": "v1"
+      }
+    ]
+  },
+  "collection": [
+    {
+      "document": "Branch notes",
+      "kb": "Lending",
+      "lanes": {
+        "keyword": 1.0,
+        "meaning": 0.568
+      },
+      "page": 1,
+      "score": 0.01639,
+      "section": "Opening hours",
+      "version": "v1"
+    }
+  ],
+  "coverage": [
+    7,
+    7
+  ],
+  "hits:keyword": [
+    {
+      "chunk_id": "<chk>",
+      "file_id": "<fil>",
+      "item_id": "<itm>",
+      "kb_id": "<kb>",
+      "lane_score": 1.0,
+      "page": 1,
+      "rank": 6.2,
+      "section": "1 Fixed rates",
+      "shared": 6,
+      "text": "The five-year fixed mortgage rate is 4.89 percent for insured borrowers.",
+      "title": "Rate Sheet",
+      "total": 6,
+      "unit_kind": "self",
+      "unit_text": "Rate Sheet > 1 Fixed rates\n\nThe five-year fixed mortgage rate is 4.89 percent for insured borrowers.",
+      "url": null,
+      "verified": false,
+      "version": 1
+    },
+    {
+      "chunk_id": "<chk>",
+      "file_id": "<fil>",
+      "item_id": "<itm>",
+      "kb_id": "<kb>",
+      "lane_score": 0.333333,
+      "page": 1,
+      "rank": 2.2,
+      "section": "1 Eligibility",
+      "shared": 2,
+      "text": "A borrower who lost their job may defer up to three mortgage payments in a year.",
+      "title": "Mortgage Hardship Policy",
+      "total": 6,
+      "unit_kind": "self",
+      "unit_text": "Mortgage Hardship Policy > 1 Eligibility\n\nA borrower who lost their job may defer up to three mortgage payments in a year.",
+      "url": null,
+      "verified": false,
+      "version": 1
+    }
+  ],
+  "hits:mixed": [
+    {
+      "chunk_id": "<chk>",
+      "file_id": "<fil>",
+      "item_id": "<itm>",
+      "kb_id": "<kb>",
+      "lane_score": 0.333333,
+      "page": 3,
+      "rank": 3.6,
+      "section": "Late fees",
+      "shared": 2,
+      "text": "A late fee of four percent applies when a payment is more than fifteen days past due.",
+      "title": "Customer help",
+      "total": 6,
+      "unit_kind": "self",
+      "unit_text": "Customer help > Late fees\n\nA late fee of four percent applies when a payment is more than fifteen days past due.",
+      "url": null,
+      "verified": false,
+      "version": 1
+    },
+    {
+      "chunk_id": "<chk>",
+      "file_id": "<fil>",
+      "item_id": "<itm>",
+      "kb_id": "<kb>",
+      "lane_score": 0.333333,
+      "page": 1,
+      "rank": 3.2,
+      "section": "Reporting a claim late",
+      "shared": 2,
+      "text": "If you tell us about a claim after the notification window has closed, we can still accept it when you explain the delay.",
+      "title": "Customer help",
+      "total": 6,
+      "unit_kind": "self",
+      "unit_text": "Customer help > Reporting a claim late\n\nIf you tell us about a claim after the notification window has closed, we can still accept it when you explain the delay.",
+      "url": null,
+      "verified": false,
+      "version": 1
+    },
+    {
+      "chunk_id": "<chk>",
+      "file_id": "<fil>",
+      "item_id": "<itm>",
+      "kb_id": "<kb>",
+      "lane_score": 0.333333,
+      "page": 2,
+      "rank": 2.6,
+      "section": "Early repayment",
+      "shared": 2,
+      "text": "You can repay all or part of your loan at any time; an early repayment charge may apply.",
+      "title": "Customer help",
+      "total": 6,
+      "unit_kind": "self",
+      "unit_text": "Customer help > Early repayment\n\nYou can repay all or part of your loan at any time; an early repayment charge may apply.",
+      "url": null,
+      "verified": false,
+      "version": 1
+    },
+    {
+      "chunk_id": "<chk>",
+      "file_id": "<fil>",
+      "item_id": "<itm>",
+      "kb_id": "<kb>",
+      "lane_score": 0.333333,
+      "page": 2,
+      "rank": 1.8,
+      "section": "2 Interest",
+      "shared": 2,
+      "text": "Deferred interest is capitalised into the loan balance at the end of the deferral.",
+      "title": "Mortgage Hardship Policy",
+      "total": 6,
+      "unit_kind": "self",
+      "unit_text": "Mortgage Hardship Policy > 2 Interest\n\nDeferred interest is capitalised into the loan balance at the end of the deferral.",
+      "url": null,
+      "verified": false,
+      "version": 1
+    }
+  ],
+  "nearest": [
+    {
+      "chunk_id": "<chk>",
+      "file_id": "<fil>",
+      "item_id": "<itm>",
+      "kb_id": "<kb>",
+      "page": 2,
+      "section": "Early repayment",
+      "similarity": 0.862539,
+      "text": "You can repay all or part of your loan at any time; an early repayment charge may apply.",
+      "title": "Customer help",
+      "unit_kind": "self",
+      "unit_text": "Customer help > Early repayment\n\nYou can repay all or part of your loan at any time; an early repayment charge may apply.",
+      "url": null,
+      "verified": false,
+      "version": 1
+    },
+    {
+      "chunk_id": "<chk>",
+      "file_id": "<fil>",
+      "item_id": "<itm>",
+      "kb_id": "<kb>",
+      "page": 1,
+      "section": "1 Fixed rates",
+      "similarity": 0.500574,
+      "text": "The five-year fixed mortgage rate is 4.89 percent for insured borrowers.",
+      "title": "Rate Sheet",
+      "unit_kind": "self",
+      "unit_text": "Rate Sheet > 1 Fixed rates\n\nThe five-year fixed mortgage rate is 4.89 percent for insured borrowers.",
+      "url": null,
+      "verified": false,
+      "version": 1
+    },
+    {
+      "chunk_id": "<chk>",
+      "file_id": "<fil>",
+      "item_id": "<itm>",
+      "kb_id": "<kb>",
+      "page": 2,
+      "section": "2 Interest",
+      "similarity": 0.496846,
+      "text": "Deferred interest is capitalised into the loan balance at the end of the deferral.",
+      "title": "Mortgage Hardship Policy",
+      "unit_kind": "self",
+      "unit_text": "Mortgage Hardship Policy > 2 Interest\n\nDeferred interest is capitalised into the loan balance at the end of the deferral.",
+      "url": null,
+      "verified": false,
+      "version": 1
+    },
+    {
+      "chunk_id": "<chk>",
+      "file_id": "<fil>",
+      "item_id": "<itm>",
+      "kb_id": "<kb>",
+      "page": 1,
+      "section": "1 Eligibility",
+      "similarity": 0.496172,
+      "text": "A borrower who lost their job may defer up to three mortgage payments in a year.",
+      "title": "Mortgage Hardship Policy",
+      "unit_kind": "self",
+      "unit_text": "Mortgage Hardship Policy > 1 Eligibility\n\nA borrower who lost their job may defer up to three mortgage payments in a year.",
+      "url": null,
+      "verified": false,
+      "version": 1
+    },
+    {
+      "chunk_id": "<chk>",
+      "file_id": "<fil>",
+      "item_id": "<itm>",
+      "kb_id": "<kb>",
+      "page": 3,
+      "section": "Late fees",
+      "similarity": 0.362371,
+      "text": "A late fee of four percent applies when a payment is more than fifteen days past due.",
+      "title": "Customer help",
+      "unit_kind": "self",
+      "unit_text": "Customer help > Late fees\n\nA late fee of four percent applies when a payment is more than fifteen days past due.",
+      "url": null,
+      "verified": false,
+      "version": 1
+    },
+    {
+      "chunk_id": "<chk>",
+      "file_id": "<fil>",
+      "item_id": "<itm>",
+      "kb_id": "<kb>",
+      "page": 1,
+      "section": "Opening hours",
+      "similarity": 0.064063,
+      "text": "Branches open at nine and close at five on weekdays.",
+      "title": "Branch notes",
+      "unit_kind": "self",
+      "unit_text": "Branch notes > Opening hours\n\nBranches open at nine and close at five on weekdays.",
+      "url": null,
+      "verified": false,
+      "version": 1
+    },
+    {
+      "chunk_id": "<chk>",
+      "file_id": "<fil>",
+      "item_id": "<itm>",
+      "kb_id": "<kb>",
+      "page": 1,
+      "section": "Reporting a claim late",
+      "similarity": 0.011938,
+      "text": "If you tell us about a claim after the notification window has closed, we can still accept it when you explain the delay.",
+      "title": "Customer help",
+      "unit_kind": "self",
+      "unit_text": "Customer help > Reporting a claim late\n\nIf you tell us about a claim after the notification window has closed, we can still accept it when you explain the delay.",
+      "url": null,
+      "verified": false,
+      "version": 1
+    }
+  ],
+  "one:eligibility": [
+    {
+      "document": "Mortgage Hardship Policy",
+      "kb": "Lending",
+      "lanes": {
+        "keyword": 1.0,
+        "meaning": 0.992
+      },
+      "page": 1,
+      "score": 0.01639,
+      "section": "1 Eligibility",
+      "version": "v1"
+    },
+    {
+      "document": "Mortgage Hardship Policy",
+      "kb": "Lending",
+      "lanes": {
+        "meaning": 0.99
+      },
+      "page": 2,
+      "score": 0.00968,
+      "section": "2 Interest",
+      "version": "v1"
+    },
+    {
+      "document": "Rate Sheet",
+      "kb": "Lending",
+      "lanes": {
+        "meaning": 0.983
+      },
+      "page": 1,
+      "score": 0.00952,
+      "section": "1 Fixed rates",
+      "version": "v1"
+    }
+  ],
+  "one:keyword": [
+    {
+      "document": "Rate Sheet",
+      "kb": "Lending",
+      "lanes": {
+        "keyword": 1.0,
+        "meaning": 0.991
+      },
+      "page": 1,
+      "score": 0.01639,
+      "section": "1 Fixed rates",
+      "version": "v1"
+    },
+    {
+      "document": "Mortgage Hardship Policy",
+      "kb": "Lending",
+      "lanes": {
+        "meaning": 0.989
+      },
+      "page": 1,
+      "score": 0.00968,
+      "section": "1 Eligibility",
+      "version": "v1"
+    },
+    {
+      "document": "Mortgage Hardship Policy",
+      "kb": "Lending",
+      "lanes": {
+        "meaning": 0.988
+      },
+      "page": 2,
+      "score": 0.00952,
+      "section": "2 Interest",
+      "version": "v1"
+    }
+  ],
+  "one:mixed": [
+    {
+      "document": "Rate Sheet",
+      "kb": "Lending",
+      "lanes": {
+        "meaning": 0.721
+      },
+      "page": 1,
+      "score": 0.00984,
+      "section": "1 Fixed rates",
+      "version": "v1"
+    },
+    {
+      "document": "Mortgage Hardship Policy",
+      "kb": "Lending",
+      "lanes": {
+        "meaning": 0.707
+      },
+      "page": 2,
+      "score": 0.00968,
+      "section": "2 Interest",
+      "version": "v1"
+    },
+    {
+      "document": "Mortgage Hardship Policy",
+      "kb": "Lending",
+      "lanes": {
+        "meaning": 0.706
+      },
+      "page": 1,
+      "score": 0.00952,
+      "section": "1 Eligibility",
+      "version": "v1"
+    }
+  ],
+  "one:nothing": [],
+  "one:paraphrase": [
+    {
+      "document": "Rate Sheet",
+      "kb": "Lending",
+      "lanes": {
+        "meaning": 0.501
+      },
+      "page": 1,
+      "score": 0.00984,
+      "section": "1 Fixed rates",
+      "version": "v1"
+    },
+    {
+      "document": "Mortgage Hardship Policy",
+      "kb": "Lending",
+      "lanes": {
+        "meaning": 0.497
+      },
+      "page": 2,
+      "score": 0.00968,
+      "section": "2 Interest",
+      "version": "v1"
+    },
+    {
+      "document": "Mortgage Hardship Policy",
+      "kb": "Lending",
+      "lanes": {
+        "meaning": 0.496
+      },
+      "page": 1,
+      "score": 0.00952,
+      "section": "1 Eligibility",
+      "version": "v1"
+    }
+  ],
+  "pendingCount": 0,
+  "pendingOtherModel": [
+    [
+      "chunk_id",
+      "heading",
+      "id",
+      "item_id",
+      "text"
+    ],
+    [
+      "chunk_id",
+      "heading",
+      "id",
+      "item_id",
+      "text"
+    ],
+    [
+      "chunk_id",
+      "heading",
+      "id",
+      "item_id",
+      "text"
+    ]
+  ],
+  "query": {
+    "answer": "A borrower who lost their job may defer up to three mortgage payments in a year.",
+    "chunks": [
+      {
+        "chunkId": "<chk>",
+        "documentId": "Mortgage Hardship Policy",
+        "documentTitle": "Mortgage Hardship Policy",
+        "lanes": {
+          "keyword": 1.0,
+          "meaning": 0.992
+        },
+        "location": "p. 1, 1 Eligibility",
+        "rejected": false,
+        "score": 0.01639,
+        "sourceName": "Lending PDFs",
+        "text": "A borrower who lost their job may defer up to three mortgage payments in a year.",
+        "version": "v1"
+      },
+      {
+        "chunkId": "<chk>",
+        "documentId": "Mortgage Hardship Policy",
+        "documentTitle": "Mortgage Hardship Policy",
+        "lanes": {
+          "meaning": 0.99
+        },
+        "location": "p. 2, 2 Interest",
+        "rejected": false,
+        "score": 0.00968,
+        "sourceName": "Lending PDFs",
+        "text": "Deferred interest is capitalised into the loan balance at the end of the deferral.",
+        "version": "v1"
+      },
+      {
+        "chunkId": "<chk>",
+        "documentId": "Rate Sheet",
+        "documentTitle": "Rate Sheet",
+        "lanes": {
+          "meaning": 0.983
+        },
+        "location": "p. 1, 1 Fixed rates",
+        "rejected": false,
+        "score": 0.00952,
+        "sourceName": "Lending PDFs",
+        "text": "The five-year fixed mortgage rate is 4.89 percent for insured borrowers.",
+        "version": "v1"
+      }
+    ],
+    "citations": [
+      {
+        "documentId": "Mortgage Hardship Policy",
+        "n": 1,
+        "page": 1,
+        "section": "1 Eligibility",
+        "snippet": "A borrower who lost their job may defer up to three mortgage payments in a year.",
+        "title": "Mortgage Hardship Policy",
+        "version": "v1"
+      },
+      {
+        "documentId": "Mortgage Hardship Policy",
+        "n": 2,
+        "page": 2,
+        "section": "2 Interest",
+        "snippet": "Deferred interest is capitalised into the loan balance at the end of the deferral.",
+        "title": "Mortgage Hardship Policy",
+        "version": "v1"
+      },
+      {
+        "documentId": "Rate Sheet",
+        "n": 3,
+        "page": 1,
+        "section": "1 Fixed rates",
+        "snippet": "The five-year fixed mortgage rate is 4.89 percent for insured borrowers.",
+        "title": "Rate Sheet",
+        "version": "v1"
+      }
+    ],
+    "cost": {
+      "embeddingTokens": 12
+    },
+    "id": "<qry>",
+    "lanes": {
+      "asked": [
+        "keyword",
+        "meaning"
+      ],
+      "ran": [
+        "keyword",
+        "meaning"
+      ],
+      "skipped": []
+    },
+    "matchers": [],
+    "passages": [
+      {
+        "fileId": "<fil>",
+        "itemId": "Mortgage Hardship Policy",
+        "kbId": "Lending",
+        "lanes": {
+          "keyword": 1.0,
+          "meaning": 0.992
+        },
+        "matched": "self",
+        "page": 1,
+        "score": 0.01639,
+        "section": "1 Eligibility",
+        "snippet": "A borrower who lost their job may defer up to three mortgage payments in a year.",
+        "text": "A borrower who lost their job may defer up to three mortgage payments in a year.",
+        "title": "Mortgage Hardship Policy",
+        "verified": false,
+        "version": "v1"
+      },
+      {
+        "fileId": "<fil>",
+        "itemId": "Mortgage Hardship Policy",
+        "kbId": "Lending",
+        "lanes": {
+          "meaning": 0.99
+        },
+        "matched": "self",
+        "page": 2,
+        "score": 0.00968,
+        "section": "2 Interest",
+        "snippet": "Deferred interest is capitalised into the loan balance at the end of the deferral.",
+        "text": "Deferred interest is capitalised into the loan balance at the end of the deferral.",
+        "title": "Mortgage Hardship Policy",
+        "verified": false,
+        "version": "v1"
+      },
+      {
+        "fileId": "<fil>",
+        "itemId": "Rate Sheet",
+        "kbId": "Lending",
+        "lanes": {
+          "meaning": 0.983
+        },
+        "matched": "self",
+        "page": 1,
+        "score": 0.00952,
+        "section": "1 Fixed rates",
+        "snippet": "The five-year fixed mortgage rate is 4.89 percent for insured borrowers.",
+        "text": "The five-year fixed mortgage rate is 4.89 percent for insured borrowers.",
+        "title": "Rate Sheet",
+        "verified": false,
+        "version": "v1"
+      }
+    ],
+    "question": "How many mortgage payments can a borrower who lost their job defer?",
+    "retrievalMs": "<retrievalMs>",
+    "shape": "chunks",
+    "synthesisMs": "<synthesisMs>"
+  }
+}

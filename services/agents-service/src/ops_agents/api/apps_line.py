@@ -23,6 +23,7 @@ from ops_service_kit.logging import get_logger
 from ..activities.tool_directory import ToolsUnavailable
 from ..domain.accounts import chosen_accounts
 from ..store.team_defaults import TeamDefaults
+from .agent_registry import live_agent
 from .child_runs import TURN_PERSON
 from .deps import Runtime
 from .runs import graph_store
@@ -146,7 +147,7 @@ class AppsLine:
         thread = await graph_store(self.rt).thread(thread_id) if thread_id else None
         overrides = cast(dict[str, Any], (thread or {}).get("overrides") or {})
         off = set(cast(list[str], overrides.get("toolsOff") or []))
-        agent = self.rt.catalog.agent(agent_id)
+        agent = await live_agent(self.rt, agent_id)
         if agent is not None:
             chosen = chosen_accounts(agent=agent.accounts, chat=cast(dict[str, str], overrides.get("accounts") or {}))
             cards = await self._uses(cards, chosen, str((thread or {}).get("team_id") or ""))

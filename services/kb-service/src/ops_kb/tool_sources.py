@@ -18,13 +18,19 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
+from pydantic import BaseModel, ConfigDict, TypeAdapter
+
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import Conflict, ValidationFailed
+from ops_service_kit.http import JsonValue
 from ops_service_kit.ids import new_id
 
 from .ai import spent_on
 from .files import FileNotScanned, Stored
 from .origin import Origin, source_team
+from .schemas import PreviewPage, Scope, ScopesPage, SourcePreview
+from .settled import parse_error
+from .store.knowledge import ItemFetched, ItemRow, RunError, RunWrite, SourceRow
 
 if TYPE_CHECKING:
     from .service import KnowledgeService, Who
@@ -50,9 +56,102 @@ TEAM_SIGN_IN = ("team",)
 @dataclass(frozen=True)
 class Answer:
     ok: bool
-    output: Any = None
+    output: JsonValue = None
     code: str = ""
     message: str = ""
+
+
+class Declared(BaseModel):
+    """A knowledge source as tools-service declares it for a team: the tools that list, fetch, change-watch, pick and
+    preview it, how its connection signs in, and the inputs its settings are checked against."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    plugin: str
+    source: str
+    title: str
+    needsConnection: bool = True  # noqa: N815 - the wire names follow
+    connectionId: str | None = None  # noqa: N815
+    connectionStatus: str | None = None  # noqa: N815
+    signIn: str | None = None  # noqa: N815
+    listTool: str | None = None  # noqa: N815
+    getTool: str | None = None  # noqa: N815
+    changesTool: str | None = None  # noqa: N815
+    scopesTool: str | None = None  # noqa: N815
+    previewTool: str | None = None  # noqa: N815
+    listsWhole: bool = False  # noqa: N815
+    fetchAtOnce: int | None = None  # noqa: N815
+    site: bool = False
+    getTakesTag: bool = False  # noqa: N815
+    schedule: dict[str, JsonValue] | None = None
+    inputs: dict[str, dict[str, JsonValue]] = {}
+
+
+class Host(BaseModel):
+    """One host a source's values would have its sync reach, as the account's egress rule answers for it."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    host: str
+    state: str
+    reason: str | None = None
+    runKey: str | None = None  # noqa: N815
+
+
+HOSTS = TypeAdapter(list[Host])
+
+
+def waiting_in(cfg: dict[str, JsonValue]) -> list[str]:
+    """The hosts a source's config says wait on an admin's approval."""
+    waiting = cfg.get("waitingHosts")
+    return [str(w.get("host")) for w in waiting if isinstance(w, dict)] if isinstance(waiting, list) else []
+
+
+class _PreviewRow(BaseModel):
+    id: JsonValue = None
+    outcome: str | None = None
+    will_fetch: JsonValue = None
+
+
+class _PreviewOut(BaseModel):
+    found: int | None = None
+    will_fetch: int | None = None
+    pages: list[_PreviewRow] = []
+    capped: JsonValue = None
+
+
+class _ScopesOut(BaseModel):
+    scopes: list[JsonValue] = []
+    next_cursor: JsonValue = None
+
+
+def preview_of(output: JsonValue) -> SourcePreview:
+    """What a plugin's preview tool answered, as the page the console shows."""
+    out = _PreviewOut.model_validate(output or {})
+    pages = [PreviewPage(id=str(p.id), outcome=p.outcome or "", will_fetch=bool(p.will_fetch)) for p in out.pages]
+    return SourcePreview(
+        found=out.found or len(pages),
+        will_fetch=out.will_fetch or sum(p.will_fetch for p in pages),
+        pages=pages,
+        capped=bool(out.capped),
+    )
+
+
+def scopes_of(output: JsonValue) -> ScopesPage:
+    """What a plugin's scopes tool answered, as the page a picker shows."""
+    out = _ScopesOut.model_validate(output or {})
+    scopes = [
+        Scope(
+            id=str(r["id"]),
+            title=str(r.get("title") or r["id"]),
+            kind=str(r.get("kind") or ""),
+            parent=str(r["parent"]) if r.get("parent") else None,
+            detail=str(r["detail"]) if r.get("detail") else None,
+        )
+        for r in out.scopes
+        if isinstance(r, dict) and r.get("id")
+    ]
+    return ScopesPage(scopes=scopes, next_cursor=str(out.next_cursor) if out.next_cursor else None)
 
 
 class ToolReader:
@@ -61,22 +160,22 @@ class ToolReader:
     def __init__(self, tools: ServiceClient) -> None:
         self.tools = tools
 
-    async def declared(self, tenant_id: str, team_id: str) -> list[dict[str, Any]]:
+    async def declared(self, tenant_id: str, team_id: str) -> list[dict[str, JsonValue]]:
         return list(await self.tools.get("/v1/knowledge-sources", tenant=tenant_id, team=team_id) or [])
 
     async def source_hosts(
         self,
         tenant_id: str,
         team_id: str,
-        cfg: dict[str, Any],
+        cfg: dict[str, JsonValue],
         *,
         credentials: dict[str, str] | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[dict[str, JsonValue]]:
         """Each host the source's values would have its sync reach, decided by the account's egress rule as any new
         outside address is (tools-service `/v1/knowledge-sources/hosts`): asked as the person adding or changing the
         source (`credentials`), it lists the host where they may, asks the Security team, or is refused; asked as
         this service, it only reads whether each host passes now."""
-        body: dict[str, Any] = {
+        body: dict[str, JsonValue] = {
             "plugin": cfg.get("plugin"),
             "source": cfg.get("source"),
             "values": cfg.get("values") or {},
@@ -87,7 +186,7 @@ class ToolReader:
             kw |= {"headers": credentials, "token_header": "X-Service-Authorization"}
         return list(await self.tools.post("/v1/knowledge-sources/hosts", json=body, **kw) or [])
 
-    async def call(self, tenant_id: str, team_id: str, tool: str, args: dict[str, Any], *, act: str) -> Answer:
+    async def call(self, tenant_id: str, team_id: str, tool: str, args: dict[str, JsonValue], *, act: str) -> Answer:
         body = {
             "tool": tool,
             "input": args,
@@ -96,7 +195,7 @@ class ToolReader:
             "runContext": {"act": act, "environment": "live"},
         }
         try:
-            data = await self.tools.post("/v1/calls", json=body, tenant=tenant_id, team=team_id, timeout=60)
+            data = await self.tools.post("/v1/calls", json=body, tenant=tenant_id, team=team_id)
         except ServiceCallError as e:
             return Answer(False, code=str(e.code or "refused"), message=e.message)
         except ServiceUnreachable as e:
@@ -108,14 +207,19 @@ class ToolReader:
         return Answer(True, answer.get("output"))
 
 
-def refusal_of(found: dict[str, Any]) -> tuple[str, str] | None:
+async def declared_sources(reader: ToolReader, tenant_id: str, team_id: str) -> list[Declared]:
+    """Every knowledge source the team's apps declare."""
+    return [Declared.model_validate(d) for d in await reader.declared(tenant_id, team_id)]
+
+
+def refusal_of(found: Declared) -> tuple[str, str] | None:
     """Why a source declared for the team cannot be made, as (code, message), or None when it can. Create and the
     Add source list both ask this, so a source is offered exactly when create accepts it."""
-    if not found.get("needsConnection", True):
+    if not found.needsConnection:
         return None
-    if not found.get("connectionId"):
-        return "connection_missing", f"{found['title']} needs the team's connection; sign in first."
-    if found.get("signIn") not in TEAM_SIGN_IN:
+    if not found.connectionId:
+        return "connection_missing", f"{found.title} needs the team's connection; sign in first."
+    if found.signIn not in TEAM_SIGN_IN:
         return (
             "sign_in_not_team",
             "This connection signs in each person. A knowledge source needs a team sign-in.",
@@ -123,7 +227,7 @@ def refusal_of(found: dict[str, Any]) -> tuple[str, str] | None:
     return None
 
 
-async def declared_source(reader: ToolReader | None, who: Who, plugin: str, name: str) -> dict[str, Any]:
+async def declared_source(reader: ToolReader | None, who: Who, plugin: str, name: str) -> Declared:
     """The plugin's knowledge source as tools-service declares it for the team: refused unless the plugin is on,
     names the source, and its connection signs in with the team's account, since a sync has no person behind it."""
     if reader is None:
@@ -132,7 +236,8 @@ async def declared_source(reader: ToolReader | None, who: Who, plugin: str, name
         )
     team = str(who.team_id or "")
     found = next(
-        (d for d in await reader.declared(who.tenant_id, team) if d["plugin"] == plugin and d["source"] == name), None
+        (d for d in await declared_sources(reader, who.tenant_id, team) if d.plugin == plugin and d.source == name),
+        None,
     )
     if found is None:
         raise ValidationFailed(
@@ -143,29 +248,29 @@ async def declared_source(reader: ToolReader | None, who: Who, plugin: str, name
     return found
 
 
-async def source_config(reader: ToolReader | None, who: Who, i: dict[str, Any]) -> dict[str, Any]:
+async def source_config(reader: ToolReader | None, who: Who, wanted: dict[str, JsonValue]) -> dict[str, JsonValue]:
     """A new tool source's config, from what tools-service declares for the team: refused unless the plugin is on,
-    names the source, and its connection signs in with the team's account, since a sync has no person behind it."""
-    wanted = cast(dict[str, Any], i.get("config") or {})
+    names the source, and its connection signs in with the team's account, since a sync has no person behind it.
+    `wanted` names the plugin, its source and the source's own values."""
     plugin, name = str(wanted.get("plugin") or ""), str(wanted.get("source") or "")
     found = await declared_source(reader, who, plugin, name)
-    cfg: dict[str, Any] = {
+    cfg: dict[str, JsonValue] = {
         "plugin": plugin,
         "source": name,
         # The plugin's name for this kind of source, which the source shows as its kind.
-        "title": str(found.get("title") or ""),
-        "listTool": found["listTool"],
-        "getTool": found["getTool"],
-        "changesTool": found.get("changesTool"),
-        "scopesTool": found.get("scopesTool"),
-        "previewTool": found.get("previewTool"),
-        "listsWhole": bool(found.get("listsWhole")),
-        "fetchAtOnce": int(found.get("fetchAtOnce") or AT_ONCE),
+        "title": found.title,
+        "listTool": found.listTool,
+        "getTool": found.getTool,
+        "changesTool": found.changesTool,
+        "scopesTool": found.scopesTool,
+        "previewTool": found.previewTool,
+        "listsWhole": found.listsWhole,
+        "fetchAtOnce": found.fetchAtOnce or AT_ONCE,
         # Its items are a website's pages, so it starts with a website's cleaning and splitting.
-        "site": bool(found.get("site")),
-        "getTakesTag": bool(found.get("getTakesTag")),
-        "connectionId": found.get("connectionId"),
-        "schedule": found.get("schedule") or {"kind": "manual"},
+        "site": found.site,
+        "getTakesTag": found.getTakesTag,
+        "connectionId": found.connectionId,
+        "schedule": found.schedule or {"kind": "manual"},
         # What this source is set up with (start addresses, sites, spaces), checked against what the plugin declares
         # and sent to each of its tools as `source`.
         "values": source_values(found, wanted.get("values")),
@@ -173,18 +278,19 @@ async def source_config(reader: ToolReader | None, who: Who, i: dict[str, Any]) 
     return {**cfg, "waitingHosts": await waiting_hosts(cast(ToolReader, reader), who, cfg)}
 
 
-async def waiting_hosts(reader: ToolReader, who: Who, cfg: dict[str, Any]) -> list[dict[str, Any]]:
+async def waiting_hosts(reader: ToolReader, who: Who, cfg: dict[str, JsonValue]) -> list[JsonValue]:
     """The source's hosts an admin has yet to approve, each with the Security task it waits on: a sync reaches a
     source's own site only once the account lists its host, under the same rule as every new outside address. A host
     the account refuses refuses the source."""
-    answers = await reader.source_hosts(who.tenant_id, str(who.team_id or ""), cfg, credentials=who.credentials)
-    refused = [h for h in answers if h.get("state") == "refused"]
+    answers = HOSTS.validate_python(
+        await reader.source_hosts(who.tenant_id, str(who.team_id or ""), cfg, credentials=who.credentials)
+    )
+    refused = [h for h in answers if h.state == "refused"]
     if refused:
         raise ValidationFailed(
-            str(refused[0].get("reason") or f"{refused[0]['host']} is not an allowed address."),
-            code="egress_host_refused",
+            refused[0].reason or f"{refused[0].host} is not an allowed address.", code="egress_host_refused"
         )
-    return [{"host": str(h["host"]), "runKey": h.get("runKey")} for h in answers if h.get("state") == "waiting"]
+    return [{"host": h.host, "runKey": h.runKey} for h in answers if h.state == "waiting"]
 
 
 INPUT_TYPES: dict[str, type | tuple[type, ...]] = {
@@ -197,22 +303,22 @@ INPUT_TYPES: dict[str, type | tuple[type, ...]] = {
 }
 
 
-def source_values(declared: dict[str, Any], given: Any) -> dict[str, Any]:
+def source_values(declared: Declared, given: JsonValue) -> dict[str, JsonValue]:
     """A source's own settings checked against the inputs its plugin declares: a required one present, each of its
     declared type, and nothing undeclared."""
-    inputs = cast(dict[str, dict[str, Any]], declared.get("inputs") or {})
-    values = cast(dict[str, Any], given) if isinstance(given, dict) else {}
+    inputs = declared.inputs
+    values = given if isinstance(given, dict) else {}
     if unknown := sorted(set(values) - set(inputs)):
-        raise ValidationFailed(f"{declared['title']} takes no {', '.join(unknown)}.", code="invalid_source_values")
+        raise ValidationFailed(f"{declared.title} takes no {', '.join(unknown)}.", code="invalid_source_values")
     for name, field in inputs.items():
         if values.get(name) in (None, "", []):
             if field.get("required", True):
-                raise ValidationFailed(f"{declared['title']} needs {name}.", code="invalid_source_values")
+                raise ValidationFailed(f"{declared.title} needs {name}.", code="invalid_source_values")
             continue
         expected = INPUT_TYPES.get(str(field.get("type") or "string"), str)
         if not isinstance(values[name], expected):
             raise ValidationFailed(
-                f"{name} is a {field.get('type') or 'string'} for {declared['title']}.", code="invalid_source_values"
+                f"{name} is a {field.get('type') or 'string'} for {declared.title}.", code="invalid_source_values"
             )
     return values
 
@@ -273,14 +379,14 @@ async def sync_tool_source(
     service: KnowledgeService,
     reader: ToolReader,
     who: Who,
-    s: dict[str, Any],
+    s: SourceRow,
     *,
     full: bool,
     trigger: str,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
-) -> dict[str, Any]:
-    cfg: dict[str, Any] = dict(s.get("config") or {})
-    tenant, team, source_id = who.tenant_id, str(s["team_id"]), str(s["id"])
+) -> RunWrite:
+    cfg: dict[str, Any] = dict(s.config or {})
+    tenant, team, source_id = who.tenant_id, str(s.team_id), str(s.id)
     act = f"kb-sync:{source_id}"
     if cfg.get("paused") == "needs_reconnect":
         healthy = any(
@@ -321,9 +427,9 @@ async def sync_tool_source(
     whole = from_start or "seenSoFar" in cfg
     if from_start:
         cfg.pop("seenSoFar", None)
-    known = {str(i["path"]): i for i in await service.store.items(tenant, source_ids=[source_id])}
+    known = {i.path: i for i in await service.store.items(tenant, source_ids=[source_id])}
     counts = {"listed": 0, "unchanged": 0, "upserted": 0, "deleted": 0, "failed": 0, "skipped": 0}
-    errors: list[dict[str, Any]] = []
+    errors: list[RunError] = []
     log: list[str] = []
     status, stopped = "success", ""
     seen: set[str] = set()
@@ -401,7 +507,7 @@ async def sync_tool_source(
                 log.append(f"{r.get('title') or item_id}: {r['skipped']}")
                 continue
             ex = known.get(item_id)
-            if ex is not None and ex.get("marker") == marker and ex["status"] == "indexed":
+            if ex is not None and ex.marker == marker and ex.status == "indexed":
                 counts["unchanged"] += 1
             else:
                 changed.append({**r, "marker": marker})
@@ -425,7 +531,7 @@ async def sync_tool_source(
     if not resumes:
         seen |= carried
         cfg.pop("seenSoFar", None)
-    gone = [str(i["path"]) for i in known.values() if not i.get("parent_id")] if full and whole else []
+    gone = [i.path for i in known.values() if not i.parent_id] if full and whole else []
     if status == "success" or resumes:
         lock = asyncio.Semaphore(int(cfg.get("fetchAtOnce") or AT_ONCE))
         paced = Pacer(pace)
@@ -433,7 +539,7 @@ async def sync_tool_source(
         async def fetch(item_id: str) -> Answer:
             # The version tag held for the item lets the system answer `unchanged` without sending it again.
             held = known.get(item_id)
-            tag = {"tag": held["tag"]} if cfg.get("getTakesTag") and held and held.get("tag") else {}
+            tag = {"tag": held.tag} if cfg.get("getTakesTag") and held and held.tag else {}
             async with lock:
                 await paced.turn()
                 return await reader.call(tenant, team, cfg["getTool"], {**given, "id": item_id, **tag}, act=act)
@@ -443,12 +549,18 @@ async def sync_tool_source(
         changed = [r for r in changed if "content" not in r]
         for r in listed_whole:
             await _put(service, who, s, known, r, marker=str(r["marker"]), parent=None, counts=counts, errors=errors)
-        answers = await asyncio.gather(*(fetch(str(r["id"])) for r in changed))
+        try:
+            async with asyncio.TaskGroup() as group:
+                fetches = [group.create_task(fetch(str(r["id"]))) for r in changed]
+        except ExceptionGroup as failed:
+            # The run fails on the first fetch that raised, as it did before the fetches shared a group.
+            raise failed.exceptions[0] from None
+        answers = [f.result() for f in fetches]
         for r, got in zip(changed, answers, strict=True):
             if not got.ok and got.code == "NOT_FOUND" and (held := known.get(str(r["id"]))) is not None:
                 # Gone at the source: removed on the second sync in a row that finds it gone, then tombstoned.
-                count = int(held.get("gone_count") or 0) + 1
-                await service.store.update_item(tenant, str(held["id"]), {"gone_count": count})
+                count = held.gone_count + 1
+                await service.store.update_item(tenant, held.id, {"gone_count": count})
                 if count >= GONE_TWICE:
                     gone_now.append(str(r["id"]))
                     tombstones[str(r["id"])] = {
@@ -456,7 +568,7 @@ async def sync_tool_source(
                         "reason": got.message or "Gone at the source",
                     }
                 else:
-                    log.append(f"{held['title']}: answered gone once; removed if it answers so again")
+                    log.append(f"{held.title}: answered gone once; removed if it answers so again")
                 continue
             if not got.ok:
                 counts["failed"] += 1
@@ -470,7 +582,7 @@ async def sync_tool_source(
             if item.get("unchanged") is True:
                 held = known.get(str(r["id"]))
                 if held is not None:
-                    await service.store.update_item(tenant, str(held["id"]), {"marker": str(r["marker"])})
+                    await service.store.update_item(tenant, held.id, {"marker": str(r["marker"])})
                 counts["unchanged"] += 1
                 continue
             await _put(service, who, s, known, item, marker=str(r["marker"]), parent=None, counts=counts, errors=errors)
@@ -480,7 +592,7 @@ async def sync_tool_source(
                 marker = str(child.get("marker") or child.get("updated_at") or "")
                 # An attachment is fetched only when its own marker moved, not each time its parent changes.
                 ex = known.get(kid_id)
-                if marker and ex is not None and ex.get("marker") == marker and ex["status"] == "indexed":
+                if marker and ex is not None and ex.marker == marker and ex.status == "indexed":
                     counts["unchanged"] += 1
                     continue
                 kid = await fetch(kid_id)
@@ -499,10 +611,10 @@ async def sync_tool_source(
                 else:
                     counts["failed"] += 1
         # A base this source feeds may keep what its source removed: then it stays searchable and says so.
-        keep = (await service.sync_rules(tenant, str(s["id"])))["removedAtSource"] == "keep"
+        keep = (await service.sync_rules(tenant, str(s.id)))["removedAtSource"] == "keep"
         if gone_now:
-            gone_ids = [str(known[p]["id"]) for p in gone_now]
-            gone_files = [str(known[p]["file_id"]) for p in gone_now]
+            gone_ids = [known[p].id for p in gone_now]
+            gone_files = [known[p].file_id for p in gone_now]
             if keep:
                 await _flag_removed(service, tenant, gone_ids)
                 for p in gone_now:
@@ -511,25 +623,25 @@ async def sync_tool_source(
                 counts["deleted"] += await service.store.remove_items(tenant, gone_ids)
                 await release_snapshots(service, who, s, gone_files)
             done = "kept and flagged" if keep else "removed and tombstoned"
-            log += [f"{known[p]['title']}: gone at the source twice, {done}" for p in gone_now]
+            log += [f"{known[p].title}: gone at the source twice, {done}" for p in gone_now]
         if removed_at_source:
             # Items the system says it deleted (in a changes listing) leave search at once, with their attachments.
-            out_ids = [str(known[p]["id"]) for p in removed_at_source if p in known]
-            out_ids += [str(i["id"]) for i in known.values() if i.get("parent_id") in set(out_ids)]
-            files_out = [str(i["file_id"]) for i in known.values() if str(i["id"]) in set(out_ids)]
+            out_ids = [known[p].id for p in removed_at_source if p in known]
+            out_ids += [i.id for i in known.values() if i.parent_id in set(out_ids)]
+            files_out = [i.file_id for i in known.values() if i.id in set(out_ids)]
             if keep:
                 await _flag_removed(service, tenant, out_ids)
             else:
                 counts["deleted"] += await service.store.remove_items(tenant, out_ids)
                 await release_snapshots(service, who, s, files_out)
             done = "kept and flagged" if keep else "removed"
-            log += [f"{known[p]['title']}: deleted at the source, {done}" for p in removed_at_source if p in known]
+            log += [f"{known[p].title}: deleted at the source, {done}" for p in removed_at_source if p in known]
         if full and not resumes:
             dropped = [p for p in gone if p not in seen]
-            removed_ids = [str(known[p]["id"]) for p in dropped]
+            removed_ids = [known[p].id for p in dropped]
             # Attachments go with their parent (parent_id holds the parent document's id).
-            removed_ids += [str(i["id"]) for i in known.values() if i.get("parent_id") in set(removed_ids)]
-            gone_files = [str(i["file_id"]) for i in known.values() if str(i["id"]) in set(removed_ids)]
+            removed_ids += [i.id for i in known.values() if i.parent_id in set(removed_ids)]
+            gone_files = [i.file_id for i in known.values() if i.id in set(removed_ids)]
             if keep:
                 await _flag_removed(service, tenant, removed_ids)
             else:
@@ -537,7 +649,7 @@ async def sync_tool_source(
                 await release_snapshots(service, who, s, gone_files)
             for p in dropped:
                 log.append(
-                    f"{known[p]['title']}: no longer listed by the system, {'kept and flagged' if keep else 'removed'}"
+                    f"{known[p].title}: no longer listed by the system, {'kept and flagged' if keep else 'removed'}"
                 )
         if status == "success":
             cfg["watermark"] = watermark
@@ -556,7 +668,7 @@ async def sync_tool_source(
         _, by_source = await service._joined(tenant)  # pyright: ignore[reportPrivateUsage]
         await service.store.refreshed(tenant, by_source.get(source_id, []))
     spent_on(counts, log)
-    run = {
+    run: RunWrite = {
         "tenant_id": tenant,
         "id": new_id("run"),
         "source_id": source_id,
@@ -576,14 +688,14 @@ async def sync_tool_source(
 async def _put(
     service: KnowledgeService,
     who: Who,
-    s: dict[str, Any],
-    known: dict[str, dict[str, Any]],
+    s: SourceRow,
+    known: dict[str, ItemRow],
     item: dict[str, Any],
     *,
     marker: str,
     parent: str | None,
     counts: dict[str, int],
-    errors: list[dict[str, Any]],
+    errors: list[RunError],
 ) -> None:
     """One fetched item, kept as a knowledge snapshot in files-service before it is read, so a rebuild never fetches
     it again and a citation opens the copy used. Unchanged when files-service's digest of its bytes is the stored one
@@ -592,22 +704,22 @@ async def _put(
     data = _content(item)
     item_id = str(item["id"])
     ex = known.get(item_id)
-    tenant, team, source_id = who.tenant_id, source_team(s), str(s["id"])
+    tenant, team, source_id = who.tenant_id, source_team(s), str(s.id)
     name, mime = _filename(item), str(item.get("mime") or "text/plain")
     try:
         stored = await service.files.put(
             tenant, team, data, name=name, mime=mime, actor=f"kb-sync:{source_id}", purpose="knowledge_snapshot"
         )
-        await service.files.use(tenant, team, stored.file_id, source_id=source_id, source_name=str(s["name"]))
+        await service.files.use(tenant, team, stored.file_id, source_id=source_id, source_name=str(s.name))
     except (ValueError, FileNotScanned) as e:
         counts["failed"] += 1
         errors.append({"itemTitle": item.get("title"), "phase": "store", "errorClass": "snapshot", "message": str(e)})
         return
-    if ex is not None and ex["digest"] == stored.digest and ex["status"] == "indexed":
-        await service.store.update_item(tenant, str(ex["id"]), {"marker": marker})
+    if ex is not None and ex.digest == stored.digest and ex.status == "indexed":
+        await service.store.update_item(tenant, ex.id, {"marker": marker})
         counts["unchanged"] += 1
         return
-    extra: dict[str, Any] = {
+    extra: ItemFetched = {
         "marker": marker,
         "parent_id": None,
         "url": item.get("url"),
@@ -618,41 +730,34 @@ async def _put(
     }
     if parent is not None:
         parent_row = known.get(parent) or next(
-            (i for i in await service.store.items(tenant, source_ids=[source_id]) if i["path"] == parent), None
+            (i for i in await service.store.items(tenant, source_ids=[source_id]) if i.path == parent), None
         )
-        extra["parent_id"] = parent_row["id"] if parent_row else None
+        extra["parent_id"] = parent_row.id if parent_row else None
     found = Stored(stored.file_id, name, stored.mime, stored.size, stored.digest, stored.deduplicated)
     allowed = cast(list[Any], item["allowed"]) if isinstance(item.get("allowed"), list) else None
     origin = Origin(item_id, str(item.get("title") or item_id), extra, allowed=[str(a) for a in allowed or []] or None)
     done = await service._read_file(who, s, ex, name=name, found=found, rebuild=False, origin=origin)  # pyright: ignore[reportPrivateUsage]
-    known[item_id] = done
-    if ex is not None and ex.get("file_id") and ex["file_id"] != stored.file_id:
-        await release_snapshots(service, who, s, [str(ex["file_id"])])
-    if done["status"] == "failed":
+    # The row as written, so a later look at this item in the run (its attachments, gone or removed) reads it.
+    known[item_id] = (await service.store.items(tenant, item_id=done.id))[0]
+    if ex is not None and ex.file_id and ex.file_id != stored.file_id:
+        await release_snapshots(service, who, s, [ex.file_id])
+    if done.status == "failed":
         counts["failed"] += 1
-        errors.append(
-            {
-                "itemId": done["id"],
-                "itemTitle": done["title"],
-                "phase": "parse",
-                "errorClass": done["error_class"],
-                "message": done["error"],
-            }
-        )
-    elif done["status"] == "reading":
+        errors.append(parse_error(done))
+    elif done.status == "reading":
         counts.setdefault("reading", 0)
         counts["reading"] += 1
-    elif done.get("unchanged"):
+    elif done.unchanged:
         counts["unchanged"] += 1
     else:
         counts["upserted"] += 1
 
 
-async def release_snapshots(service: KnowledgeService, who: Who, s: dict[str, Any], file_ids: list[str]) -> None:
+async def release_snapshots(service: KnowledgeService, who: Who, s: SourceRow, file_ids: list[str]) -> None:
     """Lets go of snapshots no item of the source uses any more; files-service keeps each for its retention days."""
-    held = {str(i["file_id"]) for i in await service.store.items(who.tenant_id, source_ids=[str(s["id"])])}
+    held = {i.file_id for i in await service.store.items(who.tenant_id, source_ids=[str(s.id)])}
     for file_id in dict.fromkeys(f for f in file_ids if f and f not in held):
-        await service.files.release(who.tenant_id, source_team(s), file_id, source_id=str(s["id"]))
+        await service.files.release(who.tenant_id, source_team(s), file_id, source_id=str(s.id))
 
 
 # What a kept item says once its source has removed it.

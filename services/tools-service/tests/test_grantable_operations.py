@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_tools.store.modules import ModuleStore
@@ -80,11 +81,13 @@ async def test_another_tenants_operations_are_not_listed(api: Api) -> None:
     }
 
 
-async def test_the_list_is_for_services_holding_tools_view(api: Api) -> None:
-    r = await api.client.get("/v1/grantable-operations", headers={"X-Dev-User": "Maya Okafor"})
+@pytest.mark.parametrize("path", ["/v1/grantable-operations", "/v1/tools/update_address"])
+async def test_the_registry_reads_are_for_services_holding_tools_view(api: Api, path: str) -> None:
+    r = await api.client.get(path, headers={"X-Dev-User": "Maya Okafor"})
     assert r.status_code == 401, r.text
-    unscoped = await api.client.get("/v1/grantable-operations", headers=service_headers(api.tenant, scopes=[]))
+    unscoped = await api.client.get(path, headers=service_headers(api.tenant, scopes=[]))
     assert unscoped.status_code == 403 and unscoped.json()["error"]["code"] == "scope_required", unscoped.text
+    assert (await api.client.get(path, headers=service_headers(api.tenant))).status_code == 200
 
 
 async def test_a_registry_operations_access_class_is_known(api: Api) -> None:

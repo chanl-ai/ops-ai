@@ -6,16 +6,17 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_service_kit.http import Out
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee
+from ops_store.rows import rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
 from .base import metadata
 from .graphs import graph_threads
-from .tenancy import current_tenant, tenant_tx
+from .tenancy import RuntimeStore, current_tenant
 
 review_decisions = sa.Table(
     "review_decisions",
@@ -30,7 +31,7 @@ review_decisions = sa.Table(
     sa.Column("attempts", sa.Integer, nullable=False, server_default="0"),
     sa.Column("run_id", sa.String(80)),
     sa.Column("resumed_at", sa.String(32)),
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local", index=True),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, index=True),
     # The thread's team, so the policy holds the decision without reading its thread (migration 0073).
     sa.Column("team_id", sa.String(64), nullable=False),
     # A fingerprint of the step-up the decision was made under (api/auth.py step_up_ref), never the token.
@@ -46,7 +47,7 @@ review_approvals = sa.Table(
     sa.Column("approver", sa.String(200), primary_key=True),
     sa.Column("input_hash", sa.String(64), nullable=False),
     sa.Column("approved_at", sa.String(32), nullable=False),
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local", index=True),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, index=True),
     sa.Column("team_id", sa.String(64), nullable=False),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
@@ -59,27 +60,62 @@ def _team_of(thread_id: str) -> Any:
     return sa.select(t.c.team_id).where(t.c.id == thread_id, team_visible(t)).scalar_subquery()
 
 
-class ReviewStore:
+class DecisionOut(Out):
+    """One recorded decision on a review: who decided what, and how its resume went."""
+
+    thread_id: str
+    decision_id: str
+    decision: str
+    reason: str | None
+    decided_by: str
+    decided_at: str
+    review: dict[str, Any]
+    attempts: int
+    run_id: str | None
+    resumed_at: str | None
+    step_up_ref: str | None
+
+
+_d = review_decisions.c
+DECISION_COLUMNS = (
+    _d.thread_id,
+    _d.decision_id,
+    _d.decision,
+    _d.reason,
+    _d.decided_by,
+    _d.decided_at,
+    _d.review,
+    _d.attempts,
+    _d.run_id,
+    _d.resumed_at,
+    _d.step_up_ref,
+)
+
+
+class ApproverRow(Out):
+    thread_id: str
+    step: str
+    approver: str
+
+
+class ReviewStore(RuntimeStore):
     # A decision is one insert keyed by its interrupt (a second decision of the same interrupt is refused), and an
     # approval replaces the approver's row and reads the step's approvers in one transaction.
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION})
 
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
-
-    async def latest_decisions(self, thread_ids: list[str] | None = None) -> dict[str, dict[str, Any]]:
+    async def latest_decisions(self, thread_ids: list[str] | None = None) -> dict[str, DecisionOut]:
         """The latest decision per thread."""
-        q = review_decisions.select().where(team_visible(review_decisions)).order_by(review_decisions.c.decided_at)
+        q = sa.select(*DECISION_COLUMNS).where(team_visible(review_decisions)).order_by(_d.decided_at)
         if thread_ids is not None:
-            q = q.where(review_decisions.c.thread_id.in_(thread_ids))
-        async with tenant_tx(self.engine) as c:
-            return {r["thread_id"]: dict(r) for r in (await c.execute(q)).mappings()}
+            q = q.where(_d.thread_id.in_(thread_ids))
+        async with self.tx() as c:
+            return {r.thread_id: r for r in await rows(c, q, DecisionOut)}
 
-    async def decisions_of(self, thread_id: str) -> dict[str, dict[str, Any]]:
+    async def decisions_of(self, thread_id: str) -> dict[str, DecisionOut]:
         """Every decision on the thread, by interrupt id."""
-        q = review_decisions.select().where(review_decisions.c.thread_id == thread_id, team_visible(review_decisions))
-        async with tenant_tx(self.engine) as c:
-            return {r["decision_id"]: dict(r) for r in (await c.execute(q)).mappings()}
+        q = sa.select(*DECISION_COLUMNS).where(_d.thread_id == thread_id, team_visible(review_decisions))
+        async with self.tx() as c:
+            return {r.decision_id: r for r in await rows(c, q, DecisionOut)}
 
     async def record_decision(
         self,
@@ -92,7 +128,7 @@ class ReviewStore:
         review: dict[str, Any],
         step_up_ref: str | None = None,
     ) -> None:
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(
                 review_decisions.insert().values(
                     thread_id=thread_id,
@@ -110,7 +146,7 @@ class ReviewStore:
 
     async def update_decision(self, thread_id: str, decision_id: str, **values: Any) -> None:
         keys = (review_decisions.c.thread_id == thread_id, review_decisions.c.decision_id == decision_id)
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(review_decisions.update().where(*keys).values(**values))
 
     async def approve(
@@ -125,7 +161,7 @@ class ReviewStore:
             review_approvals.c.step == step,
             review_approvals.c.approver == approver,
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             if distinct:
                 again = await c.execute(
                     sa.select(review_approvals.c.approver).where(
@@ -167,8 +203,25 @@ class ReviewStore:
             )
             .order_by(review_approvals.c.approved_at)
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [str(r[0]) for r in await c.execute(q)]
+
+    async def approvers_of(self, thread_ids: list[str]) -> dict[tuple[str, str], list[str]]:
+        """Each named thread's approvers by (thread, step), earliest first, in one statement; `thread_ids` is bounded
+        by the caller (a list's rows per source)."""
+        if not thread_ids:
+            return {}
+        a = review_approvals.c
+        q = (
+            sa.select(a.thread_id, a.step, a.approver)
+            .where(a.thread_id.in_(thread_ids), a.tenant_id == current_tenant(), team_visible(review_approvals))
+            .order_by(a.approved_at)
+        )
+        found: dict[tuple[str, str], list[str]] = {}
+        async with self.tx() as c:
+            for r in await rows(c, q, ApproverRow):
+                found.setdefault((r.thread_id, r.step), []).append(r.approver)
+        return found
 
     async def approvals_by_step(self, thread_id: str) -> dict[str, list[str]]:
         q = (
@@ -177,7 +230,7 @@ class ReviewStore:
             .order_by(review_approvals.c.approved_at)
         )
         out: dict[str, list[str]] = {}
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             for step, approver in (await c.execute(q)).all():
                 out.setdefault(str(step), []).append(str(approver))
         return out
@@ -188,5 +241,5 @@ class ReviewStore:
         q = sa.select(a.approver, a.approved_at).where(
             a.thread_id == thread_id, a.step == step, a.input_hash == digest, team_visible(review_approvals)
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [(str(r.approver), str(r.approved_at)) for r in (await c.execute(q)).all()]

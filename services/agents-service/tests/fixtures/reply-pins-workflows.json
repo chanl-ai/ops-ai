@@ -1,0 +1,1464 @@
+{
+  "create": {
+    "body": {
+      "data": {
+        "agentSlugs": [
+          "wire-fraud-sentinel"
+        ],
+        "deploymentCount": 0,
+        "description": "",
+        "engine": "v1",
+        "gateCount": 1,
+        "id": "<wf>",
+        "kind": "standard",
+        "name": "Payee check",
+        "openReviews": 0,
+        "reviewed24h": 0,
+        "runs24h": 0,
+        "status": "draft",
+        "stepCount": 2,
+        "teamId": "team_ops",
+        "trigger": "Payee added",
+        "updatedAt": "<timeZ>",
+        "version": 0
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "create.badTemplate": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "template"
+            ],
+            "msg": "Input should be 'blank', 'approval', 'triage' or 'chat'"
+          }
+        ],
+        "message": "template: Input should be 'blank', 'approval', 'triage' or 'chat'",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "create.chatNoAgent": {
+    "body": {
+      "error": {
+        "code": "agent_required",
+        "message": "The chat template needs agentSlug.",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "create.unknownField": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "colour"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "colour: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "delete": {
+    "body": null,
+    "status": 204
+  },
+  "delete.again": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Workflow <wf> was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "discardDraft": {
+    "body": {
+      "data": null,
+      "success": true
+    },
+    "status": 200
+  },
+  "list": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "agentSlugs": [],
+            "deploymentCount": 0,
+            "description": "Seeded definition",
+            "engine": "v1",
+            "gateCount": 1,
+            "id": "dispute_email",
+            "kind": "standard",
+            "name": "Dispute email",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 9,
+            "teamId": "team_ops",
+            "trigger": "Email",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          },
+          {
+            "agentSlugs": [],
+            "deploymentCount": 0,
+            "description": "Seeded definition",
+            "engine": "v1",
+            "gateCount": 1,
+            "id": "levy-case",
+            "kind": "standard",
+            "name": "Levy-case",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 6,
+            "teamId": "team_ops",
+            "trigger": "Email",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          },
+          {
+            "agentSlugs": [],
+            "deploymentCount": 0,
+            "description": "Seeded definition",
+            "engine": "v1",
+            "gateCount": 0,
+            "id": "levy-intake",
+            "kind": "standard",
+            "name": "Levy-intake",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 5,
+            "teamId": "team_ops",
+            "trigger": "Email",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          }
+        ],
+        "facets": {
+          "status": {
+            "draft": 1,
+            "live": 4
+          }
+        },
+        "pagination": {
+          "hasNext": true,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 3,
+          "total": 5,
+          "totalPages": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "list.current": {
+    "body": {
+      "data": {
+        "data": [],
+        "facets": {
+          "status": {}
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 25,
+          "total": 0,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "list.desc": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "agentSlugs": [
+              "wire-fraud-sentinel"
+            ],
+            "deploymentCount": 0,
+            "description": "Wire Fraud Sentinel reads the request, then a fraud analyst approves or rejects the hold.",
+            "engine": "v1",
+            "gateCount": 1,
+            "id": "wire_hold_review",
+            "kind": "standard",
+            "name": "Wire hold review",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 2,
+            "teamId": "team_ops",
+            "trigger": "Hold requested",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          },
+          {
+            "agentSlugs": [
+              "wire-fraud-sentinel"
+            ],
+            "deploymentCount": 0,
+            "description": "",
+            "engine": "v1",
+            "gateCount": 1,
+            "id": "<wf>",
+            "kind": "standard",
+            "name": "Payee check",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "draft",
+            "stepCount": 2,
+            "teamId": "team_ops",
+            "trigger": "Payee added",
+            "updatedAt": "<timeZ>",
+            "version": 0
+          },
+          {
+            "agentSlugs": [],
+            "deploymentCount": 0,
+            "description": "Seeded definition",
+            "engine": "v1",
+            "gateCount": 0,
+            "id": "levy-intake",
+            "kind": "standard",
+            "name": "Levy-intake",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 5,
+            "teamId": "team_ops",
+            "trigger": "Email",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          }
+        ],
+        "facets": {
+          "status": {
+            "draft": 1,
+            "live": 4
+          }
+        },
+        "pagination": {
+          "hasNext": true,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 3,
+          "total": 5,
+          "totalPages": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "list.draft": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "agentSlugs": [
+              "wire-fraud-sentinel"
+            ],
+            "deploymentCount": 0,
+            "description": "",
+            "engine": "v1",
+            "gateCount": 1,
+            "id": "<wf>",
+            "kind": "standard",
+            "name": "Payee check",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "draft",
+            "stepCount": 2,
+            "teamId": "team_ops",
+            "trigger": "Payee added",
+            "updatedAt": "<timeZ>",
+            "version": 0
+          }
+        ],
+        "facets": {
+          "status": {
+            "draft": 1,
+            "live": 4
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 25,
+          "total": 1,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "list.pageSizeOver": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "query",
+              "pageSize"
+            ],
+            "msg": "Input should be less than or equal to 200"
+          }
+        ],
+        "message": "query.pageSize: Input should be less than or equal to 200",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "list.pastEnd": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "agentSlugs": [],
+            "deploymentCount": 0,
+            "description": "Seeded definition",
+            "engine": "v1",
+            "gateCount": 1,
+            "id": "dispute_email",
+            "kind": "standard",
+            "name": "Dispute email",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 9,
+            "teamId": "team_ops",
+            "trigger": "Email",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          },
+          {
+            "agentSlugs": [],
+            "deploymentCount": 0,
+            "description": "Seeded definition",
+            "engine": "v1",
+            "gateCount": 1,
+            "id": "levy-case",
+            "kind": "standard",
+            "name": "Levy-case",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 6,
+            "teamId": "team_ops",
+            "trigger": "Email",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          },
+          {
+            "agentSlugs": [],
+            "deploymentCount": 0,
+            "description": "Seeded definition",
+            "engine": "v1",
+            "gateCount": 0,
+            "id": "levy-intake",
+            "kind": "standard",
+            "name": "Levy-intake",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 5,
+            "teamId": "team_ops",
+            "trigger": "Email",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          },
+          {
+            "agentSlugs": [
+              "wire-fraud-sentinel"
+            ],
+            "deploymentCount": 0,
+            "description": "",
+            "engine": "v1",
+            "gateCount": 1,
+            "id": "<wf>",
+            "kind": "standard",
+            "name": "Payee check",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "draft",
+            "stepCount": 2,
+            "teamId": "team_ops",
+            "trigger": "Payee added",
+            "updatedAt": "<timeZ>",
+            "version": 0
+          },
+          {
+            "agentSlugs": [
+              "wire-fraud-sentinel"
+            ],
+            "deploymentCount": 0,
+            "description": "Wire Fraud Sentinel reads the request, then a fraud analyst approves or rejects the hold.",
+            "engine": "v1",
+            "gateCount": 1,
+            "id": "wire_hold_review",
+            "kind": "standard",
+            "name": "Wire hold review",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 2,
+            "teamId": "team_ops",
+            "trigger": "Hold requested",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          }
+        ],
+        "facets": {
+          "status": {
+            "draft": 1,
+            "live": 4
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 10,
+          "total": 5,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "list.startable": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "agentSlugs": [],
+            "deploymentCount": 0,
+            "description": "Seeded definition",
+            "engine": "v1",
+            "gateCount": 1,
+            "id": "dispute_email",
+            "kind": "standard",
+            "name": "Dispute email",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 9,
+            "teamId": "team_ops",
+            "trigger": "Email",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          },
+          {
+            "agentSlugs": [],
+            "deploymentCount": 0,
+            "description": "Seeded definition",
+            "engine": "v1",
+            "gateCount": 1,
+            "id": "levy-case",
+            "kind": "standard",
+            "name": "Levy-case",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 6,
+            "teamId": "team_ops",
+            "trigger": "Email",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          },
+          {
+            "agentSlugs": [],
+            "deploymentCount": 0,
+            "description": "Seeded definition",
+            "engine": "v1",
+            "gateCount": 0,
+            "id": "levy-intake",
+            "kind": "standard",
+            "name": "Levy-intake",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 5,
+            "teamId": "team_ops",
+            "trigger": "Email",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          }
+        ],
+        "facets": {
+          "status": {
+            "draft": 1,
+            "live": 4
+          }
+        },
+        "pagination": {
+          "hasNext": true,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 3,
+          "total": 5,
+          "totalPages": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "live.unpublished": {
+    "body": {
+      "error": {
+        "code": "not_published",
+        "message": "Publish this workflow before setting it live.",
+        "requestId": "<req>",
+        "status": 409
+      },
+      "success": false
+    },
+    "status": 409
+  },
+  "pointer": {
+    "body": {
+      "data": {
+        "agentSlugs": [
+          "wire-fraud-sentinel"
+        ],
+        "deploymentCount": 0,
+        "description": "Checks a new payee.",
+        "engine": "v1",
+        "gateCount": 1,
+        "id": "<wf>",
+        "kind": "standard",
+        "name": "Payee check",
+        "openReviews": 0,
+        "reviewed24h": 0,
+        "runs24h": 0,
+        "status": "live",
+        "stepCount": 2,
+        "teamId": "team_ops",
+        "trigger": "Payee added",
+        "updatedAt": "<timeZ>",
+        "version": 1
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "pointer.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Workflow <wf> version 9 was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "publish": {
+    "body": {
+      "data": {
+        "actionTool": "publish_workflow",
+        "agentName": null,
+        "agentSlug": "",
+        "approvals": [
+          "auto-approve (dev)"
+        ],
+        "confidence": 1,
+        "createdAt": "<timeZ>",
+        "currency": "CAD",
+        "customer": "Requested by j.richardson@harborpine.example",
+        "decidedAt": "<timeZ>",
+        "decidedBy": "auto-approve (dev)",
+        "evidence": [],
+        "id": "<WFP>",
+        "kind": "publish_request",
+        "policy": {
+          "condition": "every version before it serves",
+          "fourEyes": false,
+          "id": "gp_workflow_publish",
+          "name": "Workflow publish",
+          "onTimeout": "Stays pending; the requester is notified",
+          "reviewers": "publishers",
+          "sla": "1 business day"
+        },
+        "proposal": "go",
+        "publish": {
+          "changes": [],
+          "digest": "<hex>",
+          "fromVersion": 0,
+          "majorChange": true,
+          "note": "go",
+          "policy": "major",
+          "requestedBy": "j.richardson@harborpine.example",
+          "reviewReason": "dev_auto_approve",
+          "reviewRequired": false,
+          "toVersion": 1,
+          "validation": {
+            "checksFailing": 0,
+            "passed": 3,
+            "regressions": 0,
+            "total": 3
+          },
+          "workflowId": "<wf>"
+        },
+        "reasoning": [],
+        "risk": "low",
+        "slaMinutes": null,
+        "status": "approved",
+        "title": "Publish Payee check v1",
+        "workflowId": "<wf>",
+        "workflowName": "Payee check"
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "publish.notCompiling": {
+    "body": {
+      "error": {
+        "code": "checks_failing",
+        "details": {
+          "checks": [
+            {
+              "caseId": "entry",
+              "caseName": "One trigger",
+              "draft": {
+                "failure": "The graph has 0 triggers; it needs one.",
+                "passed": false,
+                "paused": false,
+                "reply": "",
+                "toolsCalled": []
+              },
+              "live": null,
+              "regression": false
+            }
+          ]
+        },
+        "message": "The graph does not compile; validate it to see the failing checks.",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
+  "read": {
+    "body": {
+      "data": {
+        "agentSlugs": [
+          "wire-fraud-sentinel"
+        ],
+        "canDelete": true,
+        "canEdit": true,
+        "canPublish": true,
+        "deploymentCount": 0,
+        "description": "",
+        "draft": {
+          "graph": {
+            "edges": [
+              {
+                "id": "t-out-agent",
+                "source": "t",
+                "target": "agent"
+              },
+              {
+                "id": "agent-out-review",
+                "source": "agent",
+                "target": "review"
+              },
+              {
+                "id": "review-approved-done",
+                "source": "review",
+                "sourceHandle": "approved",
+                "target": "done"
+              },
+              {
+                "id": "review-rejected-stopped",
+                "source": "review",
+                "sourceHandle": "rejected",
+                "target": "stopped"
+              }
+            ],
+            "nodes": [
+              {
+                "data": {
+                  "category": "trigger",
+                  "description": "",
+                  "icon": "globe",
+                  "label": "Payee added"
+                },
+                "id": "t",
+                "position": {
+                  "x": 0,
+                  "y": 200
+                },
+                "type": "trigger"
+              },
+              {
+                "data": {
+                  "agentSlug": "wire-fraud-sentinel",
+                  "category": "ai",
+                  "description": "",
+                  "icon": "brain",
+                  "label": "Agent"
+                },
+                "id": "agent",
+                "position": {
+                  "x": 270,
+                  "y": 200
+                },
+                "type": "step"
+              },
+              {
+                "data": {
+                  "category": "human",
+                  "description": "",
+                  "icon": "user",
+                  "label": "Review"
+                },
+                "id": "review",
+                "position": {
+                  "x": 540,
+                  "y": 200
+                },
+                "type": "review"
+              },
+              {
+                "data": {
+                  "category": "control",
+                  "description": "",
+                  "icon": "check",
+                  "label": "Approved"
+                },
+                "id": "done",
+                "position": {
+                  "x": 810,
+                  "y": 100
+                },
+                "type": "end"
+              },
+              {
+                "data": {
+                  "category": "control",
+                  "description": "",
+                  "icon": "check",
+                  "label": "Rejected"
+                },
+                "id": "stopped",
+                "position": {
+                  "x": 810,
+                  "y": 300
+                },
+                "type": "end"
+              }
+            ],
+            "workflowId": "<wf>"
+          },
+          "savedAt": "<timeZ>",
+          "savedBy": "j.richardson@harborpine.example"
+        },
+        "engine": "v1",
+        "gateCount": 1,
+        "graph": {
+          "edges": [
+            {
+              "id": "t-out-agent",
+              "source": "t",
+              "target": "agent"
+            },
+            {
+              "id": "agent-out-review",
+              "source": "agent",
+              "target": "review"
+            },
+            {
+              "id": "review-approved-done",
+              "source": "review",
+              "sourceHandle": "approved",
+              "target": "done"
+            },
+            {
+              "id": "review-rejected-stopped",
+              "source": "review",
+              "sourceHandle": "rejected",
+              "target": "stopped"
+            }
+          ],
+          "nodes": [
+            {
+              "data": {
+                "category": "trigger",
+                "description": "",
+                "icon": "globe",
+                "label": "Payee added"
+              },
+              "id": "t",
+              "position": {
+                "x": 0,
+                "y": 200
+              },
+              "type": "trigger"
+            },
+            {
+              "data": {
+                "agentSlug": "wire-fraud-sentinel",
+                "category": "ai",
+                "description": "",
+                "icon": "brain",
+                "label": "Agent"
+              },
+              "id": "agent",
+              "position": {
+                "x": 270,
+                "y": 200
+              },
+              "type": "step"
+            },
+            {
+              "data": {
+                "category": "human",
+                "description": "",
+                "icon": "user",
+                "label": "Review"
+              },
+              "id": "review",
+              "position": {
+                "x": 540,
+                "y": 200
+              },
+              "type": "review"
+            },
+            {
+              "data": {
+                "category": "control",
+                "description": "",
+                "icon": "check",
+                "label": "Approved"
+              },
+              "id": "done",
+              "position": {
+                "x": 810,
+                "y": 100
+              },
+              "type": "end"
+            },
+            {
+              "data": {
+                "category": "control",
+                "description": "",
+                "icon": "check",
+                "label": "Rejected"
+              },
+              "id": "stopped",
+              "position": {
+                "x": 810,
+                "y": 300
+              },
+              "type": "end"
+            }
+          ],
+          "workflowId": "<wf>"
+        },
+        "id": "<wf>",
+        "kind": "standard",
+        "name": "Payee check",
+        "openReviews": 0,
+        "reviewed24h": 0,
+        "runs24h": 0,
+        "status": "draft",
+        "stepCount": 2,
+        "teamId": "team_ops",
+        "teamName": null,
+        "trigger": "Payee added",
+        "updatedAt": "<timeZ>",
+        "version": 0
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "read.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Workflow wf_missing was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "refs.service": {
+    "body": {
+      "data": [
+        {
+          "id": "dispute_email",
+          "name": "Dispute email",
+          "status": "live",
+          "teamId": "team_ops"
+        },
+        {
+          "id": "levy-case",
+          "name": "Levy-case",
+          "status": "live",
+          "teamId": "team_ops"
+        },
+        {
+          "id": "levy-intake",
+          "name": "Levy-intake",
+          "status": "live",
+          "teamId": "team_ops"
+        },
+        {
+          "id": "<wf>",
+          "name": "Payee check",
+          "status": "paused",
+          "teamId": "team_ops"
+        },
+        {
+          "id": "wire_hold_review",
+          "name": "Wire hold review",
+          "status": "live",
+          "teamId": "team_ops"
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "restore": {
+    "body": {
+      "data": {
+        "agentSlugs": [
+          "wire-fraud-sentinel"
+        ],
+        "deploymentCount": 0,
+        "description": "Checks a new payee.",
+        "engine": "v1",
+        "gateCount": 1,
+        "id": "<wf>",
+        "kind": "standard",
+        "name": "Payee check",
+        "openReviews": 0,
+        "reviewed24h": 0,
+        "runs24h": 0,
+        "status": "live",
+        "stepCount": 2,
+        "teamId": "team_ops",
+        "trigger": "Payee added",
+        "updatedAt": "<timeZ>",
+        "version": 1
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "restore.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Workflow <wf> version 9 was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "routeFields": {
+    "body": {
+      "data": {
+        "fields": [
+          {
+            "name": "attempts",
+            "type": "number"
+          },
+          {
+            "name": "category",
+            "type": "text"
+          },
+          {
+            "name": "compliance",
+            "type": "text"
+          },
+          {
+            "name": "decision.decision",
+            "type": "text"
+          },
+          {
+            "name": "draft",
+            "type": "text"
+          },
+          {
+            "name": "email.body",
+            "type": "text"
+          },
+          {
+            "name": "email.sender",
+            "type": "text"
+          },
+          {
+            "name": "email.subject",
+            "type": "text"
+          },
+          {
+            "name": "evidence",
+            "type": "text"
+          },
+          {
+            "name": "feedback",
+            "type": "text"
+          },
+          {
+            "name": "record_count",
+            "type": "number"
+          },
+          {
+            "name": "review_id",
+            "type": "text"
+          },
+          {
+            "name": "route_reason",
+            "type": "text"
+          },
+          {
+            "name": "score",
+            "type": "number"
+          },
+          {
+            "name": "sent",
+            "type": "text"
+          },
+          {
+            "name": "status",
+            "type": "text"
+          }
+        ],
+        "ops": [
+          {
+            "label": "is",
+            "op": "eq",
+            "types": [
+              "text",
+              "number",
+              "boolean"
+            ]
+          },
+          {
+            "label": "is not",
+            "op": "ne",
+            "types": [
+              "text",
+              "number",
+              "boolean"
+            ]
+          },
+          {
+            "label": "is less than",
+            "op": "lt",
+            "types": [
+              "number"
+            ]
+          },
+          {
+            "label": "is at most",
+            "op": "le",
+            "types": [
+              "number"
+            ]
+          },
+          {
+            "label": "is more than",
+            "op": "gt",
+            "types": [
+              "number"
+            ]
+          },
+          {
+            "label": "is at least",
+            "op": "ge",
+            "types": [
+              "number"
+            ]
+          },
+          {
+            "label": "is one of",
+            "list": true,
+            "op": "in",
+            "types": [
+              "text",
+              "number"
+            ]
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "runs": {
+    "body": {
+      "data": {
+        "data": [],
+        "facets": {
+          "status": {}
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 25,
+          "total": 0,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "runs.pastEnd": {
+    "body": {
+      "data": {
+        "data": [],
+        "facets": {
+          "status": {}
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": true,
+          "page": 5,
+          "pageSize": 2,
+          "total": 0,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "saveDraft": {
+    "body": {
+      "data": {
+        "graph": {
+          "edges": [],
+          "nodes": [],
+          "workflowId": "<wf>"
+        },
+        "savedAt": "<timeZ>",
+        "savedBy": "j.richardson@harborpine.example"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "settings": {
+    "body": {
+      "data": {
+        "agentSlugs": [
+          "wire-fraud-sentinel"
+        ],
+        "deploymentCount": 0,
+        "description": "Checks a new payee.",
+        "engine": "v1",
+        "gateCount": 1,
+        "id": "<wf>",
+        "kind": "standard",
+        "name": "Payee check",
+        "openReviews": 0,
+        "reviewed24h": 0,
+        "runs24h": 0,
+        "status": "draft",
+        "stepCount": 2,
+        "teamId": "team_ops",
+        "trigger": "Payee added",
+        "updatedAt": "<timeZ>",
+        "version": 0
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "settings.unknownField": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "owner"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "owner: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "status": {
+    "body": {
+      "data": {
+        "agentSlugs": [
+          "wire-fraud-sentinel"
+        ],
+        "deploymentCount": 0,
+        "description": "Checks a new payee.",
+        "engine": "v1",
+        "gateCount": 1,
+        "id": "<wf>",
+        "kind": "standard",
+        "name": "Payee check",
+        "openReviews": 0,
+        "reviewed24h": 0,
+        "runs24h": 0,
+        "status": "paused",
+        "stepCount": 2,
+        "teamId": "team_ops",
+        "trigger": "Payee added",
+        "updatedAt": "<timeZ>",
+        "version": 1
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "test": {
+    "body": {
+      "data": {
+        "endStatus": "done",
+        "output": "Here is what I found.",
+        "pausesApproved": 1,
+        "status": "completed",
+        "visited": [
+          "t",
+          "agent",
+          "review",
+          "review__decide",
+          "done"
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "validate": {
+    "body": {
+      "data": {
+        "id": "<val>",
+        "ranAt": "<timeZ>",
+        "results": [
+          {
+            "caseId": "entry",
+            "caseName": "One trigger",
+            "draft": {
+              "failure": "The graph has 0 triggers; it needs one.",
+              "passed": false,
+              "paused": false,
+              "reply": "",
+              "toolsCalled": []
+            },
+            "live": null,
+            "regression": false
+          }
+        ],
+        "summary": {
+          "checksFailing": 1,
+          "passed": 0,
+          "regressions": 0,
+          "total": 1
+        },
+        "target": "draft",
+        "workflowId": "<wf>"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "validations.latest": {
+    "body": {
+      "data": {
+        "id": "<val>",
+        "ranAt": "<timeZ>",
+        "results": [
+          {
+            "caseId": "entry",
+            "caseName": "One trigger",
+            "draft": {
+              "failure": "The graph has 0 triggers; it needs one.",
+              "passed": false,
+              "paused": false,
+              "reply": "",
+              "toolsCalled": []
+            },
+            "live": null,
+            "regression": false
+          }
+        ],
+        "summary": {
+          "checksFailing": 1,
+          "passed": 0,
+          "regressions": 0,
+          "total": 1
+        },
+        "target": "draft",
+        "workflowId": "<wf>"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "versions": {
+    "body": {
+      "data": [
+        {
+          "changes": [
+            "First version"
+          ],
+          "current": true,
+          "note": "go",
+          "publishedAt": "<timeZ>",
+          "publishedBy": "auto-approve (dev)",
+          "version": 1
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  }
+}

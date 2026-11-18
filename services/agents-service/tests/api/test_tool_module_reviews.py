@@ -34,9 +34,15 @@ BODY = {
 }
 
 
-def service(name: str, team: str | None = None) -> str:
-    token = mint_service_token(dev_service_signer(), service=name, audience="agents", tenant_id=TENANT, team_id=team)
+def service(name: str, team: str | None = None, scopes: list[str] | None = None) -> str:
+    token = mint_service_token(
+        dev_service_signer(), service=name, audience="agents", tenant_id=TENANT, team_id=team, scopes=scopes
+    )
     return f"Bearer {token}"
+
+
+# The scope tools-service's agents client asks for on the token it sends beside a person's credentials.
+PUBLISH = ["tools:publish"]
 
 
 class WorkspaceTeams:
@@ -100,7 +106,9 @@ async def stack() -> AsyncIterator[tuple[AsyncClient, FakeTools]]:
 
 async def _open(c: AsyncClient, body: dict[str, Any] = BODY) -> Any:
     return await c.post(
-        "/v1/publish-requests", json=body, headers={**BUILDER, "X-Service-Authorization": service("tools")}
+        "/v1/publish-requests",
+        json=body,
+        headers={**BUILDER, "X-Service-Authorization": service("tools", scopes=PUBLISH)},
     )
 
 
@@ -110,10 +118,17 @@ async def test_only_tools_service_opens_a_review_for_the_person_and_their_team(
     c, _ = stack
     bare = await c.post("/v1/publish-requests", json=BODY, headers=BUILDER)
     assert (bare.status_code, bare.json()["error"]["code"]) == (401, "service_required"), bare.text
-    other = await c.post(
-        "/v1/publish-requests", json=BODY, headers={**BUILDER, "X-Service-Authorization": service("kb")}
+    # Who may vouch beside the person: tools-service holding tools:publish (opened below). Another service cannot hold
+    # that scope (the cap refuses its token) and a person's token is no service token.
+    callers: tuple[tuple[str, int, str], ...] = (
+        (service("tools"), 403, "scope_required"),
+        (service("kb"), 403, "scope_required"),
+        (service("kb", scopes=PUBLISH), 401, "unauthorized"),
+        (BUILDER["Authorization"], 401, "unauthorized"),
     )
-    assert (other.status_code, other.json()["error"]["code"]) == (403, "service_required"), other.text
+    for token, status, code in callers:
+        got = await c.post("/v1/publish-requests", json=BODY, headers={**BUILDER, "X-Service-Authorization": token})
+        assert (got.status_code, got.json().get("error", {}).get("code")) == (status, code), got.text
     elsewhere = await _open(c, {**BODY, "teamId": "team_fraud"})
     assert (elsewhere.status_code, elsewhere.json()["error"]["code"]) == (403, "team_forbidden"), elsewhere.text
     opened = await _open(c)
@@ -165,7 +180,9 @@ async def test_tools_service_alone_opens_a_tool_module_review_on_a_persons_behal
     assert review["customer"] == "Requested by james@harborpine.example", review
     assert review["toolModule"].get("openedBy") == "tools-service" or "openedBy" not in review["toolModule"], review
     person = await c.post(
-        "/v1/publish-requests", json=asked, headers={**BUILDER, "X-Service-Authorization": service("tools")}
+        "/v1/publish-requests",
+        json=asked,
+        headers={**BUILDER, "X-Service-Authorization": service("tools", scopes=PUBLISH)},
     )
     assert (person.status_code, person.json()["error"]["code"]) == (400, "requested_by_forbidden"), person.text
     agent = await c.post(
@@ -240,5 +257,75 @@ async def test_a_security_review_is_a_task_of_security_alone(stack: tuple[AsyncC
     assert not elsewhere and counted == 0
     assert (await listed(SECURITY))[0]
     assert (await c.get(f"/reviews/{rid}", headers=fraud)).status_code == 404
-    assert (await c.get(f"/v1/publish-requests/{rid}", headers=fraud)).status_code == 404
-    assert (await c.get(f"/v1/publish-requests/{rid}", headers=BUILDER)).status_code == 200
+
+
+TOOL_MODULE_READ = {
+    "actionTool": "publish_tool_module",
+    "agentName": None,
+    "agentSlug": "",
+    "approvals": [],
+    "confidence": 1,
+    "currency": "CAD",
+    "customer": "Requested by james@harborpine.example",
+    "evidence": [],
+    "id": "TMP-1001",
+    "kind": "publish_request",
+    "policy": {
+        "condition": "every version before it serves",
+        "fourEyes": False,
+        "id": "gp_tool_module_review",
+        "name": "Tool module review",
+        "onTimeout": "Stays pending; the requester is notified",
+        "reviewers": "Security",
+        "sla": "1 business day",
+    },
+    "proposal": "",
+    "reasoning": ["Two approvers"],
+    "risk": "low",
+    "status": "pending",
+    "title": "Publish Core banking v3.0.0",
+    "toolModule": {"applyPending": False, "moduleId": "mod_core_banking", "version": "3.0.0"},
+    "workflowId": "",
+    "workflowName": "Core banking",
+}
+HOST = {"host": "api.ledger.example", "app": "Ledger"}
+HELD_HOST = {
+    "app": "Ledger",
+    "applyPending": False,
+    "host": "api.ledger.example",
+    "requestedBy": "james@harborpine.example",
+    "teamId": "team_ops",
+}
+
+
+async def test_publish_requests_answer_their_reviewers_outside_the_owning_team(
+    stack: tuple[AsyncClient, FakeTools],
+) -> None:
+    """Security reviews what other teams ship, so it reads a security change or a held host by id before deciding; the
+    asking team reads it too, and any other team gets not found. A held host opens once: 201, then 200 with the same
+    request while it waits."""
+    c, _ = stack
+    tools = {**BUILDER, "X-Service-Authorization": service("tools", scopes=PUBLISH)}
+    fraud = person("otto", "team_fraud", "approver")
+    module = (await _open(c)).json()["data"]["id"]
+    opened = await c.post("/v1/publish-requests/egress-hosts", json=HOST, headers=tools)
+    again = await c.post("/v1/publish-requests/egress-hosts", json=HOST, headers=tools)
+    host = opened.json()["data"]["id"]
+    assert (opened.status_code, host, opened.json()["data"]["egressHost"]) == (201, "EGH-1001", HELD_HOST)
+    assert (again.status_code, again.json()["data"]["id"]) == (200, host), again.text
+    rows: list[tuple[str, dict[str, str], int, dict[str, Any] | None]] = [
+        (module, SECURITY, 200, TOOL_MODULE_READ),
+        (module, BUILDER, 200, None),
+        (module, fraud, 404, None),
+        (host, SECURITY, 200, None),
+        (host, BUILDER, 200, None),
+        (host, fraud, 404, None),
+    ]
+    for rid, who, status, reply in rows:
+        read = await c.get(f"/v1/publish-requests/{rid}", headers=who)
+        assert read.status_code == status, (rid, who, read.text)
+        if status == 200:
+            data = read.json()["data"]
+            assert data["policy"]["reviewers"] == "Security", (rid, who)
+            if reply is not None:
+                assert {k: v for k, v in data.items() if k not in ("createdAt", "slaMinutes")} == reply

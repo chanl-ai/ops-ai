@@ -16,6 +16,8 @@ from ops_access import (
     ACTIONS,
     AREAS,
     BUILTIN_ROLES,
+    INVITE_ROLES,
+    MEMBER_ROLES_BY_RANK,
     Access,
     Grant,
     Grids,
@@ -375,3 +377,9 @@ async def test_a_refusal_names_the_roles_the_workspaces_edited_grid_gives_the_ce
         ACCESS.can(viewer, "secrets_egress", "create", team="team_a")
     assert "Builder" not in refused.value.message, refused.value.message
     assert "builder" not in (refused.value.details or {})["grantedBy"]
+
+
+def test_membership_roles_rank_lowest_first() -> None:
+    # Sign-in gives the highest role any of a person's group rules names, so this order decides who gets what.
+    assert MEMBER_ROLES_BY_RANK == ("chat_user", "viewer", "builder", "approver", "admin")
+    assert sorted(MEMBER_ROLES_BY_RANK) == sorted(INVITE_ROLES)

@@ -21,7 +21,7 @@ from .store.holders import HolderStore
 from .store.identity import User
 from .store.members import Actor
 from .store.policies import PolicyStore
-from .store.signin import SignInStore
+from .store.signin import BreakGlassRow, SignInStore
 from .store.workspace import WorkspaceStore
 from .teams import Members
 
@@ -50,39 +50,40 @@ class BreakGlass:
 
     async def _security_admins(self, tenant_id: str) -> set[str]:
         team = await self.workspace.security_team(tenant_id)
-        found: dict[str, Any] = await self.holders.holders(tenant_id, team, "settings", "manage") if team else {}
-        return {str(p["id"]) for p in found.get("holders", [])}
+        if not team:
+            return set()
+        return {p.id for p in (await self.holders.holders(tenant_id, team, "settings", "manage")).holders}
 
-    async def people(self, tenant_id: str) -> list[dict[str, Any]]:
+    async def people(self, tenant_id: str) -> list[BreakGlassRow]:
         """The people on the list who still count."""
         admins = await self._security_admins(tenant_id)
-        return [p for p in await self.store.break_glass(tenant_id) if p["userId"] in admins]
+        return [p for p in await self.store.break_glass(tenant_id) if p.user_id in admins]
 
     async def counts(self, user: User) -> bool:
-        return any(p["userId"] == user.id for p in await self.people(user.tenant_id))
+        return any(p.user_id == user.id for p in await self.people(user.tenant_id))
 
-    async def list(self, actor: Actor) -> list[dict[str, Any]]:
+    async def list(self, actor: Actor) -> list[BreakGlassRow]:
         await self.members.require_admin(actor, "settings", "view")
         return await self.people(actor.tenant_id)
 
-    async def add(self, actor: Actor, user_id: str) -> list[dict[str, Any]]:
+    async def add(self, actor: Actor, user_id: str) -> list[BreakGlassRow]:
         await self.members.require_admin(actor, "settings", "manage")
         if user_id not in await self._security_admins(actor.tenant_id):
             raise Unprocessable(
                 "Only a Security admin can be a break-glass account.", code="break_glass_not_security_admin"
             )
         now = await self.people(actor.tenant_id)
-        if user_id not in {p["userId"] for p in now} and len(now) >= MOST:
+        if user_id not in {p.user_id for p in now} and len(now) >= MOST:
             raise Unprocessable(f"At most {MOST} people can be break-glass accounts.", code="break_glass_full")
         await self.store.add_break_glass(
             actor.tenant_id, user_id, actor=actor.user_id, at=_iso(datetime.now(UTC)), request_id=actor.request_id
         )
         return await self.people(actor.tenant_id)
 
-    async def remove(self, actor: Actor, user_id: str) -> list[dict[str, Any]]:
+    async def remove(self, actor: Actor, user_id: str) -> list[BreakGlassRow]:
         await self.members.require_admin(actor, "settings", "manage")
         now = await self.people(actor.tenant_id)
-        if [p["userId"] for p in now] == [user_id] and await self.required(actor.tenant_id):
+        if [p.user_id for p in now] == [user_id] and await self.required(actor.tenant_id):
             raise Conflict(
                 "Company sign-in is required, so one break-glass account must stay. Add another first, or turn "
                 "company sign-in required off.",

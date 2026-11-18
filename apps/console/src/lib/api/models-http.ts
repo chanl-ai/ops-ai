@@ -10,6 +10,6 @@ import { createProviderKeysHttp } from './provider-keys-http';
  * are an account admin.
  */
 export function createModelsHttp(baseUrl: string): { providerKeys: ProviderKeysApi; providerConnections: ProviderConnectionsApi } {
-  const { get, send } = createTransport(`${baseUrl}/v1`);
-  return { providerKeys: createProviderKeysHttp(get, send), providerConnections: createProviderConnectionsHttp(get, send) };
+  const { get, send, qs } = createTransport(`${baseUrl}/v1`);
+  return { providerKeys: createProviderKeysHttp(get, send, qs), providerConnections: createProviderConnectionsHttp(get, send, qs) };
 }

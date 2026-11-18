@@ -18,7 +18,7 @@ export default function WorkflowDefinitionPage() {
   const router = useRouter();
   const definition = useDefinition(id);
   const nodeTypes = useNodeTypes();
-  const canBuild = useCanBuild();
+  const canBuild = useCanBuild('workflows');
   const canPublish = useCan('workflows', 'publish');
   const { mutateAsync: validateAsync } = useValidateDefinition();
   const { mutateAsync: publishAsync, isPending: publishing } = usePublishDefinition();

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, cast
 
 from fastapi import Request
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 
@@ -30,6 +31,16 @@ class UsageReader(Protocol):
     async def of(self, tenant_id: str, team_id: str) -> TeamUsage: ...
 
 
+class _UsageReply(BaseModel):
+    """agents-service's reply to `GET /v1/teams/usage`; a field it leaves out or sends as null counts as none."""
+
+    model_config = ConfigDict(frozen=True)
+
+    runs_in_progress: int | None = Field(None, alias="runsInProgress")
+    # Any JSON value, each read as text: the names are shown, never looked up.
+    live_workflows: list[Any] | None = Field(None, alias="liveWorkflows")
+
+
 @dataclass
 class AgentsUsage:
     """`agents` unset (no agents-service URL configured) refuses every read, so nothing is deleted unchecked."""
@@ -40,11 +51,14 @@ class AgentsUsage:
         if self.agents is None:
             raise UsageUnavailable("agents-service is not configured")
         try:
-            data = cast(dict[str, Any], await self.agents.get("/v1/teams/usage", tenant=tenant_id, team=team_id))
+            reply = _UsageReply.model_validate(await self.agents.get("/v1/teams/usage", tenant=tenant_id, team=team_id))
         except (ServiceCallError, ServiceUnreachable) as e:
             raise UsageUnavailable(str(e)) from e
-        live = cast(list[Any], data.get("liveWorkflows") or [])
-        return TeamUsage(int(data.get("runsInProgress") or 0), [str(n) for n in live])
+        except ValidationError as e:
+            raise UsageUnavailable(
+                f"agents-service answered usage in an unknown shape: {e.error_count()} errors"
+            ) from e
+        return TeamUsage(reply.runs_in_progress or 0, [str(n) for n in reply.live_workflows or []])
 
 
 def team_usage(request: Request) -> UsageReader:

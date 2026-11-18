@@ -5,16 +5,16 @@ vector with each unit's by cosine distance (ops_store.dialect) and returns each 
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import TypedDict
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_store import isolation
 from ops_store.dialect import vector_distance_sql, vector_search_setup, vector_text
+from ops_store.store import Store
 from ops_store.team_scope import team_visible
 
-from .fulltext import Narrowing, scope_sql
+from .fulltext import Narrowing, PieceHit, piece_of, scope_sql
 from .knowledge import ROLE, kb_chunks, kb_unit_vectors, kb_units
 
 # Units read per piece asked for, as the keyword lane reads them: a piece's text, children and questions can all be
@@ -39,27 +39,61 @@ def _search_sql(width: int, scope: str = "TRUE") -> sa.TextClause:
         WHERE v.tenant_id = :tenant AND l.kb_id IN :kb_ids AND v.model = :model AND v.width = :width AND {scope}
         ORDER BY {distance}
         LIMIT :limit
-        """
+        """  # noqa: S608
     ).bindparams(sa.bindparam("kb_ids", expanding=True))
 
 
-class PgVectorStore:
+class PendingUnit(TypedDict):
+    """An index unit waiting for a vector, with what its vector is made from."""
+
+    id: str
+    chunk_id: str
+    item_id: str
+    heading: str | None
+    text: str
+
+
+class UnitVector(TypedDict):
+    """A unit's vector to store, with the piece and item the unit belongs to."""
+
+    unit_id: str
+    chunk_id: str
+    item_id: str
+    vector: list[float]
+
+
+class VectorHit(PieceHit):
+    """A unit the meaning lane matched, with its similarity to the question (1 is the same direction)."""
+
+    similarity: float
+
+
+class MeaningHit(VectorHit):
+    """A vector hit above the bases' threshold, scored for the fusion by its similarity."""
+
+    lane_score: float
+
+
+class PgVectorStore(Store):
+    role = ROLE
+
     def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+        super().__init__(engine)
         self._ready: bool | None = None
 
     async def ready(self) -> bool:
-        """Whether this database has the vector table (pgvector installed when the chain ran)."""
+        """Whether this database has the vector table (pgvector installed when the chain ran). Asked inside a tenant's
+        request or pass, on its transaction."""
         if self._ready is None:
-            async with self.engine.connect() as c:
-                if c.dialect.name != "postgresql":
-                    self._ready = False
-                else:
+            if self.engine.dialect.name != "postgresql":
+                self._ready = False
+            else:
+                async with self.tx() as c:
                     found = await c.scalar(sa.text("SELECT to_regclass('kb_unit_vectors')"))
-                    self._ready = found is not None
+                self._ready = found is not None
         return self._ready
 
-    async def pending(self, tenant: str, *, model: str, width: int, limit: int) -> list[dict[str, Any]]:
+    async def pending(self, tenant: str, *, model: str, width: int, limit: int) -> list[PendingUnit]:
         """Units of live pieces with no vector of `model` at `width`, oldest piece first."""
         u, c, v = kb_units, kb_chunks, kb_unit_vectors
         current = sa.and_(v.c.tenant_id == u.c.tenant_id, v.c.unit_id == u.c.id, v.c.model == model, v.c.width == width)
@@ -76,8 +110,13 @@ class PgVectorStore:
             .order_by(u.c.chunk_id, u.c.position)
             .limit(limit)
         )
-        async with isolation.isolated_tx(self.engine, role=ROLE) as conn:
-            return [dict(r) for r in (await conn.execute(q)).mappings()]
+        async with self.tx() as conn:
+            return [
+                PendingUnit(
+                    id=r["id"], chunk_id=r["chunk_id"], item_id=r["item_id"], heading=r["heading"], text=r["text"]
+                )
+                for r in (await conn.execute(q)).mappings()
+            ]
 
     async def pending_count(self, tenant: str, *, model: str, width: int) -> int:
         """How many units of live pieces have no vector of `model` at `width`."""
@@ -94,16 +133,16 @@ class PgVectorStore:
                 team_visible(c),
             )
         )
-        async with isolation.isolated_tx(self.engine, role=ROLE) as conn:
+        async with self.tx() as conn:
             return int(await conn.scalar(q) or 0)
 
-    async def put(self, tenant: str, rows: list[dict[str, Any]], *, model: str, width: int) -> None:
+    async def put(self, tenant: str, rows: list[UnitVector], *, model: str, width: int) -> None:
         """Each unit's vector, replacing one of another model or width."""
         if not rows:
             return
         v = kb_unit_vectors
         now = datetime.now(UTC)
-        async with isolation.isolated_tx(self.engine, role=ROLE) as conn:
+        async with self.tx() as conn:
             ids = [str(r["unit_id"]) for r in rows]
             teams = {
                 str(r[0]): str(r[1])
@@ -148,7 +187,7 @@ class PgVectorStore:
             """
         ).bindparams(sa.bindparam("kb_ids", expanding=True))
         params = {"tenant": tenant, "kb_ids": kb_ids, "model": model, "width": width}
-        async with isolation.isolated_tx(self.engine, role=ROLE) as conn:
+        async with self.tx() as conn:
             row = (await conn.execute(q, params)).mappings().one()
         return int(row["embedded"] or 0), int(row["total"] or 0)
 
@@ -162,7 +201,7 @@ class PgVectorStore:
         width: int,
         limit: int,
         how: Narrowing | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[VectorHit]:
         """The units nearest the question's vector within each base's scope, with their piece and similarity (1 is the
         same direction). The scope is in the query, so the nearest units out of scope never take the places."""
         scope, scoped = scope_sql(kb_ids, how)
@@ -175,7 +214,10 @@ class PgVectorStore:
             "width": width,
             "limit": limit * OVERFETCH,
         }
-        async with isolation.isolated_tx(self.engine, role=ROLE) as conn:
+        async with self.tx() as conn:
             for statement in vector_search_setup(conn.dialect.name):
                 await conn.execute(sa.text(statement))
-            return [dict(r) for r in (await conn.execute(_search_sql(width, scope), params)).mappings()]
+            return [
+                VectorHit(**piece_of(r), similarity=r["similarity"])
+                for r in (await conn.execute(_search_sql(width, scope), params)).mappings()
+            ]

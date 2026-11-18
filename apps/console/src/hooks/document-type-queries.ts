@@ -2,7 +2,10 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import type { OptionSource } from "@/hooks/options-queries";
+import { usePagedQuery } from "@/hooks/paged-query";
 import { api } from "@/lib/api";
+import type { ListParams } from "@/lib/types/query";
 import type {
   DocumentTypeInput,
   DocumentTypeSampleInput,
@@ -23,11 +26,29 @@ export const dtk = {
     ["document-types", "session-tests", id] as const,
 };
 
-export const useDocumentTypes = () =>
-  useTeamQuery({
-    queryKey: dtk.list,
-    queryFn: () => api.files.documentTypes.list(),
+/** One page of the team's types; the server searches, orders and counts. */
+export const useDocumentTypes = (p: ListParams) =>
+  usePagedQuery({
+    queryKey: [...dtk.list, p],
+    queryFn: () => api.files.documentTypes.list(p),
   });
+
+/** Document types for a picker: searched on the server as typed, or named by id; a page number is the cursor. */
+export const documentTypeOptions: OptionSource = {
+  key: "document-type-options",
+  fetch: async ({ search, cursor, limit = 25, ids }) => {
+    const page = Number(cursor ?? 1);
+    const res = await api.files.documentTypes.list(
+      ids?.length
+        ? { page: 1, pageSize: Math.min(ids.length, 50), ids }
+        : { page, pageSize: limit, search: search || undefined },
+    );
+    return {
+      data: res.data.map((t) => ({ id: t.id, label: t.name, hint: t.description })),
+      nextCursor: !ids?.length && res.pagination.hasNext ? String(page + 1) : null,
+    };
+  },
+};
 export const useDocumentType = (id: string) =>
   useTeamQuery({
     queryKey: dtk.one(id),

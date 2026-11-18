@@ -34,9 +34,7 @@ async def test_an_auth_configs_client_secret_is_listed_read_only_and_changed_onl
             "/v1/secrets", json={"name": "DESK_TOOL_KEY", "value": "x", "teamId": TEAM}, headers=sam
         )
     )
-    page = _data(
-        await world.client.get("/v1/secrets", params={"teamId": TEAM, "page": 1, "pageSize": 200}, headers=sam)
-    )
+    page = _data(await world.client.get("/v1/secrets", params={"teamId": TEAM, "page": 1, "pageSize": 50}, headers=sam))
     rows = {s["name"]: s for s in page["data"]}
     sealed = [n for n, s in rows.items() if s.get("credentialId") == row["id"]]
     assert sealed and "DESK_TOOL_KEY" in rows, list(rows)
@@ -53,3 +51,24 @@ async def test_an_auth_configs_client_secret_is_listed_read_only_and_changed_onl
         refused = await world.client.request(method, path, params={"teamId": TEAM}, json=body, headers=sam)
         assert refused.status_code == 409 and refused.json()["error"]["code"] == "credential_secret", refused.text
         assert row["name"] in refused.json()["error"]["message"], refused.text
+
+
+async def test_the_secrets_list_filters_on_read_only_and_never_shows_another_teams(
+    world: World,  # noqa: F811
+    tenant: str,
+) -> None:
+    await made(world, tenant)
+    sam = person(tenant, "Sam Adeyemi", {"team_security": "admin"})
+    for name, team in (("DESK_TOOL_KEY", TEAM), ("OTHER_TEAM_KEY", "team_ops")):
+        _data(await world.client.post("/v1/secrets", json={"name": name, "value": "x", "teamId": team}, headers=sam))
+    seen: dict[str, tuple[int, list[bool]]] = {}
+    for want in ("true", "false"):
+        page = _data(
+            await world.client.get(
+                "/v1/secrets", params={"teamId": TEAM, "readOnly": want, "pageSize": 50}, headers=sam
+            )
+        )
+        seen[want] = (page["pagination"]["total"], [s["readOnly"] for s in page["data"]])
+        assert "OTHER_TEAM_KEY" not in {s["name"] for s in page["data"]}, page["data"]
+    assert seen["true"][1] and set(seen["true"][1]) == {True} and seen["true"][0] == len(seen["true"][1]), seen
+    assert seen["false"] == (1, [False]), seen

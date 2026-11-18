@@ -12,30 +12,40 @@ test spends a model call per sample, so its estimate (calls and cost from the al
 
 from __future__ import annotations
 
-import asyncio
 import re
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, Protocol, cast
-
-import httpx
+from typing import Any, Protocol, TypedDict, cast
 
 from ops_contracts.field_values import DATE_ORDERS, DEFAULT_DATE_ORDER, normalise
 from ops_documents.errors import CreateNotAllowedError, DocumentTypeMissingError, InvalidRequestError, StateError
-from ops_documents.extraction import ALIAS, FALLBACK_ALIAS, PATH_TEMPLATE, Extractor, reading, request_of
+from ops_documents.extraction import ALIAS, FALLBACK_ALIAS, PATH_TEMPLATE, Extractor, request_of
 from ops_documents.files import Files, Who
-from ops_documents.store.document_types import DocumentTypesStore, NameTakenError
+from ops_documents.pending import Pending
+from ops_documents.readings import READING_PROCESS
+from ops_documents.store.document_types import (
+    SINGLE,
+    DocumentTypesStore,
+    ExampleRow,
+    NameTakenError,
+    SampleRow,
+    TestRow,
+    TypeRow,
+    VersionRow,
+)
 from ops_documents.store.extractions import ExtractionRow
 from ops_extract import boxes, rules, templates
 from ops_extract.checks import fold
-from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable, segment
+from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_pii import mask
+from ops_service_kit.http import PageJSON
+from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
-from ops_store import isolation
+from ops_store import background, isolation
 
 log = get_logger("ops_documents.document_types")
 
@@ -54,6 +64,17 @@ class Prices(Protocol):
         ...
 
 
+class AliasPrice(TypedDict):
+    """The fields of models-service's alias row a price reads."""
+
+    inputPerMillion: str
+    outputPerMillion: str
+
+
+class AliasPage(TypedDict):
+    data: list[AliasPrice]
+
+
 @dataclass
 class ModelsPrices:
     """An alias's price from models-service (its alias versions), for a test's estimate; `extract` falls back to
@@ -64,20 +85,14 @@ class ModelsPrices:
     async def price(self, alias: str, *, tenant: str) -> tuple[Decimal, Decimal] | None:
         for name in dict.fromkeys((alias, FALLBACK_ALIAS)):
             try:
-                # models-service refuses a service token that names no tenant (401), which read as "no price".
-                path = f"/v1/models/aliases/{segment(name)}/versions"
-                rows = cast(list[dict[str, Any]], await self.client.request("GET", path, tenant=tenant))
-            except ServiceCallError as e:
-                if e.status == 404:
-                    continue
+                # models-service refuses a service token that names no tenant (401), which read as "no price". The
+                # alias list answers each alias's serving version, which its versions list may hold past page one.
+                page = await self.client.request("GET", "/v1/models/aliases", params={"ids": name}, tenant=tenant)
+            except (ServiceCallError, ServiceUnreachable):
                 return None
-            except ServiceUnreachable:
-                return None
-            except ValueError:
-                continue  # a name with a slash is no alias models-service holds
-            current = [r for r in rows if r.get("status") == "current"] or rows
+            current = cast(AliasPage, page)["data"]
             if current:
-                return Decimal(str(current[-1]["inputPerMillion"])), Decimal(str(current[-1]["outputPerMillion"]))
+                return Decimal(str(current[0]["inputPerMillion"])), Decimal(str(current[0]["outputPerMillion"]))
         return None
 
 
@@ -94,49 +109,81 @@ def dated(fields: list[dict[str, Any]], order: str | None) -> list[dict[str, Any
     return [{**f, "dateOrder": order or DEFAULT_DATE_ORDER} if f.get("type") == "date" else f for f in fields]
 
 
-def _version_view(v: dict[str, Any]) -> dict[str, Any]:
+class TypeSummary(TypedDict):
+    """A type as the list answers it (`DocumentTypeRow`)."""
+
+    id: str
+    name: str
+    description: str | None
+    latestVersion: int
+
+
+class TypePage(TypedDict):
+    """A page of the team's types (`DocumentTypeList`)."""
+
+    data: list[TypeSummary]
+    pagination: PageJSON
+    facets: dict[str, dict[str, int]]
+    canCreate: bool
+
+
+def _version_view(v: VersionRow) -> dict[str, Any]:
     return {
-        "version": v["version"],
-        "fields": v["fields"],
-        "many": v["many"],
-        "reviewBelow": v["review_below"],
-        "dateOrder": v.get("date_order") or DEFAULT_DATE_ORDER,
-        "templates": v.get("templates") or [],
-        "checks": v.get("checks") or [],
-        "pageImages": bool(v.get("page_images")),
-        "offerAt": v.get("offer_at") or DEFAULT_OFFER_AT,
-        "note": v["note"],
-        "createdBy": v["created_by"],
-        "createdAt": v["created_at"].isoformat(),
+        "version": v.version,
+        "fields": v.fields,
+        "many": v.many,
+        "reviewBelow": v.review_below,
+        "dateOrder": v.date_order or DEFAULT_DATE_ORDER,
+        "templates": v.templates or [],
+        "checks": v.checks or [],
+        "pageImages": bool(v.page_images),
+        "offerAt": v.offer_at or DEFAULT_OFFER_AT,
+        "note": v.note,
+        "createdBy": v.created_by,
+        "createdAt": v.created_at.isoformat(),
     }
 
 
-def _sample_view(s: dict[str, Any]) -> dict[str, Any]:
+def _sample_view(s: SampleRow) -> dict[str, Any]:
     return {
-        "id": s["id"],
-        "fileId": s["file_id"],
-        "name": s["name"],
-        "expected": s["expected"],
-        "addedBy": s["added_by"],
-        "addedAt": s["added_at"].isoformat(),
+        "id": s.id,
+        "fileId": s.file_id,
+        "name": s.name,
+        "expected": s.expected,
+        "addedBy": s.added_by,
+        "addedAt": s.added_at.isoformat(),
     }
 
 
-def _test_view(t: dict[str, Any]) -> dict[str, Any]:
+def _test_view(t: TestRow) -> dict[str, Any]:
     out: dict[str, Any] = {
-        "id": t["id"],
-        "typeId": t["type_id"],
-        "version": t["version"],
-        "status": t["status"],
-        "samples": t["samples"],
-        "askedBy": t["asked_by"],
-        "askedAt": t["asked_at"].isoformat(),
+        "id": t.id,
+        "typeId": t.type_id,
+        "version": t.version,
+        "status": t.status,
+        "samples": t.samples,
+        "askedBy": t.asked_by,
+        "askedAt": t.asked_at.isoformat(),
     }
-    if t.get("result") is not None:
-        out["result"] = t["result"]
-    if t.get("error"):
-        out["error"] = t["error"]
+    if t.result is not None:
+        out["result"] = t.result
+    if t.error:
+        out["error"] = t.error
     return out
+
+
+def example_view(e: ExampleRow) -> dict[str, Any]:
+    """An example as a read is given it and a person sees it: its record's position, or none for a read of one."""
+    return {
+        "id": e.id,
+        "field": e.field,
+        "line": e.line,
+        "value": e.value,
+        "extractionId": e.extraction_id,
+        "record": None if e.record == SINGLE else e.record,
+        "correctedBy": e.corrected_by,
+        "createdAt": e.created_at.isoformat(),
+    }
 
 
 def matches(f: dict[str, Any], expected: Any, got: Any) -> bool:
@@ -157,7 +204,7 @@ class DocumentTypes:
     extractor: Extractor
     prices: Prices | None = None
     clock: Callable[[], datetime] = lambda: datetime.now(UTC)
-    _tasks: set[asyncio.Task[None]] = field(default_factory=set[asyncio.Task[None]])
+    _pending: Pending = field(default_factory=Pending)
 
     # ── types and versions ──
 
@@ -283,9 +330,9 @@ class DocumentTypes:
         found = await self.store.version(type_id, version)
         return _version_view(found) if found is not None else None
 
-    async def _own(self, who: Who, type_id: str) -> dict[str, Any] | None:
+    async def _own(self, who: Who, type_id: str) -> TypeRow | None:
         row = await self.store.get(type_id)
-        return row if row is not None and row["team"] == who.team else None
+        return row if row is not None and row.team == who.team else None
 
     async def get(self, who: Who, type_id: str) -> dict[str, Any] | None:
         row = await self._own(who, type_id)
@@ -294,13 +341,13 @@ class DocumentTypes:
         versions = await self.store.versions(type_id)
         samples = await self.store.samples(type_id)
         return {
-            "id": row["id"],
-            "name": row["name"],
-            "description": row["description"],
-            "team": row["team"],
-            "latestVersion": row["latest_version"],
-            "createdBy": row["created_by"],
-            "createdAt": row["created_at"].isoformat(),
+            "id": row.id,
+            "name": row.name,
+            "description": row.description,
+            "team": row.team,
+            "latestVersion": row.latest_version,
+            "createdBy": row.created_by,
+            "createdAt": row.created_at.isoformat(),
             "versions": [_version_view(v) for v in versions],
             "samples": [_sample_view(s) for s in samples],
             "canEdit": who.edits,
@@ -308,41 +355,47 @@ class DocumentTypes:
 
     async def list(self, who: Who) -> list[dict[str, Any]]:
         return [
-            {"id": r["id"], "name": r["name"], "description": r["description"], "latestVersion": r["latest_version"]}
-            for r in await self.store.list(who.team)
+            {"id": r.id, "name": r.name, "description": r.description, "latestVersion": r.latest_version}
+            for r in await self.store.every(who.team)
         ]
+
+    async def page(self, who: Who, params: ListParams) -> TypePage:
+        """One page of the team's types, and whether the caller may add one (the console's New type)."""
+        rows, page = await self.store.list(who.team, params)
+        listed = [
+            TypeSummary(id=r.id, name=r.name, description=r.description, latestVersion=r.latest_version) for r in rows
+        ]
+        return TypePage(data=listed, pagination=page["pagination"], facets=page["facets"], canCreate=who.creates)
 
     async def name(self, who: Who, type_id: str) -> str | None:
         row = await self._own(who, type_id)
-        return str(row["name"]) if row is not None else None
+        return row.name if row is not None else None
 
     async def resolve(self, who: Who, type_id: str, version: int | None) -> dict[str, Any]:
         """The version an extraction reads with: the one asked for, or the newest. Another team's type, or a version
         it does not have, is not found."""
-        row = await self._own(who, type_id)
-        if row is None:
-            raise DocumentTypeMissingError(type_id)
-        n = version if version is not None else int(row["latest_version"])
-        found = await self.store.version(type_id, n)
+        # The type and its version in one transaction; inside a caller's own one, part of it.
+        async with isolation.request_transaction():
+            row = await self._own(who, type_id)
+            if row is None:
+                raise DocumentTypeMissingError(type_id)
+            n = version if version is not None else row.latest_version
+            found = await self.store.version(type_id, n)
         if found is None:
             raise DocumentTypeMissingError(f"{type_id} v{n}")
         return {
             "id": type_id,
-            "name": row["name"],
+            "name": row.name,
             "version": n,
-            "fields": dated(found["fields"], found.get("date_order")),
-            "many": found["many"],
-            "reviewBelow": found["review_below"],
+            "fields": dated(found.fields, found.date_order),
+            "many": found.many,
+            "reviewBelow": found.review_below,
             # The templates extraction tries; one flagged for a rebuild reads a field the version lacks.
-            "templates": [
-                t
-                for t in cast(list[dict[str, Any]], found.get("templates") or [])
-                if not t.get(templates.NEEDS_REBUILD)
-            ],
-            "allTemplates": found.get("templates") or [],
-            "checks": found.get("checks") or [],
-            "pageImages": bool(found.get("page_images")),
-            "offerAt": found.get("offer_at") or DEFAULT_OFFER_AT,
+            "templates": [t for t in found.templates or [] if not t.get(templates.NEEDS_REBUILD)],
+            "allTemplates": found.templates or [],
+            "checks": found.checks or [],
+            "pageImages": bool(found.page_images),
+            "offerAt": found.offer_at or DEFAULT_OFFER_AT,
         }
 
     # ── template suggestions ──
@@ -371,16 +424,19 @@ class DocumentTypes:
         """A draft template from the team's finished reads of the type, and how it reads each of them. Nothing is
         saved: a builder saves the draft as a new version, so nothing goes live on its own."""
         self._may_write(who)
-        if await self._own(who, type_id) is None:
-            return None
-        ids = list(dict.fromkeys(extraction_ids))
-        if not 0 < len(ids) <= MAX_SUGGEST_READS:
-            raise InvalidRequestError(f"extractionIds lists 1 to {MAX_SUGGEST_READS} reads")
-        rows = [await self.extractor.store.get(i) for i in ids]
+        # Gate: the type, the reads and the latest version in one transaction, closed before any layout is read, which
+        # reads files-service when the layout is not stored.
+        async with isolation.request_transaction():
+            if await self._own(who, type_id) is None:
+                return None
+            ids = list(dict.fromkeys(extraction_ids))
+            if not 0 < len(ids) <= MAX_SUGGEST_READS:
+                raise InvalidRequestError(f"extractionIds lists 1 to {MAX_SUGGEST_READS} reads")
+            rows = [await self.extractor.store.get(i) for i in ids]
+            version = await self.resolve(who, type_id, None)
         reads = [await self._read_of(who, type_id, r, i) for r, i in zip(rows, ids, strict=True)]
         tid = f"tpl_{uuid.uuid4().hex[:10]}"
         draft = templates.suggest(reads, template_id=tid)
-        version = await self.resolve(who, type_id, None)
         fields = cast(list[dict[str, Any]], version["fields"])
         checks: list[dict[str, Any]] = []
         for row, read in zip(rows, reads, strict=True):
@@ -406,13 +462,16 @@ class DocumentTypes:
     async def template_offers(self, who: Who, type_id: str) -> list[dict[str, Any]] | None:
         """Groups of at least the version's offerAt checked model reads of the type that share a layout and that no
         template of the latest version reads: where suggesting a template pays."""
-        if await self._own(who, type_id) is None:
-            return None
-        version = await self.resolve(who, type_id, None)
-        current = cast(list[dict[str, Any]], version.get("templates") or [])
         store = self.extractor.store
+        # The type, its version and its reads in one transaction, closed before a layout is read from files-service.
+        async with isolation.request_transaction():
+            if await self._own(who, type_id) is None:
+                return None
+            version = await self.resolve(who, type_id, None)
+            recent = await store.recent_reads(who.team, type_id, last=TEMPLATE_OFFER_READS)
+        current = cast(list[dict[str, Any]], version.get("templates") or [])
         groups: dict[str, list[ExtractionRow]] = {}
-        for row in await store.recent_reads(who.team, type_id, last=TEMPLATE_OFFER_READS):
+        for row in recent:
             result = row.result or {}
             if result.get("path") == PATH_TEMPLATE or result.get("needsReview") or "records" in result:
                 continue
@@ -437,65 +496,71 @@ class DocumentTypes:
 
     async def add_sample(self, who: Who, type_id: str, body: dict[str, Any]) -> dict[str, Any] | None:
         self._may_write(who)
-        row = await self._own(who, type_id)
-        if row is None:
-            return None
         file_id = str(body.get("fileId") or "")
         expected = body.get("expected")
-        latest = await self.store.version(type_id, int(row["latest_version"]))
+        # Gate: the type and its latest version, in one transaction closed before files-service is asked.
+        async with isolation.request_transaction():
+            row = await self._own(who, type_id)
+            if row is None:
+                return None
+            latest = await self.store.version(type_id, row.latest_version)
         assert latest is not None
-        keys = {str(f["key"]) for f in cast(list[dict[str, Any]], latest["fields"])}
-        records = cast(list[Any], expected) if latest["many"] and isinstance(expected, list) else [expected]
-        if (latest["many"] and not isinstance(expected, list)) or not all(isinstance(r, dict) for r in records):
+        keys = {str(f["key"]) for f in latest.fields}
+        records = cast(list[Any], expected) if latest.many and isinstance(expected, list) else [expected]
+        if (latest.many and not isinstance(expected, list)) or not all(isinstance(r, dict) for r in records):
             raise InvalidRequestError(
                 "expected is {field: value}, or a list of them for a type reading several records"
             )
         unknown = sorted({k for r in records for k in cast(dict[str, Any], r)} - keys)
         if unknown:
             raise InvalidRequestError(
-                f"expected names fields version {latest['version']} does not have: {', '.join(unknown)}"
+                f"expected names fields version {latest.version} does not have: {', '.join(unknown)}"
             )
         file = await self.files.readable(who, file_id)
         sample_id = f"smp_{uuid.uuid4().hex[:12]}"
         # Files keeps the file while the sample names it (files 5.3.4).
-        await self.files.keep(who, file_id, ref_id=sample_id, name=row["name"])
-        values: dict[str, Any] = {
-            "tenant_id": who.tenant_id,
-            "id": sample_id,
-            "type_id": type_id,
-            "file_id": file_id,
-            "name": file.name,
-            "expected": expected,
-            "added_by": who.actor,
-            "added_at": self.clock(),
-        }
-        await self.store.add_sample(values)
-        return _sample_view(values)
+        await self.files.keep(who, file_id, ref_id=sample_id, name=row.name)
+        sample = SampleRow(
+            id=sample_id,
+            type_id=type_id,
+            file_id=file_id,
+            name=file.name,
+            expected=expected,
+            added_by=who.actor,
+            added_at=self.clock(),
+        )
+        async with isolation.request_transaction():
+            await self.store.add_sample({"tenant_id": who.tenant_id, **sample.model_dump()})
+        return _sample_view(sample)
 
     async def remove_sample(self, who: Who, type_id: str, sample_id: str) -> bool:
         self._may_write(who)
-        if await self._own(who, type_id) is None:
-            return False
-        gone = await self.store.remove_sample(type_id, sample_id)
+        # The sample's row goes in one transaction, committed before files-service is told to let the file go.
+        async with isolation.request_transaction():
+            if await self._own(who, type_id) is None:
+                return False
+            gone = await self.store.remove_sample(type_id, sample_id)
         if gone is None:
             return False
-        await self.files.release(who, gone["file_id"], ref_id=sample_id)
+        await self.files.release(who, gone.file_id, ref_id=sample_id)
         return True
 
     # ── examples ──
 
     async def examples(self, tenant: str, team: str, type_id: str, keys: list[str]) -> list[dict[str, Any]]:
         """What a read of the type is given: the newest few per field it asks, within the two caps."""
-        return await self.store.recent_examples(
+        found = await self.store.recent_examples(
             team, type_id, keys, per_field=EXAMPLES_PER_FIELD, total=EXAMPLES_IN_ALL
         )
+        return [example_view(e) for e in found]
 
     async def list_examples(self, who: Who, type_id: str) -> list[dict[str, Any]] | None:
         """The type's examples in the caller's team, newest first, each printed line masked as the team masks personal
         data in what people see, and its corrected value too; the stored example, which reads are given, stays real."""
-        if await self._own(who, type_id) is None:
-            return None
-        rows = await self.store.examples(who.team, type_id)
+        async with isolation.request_transaction():
+            if await self._own(who, type_id) is None:
+                return None
+            rows = [example_view(e) for e in await self.store.examples(who.team, type_id)]
         if await self.extractor.masks(who):
             rows = [{**r, "line": masked(r["line"]), "value": masked(r["value"])} for r in rows]
         return rows
@@ -511,18 +576,20 @@ class DocumentTypes:
     async def estimate(self, who: Who, type_id: str, version: int) -> dict[str, Any] | None:
         """What testing the version spends before it is run: one model call per sample (two when a re-ask is
         needed), at most MAX_TEST_SAMPLES samples, priced at the extract alias's current price when it is known."""
-        if await self._own(who, type_id) is None or await self.store.version(type_id, version) is None:
-            return None
-        samples = min(len(await self.store.samples(type_id)), MAX_TEST_SAMPLES)
+        # Every row it reads in one transaction, closed before models-service is asked for the price.
+        async with isolation.request_transaction():
+            if await self._own(who, type_id) is None or await self.store.version(type_id, version) is None:
+                return None
+            samples = min(len(await self.store.samples(type_id)), MAX_TEST_SAMPLES)
+            # A reasoning model's output dwarfs a fixed guess (2,300 tokens a call against 600 on the baseline), so a
+            # type read before is priced at what reading it measured, then the tenant's reads, then the guess.
+            tokens, basis = (float(TOKENS_IN_PER_CALL), float(TOKENS_OUT_PER_CALL)), "default"
+            extractions = self.extractor.store
+            if (measured := await extractions.tokens_per_call(type_id)) is not None:
+                tokens, basis = measured, "type"
+            elif (measured := await extractions.tokens_per_call(None)) is not None:
+                tokens, basis = measured, "tenant"
         price = await self.prices.price(ALIAS, tenant=who.tenant_id) if self.prices is not None else None
-        # A reasoning model's output dwarfs a fixed guess (2,300 tokens a call against 600 on the baseline), so a type
-        # that was read before is priced at what reading it measured, then the tenant's reads, then the guess.
-        tokens, basis = (float(TOKENS_IN_PER_CALL), float(TOKENS_OUT_PER_CALL)), "default"
-        extractions = self.extractor.store
-        if (measured := await extractions.tokens_per_call(type_id)) is not None:
-            tokens, basis = measured, "type"
-        elif (measured := await extractions.tokens_per_call(None)) is not None:
-            tokens, basis = measured, "tenant"
         out: dict[str, Any] = {
             "samples": samples,
             "calls": samples,
@@ -540,73 +607,76 @@ class DocumentTypes:
 
     async def start_test(self, who: Who, type_id: str, version: int) -> dict[str, Any] | None:
         self._may_write(who)
-        if await self._own(who, type_id) is None or await self.store.version(type_id, version) is None:
-            return None
-        samples = await self.store.samples(type_id)
-        if not samples:
-            raise InvalidRequestError("add a sample before testing a version")
-        values = {
-            "tenant_id": who.tenant_id,
-            "id": f"dtt_{uuid.uuid4().hex[:12]}",
-            "type_id": type_id,
-            "version": version,
-            "team": who.team,
-            "status": "queued",
-            "samples": min(len(samples), MAX_TEST_SAMPLES),
-            "asked_by": who.actor,
-            "asked_at": self.clock(),
-        }
-        await self.store.insert_test(values)
-        self._later(values)
-        return _test_view(values)
+        # The run's row commits before the task that runs it starts, so the task finds it.
+        async with isolation.request_transaction():
+            if await self._own(who, type_id) is None or await self.store.version(type_id, version) is None:
+                return None
+            samples = await self.store.samples(type_id)
+            if not samples:
+                raise InvalidRequestError("add a sample before testing a version")
+            test = TestRow(
+                tenant_id=who.tenant_id,
+                id=f"dtt_{uuid.uuid4().hex[:12]}",
+                type_id=type_id,
+                version=version,
+                team=who.team,
+                status="queued",
+                samples=min(len(samples), MAX_TEST_SAMPLES),
+                result=None,
+                error=None,
+                asked_by=who.actor,
+                asked_at=self.clock(),
+                finished_at=None,
+            )
+            await self.store.insert_test(test)
+        await self._later(test)
+        return _test_view(test)
 
     async def get_test(self, who: Who, type_id: str, test_id: str) -> dict[str, Any] | None:
         if await self._own(who, type_id) is None:
             return None
         found = await self.store.test(test_id)
-        return _test_view(found) if found is not None and found["type_id"] == type_id else None
+        return _test_view(found) if found is not None and found.type_id == type_id else None
 
     async def resume(self) -> int:
         pending = await self.store.pending_tests()
         for t in pending:
-            self._later(t)
+            await self._later(t)
         return len(pending)
 
     async def drain(self) -> None:
-        while self._tasks:
-            await asyncio.gather(*list(self._tasks), return_exceptions=True)
+        """Waits until no test run is running in this process (tests and shutdown)."""
+        await self._pending.none()
 
-    def _later(self, test: dict[str, Any]) -> None:
-        task = asyncio.create_task(self._as_owner(test))
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+    async def _later(self, test: TestRow) -> None:
+        self._pending.add()
+        await background.start(self._as_owner(test), key=READING_PROCESS)
 
-    async def _as_owner(self, test: dict[str, Any]) -> None:
-        """The run as the test's own tenant and team: a restart picks tests up with no request behind them."""
-        with isolation.scope(str(test["tenant_id"]), str(test["team"])):
-            try:
+    async def _as_owner(self, test: TestRow) -> None:
+        """The run as the test's own tenant and team: a restart picks tests up with no request behind them. It runs on
+        the supervisor, which shows a failure on /health/background."""
+        try:
+            with isolation.scope(test.tenant_id, test.team):
                 await self._run(test)
-            except Exception as e:
-                await reading().failed(e)
-                raise
-        await reading().ok(1, waiting=max(0, len(self._tasks) - 1))
+        finally:
+            self._pending.done()
 
-    async def _run(self, test: dict[str, Any]) -> None:
-        tenant, test_id = str(test["tenant_id"]), str(test["id"])
-        who = Who(tenant_id=tenant, team=str(test["team"]), actor=str(test["asked_by"]))
+    async def _run(self, test: TestRow) -> None:
+        test_id = test.id
+        who = Who(tenant_id=test.tenant_id, team=test.team, actor=test.asked_by)
         try:
             await self.store.set_test(test_id, {"status": "running"})
-            version = await self.resolve(who, str(test["type_id"]), int(test["version"]))
+            version = await self.resolve(who, test.type_id, test.version)
             fields = cast(list[dict[str, Any]], version["fields"])
-            samples = (await self.store.samples(str(test["type_id"])))[:MAX_TEST_SAMPLES]
+            samples = (await self.store.samples(test.type_id))[:MAX_TEST_SAMPLES]
             rows: list[dict[str, Any]] = []
             for s in samples:
                 # Keyed by test and sample, so a test resumed after a restart reads the extractions it already made.
                 _, answer = await self.extractor.ask(
                     who,
-                    str(s["file_id"]),
-                    {"documentTypeId": test["type_id"], "version": test["version"]},
-                    idempotency_key=f"{test_id}:{s['id']}",
+                    s.file_id,
+                    {"documentTypeId": test.type_id, "version": test.version},
+                    idempotency_key=f"{test_id}:{s.id}",
                     inline=True,
                 )
                 rows.append(self._compare(fields, bool(version["many"]), s, answer))
@@ -618,13 +688,11 @@ class DocumentTypes:
             await self.store.set_test(test_id, {"status": "failed", "error": str(e), "finished_at": self.clock()})
 
     @staticmethod
-    def _compare(
-        fields: list[dict[str, Any]], many: bool, sample: dict[str, Any], answer: dict[str, Any]
-    ) -> dict[str, Any]:
-        expected = sample["expected"]
+    def _compare(fields: list[dict[str, Any]], many: bool, sample: SampleRow, answer: dict[str, Any]) -> dict[str, Any]:
+        expected = sample.expected
         out: dict[str, Any] = {
-            "sampleId": sample["id"],
-            "name": sample["name"],
+            "sampleId": sample.id,
+            "name": sample.name,
             "extractionId": answer.get("id"),
             "status": answer.get("status"),
         }
@@ -696,10 +764,9 @@ def default_document_types(files: Files, engine: Any, settings: Settings, extrac
     """On the extractor this app serves, which then resolves `documentTypeId` through them; prices from
     models-service when it is configured, else the estimate gives calls without a cost."""
     prices: Prices | None = None
-    if settings.models_url:
-        http = httpx.AsyncClient(base_url=settings.models_url, timeout=10)
+    if settings.models is not None:
         try:
-            prices = ModelsPrices(ServiceClient.for_settings(settings, http, service="documents", audience="models"))
+            prices = ModelsPrices(ServiceClient.for_settings(settings, service="documents", audience="models"))
         except ValueError as e:  # no service signing key outside dev
             log.warning("no service signing key; test estimates carry no cost", extra={"error": str(e)})
     types = DocumentTypes(DocumentTypesStore(engine), files, extractor, prices)

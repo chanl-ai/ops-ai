@@ -16,6 +16,7 @@ from ops_agents.api.app import create_app
 from ops_agents.api.child_runs import ChildRuns
 from ops_agents.api.deps import Runtime
 from ops_agents.store.base import metadata
+from ops_engine.store import metadata as engine_metadata
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events
 
@@ -25,8 +26,11 @@ ASK = "Start workflow dispute_email: I was charged twice for order 4411 and want
 @pytest.fixture
 async def stack() -> AsyncIterator[tuple[AsyncClient, Runtime]]:
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
+    # The runner's tables too, as a migrated database has them: the tool catalog reads them in the request's one
+    # transaction, where a missing table fails every read after it.
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     app = create_app(
         Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED),
         model=scripted_model(),
@@ -50,6 +54,8 @@ async def agent_turn(client: AsyncClient, message: str) -> tuple[str, list[dict[
     return tid, sse_events(res.text)
 
 
+# A graph run calls `offers` inside its run's tenant.
+@pytest.mark.usefixtures("local_tenant")
 async def test_only_granted_published_workflows_are_offered(stack: tuple[AsyncClient, Runtime]) -> None:
     _, rt = stack
     offers = await ChildRuns(rt).offers(["workflow:dispute_email", "workflow:never_published"])

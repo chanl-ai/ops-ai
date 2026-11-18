@@ -5,9 +5,9 @@
 // Exits with the number of pages that failed.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { chromium } from '@ops-ai/usecase-runner/harness';
+import { chromium, requireStagingOrigin } from '@ops-ai/usecase-runner/harness';
 
-const origin = process.env.STG_ORIGIN;
+const origin = requireStagingOrigin(process.env.STG_ORIGIN);
 const out = process.env.OUT ?? '.';
 mkdirSync(out, { recursive: true });
 const browser = await chromium.launch();

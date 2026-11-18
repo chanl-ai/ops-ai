@@ -25,12 +25,10 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useDeleteGuardrail, useRequestGuardrailPublish, useSetGuardrailStatus, useUpdateGuardrail } from '@/hooks/guardrail-queries';
+import { useDeleteGuardrail, useGuardrail, useRequestGuardrailPublish, useSetGuardrailStatus, useUpdateGuardrail, type Guardrail } from '@/hooks/guardrail-queries';
 import { useCanBuild } from '@/hooks/me-queries';
-import { useGuardrail } from '@/hooks/queries';
 import { useTabParam } from '@/hooks/use-tab-param';
 import { relativeTime } from '@/lib/format';
-import type { Guardrail } from '@/lib/types/domain';
 
 const TABS = ['settings', 'versions'] as const;
 
@@ -72,7 +70,7 @@ function GuardrailView({ guardrail: g }: { guardrail: Guardrail }) {
     setErrors(e);
     if (e.topics || e.message) return;
     try {
-      const after = await update.mutateAsync({ id: g.id, topics: draft.topics, message: draft.message.trim(), scopes: keptScopes(draft), holdUntilChecked: draft.holdUntilChecked, note: note.trim() });
+      const after = await update.mutateAsync({ id: g.id, body: { topics: draft.topics, message: draft.message.trim(), scopes: keptScopes(draft), holdUntilChecked: draft.holdUntilChecked, note: note.trim() } });
       toast.success(`Saved ${after.name} v${after.version} as a draft`, { description: 'Agents keep the version they pin. Publish it to let them pin this one.' });
     } catch (err) {
       setErrors({ submit: (err as Error).message });

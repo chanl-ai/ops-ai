@@ -74,7 +74,8 @@ export interface paths {
          * Access Holders
          * @description Which roles grant `area.action` in a team (the Security team for its actions), and who holds them there:
          *     what a "View only" notice names. The team is `team`, the record's, when the page shows another team's
-         *     record, else the one the request acts in; a member of that team, or a workspace admin, may ask.
+         *     record, else the one the request acts in; a member of that team, or a workspace admin, may ask, holding
+         *     access.view where the request acts (a Chat user does not: 403 `admin_required`).
          */
         get: operations["access_access_holders"];
         put?: never;
@@ -116,8 +117,9 @@ export interface paths {
         };
         /**
          * List Api Keys
-         * @description The team's keys; `targetKind` and `targetId` keep the keys made for one target, as an MCP link's Keys tab
-         *     lists them.
+         * @description The team's keys on the shared list contract, newest first, searched on name;
+         *     `targetKind` and `targetId` keep the keys made for one target, as an MCP link's Keys tab lists them. The
+         *     filters are declared here so a bad value is refused; ListQuery reads the same keys as its filters.
          */
         get: operations["api_keys_list_api_keys"];
         put?: never;
@@ -153,7 +155,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read Audit */
+        /**
+         * Read Audit
+         * @description The team's entries on the shared list contract, newest first then by id; `ids` names entries. The filters
+         *     narrow the page; `facets` and `viewCounts` count every entry the reader may see.
+         */
         get: operations["audit_read_audit"];
         put?: never;
         post?: never;
@@ -681,8 +687,9 @@ export interface paths {
         };
         /**
          * People Names
-         * @description Every person's display name in the workspace by email, so a list naming who did something shows a
-         *     name rather than an address. Any member reads them; a service token needs the `settings:view` scope.
+         * @description Every person's display name in the workspace by email, so a list naming who did something shows a name
+         *     rather than an address. A person needs access.view where the request acts (no console screen calls it, a Chat
+         *     user's none); a service token needs the `settings:view` scope.
          */
         get: operations["people_people_names"];
         put?: never;
@@ -703,7 +710,7 @@ export interface paths {
         /**
          * Person Permissions
          * @description What a person may do in the teams they share with the caller, with their name and address; 404 when they
-         *     share none.
+         *     share none. Another person's needs access.view where the request acts (a Chat user reads only their own).
          */
         get: operations["people_person_permissions"];
         put?: never;
@@ -723,8 +730,9 @@ export interface paths {
         };
         /**
          * Person Role Grants
-         * @description The custom roles given to a person on their own, each with its team; read by whoever shares a team with
-         *     them, as their permissions are (404 otherwise).
+         * @description The custom roles given to a person on their own, each with its team, on the shared list contract by role
+         *     name, searched on it; read by whoever shares a team with them, as their permissions are (404 otherwise), and
+         *     holds access.view where the request acts when it is another person (a Chat user reads only their own).
          */
         get: operations["people_person_role_grants"];
         put?: never;
@@ -769,7 +777,8 @@ export interface paths {
         };
         /**
          * List Policies
-         * @description Every policy with its value and open default; any member of the workspace reads them.
+         * @description Every policy with its value and open default; whoever holds access.view where the request acts reads them
+         *     (every membership role but Chat user: 403 `admin_required`).
          */
         get: operations["policies_list_policies"];
         put?: never;
@@ -789,7 +798,7 @@ export interface paths {
         };
         /**
          * Get Policy
-         * @description One policy of the workspace. Any member reads it; a service token needs the
+         * @description One policy of the workspace. A person needs access.view where the request acts; a service token needs the
          *     `settings:view` scope and reads its own tenant's value, as a background job with no person does (the
          *     memory sweep). 400 `policy_value` for a key the catalogue does not hold.
          */
@@ -816,8 +825,11 @@ export interface paths {
         };
         /**
          * List Roles
-         * @description Every role in the tenant, built-in first, with how many permissions it grants and how many hold it. Needs
-         *     access.view in the acting team: 403 `admin_required`.
+         * @description The tenant's roles on the shared list contract, built-in first in their fixed order, then by name, searched
+         *     on name, with how many permissions each grants and how many hold it. `builtin` keeps built-in or custom roles,
+         *     `canDecideReviews` the roles that do or do not grant reviews.decide. Needs access.view in the acting team:
+         *     403 `admin_required`. The filters are declared here so a bad value is refused; ListQuery reads the same keys
+         *     as its filters.
          */
         get: operations["roles_list_roles"];
         put?: never;
@@ -873,7 +885,8 @@ export interface paths {
         };
         /**
          * Role Holders
-         * @description Who holds the role and in which team: what deleting it would take from them. A workspace admin's.
+         * @description Who holds the role and in which team, on the shared list contract by name, searched on name and email:
+         *     what deleting it would take from them. A workspace admin's.
          */
         get: operations["roles_role_holders"];
         put?: never;
@@ -933,7 +946,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Members */
+        /**
+         * List Members
+         * @description The team's people and invites on the shared list contract: `role` and `status` filter and are counted,
+         *     `search` matches name and email, oldest first (`sortBy` name, role, status, or teamId for the team's name).
+         *     Every built-in role but Chat user reads the team's people. The filters are declared here so a bad value is
+         *     refused; ListQuery reads the same keys as its filters.
+         */
         get: operations["members_list_members"];
         put?: never;
         post?: never;
@@ -1281,8 +1300,8 @@ export interface paths {
         };
         /**
          * List Workspace Teams
-         * @description Every team of the workspace with its member and admin counts; workspace admins (`access.view` in every
-         *     team) only.
+         * @description Every team of the workspace with its member and admin counts on the shared list contract, by name, searched
+         *     on name; `status` keeps active or archived teams. Workspace admins (`access.view` in every team) only.
          */
         get: operations["teams_list_workspace_teams"];
         put?: never;
@@ -1452,8 +1471,9 @@ export interface paths {
         };
         /**
          * Team Names
-         * @description Every team's display name in the workspace, so a page showing another team's record names its team.
-         *     Any member reads them; a service token needs the `settings:view` scope and reads its own tenant's.
+         * @description Every team's display name in the workspace, so a page showing another team's record names its team. A
+         *     person needs access.view where the request acts (no console screen calls it, a Chat user's none); a service
+         *     token needs the `settings:view` scope and reads its own tenant's.
          */
         get: operations["teams_team_names"];
         put?: never;
@@ -1671,6 +1691,8 @@ export interface components {
             name: string;
             /** Prefix */
             prefix: string;
+            /** Revision */
+            revision: number;
             /**
              * Status
              * @enum {string}
@@ -2070,9 +2092,45 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ListResult[ApiKeyOut]] */
+        Envelope_ListResult_ApiKeyOut__: {
+            data: components["schemas"]["ListResult_ApiKeyOut_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ListResult[MemberOut]] */
         Envelope_ListResult_MemberOut__: {
             data: components["schemas"]["ListResult_MemberOut_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ListResult[RoleGrantOut]] */
+        Envelope_ListResult_RoleGrantOut__: {
+            data: components["schemas"]["ListResult_RoleGrantOut_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ListResult[RoleHolderOut]] */
+        Envelope_ListResult_RoleHolderOut__: {
+            data: components["schemas"]["ListResult_RoleHolderOut_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ListResult[RoleOut]] */
+        Envelope_ListResult_RoleOut__: {
+            data: components["schemas"]["ListResult_RoleOut_"];
             /**
              * Success
              * @constant
@@ -2304,16 +2362,6 @@ export interface components {
              */
             success: true;
         };
-        /** Envelope[list[ApiKeyOut]] */
-        Envelope_list_ApiKeyOut__: {
-            /** Data */
-            data: components["schemas"]["ApiKeyOut"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
         /** Envelope[list[ApiKeySummary]] */
         Envelope_list_ApiKeySummary__: {
             /** Data */
@@ -2368,36 +2416,6 @@ export interface components {
         Envelope_list_ProviderOut__: {
             /** Data */
             data: components["schemas"]["ProviderOut"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[RoleGrantOut]] */
-        Envelope_list_RoleGrantOut__: {
-            /** Data */
-            data: components["schemas"]["RoleGrantOut"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[RoleHolderOut]] */
-        Envelope_list_RoleHolderOut__: {
-            /** Data */
-            data: components["schemas"]["RoleHolderOut"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[RoleOut]] */
-        Envelope_list_RoleOut__: {
-            /** Data */
-            data: components["schemas"]["RoleOut"][];
             /**
              * Success
              * @constant
@@ -2738,10 +2756,58 @@ export interface components {
             /** Version */
             version?: number | null;
         };
+        /** ListResult[ApiKeyOut] */
+        ListResult_ApiKeyOut_: {
+            /** Data */
+            data: components["schemas"]["ApiKeyOut"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
         /** ListResult[MemberOut] */
         ListResult_MemberOut_: {
             /** Data */
             data: components["schemas"]["MemberOut"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[RoleGrantOut] */
+        ListResult_RoleGrantOut_: {
+            /** Data */
+            data: components["schemas"]["RoleGrantOut"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[RoleHolderOut] */
+        ListResult_RoleHolderOut_: {
+            /** Data */
+            data: components["schemas"]["RoleHolderOut"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[RoleOut] */
+        ListResult_RoleOut_: {
+            /** Data */
+            data: components["schemas"]["RoleOut"][];
             /** Facets */
             facets: {
                 [key: string]: {
@@ -2766,6 +2832,7 @@ export interface components {
         Me: {
             /** Flags */
             flags: components["schemas"]["FlagOut"][];
+            permissions: components["schemas"]["PermissionsOut"];
             /** Policies */
             policies: {
                 [key: string]: unknown;
@@ -3995,6 +4062,12 @@ export interface operations {
             query?: {
                 targetKind?: ("agent" | "workflow" | "mcp_link") | null;
                 targetId?: string | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -4008,7 +4081,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_ApiKeyOut__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_ApiKeyOut__"];
                 };
             };
             /** @description Invalid request */
@@ -4313,7 +4386,11 @@ export interface operations {
                 from?: string | null;
                 to?: string | null;
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -7321,7 +7398,14 @@ export interface operations {
     };
     people_person_role_grants: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path: {
                 person_id: string;
@@ -7336,7 +7420,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_RoleGrantOut__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_RoleGrantOut__"];
                 };
             };
             /** @description Invalid request */
@@ -7944,7 +8028,16 @@ export interface operations {
     };
     roles_list_roles: {
         parameters: {
-            query?: never;
+            query?: {
+                builtin?: ("true" | "false") | null;
+                canDecideReviews?: ("true" | "false") | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -7957,7 +8050,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_RoleOut__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_RoleOut__"];
                 };
             };
             /** @description Invalid request */
@@ -8463,7 +8556,14 @@ export interface operations {
     };
     roles_role_holders: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path: {
                 role_id: string;
@@ -8478,7 +8578,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_RoleHolderOut__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_RoleHolderOut__"];
                 };
             };
             /** @description Invalid request */
@@ -8778,7 +8878,13 @@ export interface operations {
         parameters: {
             query?: {
                 role?: string[] | null;
-                status?: string[] | null;
+                status?: ("active" | "invited")[] | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -10846,9 +10952,12 @@ export interface operations {
         parameters: {
             query?: {
                 status?: ("active" | "archived")[] | null;
-                search?: string;
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;

@@ -27,6 +27,8 @@ import { ListEmpty, QueryError } from "@/components/shared/query-states";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { serverPagination } from "@/components/shared/server-pagination";
+import { useListParams } from "@/hooks/use-list-params";
 import { TemplatesGallery } from '@/components/templates/templates-gallery';
 import {
   useCreateDocumentType,
@@ -234,12 +236,15 @@ function NewTypeDialog({
   );
 }
 
+/** The one column the service orders by; the latest version is a number the list row does not sort on. */
+const SORT_COLUMNS = { name: "name", latestVersion: "latestVersion" };
+
 export default function DocumentTypesPage() {
   const router = useRouter();
-  const query = useDocumentTypes();
+  const list = useListParams("name", undefined, undefined, SORT_COLUMNS);
+  const query = useDocumentTypes(list.params);
   const [creating, setCreating] = React.useState(false);
   const [filterResetKey, setFilterResetKey] = React.useState(0);
-  const [filtered, setFiltered] = React.useState(false);
   const canCreate = !!query.data?.canCreate;
   const cols = React.useMemo(
     () => columns((t) => router.push(`/data/document-types/${t.id}`)),
@@ -278,7 +283,7 @@ export default function DocumentTypesPage() {
       ) : (
         <DataTableWithViews
           columns={cols}
-          data={query.data.items.map((t) => ({
+          data={query.data.data.map((t) => ({
             ...t,
             onRowClick: (x: DocumentTypeSummary) =>
               router.push(`/data/document-types/${x.id}`),
@@ -288,19 +293,15 @@ export default function DocumentTypesPage() {
           searchColumn="name"
           searchPlaceholder="Search document types…"
           filterResetKey={filterResetKey}
-          onColumnFiltersChange={(f) =>
-            setFiltered(
-              f.some((x) =>
-                Array.isArray(x.value) ? x.value.length > 0 : !!x.value,
-              ),
-            )
-          }
+          onColumnFiltersChange={list.onColumnFiltersChange}
+          serverPagination={serverPagination(list, query)}
+          serverSorting={list.serverSort}
           hideViewSwitcher
           emptyState={
             <ListEmpty
               icon={FileText}
               noun="document types"
-              filtered={filtered}
+              filtered={list.isFiltered}
               onClear={() => setFilterResetKey((k) => k + 1)}
               createLabel={canCreate ? "New type" : undefined}
               onCreate={() => setCreating(true)}

@@ -57,7 +57,16 @@ class FakeDocuments:
             status, code, message = self.refuse
             return httpx.Response(status, json={"success": False, "error": {"code": code, "message": message}})
         if path == "/v1/document-types":
-            return httpx.Response(200, json={"data": {"items": [LEVY] if team == OPS else []}})
+            listed = [LEVY] if team == OPS else []
+            page = {
+                "page": 1,
+                "pageSize": 20,
+                "total": len(listed),
+                "totalPages": 1,
+                "hasNext": False,
+                "hasPrev": False,
+            }
+            return httpx.Response(200, json={"data": {"data": listed, "pagination": page, "facets": {}}})
         if path.startswith("/v1/document-types/"):
             if team == OPS and path.endswith(LEVY_ID):
                 return httpx.Response(200, json={"data": LEVY})

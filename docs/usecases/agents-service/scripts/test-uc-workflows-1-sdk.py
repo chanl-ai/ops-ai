@@ -26,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "sdk" / "python" / 
 from ops_ai import OpsAI
 
 JAMES, MAYA, PASSWORD = "j.richardson@harborpine.example", "m.okafor@harborpine.example", "northfield-demo"
+PRIYA = "p.shah@harborpine.example"
 AUTH = {
     "OPS_AUTH_MODE": "platform",
     "OPS_PLATFORM_URL": f"http://127.0.0.1:{PLATFORM_PORT}",
@@ -55,6 +56,11 @@ DEFINITION: dict[str, Any] = {
 }
 
 with platform(), agents(env=AUTH):
+    # A new workspace publishes at once (publishReview "never"): Priya, the team's admin, turns review on for
+    # workflows so Maya's decision is what takes the version live. A policy change refreshes every token, so James
+    # and Maya sign in after it.
+    priya = OpsAI.sign_in(PRIYA, PASSWORD, team="team_ops", **CONN)
+    priya.raw.platform.policies_set_policy("publishReview", {"value": {"workflows": "always"}})
     james = OpsAI.sign_in(JAMES, PASSWORD, team="team_ops", **CONN)
     maya = OpsAI.sign_in(MAYA, PASSWORD, team="team_ops", **CONN)
     james.raw.agents.workflows_create_definition({"definition": DEFINITION})

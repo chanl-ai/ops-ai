@@ -13,17 +13,18 @@ Why: configuration read in one place can be listed, validated and documented; a 
 
 Today: no breach in Python; the console has four files outside the entry module that read `process.env` (see `CF6`).
 
-Pattern (`packages/ops_service_kit/src/ops_service_kit/settings.py:64`):
+Pattern (`Settings` in `packages/ops_service_kit/src/ops_service_kit/settings.py`):
 
 ```python
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="OPS_", extra="ignore", secrets_dir=_secrets_dir(), env_ignore_empty=True)
+    model_config = SettingsConfigDict(env_prefix="OPS_", env_nested_delimiter="__", extra="ignore", ...)
     environment: Literal["dev", "test", "production"] = "dev"
 ```
 
 Check: `services/agents-service/scripts/check_standards.py` rule 4 (environment read only in `settings.py`; no
 `dotenv`; no `.env` file), run in the agents-service CI job and in pre-commit; `apps/console/scripts/check-standards.mjs`
-rule 4. Needed: run rule 4 over every service in the `checks` job.
+rule 4. Needed: run rule 4 over every service in the `checks` job. Python rule 4 catches `os.environ`, `os.getenv`,
+`import os as o` and `from os import environ`; it does not follow an environment mapping passed in from elsewhere.
 
 ## CF2 No literal host, port, URL, model or timeout in code
 
@@ -32,26 +33,39 @@ named constant; code outside those never writes one, and a setting never falls b
 Why: a value in code changes only with a release and differs silently between copies, and a loopback fallback hides a
 missing setting until the first call fails.
 
-Today (`services/kb-service/src/ops_kb/app.py:152`): a loopback fallback and a literal timeout beside the setting.
+Today (`services/kb-service/src/ops_kb/app.py`, `_agents_service`): the address is the setting, with no fallback; the
+client and its timeout are still built where they are used.
 
 ```python
-http = httpx.AsyncClient(base_url=settings.agents_url or f"http://127.0.0.1:{settings.port}", timeout=5)
+http = httpx.AsyncClient(base_url=settings.endpoint("agents").base, timeout=5)
 ```
 
-Also `services/agents-service/src/ops_agents/api/acting_for.py:86` (same fallback),
-`services/agents-service/src/ops_agents/api/worker.py:94` (`timeout=10`) and
-`packages/ops_service_kit/src/ops_service_kit/opa_server.py:40` (port 8181). The audit counted 20 loopback literals
-and about 58 literal timeouts in service code.
+After: the client comes from the endpoint, which carries the address, the timeout and the retries.
 
-Pattern (`packages/ops_service_kit/src/ops_service_kit/settings.py:76`): the value is a named setting with its reason.
+```python
+agents = ServiceClient.for_settings(settings, service="kb", audience="agents", scopes=["agents:view"])
+```
+
+Also `services/agents-service/src/ops_agents/api/worker.py` (`timeout=10`) and
+`packages/ops_service_kit/src/ops_service_kit/opa_server.py` (port 8181). One loopback fallback is left, in
+`packages/ops_identity/src/ops_identity/fastapi.py`, and the check counts 59 literal timeouts and 50 clients built
+outside `ops_identity.client`.
+
+Pattern (`Settings.database_connect_timeout_s` in `packages/ops_service_kit/src/ops_service_kit/settings.py`): the value
+is a named setting with its reason.
 
 ```python
 database_connect_timeout_s: float = 30.0
 database_connect_attempts: int = 3
 ```
 
-Check: no check yet. Needed: a grep ratchet over `services/*/src` and `packages/*/src` for `127.0.0.1`, `localhost`,
-`timeout=<digits>` and `:<port>` literals, with today's count as the ceiling and the loopback count driven to 0.
+Check: `uv run python scripts/check_config_literals.py --strict` (in `make python-verify`, the commit gate and CI): a
+loopback fallback fails anywhere but the two named in the script; a literal `timeout=` or an `httpx.AsyncClient(`
+fails beyond the member's `config-literals-baseline.txt`, whose rows only fall. `.importlinter` allows `httpx` only in
+tools-service, models-service, `ops_identity.client` and the client packages, beyond a list that only shrinks. Needed:
+`:<port>` literals. The script catches the literal form only: a number, an upper-case constant, or a name the same
+function assigns a number (`timeout=t`), and a loopback in a constant or a ternary; a value passed in from a caller
+or built in another module passes.
 
 ## CF3 A missing required setting stops the process at start
 
@@ -59,22 +73,22 @@ Rule: a service checks every setting it needs when it starts and exits naming th
 found by the first request.
 Why: a half-configured service in production serves wrong answers; one that refuses to start is noticed at deploy.
 
-Today: the fallbacks in `CF2` are the breach: with `OPS_AGENTS_URL` unset, kb-service starts and calls itself.
+Today: every service process names the endpoints it cannot run without, first in its `__main__`; an address a process
+reads only when a feature is on (`settings.files_url` in agents-service) is not yet checked at start.
 
-Pattern (`packages/ops_service_kit/src/ops_service_kit/settings.py:611`): a key still holding its public default
-stops the service outside dev.
+Pattern (`services/kb-service/src/ops_kb/__main__.py`, `main`; `Settings.require` and `require_keys` in
+`packages/ops_service_kit/src/ops_service_kit/settings.py`): an unset endpoint, or a key still holding its public
+default outside dev, stops the service.
 
 ```python
-def require_keys(settings: Settings, *names: str) -> None:
-    ...
-    raise ValueError(f"{name} must be set outside dev; the default is public")
+settings.require("agents", *settings.identity_endpoints)
 ```
 
 Also `services/models-service/src/ops_models/__main__.py:39`: a provider key left in settings outside dev raises
 `SystemExit` with the fix in the message.
 
-Check: no check yet. Needed: a boot test per service that starts the app with each required setting removed and asserts
-the exit names it.
+Check: `uv run pytest -q scripts/tests/test_boot_requires_endpoints.py` starts each service process with its required
+addresses unset and asserts the exit names them; it fails when a service gains a `__main__` with no row.
 
 ## CF4 Secrets come only from the secret store
 
@@ -86,7 +100,7 @@ Why: the repository is public, and a secret in a log or fixture leaks through ev
 Today: no known breach; the leak scan is required on `main` only, so a red scan does not stop a merge to the
 development trunk.
 
-Pattern (`packages/ops_service_kit/src/ops_service_kit/settings.py:91`):
+Pattern (`Settings.anthropic_api_key` in `packages/ops_service_kit/src/ops_service_kit/settings.py`):
 
 ```python
 anthropic_api_key: SecretStr | None = Field(default=None, validation_alias=AliasChoices("ANTHROPIC_API_KEY"))
@@ -101,17 +115,18 @@ Rule: a setting's default is the value production should run with; a development
 `environment` names development.
 Why: a forgotten setting must not open a door in production.
 
-Today (`packages/ops_service_kit/src/ops_service_kit/settings.py:72`): the default runs with no sign-in.
+Today: no known breach in sign-in; `registry_auto_approve` still defaults on and is ignored outside dev.
+
+Pattern (`Settings.auth_mode` in `packages/ops_service_kit/src/ops_service_kit/settings.py`): the default signs every
+caller in, and a development stack or a test names the dev user.
 
 ```python
-auth_mode: Literal["dev", "platform"] = "dev"
+auth_mode: Literal["dev", "platform"] = "platform"
 ```
 
-Pattern (`packages/ops_service_kit/src/ops_service_kit/settings.py:611`): `require_keys` refuses a public default
-outside dev, so the unsafe default cannot reach production.
-
-Check: no check yet. Needed: a test that builds `Settings` with `environment="production"` and no other variable, and
-asserts every shortcut is off or the build refuses.
+Check: `packages/ops_service_kit/tests/test_endpoint_settings.py` builds `Settings` with nothing set and with
+`environment="production"` alone, and asserts callers are signed in and the dev user is refused. Needed: the same
+assertion for every other shortcut.
 
 ## CF6 The console reads the environment in one file
 

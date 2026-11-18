@@ -17,7 +17,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
+from ops_store.isolation import attempt
+from ops_store.listing import LISTED, ListPage, list_page
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
@@ -48,11 +51,11 @@ cases = sa.Table(
     # The producer's own key (a run's or chat's), unique in the team: opening the case again finds it.
     sa.Column("producer_key", sa.String(200)),
     sa.Column("subject", sa.String(300), nullable=False),
-    sa.Column("customer_id", sa.String(200)),
+    sa.Column("customer_id", sa.String(200), info=LISTED),
     sa.Column("customer_name", sa.String(300)),
-    sa.Column("status", sa.String(32), nullable=False),
-    sa.Column("assignee", sa.String(320)),
-    sa.Column("priority", sa.String(16), nullable=False),
+    sa.Column("status", sa.String(32), nullable=False, info=LISTED),
+    sa.Column("assignee", sa.String(320), info=LISTED),
+    sa.Column("priority", sa.String(16), nullable=False, info=LISTED),
     sa.Column("response_due_at", sa.String(32), nullable=False),
     sa.Column("resolution_due_at", sa.String(32), nullable=False),
     sa.Column("responded_at", sa.String(32)),
@@ -68,6 +71,11 @@ cases = sa.Table(
     sa.Column("updated_at", sa.String(32), nullable=False),
     sa.UniqueConstraint("tenant_id", "team_id", "producer_key", name="uq_cases_producer_key"),
     sa.Index("ix_cases_team_due", "tenant_id", "team_id", "resolution_due_at"),
+    # The cases list's filters, each within one team (agents 0111).
+    sa.Index("ix_cases_team_status", "tenant_id", "team_id", "status"),
+    sa.Index("ix_cases_team_priority", "tenant_id", "team_id", "priority"),
+    sa.Index("ix_cases_team_assignee", "tenant_id", "team_id", "assignee"),
+    sa.Index("ix_cases_team_customer", "tenant_id", "team_id", "customer_id"),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
@@ -157,7 +165,8 @@ class CaseStore:
             "type_version": type_version,
         }
         try:
-            async with tenant_tx(self.engine) as c:
+            # A savepoint, so a retry's duplicate producer key leaves a request transaction usable for the read below.
+            async with tenant_tx(self.engine) as c, attempt(c):
                 await c.execute(cases.insert().values(**values))
                 await _event(c, str(values["id"]), "opened", ref=None, detail={"subject": subject}, by=by, at=_iso(at))
         except IntegrityError:
@@ -194,11 +203,12 @@ class CaseStore:
         page: int = 1,
         size: int = 25,
     ) -> tuple[list[dict[str, Any]], int]:
-        """One page of the teams' cases, the soonest resolution deadline first, and the count that matched. `search`
-        keeps the cases holding every one of its words, in any order and ignoring case, each word in the subject, the
-        customer's name or the customer's id."""
-        at = _iso(now or datetime.now(UTC))
-        where: list[Any] = [cases.c.team_id.in_(teams), team_visible(cases)]
+        """One page of the teams' cases, the soonest resolution deadline first, and the count that matched; for the
+        overview and the Ops assistant's case search. `search` as in `_chosen`."""
+        where = [
+            *self._chosen(teams, overdue=overdue, due_before=due_before, search=search, now=now),
+            team_visible(cases),
+        ]
         if status:
             where.append(cases.c.status.in_(status))
         if assignee:
@@ -207,6 +217,56 @@ class CaseStore:
             where.append(cases.c.priority.in_(priority))
         if customer_id:
             where.append(cases.c.customer_id == customer_id)
+        async with tenant_tx(self.engine) as c:
+            total = int((await c.execute(sa.select(sa.func.count()).select_from(cases).where(*where))).scalar_one())
+            q = (
+                sa.select(cases)
+                .where(*where)
+                .order_by(cases.c.resolution_due_at, cases.c.id)
+                .limit(size)
+                .offset((page - 1) * size)
+            )
+            rows = [_row(r) for r in (await c.execute(q)).all()]
+        return rows, total
+
+    async def page(self, teams: list[str], params: ListParams, *, overdue: bool = False) -> ListPage:
+        """The cases list on the shared contract: the teams' cases, the soonest resolution deadline first, then by id;
+        `status`, `priority`, `assignee` and `customerId` filter (each value given once per key), `search` as in
+        `_chosen` unless `ids` names the cases, and `overdue` keeps the open ones past their deadline."""
+        search = None if params.ids is not None else params.search
+        q = sa.select(cases).where(*self._chosen(teams, overdue=overdue, search=search), team_visible(cases))
+        c_ = cases.c
+        async with tenant_tx(self.engine) as c:
+            return await list_page(
+                c,
+                q,
+                params,
+                default_sort=c_.resolution_due_at.asc(),
+                filters={
+                    "status": c_.status,
+                    "priority": c_.priority,
+                    "assignee": c_.assignee,
+                    "customerId": c_.customer_id,
+                },
+            )
+
+    @staticmethod
+    def _chosen(
+        teams: list[str],
+        *,
+        overdue: bool = False,
+        due_before: str | None = None,
+        search: str | None = None,
+        now: datetime | None = None,
+    ) -> list[sa.ColumnElement[bool]]:
+        """The tenant's cases in `teams`; each caller adds `team_visible`, the acting team's only. `search` keeps the
+        cases holding every one of its words, in any order and ignoring case, each word in the subject, the customer's
+        name or the customer's id."""
+        at = _iso(now or datetime.now(UTC))
+        where: list[sa.ColumnElement[bool]] = [
+            cases.c.tenant_id == current_tenant(),
+            cases.c.team_id.in_(teams),
+        ]
         # Word by word: "application documents" finds "Loan application: ..., waiting on documents: ...", which the
         # phrase does not.
         for word in (search or "").split():
@@ -232,17 +292,7 @@ class CaseStore:
                     cases.c.resolution_due_at < due_before,
                 )
             )
-        async with tenant_tx(self.engine) as c:
-            total = int((await c.execute(sa.select(sa.func.count()).select_from(cases).where(*where))).scalar_one())
-            q = (
-                sa.select(cases)
-                .where(*where)
-                .order_by(cases.c.resolution_due_at, cases.c.id)
-                .limit(size)
-                .offset((page - 1) * size)
-            )
-            rows = [_row(r) for r in (await c.execute(q)).all()]
-        return rows, total
+        return where
 
     async def events(self, case_id: str) -> list[dict[str, Any]]:
         async with tenant_tx(self.engine) as c:
@@ -330,7 +380,8 @@ class CaseStore:
         )
         q = (
             sa.select(
-                sa.func.count().filter(needs).label("needs"), sa.func.count().filter(breaching).label("breaching")
+                sa.func.count(sa.case((needs, 1))).label("needs"),
+                sa.func.count(sa.case((breaching, 1))).label("breaching"),
             )
             .select_from(cases)
             .where(cases.c.team_id.in_(teams), team_visible(cases))

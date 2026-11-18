@@ -4,8 +4,11 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/lib/api';
 import type { NavNeed } from '@/lib/nav';
+import type { ListParams } from '@/lib/types/query';
 import type { MemberRole, RoleCell, RoleInput } from '@/lib/types/settings';
 
+import { type OptionSource } from './options-queries';
+import { usePagedQuery } from './paged-query';
 import { useSession } from './auth-queries';
 import { useTeam } from './use-team';
 import { useSessionQuery, useTeamQuery } from './team-query';
@@ -14,42 +17,59 @@ import { useSessionQuery, useTeamQuery } from './team-query';
 export const useMe = () => useSessionQuery({ queryKey: ['me'], queryFn: () => api.teams.me!(), enabled: !!api.teams.me, staleTime: 60_000 });
 
 /**
- * The person's role in the team the console acts in. Platform sign-in reads it from /v1/me; the mock and dev sign-ins
- * carry no per-team roles, so their workspace role stands in (member as builder). Undefined while loading.
+ * The role the person holds in the team the console acts in, to show on their account page (GET /v1/me). It decides
+ * nothing: every screen asks `useCan` for the cell it needs. Undefined while loading and off platform sign-in.
  */
 export function useTeamRole(): MemberRole | undefined {
   const { teamId } = useTeam();
   const me = useMe();
-  const { session } = useSession();
-  if (api.teams.me) return me.data?.teams.find((t) => t.id === teamId)?.role ?? me.data?.teams[0]?.role;
-  const role = session?.user.teamRoles?.[teamId] ?? session?.user.role;
-  return role === 'member' ? 'builder' : role;
+  return me.data?.teams.find((t) => t.id === teamId)?.role ?? me.data?.teams[0]?.role;
 }
 
-/** What `can()` grants the person in each team and in every team (GET /v1/me/permissions); off platform sign-in, absent. */
+/**
+ * What `can()` grants the person in each team and in every team, from the same GET /v1/me answer `useMe` reads (one
+ * request, one cache entry); off platform sign-in, absent.
+ */
 export const useMyPermissions = () =>
   useSessionQuery({
-    queryKey: ['me', 'permissions'],
-    queryFn: () => api.teams.permissions!(),
-    enabled: !!api.teams.permissions,
+    queryKey: ['me'],
+    queryFn: () => api.teams.me!(),
+    enabled: !!api.teams.me,
     staleTime: 60_000,
+    select: (me) => me.permissions,
   });
 
 /**
  * Whether the person may take `area.action` in the team the console acts in, as the service will decide it: the
- * team's own answer or one held in every team (a workspace admin). Off platform sign-in, where no grid is served, the
- * session's role stands in (builders and admins build). Undefined while loading, so nothing flashes on and off.
+ * team's own answer or one held in every team (a workspace admin). Off platform sign-in, where no grid is served, a
+ * signed-in person may take every action. Undefined while loading, so nothing flashes on and off.
  */
 /** Whether the person holds `area.action` across the whole workspace (a workspace admin), not only in a team. */
 export function useCanInWorkspace(area: string, action: string): boolean | undefined {
   const perms = useMyPermissions();
-  if (!api.teams.permissions) return false;
+  if (!api.teams.me) return false;
   if (!perms.data) return undefined;
   return (perms.data.workspace ?? []).some((p) => p.area === area && p.action === action);
 }
 
-/** The workspace's roles, one role with its grid, and a person's grants; disabled off platform sign-in. */
-export const useRoles = () => useTeamQuery({ queryKey: ['access', 'roles'], queryFn: () => api.teams.roles!(), enabled: !!api.teams.roles });
+/** One page of the workspace's roles, one role with its grid, and a person's grants; disabled off platform sign-in. */
+export const useRoles = (p: ListParams) => usePagedQuery({ queryKey: ['access', 'roles', p], queryFn: () => api.teams.roles!(p), enabled: !!api.teams.roles });
+/**
+ * Roles for a picker: searched on the server as typed, or named by id; a page number is the cursor. `except` leaves a
+ * role out of what the picker offers (the role being deleted); `filters` are the server's own (`builtin`,
+ * `canDecideReviews`), so each page already holds only what the field offers.
+ */
+export const rolesWhere = (key: string, except: string[] = [], filters?: Record<string, string[]>): OptionSource => ({
+  key,
+  fetch: async ({ search, cursor, limit = 25, ids }) => {
+    const page = Number(cursor ?? 1);
+    const res = await api.teams.roles!(ids?.length ? { page: 1, pageSize: Math.min(ids.length, 50), ids } : { page, pageSize: limit, search: search || undefined, filters });
+    return {
+      data: res.data.filter((r) => ids?.includes(r.id) || !except.includes(r.id)).map((r) => ({ id: r.id, label: r.name, hint: r.description })),
+      nextCursor: !ids?.length && res.pagination.hasNext ? String(page + 1) : null,
+    };
+  },
+});
 export const useRole = (id: string) => useTeamQuery({ queryKey: ['access', 'role', id], queryFn: () => api.teams.role!(id), enabled: !!api.teams.role && !!id });
 /** Saves every cell of a role, or puts a built-in role back to its default; both refresh the role and the role list. */
 export function useEditRole(id: string) {
@@ -79,14 +99,14 @@ export function useRoleChanges(id: string) {
   return { rename, remove };
 }
 
-/** Who holds a role, read while the delete dialog is open. */
-export const useRoleHolders = (id: string, enabled: boolean) =>
-  useTeamQuery({ queryKey: ['access', 'role', id, 'holders'], queryFn: () => api.teams.roleHolders!(id), enabled: enabled && !!api.teams.roleHolders });
+/** One page of who holds a role (with the total), read while the delete dialog is open. */
+export const useRoleHolders = (id: string, enabled: boolean, p: ListParams = { page: 1, pageSize: 10 }) =>
+  useTeamQuery({ queryKey: ['access', 'role', id, 'holders', p], queryFn: () => api.teams.roleHolders!(id, p), enabled: enabled && !!api.teams.roleHolders });
 
 /** The custom roles given to a person, and giving or taking one; their access refreshes after either. */
-export function useRoleGrants(personId: string) {
+export function useRoleGrants(personId: string, p: ListParams = { page: 1, pageSize: 20 }) {
   const qc = useQueryClient();
-  const grants = useTeamQuery({ queryKey: ['access', 'person', personId, 'grants'], queryFn: () => api.teams.roleGrants!(personId), enabled: !!api.teams.roleGrants && !!personId });
+  const grants = useTeamQuery({ queryKey: ['access', 'person', personId, 'grants', p], queryFn: () => api.teams.roleGrants!(personId, p), enabled: !!api.teams.roleGrants && !!personId });
   const settled = () => Promise.all([qc.invalidateQueries({ queryKey: ['access', 'person', personId] }), qc.invalidateQueries({ queryKey: ['access', 'roles'] })]);
   const give = useMutation({ mutationFn: (input: { roleId: string }) => api.teams.giveRole!(personId, input), onSuccess: settled });
   const take = useMutation({ mutationFn: (grantId: string) => api.teams.takeRole!(personId, grantId), onSuccess: settled });
@@ -134,9 +154,10 @@ export function useCanCheck(): (area: string, action: string, everyTeam?: boolea
   const { teamId, team } = useTeam();
   const current = team?.id ?? teamId;
   const perms = useMyPermissions();
-  const role = useTeamRole();
+  const { session } = useSession();
   return (area, action, everyTeam = false) => {
-    if (!api.teams.permissions) return role === undefined ? undefined : role === 'builder' || role === 'admin';
+    // Off platform sign-in no grid is served: a signed-in person may take every action (the mock has no roles to tell them apart).
+    if (!api.teams.me) return session ? true : undefined;
     if (!perms.data) return undefined;
     const held = (list: { area: string; action: string }[]) => list.some((p) => p.area === area && p.action === action);
     if (everyTeam) return held(perms.data.workspace ?? []);
@@ -158,7 +179,7 @@ export function useTeamsAllowing(area: string, action: string): string[] | undef
   const perms = useMyPermissions();
   const here = useCanCheck()(area, action);
   // Without per-team permissions only the current team's answer is known.
-  if (!api.teams.permissions) return here === undefined ? undefined : here ? [team?.id ?? teamId] : [];
+  if (!api.teams.me) return here === undefined ? undefined : here ? [team?.id ?? teamId] : [];
   if (!perms.data) return undefined;
   const held = (list: { area: string; action: string }[]) => list.some((p) => p.area === area && p.action === action);
   if (held(perms.data.workspace ?? [])) return teams.map((t) => t.id);
@@ -169,10 +190,12 @@ export function useTeamsAllowing(area: string, action: string): string[] | undef
 /** Who holds `area.action` in `forTeam` (a record's team), else the current team. */
 export function useHolders(area: string, action: string, enabled: boolean, forTeam?: string) {
   const { team, teamId } = useTeam();
+  // platform-service refuses the holders route to a person without access.view (a Chat user); a notice then names nobody.
+  const mayRead = useCan('access', 'view') === true;
   return useTeamQuery({
     queryKey: ['holders', forTeam ?? team?.id ?? teamId, area, action],
     queryFn: () => api.teams.holders!(area, action, forTeam),
-    enabled: enabled && !!api.teams.holders,
+    enabled: enabled && mayRead && !!api.teams.holders,
     staleTime: 60_000,
   });
 }

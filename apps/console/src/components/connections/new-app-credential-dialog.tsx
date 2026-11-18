@@ -14,7 +14,8 @@ import { DialogShell } from '@/components/shared/dialog-shell';
 import { FormField } from '@/components/shared/form-field';
 import { FormTextField } from '@/components/shared/form-text-field';
 import { LoadingButton } from '@/components/shared/loading-button';
-import { ListEmpty } from '@/components/shared/query-states';
+import { ListEmpty, QueryError } from '@/components/shared/query-states';
+import { useDebounced } from '@/hooks/use-debounced';
 import { Row, Rows } from '@/components/shared/surface';
 import { Stepper } from '@/components/shared/stepper';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -23,7 +24,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Form } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { type SystemCard, useConnectionKinds, useCreateAppCredential, useSystems } from '@/hooks/systems-queries';
+import { type SystemCard, useConnectionKinds, useCreateAppCredential, useSystemCard, useSystems } from '@/hooks/systems-queries';
 import type { KindField, Kinds } from '@/lib/connect-plan';
 import { configSchema, fieldErrors, schemaForFields } from '@/lib/field-schema';
 import { initials } from '@/lib/format';
@@ -61,13 +62,15 @@ export function NewAppCredentialDialog({
   app?: string;
   onCreated?: (credentialId: string) => void;
 }) {
-  const systems = useSystems();
   const kinds = useConnectionKinds();
   const all = kinds.data as Kinds | undefined;
   const [q, setQ] = React.useState('');
   const [picked, setApp] = React.useState<SystemCard | null>(null);
-  const app = picked ?? (systems.data ?? []).find((c) => c.id === fixed) ?? null;
-  const apps = (systems.data ?? []).filter((c) => signsIn(c, all) && (!q || c.name.toLowerCase().includes(q.toLowerCase())));
+  // The list is the server's search of the team's apps, asked once the window is open on the picking step.
+  const systems = useSystems({ page: 1, pageSize: 50, search: useDebounced(q.trim()) || undefined, enabled: open && !fixed && !picked });
+  const fixedCard = useSystemCard(open ? fixed : undefined).data ?? null;
+  const app = picked ?? fixedCard;
+  const apps = (systems.data?.data ?? []).filter((c) => signsIn(c, all));
   const close = () => {
     setApp(null);
     setQ('');
@@ -98,7 +101,9 @@ export function NewAppCredentialDialog({
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search apps" aria-label="Search apps" className="pl-9" data-testid="new-credential-search" />
           </div>
-          {systems.isPending || kinds.isPending ? (
+          {systems.isError && !systems.data ? (
+            <QueryError what="apps" error={systems.error} onRetry={() => systems.refetch()} retrying={systems.isFetching} />
+          ) : systems.isPending || kinds.isPending ? (
             <Skeleton className="h-32 w-full" />
           ) : !apps.length ? (
             <ListEmpty icon={Search} noun="apps" filtered={Boolean(q)} onClear={() => setQ('')} description="No app that signs in with an account is turned on for this install." />
@@ -124,6 +129,7 @@ export function NewAppCredentialDialog({
               ))}
             </Rows>
           )}
+          {systems.data?.pagination.hasNext && <p className="text-xs text-muted-foreground">Showing the first {systems.data.pagination.pageSize} apps. Search to narrow the list.</p>}
         </div>
       )}
     </DialogShell>

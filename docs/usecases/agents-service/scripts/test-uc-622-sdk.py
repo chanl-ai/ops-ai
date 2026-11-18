@@ -19,6 +19,12 @@ def _run(argv: list[str], cwd: Path | None = None) -> subprocess.CompletedProces
     return subprocess.run(argv, cwd=cwd or ROOT, text=True, capture_output=True, check=False)
 
 
+def _first_setup(folder: Path) -> str:
+    """A first setup: a `.bindings.json` an earlier run left in the folder would make setup print FOUND."""
+    (folder / ".bindings.json").unlink(missing_ok=True)
+    return _setup(folder)
+
+
 def _setup(folder: Path) -> str:
     proc = _run([sys.executable, str(folder / "setup.py")])
     out = (proc.stdout or "") + (proc.stderr or "")
@@ -41,7 +47,7 @@ def _yaml_only(folder: Path) -> bool:
 
 
 def main() -> None:
-    first = _setup(A1)
+    first = _first_setup(A1)
     check(
         "1 first A1 setup prints READY and not MADE",
         "READY" in first.splitlines() and "MADE" not in first,
@@ -61,7 +67,7 @@ def main() -> None:
         again,
     )
 
-    kb_first = _setup(A2)
+    kb_first = _first_setup(A2)
     check(
         "4 first A2 setup prints READY and reuses the handbook",
         "READY" in kb_first.splitlines() and "MADE" not in kb_first,
@@ -87,7 +93,7 @@ def main() -> None:
         kb_again,
     )
 
-    tool_first = _setup(A3)
+    tool_first = _first_setup(A3)
     check(
         "8 first A3 setup prints READY and reuses search_customers",
         "READY" in tool_first.splitlines() and "MADE" not in tool_first,

@@ -116,8 +116,6 @@ OPERATIONS: dict[str, Operation] = {
         "path": "/v1/files",
         "pathParams": [],
         "query": [
-            "page",
-            "pageSize",
             "uploadedBy",
             "purpose",
             "scan",
@@ -126,10 +124,15 @@ OPERATIONS: dict[str, Operation] = {
             "readPath",
             "refType",
             "refId",
-            "search",
             "uploadedAfter",
             "uploadedBefore",
             "view",
+            "page",
+            "pageSize",
+            "search",
+            "sortBy",
+            "sortOrder",
+            "ids",
         ],
         "stream": False,
     },
@@ -279,8 +282,6 @@ class Operations:
     def files_list_files(
         self,
         *,
-        page: int | None = None,
-        page_size: int | None = None,
         uploaded_by: str | None = None,
         purpose: list[str] | None = None,
         scan: list[str] | None = None,
@@ -289,10 +290,15 @@ class Operations:
         read_path: list[str] | None = None,
         ref_type: str | None = None,
         ref_id: str | None = None,
-        search: str | None = None,
         uploaded_after: str | None = None,
         uploaded_before: str | None = None,
         view: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> FileList:
         "List Files"
         return self._t.call(
@@ -300,8 +306,6 @@ class Operations:
             OPERATIONS["files_list_files"],
             {},
             {
-                "page": page,
-                "pageSize": page_size,
                 "uploadedBy": uploaded_by,
                 "purpose": purpose,
                 "scan": scan,
@@ -310,10 +314,15 @@ class Operations:
                 "readPath": read_path,
                 "refType": ref_type,
                 "refId": ref_id,
-                "search": search,
                 "uploadedAfter": uploaded_after,
                 "uploadedBefore": uploaded_before,
                 "view": view,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
             },
             {},
             None,
@@ -397,7 +406,7 @@ class Operations:
         "Get Content"
         return self._t.call(SERVICE, OPERATIONS["files_get_content"], {"file_id": file_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def files_set_file_data(self, file_id: str, body: FileData) -> FileDetail:
+    def files_set_file_data(self, file_id: str, body: FileDataIn) -> FileDetail:
         "Set File Data"
         return self._t.call(SERVICE, OPERATIONS["files_set_file_data"], {"file_id": file_id}, {}, {}, body)  # type: ignore[no-any-return]
 
@@ -459,7 +468,7 @@ class Operations:
         "Delete Credential"
         return self._t.call(SERVICE, OPERATIONS["settings_delete_credential"], {"name": name}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def settings_test_target(self, body: StorageTarget) -> ProbeResult:
+    def settings_test_target(self, body: StorageTargetIn) -> ProbeResult:
         "Test Target"
         return self._t.call(SERVICE, OPERATIONS["settings_test_target"], {}, {}, {}, body)  # type: ignore[no-any-return]
 
@@ -481,8 +490,6 @@ class AsyncOperations:
     async def files_list_files(
         self,
         *,
-        page: int | None = None,
-        page_size: int | None = None,
         uploaded_by: str | None = None,
         purpose: list[str] | None = None,
         scan: list[str] | None = None,
@@ -491,10 +498,15 @@ class AsyncOperations:
         read_path: list[str] | None = None,
         ref_type: str | None = None,
         ref_id: str | None = None,
-        search: str | None = None,
         uploaded_after: str | None = None,
         uploaded_before: str | None = None,
         view: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> FileList:
         "List Files"
         return await self._t.call(
@@ -502,8 +514,6 @@ class AsyncOperations:
             OPERATIONS["files_list_files"],
             {},
             {
-                "page": page,
-                "pageSize": page_size,
                 "uploadedBy": uploaded_by,
                 "purpose": purpose,
                 "scan": scan,
@@ -512,10 +522,15 @@ class AsyncOperations:
                 "readPath": read_path,
                 "refType": ref_type,
                 "refId": ref_id,
-                "search": search,
                 "uploadedAfter": uploaded_after,
                 "uploadedBefore": uploaded_before,
                 "view": view,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
             },
             {},
             None,
@@ -599,7 +614,7 @@ class AsyncOperations:
         "Get Content"
         return await self._t.call(SERVICE, OPERATIONS["files_get_content"], {"file_id": file_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def files_set_file_data(self, file_id: str, body: FileData) -> FileDetail:
+    async def files_set_file_data(self, file_id: str, body: FileDataIn) -> FileDetail:
         "Set File Data"
         return await self._t.call(SERVICE, OPERATIONS["files_set_file_data"], {"file_id": file_id}, {}, {}, body)  # type: ignore[no-any-return]
 
@@ -661,6 +676,6 @@ class AsyncOperations:
         "Delete Credential"
         return await self._t.call(SERVICE, OPERATIONS["settings_delete_credential"], {"name": name}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def settings_test_target(self, body: StorageTarget) -> ProbeResult:
+    async def settings_test_target(self, body: StorageTargetIn) -> ProbeResult:
         "Test Target"
         return await self._t.call(SERVICE, OPERATIONS["settings_test_target"], {}, {}, {}, body)  # type: ignore[no-any-return]

@@ -1,8 +1,7 @@
-import type { MemberRole } from '@/lib/types/settings';
 
 import type { SignedInIdentity } from '@/lib/api/request-identity';
 
-import { AuthError, type AuthMethod, type AuthProvider, type DemoPerson, type ReauthInput, type Session, type SignInOptions, type SignInResult, type StepUp, type WorkspaceRole } from '../provider.ts';
+import { AuthError, type AuthMethod, type AuthProvider, type DemoPerson, type ReauthInput, type Session, type SignInOptions, type SignInResult, type StepUp } from '../provider.ts';
 
 /** platform-service's caller, as GET /v1/auth/session and the sign-in response return it. */
 interface Principal {
@@ -14,7 +13,6 @@ interface Principal {
   /** Null for a person on several teams. */
   teamId: string | null;
   teamIds: string[];
-  roles: Record<string, MemberRole>;
   scopes: string[];
   authMethod: string;
 }
@@ -67,16 +65,13 @@ function tabStorage(): Storage | null {
   }
 }
 
-const workspaceRole = (r: MemberRole | undefined): WorkspaceRole => (r === 'admin' ? 'admin' : r === 'viewer' ? 'viewer' : 'member');
-
 /** platform-service's `authMethod` as the console names it: OIDC and SAML sessions step up at their IdP. */
 const methodOf = (m: string): AuthMethod => (m === 'oidc' || m === 'saml' ? 'sso' : 'password');
 
 function toSession(s: Stored): Session {
   const p = s.principal;
-  const role = p.roles[p.teamId ?? p.teamIds[0] ?? ''];
   return {
-    user: { id: p.sub, name: p.name, email: p.email, teamIds: p.teamIds, role: workspaceRole(role), teamRoles: p.roles },
+    user: { id: p.sub, name: p.name, email: p.email, teamIds: p.teamIds },
     mfaEnrolled: false,
     authMethod: methodOf(p.authMethod),
     issuedAt: s.issuedAt,

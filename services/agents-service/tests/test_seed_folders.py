@@ -8,10 +8,12 @@ from __future__ import annotations
 import ast
 import sys
 from pathlib import Path
+from typing import Any
 
 from pydantic import SecretStr
 
 from ops_agents.activities.catalog import load_catalog
+from ops_service_kit import standards
 from ops_service_kit.settings import Settings
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -68,5 +70,8 @@ def test_rule_5_counts_a_route_a_person_or_any_service_of_the_tenant_calls_as_au
     """Knowledge usage and workflow refs authenticate through current_tenant_caller; rule 5 read them as
     open."""
     out: list[str] = []
-    checked = check_standards.check_routes(out)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+    scripts: Any = check_standards
+    app = scripts.create_app(Settings(database_url="sqlite+aiosqlite://"))
+    public = standards.PUBLIC_ROUTES | scripts.PUBLIC_ROUTES
+    checked = standards.check_routes(app, set(scripts.AUTHENTICATED), public, out)
     assert checked and not [o for o in out if "rule 5" in o], out

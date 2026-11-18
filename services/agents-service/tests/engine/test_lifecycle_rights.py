@@ -27,7 +27,8 @@ from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_mo
 from tests.engine.test_lifecycle import definition
 
 PLATFORM = Ed25519Signer.generate("platform-test")
-TENANT = "acme"
+# The dev seed's tenant: the seeded agents these callers chat with are its (an agent id is held by one tenant).
+TENANT = "local"
 
 
 def person(

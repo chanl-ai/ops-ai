@@ -21,12 +21,14 @@ from typing import Any, Literal
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_documents.store.metadata import ROLE, metadata
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import isolation
+from ops_store.rows import one, rows
 from ops_store.schema import TENANT_SCOPED, team_owned
+from ops_store.store import Store
 from ops_store.team_scope import team_visible
 
 Kind = Literal["document_type"]
@@ -73,11 +75,31 @@ sa.Index(
 )
 
 
-class TemplateCopies:
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+class CopyRow(Out):
+    """One copy's row as stored."""
 
-    async def live(self, source: str, template_id: str) -> dict[str, Any] | None:
+    id: str
+    tenant_id: str
+    team: str
+    kind: Kind
+    record_id: str
+    source: str
+    template_id: str
+    version: int
+    digest: str | None
+    record_version: int | None
+    base: dict[str, Any] | None
+    installed_by: str
+    installed_at: str
+    removed_at: str | None
+    detached_at: str | None
+    detached_by: str | None
+
+
+class TemplateCopies(Store):
+    role = ROLE
+
+    async def live(self, source: str, template_id: str) -> CopyRow | None:
         """The acting team's live copy of this template, at whatever version it last took, if it has one."""
         t = template_copies
         q = sa.select(t).where(
@@ -87,16 +109,15 @@ class TemplateCopies:
             LIVE,
             team_visible(t),
         )
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            found = (await c.execute(q)).mappings().first()
-        return dict(found) if found is not None else None
+        async with self.tx() as c:
+            return await one(c, q, CopyRow)
 
-    async def of_team(self) -> list[dict[str, Any]]:
+    async def of_team(self) -> list[CopyRow]:
         """Every live copy the acting team holds, for the template list's `installed`."""
         t = template_copies
         q = sa.select(t).where(t.c.tenant_id == isolation.tenant(), LIVE, team_visible(t))
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+        async with self.tx() as c:
+            return await rows(c, q, CopyRow)
 
     async def add(
         self,
@@ -111,7 +132,7 @@ class TemplateCopies:
         digest: str | None = None,
         record_version: int | None = None,
         base: dict[str, Any] | None = None,
-    ) -> tuple[dict[str, Any], bool]:
+    ) -> tuple[CopyRow, bool]:
         """Records a new copy and answers it with True; when another install of the same template won the race, answers
         that one's row with False. The base goes in the same insert, so the loser's base never lands on the winner's."""
         row = {
@@ -129,23 +150,23 @@ class TemplateCopies:
             "installed_by": by,
             "installed_at": now_iso(),
         }
-        try:
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                await c.execute(template_copies.insert().values(**row))
-        except IntegrityError:
-            first = await self.live(source, template_id)
-            if first is None:
-                raise
-            return first, False
-        return {**row, "removed_at": None, "detached_at": None, "detached_by": None}, True
+        async with self.tx() as c:
+            try:
+                async with self.attempt(c):
+                    await c.execute(template_copies.insert().values(**row))
+            except IntegrityError:
+                first = await self.live(source, template_id)
+                if first is None:
+                    raise
+                return first, False
+        return CopyRow.model_validate({**row, "removed_at": None, "detached_at": None, "detached_by": None}), True
 
-    async def of_record(self, record_id: str) -> dict[str, Any] | None:
+    async def of_record(self, record_id: str) -> CopyRow | None:
         """The acting team's copy row of this type, detached or not, if the type is a copy."""
         t = template_copies
         q = sa.select(t).where(t.c.tenant_id == isolation.tenant(), t.c.record_id == record_id, KEPT, team_visible(t))
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            found = (await c.execute(q)).mappings().first()
-        return dict(found) if found is not None else None
+        async with self.tx() as c:
+            return await one(c, q, CopyRow)
 
     async def updated(
         self, copy_id: str, *, version: int, digest: str | None, record_version: int, base: dict[str, Any] | None
@@ -154,27 +175,30 @@ class TemplateCopies:
         `base` is the template body it was merged against (never the merged result)."""
         t = template_copies
         values = {"version": version, "digest": digest, "record_version": record_version, "base": base}
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 t.update()
                 .where(t.c.tenant_id == isolation.tenant(), t.c.id == copy_id, team_visible(t))
                 .values(**values)
             )
 
-    async def detach(self, copy_id: str, *, by: str) -> dict[str, Any]:
+    async def detach(self, copy_id: str, *, by: str) -> CopyRow:
         """Makes the copy the team's own: it is offered no update again. A second call answers the same row."""
         t = template_copies
         mine = sa.and_(t.c.tenant_id == isolation.tenant(), t.c.id == copy_id, team_visible(t))
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 t.update().where(mine, t.c.detached_at.is_(None)).values(detached_at=now_iso(), detached_by=by)
             )
-            return dict((await c.execute(sa.select(t).where(mine))).mappings().one())
+            found = await one(c, sa.select(t).where(mine), CopyRow)
+        if found is None:
+            raise LookupError(f"no copy {copy_id} in the team after it was detached")
+        return found
 
     async def removed_record(self, record_id: str) -> None:
         """The type a copy made was deleted: its live row, if any, stops counting."""
         t = template_copies
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 t.update()
                 .where(t.c.tenant_id == isolation.tenant(), t.c.record_id == record_id, KEPT, team_visible(t))
@@ -184,7 +208,7 @@ class TemplateCopies:
     async def removed(self, copy_id: str) -> None:
         """The copy's type is gone: its row stops counting, so the next install makes a new copy."""
         t = template_copies
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 t.update()
                 .where(t.c.tenant_id == isolation.tenant(), t.c.id == copy_id, team_visible(t))

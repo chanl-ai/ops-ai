@@ -6,29 +6,32 @@ Column types are the portable ones (JSON, not JSONB) so the API tests run on SQL
 
 from __future__ import annotations
 
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncEngine
+from pydantic import BaseModel, JsonValue
 
 from ops_store import Guarantee
 from ops_store.dialect import insert_ignore, locked
+from ops_store.listing import LISTED
+from ops_store.rows import rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
 from .leases import check_fence
-from .tenancy import CLAIM_THREAD, current_tenant, system_tx, tenant_tx
+from .tenancy import CLAIM_THREAD, RuntimeStore, current_tenant
 
 graph_threads = sa.Table(
     "graph_threads",
     metadata,
     sa.Column("id", sa.String(64), primary_key=True),
-    sa.Column("graph", sa.String(64), nullable=False, index=True),
+    sa.Column("graph", sa.String(64), nullable=False, index=True, info=LISTED),
     sa.Column("meta", sa.JSON, nullable=False),
     sa.Column("team_id", sa.String(64), nullable=False),
     sa.Column("created_at", sa.String(32), nullable=False),
-    sa.Column("updated_at", sa.String(32), nullable=False),
+    sa.Column("updated_at", sa.String(32), nullable=False, info=LISTED),
     sa.Column("status", sa.String(16), nullable=False),
     # Set for definition-built workflows: the version the thread started on and its digest. Every run and resume
     # compiles this version, so later publishes do not change a running or paused case.
@@ -42,12 +45,17 @@ graph_threads = sa.Table(
     sa.Column("parent_thread_id", sa.String(64), index=True),
     # A chat thread's overrides within its agent's limits, applied to every turn (activities/overrides.py).
     sa.Column("overrides", sa.JSON),
+    # The email of the person the thread belongs to, the same as its meta's `ownerEmail` and written with it
+    # (`_owner`), so a list or count by owner reads a column, not each row's JSON (migration 0105).
+    sa.Column("owner", sa.String(320)),
     # Set from the request's or loop's tenant (store/tenancy.py), never from a body; PostgreSQL RLS reads it (0021).
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local", index=True),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, index=True),
     # Per tenant, so one tenant's key neither collides with nor reveals another's.
     sa.UniqueConstraint("tenant_id", "external_key", name="uq_graph_threads_tenant_external_key"),
     # A team's thread list, newest first.
     sa.Index("ix_graph_threads_team_updated", "tenant_id", "team_id", "updated_at"),
+    # A person's own threads.
+    sa.Index("ix_graph_threads_owner", "tenant_id", "owner"),
     # Held to the caller's team by the database too (migration 0073): another team's thread is not found.
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
@@ -55,11 +63,16 @@ graph_threads = sa.Table(
 graph_versions = sa.Table(
     "graph_versions",
     metadata,
+    # The workflow's tenant (agents 0106), with no default (agents 0109).
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant),
     sa.Column("name", sa.String(64), primary_key=True),
     sa.Column("version", sa.Integer, primary_key=True),
-    sa.Column("digest", sa.String(64), nullable=False, unique=True),
+    sa.Column("digest", sa.String(64), nullable=False),
     sa.Column("definition", sa.JSON, nullable=False),
     sa.Column("created_at", sa.String(32), nullable=False),
+    # A digest is stored once per tenant.
+    sa.UniqueConstraint("tenant_id", "digest", name="uq_graph_versions_tenant_digest"),
+    info=TENANT_SCOPED,
 )
 
 graph_runs = sa.Table(
@@ -75,11 +88,59 @@ graph_runs = sa.Table(
     sa.Column("input", sa.JSON),
     sa.Column("created_at", sa.String(32), nullable=False),
     sa.Column("finished_at", sa.String(32)),
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local", index=True),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, index=True),
     # The thread's team, copied when the run starts, so the policy holds the run without reading its thread.
     sa.Column("team_id", sa.String(64), nullable=False),
     info={**TENANT_SCOPED, **TEAM_OWNED},
 )
+
+
+class RunThread(BaseModel):
+    """A thread as a workflow's runs list shows it."""
+
+    id: str
+    status: str
+    version: int | None
+    meta: dict[str, JsonValue]
+    created_at: str
+    updated_at: str
+
+
+class ThreadRow(BaseModel):
+    """A `graph_threads` row, every column."""
+
+    id: str
+    graph: str
+    meta: dict[str, JsonValue]
+    team_id: str
+    created_at: str
+    updated_at: str
+    status: str
+    version: int | None
+    digest: str | None
+    external_key: str | None
+    deployment_id: str | None
+    parent_thread_id: str | None
+    overrides: dict[str, JsonValue] | None
+    owner: str | None
+    tenant_id: str
+
+
+class StoredVersion(BaseModel):
+    """A stored workflow version's definition and digest."""
+
+    name: str
+    version: int
+    digest: str
+    definition: dict[str, JsonValue]
+
+
+class RunJournal(BaseModel):
+    """One run's kind and streamed events, by its thread."""
+
+    thread_id: str
+    kind: str
+    events: list[dict[str, JsonValue]]
 
 
 def mine(table: sa.Table) -> sa.ColumnElement[bool]:
@@ -87,13 +148,15 @@ def mine(table: sa.Table) -> sa.ColumnElement[bool]:
     return table.c.tenant_id == current_tenant()
 
 
-class GraphStore:
+def _owner(owner_email: object) -> str | None:
+    """The owner column's value for a meta's `ownerEmail`: None when it names nobody."""
+    return str(owner_email) if owner_email else None
+
+
+class GraphStore(RuntimeStore):
     # Run and status writes are checked against the lease generation in their own transaction (TRANSACTION); a
     # thread found or created by external key, and a version stored once per digest, rest on unique inserts (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.CAS})
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
 
     async def create_thread(
         self,
@@ -106,12 +169,13 @@ class GraphStore:
         version: int | None = None,
         digest: str | None = None,
     ) -> None:
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(
                 graph_threads.insert().values(
                     id=thread_id,
                     graph=graph,
                     meta=meta,
+                    owner=_owner(meta.get("ownerEmail")),
                     team_id=team_id,
                     created_at=now,
                     updated_at=now,
@@ -125,13 +189,13 @@ class GraphStore:
         """Which tenant and team a thread belongs to, read past row-level security. For the sweeper and the timer
         poller only, which claim work before they know its owner (tests/store/test_tenancy.py holds the callers)."""
         t = graph_threads
-        async with system_tx(self.engine, CLAIM_THREAD) as c:
+        async with self.system_tx(CLAIM_THREAD) as c:
             q = sa.select(t.c.tenant_id, t.c.team_id).where(t.c.id == thread_id, any_team(t, "a loop finds its owner"))
             row = (await c.execute(q)).first()
         return (str(row[0]), str(row[1])) if row else None
 
     async def thread_by_key(self, external_key: str) -> dict[str, Any] | None:
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             q = graph_threads.select().where(
                 graph_threads.c.external_key == external_key, mine(graph_threads), team_visible(graph_threads)
             )
@@ -158,6 +222,7 @@ class GraphStore:
             "id": thread_id,
             "graph": graph,
             "meta": meta,
+            "owner": _owner(meta.get("ownerEmail")),
             "team_id": team_id,
             "created_at": now,
             "updated_at": now,
@@ -169,7 +234,7 @@ class GraphStore:
             "parent_thread_id": parent_thread_id,
             "tenant_id": current_tenant(),
         }
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             stmt = insert_ignore(c, graph_threads, values, keys=["tenant_id", "external_key"])
             created = (await c.execute(stmt)).rowcount == 1
             row = (
@@ -188,7 +253,7 @@ class GraphStore:
         return dict(row), created
 
     async def pin(self, thread_id: str, version: int, digest: str, now: str) -> None:
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(
                 graph_threads.update()
                 .where(graph_threads.c.id == thread_id)
@@ -196,26 +261,65 @@ class GraphStore:
             )
 
     async def versions(self, name: str) -> list[dict[str, Any]]:
-        q = graph_versions.select().where(graph_versions.c.name == name).order_by(graph_versions.c.version)
-        async with self.engine.begin() as c:
+        q = (
+            graph_versions.select()
+            .where(mine(graph_versions), graph_versions.c.name == name)
+            .order_by(graph_versions.c.version)
+        )
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def version(self, name: str, version: int) -> dict[str, Any] | None:
-        q = graph_versions.select().where(graph_versions.c.name == name, graph_versions.c.version == version)
-        async with self.engine.begin() as c:
+        q = graph_versions.select().where(
+            mine(graph_versions), graph_versions.c.name == name, graph_versions.c.version == version
+        )
+        async with self.tx() as c:
             row = (await c.execute(q)).mappings().first()
         return dict(row) if row else None
 
+    async def threads_named(self, thread_ids: Sequence[str]) -> list[ThreadRow]:
+        """The named threads the caller may see, in one statement; `thread_ids` is bounded by the caller (a batch of
+        a stream's events)."""
+        if not thread_ids:
+            return []
+        t = graph_threads
+        q = sa.select(*(t.c[name] for name in ThreadRow.model_fields)).where(
+            t.c.id.in_(list(thread_ids)), mine(t), team_visible(t)
+        )
+        async with self.tx() as c:
+            return await rows(c, q, ThreadRow)
+
+    async def versions_at(self, pairs: Collection[tuple[str, int]]) -> dict[tuple[str, int], StoredVersion]:
+        """The named workflow versions in one statement, by (name, version); a pair with no stored version is left
+        out. Read by the names and versions asked for, then matched in pairs, so no tuple IN is needed."""
+        if not pairs:
+            return {}
+        v = graph_versions.c
+        q = sa.select(v.name, v.version, v.digest, v.definition).where(
+            mine(graph_versions),
+            v.name.in_(sorted({n for n, _ in pairs})),
+            v.version.in_(sorted({n for _, n in pairs})),
+        )
+        async with self.tx() as c:
+            found = await rows(c, q, StoredVersion)
+        return {(r.name, r.version): r for r in found if (r.name, r.version) in pairs}
+
     async def publish(self, name: str, definition: dict[str, Any], digest: str, now: str) -> int:
         """Stores the next version of a workflow; a definition already stored under its digest returns that version."""
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             same = (
-                await c.execute(sa.select(graph_versions.c.version).where(graph_versions.c.digest == digest))
+                await c.execute(
+                    sa.select(graph_versions.c.version).where(mine(graph_versions), graph_versions.c.digest == digest)
+                )
             ).first()
             if same:
                 return int(same.version)
             latest = (
-                await c.execute(sa.select(sa.func.max(graph_versions.c.version)).where(graph_versions.c.name == name))
+                await c.execute(
+                    sa.select(sa.func.max(graph_versions.c.version)).where(
+                        mine(graph_versions), graph_versions.c.name == name
+                    )
+                )
             ).scalar()
             version = int(latest or 0) + 1
             await c.execute(
@@ -230,7 +334,7 @@ class GraphStore:
             return version
 
     async def thread(self, thread_id: str) -> dict[str, Any] | None:
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             row = (
                 (
                     await c.execute(
@@ -248,24 +352,69 @@ class GraphStore:
         q = (
             graph_threads.select()
             .where(mine(graph_threads), team_visible(graph_threads))
-            .order_by(graph_threads.c.updated_at.desc())
+            .order_by(graph_threads.c.updated_at.desc(), graph_threads.c.id)
         )
         if graph:
             q = q.where(graph_threads.c.graph == graph)
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
+
+    async def thread_page(
+        self, graph: str, labels: Mapping[str, str], other: str, wanted: Sequence[str], *, offset: int, limit: int
+    ) -> tuple[list[RunThread], int, dict[str, int]]:
+        """One page of `graph`'s threads, newest update first then by id, with the total and the count per label.
+        `labels` names a thread status's label and `other` every status it does not name; `wanted` keeps the threads
+        whose label it lists (all when empty). The counts leave `wanted` out, so a filtered list still counts each."""
+        status = graph_threads.c.status
+        scope = (graph_threads.c.graph == graph, mine(graph_threads), team_visible(graph_threads))
+        counted: dict[str, int] = {}
+        chosen: list[sa.ColumnElement[bool]] = []
+        if wanted:
+            named = [raw for raw, label in labels.items() if label in wanted]
+            chosen = [sa.or_(status.in_(named), *([status.not_in(list(labels))] if other in wanted else []))]
+        t = graph_threads.c
+        page = (
+            sa.select(t.id, t.status, t.version, t.meta, t.created_at, t.updated_at)
+            .where(*scope, *chosen)
+            .order_by(graph_threads.c.updated_at.desc(), graph_threads.c.id)
+            .offset(offset)
+            .limit(limit)
+        )
+        async with self.tx() as c:
+            for raw, n in await c.execute(sa.select(status, sa.func.count()).where(*scope).group_by(status)):
+                label = labels.get(str(raw), other)
+                counted[label] = counted.get(label, 0) + int(n)
+            total = int(
+                (
+                    await c.execute(sa.select(sa.func.count()).select_from(graph_threads).where(*scope, *chosen))
+                ).scalar_one()
+            )
+            found = await rows(c, page, RunThread)
+        return found, total, counted
+
+    async def run_events(self, thread_ids: Sequence[str]) -> list[RunJournal]:
+        """The named threads' runs' kinds and events, oldest run first, in one statement."""
+        if not thread_ids:
+            return []
+        q = (
+            sa.select(graph_runs.c.thread_id, graph_runs.c.kind, graph_runs.c.events)
+            .where(graph_runs.c.thread_id.in_(list(thread_ids)), mine(graph_runs), team_visible(graph_runs))
+            .order_by(graph_runs.c.created_at, graph_runs.c.id)
+        )
+        async with self.tx() as c:
+            return await rows(c, q, RunJournal)
 
     async def set_thread_status(self, thread_id: str, status: str, now: str, *, generation: int | None = None) -> None:
         """`generation`: the writing run's lease generation, checked in this transaction (ADR-0016)."""
 
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await check_fence(c, thread_id, generation)
             await c.execute(
                 graph_threads.update().where(graph_threads.c.id == thread_id).values(status=status, updated_at=now)
             )
 
     async def run(self, run_id: str) -> dict[str, Any] | None:
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             row = (
                 (
                     await c.execute(
@@ -281,9 +430,9 @@ class GraphStore:
         q = (
             graph_runs.select()
             .where(graph_runs.c.thread_id == thread_id, mine(graph_runs), team_visible(graph_runs))
-            .order_by(graph_runs.c.created_at)
+            .order_by(graph_runs.c.created_at, graph_runs.c.id)
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def mark_crashed(
@@ -305,7 +454,7 @@ class GraphStore:
             "event": "crashed",
             "data": {"owner": owner, "running": running or [], "generation": generation, "at": now},
         }
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             row = (
                 await c.execute(
                     sa.select(graph_runs.c.events, graph_runs.c.thread_id).where(
@@ -328,7 +477,7 @@ class GraphStore:
         """Records the run; False when the id already exists (the caller replays or refuses). `generation` is the
         run's lease generation, checked in this transaction (ADR-0016)."""
 
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await check_fence(c, thread_id, generation)
             taken = sa.select(graph_runs.c.id).where(graph_runs.c.id == run_id, team_visible(graph_runs))
             if (await c.execute(taken)).first():
@@ -359,7 +508,7 @@ class GraphStore:
         a `stale_owner_finished` event instead of replacing them (ADR-0016)."""
         from ops_checkpointer import LeaseSupersededError  # noqa: PLC0415
 
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             q = sa.select(graph_runs.c.events, graph_runs.c.thread_id, graph_runs.c.status).where(
                 graph_runs.c.id == run_id, team_visible(graph_runs)
             )
@@ -383,7 +532,7 @@ class GraphStore:
             await c.execute(graph_runs.update().where(graph_runs.c.id == run_id).values(events=[*row.events, late]))
 
     async def meta(self, thread_id: str) -> dict[str, Any]:
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             meta: Any = (
                 await c.execute(
                     sa.select(graph_threads.c.meta).where(graph_threads.c.id == thread_id, team_visible(graph_threads))
@@ -393,7 +542,7 @@ class GraphStore:
 
     async def set_overrides(self, thread_id: str, overrides: dict[str, Any] | None, *, updated_at: str) -> None:
         """Replaces the thread's overrides; the caller has checked them against the agent's limits."""
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(
                 graph_threads.update()
                 .where(graph_threads.c.id == thread_id, mine(graph_threads))
@@ -402,7 +551,7 @@ class GraphStore:
 
     async def set_deployment(self, thread_id: str, deployment_id: str) -> None:
         """Marks a thread as started on a deployment (an embed), so its usage is counted on the column."""
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(
                 graph_threads.update().where(graph_threads.c.id == thread_id).values(deployment_id=deployment_id)
             )
@@ -419,7 +568,7 @@ class GraphStore:
             .where(t.c.deployment_id.in_(list(teams)), team_visible(t))
             .group_by(t.c.deployment_id, t.c.team_id)
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             rows = (await c.execute(q)).all()
         return {str(d): (int(n or 0), last) for d, team, n, last in rows if teams.get(str(d)) == team}
 
@@ -429,12 +578,13 @@ class GraphStore:
         """Merges `patch` into the thread's meta. `lock` takes the row lock for the read and write, so two locked
         patches do not lose one another; it waits on any transaction that holds the row, so a caller inside one
         must not pass it."""
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             q = sa.select(graph_threads.c.meta).where(graph_threads.c.id == thread_id, team_visible(graph_threads))
             if lock:
                 q = locked(q, graph_threads)
             meta: Any = (await c.execute(q)).scalar_one_or_none()
             values: dict[str, Any] = {"meta": {**(meta or {}), **patch}}
+            values["owner"] = _owner(values["meta"].get("ownerEmail"))
             if updated_at is not None:
                 values["updated_at"] = updated_at
             await c.execute(graph_threads.update().where(graph_threads.c.id == thread_id).values(**values))
@@ -447,13 +597,17 @@ class GraphStore:
             mine(graph_threads),
             team_visible(graph_threads),
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [str(r[0]) for r in await c.execute(q)]
 
     async def latest_versions(self) -> dict[str, int]:
         """Every published definition's name and its highest version."""
-        q = sa.select(graph_versions.c.name, sa.func.max(graph_versions.c.version)).group_by(graph_versions.c.name)
-        async with self.engine.begin() as c:
+        q = (
+            sa.select(graph_versions.c.name, sa.func.max(graph_versions.c.version))
+            .where(mine(graph_versions))
+            .group_by(graph_versions.c.name)
+        )
+        async with self.tx() as c:
             return {str(r[0]): int(r[1]) for r in await c.execute(q)}
 
     async def run_summaries(self, only: str | None = None) -> dict[str, list[dict[str, Any]]]:
@@ -467,12 +621,12 @@ class GraphStore:
                 graph_runs.c.finished_at,
             )
             .where(mine(graph_runs), team_visible(graph_runs))
-            .order_by(graph_runs.c.created_at)
+            .order_by(graph_runs.c.created_at, graph_runs.c.id)
         )
         if only is not None:
             q = q.where(graph_runs.c.thread_id == only)
         out: dict[str, list[dict[str, Any]]] = {}
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             for r in (await c.execute(q)).mappings():
                 out.setdefault(str(r["thread_id"]), []).append(dict(r))
         return out
@@ -485,7 +639,7 @@ class GraphStore:
             mine(graph_threads),
             team_visible(graph_threads),
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [(str(g), dict(m or {})) for g, m in await c.execute(q)]
 
     async def thread_stats(self) -> list[tuple[str, str, str]]:
@@ -493,5 +647,5 @@ class GraphStore:
         q = sa.select(graph_threads.c.graph, graph_threads.c.status, graph_threads.c.created_at).where(
             mine(graph_threads), team_visible(graph_threads)
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [(str(g), str(s), str(t)) for g, s, t in await c.execute(q)]

@@ -57,7 +57,7 @@ def answers(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
     return ModelResponse(parts=[ToolCallPart("final_result", {"summary": "never asked"})])
 
 
-async def test_a_turn_without_its_answer_takes_the_error_port_without_a_retry() -> None:
+async def test_a_turn_without_its_answer_takes_the_error_port_without_a_retry(local_tenant: None) -> None:
     db = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with db.begin() as c:
         await c.run_sync(metadata.create_all)
@@ -112,7 +112,7 @@ async def port_on(model: Any, tools: Any, *, spec: dict[str, Any] | None = None)
     return KernelAgents(db, load_catalog(SEED), ports, OneTool(), "default"), aid  # type: ignore[arg-type]
 
 
-async def test_the_steps_tool_cap_bounds_a_model_that_keeps_calling_tools() -> None:
+async def test_the_steps_tool_cap_bounds_a_model_that_keeps_calling_tools(local_tenant: None) -> None:
     reads = Reads()
     port, aid = await port_on(FunctionModel(keeps_reading, stream_function=stream_of(keeps_reading)), reads)
     req = AgentRequest(agent_id=aid, message="Summarise", turn_id="r:s:1", output_schema=SCHEMA, max_tool_calls=2)
@@ -120,7 +120,7 @@ async def test_the_steps_tool_cap_bounds_a_model_that_keeps_calling_tools() -> N
     assert (result.ok, result.code, reads.calls) == (False, "no_output", 2), (result, reads.calls)
 
 
-async def test_a_step_model_the_agent_does_not_allow_takes_the_error_port() -> None:
+async def test_a_step_model_the_agent_does_not_allow_takes_the_error_port(local_tenant: None) -> None:
     port, aid = await port_on(FunctionModel(answers), Reads())
     req = AgentRequest(
         agent_id=aid, message="Summarise", turn_id="r:s:1", output_schema=SCHEMA, model_alias="not-allowed"
@@ -240,7 +240,7 @@ class SearchTool:
         return [OperationRef("search_knowledge", "Search knowledge", "read", schema, False, None, "Knowledge bases")]
 
 
-async def test_a_workflow_agent_step_searches_only_its_agents_bases_whatever_the_model_asks() -> None:
+async def test_a_workflow_agent_step_searches_only_its_agents_bases_whatever_the_model_asks(local_tenant: None) -> None:
     """A workflow's agent step ran search_knowledge as the model asked: naming another base, or asking for the whole
     team's, read knowledge the agent was never given."""
     asks = {"query": "salary bands", "collections": ["kb_hr_private"], "allTeamKnowledgeBases": True}

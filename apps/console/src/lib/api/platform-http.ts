@@ -1,4 +1,5 @@
-import type { AccessCheck, ApiKey, Holders, Me, MyPermissions, PersonPermissions, RoleCreated, RoleDetail, RoleGrant, RoleHolder, RoleSummary, WhyNot } from '@/lib/types/settings';
+import type { AccessCheck, ApiKey, Holders, Me, PersonPermissions, RoleCreated, RoleDetail, RoleGrant, RoleHolder, RoleSummary, WhyNot } from '@/lib/types/settings';
+import type { ListResult } from '@/lib/types/query';
 import type { Team } from '@/lib/types/team';
 
 import type { OpsApi } from './contract';
@@ -14,26 +15,25 @@ import { createWorkspaceTeamsHttp } from './workspace-teams-http';
  * settings, so there is no create.
  */
 export function createPlatformTeamsHttp(baseUrl: string): OpsApi['teams'] {
-  const { get, send } = createTransport(`${baseUrl}/v1`);
+  const { get, send, qs } = createTransport(`${baseUrl}/v1`);
   return {
     list: async () => (await get<Omit<Team, 'icon'>[]>('/teams')).map((t) => ({ ...t, icon: 'team' as const })),
     me: () => get<Me>('/me'),
-    roles: () => get<RoleSummary[]>('/roles'),
+    roles: (p) => get<ListResult<RoleSummary>>(`/roles?${qs(p)}`),
     role: (id) => get<RoleDetail>(`/roles/${encodeURIComponent(id)}`),
     editRole: (id, permissions) => send<RoleDetail>('PUT', `/roles/${encodeURIComponent(id)}/permissions`, { permissions }),
     resetRole: (id) => send<RoleDetail>('POST', `/roles/${encodeURIComponent(id)}/reset`),
     createRole: (input) => send<RoleCreated>('POST', '/roles', input),
     renameRole: (id, input) => send<RoleDetail>('PATCH', `/roles/${encodeURIComponent(id)}`, input),
     deleteRole: (id, moveTo) => send<void>('DELETE', `/roles/${encodeURIComponent(id)}${moveTo ? `?moveTo=${encodeURIComponent(moveTo)}` : ''}`),
-    roleHolders: (id) => get<RoleHolder[]>(`/roles/${encodeURIComponent(id)}/holders`),
-    roleGrants: (person) => get<RoleGrant[]>(`/people/${encodeURIComponent(person)}/role-grants`),
+    roleHolders: (id, p) => get<ListResult<RoleHolder>>(`/roles/${encodeURIComponent(id)}/holders?${qs(p)}`),
+    roleGrants: (person, p) => get<ListResult<RoleGrant>>(`/people/${encodeURIComponent(person)}/role-grants?${qs(p)}`),
     giveRole: (person, input) => send<RoleGrant>('POST', `/people/${encodeURIComponent(person)}/role-grants`, input),
     takeRole: (person, grant) => send<void>('DELETE', `/people/${encodeURIComponent(person)}/role-grants/${encodeURIComponent(grant)}`),
     personPermissions: (id) => get<PersonPermissions>(`/people/${encodeURIComponent(id)}/permissions`),
     why: (area, action) => get<WhyNot>(`/me/why?area=${encodeURIComponent(area)}&action=${encodeURIComponent(action)}`),
     checkAccess: (input) => send<AccessCheck>('POST', '/access/check', input),
     renameWorkspace: (name) => send<{ id: string; name: string }>('PATCH', '/settings/workspace', { name }),
-    permissions: () => get<MyPermissions>('/me/permissions'),
     holders: (area, action, team) =>
       get<Holders>(`/access/holders?area=${encodeURIComponent(area)}&action=${encodeURIComponent(action)}${team ? `&team=${encodeURIComponent(team)}` : ''}`),
   };
@@ -65,17 +65,21 @@ export function createPlatformWorkspaceTeamsHttp(baseUrl: string): OpsApi['works
 
 /**
  * The team's API keys (/v1/api-keys), the one list every keys screen reads (Settings › Team › API keys, an MCP link's
- * Keys tab). platform-service lists the acting team's keys in one answer, so they arrive as one page. A key's
+ * Keys tab), one page at a time with its search and total. A key's
  * scopes there are `read` and `write`; a console scope that changes anything (`runs:write`) asks for write.
  */
 export function createPlatformApiKeysHttp(baseUrl: string): OpsApi['settings']['apiKeys'] {
-  const { get, send } = createTransport(`${baseUrl}/v1`);
+  const { get, send, qs } = createTransport(`${baseUrl}/v1`);
   return {
-    list: async (p) => {
-      // An MCP link's Keys tab names its link; platform-service keeps the keys made for it.
+    list: (p) => {
+      // An MCP link's Keys tab names its link; platform-service keeps the keys made for it. Page, size and search are the service's.
       const link = p.filters?.mcpLink?.[0];
-      const data = await get<ApiKey[]>(link ? `/api-keys?targetKind=mcp_link&targetId=${encodeURIComponent(link)}` : '/api-keys');
-      return { data, pagination: { page: 1, pageSize: Math.max(data.length, 1), total: data.length, totalPages: 1, hasNext: false, hasPrev: false }, facets: {} };
+      const q = new URLSearchParams(qs({ ...p, filters: undefined }));
+      if (link) {
+        q.set('targetKind', 'mcp_link');
+        q.set('targetId', link);
+      }
+      return get<ListResult<ApiKey>>(`/api-keys?${q}`);
     },
     create: async (input) => {
       const scopes = input.target ? ['read'] : input.scopes.some((s) => s === 'write' || s.endsWith(':write')) ? ['read', 'write'] : ['read'];

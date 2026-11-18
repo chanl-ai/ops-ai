@@ -4,7 +4,7 @@ heartbeat, the journal and the event shape `{event, runId, seq, node?, data?}`."
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Sequence
 from contextlib import AbstractContextManager, aclosing, suppress
 from typing import Any, cast
 
@@ -17,7 +17,7 @@ from ops_store import isolation
 from ops_store.isolation import Isolation
 
 from ..store.events import EventLog
-from ..store.graphs import GraphStore
+from ..store.graphs import GraphStore, ThreadRow
 from ..store.leases import Heartbeat, Leases
 from .deps import Runtime
 from .event_log import designed_type
@@ -87,17 +87,55 @@ async def resolve(rt: Runtime, thread_id: str) -> tuple[dict[str, Any], Any]:
     if row is None:
         # Another tenant's or team's thread is not found either: the store and the database never return it.
         raise NotFound("Thread")
-    require_graphs(rt)
-    if row["graph"] in rt.graphs:
-        return row, rt.graphs[row["graph"]]
-    d = await definition(rt, row["graph"], row["version"])
-    if d.digest() != row["digest"]:
-        raise Conflict(
-            f"Stored {row['graph']} version {row['version']} no longer matches the thread's digest.",
-            code="digest_mismatch",
-        )
-    assert rt.workflows is not None
-    return row, rt.workflows.get(d)
+    found = (await resolve_rows(rt, [ThreadRow.model_validate(row)])).graphs[thread_id]
+    if isinstance(found, ApiError):
+        raise found
+    return row, found
+
+
+# A thread's graph, compiled from code or from its pinned workflow version; LangGraph ships no type stubs, so the
+# runtime holds compiled graphs untyped (Runtime.graphs).
+Graph = Any
+
+
+class Resolved:
+    """Threads' graphs by thread id, each a graph or the error `resolve` raises for it, and the workflow versions read
+    on the way, by (name, version)."""
+
+    def __init__(
+        self, graphs: dict[str, Graph | ApiError], versions: dict[tuple[str, int], WorkflowDefinition]
+    ) -> None:
+        self.graphs = graphs
+        self.versions = versions
+
+
+async def resolve_rows(rt: Runtime, rows: Sequence[ThreadRow]) -> Resolved:
+    """`resolve` for threads already read, with every pinned workflow version they name read in one statement, so a
+    list resolves its rows in a fixed number of reads."""
+    try:
+        require_graphs(rt)
+    except GraphsUnavailable as e:
+        return Resolved({r.id: e for r in rows}, {})
+    pinned = {(r.graph, r.version) for r in rows if r.graph not in rt.graphs and r.version}
+    stored = await graph_store(rt).versions_at(pinned)
+    versions = {k: WorkflowDefinition.model_validate(v.definition) for k, v in stored.items()}
+    graphs: dict[str, Graph | ApiError] = {}
+    for r in rows:
+        tid, name = r.id, r.graph
+        if name in rt.graphs:
+            graphs[tid] = rt.graphs[name]
+            continue
+        d = versions.get((name, r.version)) if r.version else None
+        if d is None:
+            graphs[tid] = NotFound(f"{name} version {r.version}")
+        elif d.digest() != r.digest:
+            graphs[tid] = Conflict(
+                f"Stored {name} version {r.version} no longer matches the thread's digest.", code="digest_mismatch"
+            )
+        else:
+            assert rt.workflows is not None
+            graphs[tid] = rt.workflows.get(d)
+    return Resolved(graphs, versions)
 
 
 def as_thread_team(row: dict[str, Any]) -> AbstractContextManager[Isolation]:

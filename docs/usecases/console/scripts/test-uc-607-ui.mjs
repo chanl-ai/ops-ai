@@ -98,6 +98,16 @@ const call = async (base, method, path, headers, body) => {
   }
   return { status: r.status, data: json?.data, text: text.slice(0, 400) };
 };
+// GET /v1/apps answers a page at a time: one card is named by its id, and a whole list follows every page.
+const cardOf = async (base, headers, id) => ((await call(base, 'GET', `/v1/apps?ids=${encodeURIComponent(id)}`, headers)).data?.data ?? []).find((c) => c.id === id);
+const everyCard = async (base, headers, query = '') => {
+  const rows = [];
+  for (let page = 1; ; page++) {
+    const got = (await call(base, 'GET', `/v1/apps?page=${page}&pageSize=50${query}`, headers)).data ?? {};
+    rows.push(...(got.data ?? []));
+    if (!got.pagination?.hasNext) return rows;
+  }
+};
 
 // A card's own testid; the state badge inside it ends in -state and also carries data-state.
 const CARDS = '[data-testid^="system-"][data-state]:not([data-testid$="-state"])';
@@ -177,7 +187,7 @@ try {
       await call(tools, 'POST', '/v1/egress/ranges', sam, { value: fake.info.range, note: 'uc-607' });
       let card = null;
       for (let i = 0; i < 40 && !card?.plugin?.platformApp; i++) {
-        card = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.id === APP);
+        card = (await cardOf(tools, priya, APP));
         if (!card?.plugin?.platformApp) await new Promise((r) => setTimeout(r, 500));
       }
       const agent = required(await call(agents, 'POST', '/v1/agents', priya, { name: 'Ticket desk', role: 'Reads tickets from Person desk' }), 'create the agent');
@@ -280,7 +290,7 @@ try {
           await page.getByTestId('account-state-Person desk').filter({ hasText: 'Connected' }).waitFor({ timeout: 30_000 });
           const accounts = (await page.getByRole('tabpanel').innerText()).replace(/\s+/g, ' ');
           await shoot(page, 'app-connected-team');
-          const conn = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.id === APP);
+          const conn = (await cardOf(tools, priya, APP));
           const detail = required(await call(tools, 'GET', `/v1/apps/${APP}/accounts/${conn?.connectionId}`, priya), 'read the account');
           check(
             '4 Connect in the Connect window, allow as the team account, and the app’s page lists it as the default',
@@ -293,7 +303,7 @@ try {
         // fails leaves the account Connected and says so beside it, with Reconnect: here Security takes the app's hosts
         // off the allow list, the test is refused at the gateway, and the hosts go back once it is shown.
         await step('40 a test call that fails after the sign-in shows on the account and the catalog card, with Reconnect', async () => {
-          const conn = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.id === APP);
+          const conn = (await cardOf(tools, priya, APP));
           // An app always reaches its own hosts, so the system itself goes down after the sign-in.
           await fakeDown(true);
           const failed = await call(tools, 'POST', `/v1/apps/${APP}/accounts/${conn?.connectionId}/test`, priya, { account: 'team' });
@@ -308,7 +318,7 @@ try {
           await shoot(page, 'catalog-test-failed');
           await fakeDown(false);
           const passed = await call(tools, 'POST', `/v1/apps/${APP}/accounts/${conn?.connectionId}/test`, priya, { account: 'team' });
-          const after = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.id === APP);
+          const after = (await cardOf(tools, priya, APP));
           check(
             '40 a test call that fails after the sign-in shows on the account and the catalog card, with Reconnect',
             /Signed in, but a test call failed/.test(row) && rowReconnect && cardState === 'needs_sign_in' && after?.state === 'connected' && passed.data?.health?.status === 'ok',
@@ -453,7 +463,7 @@ try {
 
         // The tool's own page has the same log as a Logs tab, fixed to this tool.
         await step('44 the tool’s page has General and Logs tabs, and Logs lists its calls with whom each ran as', async () => {
-          const card = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.id === APP);
+          const card = (await cardOf(tools, priya, APP));
           const moduleId = card?.moduleIds?.[0] ?? '';
           await james.goto(`${consoleUrl}/tools/${encodeURIComponent(moduleId)}/operations/person_get_record`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
           await james.getByTestId('tool-tab-logs').click();
@@ -549,7 +559,7 @@ try {
           await james.getByTestId('systems-grid').waitFor({ timeout: 60_000 });
           // A person's card is their own state, so the grid is compared with James's answer, not Priya's.
           const jamesToken = as(await tokenFor('j.richardson@harborpine.example'), 'team_ops');
-          const cards = (await call(tools, 'GET', '/v1/apps', jamesToken)).data ?? [];
+          const cards = await everyCard(tools, jamesToken);
           out.disagree = [];
           // The grid pages its cards, so each app is found as a person finds it: by search.
           for (const c of cards.filter((x) => x.kind !== 'builtin')) {
@@ -625,7 +635,7 @@ try {
         await step('8 each Built in app opens the page that manages it', async () => {
           // The Apps grid leaves the built-in apps out (they have their own menu); include=builtin lists them with the
           // page each one opens, and that page loads.
-          const cards = ((await call(tools, 'GET', '/v1/apps?include=builtin', priya)).data ?? []).filter((c) => c.kind === 'builtin');
+          const cards = (await everyCard(tools, priya, '&include=builtin')).filter((c) => c.kind === 'builtin');
           const opened = {};
           for (const c of cards) {
             if (!String(c.href ?? '').startsWith('/')) { opened[c.id] = false; continue; }
@@ -798,7 +808,7 @@ try {
           await stack.startWorker();
           // A run acting for a person waits only while no team account stands in for them: each person signs in, with
           // no team backup (Settings' switch keeps the team's as backup, so the API sets this one).
-          const teamAccount = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.id === APP)?.connectionId;
+          const teamAccount = (await cardOf(tools, priya, APP))?.connectionId;
           const held = required(await call(tools, 'GET', `/v1/apps/${encodeURIComponent(APP)}/accounts/${teamAccount}`, priya), 'read the team account');
           const personal = await call(tools, 'PATCH', `/v1/apps/${encodeURIComponent(APP)}/accounts/${teamAccount}`, priya, { revision: held.revision, signIn: 'person', teamBackup: false });
           const flow = `uc607_${Math.random().toString(36).slice(2, 8)}`;
@@ -992,7 +1002,7 @@ await withUiStack(
         await shoot(page, 'custom-app-window');
         await window_.getByTestId('connect-submit').click();
         await window_.waitFor({ state: 'detached', timeout: 30_000 });
-        const card = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.name === 'Bank API');
+        const card = (await everyCard(tools, priya, '&search=Bank%20API')).find((c) => c.name === 'Bank API');
         const account = card ? await accountOf(priya, card.id, card.connectionId) : {};
         check(
           '14 Add custom app: a refused key tests Failed with the 401, the right one Working with 200, and Save keeps it sealed',
@@ -1057,7 +1067,7 @@ try {
       const browser = await chromium.launch();
       try {
         const page = await adminPage(browser, consoleUrl, 'p.shah@harborpine.example');
-        for (let i = 0; i < 20 && !((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).some((c) => c.pluginId === 'test.entra'); i++) await page.waitForTimeout(1000);
+        for (let i = 0; i < 20 && !(await cardOf(tools, priya, 'plugin:test.entra')); i++) await page.waitForTimeout(1000);
         await step("17 a certificate app connects in the window, its account reads working, and its page never shows the key", async () => {
           // The app's own client is made under Credentials (no secret: it signs an assertion), then picked here. It is
           // made first: until the team has one, the app's card asks for an auth config instead of offering Connect.
@@ -1079,7 +1089,7 @@ try {
           const tested = await windowTest(page);
           await window_.getByTestId('connect-submit').click();
           await window_.waitFor({ state: 'detached', timeout: 30_000 });
-          const entra = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.pluginId === 'test.entra');
+          const entra = (await cardOf(tools, priya, 'plugin:test.entra'));
           await openAccounts(page, consoleUrl, entra?.id ?? 'plugin:test.entra');
           const account = await keysRow(page);
           await shoot(page, 'app-settings-certificate');
@@ -1158,7 +1168,7 @@ try {
       const browser = await chromium.launch();
       try {
         const page = await adminPage(browser, consoleUrl, 'p.shah@harborpine.example', toLogin);
-        for (let i = 0; i < 20 && !((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).some((c) => c.pluginId === 'opsai.salesforce'); i++) await page.waitForTimeout(1000);
+        for (let i = 0; i < 20 && !(await cardOf(tools, priya, 'plugin:opsai.salesforce')); i++) await page.waitForTimeout(1000);
         const SF = 'plugin:opsai.salesforce';
         /** The app's team accounts, each with its last test, as its Accounts tab reads them. */
         const sfAccounts = async () => ((await call(tools, 'GET', `/v1/apps/${encodeURIComponent(SF)}`, priya)).data?.accounts ?? []).filter((a) => a.kind !== 'person');
@@ -1257,7 +1267,7 @@ try {
           );
         }, page);
         await step("41 Settings › Edit asks nothing the auth config holds, and saving without typing keeps every saved value", async () => {
-          const card = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.pluginId === 'opsai.salesforce');
+          const card = (await cardOf(tools, priya, 'plugin:opsai.salesforce'));
           const before = await accountOf(priya, SF, card?.connectionId);
           await openSettings(page, consoleUrl, SF);
           await page.getByTestId('app-edit').click();
@@ -1288,7 +1298,7 @@ try {
           const button = page.getByTestId(`account-reconnect-${live}`);
           await button.waitFor({ timeout: 60_000 }).catch(async (e) => {
             // What the Accounts section and the card say instead, so a red run says why.
-            const card = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.pluginId === 'opsai.salesforce');
+            const card = (await cardOf(tools, priya, 'plugin:opsai.salesforce'));
             console.log('accounts:', ((await page.locator('main').innerText().catch(() => '')) ?? '').replace(/\s+/g, ' ').slice(0, 500), 'card:', JSON.stringify({ state: card?.state, status: card?.status }));
             throw e;
           });
@@ -1308,7 +1318,7 @@ try {
           await again.waitForEvent('close', { timeout: 60_000 }).catch(() => {});
           await openAccounts(page, consoleUrl, SF);
           await testNow(page, live);
-          const card = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.pluginId === 'opsai.salesforce');
+          const card = (await cardOf(tools, priya, 'plugin:opsai.salesforce'));
           const after = await accountOf(priya, SF, card?.connectionId);
           check(
             "21 when Salesforce refuses the team account's refresh, its account reads Expired with Reconnect, and signing in again makes it work",

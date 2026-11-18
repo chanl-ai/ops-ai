@@ -71,6 +71,7 @@ async def test_new_people_go_only_to_a_team_the_author_may_add_people_to(signin:
     ).status_code == 200
     r = await signin.configure("sip_b", _oidc(f"b.{signin.zone}", jit={"team": signin.ops_team, "role": "admin"}))
     assert r.status_code == 400 and r.json()["error"]["code"] == "jit_role"
+    assert r.json()["error"]["message"] == "A first sign-in may give chat_user, viewer, builder, approver.", r.text
 
 
 async def test_a_domain_another_workspace_uses_is_refused(signin: SignInRig) -> None:

@@ -35,6 +35,6 @@ async def test_a_chat_two_approver_action_runs_on_two_approvals_through_the_gate
     assert second.status_code == 200, second.text
     assert second.json()["data"]["state"] == "approved"
     rows = await gateway.log.for_thread(thread["id"], tenant_id="local")
-    assert [(r["tool"], r["decision"], r["outcome"]) for r in rows] == [("place_wire_hold", "allow", "ok")]
+    assert [(r.tool, r.decision, r.outcome) for r in rows] == [("place_wire_hold", "allow", "ok")]
     reply = (await runtime.get(f"/chat/threads/{thread['id']}")).json()["data"]["messages"][-1]
     assert "hold is in place" in reply["content"]

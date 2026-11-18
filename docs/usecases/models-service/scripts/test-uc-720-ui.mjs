@@ -63,7 +63,7 @@ await withUiStack(
     const N = { Authorization: `Bearer ${wanjiru.token}`, 'X-Team-Id': 'team_security', 'Content-Type': 'application/json' };
     // The agents' default alias runs on openai-local; it now signs in with a key the fake refuses.
     const saved = await fetch(`${models}/v1/provider-keys/${KEY}`, { method: 'PUT', headers: N, body: JSON.stringify({ value: WRONG }) });
-    const local = (await (await fetch(`${models}/v1/models/providers`, { headers: N })).json()).data.find((p) => p.id === 'openai-local');
+    const local = (await (await fetch(`${models}/v1/models/providers`, { headers: N })).json()).data.data.find((p) => p.id === 'openai-local');
     const bound = await fetch(`${models}/v1/models/providers/openai-local`, { method: 'PUT', headers: N, body: JSON.stringify({ baseUrl: local.baseUrl, keyRef: KEY }) });
     check('0 set-up: a wrong key is saved and openai-local signs in with it', saved.status === 200 && bound.status === 200, { saved: saved.status, bound: await bound.text() });
 

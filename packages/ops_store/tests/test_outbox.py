@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_service_kit.settings import Settings
-from ops_store.outbox import Relay, add, outbox_table
+from ops_store.outbox import Relay, add, outbox_table, relay
 
 
 class Receiver:
@@ -123,3 +123,130 @@ async def test_old_delivered_and_never_sent_events_are_pruned_and_one_being_retr
     async with engine.connect() as c:
         left = sorted(r.event_key for r in await c.execute(sa.select(table.c.event_key)))
     assert left == ["new-sent", "old-retrying"], left
+
+
+class Service:
+    """Another service's client as `relay()` uses it: records each post, answers with `answer`, raises while down."""
+
+    def __init__(self, *, up: bool = True, answer: Any = None) -> None:
+        self.up, self.answer = up, answer
+        self.posts: list[tuple[str, dict[str, Any], str, str]] = []
+
+    async def post(self, path: str, body: Any, /, *, tenant: str, team: str) -> Any:
+        if not self.up:
+            raise ConnectionError("503 from the subscriber")
+        self.posts.append((path, body, tenant, team))
+        return self.answer
+
+
+async def emit_named(engine: AsyncEngine, table: sa.Table, name: str, key: str) -> None:
+    async with engine.begin() as c:
+        await add(c, table, tenant_id="acme", team_id="team_ops", name=name, key=key, payload={}, now=0.0)
+
+
+async def unsent(engine: AsyncEngine, table: sa.Table) -> list[str]:
+    async with engine.connect() as c:
+        return list((await c.execute(sa.select(table.c.event_key).where(table.c.sent_at.is_(None)))).scalars())
+
+
+async def test_each_event_goes_to_the_services_its_route_names_and_no_others(
+    setup: tuple[AsyncEngine, sa.Table],
+) -> None:
+    """An event with its own row ignores "*"; a service this install does not run is skipped; an event with no
+    route is delivered by doing nothing, so it does not wait in the outbox for ever."""
+    engine, table = setup
+    agents, tools = Service(), Service()
+    await emit_named(engine, table, "member.removed", "m1")
+    await emit_named(engine, table, "file.deleted", "f1")
+    routed = relay(
+        engine,
+        table,
+        routes={"member.removed": ("tools", "kb"), "*": ("agents",)},
+        targets={"agents": agents, "tools": tools},
+        role=None,
+        path_by_target={"tools": "/v1/platform-events"},
+    )
+    assert await routed.once() == 2
+    assert [(path, body["key"], tenant, team) for path, body, tenant, team in tools.posts] == [
+        ("/v1/platform-events", "m1", "acme", "team_ops")
+    ]
+    assert [(path, body["key"]) for path, body, _, _ in agents.posts] == [("/v1/events", "f1")]
+
+    await emit_named(engine, table, "file.deleted", "f2")
+    nobody = relay(engine, table, routes={"member.removed": ("tools",)}, targets={"tools": tools}, role=None)
+    assert await nobody.once() == 1 and len(tools.posts) == 1
+    assert await unsent(engine, table) == []
+
+
+async def test_an_event_one_of_its_services_refused_stays_unsent_and_goes_to_all_again(
+    setup: tuple[AsyncEngine, sa.Table],
+) -> None:
+    engine, table = setup
+    tools, agents = Service(), Service(up=False)
+    await emit_named(engine, table, "team.created", "t1")
+    clock = [5.0]
+    both = relay(
+        engine,
+        table,
+        routes={"team.created": ("tools", "agents")},
+        targets={"tools": tools, "agents": agents},
+        role=None,
+    )
+    both.clock = lambda: clock[0]
+    assert await both.once() == 0
+    assert await unsent(engine, table) == ["t1"], "a half-delivered event was marked sent; agents never hears it"
+    agents.up = True
+    clock[0] += 60.0
+    assert await both.once() == 1
+    assert len(agents.posts) == 1 and len(tools.posts) == 2
+
+
+async def test_a_service_that_takes_the_team_from_the_token_gets_no_team_in_the_body(
+    setup: tuple[AsyncEngine, sa.Table],
+) -> None:
+    engine, table = setup
+    platform, agents = Service(), Service()
+    await emit_named(engine, table, "kb.audit", "a1")
+    audit = relay(
+        engine,
+        table,
+        routes={"kb.audit": ("platform", "agents")},
+        targets={"platform": platform, "agents": agents},
+        role=None,
+        team_in_token=frozenset({"platform"}),
+    )
+    assert await audit.once() == 1
+    (_, to_platform, _, team), (_, to_agents, _, _) = platform.posts[0], agents.posts[0]
+    assert "teamId" not in to_platform and team == "team_ops"
+    assert to_agents["teamId"] == "team_ops", "the next service's body lost its team too"
+
+
+async def test_enrich_gets_the_answer_of_each_delivery_and_its_failure_keeps_the_event(
+    setup: tuple[AsyncEngine, sa.Table],
+) -> None:
+    engine, table = setup
+    agents = Service(answer={"status": "started", "runIds": ["run_1"]})
+    await emit_named(engine, table, "file.read_requested", "r1")
+    seen: list[tuple[str, str, Any]] = []
+    broken = [True]
+
+    async def record(body: dict[str, Any], service: str, answer: Any) -> None:
+        if broken[0]:
+            raise RuntimeError("the read request's row could not be written")
+        seen.append((body["key"], service, answer))
+
+    clock = [5.0]
+    enriched = relay(
+        engine,
+        table,
+        routes={"*": ("agents",)},
+        targets={"agents": agents},
+        role=None,
+        enrich=record,
+    )
+    enriched.clock = lambda: clock[0]
+    assert await enriched.once() == 0 and await unsent(engine, table) == ["r1"]
+    broken[0] = False
+    clock[0] += 60.0
+    assert await enriched.once() == 1
+    assert seen == [("r1", "agents", {"status": "started", "runIds": ["run_1"]})]

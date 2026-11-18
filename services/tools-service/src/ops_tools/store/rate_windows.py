@@ -9,16 +9,18 @@ any 60 seconds; a sliding window over `gateway_calls` is the upgrade if that mat
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import Guarantee
+from ops_store.dialect import db_after, db_now, insert_ignore
+from ops_store.schema import TENANT_SCOPED
+from ops_store.store import Store
 
 from .modules import metadata
+from .tenancy import ROLE
 
 operation_rate_windows = sa.Table(
     "operation_rate_windows",
@@ -28,6 +30,7 @@ operation_rate_windows = sa.Table(
     sa.Column("operation", sa.String(200), primary_key=True),
     sa.Column("window_start", sa.DateTime(timezone=True), primary_key=True),
     sa.Column("calls", sa.Integer, nullable=False),
+    info=TENANT_SCOPED,
 )
 
 
@@ -38,32 +41,22 @@ class Spent:
     reset_at: str
 
 
-class RateWindows:
+class RateWindows(Store):
     # The count rises by one atomic statement, so concurrent calls never share a slot (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS})
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+    role = ROLE
 
     async def spend(self, tenant_id: str, operation: str, limit: int) -> Spent:
-        """Counts one call in the current minute; allowed while the count is within `limit`."""
+        """Counts one call in the current minute; allowed while the count is within `limit`. The window's row is made
+        if missing, then raised by one in a single UPDATE, whose row lock makes concurrent calls take turns."""
         t = operation_rate_windows
-        window = sa.func.date_trunc("minute", sa.func.now())
-        stmt = (
-            insert(t)
-            .values(tenant_id=tenant_id, operation=operation, window_start=window, calls=1)
-            .on_conflict_do_update(
-                index_elements=[t.c.tenant_id, t.c.operation, t.c.window_start], set_={"calls": t.c.calls + 1}
-            )
-            .returning(t.c.calls, t.c.window_start)
-        )
-        async with self.engine.begin() as c:
-            calls, start = (await c.execute(stmt)).one()
-            await c.execute(
-                t.delete().where(
-                    t.c.tenant_id == tenant_id,
-                    t.c.operation == operation,
-                    t.c.window_start < sa.func.now() - sa.text("interval '1 hour'"),
-                )
-            )
-        return Spent(allowed=int(calls) <= limit, calls=int(calls), reset_at=(start + timedelta(minutes=1)).isoformat())
+        key = (t.c.tenant_id == tenant_id, t.c.operation == operation)
+        async with self.tx() as c:
+            now: datetime = (await c.execute(sa.select(db_now()))).scalar_one()
+            start = now.astimezone(UTC).replace(second=0, microsecond=0)
+            row = {"tenant_id": tenant_id, "operation": operation, "window_start": start, "calls": 0}
+            await c.execute(insert_ignore(c, t, row, keys=["tenant_id", "operation", "window_start"]))
+            raised = t.update().where(*key, t.c.window_start == start).values(calls=t.c.calls + 1).returning(t.c.calls)
+            calls = int((await c.execute(raised)).scalar_one())
+            await c.execute(t.delete().where(*key, t.c.window_start < db_after(-3600)))
+        return Spent(allowed=calls <= limit, calls=calls, reset_at=(start + timedelta(minutes=1)).isoformat())

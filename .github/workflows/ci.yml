@@ -53,7 +53,7 @@ jobs:
           scripts/ci-plan.sh "$base" | tee -a "$GITHUB_OUTPUT"
 
   checks:
-    # The fast checks scripts/verify-changed.sh runs on every change.
+    # The one list of checks (make/checks.mk), the same one `make verify`, verify-changed.sh and pre-commit run.
     needs: plan
     if: needs.plan.outputs.full != 'true'
     runs-on: ubuntu-24.04
@@ -71,8 +71,9 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup
         with:
-          # The script tests drive the commit hooks, which run pnpm.
-          node: ${{ needs.plan.outputs.scripts }}
+          # The SDK drift check, the changelog check and the console's standards run on node; the script tests drive
+          # the commit hooks, which run pnpm.
+          node: "true"
       - name: Lint and format the changed Python
         run: |
           base=$(git merge-base "$BASE_SHA" HEAD)
@@ -81,16 +82,8 @@ jobs:
       - name: Types of the packages
         run: |
           base=$(git merge-base "$BASE_SHA" HEAD)
-          if git diff --name-only "$base" HEAD | grep -q '^packages/'; then uv run pyright packages; fi
-      - run: uv run python scripts/store_inventory.py --check
-      - run: uv run python scripts/roles_matrix.py --check
-      # Access decided outside can(): a file gaining a 403, role name or lock beyond its allowlist count fails.
-      - run: uv run python scripts/check_access_exceptions.py
-      - run: uv run python scripts/check_access_exceptions.py --commits
-      - run: uv run python deploy/k8s/generate.py --check
-      - run: uv run lint-imports --no-logo
-      - run: uv run python scripts/check_portable_store.py --strict
-      - run: node scripts/changelog-check.mjs --entries
+          if git diff --name-only "$base" HEAD | grep -q '^packages/'; then uv run python scripts/check_tests_typecheck.py packages; fi
+      - run: make -s checks
       - name: Script tests
         if: needs.plan.outputs.scripts == 'true'
         run: uv run pytest -q scripts/tests
@@ -215,12 +208,171 @@ jobs:
       - run: make python-verify VERIFY_POOL="${{ needs.plan.outputs.repo_pool }}"
       - run: make sdk-verify changelog-verify
 
+  store-mssql:
+    # The store, kit and identity suites on SQL Server beside PostgreSQL: the tests that run on both databases skip
+    # SQL Server unless OPS_MSSQL_SERVER and MSSQL_SA_PASSWORD are set (packages/ops_store/CLAUDE.md), so a run that
+    # skips any of them fails here. The image is the pinned one deploy/fly/mssql/Dockerfile builds on.
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        # PostgreSQL 17 with pgvector, which knowledge search by meaning needs (kb_0021).
+        image: pgvector/pgvector:pg17
+        env: { POSTGRES_USER: ops, POSTGRES_PASSWORD: ops, POSTGRES_DB: ops_runtime }
+        ports: ["5477:5432"]
+        options: --health-cmd "pg_isready -U ops -d ops_runtime" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          infra: "true"
+      - name: SQL Server
+        run: |
+          # A password made for this run, masked before it is used; it never reaches a file or the log.
+          pw=$(python3 -c 'import secrets,string;p=[secrets.choice(s) for s in (string.ascii_uppercase,string.ascii_lowercase,string.digits) for _ in range(8)];secrets.SystemRandom().shuffle(p);print("".join(p))')
+          echo "::add-mask::$pw"
+          echo "MSSQL_SA_PASSWORD=$pw" >> "$GITHUB_ENV"
+          echo "OPS_MSSQL_SERVER=127.0.0.1,1433" >> "$GITHUB_ENV"
+          docker run -d --name ops-mssql -e ACCEPT_EULA=Y -e MSSQL_PID=Developer -e MSSQL_SA_PASSWORD="$pw" \
+            -p 127.0.0.1:1433:1433 mcr.microsoft.com/mssql/server:2025-latest@sha256:21cba63f9e5f93ae72d211e50bceca8f047a6233da18ed5ecb497152f97eca7b
+          # The ODBC driver the store opens its connections with (ODBC Driver 18 for SQL Server), from Microsoft's
+          # repository. The runner image already lists that repository (microsoft-prod.gpg); a second entry for the
+          # same source with another key file makes apt refuse to read its sources (exit 100), so ours is added only
+          # when the image lacks one.
+          if ! grep -rqs "packages.microsoft.com/ubuntu/24.04/prod" /etc/apt/sources.list /etc/apt/sources.list.d; then
+            curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor --yes -o /usr/share/keyrings/microsoft.gpg
+            echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/ubuntu/24.04/prod noble main" \
+              | sudo tee /etc/apt/sources.list.d/mssql-release.list >/dev/null
+          fi
+          sudo apt-get update -q
+          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc
+          odbcinst -q -d | grep -q "ODBC Driver 18 for SQL Server" || { odbcinst -q -d; echo "::error::ODBC Driver 18 is not registered"; exit 1; }
+          for _ in $(seq 60); do docker logs ops-mssql 2>&1 | grep -q "ready for client" && break; sleep 2; done
+          docker logs ops-mssql 2>&1 | grep -q "ready for client" || { docker logs ops-mssql | tail -20; exit 1; }
+      - name: The both-database suites
+        shell: bash
+        run: |
+          uv run python scripts/test_db.py "$OPS_TEST_DATABASE_URL"
+          for p in ops_store ops_service_kit ops_identity; do
+            (cd "packages/$p" && OPS_DATABASE_URL=$OPS_TEST_DATABASE_URL uv run pytest -q -rs -p no:cacheprovider) | tee -a "$RUNNER_TEMP/mssql-suites.log"
+          done
+          # A pass that skipped SQL Server tested one database only.
+          if grep -E "SKIPPED.*(OPS_MSSQL_SERVER|SQL Server)" "$RUNNER_TEMP/mssql-suites.log"; then
+            echo "::error title=SQL Server not tested::A both-database test skipped SQL Server (above)."; exit 1
+          fi
+      - name: The services' store tests on both databases
+        shell: bash
+        run: |
+          # Each service's database_url runs on PostgreSQL and on a scratch SQL Server database holding its golden DDL
+          # (ops_store.testing.sql_server_schema). The files that exercise stores, isolation and migrations only; the
+          # provider, storage and route tests stay in the service job, on PostgreSQL.
+          declare -A files=(
+            [agents-service]="tests/store/test_registry_policies.py tests/store/test_registry_policies_migration.py tests/store/test_registry_tenant_migration.py tests/store/test_registry_tenant_keys_migration.py tests/store/test_skill_list.py tests/store/test_threads_list.py"
+            [models-service]="tests/test_call_log_isolation_migration.py tests/test_call_log_rows_isolated.py tests/test_model_key_share_rows_isolated.py tests/test_provider_key_rows_isolated.py tests/test_alias_current_index.py tests/test_spend_caps.py tests/test_key_spend_race.py tests/test_spend_retention.py"
+            [documents-service]="tests/test_isolation.py tests/test_template_copies.py"
+            [files-service]="tests/test_isolation.py tests/test_store.py"
+            [kb-service]="tests/test_kb_isolation.py tests/test_kb_changed.py tests/test_team_isolation.py tests/test_background_tenants.py tests/test_system_user_predicates.py tests/test_lookup_indexes.py tests/test_list_routes.py tests/test_statement_budget.py"
+            [platform-service]="tests/test_store_both_databases.py tests/test_lookup_exposure.py tests/test_migrations.py tests/test_rls.py tests/test_policies.py tests/test_access_check.py tests/test_acting_for.py tests/test_api_key_target.py tests/test_audit_events.py tests/test_bootstrap.py tests/test_boundary.py tests/test_cors.py tests/test_custom_roles.py tests/test_dev_sign_in.py tests/test_flags.py tests/test_identity_seam.py tests/test_introspect.py tests/test_member_options.py tests/test_reply_pins.py tests/test_saml_security.py tests/test_seed.py tests/test_team_names.py tests/test_tenancy_mode.py tests/test_workspace_admin.py tests/test_body_name_pins.py tests/test_signin_lockout.py tests/test_signin_password.py tests/test_auth.py tests/test_holders.py tests/test_signin_secrets.py tests/test_api_keys.py tests/test_step_up.py"
+            [tools-service]="tests/test_policed_tables.py tests/test_module_tenant_policy.py tests/test_mcp_link_rows_isolated.py tests/test_secret_rows_isolated.py tests/test_sign_in_rows_isolated.py tests/test_registry_store.py tests/test_background_two_tenants.py tests/test_gateway_fences.py tests/test_statement_budget.py"
+          )
+          failed=0
+          printf '| service | PostgreSQL passed | SQL Server passed | result |\n|---|---|---|---|\n' >> "$GITHUB_STEP_SUMMARY"
+          for s in agents-service models-service documents-service files-service kb-service tools-service platform-service; do
+            log="$RUNNER_TEMP/mssql-$s.log"
+            read -ra picked <<<"${files[$s]}"
+            (cd "services/$s" && OPS_DATABASE_URL=$OPS_TEST_DATABASE_URL uv run pytest -vv -rs -p no:cacheprovider "${picked[@]}") > "$log" 2>&1 || failed=1
+            grep -E " (FAILED|ERROR)|^(FAILED|ERROR|SKIPPED)|^E  " "$log" | head -60 || true
+            pg=$(grep " PASSED" "$log" | grep -c "postgresql" || true)
+            ms=$(grep " PASSED" "$log" | grep -c "mssql" || true)
+            result=$(tail -1 "$log")
+            echo "$s: PostgreSQL passed $pg, SQL Server passed $ms; $result"
+            echo "| $s | $pg | $ms | $result |" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$ms" -eq 0 ] || grep -qE "SKIPPED.*(OPS_MSSQL_SERVER|SQL Server)" "$log"; then
+              echo "::error title=SQL Server not tested::$s passed no SQL Server case, or skipped one."; failed=1
+            fi
+          done
+          exit $failed
+
+  release-proof:
+    # A pull request into main is a release: the upgrade from the last tag's schema on a seeded database, and a fresh
+    # install through ./install.sh on the released images. Needs the whole history and its tags.
+    needs: plan
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: ./.github/actions/setup
+        with:
+          node: "true"
+      - name: The upgrade from the last release
+        run: |
+          last=$(git tag --list 'v20*' --sort=-v:refname | head -1)
+          [ -n "$last" ] || { echo "::error title=No release tag::The upgrade proof needs the last release's tag."; exit 1; }
+          echo "upgrade from $last"
+          make db-scripts-proof FROM="$last"
+      - name: A fresh install
+        run: make install-proof
+
+  maintainer-review:
+    # A raised or new baseline row, or a new access exception line, in this pull request's commits needs an approving
+    # review on the pull request from a maintainer listed in .github/standards-maintainers.txt (scripts/baseline_history.py).
+    # The review is read from GitHub, so no commit message can stand in for it. After the review is given, re-run this job.
+    needs: plan
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: The base revision's copies of the gate
+        # The scripts, the make list and the ratchet tests below decide whether a rise passes, and this pull request
+        # may have edited them to say it does. They are replaced here by the base's own files, so what judges the pull
+        # request is what was already merged. An edit to any of them is itself a rise (scripts/baseline_history.py
+        # PROTECTED), and this workflow file is the root of that trust: protect it with a code owner rule on .github/.
+        # The pull request that adds the gate has no base copy: its own run, with a warning, and the owner's review by hand.
+        env:
+          TRUSTED: >-
+            scripts/check_review_approval.py scripts/baseline_history.py scripts/check_access_exceptions.py
+            scripts/check_portable_store.py scripts/check_config_literals.py scripts/check_typed_boundaries.py
+            scripts/check_console_baselines.py
+            scripts/keep_going.sh make/checks.mk Makefile
+            packages/ops_store/tests/test_isolation_sites.py packages/ops_store/tests/test_relay_sites.py
+            packages/ops_store/tests/test_loop_health.py deploy/database/tests/test_indexes.py
+        run: |
+          if ! git cat-file -e "$BASE_SHA:scripts/check_review_approval.py" 2>/dev/null; then
+            echo "::warning title=Gate added here::The base has no maintainer-review gate, so this pull request's own copies run; its review is the owner's, by hand."
+            exit 0
+          fi
+          for f in $TRUSTED; do
+            if git cat-file -e "$BASE_SHA:$f" 2>/dev/null; then git show "$BASE_SHA:$f" > "$f"; fi
+          done
+          echo "gate files taken from $BASE_SHA"
+      - name: A rise needs a maintainer's approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          review=$(uv run python scripts/check_review_approval.py --repo "$GITHUB_REPOSITORY" --pr "$PR" --base "$BASE_SHA" --head "$HEAD_SHA")
+          echo "maintainer review: $review"
+          OPS_STANDARDS_BASE=$(git merge-base "$BASE_SHA" HEAD) OPS_STANDARDS_REVIEW="$review" make -s checks-history
+
   ci-ok:
     # The one required check: it always runs, waits for every other job, and fails when any of them failed or was
     # cancelled. A job the plan skipped counts as passed, so a narrow change is not held up by suites it did not touch.
     name: ci-ok
     if: always()
-    needs: [plan, checks, service, package, console, docs, repo]
+    needs: [plan, checks, service, package, console, docs, repo, store-mssql, release-proof, maintainer-review]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

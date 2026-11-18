@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from pydantic import JsonValue, TypeAdapter
+
 from ops_service_kit.logging import configure_logging, get_logger
 from ops_service_kit.settings import Settings
 from ops_store import isolation
@@ -28,7 +30,9 @@ from ops_store.database import open_database
 from .connections.records import module_auth
 from .modules.service import CREDENTIAL_HEADER
 from .store.connections import ConnectionStore
-from .store.modules import ModuleStore
+from .store.modules import Header, Module, ModuleStore, Operation, StoredOperation
+
+HEADER = TypeAdapter(Header)
 
 log = get_logger("ops_tools.header_keys")
 
@@ -44,11 +48,11 @@ class Move:
     secret: str  # the team secret's name; its value is never read here
 
 
-def _headers(op: dict[str, Any]) -> list[dict[str, str]]:
-    return cast(list[dict[str, str]], op.get("headers") or [])
+def _headers(op: Operation | StoredOperation) -> list[Header]:
+    return op.get("headers") or []
 
 
-def sign_in_headers(op: dict[str, Any]) -> list[dict[str, str]]:
+def sign_in_headers(op: Operation | StoredOperation) -> list[Header]:
     return [
         h
         for h in _headers(op)
@@ -56,7 +60,7 @@ def sign_in_headers(op: dict[str, Any]) -> list[dict[str, str]]:
     ]
 
 
-def plan(module: dict[str, Any], conn: dict[str, Any] | None) -> Move | str | None:
+def plan(module: Module, conn: dict[str, Any] | None) -> Move | str | None:
     """What moves for one module: a Move, the reason it is left alone, or None when its tools send no sign-in header."""
     pairs = {(h["key"].strip(), h["value"].strip()) for o in module["operations"] for h in sign_in_headers(o)}
     if not pairs:
@@ -77,12 +81,26 @@ def plan(module: dict[str, Any], conn: dict[str, Any] | None) -> Move | str | No
     return "the header holds a typed value, not a {{NAME}} reference"
 
 
-def _without_sign_in(ops: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _without_sign_in(ops: list[Operation]) -> list[Operation]:
     return [{**o, "headers": [h for h in _headers(o) if h not in sign_in_headers(o)]} for o in ops]
 
 
+def _stored_without_sign_in(ops: list[dict[str, JsonValue]]) -> list[dict[str, JsonValue]]:
+    """The baseline's copies with their sign-in headers dropped, every other key as stored."""
+    out: list[dict[str, JsonValue]] = []
+    for o in ops:
+        raw = o.get("headers")
+        kept: list[JsonValue] = []
+        for h in raw if isinstance(raw, list) else []:
+            held: StoredOperation = {"headers": [HEADER.validate_python(h)]}
+            if not sign_in_headers(held):
+                kept.append(h)
+        out.append({**o, "headers": kept})
+    return out
+
+
 async def _apply(
-    modules: ModuleStore, connections: ConnectionStore, module: dict[str, Any], conn: dict[str, Any], move: Move
+    modules: ModuleStore, connections: ConnectionStore, module: Module, conn: dict[str, Any], move: Move
 ) -> None:
     at = datetime.now(UTC)
     secrets = {"key": move.secret} if move.kind == "api_key" else {"token": move.secret}
@@ -101,7 +119,7 @@ async def _apply(
             **module,
             "auth": module_auth(moved),
             "operations": _without_sign_in(module["operations"]),
-            "baseline": None if baseline is None else _without_sign_in(baseline),
+            "baseline": None if baseline is None else _stored_without_sign_in(baseline),
         },
         expected_revision=module["revision"],
     )

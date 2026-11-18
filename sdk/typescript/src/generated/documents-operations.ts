@@ -94,7 +94,14 @@ export const documentsOperations = {
     "method": "GET",
     "path": "/v1/document-types",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "document_types_remove_example": {
@@ -226,7 +233,11 @@ export const documentsOperations = {
     "query": [
       "fileId",
       "page",
-      "pageSize"
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },

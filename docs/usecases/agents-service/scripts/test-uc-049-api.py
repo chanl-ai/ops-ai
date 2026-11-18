@@ -76,7 +76,7 @@ settings = {"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}
 with (
     fake_bank() as bank,
     agents(gateway_url=f"http://127.0.0.1:{TOOLS_PORT}") as api,
-    tools(settings={**bank.settings, **settings}) as gw,
+    tools(settings={**bank.settings, **settings}, approval_rules=True) as gw,
 ):
     gw.post("/v1/egress/hosts", json={"value": HOST, "note": "uc-049 fake bank"})
     gw.post("/v1/egress/ranges", json={"value": bank.range, "note": "uc-049 fake bank network"})

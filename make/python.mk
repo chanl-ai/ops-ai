@@ -18,11 +18,11 @@ endif
 
 # Tests never run on the stack's database: each make run makes its own throwaway one (OPS_TEST_DATABASE_URL, make/env.mk)
 # on the stack's PostgreSQL, so no second stack is needed beside `make up`.
-test: db-up ## Tests on a throwaway database: PKG=packages/<x>|services/<x> runs that member's (T= some files); no PKG runs what changed since origin/main
+test: db-up ## Tests on a throwaway database: PKG=packages/<x>|services/<x> runs that member's (T= some files, PAR=<n> on n workers where proven); no PKG runs what changed since origin/main
 ifdef PKG
 	@[ -d "$(PKG)" ] || { echo "make test: no folder $(PKG)"; exit 2; }
 ifneq ($(wildcard $(PKG)/Makefile),)
-	@$(MAKE) -s -C "$(PKG)" test $(if $(T),T="$(T)")
+	@$(MAKE) -s -C "$(PKG)" test $(if $(T),T="$(T)") $(if $(PAR),PAR=$(PAR))
 else
 	@$(TEST_DB) uv run --directory "$(PKG)" pytest -q $(or $(T),tests)
 endif
@@ -44,22 +44,16 @@ python-verify: ## Lint and type-check packages, then verify each service with mo
 	@rm -f $(VERIFY_FAILED)
 	$(KEEP) uv run ruff format --check packages
 	$(KEEP) uv run ruff check packages
-	@# Database code only in store packages, and the layers' import directions (.importlinter). Seconds.
-	$(KEEP) uv run lint-imports --no-logo
 	@mkdir -p $(VERIFY_LOGS)
 	@# The suites side by side; each writes its own log, printed below in a fixed order once all have ended.
 	-@$(MAKE) -s -k -j$(VERIFY_JOBS) $(VERIFY_POOL) VERIFY_FAILED=$(VERIFY_FAILED) VERIFY_LOGS=$(VERIFY_LOGS)
 	@for job in $(VERIFY_POOL); do echo "== $$job"; cat $(VERIFY_LOGS)/$$job.log 2>/dev/null; done; rm -rf $(VERIFY_LOGS)
-	$(KEEP) uv run python scripts/store_inventory.py --check
-	$(KEEP) uv run python scripts/roles_matrix.py --check
-	$(KEEP) uv run python scripts/check_access_exceptions.py
-	$(KEEP) uv run python scripts/check_access_exceptions.py --commits
-	$(KEEP) uv run python scripts/sbom.py --check
-	$(KEEP) uv run python deploy/k8s/generate.py --check
+	@# The one list of checks (make/checks.mk): the standards ratchets, the files written from code, import directions
+	@# and the SDK drift check. The pull-request checks job and pre-commit run the same list.
+	$(KEEP) $(MAKE) -s checks
+	@# The rises the pull request made need a maintainer's approval, read from GitHub; red until it exists.
+	$(KEEP) $(MAKE) -s checks-history
 	$(KEEP) uv run pytest -q scripts/tests
-	@# Database-specific code outside ops_store, unbounded key columns, long names; a raised baseline row needs a trailer.
-	$(KEEP) uv run python scripts/check_portable_store.py --strict
-	$(KEEP) uv run python scripts/check_portable_store.py --commits
 	@$(ROOT)/scripts/keep_going.sh --report $(VERIFY_FAILED)
 
 # The suites share nothing but the machine, so they run side by side: one after another they used one of 14
@@ -92,7 +86,7 @@ pool-documents:
 pool-runner:
 	@$(call pool_job,$@,OPS_TEST_DATABASE_URL=$(call db_for,runner) $(MAKE) -k -C services/runner-service verify)
 pool-pyright:
-	@$(call pool_job,$@,uv run pyright packages)
+	@$(call pool_job,$@,uv run python scripts/check_tests_typecheck.py packages)
 pool-store:
 	@$(call pool_job,$@,uv run python scripts/test_db.py $(call db_for,store) && cd packages/ops_store && OPS_DATABASE_URL=$(call db_for,store) uv run pytest)
 pool-engine:

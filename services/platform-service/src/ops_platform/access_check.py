@@ -68,7 +68,8 @@ class AccessCheck:
         )
         granting = await self.holders.holders(caller.tenant_id, caller.team_id, area, action)
         admins = await self.holders.holders(caller.tenant_id, caller.team_id, "access", "manage")
-        return answer | {"roles": granting["roles"], "askable": [h["name"] for h in admins["holders"]]}
+        roles = [r.model_dump(by_alias=True) for r in granting.roles]
+        return answer | {"roles": roles, "askable": [h.name for h in admins.holders]}
 
     async def _answer(
         self,

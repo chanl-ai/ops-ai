@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_kb.files import KnowledgeFiles
 from ops_kb.store.vectors import PgVectorStore
+from ops_store import isolation
 
 from .conftest import kb_client
 from .readings_fake import LocalReadings
@@ -27,7 +28,9 @@ PARAPHRASE = "what does it cost to clear my loan sooner"
 
 @pytest.fixture
 async def client(engine: AsyncEngine, tenant: str, tmp_path: Path) -> AsyncIterator[httpx.AsyncClient]:
-    if not await PgVectorStore(engine).ready():
+    with isolation.tenant_wide("test: whether the database has pgvector", tenant_id=tenant):
+        has_vectors = await PgVectorStore(engine).ready()
+    if not has_vectors:
         pytest.skip("This PostgreSQL has no pgvector; make db-move-image moves the local stack onto it.")
     files = KnowledgeFiles(tmp_path)
     async with kb_client(engine, tenant, files=files, readings=LocalReadings(files), embedder=ConceptEmbedder()) as c:

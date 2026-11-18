@@ -1,5 +1,5 @@
 import type { ListParams } from '@/lib/types/query';
-import type { ChatMenuSkill, SkillGenerateEvent } from '@/lib/types/skills';
+import type { SkillGenerateEvent } from '@/lib/types/skills';
 
 import { ApiError } from './contract';
 import type { SkillsApi } from './skills-contract';
@@ -27,9 +27,6 @@ async function* events(res: Response): AsyncIterable<SkillGenerateEvent> {
 /** REST routes for skills; generation streams over SSE from POST /skills/generate. */
 export function createSkillsHttp(get: Get, send: Send, qs: (p: ListParams & { view?: string }) => string, baseUrl: string): SkillsApi {
   return {
-    list: (p) => get(`/skills?${qs(p)}`),
-    chatMenu: async (agentId) =>
-      (await get<{ data: ChatMenuSkill[] }>(`/skills?${new URLSearchParams({ view: 'published', usableBy: 'agent', agentId, pageSize: '200' })}`)).data,
     get: (id) => get(`/skills/${id}`),
     create: (i) => send('POST', '/skills', i),
     saveDraft: (id, patch) => send('PUT', `/skills/${id}/draft`, patch),

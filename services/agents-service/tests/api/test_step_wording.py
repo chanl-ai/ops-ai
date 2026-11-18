@@ -265,12 +265,12 @@ async def test_a_call_of_another_team_is_not_read(stack: Stack) -> None:  # noqa
         theirs = await EventLog(rt.db).append(
             thread_id="th_other", team_id="team_other", run_id=None, type_="tool_end", node="agent", data=data
         )
-        rows = [{"kind": "tool_call", "source_type": "chat", "row_id": theirs["id"]}]
+        rows = [{"kind": "tool_call", "source_type": "chat", "row_id": theirs.id}]
         with acting_as("team_ops"):
             seen = await Activity(rt.db).calls(rows)
         with acting_as("team_other"):
             own = await Activity(rt.db).calls(rows)
-    assert seen == {} and own[str(theirs["id"])]["tool"] == "list_accounts", (seen, own)
+    assert seen == {} and own[theirs.id]["tool"] == "list_accounts", (seen, own)
 
 
 async def test_a_call_carrying_an_object_reads_without_it(stack: Stack) -> None:  # noqa: F811

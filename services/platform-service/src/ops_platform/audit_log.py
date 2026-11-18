@@ -4,18 +4,21 @@ is `all` (the platform team). Entries are written by each store in the transacti
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from math import ceil
 from typing import Any
 
 from ops_access import ANY_TEAM
+from ops_access.catalogue import BUILTIN_ROLES, MEMBER_ROLE_TO_BUILTIN
 from ops_service_kit.errors import Forbidden
+from ops_service_kit.listing import ListParams
 
-from .store.audit import EVERYTHING_BUT, KIND, VIEWS, AuditLog
+from .store.audit import EVERYTHING_BUT, KIND, VIEWS, AuditEntryRow, AuditLog
 from .store.members import Actor, TeamStore
 from .teams import Members
 
-# People read reviewer for the stored `approver` (roles-and-permissions, open question 1).
-ROLE_LABEL = {"admin": "admin", "builder": "builder", "approver": "reviewer", "viewer": "viewer"}
+# A stored membership role as people read it: its built-in role's name, so `approver` reads "reviewer" and
+# `chat_user` reads "chat user" (roles-and-permissions, open question 1).
+_NAMES = {r.id: r.name.lower() for r in BUILTIN_ROLES}
+ROLE_LABEL = {member: _NAMES[builtin] for member, builtin in MEMBER_ROLE_TO_BUILTIN.items()}
 
 
 def words(key: object) -> str:
@@ -33,10 +36,10 @@ SIGN_IN_HOW = {
 }
 
 
-def summary(row: dict[str, Any]) -> str:
+def summary(row: AuditEntryRow) -> str:
     """One line a person reads, from the action and its detail."""
-    d: dict[str, Any] = row["detail"] or {}
-    target = str(row.get("target_name") or row["target_id"])
+    d = row.detail
+    target = str(row.target_name or row.target_id)
     email = str(d.get("email", target))
 
     def role(key: str) -> str:
@@ -71,28 +74,28 @@ def summary(row: dict[str, Any]) -> str:
             + ("allowed" if d.get("allowed") else "refused")
         ),
     }
-    line = lines.get(str(row["action"]))
+    line = lines.get(row.action)
     # Another service's entry carries its own line (ops_store.audit), since only that service can word its action.
-    return line() if line else str(d.get("summary") or row["action"])
+    return line() if line else str(d.get("summary") or row.action)
 
 
-def shown(row: dict[str, Any]) -> dict[str, Any]:
+def shown(row: AuditEntryRow) -> dict[str, Any]:
     return {
-        "id": row["id"],
-        "teamId": row["team_id"],
-        "team": row.get("team_name"),
-        "actor": row["actor"],
-        "actorName": row.get("actor_name"),
-        "actorEmail": row.get("actor_email"),
-        "action": row["action"],
-        "kind": KIND.get(row["action"], "edited"),
+        "id": row.id,
+        "teamId": row.team_id,
+        "team": row.team_name,
+        "actor": row.actor,
+        "actorName": row.actor_name,
+        "actorEmail": row.actor_email,
+        "action": row.action,
+        "kind": KIND.get(row.action, "edited"),
         "summary": summary(row),
-        "targetKind": row["target_kind"],
-        "targetId": row["target_id"],
-        "targetName": row.get("target_name"),
-        "requestId": row["request_id"],
-        "at": row["at"],
-        "detail": row["detail"],
+        "targetKind": row.target_kind,
+        "targetId": row.target_id,
+        "targetName": row.target_name,
+        "requestId": row.request_id,
+        "at": row.at,
+        "detail": row.detail,
     }
 
 
@@ -109,14 +112,14 @@ class AuditReader:
             return False
         return True
 
-    async def page(self, actor: Actor, filters: dict[str, str | None], page: int, size: int) -> dict[str, Any]:
+    async def page(self, actor: Actor, filters: dict[str, str | None], params: ListParams) -> dict[str, Any]:
         await self.members.require_admin(actor, "audit", "view")
         # The acting team's entries; the account's own (no team) only for whoever reads audit in every team, the
         # account admin. No team reads another team's.
         account = await self._account_admin(actor)
-        team = actor.team_id
-        rows, total = await self.log.page(actor.tenant_id, team, account=account, filters=filters, page=page, size=size)
-        counts = await self.log.counts(actor.tenant_id, team, account=account)
+        found, counts = await self.log.page(
+            actor.tenant_id, actor.team_id, account=account, filters=filters, params=params
+        )
         kinds: dict[str, int] = {}
         targets: dict[str, int] = {}
         for (action, target), n in counts.items():
@@ -124,17 +127,9 @@ class AuditReader:
             targets[target] = targets.get(target, 0) + n
         views = {v: sum(n for (a, _), n in counts.items() if a in actions) for v, actions in VIEWS.items()}
         views |= {v: sum(n for (a, _), n in counts.items() if a not in left) for v, left in EVERYTHING_BUT.items()}
-        pages = max(1, ceil(total / size))
         return {
-            "data": [shown(r) for r in rows],
-            "pagination": {
-                "page": page,
-                "pageSize": size,
-                "total": total,
-                "totalPages": pages,
-                "hasNext": page < pages,
-                "hasPrev": page > 1,
-            },
+            "data": [shown(AuditEntryRow.model_validate(r)) for r in found["data"]],
+            "pagination": found["pagination"],
             "facets": {"action": kinds, "targetType": targets},
             "viewCounts": {"all": sum(counts.values()), **views},
         }

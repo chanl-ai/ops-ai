@@ -1,11 +1,10 @@
 """Standards spec 17 section 8 enforces. Exits non-zero with file:line for each breach.
 
-1 layers import one direction · 3 fixtures only under tests/fixtures · 3b source names no tests/ path · 4 env read
-only in ops_service_kit/settings.py · 5 every route authenticated · 6 no print or logging.getLogger in packages · 6b log
-setup only in ops_service_kit.logging (no logging.basicConfig; a service's uvicorn runs with log_config=None and
-access_log=False, never log_level) and every log call's event a string literal, its values keywords. 1b
-ops_engine imports nothing from ops_agents (docs/architecture/workflow-runner.md section 2). Database drivers outside a
-store are the drivers-only-in-stores contract in .importlinter (`uv run lint-imports`).
+1 layers import one direction · 3 fixtures only under tests/fixtures · 3b source names no tests/ path · 1b
+ops_engine imports nothing from ops_agents (docs/architecture/workflow-runner.md section 2). Rules 4 to 6 (the
+environment read in one module, every route authenticated, no print or logging.getLogger, one log setup) are
+`ops_service_kit.standards.check`, which every service can call. Database drivers outside a store are the
+drivers-only-in-stores contract in .importlinter (`uv run lint-imports`).
 """
 
 from __future__ import annotations
@@ -15,14 +14,13 @@ import re
 import sys
 from pathlib import Path
 
-from fastapi.routing import APIRoute, iter_route_contexts
-
 from ops_agents.api.app import create_app
 from ops_agents.api.auth import principal, service_principal
 from ops_agents.api.routers.run_resume import resume_caller
 from ops_agents.api.routers.widget import mint_key_caller, widget_caller
 from ops_identity import current_caller, current_principal, current_service, current_tenant_caller
-from ops_service_kit.settings import Settings
+from ops_service_kit import standards
+from ops_service_kit.settings import Settings, isolate_from_stack
 
 ROOT = Path(__file__).resolve().parents[3]
 # Source trees of the Python workspace: reusable libraries and the services built from them.
@@ -65,19 +63,8 @@ ORDER = [
     "ops_platform",
     "ops_agents.api",
 ]
-KIT = ROOT / "packages" / "ops_service_kit" / "src" / "ops_service_kit"
-SETTINGS = KIT / "settings.py"
-LOGGING = KIT / "logging.py"
 # /widget/v1.js answers 410 Gone (retired); /embed/v1.js is the loader a page loads: no key, no data.
 PUBLIC_ROUTES = {
-    "/health",
-    "/health/background",
-    "/healthz",
-    "/readyz",
-    "/v1/openapi.json",
-    "/docs",
-    "/docs/oauth2-redirect",
-    "/redoc",
     "/widget/v1.js",
     "/embed/v1.js",
     # The embed app's pre-session read: agent name, pause and the origins for frame-ancestors.
@@ -88,6 +75,10 @@ PUBLIC_ROUTES = {
     "/v1/forms/public/{slug}/submit",
     "/v1/forms/public/{slug}/files",
 }
+
+
+# The app is built to read its routes: the fixed dev user, and none of a running stack's addresses.
+isolate_from_stack()
 
 
 def sources() -> list[Path]:
@@ -138,63 +129,6 @@ def check_layers(path: Path, tree: ast.AST, out: list[str]) -> None:
                 out.append(f"{where} rule 1: {package_of(path)} imports {top}, a later layer")
 
 
-def check_env(path: Path, tree: ast.AST, out: list[str]) -> None:
-    if path == SETTINGS:
-        return
-    for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.Attribute)
-            and node.attr in {"environ", "getenv"}
-            and isinstance(node.value, ast.Name)
-            and node.value.id == "os"
-        ):
-            out.append(
-                f"{path.relative_to(ROOT)}:{node.lineno} rule 4: environment read outside ops_service_kit/settings.py"
-            )
-        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("dotenv"):
-            out.append(f"{path.relative_to(ROOT)}:{node.lineno} rule 4: dotenv import")
-
-
-LOG_METHODS = {"debug", "info", "warning", "error", "exception", "critical"}
-# What every module names its `get_logger(__name__)`.
-LOGGER_NAMES = {"log", "logger"}
-
-
-def check_logging(path: Path, tree: ast.AST, out: list[str]) -> None:
-    at = path.relative_to(ROOT)
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "print":
-            out.append(f"{at}:{node.lineno} rule 6: print in package code")
-        if path != LOGGING and isinstance(node, ast.Attribute) and node.attr == "getLogger":
-            out.append(f"{at}:{node.lineno} rule 6: logging.getLogger outside ops_service_kit.logging")
-        if path != LOGGING and isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-            check_log_call(at, path, node, node.func, out)
-
-
-def check_log_call(at: Path, path: Path, node: ast.Call, func: ast.Attribute, out: list[str]) -> None:
-    """Rule 6b: one log setup (a second format, or uvicorn's own handlers, would print lines a collector cannot
-    parse), and event names a search can find (a value in the event makes every line a different event)."""
-    if func.attr == "basicConfig":
-        out.append(f"{at}:{node.lineno} rule 6b: logging.basicConfig; a process calls configure_logging")
-    receiver = func.value.id if isinstance(func.value, ast.Name) else None
-    if receiver == "uvicorn" and func.attr in {"run", "Config"} and path.is_relative_to(ROOT / "services"):
-        kw = {k.arg: (k.value.value if isinstance(k.value, ast.Constant) else k.value) for k in node.keywords}
-        if (
-            "log_level" in kw
-            or "log_config" not in kw
-            or kw["log_config"] is not None
-            or kw.get("access_log") is not False
-        ):
-            out.append(
-                f"{at}:{node.lineno} rule 6b: uvicorn.{func.attr} needs log_config=None and access_log=False and no "
-                "log_level, so its lines reach configure_logging's handler"
-            )
-    if receiver in LOGGER_NAMES and func.attr in LOG_METHODS:
-        first = node.args[0] if node.args else None
-        if not (isinstance(first, ast.Constant) and isinstance(first.value, str)) or len(node.args) > 1:
-            out.append(f"{at}:{node.lineno} rule 6b: a log call's event is a string literal and its values keywords")
-
-
 def check_fixtures(out: list[str]) -> None:
     for p in (f for src in SRC_ROOTS for f in src.rglob("*")):
         if not p.is_file():
@@ -240,38 +174,23 @@ def check_tests_paths(path: Path, tree: ast.AST, out: list[str]) -> None:
             )
 
 
-def check_routes(out: list[str]) -> int:
-    """Returns how many routes it checked, so a check that silently sees none fails instead of passing."""
-    app = create_app(Settings(database_url="sqlite+aiosqlite://"))
-
-    def deps(dependant: object) -> set[object]:
-        found: set[object] = set()
-        stack = [dependant]
-        while stack:
-            d = stack.pop()
-            for sub in getattr(d, "dependencies", []):
-                found.add(sub.call)
-                stack.append(sub)
-        return found
-
-    checked = 0
-    # Included routers are nested in FastAPI 0.143; iter_route_contexts flattens them with their effective paths.
-    for ctx in iter_route_contexts(app.routes):
-        route = ctx.original_route
-        if not isinstance(route, APIRoute) or (ctx.path or route.path) in PUBLIC_ROUTES:
-            continue
-        checked += 1
-        # A user route depends on principal; an internal route (a scheduler's timer fire) on service_principal; a widget
-        # page route on widget_caller (the X-Widget-Session the page was minted); the bank server's mint on
-        # mint_key_caller (the deployment's mint key). A route a person or a service may call reaches
-        # ops_identity's current_caller, and a service-only one its current_service, through whatever wraps them; one a
-        # person or any service of the tenant may call, whether or not its token names a team, current_tenant_caller.
-        # An outside system resuming a parked workflow step holds that step's signed token, resume_caller.
-        authenticated = {principal, service_principal, widget_caller, mint_key_caller, resume_caller}
-        identity = {current_caller, current_principal, current_service, current_tenant_caller}
-        if not deps(route.dependant) & (authenticated | identity):
-            out.append(f"route {sorted(route.methods or set())} {ctx.path or route.path} rule 5: no auth dependency")
-    return checked
+# A user route depends on principal; an internal route (a scheduler's timer fire) on service_principal; a widget page
+# route on widget_caller (the X-Widget-Session the page was minted); the bank server's mint on mint_key_caller (the
+# deployment's mint key). A route a person or a service may call reaches ops_identity's current_caller, and a
+# service-only one its current_service, through whatever wraps them; one a person or any service of the tenant may
+# call, whether or not its token names a team, current_tenant_caller. An outside system resuming a parked workflow
+# step holds that step's signed token, resume_caller.
+AUTHENTICATED = {
+    principal,
+    service_principal,
+    widget_caller,
+    mint_key_caller,
+    resume_caller,
+    current_caller,
+    current_principal,
+    current_service,
+    current_tenant_caller,
+}
 
 
 def main() -> int:
@@ -279,12 +198,12 @@ def main() -> int:
     for path in sources():
         tree = ast.parse(path.read_text(), filename=str(path))
         check_layers(path, tree, out)
-        check_env(path, tree, out)
-        check_logging(path, tree, out)
         check_tests_paths(path, tree, out)
     check_fixtures(out)
-    if check_routes(out) == 0:
-        out.append("rule 5: no authenticated routes were found to check")
+    app = create_app(Settings(database_url="sqlite+aiosqlite://"))
+    out += standards.check(
+        app, settings_module="ops_service_kit.settings", authenticated=AUTHENTICATED, public=PUBLIC_ROUTES
+    )
     for line in out:
         sys.stderr.write(line + "\n")
     sys.stdout.write(f"check_standards: {len(sources())} files, {len(out)} problems\n")

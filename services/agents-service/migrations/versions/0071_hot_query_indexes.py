@@ -50,15 +50,18 @@ def upgrade() -> None:
     )
 
     # ops_checkpoints is the PostgreSQL checkpointer's own table (raw asyncpg, migration 0004) until its SQL Server
-    # rewrite: adelete_for_runs matches metadata->>'run_id' within a tenant and team.
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_ops_checkpoints_run ON ops_checkpoints "
-        "(tenant_id, team_id, (metadata->>'run_id'))"
-    )
+    # rewrite: adelete_for_runs matches metadata->>'run_id' within a tenant and team. On SQL Server 0090 makes the
+    # table with its run_id column and this index.
+    if op.get_context().dialect.name == "postgresql":
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS ix_ops_checkpoints_run ON ops_checkpoints "
+            "(tenant_id, team_id, (metadata->>'run_id'))"
+        )
 
 
 def downgrade() -> None:
-    op.execute("DROP INDEX IF EXISTS ix_ops_checkpoints_run")
+    if op.get_context().dialect.name == "postgresql":
+        op.execute("DROP INDEX IF EXISTS ix_ops_checkpoints_run")
     op.drop_index("ix_engine_runs_workflow_created", table_name="engine_runs")
     op.create_index("ix_thread_events_team_position", "thread_events", ["team_id", "position"])
     op.drop_index("ix_thread_events_tenant_team_position", table_name="thread_events")

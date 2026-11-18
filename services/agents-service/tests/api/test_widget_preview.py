@@ -63,7 +63,7 @@ async def test_only_an_editor_with_their_own_sign_in_previews(client: AsyncClien
 
 async def test_the_console_reads_a_deployments_config_for_its_preview_other_pages_not(client: AsyncClient) -> None:
     dep = await deploy(client)
-    url = f"/v1/widget/{dep['id']}/config?tenant=acme"
+    url = f"/v1/widget/{dep['id']}/config?tenant=local"
     console = await client.get(url, headers={"Origin": CONSOLE})
     other = await client.get(url, headers={"Origin": "https://evil.example"})
     assert console.status_code == 200 and console.json()["data"]["deploymentName"], console.text
@@ -77,6 +77,6 @@ async def test_the_preview_frame_gets_one_cors_header_on_the_config_read(monkeyp
     settings = SETTINGS.model_copy(update={"console_url": CONSOLE, "cors_origins": [CONSOLE]})
     async for c in _client(settings, platform=True):
         dep = await deploy(c)
-        res = await c.get(f"/v1/widget/{dep['id']}/config", params={"tenant": "acme"}, headers={"Origin": CONSOLE})
+        res = await c.get(f"/v1/widget/{dep['id']}/config", params={"tenant": "local"}, headers={"Origin": CONSOLE})
         assert res.status_code == 200, res.text
         assert res.headers.get_list("access-control-allow-origin") == [CONSOLE]

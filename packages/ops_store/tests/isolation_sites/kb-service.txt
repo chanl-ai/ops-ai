@@ -1,0 +1,1 @@
+# kb-service: 0 raw, 0 broad outside Store.tx() or with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.

@@ -6,14 +6,10 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints, model_validator
-from pydantic.alias_generators import to_camel
 
+from ops_access.catalogue import INVITE_ROLES
 from ops_service_kit.flags import FlagName
-from ops_service_kit.http import ListResult, Out
-
-
-class In(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+from ops_service_kit.http import In, ListResult, Out
 
 
 class SignIn(In):
@@ -136,7 +132,8 @@ class Health(Out):
     status: str
 
 
-ROLE = r"^(admin|builder|approver|viewer)$"
+# The membership roles an invite or a role change may give, from the catalogue (Chat user among them, E31).
+ROLE = rf"^({'|'.join(INVITE_ROLES)})$"
 MEMBER_ID = r"^mem_[A-Za-z0-9_-]{1,60}$"
 EMAIL = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
 
@@ -171,6 +168,8 @@ class FlagOut(Out):
 
 class Me(Out):
     user: MeUser
+    # What the person may do in each of their teams, the same answer as /v1/me/permissions.
+    permissions: PermissionsOut
     tenant_id: str
     # The workspace's name, for the console's header; null when it has none, so no id is shown in its place.
     tenant_name: str | None
@@ -411,6 +410,8 @@ class ApiKeySummary(Out):
     last_used_at: str | None
     expires_at: str | None
     created_at: str
+    # Raised by every write and carried by its `api_key.changed` event, so a copy keeps whichever state is newer.
+    revision: int
 
 
 class KeyTargetIn(In):

@@ -52,9 +52,9 @@ async def client(
 
 
 async def state(c: httpx.AsyncClient, tenant: str) -> str:
-    r = await c.get("/v1/apps", headers=admin(tenant))
+    r = await c.get("/v1/apps", params={"ids": APP}, headers=admin(tenant))
     assert r.status_code == 200, r.text
-    return next(x for x in r.json()["data"] if x["id"] == APP)["appState"]
+    return next(x for x in r.json()["data"]["data"] if x["id"] == APP)["appState"]
 
 
 async def test_a_template_pack_turned_on_reads_connected_and_off_again_when_turned_off(

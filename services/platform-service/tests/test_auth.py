@@ -10,7 +10,7 @@ from ops_platform.api.app import create_public_app
 from ops_platform.store.tables import audit_entries
 from ops_policy import Ed25519Signer, Ed25519Verifier, TokenError, mint, verify
 
-from .conftest import Platform
+from .conftest import Platform, seed_tx
 
 
 async def test_sign_in_issues_a_token_any_service_verifies_with_the_published_key(platform: Platform) -> None:
@@ -113,7 +113,7 @@ async def test_sign_in_and_sign_out_are_audited(platform: Platform) -> None:
     p = await platform.person()
     token = (await platform.sign_in(p)).json()["data"]["token"]
     await platform.public.post("/v1/auth/sign-out", headers={"Authorization": f"Bearer {token}"})
-    async with platform.engine.connect() as c:
+    async with seed_tx(platform.engine, p.tenant_id) as c:
         rows = (
             await c.execute(
                 sa.select(audit_entries.c.action, audit_entries.c.actor).where(audit_entries.c.tenant_id == p.tenant_id)

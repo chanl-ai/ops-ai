@@ -1,6 +1,7 @@
 ---
 name: ops-store-builder
 description: Builds the store layer of one approved change: tables, repositories, migrations, indexes, isolation policies and retention, on PostgreSQL and SQL Server. Use for any change under a service's store/ or migrations/, ops_store or deploy/database.
+model: opus
 ---
 
 You build the part of a change that touches the database. You own the stores, the migrations and `ops_store`; the
@@ -74,6 +75,19 @@ read); `LY3` (database code only here); `EV1` and `EV5` when a store writes an o
 | `ops-events-builder` | a relay, worker or loop that reads the new table |
 | `ops-ci-builder` | a check the standards page marks "no check yet" that this change needs (a statement budget, an index test) |
 | `ops-access-builder` | a new permission cell or a policy table |
+
+## Budget
+
+One component or one card per run. Stop at about 150k tokens or 120 turns, whichever comes first: commit what is
+green, write a three-line hand-over in the last commit body (done, next, what is red), and return. Run only the tests
+the change touches, one heavy run at a time.
+
+## Lessons
+
+Lines added from repeated review findings, one per line, each naming the rule id it guards. A lesson is deleted once a
+check enforces it. Edited only through a reviewed pull request, never by this agent.
+
+- (none yet)
 
 ## Report (at most 10 lines)
 Commits; the migration's revision id and that it downgrades; every new table's marking; tests seen failing and what they

@@ -1,6 +1,7 @@
 ---
 name: ops-console-builder
 description: Builds the console and embed part of one approved change: pages, hooks, contract and client, with every state, from the existing components and the generated SDK. Use for any change under apps/console or apps/embed.
+model: sonnet
 ---
 
 You build what a person sees. A screen shows what one API call returned; it never joins, filters, counts or sums in the
@@ -71,6 +72,19 @@ through `useCan`, never a role name); `MD2` (types from the SDK, never hand-writ
 | `ops-sdk-builder` | the generated SDK lacks an operation the screen needs (the route's `x-ops-public` marker) |
 | `ops-access-builder` | a screen needs a cell the grid does not have |
 | `ops-mock-designer` | the plan has no mock for a state the screen now has |
+
+## Budget
+
+One component or one card per run. Stop at about 150k tokens or 120 turns, whichever comes first: commit what is
+green, write a three-line hand-over in the last commit body (done, next, what is red), and return. Run only the tests
+the change touches, one heavy run at a time.
+
+## Lessons
+
+Lines added from repeated review findings, one per line, each naming the rule id it guards. A lesson is deleted once a
+check enforces it. Edited only through a reviewed pull request, never by this agent.
+
+- (none yet)
 
 ## Report (at most 10 lines)
 Commits; the routes and components changed; the screenshots per role and width in the evidence folder; `pnpm verify`

@@ -22,7 +22,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 import httpx
-from pydantic import SecretStr
+from pydantic import JsonValue, SecretStr
 
 from ops_service_kit.errors import NotFound, ServiceUnavailable, Unauthorized, ValidationFailed
 from ops_service_kit.logging import get_logger
@@ -77,7 +77,7 @@ async def guarded_get(http: httpx.AsyncClient, fetch: PublicFetch | None, url: s
     if fetch is not None:
         return await fetch.get(http, url)
     try:
-        r = await http.get(url, timeout=5)
+        r = await http.get(url)
         r.raise_for_status()
     except httpx.HTTPError as e:
         raise ValueError(f"{url} did not answer.") from e
@@ -358,7 +358,7 @@ class Sso:
     async def _answer(self, flow: Flow, p: Provider, who: VerifiedIdentity) -> str:
         now = _iso(datetime.now(UTC))
         if flow.purpose == TEST:
-            result = {
+            result: dict[str, JsonValue] = {
                 "state": "ok",
                 "subject": who.subject,
                 "email": who.email,

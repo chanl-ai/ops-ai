@@ -1,0 +1,5 @@
+# agents-service: install-wide blocks by reason and declared tables, and blocks that declare none
+# (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
+1 THREAD_LEASES thread_leases
+1 TIMERS thread_leases,timers
+1 TIMERS timers

@@ -110,8 +110,8 @@ async def test_a_sandbox_sign_in_leaves_the_live_accounts_instance_and_hosts_apa
 
 async def test_a_plugin_answers_with_its_card_details(rig: Rig, tenant: str) -> None:  # noqa: F811
     client, _, _ = rig
-    listed = await client.get("/v1/apps", headers=team_admin(tenant))
-    card = next(c for c in listed.json()["data"] if c["id"] == APP)
+    listed = await client.get("/v1/apps", params={"ids": APP}, headers=team_admin(tenant))
+    card = next(c for c in listed.json()["data"]["data"] if c["id"] == APP)
     shown = {k: card[k] for k in ("logo", "category", "description", "docsUrl")}
     assert shown == {
         "logo": "https://desk.test/logo.svg",

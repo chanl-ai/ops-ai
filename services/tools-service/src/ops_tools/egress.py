@@ -258,7 +258,7 @@ class EgressBackend(httpcore.AsyncNetworkBackend):
         self,
         host: str,
         port: int,
-        timeout: float | None = None,
+        timeout: float | None = None,  # noqa: ASYNC109
         local_address: str | None = None,
         socket_options: Iterable[Any] | None = None,
     ) -> httpcore.AsyncNetworkStream:
@@ -272,7 +272,10 @@ class EgressBackend(httpcore.AsyncNetworkBackend):
         return await self.inner.connect_tcp(address, port, timeout, local_address, socket_options)
 
     async def connect_unix_socket(
-        self, path: str, timeout: float | None = None, socket_options: Iterable[Any] | None = None
+        self,
+        path: str,
+        timeout: float | None = None,  # noqa: ASYNC109
+        socket_options: Iterable[Any] | None = None,
     ) -> httpcore.AsyncNetworkStream:
         raise EgressDenied("tools-service never connects to a local socket.")
 

@@ -65,5 +65,5 @@ def downgrade() -> None:
     if op.get_bind().dialect.name == "postgresql":
         op.execute(f"DROP FUNCTION {FUNCTION}")
     for column in reversed(COLUMNS):
-        op.drop_column("sessions", column.name)
+        op.drop_column("sessions", column.name, mssql_drop_default=column.server_default is not None)
     op.drop_table("oauth_clients")

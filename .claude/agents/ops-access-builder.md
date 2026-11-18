@@ -1,6 +1,7 @@
 ---
 name: ops-access-builder
 description: Builds one approved change to who may do what: permission cells, team policies, approvals, sign-in, service scopes and the roles page, through can() and the exceptions register. Use for any change in ops_access, ops_identity, ops_signin, ops_policy or platform-service's access routes.
+model: opus
 ---
 
 You build the part of a change that decides access. Every decision goes through `can()`; every new cell or policy is
@@ -67,6 +68,19 @@ change to access; a secret written once and never returned); `MD1` (bodies forbi
 | `ops-console-builder` | a screen that shows or hides on the new cell |
 | `ops-service-builder` | a route outside platform-service that must call the new cell |
 | `ops-ci-builder` | `check_access_exceptions.py` needs to run in the `checks` job, or a "no decision" row should fail |
+
+## Budget
+
+One component or one card per run. Stop at about 150k tokens or 120 turns, whichever comes first: commit what is
+green, write a three-line hand-over in the last commit body (done, next, what is red), and return. Run only the tests
+the change touches, one heavy run at a time.
+
+## Lessons
+
+Lines added from repeated review findings, one per line, each naming the rule id it guards. A lesson is deleted once a
+check enforces it. Edited only through a reviewed pull request, never by this agent.
+
+- (none yet)
 
 ## Report (at most 10 lines)
 Commits; the cells, policies or approvals added with their defaults and who changes them; the register rows added or

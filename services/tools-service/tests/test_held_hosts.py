@@ -74,7 +74,7 @@ async def test_a_security_admin_lists_the_host_in_their_own_name_without_a_task(
     added = await c.post(f"/v1/tool-modules/{mid}/operations", json=OP, headers=sam)
     assert added.status_code == 200, added.text
     assert REVIEWS.hosts == [], "no task for someone who holds the approver role"
-    trail = [(a["value"], a["action"], a["actor"]) for a in await EgressStore(engine).audit(tenant)]
+    trail = [(a.value, a.action, a.actor) for a in await EgressStore(engine).audit(tenant)]
     assert ("unlisted-statements.example.com", "added", "Sam Adeyemi") in trail
 
 

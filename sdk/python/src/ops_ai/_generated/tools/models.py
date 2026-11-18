@@ -14,50 +14,9 @@ class AbandonIn(TypedDict, closed=True):
     tool: str
 
 
-class AbandonedCall(TypedDict, closed=True):
-    decision: str
-    effect: bool
-    error: NotRequired[dict[str, Any] | None]
-    id: str
-    outcome: str
-    output: NotRequired[Any]
-
-
-class AccountEvent(TypedDict, closed=True):
-    action: str
-    actor: str
-    at: NotRequired[str | None]
-    detail: dict[str, Any]
-
-
-class AccountIn(TypedDict, closed=True):
-    credentialId: NotRequired[str | None]
-    credentials: NotRequired[dict[str, str]]
-    kind: NotRequired[str | None]
-    makeDefault: NotRequired[bool | None]
-    name: str
-    sandbox: NotRequired[bool]
-    settings: NotRequired[dict[str, Any]]
-    signIn: NotRequired[str | None]
-
-
 class AccountOwner(TypedDict, closed=True):
     kind: Literal["team", "each", "person"]
     name: str
-
-
-class AccountPatchIn(TypedDict, closed=True):
-    category: NotRequired[str | None]
-    credentialId: NotRequired[str | None]
-    description: NotRequired[str | None]
-    docsUrl: NotRequired[str | None]
-    name: NotRequired[str | None]
-    revision: int
-    sandbox: NotRequired[bool | None]
-    secretValues: NotRequired[dict[str, str]]
-    settings: NotRequired[dict[str, Any] | None]
-    signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
-    teamBackup: NotRequired[bool | None]
 
 
 class AccountTest(TypedDict, closed=True):
@@ -75,11 +34,6 @@ class ActivityDay(TypedDict, closed=True):
     date: str
     errors: int
     p95Ms: int
-
-
-class AnotherOwnIn(TypedDict, closed=True):
-    name: str
-    settings: NotRequired[dict[str, Any]]
 
 
 Scope: TypeAlias = str
@@ -138,6 +92,12 @@ class AppUsers(TypedDict, closed=True):
     workflows: list[AppUser]
 
 
+class AppViewCounts(TypedDict, closed=True):
+    all: int
+    available: int
+    connected: int
+
+
 class ApprovalRequestIn(TypedDict, closed=True):
     environment: Literal["dev", "test", "production"]
     expiresInDays: int
@@ -194,15 +154,6 @@ class CallIdentity(TypedDict, closed=True):
     id: str
     kind: str
     name: str
-
-
-class CallResult(TypedDict, closed=True):
-    callId: str
-    decision: str
-    ok: bool
-    output: Any
-    replayOf: NotRequired[str | None]
-    view: NotRequired[Any]
 
 
 class CallRunAs(TypedDict, closed=True):
@@ -360,11 +311,6 @@ class EnvelopeAppUsers(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeCallResult(TypedDict, closed=True):
-    data: CallResult
-    success: Literal[True]
-
-
 class EnvelopeCredentialDeleted(TypedDict, closed=True):
     data: CredentialDeleted
     success: Literal[True]
@@ -383,37 +329,14 @@ class ErrorEnvelope(TypedDict, closed=True):
     success: Literal[False]
 
 
-class EvaluateIn(TypedDict, closed=True):
-    expressions: dict[str, str]
-    values: NotRequired[dict[str, Any]]
-
-
-class EvaluateOut(TypedDict, closed=True):
-    out: dict[str, Any]
-
-
 class FenceIn(TypedDict, closed=True):
     generation: int
     thread: str
 
 
-class GrantableOperation(TypedDict, closed=True):
-    access: str
-    added: NotRequired[bool]
-    answer: NotRequired[str]
-    approvers: int
-    description: str
-    inputSchema: dict[str, Any]
-    moduleId: str | None
-    moduleName: str
-    name: str
-    outputShape: NotRequired[str | None]
-    requiresApproval: bool
-    reviewerRole: NotRequired[str | None]
-    source: NotRequired[str]
-    stepUp: NotRequired[bool]
-    testAccount: NotRequired[bool]
-    title: NotRequired[str | None]
+class FenceResult(TypedDict, closed=True):
+    generation: int
+    thread: str
 
 
 class HeaderIn(TypedDict, closed=True):
@@ -424,6 +347,11 @@ class HeaderIn(TypedDict, closed=True):
 class HeaderOut(TypedDict, closed=True):
     key: str
     value: str
+
+
+class Health(TypedDict, closed=True):
+    reason: NotRequired[Literal["database"] | None]
+    status: Literal["ok", "degraded", "policy_drift"]
 
 
 class HeldHost(TypedDict, closed=True):
@@ -472,6 +400,9 @@ class InvalidField(TypedDict, closed=True):
     message: str
 
 
+JsonValue: TypeAlias = Any
+
+
 class KindField(TypedDict, closed=True):
     advanced: bool
     choices: NotRequired[list[str] | None]
@@ -495,13 +426,13 @@ class KnowledgeSourceView(TypedDict, closed=True):
     fetchAtOnce: NotRequired[int]
     getTakesTag: NotRequired[bool]
     getTool: str
-    inputs: NotRequired[dict[str, Any]]
+    inputs: NotRequired[dict[str, JsonValue]]
     listTool: str
     listsWhole: NotRequired[bool]
     needsConnection: NotRequired[bool]
     plugin: str
     previewTool: NotRequired[str | None]
-    schedule: dict[str, Any]
+    schedule: dict[str, JsonValue]
     scopesTool: NotRequired[str | None]
     signIn: str | None
     site: NotRequired[bool]
@@ -552,7 +483,7 @@ class McpLinkView(TypedDict, closed=True):
 
 
 class MockAnswer(TypedDict, closed=True):
-    body: NotRequired[Any]
+    body: NotRequired[JsonValue]
     createdBy: str
     default: bool
     delayMs: int
@@ -560,7 +491,7 @@ class MockAnswer(TypedDict, closed=True):
     fromCallId: NotRequired[str | None]
     headers: dict[str, str]
     id: str
-    match: dict[str, Any]
+    match: dict[str, JsonValue]
     name: str
     position: int
     status: int
@@ -569,28 +500,23 @@ class MockAnswer(TypedDict, closed=True):
 
 
 class MockIn(TypedDict, closed=True):
-    body: NotRequired[Any]
+    body: NotRequired[JsonValue]
     default: NotRequired[bool]
     delayMs: NotRequired[int]
     environment: NotRequired[Literal["test", "example"]]
     headers: NotRequired[dict[str, str]]
-    match: NotRequired[dict[str, Any]]
+    match: NotRequired[dict[str, JsonValue]]
     name: str
     status: NotRequired[int]
     timeout: NotRequired[bool]
 
 
-class MockList(TypedDict, closed=True):
-    data: list[MockAnswer]
-    operation: str
-
-
 class MockPatchIn(TypedDict, closed=True):
-    body: NotRequired[Any]
+    body: NotRequired[JsonValue]
     default: NotRequired[bool | None]
     delayMs: NotRequired[int | None]
     headers: NotRequired[dict[str, str] | None]
-    match: NotRequired[dict[str, Any] | None]
+    match: NotRequired[dict[str, JsonValue] | None]
     name: NotRequired[str | None]
     status: NotRequired[int | None]
     timeout: NotRequired[bool | None]
@@ -733,9 +659,9 @@ class PackageCheck(TypedDict, closed=True):
     title: str
 
 
-class PageOut(TypedDict):
+class PageOut(TypedDict, closed=True):
     deltaLink: str | None
-    items: list[dict[str, Any]]
+    items: list[dict[str, JsonValue]]
     nextLink: str | None
 
 
@@ -776,7 +702,7 @@ class PersonSignedIn(TypedDict, closed=True):
 class PickedTool(TypedDict, closed=True):
     description: NotRequired[str | None]
     id: str
-    inputSchema: NotRequired[dict[str, Any] | None]
+    inputSchema: NotRequired[dict[str, JsonValue] | None]
     label: str
 
 
@@ -793,7 +719,7 @@ class PlatformEventOut(TypedDict, closed=True):
     handled: bool
 
 
-class PluginRef(TypedDict):
+class PluginRef(TypedDict, closed=True):
     id: str
     title: str
     version: str
@@ -820,7 +746,7 @@ class RenameIn(TypedDict, closed=True):
     name: str
 
 
-class ResourceCopy(TypedDict):
+class ResourceCopy(TypedDict, closed=True):
     id: str
     kind: str
     recordId: str
@@ -829,7 +755,7 @@ class ResourceCopy(TypedDict):
     version: int
 
 
-class ResourceInstalled(TypedDict):
+class ResourceInstalled(TypedDict, closed=True):
     changed: NotRequired[bool]
     copies: int
     newerAvailable: bool
@@ -1004,7 +930,7 @@ class SourceHost(TypedDict, closed=True):
 class SourceHostsIn(TypedDict, closed=True):
     plugin: str
     source: str
-    values: NotRequired[dict[str, Any]]
+    values: NotRequired[dict[str, JsonValue]]
 
 
 class SubjectBinding(TypedDict, closed=True):
@@ -1044,11 +970,11 @@ class TeamPluginIn(TypedDict, closed=True):
     enabled: bool
     kind: NotRequired[str | None]
     sandbox: NotRequired[bool]
-    settings: NotRequired[dict[str, Any]]
+    settings: NotRequired[dict[str, JsonValue]]
     signIn: NotRequired[str | None]
 
 
-class TemplateRequires(TypedDict):
+class TemplateRequires(TypedDict, closed=True):
     bind: list[dict[str, str]]
     resources: NotRequired[list[str]]
     tools: list[str]
@@ -1056,7 +982,7 @@ class TemplateRequires(TypedDict):
 
 class TestDraftIn(TypedDict, closed=True):
     responseTransform: NotRequired[str | None]
-    stub: NotRequired[Any]
+    stub: NotRequired[JsonValue]
 
 
 class TestIn(TypedDict, closed=True):
@@ -1076,9 +1002,15 @@ class TestRequestOut(TypedDict, closed=True):
     url: str
 
 
-class TestStep(TypedDict):
+class TestStep(TypedDict, closed=True):
     state: Literal["done", "failed", "skipped"]
     title: str
+
+
+class ToolApproval(TypedDict, closed=True):
+    approverTeam: str | None
+    approvers: int
+    stepUp: bool
 
 
 class ToolCallRow(TypedDict, closed=True):
@@ -1165,6 +1097,7 @@ class ToolModule(TypedDict, closed=True):
     accessClasses: list[Literal["read", "write"]]
     approvalState: Literal["draft", "approved", "needs_approval", "expiring", "expired"]
     calls24h: int
+    canEdit: NotRequired[bool | None]
     connection: ConnectionRef | None
     connectionId: NotRequired[str | None]
     description: str
@@ -1194,10 +1127,36 @@ class ToolModule(TypedDict, closed=True):
     workflows: list[ModuleRef]
 
 
+class ToolOperation(TypedDict, closed=True):
+    access: str
+    description: NotRequired[str | None]
+    enabled: NotRequired[bool]
+    id: str
+    name: str
+    requiresApproval: NotRequired[bool]
+    title: NotRequired[str | None]
+
+
+class ToolPublished(TypedDict, closed=True):
+    app: NotRequired[str | None]
+    appCardId: NotRequired[str | None]
+    deleted: NotRequired[bool]
+    id: str
+    kind: NotRequired[Literal["tool.module.published"]]
+    name: str
+    operations: NotRequired[list[ToolOperation]]
+    ownerTeam: NotRequired[str | None]
+    status: NotRequired[str | None]
+    templateKind: NotRequired[Literal["builtin", "plugin", "custom"] | None]
+    title: NotRequired[str | None]
+    truncated: NotRequired[bool]
+    version: NotRequired[str | None]
+
+
 class ToolRunIn(TypedDict, closed=True):
     confirmed: NotRequired[bool]
     environment: NotRequired[Literal["test", "live"] | None]
-    input: NotRequired[dict[str, Any]]
+    input: NotRequired[dict[str, JsonValue]]
     mode: Literal["mock", "real"]
 
 
@@ -1213,8 +1172,8 @@ class ToolRunResult(TypedDict, closed=True):
     masked: list[str]
     mockId: NotRequired[str | None]
     mocked: bool
-    output: Any
-    rawResponse: NotRequired[Any]
+    output: JsonValue
+    rawResponse: NotRequired[JsonValue]
     reachedHost: NotRequired[str | None]
     request: NotRequired[TestRequestOut | None]
     status: int
@@ -1222,6 +1181,17 @@ class ToolRunResult(TypedDict, closed=True):
     testApprovalToken: NotRequired[str | None]
     transformError: NotRequired[str | None]
     wouldPause: bool
+
+
+class ToolTeamStateChanged(TypedDict, closed=True):
+    deleted: NotRequired[bool]
+    expiresAt: NotRequired[str | None]
+    id: str
+    kind: NotRequired[Literal["tool.team_state.changed"]]
+    moduleId: str
+    operations: NotRequired[list[str]]
+    via: Literal["approval", "added"]
+    waits: NotRequired[list[str]]
 
 
 class ToolUser(TypedDict, closed=True):
@@ -1253,13 +1223,17 @@ class WaitIn(TypedDict, closed=True):
     seconds: NotRequired[float]
 
 
-class WaitOut(TypedDict):
+class WaitOut(TypedDict, closed=True):
     changed: bool
 
 
-class AbandonResult(TypedDict, closed=True):
-    abandoned: bool
-    call: AbandonedCall | None
+class AbandonedCall(TypedDict, closed=True):
+    decision: str
+    effect: bool
+    error: NotRequired[dict[str, JsonValue] | None]
+    id: str
+    outcome: str
+    output: NotRequired[JsonValue]
 
 
 class AccountChoice(TypedDict, closed=True):
@@ -1272,6 +1246,43 @@ class AccountChoice(TypedDict, closed=True):
     own: NotRequired[bool]
     pointsAt: NotRequired[str | None]
     sandbox: NotRequired[bool]
+
+
+class AccountEvent(TypedDict, closed=True):
+    action: str
+    actor: str
+    at: NotRequired[str | None]
+    detail: dict[str, JsonValue]
+
+
+class AccountIn(TypedDict, closed=True):
+    credentialId: NotRequired[str | None]
+    credentials: NotRequired[dict[str, str]]
+    kind: NotRequired[str | None]
+    makeDefault: NotRequired[bool | None]
+    name: str
+    sandbox: NotRequired[bool]
+    settings: NotRequired[dict[str, JsonValue]]
+    signIn: NotRequired[str | None]
+
+
+class AccountPatchIn(TypedDict, closed=True):
+    category: NotRequired[str | None]
+    credentialId: NotRequired[str | None]
+    description: NotRequired[str | None]
+    docsUrl: NotRequired[str | None]
+    name: NotRequired[str | None]
+    revision: int
+    sandbox: NotRequired[bool | None]
+    secretValues: NotRequired[dict[str, str]]
+    settings: NotRequired[dict[str, JsonValue] | None]
+    signIn: NotRequired[Literal["team", "person", "person_or_team"] | None]
+    teamBackup: NotRequired[bool | None]
+
+
+class AnotherOwnIn(TypedDict, closed=True):
+    name: str
+    settings: NotRequired[dict[str, JsonValue]]
 
 
 class AppCredential(TypedDict, closed=True):
@@ -1291,7 +1302,7 @@ class AppCredential(TypedDict, closed=True):
     type: Literal["ops_ai", "own"]
 
 
-class AppResource(TypedDict):
+class AppResource(TypedDict, closed=True):
     canAdd: bool
     canRemove: NotRequired[bool]
     copy: NotRequired[ResourceCopy | None]
@@ -1343,6 +1354,28 @@ class CallIn(TypedDict, closed=True):
     key: str
     runContext: RunContext
     tool: str
+
+
+class CallResult(TypedDict, closed=True):
+    callId: str
+    decision: str
+    ok: bool
+    output: JsonValue
+    replayOf: NotRequired[str | None]
+    view: NotRequired[JsonValue]
+
+
+class CatalogEvent(TypedDict, closed=True):
+    name: str
+    payload: ToolPublished | ToolTeamStateChanged
+    revision: int
+    teamId: str | None
+    tenantId: str
+
+
+class CatalogPage(TypedDict, closed=True):
+    items: list[CatalogEvent]
+    nextCursor: str | None
 
 
 class CodeOperationIn(TypedDict, closed=True):
@@ -1439,13 +1472,18 @@ class DiscoveryResult(TypedDict, closed=True):
     warnings: list[str]
 
 
-class EnvelopeAbandonResult(TypedDict, closed=True):
-    data: AbandonResult
+class EnvelopeBulkResult(TypedDict, closed=True):
+    data: BulkResult
     success: Literal[True]
 
 
-class EnvelopeBulkResult(TypedDict, closed=True):
-    data: BulkResult
+class EnvelopeCallResult(TypedDict, closed=True):
+    data: CallResult
+    success: Literal[True]
+
+
+class EnvelopeCatalogPage(TypedDict, closed=True):
+    data: CatalogPage
     success: Literal[True]
 
 
@@ -1459,8 +1497,8 @@ class EnvelopeDiscoveryResult(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeEvaluateOut(TypedDict, closed=True):
-    data: EvaluateOut
+class EnvelopeFenceResult(TypedDict, closed=True):
+    data: FenceResult
     success: Literal[True]
 
 
@@ -1476,11 +1514,6 @@ class EnvelopeMcpLinkView(TypedDict, closed=True):
 
 class EnvelopeMockAnswer(TypedDict, closed=True):
     data: MockAnswer
-    success: Literal[True]
-
-
-class EnvelopeMockList(TypedDict, closed=True):
-    data: MockList
     success: Literal[True]
 
 
@@ -1554,18 +1587,8 @@ class EnvelopeListAppResource(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListGrantableOperation(TypedDict, closed=True):
-    data: list[GrantableOperation]
-    success: Literal[True]
-
-
 class EnvelopeListKnowledgeSourceView(TypedDict, closed=True):
     data: list[KnowledgeSourceView]
-    success: Literal[True]
-
-
-class EnvelopeListMcpLinkView(TypedDict, closed=True):
-    data: list[McpLinkView]
     success: Literal[True]
 
 
@@ -1579,10 +1602,38 @@ class EnvelopeListSourceHost(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EvaluateIn(TypedDict, closed=True):
+    expressions: dict[str, str]
+    values: NotRequired[dict[str, JsonValue]]
+
+
+class EvaluateOut(TypedDict, closed=True):
+    out: dict[str, JsonValue]
+
+
 class ExecutionList(TypedDict, closed=True):
     data: list[ToolCallRow]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
+
+
+class GrantableOperation(TypedDict, closed=True):
+    access: str
+    added: NotRequired[bool]
+    answer: NotRequired[str]
+    approvers: int
+    description: str
+    inputSchema: dict[str, JsonValue]
+    moduleId: str | None
+    moduleName: str
+    name: str
+    outputShape: NotRequired[str | None]
+    requiresApproval: bool
+    reviewerRole: NotRequired[str | None]
+    source: NotRequired[str]
+    stepUp: NotRequired[bool]
+    testAccount: NotRequired[bool]
+    title: NotRequired[str | None]
 
 
 class HTTPValidationError(TypedDict):
@@ -1592,6 +1643,12 @@ class HTTPValidationError(TypedDict):
 class ImportOperationsIn(TypedDict, closed=True):
     operations: list[DiscoveredOperationIn]
     source: ModuleSourceIn
+
+
+class ListResultMcpLinkView(TypedDict, closed=True):
+    data: list[McpLinkView]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
 
 
 class ListedHost(TypedDict, closed=True):
@@ -1608,6 +1665,13 @@ class McpLinkIn(TypedDict, closed=True):
     environment: NotRequired[Literal["test"]]
     name: str
     tools: list[PickedTool]
+
+
+class MockList(TypedDict, closed=True):
+    data: list[MockAnswer]
+    facets: dict[str, dict[str, int]]
+    operation: str
+    pagination: Pagination
 
 
 class ModuleActivity(TypedDict, closed=True):
@@ -1678,7 +1742,7 @@ class ModuleOperation(TypedDict, closed=True):
     secrets: NotRequired[list[SecretNeed]]
     signInHeader: NotRequired[str | None]
     stepUp: bool
-    stub: NotRequired[Any]
+    stub: NotRequired[JsonValue]
     timeoutMs: NotRequired[int | None]
     toolId: str
     waits: NotRequired[bool | None]
@@ -1689,7 +1753,7 @@ class ModuleTestIn(TypedDict, closed=True):
     contextId: str
     draft: NotRequired[TestDraftIn | None]
     environment: NotRequired[Literal["test", "live"]]
-    input: dict[str, Any]
+    input: dict[str, JsonValue]
     operation: str
     secretValues: NotRequired[dict[str, str] | None]
     simulateApproval: NotRequired[bool]
@@ -1707,8 +1771,8 @@ class ModuleTestResult(TypedDict, closed=True):
     log: NotRequired[list[TestLogLine]]
     masked: list[str]
     mockId: NotRequired[str | None]
-    output: Any
-    rawResponse: NotRequired[Any]
+    output: JsonValue
+    rawResponse: NotRequired[JsonValue]
     reachedHost: NotRequired[str | None]
     request: NotRequired[TestRequestOut | None]
     status: int
@@ -1792,7 +1856,7 @@ class OperationPatchIn(TypedDict, closed=True):
     reviewerRole: NotRequired[str | None]
     scopes: NotRequired[list[Scope] | None]
     stepUp: NotRequired[bool | None]
-    stub: NotRequired[Any]
+    stub: NotRequired[JsonValue]
     timeoutMs: NotRequired[int | None]
 
 
@@ -1809,8 +1873,8 @@ class PluginSetting(TypedDict, closed=True):
     secret: NotRequired[bool]
 
 
-class PluginTemplate(TypedDict):
-    body: NotRequired[dict[str, Any]]
+class PluginTemplate(TypedDict, closed=True):
+    body: NotRequired[dict[str, JsonValue]]
     digest: str
     id: str
     kind: Literal[
@@ -1871,14 +1935,22 @@ class SystemPlugin(TypedDict, closed=True):
     teamVersion: NotRequired[str | None]
     tools: NotRequired[list[str]]
     updateAvailable: NotRequired[bool]
-    values: NotRequired[dict[str, Any]]
+    values: NotRequired[dict[str, JsonValue]]
 
 
-class TestOut(TypedDict):
+class TestOut(TypedDict, closed=True):
     error: NotRequired[str | None]
     newest: NotRequired[dict[str, str] | None]
     ok: bool
     steps: list[TestStep]
+
+
+class ToolAccess(TypedDict, closed=True):
+    access: str
+    approval: ToolApproval
+    deadlineSeconds: float | None
+    name: str
+    outputSchema: dict[str, JsonValue] | None
 
 
 class ToolModuleDetail(TypedDict, closed=True):
@@ -1932,6 +2004,11 @@ class ToolUsedBy(TypedDict, closed=True):
     workflows: list[ToolUser]
 
 
+class AbandonResult(TypedDict, closed=True):
+    abandoned: bool
+    call: AbandonedCall | None
+
+
 class AccountDetail(TypedDict, closed=True):
     accountName: NotRequired[str | None]
     activity: list[AccountEvent]
@@ -1950,7 +2027,7 @@ class AccountDetail(TypedDict, closed=True):
     people: NotRequired[list[PersonSignedIn]]
     platformApp: NotRequired[str | None]
     pluginSecrets: NotRequired[dict[str, bool] | None]
-    pluginSettings: NotRequired[dict[str, Any] | None]
+    pluginSettings: NotRequired[dict[str, JsonValue] | None]
     redirectUri: NotRequired[str | None]
     revision: int
     sandbox: bool
@@ -2030,7 +2107,7 @@ class AppCredentialChange(TypedDict, closed=True):
     permissions: list[Permission]
     redirectUri: NotRequired[str | None]
     secretEnds: NotRequired[str | None]
-    settings: NotRequired[dict[str, Any]]
+    settings: NotRequired[dict[str, JsonValue]]
     signInAgain: int
     status: Literal["working", "not_tested", "failing"]
     teamId: str
@@ -2054,7 +2131,7 @@ class AppCredentialDetail(TypedDict, closed=True):
     permissions: list[Permission]
     redirectUri: NotRequired[str | None]
     secretEnds: NotRequired[str | None]
-    settings: NotRequired[dict[str, Any]]
+    settings: NotRequired[dict[str, JsonValue]]
     status: Literal["working", "not_tested", "failing"]
     teamId: str
     type: Literal["ops_ai", "own"]
@@ -2092,6 +2169,11 @@ class Change(TypedDict, closed=True):
     value: str
 
 
+class EnvelopeAbandonResult(TypedDict, closed=True):
+    data: AbandonResult
+    success: Literal[True]
+
+
 class EnvelopeAccountDetail(TypedDict, closed=True):
     data: AccountDetail
     success: Literal[True]
@@ -2122,8 +2204,23 @@ class EnvelopeChange(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeEvaluateOut(TypedDict, closed=True):
+    data: EvaluateOut
+    success: Literal[True]
+
+
 class EnvelopeExecutionList(TypedDict, closed=True):
     data: ExecutionList
+    success: Literal[True]
+
+
+class EnvelopeListResultMcpLinkView(TypedDict, closed=True):
+    data: ListResultMcpLinkView
+    success: Literal[True]
+
+
+class EnvelopeMockList(TypedDict, closed=True):
+    data: MockList
     success: Literal[True]
 
 
@@ -2157,6 +2254,11 @@ class EnvelopeTestOut(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeToolAccess(TypedDict, closed=True):
+    data: ToolAccess
+    success: Literal[True]
+
+
 class EnvelopeToolModuleDetail(TypedDict, closed=True):
     data: ToolModuleDetail
     success: Literal[True]
@@ -2164,6 +2266,11 @@ class EnvelopeToolModuleDetail(TypedDict, closed=True):
 
 class EnvelopeListAppTool(TypedDict, closed=True):
     data: list[AppTool]
+    success: Literal[True]
+
+
+class EnvelopeListGrantableOperation(TypedDict, closed=True):
+    data: list[GrantableOperation]
     success: Literal[True]
 
 
@@ -2238,6 +2345,13 @@ class SystemCard(TypedDict, closed=True):
     toolsCount: int
 
 
+class SystemCardList(TypedDict, closed=True):
+    data: list[SystemCard]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+    viewCounts: AppViewCounts
+
+
 class AppPage(TypedDict, closed=True):
     accounts: NotRequired[list[AppAccount]]
     authConfigs: NotRequired[list[AuthConfig]]
@@ -2260,21 +2374,21 @@ class EnvelopeHostList(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeSecretList(TypedDict, closed=True):
+    data: SecretList
+    success: Literal[True]
+
+
 class EnvelopeSignInFinished(TypedDict, closed=True):
     data: SignInFinished
     success: Literal[True]
 
 
+class EnvelopeSystemCardList(TypedDict, closed=True):
+    data: SystemCardList
+    success: Literal[True]
+
+
 class EnvelopeSystemCard(TypedDict, closed=True):
     data: SystemCard
-    success: Literal[True]
-
-
-class EnvelopeUnionListSecretMetaSecretList(TypedDict, closed=True):
-    data: list[SecretMeta] | SecretList
-    success: Literal[True]
-
-
-class EnvelopeListSystemCard(TypedDict, closed=True):
-    data: list[SystemCard]
     success: Literal[True]

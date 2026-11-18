@@ -175,7 +175,7 @@ try {
             on.status === 200 && ok(admin) && /Connect the team account/.test(admin.text) && admin.connect === 1 && ok(member) && member.ask === 1 && member.connect === 0,
             { status: on.status, admin, member });
           // Back to off with no account, so the next steps meet Salesforce as a first turn-on.
-          const card = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.id === sfId);
+          const card = ((await call(tools, 'GET', `/v1/apps?ids=${encodeURIComponent(sfId)}`, priya)).data?.data ?? []).find((c) => c.id === sfId);
           await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(sfId)}/team`, priya, { enabled: false });
           if (card?.connectionId) await call(tools, 'DELETE', `/v1/apps/${encodeURIComponent(sfId)}/accounts/${card.connectionId}`, priya);
         });
@@ -204,7 +204,7 @@ try {
           for (const app of APPS) {
             const tag = `${app.name.toLowerCase()}-${width}`;
             // Each width starts from the app off, as an admin first meets it.
-            const card = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.id === app.id);
+            const card = ((await call(tools, 'GET', `/v1/apps?ids=${encodeURIComponent(app.id)}`, priya)).data?.data ?? []).find((c) => c.id === app.id);
             if (card?.connectionId) {
               await call(tools, 'PUT', `/v1/apps/${encodeURIComponent(app.id)}/team`, priya, { enabled: false });
               await call(tools, 'DELETE', `/v1/apps/${encodeURIComponent(app.id)}/accounts/${card.connectionId}`, priya);
@@ -240,7 +240,7 @@ try {
               await result.waitFor({ timeout: 60_000 });
               await page.waitForTimeout(3000);
               const saved = (await result.innerText()).replace(/\s+/g, ' ');
-              const after = ((await call(tools, 'GET', '/v1/apps', priya)).data ?? []).find((c) => c.id === app.id);
+              const after = ((await call(tools, 'GET', `/v1/apps?ids=${encodeURIComponent(app.id)}`, priya)).data?.data ?? []).find((c) => c.id === app.id);
               await page.screenshot({ path: join(SHOTS, `saved-${tag}.png`), fullPage: true });
               check(`2 ${tag}: Turn on saves the team's setting and opens no sign-in window`, popups.length === 0 && Boolean(after?.connectionId) && new RegExp(`Saved\\. ${app.name} is on for Operations`).test(saved) && /\d+ read tools? added/.test(saved) && /Members connect their own account from Connectors › Mine|team’s .* account once someone connects it/.test(saved), { popups, connectionId: after?.connectionId, saved });
               // Connecting her own account is the optional second step.

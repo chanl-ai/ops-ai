@@ -50,10 +50,12 @@ export interface paths {
         };
         /**
          * List Files
-         * @description Available files of the caller's team, newest first; `uploadedBy=me` keeps the caller's own. Search, the
-         *     uploaded-since date, the view and the purpose, scan, sensitivity, read-as type and read path filters run in
-         *     the query, which also answers each view's count and the facet counts; `readPath=model` keeps files no
-         *     template matched.
+         * @description Available files of the caller's team on the shared list contract, newest first (`sortBy` name, uploadedAt,
+         *     size, scan or purpose; equal values stay newest first); `uploadedBy=me` keeps the caller's own. Search, the
+         *     uploaded dates, the view and the purpose, scan, sensitivity, read-as type and read path filters run in the
+         *     query, which also answers each view's count and the facet counts; `readPath=model` keeps files no template
+         *     matched. The filters are declared here so a bad value is refused; ListQuery reads the same keys as its
+         *     filters.
          */
         get: operations["files_list_files"];
         put?: never;
@@ -161,7 +163,9 @@ export interface paths {
         put?: never;
         /**
          * Create Upload
-         * @description A ticket for one upload: a signed storage URL, or this service's content route on the local backend.
+         * @description A ticket for one upload: a signed storage URL, or this service's content route on the local backend. Not
+         *     on Tx: the rows are read in one transaction and written in another, with none open while the URL is signed
+         *     (tests/test_request_transactions.py).
          */
         post: operations["files_create_upload"];
         delete?: never;
@@ -285,7 +289,8 @@ export interface paths {
         put?: never;
         /**
          * Download Url
-         * @description A short-lived link; 423 until the file is scanned clean.
+         * @description A short-lived link; 423 until the file is scanned clean. Not on Tx: no transaction is open while the link
+         *     is signed.
          */
         post: operations["files_download_url"];
         delete?: never;
@@ -701,11 +706,39 @@ export interface components {
         };
         /**
          * FileData
+         * @description What was recorded from a file, as FileDataIn took it.
+         */
+        FileData: {
+            /** Extractionid */
+            extractionId: string;
+            /** Fieldstocheck */
+            fieldsToCheck: number;
+            /**
+             * Path
+             * @enum {string}
+             */
+            path: "template" | "model";
+            /**
+             * Readat
+             * Format: date-time
+             */
+            readAt: string;
+            /** Templateid */
+            templateId: string | null;
+            /** Typeid */
+            typeId: string | null;
+            /** Typename */
+            typeName: string | null;
+            /** Version */
+            version: number | null;
+        };
+        /**
+         * FileDataIn
          * @description What was read from the file, as the extract workflow records it: the document type and version it was
          *     read as, whether a template or the model read it, how many fields wait for a person, and the extraction. A file read
          *     with Detect whose kind is none of the team's types has no type and no version: it was not recognised.
          */
-        FileData: {
+        FileDataIn: {
             /** Extractionid */
             extractionId: string;
             /** Fieldstocheck */
@@ -732,14 +765,14 @@ export interface components {
         /** FileDetail */
         FileDetail: {
             /** Candelete */
-            canDelete?: boolean | null;
+            canDelete: boolean | null;
             /** Canedit */
-            canEdit?: boolean | null;
+            canEdit: boolean | null;
             /** Canpublish */
-            canPublish?: boolean | null;
-            data?: components["schemas"]["FileData"] | null;
+            canPublish: boolean | null;
+            data: components["schemas"]["FileData"] | null;
             /** Deleteblockedby */
-            deleteBlockedBy?: string | null;
+            deleteBlockedBy: string | null;
             /**
              * Digest
              * @default
@@ -752,7 +785,7 @@ export interface components {
              * @default false
              */
             immutable: boolean;
-            legalHold?: components["schemas"]["LegalHold"] | null;
+            legalHold: components["schemas"]["LegalHold"] | null;
             /** Mime */
             mime: string;
             /** Name */
@@ -768,9 +801,9 @@ export interface components {
              */
             referenceCount: number;
             /** References */
-            references?: components["schemas"]["FileReference"][];
+            references: components["schemas"]["FileReference"][];
             retention: components["schemas"]["FileRetention"];
-            scan?: components["schemas"]["FileScan"];
+            scan: components["schemas"]["FileScan"];
             /**
              * Sensitivity
              * @default internal
@@ -784,7 +817,7 @@ export interface components {
             sensitivitySuggested: boolean;
             /** Size */
             size: number;
-            storage?: components["schemas"]["StorageLocation"] | null;
+            storage: components["schemas"]["StorageLocation"] | null;
             /** Team */
             team: string;
             /**
@@ -800,7 +833,7 @@ export interface components {
              */
             versionCount: number;
             /** Versions */
-            versions?: components["schemas"]["FileVersion"][];
+            versions: components["schemas"]["FileVersion"][];
         };
         /**
          * FileList
@@ -829,9 +862,9 @@ export interface components {
              */
             addedAt: string;
             /** Blocked */
-            blocked?: string | null;
+            blocked: string | null;
             /** Href */
-            href?: string | null;
+            href: string | null;
             /** Id */
             id: string;
             /** Name */
@@ -849,24 +882,21 @@ export interface components {
             /** Classname */
             className: string;
             /** Deleteafter */
-            deleteAfter?: string | null;
+            deleteAfter: string | null;
         };
         /**
          * FileRow
          * @description A list row: the file record without versions and references.
          */
         FileRow: {
-            data?: components["schemas"]["FileData"] | null;
+            data: components["schemas"]["FileData"] | null;
             /** Digest */
             digest: string;
             /** Id */
             id: string;
             /** Immutable */
             immutable: boolean;
-            /** Legalhold */
-            legalHold?: {
-                [key: string]: unknown;
-            } | null;
+            legalHold: components["schemas"]["LegalHold"] | null;
             /** Mime */
             mime: string;
             /** Name */
@@ -878,24 +908,15 @@ export interface components {
             purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
             /** Referencecount */
             referenceCount: number;
-            /** Retention */
-            retention: {
-                [key: string]: unknown;
-            };
-            /** Scan */
-            scan: {
-                [key: string]: unknown;
-            };
+            retention: components["schemas"]["FileRetention"];
+            scan: components["schemas"]["FileScan"];
             /** Sensitivity */
             sensitivity: string;
             /** Sensitivitysuggested */
             sensitivitySuggested: boolean;
             /** Size */
             size: number;
-            /** Storage */
-            storage?: {
-                [key: string]: unknown;
-            } | null;
+            storage: components["schemas"]["StorageLocation"] | null;
             /** Team */
             team: string;
             /** Uploadedat */
@@ -908,11 +929,11 @@ export interface components {
         /** FileScan */
         FileScan: {
             /** At */
-            at?: string | null;
+            at: string | null;
             /** Detail */
-            detail?: string | null;
+            detail: string | null;
             /** Engine */
-            engine?: string | null;
+            engine: string | null;
             /**
              * Status
              * @default pending
@@ -1035,8 +1056,30 @@ export interface components {
              */
             purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
         };
+        /** PurposeLimitIn */
+        PurposeLimitIn: {
+            /** Allowedtypes */
+            allowedTypes: string[];
+            /** Maxsizemb */
+            maxSizeMb: number;
+            /**
+             * Purpose
+             * @enum {string}
+             */
+            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+        };
         /** PurposeRetention */
         PurposeRetention: {
+            /**
+             * Purpose
+             * @enum {string}
+             */
+            purpose: "knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar";
+            /** Retentionclass */
+            retentionClass: string;
+        };
+        /** PurposeRetentionIn */
+        PurposeRetentionIn: {
             /**
              * Purpose
              * @enum {string}
@@ -1106,6 +1149,15 @@ export interface components {
              */
             type: "source" | "case" | "chat" | "eval_set" | "test_set" | "evidence" | "export" | "tool_module";
         };
+        /** RetentionClassView */
+        RetentionClassView: {
+            /** Days */
+            days: number | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+        };
         /** ScanResultIn */
         ScanResultIn: {
             /** Detail */
@@ -1127,7 +1179,10 @@ export interface components {
             /** Reason */
             reason: string;
         };
-        /** StorageDocument */
+        /**
+         * StorageDocument
+         * @description A saved document, as StorageDocumentIn took it.
+         */
         StorageDocument: {
             /**
              * Downloadlinkseconds
@@ -1135,11 +1190,25 @@ export interface components {
              */
             downloadLinkSeconds: number;
             /** Limits */
-            limits?: components["schemas"]["PurposeLimit"][];
+            limits: components["schemas"]["PurposeLimit"][];
             /** Retention */
-            retention?: components["schemas"]["PurposeRetention"][];
+            retention: components["schemas"]["PurposeRetention"][];
             /** Targets */
-            targets?: components["schemas"]["StorageTarget"][];
+            targets: components["schemas"]["StorageTarget"][];
+        };
+        /** StorageDocumentIn */
+        StorageDocumentIn: {
+            /**
+             * Downloadlinkseconds
+             * @default 300
+             */
+            downloadLinkSeconds: number;
+            /** Limits */
+            limits?: components["schemas"]["PurposeLimitIn"][];
+            /** Retention */
+            retention?: components["schemas"]["PurposeRetentionIn"][];
+            /** Targets */
+            targets?: components["schemas"]["StorageTargetIn"][];
         };
         /** StorageLocation */
         StorageLocation: {
@@ -1175,7 +1244,7 @@ export interface components {
         };
         /** StorageSettingsInput */
         StorageSettingsInput: {
-            document: components["schemas"]["StorageDocument"];
+            document: components["schemas"]["StorageDocumentIn"];
             /** Version */
             version: number;
         };
@@ -1183,9 +1252,7 @@ export interface components {
         StorageSettingsView: {
             document: components["schemas"]["StorageDocument"];
             /** Retentionclasses */
-            retentionClasses: {
-                [key: string]: unknown;
-            }[];
+            retentionClasses: components["schemas"]["RetentionClassView"][];
             /** Scanning */
             scanning: string;
             /** Updatedat */
@@ -1197,9 +1264,50 @@ export interface components {
         };
         /**
          * StorageTarget
-         * @description Where one purpose's bytes go. `default` covers every purpose without its own target.
+         * @description A saved target, as StorageTargetIn took it.
          */
         StorageTarget: {
+            /**
+             * Backend
+             * @enum {string}
+             */
+            backend: "local" | "s3" | "azure_blob";
+            /** Container */
+            container: string;
+            /**
+             * Credential
+             * @default
+             */
+            credential: string;
+            /**
+             * Encryption
+             * @default
+             */
+            encryption: string;
+            /**
+             * Endpoint
+             * @default
+             */
+            endpoint: string;
+            /** Purpose */
+            purpose: ("knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar") | "default";
+            /**
+             * Region
+             * @default
+             */
+            region: string;
+            /**
+             * Uploadpath
+             * @default direct
+             * @enum {string}
+             */
+            uploadPath: "direct" | "proxy";
+        };
+        /**
+         * StorageTargetIn
+         * @description Where one purpose's bytes go. `default` covers every purpose without its own target.
+         */
+        StorageTargetIn: {
             /**
              * Backend
              * @enum {string}
@@ -1351,8 +1459,6 @@ export interface operations {
     files_list_files: {
         parameters: {
             query?: {
-                page?: number;
-                pageSize?: number;
                 uploadedBy?: "me" | null;
                 purpose?: ("knowledge_source" | "chat_attachment" | "case_attachment" | "document_type_sample" | "email_body" | "knowledge_snapshot" | "test_import" | "evidence_bundle" | "export" | "tool_spec" | "avatar")[] | null;
                 scan?: string[] | null;
@@ -1361,10 +1467,15 @@ export interface operations {
                 readPath?: ("template" | "model")[] | null;
                 refType?: ("source" | "case" | "chat" | "eval_set" | "test_set" | "evidence" | "export" | "tool_module") | null;
                 refId?: string | null;
-                search?: string;
                 uploadedAfter?: string | null;
                 uploadedBefore?: string | null;
                 view?: "all" | "quarantined" | "legal_hold" | "unreferenced" | "expiring";
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -2945,7 +3056,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["FileData"];
+                "application/json": components["schemas"]["FileDataIn"];
             };
         };
         responses: {
@@ -3079,7 +3190,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["DownloadIn"] | null;
+                "application/json": components["schemas"]["DownloadIn"];
             };
         };
         responses: {
@@ -4260,7 +4371,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["StorageTarget"];
+                "application/json": components["schemas"]["StorageTargetIn"];
             };
         };
         responses: {

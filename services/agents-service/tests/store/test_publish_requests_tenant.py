@@ -5,14 +5,13 @@ another's requests; a statement with no tenant reads any."""
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Any
 from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
-from ops_agents.store import agent_registry
 from ops_agents.store.agent_registry import AgentRegistry
 from ops_agents.store.tenancy import NoTenantError, current_tenant, tenant_scope
 from ops_service_kit.errors import NotFound
@@ -33,12 +32,16 @@ async def _no_rls(engine: AsyncEngine) -> AsyncGenerator[AsyncConnection]:
         yield c
 
 
+def _store_without_rls(self: AgentRegistry) -> AbstractAsyncContextManager[AsyncConnection]:
+    return _no_rls(self.engine)
+
+
 @pytest.mark.parametrize("rls", [True, False], ids=["rls", "query filter alone"])
 async def test_each_tenant_has_its_own_requests(
     engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch, rls: bool
 ) -> None:
     if not rls:
-        monkeypatch.setattr(agent_registry, "tenant_tx", _no_rls)
+        monkeypatch.setattr(AgentRegistry, "tx", _store_without_rls)
     reg = AgentRegistry(engine)
     a, b = f"t-{uuid4().hex[:8]}", f"t-{uuid4().hex[:8]}"
     subject = f"wf_{uuid4().hex[:6]}"

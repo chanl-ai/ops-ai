@@ -30,7 +30,9 @@ defaults. Package rules and test commands: [../CLAUDE.md](../CLAUDE.md); repo-wi
   Security team's actions. `not_by` and `requested_by` enforce separation of duties and bind the dev caller too.
 - A refusal says who can, in words (`who_can`: "a Builder or Admin"); never write a role name into a refusal by hand.
 - Never check a role name, an owner, an id prefix or a flag in service code. A shape that decides access outside
-  `can()` must be listed in `access-exceptions-allowlist.txt`, or `scripts/check_access_exceptions.py` fails.
+  `can()` must be listed in `access-exceptions-allowlist.txt`, or `scripts/check_access_exceptions.py` fails. An
+  `is_admin` flag or a role tested against a list of names can never be listed.
+- Read a policy's value with `policy(p, key)` only; `p.policies` or `BY_KEY[key].default` read elsewhere is a finding.
 - The built-in grid in `docs/architecture/roles-and-permissions.md` is generated from this package; change the code,
   then rewrite the table.
 
@@ -44,7 +46,7 @@ models-service and platform-service.
 | The suite (24 tests, under 10 s) | `make test PKG=packages/ops_access` |
 | One file | `make test PKG=packages/ops_access T=tests/test_can.py` |
 | Roles table in the docs | `uv run python scripts/roles_matrix.py --check` (rewrite without `--check`) |
-| Access decisions outside `can()` | `uv run python scripts/check_access_exceptions.py` |
+| Access decisions outside `can()` | `uv run python scripts/check_access_exceptions.py` (`--self-test` plants one of each shape) |
 | Built-in roles match the checks | `uv run pytest -q scripts/tests/test_builtin_roles_match_checks.py` |
 | Lint, format, types | `uv run ruff check packages/ops_access`, `uv run ruff format --check packages/ops_access`, `uv run pyright packages/ops_access` |
 | A refusal as a real person | `make api GET /v1/<route> AS=viewer` ([calling the API as a person](../../CLAUDE.md#calling-the-api-as-a-person)) |

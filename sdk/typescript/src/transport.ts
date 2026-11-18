@@ -2,7 +2,7 @@
  * The one place a call goes out: the base URL per service, the key and team headers, the `{success, data}` envelope,
  * typed errors and retries. The raw operations and the resource modules call through it.
  */
-import { errorFor } from './errors.js';
+import { ServerError, errorFor } from './errors.js';
 
 export type Service = 'platform' | 'agents' | 'tools' | 'kb' | 'files' | 'documents';
 
@@ -244,4 +244,42 @@ export function pageItems(data: unknown): [unknown[], Record<string, unknown> | 
   if (pagination?.hasNext) return [items, { page: Number(pagination.page ?? 1) + 1 }];
   if (d.nextCursor) return [items, { cursor: d.nextCursor }];
   return [items, null];
+}
+
+/** The install's largest page size; a larger one is answered at this size. */
+export const PAGE_MAX = 50;
+
+/** The rows of a list operation page after page, with the query exactly as given plus each page's own cursor. A next page that repeats the request just made, or follows a page with no rows, is refused: a server that does either would keep the caller looping forever. */
+export async function* eachRow(
+  fetchPage: (query: Record<string, unknown>) => Promise<unknown>,
+  asked: Record<string, unknown> = {},
+): AsyncGenerator<any> {
+  let more: Record<string, unknown> = {};
+  while (true) {
+    const [items, next] = pageItems(await fetchPage({ ...asked, ...more }));
+    if (next && (!items.length || JSON.stringify(next) === JSON.stringify(more))) {
+      throw new ServerError(502, 'paging_loop', `the server repeated or emptied a page while claiming more: ${JSON.stringify(next)}`);
+    }
+    yield* items;
+    if (!next) return;
+    more = next;
+  }
+}
+
+/** The rows of a list operation one by one, asking for the next page only when the last one is used up. A page size above the maximum is never asked for. */
+export function eachPage(
+  fetchPage: (query: Record<string, unknown>) => Promise<unknown>,
+  query: Record<string, unknown> = {},
+): AsyncGenerator<any> {
+  return eachRow(fetchPage, { ...query, pageSize: Math.min(Number(query.pageSize ?? PAGE_MAX), PAGE_MAX) });
+}
+
+/** Every row of a list operation, following `pagination.hasNext` page after page (never the first page only). */
+export async function everyPage(
+  fetchPage: (query: Record<string, unknown>) => Promise<unknown>,
+  query: Record<string, unknown> = {},
+): Promise<any[]> {
+  const rows: any[] = [];
+  for await (const row of eachPage(fetchPage, query)) rows.push(row);
+  return rows;
 }

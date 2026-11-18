@@ -1,0 +1,1108 @@
+{
+  "case-types.badId": {
+    "body": {
+      "error": {
+        "code": "invalid_id",
+        "message": "id: lowercase letters, digits and underscores, starting with a letter.",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
+  "case-types.create": {
+    "body": {
+      "data": {
+        "copiedFrom": {
+          "id": "complaint",
+          "version": 1
+        },
+        "description": "A customer's complaint and how it was triaged.",
+        "id": "fraud_claim",
+        "name": "Copied",
+        "origin": "team",
+        "publishedVersion": null,
+        "teamId": "team_ops",
+        "updatedAt": "<timeZ>",
+        "updatedBy": "james@harborpine.example",
+        "version": 1,
+        "versions": [
+          {
+            "publishedAt": null,
+            "record": {
+              "description": "A customer's complaint and how it was triaged.",
+              "fields": [
+                {
+                  "key": "complaint",
+                  "label": "Complaint",
+                  "required": true,
+                  "type": "text"
+                },
+                {
+                  "key": "category",
+                  "label": "Category",
+                  "type": "text"
+                },
+                {
+                  "key": "urgency",
+                  "label": "Urgency",
+                  "type": "text"
+                },
+                {
+                  "key": "amount",
+                  "label": "Amount",
+                  "type": "money"
+                }
+              ],
+              "name": "Copied"
+            },
+            "savedAt": "<timeZ>",
+            "savedBy": "james@harborpine.example",
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "case-types.createStray": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "colour"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "colour: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "case-types.list": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "copiedFrom": null,
+            "description": "A hold placed on a customer's account.",
+            "id": "account_hold",
+            "name": "Account hold",
+            "origin": "seed",
+            "publishedVersion": 1,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 1
+          },
+          {
+            "copiedFrom": null,
+            "description": "A customer's complaint and how it was triaged.",
+            "id": "complaint",
+            "name": "Complaint",
+            "origin": "seed",
+            "publishedVersion": 1,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 1
+          },
+          {
+            "copiedFrom": null,
+            "description": "A court's restraining notice on a debtor's accounts.",
+            "id": "restraining_notice",
+            "name": "Restraining notice",
+            "origin": "seed",
+            "publishedVersion": 2,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 2
+          },
+          {
+            "copiedFrom": null,
+            "description": "A tax authority's levy on a taxpayer's accounts.",
+            "id": "tax_levy",
+            "name": "Tax levy",
+            "origin": "seed",
+            "publishedVersion": 2,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 2
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 20,
+          "total": 4,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "case-types.missing": {
+    "body": {
+      "error": {
+        "code": "case_type_not_found",
+        "message": "Case type no_such_type was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "case-types.publish": {
+    "body": {
+      "data": {
+        "copiedFrom": {
+          "id": "complaint",
+          "version": 1
+        },
+        "description": "A customer's complaint and how it was triaged.",
+        "id": "fraud_claim",
+        "name": "Copied",
+        "origin": "team",
+        "publishedVersion": 1,
+        "teamId": "team_ops",
+        "updatedAt": "<timeZ>",
+        "updatedBy": "james@harborpine.example",
+        "version": 1,
+        "versions": [
+          {
+            "publishedAt": "<timeZ>",
+            "record": {
+              "description": "A customer's complaint and how it was triaged.",
+              "fields": [
+                {
+                  "key": "complaint",
+                  "label": "Complaint",
+                  "required": true,
+                  "type": "text"
+                },
+                {
+                  "key": "category",
+                  "label": "Category",
+                  "required": false,
+                  "type": "text"
+                },
+                {
+                  "key": "urgency",
+                  "label": "Urgency",
+                  "required": false,
+                  "type": "text"
+                },
+                {
+                  "key": "amount",
+                  "label": "Amount",
+                  "required": false,
+                  "type": "money"
+                }
+              ],
+              "name": "Copied"
+            },
+            "savedAt": "<timeZ>",
+            "savedBy": "james@harborpine.example",
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "case-types.publishStray": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "note"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "note: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "case-types.read": {
+    "body": {
+      "data": {
+        "copiedFrom": null,
+        "description": "A customer's complaint and how it was triaged.",
+        "id": "complaint",
+        "name": "Complaint",
+        "origin": "seed",
+        "publishedVersion": 1,
+        "teamId": "team_ops",
+        "updatedAt": "<timeZ>",
+        "updatedBy": "seed",
+        "version": 1,
+        "versions": [
+          {
+            "publishedAt": "<timeZ>",
+            "record": {
+              "description": "A customer's complaint and how it was triaged.",
+              "fields": [
+                {
+                  "key": "complaint",
+                  "label": "Complaint",
+                  "required": true,
+                  "type": "text"
+                },
+                {
+                  "key": "category",
+                  "label": "Category",
+                  "type": "text"
+                },
+                {
+                  "key": "urgency",
+                  "label": "Urgency",
+                  "type": "text"
+                },
+                {
+                  "key": "amount",
+                  "label": "Amount",
+                  "type": "money"
+                }
+              ],
+              "name": "Complaint"
+            },
+            "savedAt": "<timeZ>",
+            "savedBy": "seed",
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "case-types.save": {
+    "body": {
+      "data": {
+        "copiedFrom": {
+          "id": "complaint",
+          "version": 1
+        },
+        "description": "A customer's complaint and how it was triaged.",
+        "id": "fraud_claim",
+        "name": "Copied",
+        "origin": "team",
+        "publishedVersion": null,
+        "teamId": "team_ops",
+        "updatedAt": "<timeZ>",
+        "updatedBy": "james@harborpine.example",
+        "version": 1,
+        "versions": [
+          {
+            "publishedAt": null,
+            "record": {
+              "description": "A customer's complaint and how it was triaged.",
+              "fields": [
+                {
+                  "key": "complaint",
+                  "label": "Complaint",
+                  "required": true,
+                  "type": "text"
+                },
+                {
+                  "key": "category",
+                  "label": "Category",
+                  "required": false,
+                  "type": "text"
+                },
+                {
+                  "key": "urgency",
+                  "label": "Urgency",
+                  "required": false,
+                  "type": "text"
+                },
+                {
+                  "key": "amount",
+                  "label": "Amount",
+                  "required": false,
+                  "type": "money"
+                }
+              ],
+              "name": "Copied"
+            },
+            "savedAt": "<timeZ>",
+            "savedBy": "james@harborpine.example",
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "case-types.viewerCreates": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "create",
+          "area": "workflows",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot create a case type; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "case-types.viewerSaves": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "edit",
+          "area": "workflows",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot edit this case type; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "task-types.badId": {
+    "body": {
+      "error": {
+        "code": "invalid_id",
+        "message": "id: lowercase letters, digits and underscores, starting with a letter.",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
+  "task-types.create": {
+    "body": {
+      "data": {
+        "copiedFrom": {
+          "id": "write_approval",
+          "version": 1
+        },
+        "description": "Approve a change before it is made in another system.",
+        "id": "vendor_bank_change",
+        "name": "Copied",
+        "origin": "team",
+        "publishedVersion": null,
+        "teamId": "team_ops",
+        "updatedAt": "<timeZ>",
+        "updatedBy": "james@harborpine.example",
+        "version": 1,
+        "versions": [
+          {
+            "publishedAt": null,
+            "record": {
+              "actions": [
+                {
+                  "consequence": "{onApprove}",
+                  "label": "Make the change",
+                  "name": "approve",
+                  "port": "approve",
+                  "reason": "optional",
+                  "tone": "primary"
+                },
+                {
+                  "consequence": "{onReject}",
+                  "label": "Decline",
+                  "name": "reject",
+                  "port": "reject",
+                  "reason": "required",
+                  "tone": "destructive"
+                }
+              ],
+              "description": "Approve a change before it is made in another system.",
+              "name": "Copied",
+              "params": {
+                "properties": {
+                  "call": {
+                    "type": "object"
+                  },
+                  "facts": {
+                    "type": "array"
+                  },
+                  "history": {
+                    "type": "array"
+                  },
+                  "onApprove": {
+                    "fallback": "The change is made now.",
+                    "type": "string"
+                  },
+                  "onReject": {
+                    "fallback": "Nothing changes.",
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "fallback": "Approve this change",
+                    "type": "string"
+                  },
+                  "why": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title",
+                  "call"
+                ],
+                "type": "object"
+              },
+              "regions": [
+                {
+                  "bind": {
+                    "title": "{title}"
+                  },
+                  "region": "header"
+                },
+                {
+                  "bind": {
+                    "source": "{source}",
+                    "why": "{why}"
+                  },
+                  "region": "why_source"
+                },
+                {
+                  "bind": {
+                    "facts": "{facts}"
+                  },
+                  "region": "facts"
+                },
+                {
+                  "bind": {
+                    "call": "{call}"
+                  },
+                  "region": "write_preview"
+                },
+                {
+                  "bind": {
+                    "events": "{history}"
+                  },
+                  "collapsed": true,
+                  "region": "history"
+                }
+              ]
+            },
+            "savedAt": "<timeZ>",
+            "savedBy": "james@harborpine.example",
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "task-types.createStray": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "colour"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "colour: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "task-types.list": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "copiedFrom": null,
+            "description": "Enter the details a workflow needs to go on.",
+            "id": "data_entry",
+            "name": "Data entry",
+            "origin": "seed",
+            "publishedVersion": 1,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 1
+          },
+          {
+            "copiedFrom": null,
+            "description": "A yes-or-no question with the facts it rests on.",
+            "id": "generic_decision",
+            "name": "Decision",
+            "origin": "seed",
+            "publishedVersion": 1,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 1
+          },
+          {
+            "copiedFrom": null,
+            "description": "Check the values read from a document before they are used.",
+            "id": "document_check",
+            "name": "Document check",
+            "origin": "seed",
+            "publishedVersion": 3,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 3
+          },
+          {
+            "copiedFrom": null,
+            "description": "An app turned down the team's account, or its sign-in ended; reconnect it on the app's page.",
+            "id": "app_reconnect",
+            "name": "Reconnect an app",
+            "origin": "seed",
+            "publishedVersion": 1,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 1
+          },
+          {
+            "copiedFrom": null,
+            "description": "Read a reply before it is sent.",
+            "id": "acknowledgement",
+            "name": "Reply check",
+            "origin": "seed",
+            "publishedVersion": 2,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 2
+          },
+          {
+            "copiedFrom": null,
+            "description": "Let a workflow or agent use a tool module. A copy of Write approval with the agent's reason first.",
+            "id": "tool_access_request",
+            "name": "Tool access request",
+            "origin": "seed",
+            "publishedVersion": 2,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 2
+          },
+          {
+            "copiedFrom": null,
+            "description": "Approve a change before it is made in another system.",
+            "id": "write_approval",
+            "name": "Write approval",
+            "origin": "seed",
+            "publishedVersion": 1,
+            "teamId": "team_ops",
+            "updatedAt": "<timeZ>",
+            "updatedBy": "seed",
+            "version": 1
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 20,
+          "total": 7,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "task-types.missing": {
+    "body": {
+      "error": {
+        "code": "task_type_not_found",
+        "message": "Task type no_such_type was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "task-types.publish": {
+    "body": {
+      "data": {
+        "copiedFrom": {
+          "id": "write_approval",
+          "version": 1
+        },
+        "description": "Approve a change before it is made in another system.",
+        "id": "vendor_bank_change",
+        "name": "Copied",
+        "origin": "team",
+        "publishedVersion": 1,
+        "teamId": "team_ops",
+        "updatedAt": "<timeZ>",
+        "updatedBy": "james@harborpine.example",
+        "version": 1,
+        "versions": [
+          {
+            "publishedAt": "<timeZ>",
+            "record": {
+              "actions": [
+                {
+                  "consequence": "{onApprove}",
+                  "label": "Make the change",
+                  "name": "approve",
+                  "port": "approve",
+                  "reason": "optional",
+                  "tone": "primary"
+                },
+                {
+                  "consequence": "{onReject}",
+                  "label": "Decline",
+                  "name": "reject",
+                  "port": "reject",
+                  "reason": "required",
+                  "tone": "destructive"
+                }
+              ],
+              "description": "Approve a change before it is made in another system.",
+              "name": "Copied",
+              "params": {
+                "properties": {
+                  "call": {
+                    "type": "object"
+                  },
+                  "facts": {
+                    "type": "array"
+                  },
+                  "history": {
+                    "type": "array"
+                  },
+                  "onApprove": {
+                    "fallback": "The change is made now.",
+                    "type": "string"
+                  },
+                  "onReject": {
+                    "fallback": "Nothing changes.",
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "fallback": "Approve this change",
+                    "type": "string"
+                  },
+                  "why": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title",
+                  "call"
+                ],
+                "type": "object"
+              },
+              "regions": [
+                {
+                  "bind": {
+                    "title": "{title}"
+                  },
+                  "region": "header"
+                },
+                {
+                  "bind": {
+                    "source": "{source}",
+                    "why": "{why}"
+                  },
+                  "region": "why_source"
+                },
+                {
+                  "bind": {
+                    "facts": "{facts}"
+                  },
+                  "region": "facts"
+                },
+                {
+                  "bind": {
+                    "call": "{call}"
+                  },
+                  "region": "write_preview"
+                },
+                {
+                  "bind": {
+                    "events": "{history}"
+                  },
+                  "collapsed": true,
+                  "region": "history"
+                }
+              ]
+            },
+            "savedAt": "<timeZ>",
+            "savedBy": "james@harborpine.example",
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "task-types.publishStray": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "note"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "note: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "task-types.read": {
+    "body": {
+      "data": {
+        "copiedFrom": null,
+        "description": "Approve a change before it is made in another system.",
+        "id": "write_approval",
+        "name": "Write approval",
+        "origin": "seed",
+        "publishedVersion": 1,
+        "teamId": "team_ops",
+        "updatedAt": "<timeZ>",
+        "updatedBy": "seed",
+        "version": 1,
+        "versions": [
+          {
+            "publishedAt": "<timeZ>",
+            "record": {
+              "actions": [
+                {
+                  "consequence": "{onApprove}",
+                  "label": "Make the change",
+                  "name": "approve",
+                  "port": "approve",
+                  "reason": "optional",
+                  "tone": "primary"
+                },
+                {
+                  "consequence": "{onReject}",
+                  "label": "Decline",
+                  "name": "reject",
+                  "port": "reject",
+                  "reason": "required",
+                  "tone": "destructive"
+                }
+              ],
+              "description": "Approve a change before it is made in another system.",
+              "name": "Write approval",
+              "params": {
+                "properties": {
+                  "call": {
+                    "type": "object"
+                  },
+                  "facts": {
+                    "type": "array"
+                  },
+                  "history": {
+                    "type": "array"
+                  },
+                  "onApprove": {
+                    "fallback": "The change is made now.",
+                    "type": "string"
+                  },
+                  "onReject": {
+                    "fallback": "Nothing changes.",
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "fallback": "Approve this change",
+                    "type": "string"
+                  },
+                  "why": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title",
+                  "call"
+                ],
+                "type": "object"
+              },
+              "regions": [
+                {
+                  "bind": {
+                    "title": "{title}"
+                  },
+                  "region": "header"
+                },
+                {
+                  "bind": {
+                    "source": "{source}",
+                    "why": "{why}"
+                  },
+                  "region": "why_source"
+                },
+                {
+                  "bind": {
+                    "facts": "{facts}"
+                  },
+                  "region": "facts"
+                },
+                {
+                  "bind": {
+                    "call": "{call}"
+                  },
+                  "region": "write_preview"
+                },
+                {
+                  "bind": {
+                    "events": "{history}"
+                  },
+                  "collapsed": true,
+                  "region": "history"
+                }
+              ]
+            },
+            "savedAt": "<timeZ>",
+            "savedBy": "seed",
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "task-types.save": {
+    "body": {
+      "data": {
+        "copiedFrom": {
+          "id": "write_approval",
+          "version": 1
+        },
+        "description": "Approve a change before it is made in another system.",
+        "id": "vendor_bank_change",
+        "name": "Copied",
+        "origin": "team",
+        "publishedVersion": null,
+        "teamId": "team_ops",
+        "updatedAt": "<timeZ>",
+        "updatedBy": "james@harborpine.example",
+        "version": 1,
+        "versions": [
+          {
+            "publishedAt": null,
+            "record": {
+              "actions": [
+                {
+                  "consequence": "{onApprove}",
+                  "label": "Make the change",
+                  "name": "approve",
+                  "port": "approve",
+                  "reason": "optional",
+                  "tone": "primary"
+                },
+                {
+                  "consequence": "{onReject}",
+                  "label": "Decline",
+                  "name": "reject",
+                  "port": "reject",
+                  "reason": "required",
+                  "tone": "destructive"
+                }
+              ],
+              "description": "Approve a change before it is made in another system.",
+              "name": "Copied",
+              "params": {
+                "properties": {
+                  "call": {
+                    "type": "object"
+                  },
+                  "facts": {
+                    "type": "array"
+                  },
+                  "history": {
+                    "type": "array"
+                  },
+                  "onApprove": {
+                    "fallback": "The change is made now.",
+                    "type": "string"
+                  },
+                  "onReject": {
+                    "fallback": "Nothing changes.",
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "fallback": "Approve this change",
+                    "type": "string"
+                  },
+                  "why": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title",
+                  "call"
+                ],
+                "type": "object"
+              },
+              "regions": [
+                {
+                  "bind": {
+                    "title": "{title}"
+                  },
+                  "region": "header"
+                },
+                {
+                  "bind": {
+                    "source": "{source}",
+                    "why": "{why}"
+                  },
+                  "region": "why_source"
+                },
+                {
+                  "bind": {
+                    "facts": "{facts}"
+                  },
+                  "region": "facts"
+                },
+                {
+                  "bind": {
+                    "call": "{call}"
+                  },
+                  "region": "write_preview"
+                },
+                {
+                  "bind": {
+                    "events": "{history}"
+                  },
+                  "collapsed": true,
+                  "region": "history"
+                }
+              ]
+            },
+            "savedAt": "<timeZ>",
+            "savedBy": "james@harborpine.example",
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "task-types.viewerCreates": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "create",
+          "area": "workflows",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot create a task type; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "task-types.viewerSaves": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "edit",
+          "area": "workflows",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot edit this task type; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  }
+}

@@ -86,7 +86,7 @@ with ExitStack() as stack:
         stolen.text[:300],
     )
     done = gw.post("/v1/sign-ins/complete", json=finish_body)
-    signed = (data(done) or {}).get("signedIn") or {}
+    signed = ((data(done) or {}).get("account") or {}).get("signedIn") or {}
     check("3 the person who started finishes it (200)", done.status_code == 200, done.text[:300])
     check("3 the account says who signed in", signed.get("account") == "svc-lending@bank.test", signed)
     check("3 no token is shown", "at_" not in done.text and "rt_" not in done.text, "token in the detail")

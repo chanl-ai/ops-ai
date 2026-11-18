@@ -52,7 +52,7 @@ async def introspect(key: str) -> dict[str, Any] | None:
         "sub": "key_ops",
         "email": "case-system@harborpine.example",
         "name": "case system",
-        "tenantId": "acme",
+        "tenantId": "local",
         "teamId": "team_ops",
         "scopes": ["read", "write"],
     }

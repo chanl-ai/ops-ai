@@ -7,11 +7,15 @@ import { FormField } from '@/components/shared/form-field';
 import { LoadingButton } from '@/components/shared/loading-button';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { RoleSelect } from '@/components/access/role-select';
+import { rolesWhere } from '@/hooks/me-queries';
+import { useOptionLabels } from '@/hooks/options-queries';
 import type { RoleInput, RoleSummary } from '@/lib/types/settings';
 
 const NOTHING = '__nothing__';
+/** Every role of the workspace, the choices to copy from; searched on the server. */
+const allRoles = rolesWhere('role-copy-options');
 
 /**
  * Creates a custom role, empty or as a copy of another role (`copyOf` preselects it), or renames one (`role` set).
@@ -20,7 +24,6 @@ const NOTHING = '__nothing__';
 export function RoleDialog({
   open,
   onOpenChange,
-  roles,
   role,
   copyOf,
   pending,
@@ -28,8 +31,6 @@ export function RoleDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Every role of the workspace, the choices to copy from. */
-  roles: RoleSummary[];
   /** The custom role to rename; unset makes a new one. */
   role?: RoleSummary | null;
   copyOf?: string | null;
@@ -42,12 +43,16 @@ export function RoleDialog({
   const [errors, setErrors] = React.useState<{ name?: string; form?: string }>({});
   React.useEffect(() => {
     if (!open) return;
-    const from = roles.find((r) => r.id === copyOf);
-    setName(role?.name ?? (from ? `${from.name} copy` : ''));
+    setName(role?.name ?? '');
     setDescription(role?.description ?? '');
     setSource(copyOf ?? NOTHING);
     setErrors({});
-  }, [open, role, copyOf, roles]);
+  }, [open, role, copyOf]);
+  // A copy starts under its source's name, until the person types their own.
+  const copyName = useOptionLabels(allRoles, open && !role && source !== NOTHING ? [source] : []).data?.data[0]?.label;
+  React.useEffect(() => {
+    if (copyName) setName((prev) => (!prev || prev.endsWith(' copy') ? `${copyName} copy` : prev));
+  }, [copyName]);
 
   const submit = async () => {
     if (!name.trim()) {
@@ -98,19 +103,7 @@ export function RoleDialog({
         </FormField>
         {!role && (
           <FormField id="role-source" label="Start from" hint="A copy leaves out the permissions a custom role cannot hold.">
-            <Select value={source} onValueChange={setSource}>
-              <SelectTrigger id="role-source" data-testid="role-source">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NOTHING}>No permissions</SelectItem>
-                {roles.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
-                    A copy of {r.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <RoleSelect source={allRoles} value={source === NOTHING ? '' : source} onChange={(id) => setSource(id || NOTHING)} placeholder="No permissions" noneLabel="No permissions" prefix="A copy of " testId="role-source" className="w-full" />
           </FormField>
         )}
       </div>

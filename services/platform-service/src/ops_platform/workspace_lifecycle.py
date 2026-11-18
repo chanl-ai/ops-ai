@@ -21,6 +21,7 @@ from typing import Any
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.ids import new_id
 from ops_service_kit.logging import get_logger
+from ops_store import isolation
 
 from .store.lifecycle import (
     CLOSED,
@@ -31,6 +32,7 @@ from .store.lifecycle import (
     NotOwnerError,
     PurgeStartedError,
     WorkspaceNotActiveError,
+    WorkspaceState,
 )
 from .store.members import Actor
 from .store.teams import TeamAdminStore
@@ -75,9 +77,8 @@ class WorkspaceLifecycle:
     async def _is_owner(self, actor: Actor) -> None:
         await self.members.require_admin(workspace(actor), "workspace", "manage")
 
-    async def state(self, tenant_id: str) -> dict[str, Any]:
+    def state_of(self, s: WorkspaceState) -> dict[str, Any]:
         """What `/v1/me` says of the workspace: its owner, status and, while closed, when it will be purged."""
-        s = await self.store.state(tenant_id)
         purge_after = None
         if s.status == CLOSED and s.closed_at:
             closed_at = datetime.fromisoformat(s.closed_at.replace("Z", "+00:00"))
@@ -104,11 +105,10 @@ class WorkspaceLifecycle:
             raise _owner_changed() from e
         except WorkspaceNotActiveError as e:
             raise closed() from e
-        return await self.state(actor.tenant_id)
+        return self.state_of(await self.store.state(actor.tenant_id))
 
     async def leave(self, actor: Actor) -> None:
-        if (await self.store.state(actor.tenant_id)).owner == actor.user_id:
-            raise _owner_must_transfer()
+        # The store refuses the owner inside the transaction that would remove them, before any write (E42).
         try:
             await self.store.leave(
                 actor.tenant_id, user_id=actor.user_id, at=_iso(datetime.now(UTC)), request_id=actor.request_id
@@ -130,10 +130,10 @@ class WorkspaceLifecycle:
 
     async def close(self, actor: Actor, name: str, usage: UsageReader) -> dict[str, Any]:
         await self._is_owner(actor)
-        rows, _, _ = await self.teams.every(actor.tenant_id, statuses=["active", "archived"], page_size=10_000)
+        rows = await self.teams.every(actor.tenant_id, statuses=["active", "archived"])
         if name.strip() != (await self.store.name(actor.tenant_id)):
             raise ValidationFailed("Type the workspace's name exactly to delete it.", code="name_mismatch")
-        found = await self._usages(actor.tenant_id, [str(r["id"]) for r in rows], usage)
+        found = await self._usages(actor.tenant_id, [r.id for r in rows], usage)
         running = sum(u.runs_in_progress for u in found.values())
         if running:
             raise Conflict(
@@ -147,7 +147,7 @@ class WorkspaceLifecycle:
             raise _owner_changed() from e
         except WorkspaceNotActiveError as e:
             raise closed() from e
-        return await self.state(actor.tenant_id)
+        return self.state_of(await self.store.state(actor.tenant_id))
 
     async def restore(self, actor: Actor) -> dict[str, Any]:
         await self._is_owner(actor)
@@ -157,7 +157,7 @@ class WorkspaceLifecycle:
             raise Conflict("The workspace's records are already being removed.", code="purged") from e
         except WorkspaceNotActiveError as e:
             raise Conflict("The workspace is not closed.", code="not_closed") from e
-        return await self.state(actor.tenant_id)
+        return self.state_of(await self.store.state(actor.tenant_id))
 
     async def leave_team(self, actor: Actor, team_id: str) -> None:
         try:
@@ -172,12 +172,15 @@ class WorkspaceLifecycle:
             raise NotFound("team membership")
 
     async def delete_check(self, actor: Actor, team_id: str, usage: UsageReader) -> dict[str, Any]:
-        """What the Delete card shows: whether the team may be deleted now and, if not, each reason."""
-        await self.members.require_admin(workspace(actor), "access", "manage")
-        state = await self.store.team_state(actor.tenant_id, team_id)
+        """What the Delete card shows: whether the team may be deleted now and, if not, each reason. The reads run in
+        one transaction that ends before agents-service is asked, so none is open across the call."""
+        async with isolation.request_transaction():
+            await self.members.require_admin(workspace(actor), "access", "manage")
+            state = await self.store.team_state(actor.tenant_id, team_id)
+            security = team_id == await self.teams.security_team_of(actor.tenant_id)
         if state is None:
             raise NotFound("team")
-        status, archived_at = state
+        status, archived_at = state.status, state.archived_at
         days_left = None
         if status == "archived" and archived_at:
             since = datetime.fromisoformat(archived_at.replace("Z", "+00:00"))
@@ -187,7 +190,6 @@ class WorkspaceLifecycle:
             found: TeamUsage | None = await usage.of(actor.tenant_id, team_id)
         except UsageUnavailable:
             found = None
-        security = team_id == await self.teams.security_team_of(actor.tenant_id)
         can_delete = (
             not security and status == "archived" and days_left == 0 and found is not None and not found.live_workflows
         )
@@ -209,11 +211,11 @@ class WorkspaceLifecycle:
         state = await self.store.team_state(actor.tenant_id, team_id)
         if state is None:
             raise NotFound("team")
-        if state[0] != "archived" or not state[1]:
+        if state.status != "archived" or not state.archived_at:
             raise Conflict("Archive the team before deleting it.", code="not_archived")
         now = datetime.now(UTC)
         cutoff = _iso(now - timedelta(days=self.team_delete_after_days))
-        if state[1] > cutoff:
+        if state.archived_at > cutoff:
             raise Conflict(
                 f"A team is deleted only after {self.team_delete_after_days} days archived.",
                 code="archived_too_recently",

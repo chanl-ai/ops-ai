@@ -46,7 +46,7 @@ async def build(rows: dict[str, str]) -> None:
     try:
         for table, version in rows.items():
             await c.execute(f"CREATE TABLE {table} (version_num varchar(32) NOT NULL)")
-            await c.execute(f"INSERT INTO {table} VALUES ($1)", version)
+            await c.execute(f"INSERT INTO {table} VALUES ($1)", version)  # noqa: S608
     finally:
         await c.close()
 

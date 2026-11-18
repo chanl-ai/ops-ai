@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Iterator
 from typing import Any, cast
 
-from ._transport import Operation, page_items
+from ._transport import PAGE_MAX, Operation, iter_rows, iter_rows_async, page_items
 
 SERVICE = "agents"
 LINKED = "CONNECTION_NOT_LINKED"
@@ -134,6 +134,10 @@ class Chat:
         agent Test panel's threads, which the chat list leaves out)."""
         return page_items(self._call("threads", **query))[0]
 
+    def every_thread(self, **query: Any) -> list[dict[str, Any]]:
+        """Every conversation `threads` would list, page after page (50 rows a page)."""
+        return list(iter_rows(lambda **q: self._call("threads", **q), **{"pageSize": PAGE_MAX, **query}))
+
     def start(
         self, agent: str | None = None, *, kb_ids: list[str] | None = None, test: bool = False, title: str | None = None
     ) -> dict[str, Any]:
@@ -195,6 +199,11 @@ class AsyncChat:
 
     async def threads(self, **query: Any) -> list[dict[str, Any]]:
         return page_items(await self._call("threads", **query))[0]
+
+    async def every_thread(self, **query: Any) -> list[dict[str, Any]]:
+        return [
+            row async for row in iter_rows_async(lambda **q: self._call("threads", **q), pageSize=PAGE_MAX, **query)
+        ]
 
     async def start(
         self, agent: str | None = None, *, kb_ids: list[str] | None = None, test: bool = False, title: str | None = None

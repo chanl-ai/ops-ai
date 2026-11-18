@@ -31,6 +31,7 @@ WEBHOOK = "notify_webhook"
 FIELD_KEYS = ("name", "type", "required", "description", "format", "enum", "example", "default")
 # Maya Okafor's team in platform-service's directory and the tools seed (services/tools-service/seed/tool_modules.json).
 HOLD_TEAM = "team_ops"
+STORED_SETTINGS = ("BANK_API_KEY", "LEVY_WEBHOOK_SECRET")
 
 
 def data(r: httpx.Response) -> Any:
@@ -152,8 +153,7 @@ async def ensure_module(api: httpx.AsyncClient, host: str = HOST) -> tuple[str, 
     """The module calling `host`, created from the host's OpenAPI document through tools-service's own discover and
     create routes when none does (a clean stack has none; it then goes through review like any import). Returns its
     id and whether it was created."""
-    listed: dict[str, Any] = data(await api.get("/v1/tool-modules", params={"pageSize": 200}))
-    if any(host in str(m.get("endpoint") or "") for m in listed["data"]):
+    if any(host in str(m.get("endpoint") or "") for m in await every_module(api)):
         return await find_module(api, host), False
     source = {"kind": "openapi", "specUrl": f"https://{host}/openapi.json"}
     found = data(await api.post("/v1/tool-modules/discover", json=source))
@@ -172,10 +172,21 @@ async def ensure_module(api: httpx.AsyncClient, host: str = HOST) -> tuple[str, 
     return str(data(await api.post("/v1/tool-modules", json=body))["id"]), True
 
 
+async def every_module(api: httpx.AsyncClient) -> list[dict[str, Any]]:
+    """Every module the team sees, page by page: the list answers at most 50 rows a page."""
+    rows: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        listed: dict[str, Any] = data(await api.get("/v1/tool-modules", params={"pageSize": 50, "page": page}))
+        rows += listed["data"]
+        if not listed["pagination"]["hasNext"]:
+            return rows
+        page += 1
+
+
 async def find_module(api: httpx.AsyncClient, host: str) -> str:
-    """The one module whose endpoint is on `host`. The list answers a page envelope: `data` holds the rows."""
-    listed: dict[str, Any] = data(await api.get("/v1/tool-modules", params={"pageSize": 200}))
-    rows: list[dict[str, Any]] = list(listed["data"])
+    """The one module whose endpoint is on `host`."""
+    rows = await every_module(api)
     hits = [m for m in rows if host in str(m.get("endpoint") or "")]
     if len(hits) != 1:
         raise SystemExit(f"{len(hits)} modules call {host}; pass --module <id>: {[m['id'] for m in hits] or rows}")
@@ -226,8 +237,11 @@ async def main() -> None:
         httpx.AsyncClient(base_url=args.tools, headers=keeper, timeout=60) as secrets,
     ):
         team = builder.get("X-Team-Id")
-        print(f"BANK_API_KEY: {await ensure_secret(secrets, 'BANK_API_KEY', args.bank_key, team)}")
-        print(f"LEVY_WEBHOOK_SECRET: {await ensure_secret(secrets, 'LEVY_WEBHOOK_SECRET', args.webhook_secret, team)}")
+        created = 0
+        for name, value in zip(STORED_SETTINGS, (args.bank_key, args.webhook_secret), strict=True):
+            state = await ensure_secret(secrets, name, value, team)
+            created += 1 if state == "created" else 0
+        print(f"bank settings: {created} created, {len(STORED_SETTINGS) - created} already set")
         if args.module:
             module_id = args.module
         else:

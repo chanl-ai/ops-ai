@@ -21,5 +21,9 @@ if run.get("taskId"):
 `ops.raw.<service>.<operationId>(...)`. The address, key and team can also come from `OPS_BASE_URL`, `OPS_API_KEY`
 and `OPS_TEAM`, or from a profile file you write at `~/.config/ops-ai/config.json`.
 
+Lists: `ops.agents.list(search="claims")` follows every page (50 rows at a time); a `raw` operation returns one page as
+`{"data": [...], "pagination": {...}, "facets": {...}}`. A refused call raises a subclass of `OpsError` with `status`,
+`code`, `message` and `request_id`. Both are described in https://opsai.chanl.ai/docs/architecture/api#lists-and-errors.
+
 The `_generated` folder is written by `sdk/generate.py` from the services' OpenAPI documents; run `make sdk` after a
 route changes, and `make sdk-check` fails until you do.

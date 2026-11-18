@@ -54,7 +54,8 @@ export async function until(probe, seconds = 90) {
 
 async function call(method, path, headers, body) {
   const r = await fetch(`${agents}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-  return { status: r.status, data: (await r.json().catch(() => ({}))).data };
+  const reply = await r.json().catch(() => ({}));
+  return { status: r.status, data: reply.data, error: reply.error };
 }
 
 /** Saves a workflow from YAML or a definition object and asks to publish it; `live` is true once it is approved. */
@@ -68,7 +69,7 @@ export async function saveAndPublish(headers, source) {
 /** Starts `workflowId` with `input` and returns its run id. */
 export async function start(headers, workflowId, input, extra = {}) {
   const r = await call('POST', '/v1/runs', headers, { workflowId, input, ...extra });
-  if (!r.data?.runId) throw new Error(`starting ${workflowId}: ${r.status} ${JSON.stringify(r.data).slice(0, 300)}`);
+  if (!r.data?.runId) throw new Error(`starting ${workflowId}: ${r.status} ${JSON.stringify(r.data ?? r.error ?? null).slice(0, 300)}`);
   return r.data.runId;
 }
 

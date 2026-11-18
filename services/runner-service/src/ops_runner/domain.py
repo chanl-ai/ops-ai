@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import NotRequired, TypedDict
+
+from ops_service_kit.http import JsonValue
 
 DEFAULT_MEMORY_MB = 256
 DEFAULT_TIME_S = 10.0
@@ -18,34 +20,42 @@ class Limits:
     calls: int = DEFAULT_CALLS
 
 
+class Failure(TypedDict):
+    code: str
+    message: str
+
+
+class CallReply(TypedDict):
+    """The host's answer to one `ops.call`, written back to the guest as one line."""
+
+    ok: bool
+    output: NotRequired[JsonValue]
+    error: NotRequired[Failure | None]
+
+
+class Trace(TypedDict):
+    """One `ops.call`: the tool, whether it answered, and its error code when it did not."""
+
+    tool: str
+    ok: bool
+    code: str | None
+
+
 @dataclass
 class RunResult:
     ok: bool
-    output: Any = None
-    error: dict[str, str] | None = None
+    output: JsonValue = None
+    error: Failure | None = None
     log: str = ""
     calls: int = 0
     create_ms: int = 0
     execute_ms: int = 0
-    # One entry per `ops.call`: the tool, whether it answered, and its error code when it did not.
-    trace: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
-
-    def wire(self) -> dict[str, Any]:
-        return {
-            "ok": self.ok,
-            "output": self.output,
-            "error": self.error,
-            "log": self.log,
-            "calls": self.calls,
-            "createMs": self.create_ms,
-            "executeMs": self.execute_ms,
-            "trace": self.trace,
-        }
+    trace: list[Trace] = field(default_factory=list[Trace])
 
 
 # One `ops.call` from the guest: (tool, args) to {"ok": True, "output": ...} or {"ok": False, "error": {code, message}}.
-CallAnswer = Callable[[str, dict[str, Any]], dict[str, Any]]
+CallAnswer = Callable[[str, dict[str, JsonValue]], CallReply]
 
 
-def failure(code: str, message: str) -> dict[str, str]:
+def failure(code: str, message: str) -> Failure:
     return {"code": code, "message": message}

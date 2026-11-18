@@ -10,11 +10,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, TypedDict, cast
+
+from pydantic import JsonValue
 
 from ops_service_kit.errors import Conflict, Unprocessable, ValidationFailed
 
 from ..store.guardrails import GuardrailRegistry
+from ..store.pin_users import PinUsers
 from .agent_registry import SEED_TEAM, seed_agent_version
 from .agent_registry import registry as agent_registry
 from .auth import Principal, review_teams
@@ -54,55 +57,105 @@ def check_config(kind: str, config: dict[str, Any]) -> dict[str, Any]:
 async def pinned_by(rt: Runtime, guardrail_id: str) -> list[str]:
     """Agents whose newest or published version pins the guardrail, and published workflows whose agent steps
     carry it."""
-    from .skills import workflows_pinning  # noqa: PLC0415 - skills imports this module
-
-    reg = agent_registry(rt)
-    names: list[str] = []
-    for row in await reg.rows():
-        for n in {row["version"], row["published_version"]} - {None}:
-            spec = (await reg.version(row["id"], int(n)))["spec"]
-            pins: list[dict[str, Any]] = list(spec.get("guardrailPins") or [])
-            if any(p.get("guardrailId") == guardrail_id for p in pins):
-                names.append(str(spec["name"]))
-                break
-    names.extend(await workflows_pinning(rt, "guardrails", "guardrail_id", guardrail_id))
-    return sorted(set(names))
+    return (await users_of(rt, [guardrail_id]))[guardrail_id]
 
 
-async def view(rt: Runtime, guardrail_id: str) -> dict[str, Any]:
-    reg = guardrails(rt)
-    row = await reg.row(guardrail_id)
-    versions = await reg.versions(guardrail_id)
-    by_n = {v["version"]: v for v in versions}
-    current = by_n.get(row["published_version"]) or by_n[row["version"]]
-    pending = [r for r in await agent_registry(rt).requests("guardrail", guardrail_id) if r["status"] == "pending"]
-    return {
-        "id": row["id"],
-        "slug": row["slug"],
-        "name": row["name"],
-        "kind": row["kind"],
-        "owner": row["owner"],
-        "status": row["status"],
-        "version": row["version"],
-        "publishedVersion": row["published_version"],
-        "config": current["config"],
-        "usedBy": await pinned_by(rt, guardrail_id),
-        "pendingRequestId": pending[0]["id"] if pending else None,
-        "versions": [
+async def users_of(rt: Runtime, guardrail_ids: list[str]) -> dict[str, list[str]]:
+    """`pinned_by` for each of `guardrail_ids`, read once for the lot: every agent's newest and published version in
+    one query, and the published workflows once. An agent is named by the first of its versions that pins it."""
+    from .skills import workflows_pinning_each  # noqa: PLC0415 - skills imports this module
+
+    wanted = set(guardrail_ids)
+    names: dict[str, set[str]] = {g: set() for g in guardrail_ids}
+    named: dict[str, set[str]] = {g: set() for g in guardrail_ids}
+    for held in await PinUsers(rt.db).held_versions():
+        pins = held.spec.get("guardrailPins")
+        pinned: set[str] = set()
+        for p in pins if isinstance(pins, list) else []:
+            if isinstance(p, dict):
+                pinned.add(str(p.get("guardrailId")))
+        for gid in pinned & wanted:
+            if held.agent_id not in named[gid]:
+                named[gid].add(held.agent_id)
+                names[gid].add(str(held.spec["name"]))
+    by_workflow = await workflows_pinning_each(rt, "guardrails", "guardrail_id")
+    return {g: sorted(names[g] | by_workflow.get(g, set())) for g in guardrail_ids}
+
+
+class VersionView(TypedDict):
+    version: int
+    config: dict[str, JsonValue]
+    state: str
+    note: str
+    savedBy: str
+    savedAt: str
+    publishedAt: str | None
+    publishedBy: str | None
+
+
+class GuardrailView(TypedDict):
+    id: str
+    slug: str
+    name: str
+    kind: str
+    owner: str
+    status: str
+    version: int
+    publishedVersion: int | None
+    config: dict[str, JsonValue]
+    usedBy: list[str]
+    pendingRequestId: str | None
+    versions: list[VersionView]
+    updatedAt: str
+
+
+async def view(rt: Runtime, guardrail_id: str) -> GuardrailView:
+    return (await views(rt, [await guardrails(rt).row(guardrail_id)]))[0]
+
+
+async def views(rt: Runtime, rows: list[dict[str, Any]]) -> list[GuardrailView]:
+    """The console's view of each guardrail row, in order, with a fixed number of reads however many rows there are:
+    the versions, pending requests and users of the lot are each read once."""
+    ids = [str(r["id"]) for r in rows]
+    versions = await guardrails(rt).versions_of(ids)
+    pending = await PinUsers(rt.db).pending("guardrail", ids)
+    used = await users_of(rt, ids)
+    out: list[GuardrailView] = []
+    for row in rows:
+        gid = str(row["id"])
+        by_n = {v.version: v for v in versions[gid]}
+        current = by_n.get(row["published_version"]) or by_n[row["version"]]
+        asked = pending.get(gid)
+        out.append(
             {
-                "version": v["version"],
-                "config": v["config"],
-                "state": "published" if v["published_at"] else "draft",
-                "note": v["note"],
-                "savedBy": v["saved_by"],
-                "savedAt": v["saved_at"],
-                "publishedAt": v["published_at"],
-                "publishedBy": v["published_by"],
+                "id": gid,
+                "slug": row["slug"],
+                "name": row["name"],
+                "kind": row["kind"],
+                "owner": row["owner"],
+                "status": row["status"],
+                "version": row["version"],
+                "publishedVersion": row["published_version"],
+                "config": current.config,
+                "usedBy": used[gid],
+                "pendingRequestId": asked.id if asked else None,
+                "versions": [
+                    {
+                        "version": v.version,
+                        "config": v.config,
+                        "state": "published" if v.published_at else "draft",
+                        "note": v.note,
+                        "savedBy": v.saved_by,
+                        "savedAt": v.saved_at,
+                        "publishedAt": v.published_at,
+                        "publishedBy": v.published_by,
+                    }
+                    for v in versions[gid]
+                ],
+                "updatedAt": row["updated_at"],
             }
-            for v in versions
-        ],
-        "updatedAt": row["updated_at"],
-    }
+        )
+    return out
 
 
 async def publish(rt: Runtime, req: dict[str, Any], by: str) -> None:
@@ -144,10 +197,10 @@ async def load_seed(rt: Runtime, path: Path) -> None:
     """Seeds each guardrail in `path` that has no row yet, published at v1, and pins it on the agents it names
     (`seed_agent_version`: published in dev, reviewed elsewhere, never over a person's draft). An existing guardrail
     is left as it is, so an unpin or a later version made in the console survives a restart."""
-    if not path.is_file():
+    if not path.is_file():  # noqa: ASYNC240
         return
     reg = guardrails(rt)
-    seeds: list[dict[str, Any]] = json.loads(path.read_text())
+    seeds: list[dict[str, Any]] = json.loads(path.read_text())  # noqa: ASYNC240
     for g in seeds:
         if await reg.find(g["id"]) is not None:
             continue

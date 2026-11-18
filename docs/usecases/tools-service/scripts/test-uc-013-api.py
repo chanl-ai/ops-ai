@@ -61,7 +61,7 @@ with fake_bank() as bank, agents(), tools(settings=bank.settings) as gw:
     )
 
     made = gw.post("/v1/secrets", json={"name": NAME, "value": VALUE})
-    listed = gw.get("/v1/secrets")
+    listed = gw.get(f"/v1/secrets?ids={NAME}")
     check(
         "the secret is created (201) and its value is in neither answer",
         made.status_code == 201 and VALUE not in made.text + listed.text,

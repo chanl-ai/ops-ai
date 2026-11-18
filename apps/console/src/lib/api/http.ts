@@ -28,17 +28,14 @@ import { createEvalsHttp } from './evals-http';
 import { createModelRiskHttp } from './model-risk-http';
 import { createToolModulesHttp } from './tool-modules-http';
 import { createEgressHttp } from './egress-http';
-import { createSecretsHttp } from './secrets-http';
 import { createConnectionsHttp } from './connections-http';
 import { createIntegrationsHttp } from './integrations-http';
 import { createFilesHttp } from './files-http';
 import { createTemplatesHttp } from './templates-http';
 import { createPromptsHttp } from './prompts-http';
-import { createGuardrailsHttp } from './guardrails-http';
 import { createSkillsHttp } from './skills-http';
 import { createWidgetDeploymentsHttp } from './widget-deployments-http';
 import { createBatchesHttp } from './batches-http';
-import { createFormsHttp } from './forms-http';
 import { createActivityHttp } from './activity-http';
 import { createCaseRecordsHttp } from './case-records-http';
 import { createWidgetsHttp } from './widgets-http';
@@ -52,6 +49,7 @@ function qs(params: ListParams & { view?: string; group?: string }) {
   if (params.search) q.set('search', params.search);
   if (params.sortBy) q.set('sortBy', params.sortBy);
   if (params.sortOrder) q.set('sortOrder', params.sortOrder);
+  for (const id of params.ids ?? []) q.append('ids', id);
   if (params.view) q.set('view', params.view);
   if (params.group) q.set('group', params.group);
   for (const [k, v] of Object.entries(params.filters ?? {})) v?.forEach((x) => q.append(k, x));
@@ -180,8 +178,8 @@ export function createRegistryToolsDirectory(baseUrl: string): Pick<OpsApi['tool
   };
 }
 
-export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'skills' | 'guardrails' | 'widgets' | 'widgetDeployments' | 'forms' | 'batches' | 'caseRecords' | 'activity' | 'overview' | 'assurance'> {
-  const { agents, workflows, engine, channels, skills, guardrails, widgets, widgetDeployments, forms, batches, caseRecords, activity, overview, assurance } = createHttpApi(`${baseUrl}/v1`);
+export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' | 'workflows' | 'engine' | 'channels' | 'skills' | 'widgets' | 'widgetDeployments' | 'batches' | 'caseRecords' | 'activity' | 'overview' | 'assurance'> {
+  const { agents, workflows, engine, channels, skills, widgets, widgetDeployments, batches, caseRecords, activity, overview, assurance } = createHttpApi(`${baseUrl}/v1`);
   const { bulkUpdate: _au, bulkRemove: _ar, ...agentCalls } = agents;
   const { bulkUpdate: _wu, ...workflowCalls } = workflows;
   const notServed = (what: string) => () => Promise.reject(new ApiError(`${what} is not available on this backend yet.`, 501));
@@ -190,10 +188,8 @@ export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' |
     workflows: workflowCalls,
     engine,
     channels,
-    guardrails,
     widgets,
     widgetDeployments,
-    forms,
     batches,
     caseRecords,
     activity,
@@ -226,13 +222,12 @@ export function createRegistryOnlyHttp(baseUrl: string): Pick<OpsApi, 'agents' |
   };
 }
 
-/** Tool modules, the egress allow-list, secrets, connections and the gateway's call log (Activity) against tools-service under `/v1`. */
-export function createToolsOnlyHttp(baseUrl: string): Pick<OpsApi, 'toolModules' | 'egress' | 'secrets' | 'connections' | 'mcpLinks'> & { toolCalls: GovernanceApi['toolCalls'] } {
+/** Tool modules, the egress allow-list, connections and the gateway's call log (Activity) against tools-service under `/v1`. */
+export function createToolsOnlyHttp(baseUrl: string): Pick<OpsApi, 'toolModules' | 'egress' | 'connections' | 'mcpLinks'> & { toolCalls: GovernanceApi['toolCalls'] } {
   const t = createTransport(`${baseUrl}/v1`);
   return {
     toolModules: createToolModulesHttp(t.get, t.send, t.qs),
     egress: createEgressHttp(t.get, t.send, t.qs),
-    secrets: createSecretsHttp(t.get, t.send, t.qs),
     connections: createConnectionsHttp(t.get, t.send),
     toolCalls: createExecutionsHttp(t.get),
     mcpLinks: createMcpLinksHttp(t.get, t.send),
@@ -252,7 +247,6 @@ export function createHttpApi(baseUrl: string): OpsApi {
   return {
     overview: { get: () => get('/overview') },
     agents: {
-      list: (p) => get(`/agents?${qs(p)}`),
       get: (id) => get(`/agents/${id}`),
       create: (i) => send('POST', '/agents', i),
       update: (id, i) => send('PATCH', `/agents/${id}`, i),
@@ -269,13 +263,10 @@ export function createHttpApi(baseUrl: string): OpsApi {
       toolOptions: (p) => get(`/tools/options?${optionsQs(p)}${p.agents === false ? '&agents=false' : ''}`),
       modelAliases: () => get('/model-aliases'),
       test: (id, message) => send('POST', `/agents/${id}/test`, { message }),
-      knowledgeUsage: () => get('/knowledge-usage'),
       bulkUpdate: (ids, patch) => send('POST', '/agents/bulk-update', { ids, patch }),
       bulkRemove: (ids) => send('POST', '/agents/bulk-delete', { ids }),
     },
     workflows: {
-      // The current engine's workflows only: the console no longer shows the earlier engine's.
-      list: (p) => get(`/workflows?${qs(p)}&engine=current`),
       get: (id) => get(`/workflows/${id}`),
       create: (i) => send('POST', '/workflows', i),
       validate: (id, graph, target) => send('POST', `/workflows/${id}/validate`, { graph, target }),
@@ -287,7 +278,6 @@ export function createHttpApi(baseUrl: string): OpsApi {
       update: (id, i) => send('PATCH', `/workflows/${id}`, i),
       setStatus: (id, status) => send('POST', `/workflows/${id}/status`, { status }),
       remove: (id) => send('DELETE', `/workflows/${id}`),
-      runs: (id, p) => get(`/workflows/${id}/runs?${qs(p)}`),
       versions: (id) => get(`/workflows/${id}/versions`),
       restore: (id, version) => send('POST', `/workflows/${id}/versions/${version}/restore`),
       bulkUpdate: (ids, patch) => send('POST', '/workflows/bulk-update', { ids, patch }),
@@ -316,13 +306,12 @@ export function createHttpApi(baseUrl: string): OpsApi {
     workspacePolicies: createWorkspacePoliciesHttp(get, send),
     workspaceTeams: createWorkspaceTeamsHttp(get, send),
     signInProviders: createSignInProvidersHttp(get, send),
-    providerKeys: createProviderKeysHttp(get, send),
-    providerConnections: createProviderConnectionsHttp(get, send),
+    providerKeys: createProviderKeysHttp(get, send, qs),
+    providerConnections: createProviderConnectionsHttp(get, send, qs),
     evals: createEvalsHttp(get, send, qs),
     modelRisk: createModelRiskHttp(get, send, qs),
     toolModules: createToolModulesHttp(get, send, qs),
     egress: createEgressHttp(get, send, qs),
-    secrets: createSecretsHttp(get, send, qs),
     connections: createConnectionsHttp(get, send),
     integrations: createIntegrationsHttp(get),
     files: createFilesHttp(get, send, qs),
@@ -333,11 +322,9 @@ export function createHttpApi(baseUrl: string): OpsApi {
     skills: createSkillsHttp(get, send, qs, baseUrl),
     widgets: createWidgetsHttp(get, send, qs),
     widgetDeployments: createWidgetDeploymentsHttp(get, send, baseUrl),
-    forms: createFormsHttp(get, send),
     batches: createBatchesHttp(get, send, baseUrl),
     caseRecords: createCaseRecordsHttp(get, send),
     activity: createActivityHttp(get),
-    guardrails: createGuardrailsHttp(get, send, qs),
     assurance: createAssuranceHttp(get, send, qs),
     mcpLinks: createMcpLinksHttp(get, send),
     wiki: createWikiHttp(get, send, qs),

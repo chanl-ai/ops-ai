@@ -31,7 +31,8 @@ export function createMockSignInProviders(): SignInProvidersApi {
   return {
     list: async () => structuredClone(rows),
     save: async (id, input) => {
-      const clash = input.domains.find((d) => owner(d) && owner(d)!.id !== id);
+      const domains = input.domains;
+      const clash = domains.find((d) => owner(d) && owner(d)!.id !== id);
       if (clash) throw new ApiError(`${clash} is on another of this workspace's providers; remove it there first.`, 409, undefined, 'domain_taken');
       const before = rows.find((p) => p.id === id);
       const kept = (d: string) => before?.verification.find((c) => c.domain === d)?.verifiedAt ?? null;
@@ -40,12 +41,31 @@ export function createMockSignInProviders(): SignInProvidersApi {
         kind: input.kind,
         label: input.label,
         enabled: input.enabled,
-        domains: [...input.domains].sort(),
-        oidc: input.oidc ?? null,
-        saml: input.saml ?? null,
-        jit: input.jit ?? null,
-        groups: input.groups ?? null,
-        verification: [...input.domains].sort().map((d) => check(d, kept(d))),
+        domains: [...domains].sort(),
+        oidc: input.oidc ? { issuer: input.oidc.issuer, clientId: input.oidc.clientId, clientSecretRef: input.oidc.clientSecretRef ?? null, scopes: input.oidc.scopes ?? null } : null,
+        saml: input.saml
+          ? {
+              acsUrl: null,
+              certificate: input.saml.certificate ?? null,
+              certificates: [],
+              emailAttribute: input.saml.emailAttribute ?? null,
+              idpEntityId: input.saml.idpEntityId,
+              metadataError: null,
+              metadataReadAt: null,
+              metadataUrl: input.saml.metadataUrl ?? null,
+              nameAttribute: input.saml.nameAttribute ?? null,
+              requireEncryption: input.saml.requireEncryption ?? false,
+              signOnUrl: null,
+              signRequests: input.saml.signRequests ?? false,
+              spEntityId: null,
+              spMetadataUrl: null,
+              ssoUrl: input.saml.ssoUrl,
+              tiles: input.saml.tiles ?? true,
+            }
+          : null,
+        jit: input.jit ? { role: input.jit.role, team: input.jit.team ?? null } : null,
+        groups: input.groups ? { map: input.groups.map, onMissing: input.groups.onMissing ?? 'keep', source: input.groups.source ?? null } : null,
+        verification: [...domains].sort().map((d) => check(d, kept(d))),
       };
       rows = before ? rows.map((p) => (p.id === id ? saved : p)) : [...rows, saved];
       return structuredClone(saved);

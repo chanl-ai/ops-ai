@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -25,6 +26,12 @@ ROLE = "ops_tools_tenant"
 TEAM_A, TEAM_B = "team_cards", "team_ops"
 PERSON = "usr_maya"
 SIGN_IN_TABLES = (connection_tokens, oauth_states, connect_links)
+
+
+@pytest.fixture
+def engine(both_engine: AsyncEngine) -> AsyncEngine:
+    """This file's tests run on PostgreSQL and SQL Server (conftest.database_url)."""
+    return both_engine
 
 
 async def _signed_in(engine: AsyncEngine, tenant: str, team: str = TEAM_A) -> tuple[ConnectionStore, str]:
@@ -103,10 +110,11 @@ async def test_the_database_alone_hides_and_guards_them(engine: AsyncEngine, ten
         async with isolation.isolated_tx(engine, role=ROLE) as c:
             for t in SIGN_IN_TABLES:
                 # Only the tenant is named: the team must come from the policy.
-                seen = await c.execute(sa.text(f"SELECT count(*) FROM {t.name} WHERE tenant_id = :t"), {"t": tenant})
+                seen = await c.execute(sa.text(f"SELECT count(*) FROM {t.name} WHERE tenant_id = :t"), {"t": tenant})  # noqa: S608
                 assert seen.scalar_one() == 0, f"team B read {t.name}"
                 changed = await c.execute(
-                    sa.text(f"UPDATE {t.name} SET team_id = team_id WHERE tenant_id = :t"), {"t": tenant}
+                    sa.text(f"UPDATE {t.name} SET team_id = team_id WHERE tenant_id = :t"),  # noqa: S608
+                    {"t": tenant},
                 )
                 assert changed.rowcount == 0, f"team B changed {t.name}"
     with isolation.scope(tenant, TEAM_A):
@@ -119,10 +127,12 @@ async def test_the_database_alone_hides_and_guards_them(engine: AsyncEngine, ten
 
 async def test_each_new_row_carries_its_connections_team(engine: AsyncEngine, tenant: str) -> None:
     await _signed_in(engine, tenant)
-    async with engine.connect() as c:
-        for t in (connection_tokens, oauth_states):
-            teams = (await c.execute(sa.select(t.c.team_id).where(t.c.tenant_id == tenant))).scalars().all()
-            assert teams and set(teams) == {TEAM_A}, (t.name, teams)
+    # Read across the tenant's teams, so a row written in another team is seen and fails the check.
+    with isolation.tenant_wide("TESTS", tenant_id=tenant):
+        async with isolation.isolated_tx(engine, role=ROLE) as c:
+            for t in (connection_tokens, oauth_states):
+                teams = (await c.execute(sa.select(t.c.team_id).where(t.c.tenant_id == tenant))).scalars().all()
+                assert teams and set(teams) == {TEAM_A}, (t.name, teams)
 
 
 async def test_a_moved_connection_takes_its_rows(engine: AsyncEngine, tenant: str) -> None:

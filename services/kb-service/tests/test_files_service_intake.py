@@ -4,16 +4,20 @@ says what failed. Adding files by id: test_add_existing_files.py."""
 
 from __future__ import annotations
 
+import asyncio
+import time
 from pathlib import Path
 
+from pydantic import HttpUrl
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_kb.__main__ import move_to_files_service
+from ops_kb.__main__ import move_to_files_service, wait_for_files
 from ops_kb.agents import StaticAgents
 from ops_kb.files import FilesServiceIntake, KnowledgeFiles
 from ops_kb.search import HybridRetriever
 from ops_kb.service import KnowledgeService
 from ops_kb.store import KnowledgeStore
+from ops_service_kit.settings import FilesEndpoint, Settings
 
 from .conftest import kb_client
 from .files_fake import FakeFilesService
@@ -75,3 +79,59 @@ async def test_a_refusal_from_files_service_says_what_failed_not_a_generic_error
         assert body["code"] == "files_unavailable" and "refused" in body["message"] and "try again" in body["message"]
         refused = await client.post(f"/v1/sources/{src['id']}/files", json={"fileIds": [fid]})
         assert refused.status_code == 503 and refused.json()["error"]["code"] == "files_unavailable", refused.text
+
+
+async def test_an_item_written_before_its_scan_is_refused_as_not_ready_then_read(
+    engine: AsyncEngine, tenant: str
+) -> None:
+    """Writing an item or a page goes through files-service, which holds a new file unreadable until its scan says
+    clean; the route answered 500 then. It answers 409 file_not_ready, and the same write after the scan is created."""
+    fake = FakeFilesService()
+    scanner = fake.client(service="scanner", scopes=["files:decide"])
+
+    async def scanned() -> None:
+        for fid, f in fake.files.items():
+            if f["scan"]["status"] == "pending":
+                await scanner.report_scan(tenant, fid, status="clean", engine="clamav")
+
+    async with kb_client(engine, tenant, files=FilesServiceIntake(fake.client())) as client:
+        kb = data(
+            await client.post("/v1/knowledge-bases", json={"name": "Disputes", "owner": "james@harborpine.example"}),
+            201,
+        )
+        src = data(await client.post("/v1/sources", json={"type": "push", "name": "Rules", "kbIds": [kb["id"]]}), 201)
+        item = {"name": "chargeback-window", "title": "Chargeback window", "text": "Raised within 120 days."}
+        early = await client.post(f"/v1/sources/{src['id']}/items", json=item)
+        assert (early.status_code, early.json()["error"]["code"]) == (409, "file_not_ready"), early.text
+        await scanned()
+        put = data(await client.post(f"/v1/sources/{src['id']}/items", json=item))
+        assert (put["outcome"], put["item"]["path"], put["item"]["status"]) == (
+            "created",
+            "chargeback-window.md",
+            "indexed",
+        )
+        page = {"title": "Vault", "text": "Open at 8."}
+        early = await client.post(f"/v1/knowledge-bases/{kb['id']}/pages", json=page)
+        assert (early.status_code, early.json()["error"]["code"]) == (409, "file_not_ready"), early.text
+        await scanned()
+        assert data(await client.post(f"/v1/knowledge-bases/{kb['id']}/pages", json=page), 201)["title"] == "Vault"
+
+
+async def test_start_up_waits_for_files_service_about_its_setting_not_a_probe_timeout_per_try() -> None:
+    """files-service accepting connections and never answering: each probe gives up after the probe timeout, so the
+    start-up wait ends near `ready_wait_s` rather than after tries of the files endpoint's 30 s."""
+
+    async def hold(_r: asyncio.StreamReader, _w: asyncio.StreamWriter) -> None:
+        await asyncio.sleep(60)
+
+    server = await asyncio.start_server(hold, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    settings = Settings(
+        files=FilesEndpoint(url=HttpUrl(f"http://127.0.0.1:{port}")), ready_wait_s=0.6, ready_probe_s=0.2
+    )
+    started = time.monotonic()
+    try:
+        await asyncio.wait_for(wait_for_files(settings), 5)
+    finally:
+        server.close()
+    assert time.monotonic() - started < 2

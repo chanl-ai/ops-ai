@@ -189,7 +189,7 @@ async def test_an_alias_version_sets_the_reasoning_effort_a_request_leaves_unset
                 "/v1/models/aliases", json=version | ({"reasoningEffort": effort} if effort else {}), headers=SERVICE
             )
             assert made.status_code == 201, made.text
-            listed = (await client.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).json()["data"]
+            listed = (await client.get(f"/v1/models/aliases/{name}/versions", headers=SERVICE)).json()["data"]["data"]
             assert listed[0]["reasoningEffort"] == effort, listed
         _, secret = await models.key(budget="5")
         auth = {"Authorization": f"Bearer {secret}", "X-Tenant-Id": "local"}
@@ -198,3 +198,31 @@ async def test_an_alias_version_sets_the_reasoning_effort_a_request_leaves_unset
             r = await client.post("/v1/models/chat/completions", json=ask | body, headers=auth)
             assert r.status_code == 200, r.text
     assert [s.get("reasoning_effort") for s in seen] == ["minimal", "high", None], seen
+
+
+async def test_a_tool_call_reply_keeps_openais_names_and_values(models: Models) -> None:
+    """The wire a client parses, pinned exactly: a typed reply model must not rename, add or drop a key."""
+    _, secret = await models.key(budget="5")
+    tool = {"type": "function", "function": {"name": "lookup_case", "parameters": {"type": "object"}}}
+    body = {"model": "bank-standard", "messages": [{"role": "user", "content": "please call lookup_case"}]}
+    headers = {"Authorization": f"Bearer {secret}", "X-Tenant-Id": "local"}
+    r = await models.client.post("/v1/models/chat/completions", json={**body, "tools": [tool]}, headers=headers)
+    reply = r.json()
+    choice = reply["choices"][0]
+    call = choice["message"]["tool_calls"][0]
+    assert (r.status_code, sorted(reply), sorted(choice), choice["finish_reason"]) == (
+        200,
+        ["choices", "created", "id", "model", "object", "usage"],
+        ["finish_reason", "index", "message"],
+        "tool_calls",
+    )
+    assert (sorted(choice["message"]), sorted(call), call["type"], sorted(call["function"])) == (
+        ["content", "role", "tool_calls"],
+        ["function", "id", "type"],
+        "function",
+        ["arguments", "name"],
+    )
+    assert (call["function"]["name"], sorted(reply["usage"])) == (
+        "lookup_case",
+        ["completion_tokens", "prompt_tokens", "total_tokens"],
+    )

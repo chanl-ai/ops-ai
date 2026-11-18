@@ -1,0 +1,1210 @@
+{
+  "accounts": {
+    "body": {
+      "data": {
+        "agents": [],
+        "drafts": 0,
+        "published": 0,
+        "workflows": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "accounts.noName": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "query",
+              "name"
+            ],
+            "msg": "Field required"
+          }
+        ],
+        "message": "query.name: Field required",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "assistant.empty": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "moduleIds"
+            ],
+            "msg": "List should have at least 1 item after validation, not 0"
+          }
+        ],
+        "message": "moduleIds: List should have at least 1 item after validation, not 0",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "assistant.none": {
+    "body": {
+      "data": {
+        "agentId": "<ag>",
+        "agentName": "Ops Assistant",
+        "skills": [],
+        "state": "none",
+        "tools": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "assistant.unknown": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "agentId"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "agentId: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "documentTypes": {
+    "body": {
+      "data": {
+        "dt_missing": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "documentTypes.noScope": {
+    "body": {
+      "error": {
+        "code": "scope_required",
+        "details": {
+          "scope": "workflows:view"
+        },
+        "message": "This service token does not hold the workflows:view scope.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "options.ids": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "disabled": null,
+            "hint": "Payments Hub",
+            "id": "place_wire_hold",
+            "label": "place_wire_hold"
+          }
+        ],
+        "nextCursor": null,
+        "notAdded": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "options.next": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "disabled": null,
+            "hint": "Customer Hub",
+            "id": "lookup_customer",
+            "label": "lookup_customer"
+          },
+          {
+            "disabled": null,
+            "hint": "Customer Hub",
+            "id": "request_document",
+            "label": "request_document"
+          }
+        ],
+        "nextCursor": "2",
+        "notAdded": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "options.noAgents": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "description": "Look up a Harbor & Pine deposit account by account number (e.g. CHQ-2219) or the account holder's name. Returns type, status, balance and wire limits.",
+            "disabled": null,
+            "hint": "Core Banking",
+            "id": "lookup_account",
+            "inputSchema": {
+              "properties": {
+                "query": {
+                  "description": "Account number or holder name",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "query"
+              ],
+              "type": "object"
+            },
+            "label": "lookup_account"
+          },
+          {
+            "description": "Place a hold on an outbound wire so funds are not released to the payee. Moves money: every call is reviewed by Fraud Operations before it takes effect.",
+            "disabled": null,
+            "hint": "Payments Hub",
+            "id": "place_wire_hold",
+            "inputSchema": {
+              "properties": {
+                "hours": {
+                  "maximum": 72,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "wireId": {
+                  "description": "Wire id, e.g. W-88213",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "wireId",
+                "hours",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "label": "place_wire_hold"
+          }
+        ],
+        "nextCursor": "2",
+        "notAdded": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "options.search": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "disabled": null,
+            "hint": "Customer Hub",
+            "id": "lookup_customer",
+            "label": "lookup_customer"
+          },
+          {
+            "disabled": null,
+            "hint": "Customer Hub",
+            "id": "request_document",
+            "label": "request_document"
+          }
+        ],
+        "nextCursor": "2",
+        "notAdded": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "route.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Thread was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "route.noReason": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "reason"
+            ],
+            "msg": "String should have at least 1 character"
+          }
+        ],
+        "message": "reason: String should have at least 1 character",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "route.unknown": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "team"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "team: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "route.version": {
+    "body": {
+      "data": {
+        "threads": [],
+        "versionNumber": 1,
+        "workflowId": "wire_hold_review"
+      },
+      "success": true
+    },
+    "status": 202
+  },
+  "sso.ok": {
+    "keys": [
+      "expiresAt",
+      "token"
+    ],
+    "status": 200
+  },
+  "sso.other": {
+    "body": {
+      "error": {
+        "code": "unauthorized",
+        "message": "The identity provider confirmed a different account.",
+        "requestId": "<req>",
+        "status": 401
+      },
+      "success": false
+    },
+    "status": 401
+  },
+  "sso.unreadable": {
+    "body": {
+      "error": {
+        "code": "unauthorized",
+        "message": "The identity provider's answer could not be read.",
+        "requestId": "<req>",
+        "status": 401
+      },
+      "success": false
+    },
+    "status": 401
+  },
+  "stepUp.ok": {
+    "keys": [
+      "expiresAt",
+      "token"
+    ],
+    "status": 200
+  },
+  "stepUp.unknown": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "otp"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "otp: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "stepUp.wrongCode": {
+    "body": {
+      "error": {
+        "code": "unauthorized",
+        "message": "That code is not right.",
+        "requestId": "<req>",
+        "status": 401
+      },
+      "success": false
+    },
+    "status": 401
+  },
+  "stepUp.wrongPassword": {
+    "body": {
+      "error": {
+        "code": "unauthorized",
+        "message": "That password is not right.",
+        "requestId": "<req>",
+        "status": 401
+      },
+      "success": false
+    },
+    "status": 401
+  },
+  "tools.kind": {
+    "body": {
+      "data": {
+        "appNames": {},
+        "data": [
+          {
+            "access": "read",
+            "app": null,
+            "approval": null,
+            "description": "Ask Branch Concierge, the Books appointments and answers product questions.",
+            "id": "agent:ag_branch",
+            "inputSchema": {
+              "properties": {
+                "question": {
+                  "description": "The whole question, with what the person said",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "question"
+              ],
+              "type": "object"
+            },
+            "kind": "agent",
+            "moduleId": null,
+            "name": "Branch Concierge",
+            "requiresApproval": false,
+            "server": "Agents",
+            "status": "ready",
+            "title": "Branch Concierge",
+            "usedBy": {
+              "agents": [],
+              "workflows": []
+            }
+          },
+          {
+            "access": "read",
+            "app": null,
+            "approval": null,
+            "description": "Ask Card Dispute Resolver, the Investigates and drafts card dispute outcomes.",
+            "id": "agent:ag_dispute",
+            "inputSchema": {
+              "properties": {
+                "question": {
+                  "description": "The whole question, with what the person said",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "question"
+              ],
+              "type": "object"
+            },
+            "kind": "agent",
+            "moduleId": null,
+            "name": "Card Dispute Resolver",
+            "requiresApproval": false,
+            "server": "Agents",
+            "status": "ready",
+            "title": "Card Dispute Resolver",
+            "usedBy": {
+              "agents": [],
+              "workflows": []
+            }
+          },
+          {
+            "access": "workflow",
+            "app": null,
+            "approval": null,
+            "description": "Dispute email: Seeded definition Starts the workflow on an email and returns its outcome.",
+            "id": "workflow:dispute_email",
+            "inputSchema": {
+              "properties": {
+                "body": {
+                  "type": "string"
+                },
+                "sender": {
+                  "description": "Who the email is from",
+                  "type": "string"
+                },
+                "subject": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "sender",
+                "subject",
+                "body"
+              ],
+              "type": "object"
+            },
+            "kind": "workflow",
+            "moduleId": null,
+            "name": "Dispute email",
+            "requiresApproval": false,
+            "server": "Workflows",
+            "status": "ready",
+            "title": "Dispute email",
+            "usedBy": {
+              "agents": [
+                {
+                  "id": "ag_dispute",
+                  "name": "Card Dispute Resolver"
+                }
+              ],
+              "workflows": []
+            }
+          },
+          {
+            "access": "workflow",
+            "app": null,
+            "approval": null,
+            "description": "Levy-case: Seeded definition Starts the workflow on an email and returns its outcome.",
+            "id": "workflow:levy-case",
+            "inputSchema": {
+              "properties": {
+                "body": {
+                  "type": "string"
+                },
+                "sender": {
+                  "description": "Who the email is from",
+                  "type": "string"
+                },
+                "subject": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "sender",
+                "subject",
+                "body"
+              ],
+              "type": "object"
+            },
+            "kind": "workflow",
+            "moduleId": null,
+            "name": "Levy-case",
+            "requiresApproval": false,
+            "server": "Workflows",
+            "status": "ready",
+            "title": "Levy-case",
+            "usedBy": {
+              "agents": [],
+              "workflows": []
+            }
+          }
+        ],
+        "facets": {
+          "app": {},
+          "kind": {
+            "agent": 4,
+            "custom": 9,
+            "workflow": 4
+          },
+          "status": {
+            "needs_approval": 4,
+            "ready": 13
+          }
+        },
+        "pagination": {
+          "hasNext": true,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 4,
+          "total": 8,
+          "totalPages": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "tools.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Tool no_such_tool was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "tools.one": {
+    "body": {
+      "data": {
+        "access": "write",
+        "app": null,
+        "approval": "Hold outbound wire {wireId}",
+        "description": "Place a hold on an outbound wire so funds are not released to the payee. Moves money: every call is reviewed by Fraud Operations before it takes effect.",
+        "id": "place_wire_hold",
+        "inputSchema": {
+          "properties": {
+            "hours": {
+              "maximum": 72,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "wireId": {
+              "description": "Wire id, e.g. W-88213",
+              "type": "string"
+            }
+          },
+          "required": [
+            "wireId",
+            "hours",
+            "reason"
+          ],
+          "type": "object"
+        },
+        "kind": "custom",
+        "moduleId": null,
+        "name": "place_wire_hold",
+        "requiresApproval": true,
+        "server": "Payments Hub",
+        "status": "needs_approval",
+        "title": "place_wire_hold",
+        "usedBy": {
+          "agents": [
+            {
+              "id": "ag_fraud",
+              "name": "Wire Fraud Sentinel"
+            }
+          ],
+          "workflows": [
+            {
+              "id": "wire_hold_review",
+              "name": "Wire hold review"
+            }
+          ]
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "tools.pastEnd": {
+    "body": {
+      "data": {
+        "appNames": {},
+        "data": [
+          {
+            "access": "read",
+            "app": null,
+            "approval": null,
+            "description": "Ask Ops Assistant, the Answers from the apps and knowledge your team has, as you, and drafts changes for your approval.",
+            "id": "agent:<ag>",
+            "inputSchema": {
+              "properties": {
+                "question": {
+                  "description": "The whole question, with what the person said",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "question"
+              ],
+              "type": "object"
+            },
+            "kind": "agent",
+            "moduleId": null,
+            "name": "Ops Assistant",
+            "requiresApproval": false,
+            "server": "Agents",
+            "status": "ready",
+            "title": "Ops Assistant",
+            "usedBy": {
+              "agents": [],
+              "workflows": []
+            }
+          },
+          {
+            "access": "write",
+            "app": null,
+            "approval": "Hold {amount} on account {accountId}",
+            "description": "Place a hold on funds in an account. Moves money: a reviewer approves every call.",
+            "id": "place_hold",
+            "inputSchema": {
+              "properties": {
+                "accountId": {
+                  "type": "string"
+                },
+                "amount": {
+                  "minimum": 0.01,
+                  "type": "number"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "accountId",
+                "amount",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "kind": "custom",
+            "moduleId": null,
+            "name": "place_hold",
+            "requiresApproval": true,
+            "server": "Harbor & Pine Core Banking",
+            "status": "needs_approval",
+            "title": "place_hold",
+            "usedBy": {
+              "agents": [],
+              "workflows": [
+                {
+                  "id": "levy-case",
+                  "name": "Levy-case"
+                }
+              ]
+            }
+          },
+          {
+            "access": "write",
+            "app": null,
+            "approval": "Hold outbound wire {wireId}",
+            "description": "Place a hold on an outbound wire so funds are not released to the payee. Moves money: every call is reviewed by Fraud Operations before it takes effect.",
+            "id": "place_wire_hold",
+            "inputSchema": {
+              "properties": {
+                "hours": {
+                  "maximum": 72,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "wireId": {
+                  "description": "Wire id, e.g. W-88213",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "wireId",
+                "hours",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "kind": "custom",
+            "moduleId": null,
+            "name": "place_wire_hold",
+            "requiresApproval": true,
+            "server": "Payments Hub",
+            "status": "needs_approval",
+            "title": "place_wire_hold",
+            "usedBy": {
+              "agents": [
+                {
+                  "id": "ag_fraud",
+                  "name": "Wire Fraud Sentinel"
+                }
+              ],
+              "workflows": [
+                {
+                  "id": "wire_hold_review",
+                  "name": "Wire hold review"
+                }
+              ]
+            }
+          },
+          {
+            "access": "write",
+            "app": null,
+            "approval": "Request a document from {customerId}",
+            "description": "Ask a customer to provide a document (receipt, statement, proof of address, ID). Writes to the customer: each request is reviewed before it is sent.",
+            "id": "request_document",
+            "inputSchema": {
+              "properties": {
+                "customerId": {
+                  "type": "string"
+                },
+                "document": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "customerId",
+                "document",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "kind": "custom",
+            "moduleId": null,
+            "name": "request_document",
+            "requiresApproval": true,
+            "server": "Customer Hub",
+            "status": "needs_approval",
+            "title": "request_document",
+            "usedBy": {
+              "agents": [
+                {
+                  "id": "ag_branch",
+                  "name": "Branch Concierge"
+                },
+                {
+                  "id": "ag_dispute",
+                  "name": "Card Dispute Resolver"
+                }
+              ],
+              "workflows": []
+            }
+          },
+          {
+            "access": "read",
+            "app": null,
+            "approval": null,
+            "description": "Find customers by name, email, address or the last four digits of their SSN.",
+            "id": "search_customers",
+            "inputSchema": {
+              "properties": {
+                "query": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "query"
+              ],
+              "type": "object"
+            },
+            "kind": "custom",
+            "moduleId": null,
+            "name": "search_customers",
+            "requiresApproval": false,
+            "server": "Harbor & Pine Core Banking",
+            "status": "ready",
+            "title": "search_customers",
+            "usedBy": {
+              "agents": [],
+              "workflows": []
+            }
+          },
+          {
+            "access": "read",
+            "app": null,
+            "approval": null,
+            "description": "Ask Wire Fraud Sentinel, the Scores outbound wires and places holds.",
+            "id": "agent:ag_fraud",
+            "inputSchema": {
+              "properties": {
+                "question": {
+                  "description": "The whole question, with what the person said",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "question"
+              ],
+              "type": "object"
+            },
+            "kind": "agent",
+            "moduleId": null,
+            "name": "Wire Fraud Sentinel",
+            "requiresApproval": false,
+            "server": "Agents",
+            "status": "ready",
+            "title": "Wire Fraud Sentinel",
+            "usedBy": {
+              "agents": [],
+              "workflows": []
+            }
+          },
+          {
+            "access": "workflow",
+            "app": null,
+            "approval": null,
+            "description": "Wire hold review: Wire Fraud Sentinel reads the request, then a fraud analyst approves or rejects the hold. Starts the workflow on an email and returns its outcome.",
+            "id": "workflow:wire_hold_review",
+            "inputSchema": {
+              "properties": {
+                "body": {
+                  "type": "string"
+                },
+                "sender": {
+                  "description": "Who the email is from",
+                  "type": "string"
+                },
+                "subject": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "sender",
+                "subject",
+                "body"
+              ],
+              "type": "object"
+            },
+            "kind": "workflow",
+            "moduleId": null,
+            "name": "Wire hold review",
+            "requiresApproval": false,
+            "server": "Workflows",
+            "status": "ready",
+            "title": "Wire hold review",
+            "usedBy": {
+              "agents": [],
+              "workflows": []
+            }
+          }
+        ],
+        "facets": {
+          "app": {},
+          "kind": {
+            "agent": 4,
+            "custom": 9,
+            "workflow": 4
+          },
+          "status": {
+            "needs_approval": 4,
+            "ready": 13
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": true,
+          "page": 2,
+          "pageSize": 10,
+          "total": 17,
+          "totalPages": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "tools.search": {
+    "body": {
+      "data": {
+        "appNames": {},
+        "data": [
+          {
+            "access": "read",
+            "app": null,
+            "approval": null,
+            "description": "Look up a Harbor & Pine deposit account by account number (e.g. CHQ-2219) or the account holder's name. Returns type, status, balance and wire limits.",
+            "id": "lookup_account",
+            "inputSchema": {
+              "properties": {
+                "query": {
+                  "description": "Account number or holder name",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "query"
+              ],
+              "type": "object"
+            },
+            "kind": "custom",
+            "moduleId": null,
+            "name": "lookup_account",
+            "requiresApproval": false,
+            "server": "Core Banking",
+            "status": "ready",
+            "title": "lookup_account",
+            "usedBy": {
+              "agents": [
+                {
+                  "id": "ag_fraud",
+                  "name": "Wire Fraud Sentinel"
+                }
+              ],
+              "workflows": [
+                {
+                  "id": "wire_hold_review",
+                  "name": "Wire hold review"
+                }
+              ]
+            }
+          },
+          {
+            "access": "write",
+            "app": null,
+            "approval": "Hold outbound wire {wireId}",
+            "description": "Place a hold on an outbound wire so funds are not released to the payee. Moves money: every call is reviewed by Fraud Operations before it takes effect.",
+            "id": "place_wire_hold",
+            "inputSchema": {
+              "properties": {
+                "hours": {
+                  "maximum": 72,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "reason": {
+                  "type": "string"
+                },
+                "wireId": {
+                  "description": "Wire id, e.g. W-88213",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "wireId",
+                "hours",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "kind": "custom",
+            "moduleId": null,
+            "name": "place_wire_hold",
+            "requiresApproval": true,
+            "server": "Payments Hub",
+            "status": "needs_approval",
+            "title": "place_wire_hold",
+            "usedBy": {
+              "agents": [
+                {
+                  "id": "ag_fraud",
+                  "name": "Wire Fraud Sentinel"
+                }
+              ],
+              "workflows": [
+                {
+                  "id": "wire_hold_review",
+                  "name": "Wire hold review"
+                }
+              ]
+            }
+          },
+          {
+            "access": "read",
+            "app": null,
+            "approval": null,
+            "description": "Ask Wire Fraud Sentinel, the Scores outbound wires and places holds.",
+            "id": "agent:ag_fraud",
+            "inputSchema": {
+              "properties": {
+                "question": {
+                  "description": "The whole question, with what the person said",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "question"
+              ],
+              "type": "object"
+            },
+            "kind": "agent",
+            "moduleId": null,
+            "name": "Wire Fraud Sentinel",
+            "requiresApproval": false,
+            "server": "Agents",
+            "status": "ready",
+            "title": "Wire Fraud Sentinel",
+            "usedBy": {
+              "agents": [],
+              "workflows": []
+            }
+          },
+          {
+            "access": "workflow",
+            "app": null,
+            "approval": null,
+            "description": "Wire hold review: Wire Fraud Sentinel reads the request, then a fraud analyst approves or rejects the hold. Starts the workflow on an email and returns its outcome.",
+            "id": "workflow:wire_hold_review",
+            "inputSchema": {
+              "properties": {
+                "body": {
+                  "type": "string"
+                },
+                "sender": {
+                  "description": "Who the email is from",
+                  "type": "string"
+                },
+                "subject": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "sender",
+                "subject",
+                "body"
+              ],
+              "type": "object"
+            },
+            "kind": "workflow",
+            "moduleId": null,
+            "name": "Wire hold review",
+            "requiresApproval": false,
+            "server": "Workflows",
+            "status": "ready",
+            "title": "Wire hold review",
+            "usedBy": {
+              "agents": [],
+              "workflows": []
+            }
+          }
+        ],
+        "facets": {
+          "app": {},
+          "kind": {
+            "agent": 1,
+            "custom": 2,
+            "workflow": 1
+          },
+          "status": {
+            "needs_approval": 1,
+            "ready": 3
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 5,
+          "total": 4,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "uses": {
+    "body": {
+      "data": {
+        "get_customer_profile": [],
+        "nothing_uses_it": [],
+        "place_wire_hold": [
+          {
+            "id": "ag_fraud",
+            "kind": "agent",
+            "name": "Wire Fraud Sentinel"
+          },
+          {
+            "id": "wire_hold_review",
+            "kind": "workflow",
+            "name": "Wire hold review"
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "uses.noScope": {
+    "body": {
+      "error": {
+        "code": "scope_required",
+        "details": {
+          "scope": "agents:view"
+        },
+        "message": "This service token does not hold the agents:view scope.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "uses.noTools": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "query",
+              "tools"
+            ],
+            "msg": "String should have at least 1 character"
+          }
+        ],
+        "message": "query.tools: String should have at least 1 character",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "uses.otherTeam": {
+    "body": {
+      "data": {
+        "place_wire_hold": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "uses.service": {
+    "body": {
+      "data": {
+        "place_wire_hold": [
+          {
+            "id": "ag_fraud",
+            "kind": "agent",
+            "name": "Wire Fraud Sentinel"
+          },
+          {
+            "id": "wire_hold_review",
+            "kind": "workflow",
+            "name": "Wire hold review"
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "uses.serviceNoTeam": {
+    "body": {
+      "data": {
+        "place_wire_hold": []
+      },
+      "success": true
+    },
+    "status": 200
+  }
+}

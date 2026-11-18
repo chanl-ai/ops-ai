@@ -26,18 +26,18 @@ import { ORIGIN, SkillStatusBadge, STATUS_LABEL } from '@/components/skills/skil
 import { SKILL_LOADING_LABEL, SKILL_LOADING_OPTIONS } from '@/components/skills/skill-loading';
 import { Button } from '@/components/ui/button';
 import { useDownloadFile } from '@/hooks/file-queries';
-import { useBulkDeleteSkills, useBulkDeprecateSkills, useCreateSkill, useExportSkills, useImportSkill, useSkillGeneratorBackend, useSkillImportPreview, useSkillOptions, useSkills } from '@/hooks/skill-queries';
+import { useBulkDeleteSkills, useBulkDeprecateSkills, useCreateSkill, useExportSkills, useImportSkill, useSkillGeneratorBackend, useSkillImportPreview, useSkillOptions, useSkills, type SkillRow } from '@/hooks/skill-queries';
 import { useCreateParam } from '@/hooks/use-create-param';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { useSticky } from '@/hooks/use-sticky';
 import { useCanBuild } from '@/hooks/me-queries';
 import { useTeam } from '@/hooks/use-team';
 import { pct, plural, relativeTime } from '@/lib/format';
-import type { Skill, SkillFilters, SkillOrigin, SkillStatus, SkillView } from '@/lib/types/skills';
+import type { SkillFilters, SkillOrigin, SkillStatus, SkillView } from '@/lib/types/skills';
 import { serverPagination } from '@/components/shared/server-pagination';
 import { TemplatesGallery } from '@/components/templates/templates-gallery';
 
-type Row = Skill & { onRowClick: (s: Skill) => void; href: string; rowTestId: string };
+type Row = SkillRow & { onRowClick: (s: SkillRow) => void; href: string; rowTestId: string };
 
 const STATUS_OPTIONS = (Object.keys(STATUS_LABEL) as SkillStatus[]).map((v) => ({ value: v, label: STATUS_LABEL[v] }));
 const ORIGIN_OPTIONS = (Object.keys(ORIGIN) as SkillOrigin[]).map((v) => ({ value: v, label: ORIGIN[v].label, icon: ORIGIN[v].icon }));
@@ -45,7 +45,7 @@ const ORIGIN_OPTIONS = (Object.keys(ORIGIN) as SkillOrigin[]).map((v) => ({ valu
 const serverFiltered = () => true;
 const NO_TEAMS: string[] = [];
 
-function columns(open: (s: Skill) => void, onExport: (s: Skill) => void): ColumnDef<Row>[] {
+function columns(open: (s: SkillRow) => void, onExport: (s: SkillRow) => void): ColumnDef<Row>[] {
   return [
     selectColumn<Row>((s) => s.name),
     idColumn<Row>((s) => s.id),
@@ -71,7 +71,7 @@ function columns(open: (s: Skill) => void, onExport: (s: Skill) => void): Column
       accessorKey: 'useWhen',
       header: 'Use when',
       cell: ({ row }) => (
-        <p className="w-72 text-xs whitespace-normal text-muted-foreground break-words" title={row.original.useWhen}>
+        <p className="w-72 text-xs text-muted-foreground">
           {row.original.loading === 'always' ? 'Every turn, after the agent’s instructions' : row.original.useWhen}
         </p>
       ),
@@ -197,7 +197,7 @@ export default function SkillsPage() {
   const download = useDownloadFile();
   const bulkDeprecate = useBulkDeprecateSkills();
   const bulkDelete = useBulkDeleteSkills();
-  const [bulk, setBulk] = React.useState<{ kind: 'deprecate' | 'delete'; rows: Skill[] } | null>(null);
+  const [bulk, setBulk] = React.useState<{ kind: 'deprecate' | 'delete'; rows: SkillRow[] } | null>(null);
   const shown = useSticky(bulk);
   const [resetKey, setResetKey] = React.useState(0);
   const names = (shown?.rows ?? []).map((s) => s.name);
@@ -212,7 +212,7 @@ export default function SkillsPage() {
     router.replace(`/build/skills?${next.toString()}`, { scroll: false });
   };
 
-  const runExport = async (rows: Skill[]) => {
+  const runExport = async (rows: SkillRow[]) => {
     try {
       const f = await exportSkills.mutateAsync({ ids: rows.map((s) => s.id) });
       toast.success(`Exported ${rows.length === 1 ? rows[0].name : plural(rows.length, 'skill')}`, {
@@ -226,7 +226,7 @@ export default function SkillsPage() {
   };
 
   const rows: Row[] = React.useMemo(
-    () => (query.data?.data ?? []).map((s) => ({ ...s, href: `/build/skills/${s.id}`, onRowClick: (x: Skill) => router.push(`/build/skills/${x.id}`), rowTestId: `skill-row-${s.id}` })),
+    () => (query.data?.data ?? []).map((s) => ({ ...s, href: `/build/skills/${s.id}`, onRowClick: (x: SkillRow) => router.push(`/build/skills/${x.id}`), rowTestId: `skill-row-${s.id}` })),
     [query.data, router],
   );
   const cols = React.useMemo(() => columns((s) => router.push(`/build/skills/${s.id}`), (s) => void runExport([s])), [router]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -310,8 +310,8 @@ export default function SkillsPage() {
               { label: 'Export', icon: Download, variant: 'outline', onClick: (r) => void runExport(r) },
               ...(canBuild
                 ? [
-                    { label: 'Deprecate', icon: Archive, variant: 'outline' as const, onClick: (r: Skill[]) => setBulk({ kind: 'deprecate', rows: r }) },
-                    { label: 'Delete', icon: Trash2, variant: 'destructive' as const, onClick: (r: Skill[]) => setBulk({ kind: 'delete', rows: r }) },
+                    { label: 'Deprecate', icon: Archive, variant: 'outline' as const, onClick: (r: SkillRow[]) => setBulk({ kind: 'deprecate', rows: r }) },
+                    { label: 'Delete', icon: Trash2, variant: 'destructive' as const, onClick: (r: SkillRow[]) => setBulk({ kind: 'delete', rows: r }) },
                   ]
                 : []),
             ]}

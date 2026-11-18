@@ -189,7 +189,7 @@ async def test_an_event_wakes_the_step_of_its_own_team_only(engine: AsyncEngine,
     assert (mine["status"], mine["outcome"], mine["output"]["total"]) == ("succeeded", "answered", 1250), mine
     assert other["status"] == "waiting", "another team's step keeps waiting"
     with tenant_scope(tenant):
-        types = [e["type"] for e in await EventLog(engine).run_events(ours, ours, 0)]
+        types = [e.type for e in await EventLog(engine).run_events(ours, ours, 0)]
     assert "waiting_external" in types and "resumed_by_event" in types, types
 
 
@@ -224,6 +224,6 @@ async def test_two_resumes_of_one_pause_run_it_once_and_record_the_second_as_ign
     with tenant_scope(tenant):
         first = await resumed(engine, run, run["waiting"], {"callback": {"n": 1}}, source="callback")
         second = await resumed(engine, run, run["waiting"], {"event": {"n": 2}}, source="event")
-        types = [e["type"] for e in await EventLog(engine).run_events(run_id, run_id, 0)]
+        types = [e.type for e in await EventLog(engine).run_events(run_id, run_id, 0)]
     assert (first, second) == (True, False)
     assert types.count("resumed_by_callback") == 1 and "resume_ignored" in types, types

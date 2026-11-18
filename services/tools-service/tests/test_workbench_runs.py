@@ -127,7 +127,7 @@ async def test_a_typed_secret_is_used_once_masked_in_the_request_and_stored_nowh
             t
             for t in list(tables)
             if (
-                await c.execute(sa.text(f'SELECT count(*) FROM "{t}" r WHERE r::text LIKE :v'), {"v": f"%{TYPED}%"})
+                await c.execute(sa.text(f'SELECT count(*) FROM "{t}" r WHERE r::text LIKE :v'), {"v": f"%{TYPED}%"})  # noqa: S608
             ).scalar_one()
         ]
     assert found == [], f"the typed value is stored in {found}"

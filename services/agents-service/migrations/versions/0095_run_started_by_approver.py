@@ -14,6 +14,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import mssql_drop_default_ddl
+
 revision = "0095_run_started_by_approver"
 down_revision = "0094_template_copies_digest"
 branch_labels = None
@@ -27,4 +29,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # SQL Server refuses to drop a column that holds a default; the helper drops one only if it is there.
+    if op.get_context().dialect.name == "mssql":
+        op.execute(mssql_drop_default_ddl("engine_runs", "started_by_approver"))
     op.drop_column("engine_runs", "started_by_approver")

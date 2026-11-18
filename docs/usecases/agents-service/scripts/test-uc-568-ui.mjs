@@ -247,7 +247,7 @@ try {
           check('33a after a proposed read the header names it and the banner gives a reason for any wait', /Fields proposed/.test(header) && !/waiting for a person to check fields in Human Tasks\.?$/.test(banner.trim()) && (!/waiting for a person/.test(banner) || /: .+ (was|broke|matched)/.test(banner)), { header, banner });
           await page.getByTestId('save-document-type').click();
           const saved = await until(async () => {
-            const items = (await body(await fetch(`${documents}/v1/document-types`, { headers: J }))).data?.items ?? [];
+            const items = (await body(await fetch(`${documents}/v1/document-types`, { headers: J }))).data?.data ?? [];
             for (const t of items) {
               const detail = (await body(await fetch(`${documents}/v1/document-types/${t.id}`, { headers: J }))).data;
               // The demo team already has a type with a debtor_name field: the saved one is the type whose first

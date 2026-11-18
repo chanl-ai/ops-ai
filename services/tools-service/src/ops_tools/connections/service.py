@@ -12,13 +12,12 @@ an account already holds is kept when its value is replaced, so a name made befo
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
 import re
 import secrets as random
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, NoReturn, cast
 from urllib.parse import parse_qsl, urlencode, urlsplit
@@ -32,6 +31,7 @@ from ops_policy import CredentialStore
 from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unprocessable, ValidationFailed
 from ops_service_kit.ids import new_id
 from ops_service_kit.logging import get_logger
+from ops_store import background
 
 from ..auth import Authenticator, AuthFailed, Prepared
 from ..auth.assertion import SigningError, key_matches, read_certificate
@@ -58,6 +58,8 @@ from ..store.connections import (
     plugin_of,
     verifier_context,
 )
+from ..store.modules import ModuleRef
+from ..store.secrets import SecretMeta
 from .account_events import connected_event
 from .records import status_of
 
@@ -190,6 +192,8 @@ def _hash(state: str) -> str:
 
 
 log = get_logger("ops_tools.connections")
+# The listed process (ops_store.background) a test after a sign-in runs and reports under.
+SIGN_IN_TEST = "sign_in_test"
 
 
 class ConnectionService:
@@ -253,7 +257,6 @@ class ConnectionService:
         # delete is refused while any do. Set with the app routes (Apps).
         self.account_users: Callable[[str, str, str, str], Awaitable[dict[str, Any]]] | None = None
         # Tests that run after a sign-in, held so the event loop keeps them until they finish.
-        self._after_sign_in: set[asyncio.Task[None]] = set()
 
     # ── Who may ───────────────────────────────────────────────────────────
 
@@ -300,12 +303,11 @@ class ConnectionService:
 
     # ── Views ─────────────────────────────────────────────────────────────
 
-    async def _secret_meta(self, tenant_id: str, team_id: str, names: list[str]) -> dict[str, dict[str, Any]]:
-        rows = {r["name"]: r for r in await self.secrets.store.listed(tenant_id, team_id) if r["name"] in names}
-        return rows
+    async def _secret_meta(self, tenant_id: str, team_id: str, names: list[str]) -> dict[str, SecretMeta]:
+        return {r.name: r for r in await self.secrets.store.listed(tenant_id, team_id) if r.name in names}
 
     def _keys(
-        self, kind: Kind, conn: dict[str, Any], meta: dict[str, dict[str, Any]], token: dict[str, Any] | None
+        self, kind: Kind, conn: dict[str, Any], meta: dict[str, SecretMeta], token: dict[str, Any] | None
     ) -> dict[str, Any]:
         """The account's settings, which secret parts are set (by whom and when, never a value), the team's sign-in and
         the signing certificate's view."""
@@ -315,7 +317,7 @@ class ConnectionService:
         for f in secret_fields:
             row = meta.get(named.get(f.name, ""))
             secrets[f.name] = (
-                {"set": True, "setBy": row["created_by"], "setAt": _iso(row.get("rotated_at") or row["created_at"])}
+                {"set": True, "setBy": row.created_by, "setAt": _iso(row.rotated_at or row.created_at)}
                 if row
                 else {"set": False}
             )
@@ -401,10 +403,12 @@ class ConnectionService:
         self._can(who, "view")
         return await self._view(who, await self._get(who, connection_id), detail=True)
 
-    async def team_rows(self, who: Caller) -> list[dict[str, Any]]:
+    async def team_rows(self, who: Caller, app_ids: Sequence[str] | None = None) -> list[dict[str, Any]]:
         """The caller's team's accounts as stored, with the modules that use them, for the Apps grid to join;
-        secrets stay names, never values."""
+        secrets stay names, never values. `app_ids`: only the accounts of those apps, one page of the grid."""
         self._can(who, "view")
+        if app_ids is not None:
+            return await self.store.of_apps(who.tenant_id, who.team.id, app_ids)
         teams = [who.team.id]
         return await self.store.page(
             who.tenant_id, teams, "", 0, max(await self.store.count(who.tenant_id, teams, ""), 1)
@@ -994,9 +998,7 @@ class ConnectionService:
             # The sign-in alone connects the account; its test follows without holding the answer, and its outcome
             # is kept on the account's row.
             account = "self" if token_for != SHARED else "team"
-            task = asyncio.create_task(self._test_after_sign_in(who, connection_id, account))
-            self._after_sign_in.add(task)
-            task.add_done_callback(self._after_sign_in.discard)
+            await background.start(self.after_sign_in_test(who, connection_id, account), key=SIGN_IN_TEST)
         return await self.detail(who, connection_id)
 
     async def _same_identity(
@@ -1226,11 +1228,10 @@ class ConnectionService:
         await self.store.set_status(who.tenant_id, connection_id, "needs_reconnect", why)
         await self.store.note(who.tenant_id, str(conn["id"]), self._event(who, "credential_changed"))
 
-    async def _test_after_sign_in(self, who: Caller, connection_id: str, account: str) -> None:
-        try:
-            await self.test(who, connection_id, account)
-        except Exception as e:  # a test that cannot run leaves the account connected and untested
-            log.warning("test_after_sign_in_failed", connection=connection_id, error=type(e).__name__)
+    async def after_sign_in_test(self, who: Caller, connection_id: str, account: str) -> None:
+        """A test that cannot run leaves the account connected and untested; `background.start` logs it and shows it
+        on /health/background under SIGN_IN_TEST."""
+        await self.test(who, connection_id, account)
 
     async def use_platform_app(
         self,
@@ -1533,7 +1534,12 @@ class ConnectionService:
                 code="test_path_missing",
             )
         url = str(settings["baseUrl"]).rstrip("/") + path
-        probe = {"tenant_id": who.tenant_id, "connection_id": conn["id"], "team_id": conn["team_id"], "endpoint": url}
+        probe: ModuleRef = {
+            "tenant_id": who.tenant_id,
+            "connection_id": conn["id"],
+            "team_id": conn["team_id"],
+            "endpoint": url,
+        }
         person = (
             ActingForPerson(
                 sub=own_key(who),

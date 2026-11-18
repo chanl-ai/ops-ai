@@ -91,7 +91,7 @@ def test_a_gate_still_runs_when_many_files_follow_its_match(tmp_path: Path) -> N
         ["bash", "scripts/verify-staged.sh"], cwd=ROOT, env=env, capture_output=True, text=True, check=False
     )
     out = done.stdout + done.stderr
-    assert done.returncode != 0 and "verify-staged: sbom" in out, out[-2000:]
+    assert done.returncode != 0 and "scripts/sbom.py --check (exit 1)" in out, out[-2000:]
 
 
 def test_a_new_shared_setting_without_its_k8s_files_is_refused(tmp_path: Path) -> None:
@@ -104,7 +104,7 @@ def test_a_new_shared_setting_without_its_k8s_files_is_refused(tmp_path: Path) -
     assert changed != head
     done = gate(tmp_path, {compose: changed})
     out = done.stdout + done.stderr
-    assert done.returncode != 0 and "verify-staged: k8s" in out, out[-2000:]
+    assert done.returncode != 0 and "deploy/k8s/generate.py --check (exit 1)" in out, out[-2000:]
 
 
 def test_a_uv_call_inside_the_hooks_copy_never_repoints_the_checkouts_packages(tmp_path: Path) -> None:

@@ -3,6 +3,7 @@
 import { BookOpen, Gauge, ShieldCheck, Sparkles, UserCheck, Wrench } from 'lucide-react';
 
 import { ChainOfThought, ChainOfThoughtContent, ChainOfThoughtHeader, ChainOfThoughtStep } from '@/components/ai-elements/chain-of-thought';
+import { knowledgeBaseOptions, useOptionLabels } from '@/hooks/options-queries';
 import type { ApprovalWidget, ChatMessage } from '@/lib/types/chat';
 
 const CALL_STATE: Record<string, { label: string; className: string }> = {
@@ -25,11 +26,13 @@ export interface HeldTool {
  * fired, and what the reply spent. Each step says so when there was nothing, so a plain reply still shows that
  * nothing was searched or called.
  */
-export function TestWhy({ message, kbNames, held }: { message: ChatMessage; kbNames: Record<string, string>; held: HeldTool[] }) {
+export function TestWhy({ message, held }: { message: ChatMessage; held: HeldTool[] }) {
   const citations = message.citations ?? [];
   const calls = message.toolCalls ?? [];
   const skills = message.skills ?? [];
   const searched = message.settings?.knowledgeBaseIds ?? [];
+  // Names come from the service for exactly the bases this reply searched.
+  const kbNames = Object.fromEntries((useOptionLabels(knowledgeBaseOptions, searched).data?.data ?? []).map((o) => [o.id, o.label]));
   const pause = (message.widgets ?? []).find((w): w is ApprovalWidget => w.kind === 'approval');
   const gated = calls.find((c) => c.gated);
   const fired = message.guardrail;

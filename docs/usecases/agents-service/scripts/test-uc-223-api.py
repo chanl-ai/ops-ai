@@ -263,7 +263,7 @@ def main() -> None:
             "OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}",
         }
         with (
-            tools(settings=settings) as gw,
+            tools(settings=settings, approval_rules=True) as gw,
             httpx.Client(base_url=knowledge.files_url, timeout=30) as files_api,
         ):
             for host, note in ((bank["host"], "fake bank"), (IMAP_HOST, "GreenMail"), (SMTP_HOST, "Mailpit")):

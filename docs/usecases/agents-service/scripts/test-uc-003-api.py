@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from usecase_harness import TEAM, agents, check, data, finish, new_thread, nodes, run, state
+from usecase_harness import TEAM, agents, check, every_page, finish, new_thread, nodes, run, state
 
 with agents() as api:
     tid = new_thread(api, "simple_workflow")
@@ -21,8 +21,7 @@ with agents() as api:
         cites,
     )
     check("answer is not a no-answer", v.get("no_answer") is False and "$25,000" in (v.get("answer") or ""), v)
-    listed = data(api.get("/v1/threads?graph=simple_workflow", headers=TEAM))
-    rows = listed if isinstance(listed, list) else listed.get("data", [])
+    rows = every_page(api, "/v1/threads", headers=TEAM, graph="simple_workflow")
     check("thread is listed by graph", any(r.get("threadId") == tid for r in rows), rows[:2])
 
 finish()

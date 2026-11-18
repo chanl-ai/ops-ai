@@ -12,9 +12,13 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from pydantic import JsonValue
+
 from ops_engine import default_registry
 from ops_engine.definition import WorkflowDefinition, validate
+from ops_engine.node_types import list_columns
 from ops_engine.store import DefinitionStore
+from ops_engine.store.definitions import ListColumns
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable
 
 from ..store.engine import EngineTransactions
@@ -32,8 +36,14 @@ KIND = "engine"
 REGISTRY = default_registry()
 
 
+def listed(definition: JsonValue) -> ListColumns:
+    """The definition's Workflows list columns, stored with each version it saves."""
+    return list_columns(definition, REGISTRY)
+
+
 def definitions(rt: Runtime) -> DefinitionStore:
-    return DefinitionStore(EngineTransactions(rt.db))
+    """The v2 definitions, each save writing its list columns (`listed`)."""
+    return DefinitionStore(EngineTransactions(rt.db), listed)
 
 
 async def pending(rt: Runtime, workflow_id: str) -> dict[str, Any] | None:

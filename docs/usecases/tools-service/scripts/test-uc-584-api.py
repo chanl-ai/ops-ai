@@ -28,6 +28,7 @@ from usecase_harness import (
     bearer,
     check,
     data,
+    every_page,
     finish,
     platform,
     service_headers,
@@ -126,7 +127,7 @@ with ExitStack() as stack:
     james = bearer(signed_in(api, "j.richardson@harborpine.example"), "team_ops")
 
     # 1. The three test plugins load; Security lists the fake's hosts.
-    loaded = data(gw.get("/v1/apps", headers=priya)) or []
+    loaded = every_page(gw, "/v1/apps", headers=priya)
     ids = sorted(str(c["pluginId"]) for c in loaded if c.get("kind") == "plugin")
     for h in m["hosts"]:
         gw.post("/v1/egress/hosts", json={"value": h, "note": "uc-584"}, headers=sam)

@@ -14,7 +14,7 @@ from urllib.parse import quote
 import httpx
 
 from ._config import Config
-from .errors import error_for
+from .errors import ServerError, error_for
 
 # Every service is reached through one origin under its own prefix (deploy/fly/Caddyfile); a local stack without the
 # proxy is reached by port through Config.services.
@@ -350,3 +350,57 @@ def page_items(data: Any) -> tuple[list[Any], dict[str, Any] | None]:
     if data.get("nextCursor"):
         return items, {"cursor": data["nextCursor"]}
     return items, None
+
+
+# The install's largest page size; a larger one is answered at this size.
+PAGE_MAX = 50
+
+
+def _asked(query: dict[str, Any]) -> dict[str, Any]:
+    """The query with a page size: 50 when none, and never above the maximum (a larger one is answered at 50 anyway)."""
+    return {**query, "page_size": min(int(query.get("page_size") or PAGE_MAX), PAGE_MAX)}
+
+
+def _advance(asked: dict[str, Any], more: dict[str, Any], items: list[Any], nxt: dict[str, Any] | None) -> None:
+    """Refuses a next page that would repeat the request just made, or that follows a page with no rows: a server that
+    does either would otherwise keep the caller looping forever."""
+    if nxt is not None and (nxt == more or not items):
+        raise ServerError(502, "paging_loop", f"the server repeated or emptied a page while claiming more: {nxt}")
+
+
+def iter_rows(call: Any, **asked: Any) -> Iterator[Any]:
+    """The rows of a list operation page after page, with the query exactly as given plus each page's own cursor."""
+    more: dict[str, Any] | None = {}
+    while more is not None:
+        items, nxt = page_items(call(**{**asked, **more}))
+        _advance(asked, more, items, nxt)
+        yield from items
+        more = nxt
+
+
+async def iter_rows_async(call: Any, **asked: Any) -> AsyncIterator[Any]:
+    more: dict[str, Any] | None = {}
+    while more is not None:
+        items, nxt = page_items(await call(**{**asked, **more}))
+        _advance(asked, more, items, nxt)
+        for item in items:
+            yield item
+        more = nxt
+
+
+def iter_pages(call: Any, **query: Any) -> Iterator[Any]:
+    """The rows of a list operation one by one, asking for the next page only when the last one is used up."""
+    return iter_rows(call, **_asked(query))
+
+
+def iter_pages_async(call: Any, **query: Any) -> AsyncIterator[Any]:
+    return iter_rows_async(call, **_asked(query))
+
+
+def every_page(call: Any, **query: Any) -> list[Any]:
+    """Every row of a list operation, following `pagination.hasNext` page after page (never the first page only)."""
+    return list(iter_pages(call, **query))
+
+
+async def every_page_async(call: Any, **query: Any) -> list[Any]:
+    return [row async for row in iter_pages_async(call, **query)]

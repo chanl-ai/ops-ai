@@ -6,13 +6,9 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ops_files.store.event_relay import sender
-from ops_files.store.files import service_outbox
-from ops_files.store.read_requests import ReadRequestsStore
-from ops_store.outbox import Relay
 from tests import test_api
 from tests.test_api import OPS, Client, _data, _upload  # pyright: ignore[reportPrivateUsage]
-from tests.test_file_events import Agents
+from tests.test_file_events import Agents, files_relay
 
 client = test_api.client
 
@@ -29,7 +25,7 @@ async def test_a_read_request_carries_its_read_hint_and_page_limit_to_the_event(
             f"/v1/files/{fid}/read-requests", json={"read": "everything"}, headers={**OPS, "Idempotency-Key": "p2"}
         )
         agents = Agents()
-        await Relay(engine, service_outbox, sender(agents, ReadRequestsStore(engine))).once()  # type: ignore[arg-type]
+        await files_relay(engine, agents).once()
     assert posted.status_code == 202, posted.text
     [event] = [e for e in agents.sent if e["key"] == _data(posted)["key"]]
     payload = event["payload"]

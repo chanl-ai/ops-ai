@@ -21,12 +21,11 @@ import { starterDefinition } from '@/components/workflows/definition-editor/star
 import { WorkflowDialog } from '@/components/workflows/workflow-dialog';
 import { useDeleteDefinitions, usePublishDefinition } from '@/hooks/engine-queries';
 import { useCan, useCanBuild } from '@/hooks/me-queries';
-import { useWorkflows } from '@/hooks/queries';
+import { useWorkflows, type WorkflowRow as Workflow } from '@/hooks/queries';
 import { useCreateParam } from '@/hooks/use-create-param';
 import { useSticky } from '@/hooks/use-sticky';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count, plural, relativeTime } from '@/lib/format';
-import type { Workflow } from '@/lib/types/domain';
 import type { WorkflowFilters } from '@/lib/types/query';
 import { serverPagination } from '@/components/shared/server-pagination';
 import { TemplatesGallery } from '@/components/templates/templates-gallery';
@@ -47,10 +46,7 @@ const columns: ColumnDef<Row>[] = [
         <div className="flex items-center gap-2">
           <span className="font-medium">{row.original.name}</span>
         </div>
-        {/* A span, not a div: the name column truncates descendant divs to one line, and a trigger is a sentence. */}
-        <span className="whitespace-normal text-xs text-muted-foreground break-words" title={row.original.trigger}>
-          Starts when: {row.original.trigger}
-        </span>
+        <div className="text-xs text-muted-foreground">Starts when: {row.original.trigger}</div>
       </div>
     ),
     enableHiding: false,

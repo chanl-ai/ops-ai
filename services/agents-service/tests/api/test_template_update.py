@@ -10,6 +10,8 @@ tools-service is faked at its client, as in test_template_install: moving a pin 
 
 from __future__ import annotations
 
+import asyncio
+import json
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack
 from typing import Any, cast
@@ -18,8 +20,9 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic_ai.models.test import TestModel
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import Pool, StaticPool
 
 from ops_agents.api.app import create_app
 from ops_agents.store.base import metadata
@@ -29,8 +32,10 @@ from ops_service_kit.settings import Settings
 from ..conftest import SEED, FakeGraphModels
 from ..engine.test_lifecycle_rights import person
 from .role_app import ok, role_app
+from .test_reply_pins import FIXTURES, answer, compare
 from .test_template_install import AGENT, SOURCE, TOOLS, wire
 from .test_template_install_kinds import WORKFLOW
+from .test_workflow_routes import _held_by_request  # pyright: ignore[reportPrivateUsage]
 
 OPS = person("james", "team_ops", "builder")
 VIEWER = person("vera", "team_ops", "viewer")
@@ -304,3 +309,81 @@ async def test_a_second_team_adds_the_same_skill_template_as_its_own(client: Asy
         headers=OPS,
     )
     assert clash.status_code == 409 and clash.json()["error"]["code"] == "name_taken", clash.text
+
+
+# (name, method, path, body): `{sid}` is the skill copy the first copy row makes; a "wire" row ships the next version.
+PINNED: list[tuple[str, str, str, Any]] = [
+    ("list", "get", "/v1/templates?kind=skill", None),
+    ("copy", "post", f"/v1/resources/{SOURCE}:cite-policy/copies", {}),
+    ("copy.again", "post", f"/v1/resources/{SOURCE}:cite-policy/copies", {}),
+    ("copy.unknownField", "post", f"/v1/resources/{SOURCE}:cite-policy/copies", {"colour": "red"}),
+    ("copy.missing", "post", f"/v1/resources/{SOURCE}:nowhere/copies", {}),
+    ("plan", "post", "/v1/resources/plan", {"resources": [f"{SOURCE}:cite-policy"]}),
+    ("plan.empty", "post", "/v1/resources/plan", {"resources": []}),
+    ("next", "wire", "", None),
+    ("review", "get", "/v1/resources/{res}/copies/{sid}/update", None),
+    ("take.unknownField", "post", "/v1/resources/{res}/copies/{sid}/update", {"how": "now"}),
+    ("take", "post", "/v1/resources/{res}/copies/{sid}/update", {}),
+    ("detach.notTheCopy", "post", "/v1/resources/{res}/copies/sk_missing1/detach", None),
+    ("detach", "post", "/v1/resources/{res}/copies/{sid}/detach", None),
+    ("detach.again", "post", "/v1/resources/{res}/copies/{sid}/detach", None),
+]
+
+
+async def _send(client: AsyncClient, method: str, path: str, body: Any, sid: str) -> Any:
+    url = path.replace("{res}", f"{SOURCE}:cite-policy").replace("{sid}", sid)
+    return await client.request(method, url, headers=OPS, **({} if body is None else {"json": body}))
+
+
+async def test_the_template_routes_keep_every_key_value_and_error_object(client: AsyncClient) -> None:
+    wire(client, [SKILL])
+    seen: dict[str, Any] = {}
+    sid = ""
+    for name, method, path, body in PINNED:
+        if method == "wire":
+            wire(client, [pack(2, use_when="A customer disputes a fee")])
+            continue
+        r = await _send(client, method, path, body, sid)
+        sid = sid or (r.json()["data"]["copy"]["recordId"] if name == "copy" else "")
+        seen[name] = answer(r)
+    compare(json.loads(json.dumps(seen).replace(sid, "<sk>")), FIXTURES / "reply-pins-templates.json")
+
+
+async def test_no_connection_is_held_while_tools_service_answers_and_a_detach_takes_one(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every route but the detach asks tools-service for the team's templates: none holds a connection while it
+    answers. The detach reads and writes only this service's rows, in one request transaction."""
+    templates = wire(client, [SKILL])
+    sid = await add_skill(client)
+    wire(client, [pack(2, use_when="A customer disputes a fee")])
+    with _held_by_request() as held:
+        asked: list[int] = []
+        real = type(templates).get
+
+        async def watched(self: Any, *args: Any, **kwargs: Any) -> Any:
+            asked.append(held())
+            return await real(self, *args, **kwargs)
+
+        monkeypatch.setattr(type(templates), "get", watched)
+        res = f"/v1/resources/{SOURCE}:cite-policy"
+        codes = [
+            (await client.get("/v1/templates", headers=OPS)).status_code,
+            (await client.post(f"{res}/copies", json={}, headers=OPS)).status_code,
+            (
+                await client.post("/v1/resources/plan", json={"resources": [f"{SOURCE}:cite-policy"]}, headers=OPS)
+            ).status_code,
+            (await client.get(path(sid), headers=OPS)).status_code,
+            (await client.post(path(sid), json={}, headers=OPS)).status_code,
+        ]
+        task, checkouts = asyncio.current_task(), [0]
+
+        def checked_out(*_: object) -> None:
+            checkouts[0] += asyncio.current_task() is task
+
+        event.listen(Pool, "checkout", checked_out)
+        try:
+            detached = await client.post(f"{res}/copies/{sid}/detach", headers=OPS)
+        finally:
+            event.remove(Pool, "checkout", checked_out)
+    assert (codes, set(asked), detached.status_code, checkouts) == ([200] * 5, {0}, 200, [1])

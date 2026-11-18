@@ -52,7 +52,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/api-keys",
         "pathParams": [],
-        "query": ["targetKind", "targetId"],
+        "query": ["targetKind", "targetId", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "api_keys_revoke_api_key": {
@@ -70,7 +70,21 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/audit",
         "pathParams": [],
-        "query": ["action", "kind", "view", "actor", "targetKind", "from", "to", "page", "pageSize"],
+        "query": [
+            "action",
+            "kind",
+            "view",
+            "actor",
+            "targetKind",
+            "from",
+            "to",
+            "page",
+            "pageSize",
+            "search",
+            "sortBy",
+            "sortOrder",
+            "ids",
+        ],
         "stream": False,
     },
     "auth_forgot_password": {
@@ -322,7 +336,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/settings/members",
         "pathParams": [],
-        "query": ["role", "status"],
+        "query": ["role", "status", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "members_member_options": {
@@ -412,7 +426,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/people/{person_id}/role-grants",
         "pathParams": ["person_id"],
-        "query": [],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "people_take_role": {
@@ -484,7 +498,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/roles",
         "pathParams": [],
-        "query": [],
+        "query": ["builtin", "canDecideReviews", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "roles_read_role": {
@@ -520,7 +534,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/roles/{role_id}/holders",
         "pathParams": ["role_id"],
-        "query": [],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "sign_in_providers_add_break_glass": {
@@ -709,7 +723,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/settings/teams",
         "pathParams": [],
-        "query": ["status", "search", "page", "pageSize"],
+        "query": ["status", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "teams_read_workspace_teams": {
@@ -845,14 +859,32 @@ class Operations:
         return self._t.call(SERVICE, OPERATIONS["api_keys_api_key_summaries"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     def api_keys_list_api_keys(
-        self, *, target_kind: str | None = None, target_id: str | None = None
-    ) -> list[ApiKeyOut]:
+        self,
+        *,
+        target_kind: str | None = None,
+        target_id: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultApiKeyOut:
         "List Api Keys"
         return self._t.call(
             SERVICE,
             OPERATIONS["api_keys_list_api_keys"],
             {},
-            {"targetKind": target_kind, "targetId": target_id},
+            {
+                "targetKind": target_kind,
+                "targetId": target_id,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -877,6 +909,10 @@ class Operations:
         to: str | None = None,
         page: int | None = None,
         page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> AuditPage:
         "Read Audit"
         return self._t.call(
@@ -893,6 +929,10 @@ class Operations:
                 "to": to,
                 "page": page,
                 "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
             },
             {},
             None,
@@ -1014,9 +1054,33 @@ class Operations:
         "Person Permissions"
         return self._t.call(SERVICE, OPERATIONS["people_person_permissions"], {"person_id": person_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def people_person_role_grants(self, person_id: str) -> list[RoleGrantOut]:
+    def people_person_role_grants(
+        self,
+        person_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultRoleGrantOut:
         "Person Role Grants"
-        return self._t.call(SERVICE, OPERATIONS["people_person_role_grants"], {"person_id": person_id}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["people_person_role_grants"],
+            {"person_id": person_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def people_give_role(self, person_id: str, body: RoleGrantIn) -> RoleGrantOut:
         "Give Role"
@@ -1040,9 +1104,36 @@ class Operations:
         "Set Policy"
         return self._t.call(SERVICE, OPERATIONS["policies_set_policy"], {"key": key}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def roles_list_roles(self) -> list[RoleOut]:
+    def roles_list_roles(
+        self,
+        *,
+        builtin: str | None = None,
+        can_decide_reviews: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultRoleOut:
         "List Roles"
-        return self._t.call(SERVICE, OPERATIONS["roles_list_roles"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["roles_list_roles"],
+            {},
+            {
+                "builtin": builtin,
+                "canDecideReviews": can_decide_reviews,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def roles_create_role(self, body: RoleCreateIn) -> RoleCreatedOut:
         "Create Role"
@@ -1062,9 +1153,33 @@ class Operations:
             SERVICE, OPERATIONS["roles_delete_role"], {"role_id": role_id}, {"moveTo": move_to}, {}, None
         )  # type: ignore[no-any-return]
 
-    def roles_role_holders(self, role_id: str) -> list[RoleHolderOut]:
+    def roles_role_holders(
+        self,
+        role_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultRoleHolderOut:
         "Role Holders"
-        return self._t.call(SERVICE, OPERATIONS["roles_role_holders"], {"role_id": role_id}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["roles_role_holders"],
+            {"role_id": role_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def roles_edit_role(self, role_id: str, body: RoleCellsIn) -> RoleDetail:
         "Edit Role"
@@ -1075,10 +1190,35 @@ class Operations:
         return self._t.call(SERVICE, OPERATIONS["roles_reset_role"], {"role_id": role_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def members_list_members(
-        self, *, role: list[str] | None = None, status: list[str] | None = None
+        self,
+        *,
+        role: list[str] | None = None,
+        status: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultMemberOut:
         "List Members"
-        return self._t.call(SERVICE, OPERATIONS["members_list_members"], {}, {"role": role, "status": status}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["members_list_members"],
+            {},
+            {
+                "role": role,
+                "status": status,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def members_remove_members(self, body: DeleteIn) -> BulkOut:
         "Remove Members"
@@ -1190,16 +1330,27 @@ class Operations:
         self,
         *,
         status: list[str] | None = None,
-        search: str | None = None,
         page: int | None = None,
         page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultWorkspaceTeamOut:
         "List Workspace Teams"
         return self._t.call(
             SERVICE,
             OPERATIONS["teams_list_workspace_teams"],
             {},
-            {"status": status, "search": search, "page": page, "pageSize": page_size},
+            {
+                "status": status,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -1300,14 +1451,32 @@ class AsyncOperations:
         return await self._t.call(SERVICE, OPERATIONS["api_keys_api_key_summaries"], {}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def api_keys_list_api_keys(
-        self, *, target_kind: str | None = None, target_id: str | None = None
-    ) -> list[ApiKeyOut]:
+        self,
+        *,
+        target_kind: str | None = None,
+        target_id: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultApiKeyOut:
         "List Api Keys"
         return await self._t.call(
             SERVICE,
             OPERATIONS["api_keys_list_api_keys"],
             {},
-            {"targetKind": target_kind, "targetId": target_id},
+            {
+                "targetKind": target_kind,
+                "targetId": target_id,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -1332,6 +1501,10 @@ class AsyncOperations:
         to: str | None = None,
         page: int | None = None,
         page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> AuditPage:
         "Read Audit"
         return await self._t.call(
@@ -1348,6 +1521,10 @@ class AsyncOperations:
                 "to": to,
                 "page": page,
                 "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
             },
             {},
             None,
@@ -1473,10 +1650,32 @@ class AsyncOperations:
             SERVICE, OPERATIONS["people_person_permissions"], {"person_id": person_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
-    async def people_person_role_grants(self, person_id: str) -> list[RoleGrantOut]:
+    async def people_person_role_grants(
+        self,
+        person_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultRoleGrantOut:
         "Person Role Grants"
         return await self._t.call(
-            SERVICE, OPERATIONS["people_person_role_grants"], {"person_id": person_id}, {}, {}, None
+            SERVICE,
+            OPERATIONS["people_person_role_grants"],
+            {"person_id": person_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
         )  # type: ignore[no-any-return]
 
     async def people_give_role(self, person_id: str, body: RoleGrantIn) -> RoleGrantOut:
@@ -1501,9 +1700,36 @@ class AsyncOperations:
         "Set Policy"
         return await self._t.call(SERVICE, OPERATIONS["policies_set_policy"], {"key": key}, {}, {}, body)  # type: ignore[no-any-return]
 
-    async def roles_list_roles(self) -> list[RoleOut]:
+    async def roles_list_roles(
+        self,
+        *,
+        builtin: str | None = None,
+        can_decide_reviews: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultRoleOut:
         "List Roles"
-        return await self._t.call(SERVICE, OPERATIONS["roles_list_roles"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["roles_list_roles"],
+            {},
+            {
+                "builtin": builtin,
+                "canDecideReviews": can_decide_reviews,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def roles_create_role(self, body: RoleCreateIn) -> RoleCreatedOut:
         "Create Role"
@@ -1523,9 +1749,33 @@ class AsyncOperations:
             SERVICE, OPERATIONS["roles_delete_role"], {"role_id": role_id}, {"moveTo": move_to}, {}, None
         )  # type: ignore[no-any-return]
 
-    async def roles_role_holders(self, role_id: str) -> list[RoleHolderOut]:
+    async def roles_role_holders(
+        self,
+        role_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultRoleHolderOut:
         "Role Holders"
-        return await self._t.call(SERVICE, OPERATIONS["roles_role_holders"], {"role_id": role_id}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["roles_role_holders"],
+            {"role_id": role_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def roles_edit_role(self, role_id: str, body: RoleCellsIn) -> RoleDetail:
         "Edit Role"
@@ -1536,11 +1786,34 @@ class AsyncOperations:
         return await self._t.call(SERVICE, OPERATIONS["roles_reset_role"], {"role_id": role_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def members_list_members(
-        self, *, role: list[str] | None = None, status: list[str] | None = None
+        self,
+        *,
+        role: list[str] | None = None,
+        status: list[str] | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultMemberOut:
         "List Members"
         return await self._t.call(
-            SERVICE, OPERATIONS["members_list_members"], {}, {"role": role, "status": status}, {}, None
+            SERVICE,
+            OPERATIONS["members_list_members"],
+            {},
+            {
+                "role": role,
+                "status": status,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
         )  # type: ignore[no-any-return]
 
     async def members_remove_members(self, body: DeleteIn) -> BulkOut:
@@ -1657,16 +1930,27 @@ class AsyncOperations:
         self,
         *,
         status: list[str] | None = None,
-        search: str | None = None,
         page: int | None = None,
         page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultWorkspaceTeamOut:
         "List Workspace Teams"
         return await self._t.call(
             SERVICE,
             OPERATIONS["teams_list_workspace_teams"],
             {},
-            {"status": status, "search": search, "page": page, "pageSize": page_size},
+            {
+                "status": status,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]

@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 from ops_service_kit.errors import ApiError
 from ops_service_kit.logging import get_logger
@@ -20,6 +19,7 @@ from ops_store import background, isolation
 from ops_store.schedule import due as schedule_due
 
 from .service import KnowledgeService, Who
+from .store.knowledge import SourceRow
 
 log = get_logger(__name__)
 
@@ -33,15 +33,15 @@ PURGE_WITHDRAWN = (
 WITHDRAWN_KEPT = timedelta(days=30)
 
 
-def due(service: KnowledgeService, s: dict[str, Any], now: datetime) -> bool:
+def due(service: KnowledgeService, s: SourceRow, now: datetime) -> bool:
     """A source not paused whose schedule (ops_store.schedule, the one rule) asks for a run since its last sync, or
     one waiting for an admin to approve its site's host: its sync re-reads the host's state and runs once approved, so
     the source syncs as soon as it may, whatever its schedule."""
-    if s["status"] == "paused":
+    if s.status == "paused":
         return False
-    if dict(s.get("config") or {}).get("waitingHosts"):
+    if dict(s.config or {}).get("waitingHosts"):
         return True
-    return schedule_due(service.schedule_of(s), s.get("last_sync_at"), now)
+    return schedule_due(service.schedule_of(s), s.last_sync_at, now)
 
 
 async def run_due(service: KnowledgeService, now: datetime) -> list[str]:
@@ -50,16 +50,16 @@ async def run_due(service: KnowledgeService, now: datetime) -> list[str]:
     ran: list[str] = []
     for tenant in await service.store.tenants():
         with isolation.tenant_wide(FIND_DUE, tenant_id=tenant):
-            readable = [s for s in await service.store.sources(tenant) if s["type"] != "tool" or service.tools]
+            readable = [s for s in await service.store.sources(tenant) if s.type != "tool" or service.tools]
             sources = [s for s in readable if due(service, s, now)]
         for s in sources:
-            with isolation.scope(tenant, str(s["team_id"])):
-                who = Who(tenant, "knowledge schedule", str(s["team_id"]))
+            with isolation.scope(tenant, str(s.team_id)):
+                who = Who(tenant, "knowledge schedule", str(s.team_id))
                 try:
                     await service.scheduled_sync(who, s)
-                    ran.append(str(s["id"]))
+                    ran.append(str(s.id))
                 except ApiError as e:
-                    log.info("kb_schedule_skipped", source=s["id"], code=e.code)
+                    log.info("kb_schedule_skipped", source=s.id, code=e.code)
     return ran
 
 
@@ -70,7 +70,7 @@ async def finish_readings(service: KnowledgeService) -> int:
     settled = 0
     for tenant in await service.store.tenants():
         with isolation.tenant_wide(FIND_READING, tenant_id=tenant):
-            waiting = {(str(i["team_id"]), str(i["file_id"])) for i in await service.store.reading_items(tenant)}
+            waiting = {(i.team_id, i.file_id) for i in await service.store.reading_items(tenant)}
         for team, file_id in sorted(waiting):
             with isolation.scope(tenant, team):
                 settled += await service.finish_reading(Who(tenant, "knowledge schedule", team), file_id)

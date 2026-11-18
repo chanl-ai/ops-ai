@@ -1,6 +1,7 @@
 """What blocks a team's delete or its workspace's close, for platform-service, by failure mode: a run in
 progress or a live workflow missed, so a delete goes ahead with work still running; another team's runs or workflows
-counted or named; a service naming no team, or a team in the query, read; a token without `workflows:view` answered."""
+counted or named; a service naming no team, or a team in the query, read. A token without `workflows:view` is pinned
+in test_summary_reads.py."""
 
 from __future__ import annotations
 
@@ -49,8 +50,3 @@ async def test_a_caller_naming_no_team_reads_nothing_and_a_query_team_is_ignored
     assert r.status_code == 401, r.text
     ours = await usage(c, PLATFORM, teamId="team_fraud")
     assert ours["runsInProgress"] == 0, ours
-
-
-async def test_a_token_without_workflows_view_is_refused(c: AsyncClient) -> None:  # noqa: F811
-    r = await c.get(URL, headers=service("platform", []))
-    assert r.status_code == 403, r.text

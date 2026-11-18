@@ -1,0 +1,5862 @@
+{
+ "apps_and_accounts": {
+  "accounts": {
+   "body": {
+    "data": [
+     {
+      "appId": "<id:con>",
+      "default": true,
+      "id": "<id:con>",
+      "identity": [],
+      "missingObjects": [],
+      "name": "Ledger",
+      "own": false,
+      "pointsAt": null,
+      "sandbox": false
+     }
+    ],
+    "success": true
+   },
+   "status": 200
+  },
+  "create": {
+   "body": {
+    "data": {
+     "accountName": null,
+     "activity": [
+      {
+       "action": "created",
+       "actor": "James Richardson",
+       "at": "<datetime>",
+       "detail": {
+        "kind": "api_key"
+       }
+      }
+     ],
+     "appId": "<id:con>",
+     "authKind": "api_key",
+     "category": null,
+     "credentialId": null,
+     "description": null,
+     "docsUrl": null,
+     "health": null,
+     "id": "<id:con>",
+     "kindLabel": "API key",
+     "mayManage": true,
+     "name": "Ledger",
+     "people": [],
+     "platformApp": null,
+     "redirectUri": null,
+     "revision": 1,
+     "sandbox": false,
+     "secrets": {
+      "clientKey": {
+       "set": false
+      },
+      "key": {
+       "set": false
+      }
+     },
+     "settings": {},
+     "signIn": "team",
+     "signedIn": null,
+     "status": "draft",
+     "statusDetail": null,
+     "teamBackup": false,
+     "teamId": "team_ops",
+     "updatedAt": "<datetime>",
+     "usedBy": []
+    },
+    "success": true
+   },
+   "sent": [
+    "authKind",
+    "name"
+   ],
+   "status": 201
+  },
+  "create same name": {
+   "body": {
+    "data": {
+     "accountName": null,
+     "activity": [
+      {
+       "action": "created",
+       "actor": "James Richardson",
+       "at": "<datetime>",
+       "detail": {
+        "kind": "api_key"
+       }
+      }
+     ],
+     "appId": "<id:con>",
+     "authKind": "api_key",
+     "category": null,
+     "credentialId": null,
+     "description": null,
+     "docsUrl": null,
+     "health": null,
+     "id": "<id:con>",
+     "kindLabel": "API key",
+     "mayManage": true,
+     "name": "Ledger",
+     "people": [],
+     "platformApp": null,
+     "redirectUri": null,
+     "revision": 1,
+     "sandbox": false,
+     "secrets": {
+      "clientKey": {
+       "set": false
+      },
+      "key": {
+       "set": false
+      }
+     },
+     "settings": {},
+     "signIn": "team",
+     "signedIn": null,
+     "status": "draft",
+     "statusDetail": null,
+     "teamBackup": false,
+     "teamId": "team_ops",
+     "updatedAt": "<datetime>",
+     "usedBy": []
+    },
+    "success": true
+   },
+   "sent": [
+    "authKind",
+    "name"
+   ],
+   "status": 201
+  },
+  "delete": {
+   "body": {
+    "data": {
+     "accounts": [
+      "Ledger"
+     ]
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "list": {
+   "body": {
+    "data": {
+     "data": [],
+     "facets": {
+      "appState": {},
+      "category": {},
+      "kind": {}
+     },
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 0,
+      "totalPages": 1
+     },
+     "viewCounts": {
+      "all": 0,
+      "available": 0,
+      "connected": 0
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "list available": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "accountsCount": 1,
+       "appGroup": "needs_admin",
+       "appState": "off",
+       "appStateReason": null,
+       "authKind": "api_key",
+       "category": null,
+       "connectionId": "<id:con>",
+       "credential": null,
+       "description": null,
+       "docsUrl": null,
+       "href": null,
+       "id": "<id:con>",
+       "kind": "connection",
+       "kindLabel": "API key",
+       "logo": null,
+       "managedClient": false,
+       "mayManage": true,
+       "moduleIds": [],
+       "name": "Ledger",
+       "ownSignIn": null,
+       "plugin": null,
+       "pluginId": null,
+       "sandboxId": null,
+       "signIn": "team",
+       "state": "not_signed_in",
+       "status": "draft",
+       "toolsAdded": null,
+       "toolsCount": 0
+      },
+      {
+       "accountsCount": 1,
+       "appGroup": "needs_admin",
+       "appState": "off",
+       "appStateReason": null,
+       "authKind": "api_key",
+       "category": null,
+       "connectionId": "<id:con>",
+       "credential": null,
+       "description": null,
+       "docsUrl": null,
+       "href": null,
+       "id": "<id:con>",
+       "kind": "connection",
+       "kindLabel": "API key",
+       "logo": null,
+       "managedClient": false,
+       "mayManage": true,
+       "moduleIds": [],
+       "name": "Ledger",
+       "ownSignIn": null,
+       "plugin": null,
+       "pluginId": null,
+       "sandboxId": null,
+       "signIn": "team",
+       "state": "not_signed_in",
+       "status": "draft",
+       "toolsAdded": null,
+       "toolsCount": 0
+      }
+     ],
+     "facets": {
+      "appState": {
+       "off": 2
+      },
+      "category": {},
+      "kind": {
+       "connection": 2
+      }
+     },
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 2,
+      "totalPages": 1
+     },
+     "viewCounts": {
+      "all": 2,
+      "available": 2,
+      "connected": 0
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "list connected": {
+   "body": {
+    "data": {
+     "data": [],
+     "facets": {
+      "appState": {},
+      "category": {},
+      "kind": {}
+     },
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 0,
+      "totalPages": 1
+     },
+     "viewCounts": {
+      "all": 2,
+      "available": 2,
+      "connected": 0
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "missing": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "message": "App app_nobody was not found.",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "status": 404
+  },
+  "my connections": {
+   "body": {
+    "data": [],
+    "success": true
+   },
+   "status": 200
+  },
+  "one": {
+   "body": {
+    "data": {
+     "accounts": [
+      {
+       "account": null,
+       "actions": [
+        "rename",
+        "sign_in",
+        "delete"
+       ],
+       "configId": null,
+       "configName": null,
+       "default": true,
+       "health": null,
+       "id": "<id:con>",
+       "identity": [],
+       "kind": "team",
+       "mine": false,
+       "myDefault": null,
+       "name": "Ledger",
+       "owner": {
+        "kind": "team",
+        "name": "Operations"
+       },
+       "peopleSignedIn": 0,
+       "pointsAt": null,
+       "revision": 1,
+       "rowId": "<id:con>",
+       "samePlaceAs": null,
+       "sandbox": false,
+       "signIn": "team",
+       "signInValues": [],
+       "state": "not_signed_in",
+       "stateReason": null,
+       "status": "draft",
+       "statusDetail": null,
+       "test": null
+      }
+     ],
+     "authConfigs": [
+      {
+       "accountCount": 1,
+       "canDelete": false,
+       "canEdit": false,
+       "clientId": null,
+       "default": true,
+       "fields": [],
+       "id": "",
+       "name": "API key",
+       "permissions": [],
+       "secretEnds": null,
+       "signInPlace": null,
+       "type": "account"
+      }
+     ],
+     "card": {
+      "accountsCount": 1,
+      "appGroup": "needs_admin",
+      "appState": "off",
+      "appStateReason": null,
+      "authKind": "api_key",
+      "category": null,
+      "connectionId": "<id:con>",
+      "credential": null,
+      "description": null,
+      "docsUrl": null,
+      "href": null,
+      "id": "<id:con>",
+      "kind": "connection",
+      "kindLabel": "API key",
+      "logo": null,
+      "managedClient": false,
+      "mayManage": true,
+      "moduleIds": [],
+      "name": "Ledger",
+      "ownSignIn": null,
+      "plugin": null,
+      "pluginId": null,
+      "sandboxId": null,
+      "signIn": "team",
+      "state": "not_signed_in",
+      "status": "draft",
+      "toolsAdded": null,
+      "toolsCount": 0
+     },
+     "connection": {
+      "accountName": null,
+      "activity": [
+       {
+        "action": "created",
+        "actor": "James Richardson",
+        "at": "<datetime>",
+        "detail": {
+         "kind": "api_key"
+        }
+       }
+      ],
+      "appId": "<id:con>",
+      "authKind": "api_key",
+      "category": null,
+      "certificate": null,
+      "credentialId": null,
+      "description": null,
+      "docsUrl": null,
+      "health": null,
+      "id": "<id:con>",
+      "kindLabel": "API key",
+      "mayManage": true,
+      "name": "Ledger",
+      "people": [],
+      "platformApp": null,
+      "pluginSecrets": null,
+      "pluginSettings": null,
+      "redirectUri": null,
+      "revision": 1,
+      "sandbox": false,
+      "secrets": {
+       "clientKey": {
+        "set": false,
+        "setAt": null,
+        "setBy": null
+       },
+       "key": {
+        "set": false,
+        "setAt": null,
+        "setBy": null
+       }
+      },
+      "settings": {},
+      "signIn": "team",
+      "signedIn": null,
+      "status": "draft",
+      "statusDetail": null,
+      "teamBackup": false,
+      "teamId": "team_ops",
+      "updatedAt": "<datetime>",
+      "usedBy": []
+     },
+     "me": {
+      "account": null,
+      "connected": false,
+      "signIns": 0
+     },
+     "peopleCount": 0,
+     "skills": [],
+     "tools": [],
+     "usage": []
+    },
+    "success": true
+   },
+   "status": 200
+  }
+ },
+ "egress": {
+  "add host": {
+   "body": {
+    "data": {
+     "changed": true,
+     "entry": {
+      "addedAt": "<datetime>",
+      "addedBy": "James Richardson",
+      "host": "ledger.bank.test",
+      "modules": [],
+      "note": "Ledger",
+      "protection": null,
+      "templateId": null
+     },
+     "kind": "host",
+     "value": "ledger.bank.test"
+    },
+    "success": true
+   },
+   "sent": [
+    "note",
+    "value"
+   ],
+   "status": 201
+  },
+  "add host again": {
+   "body": {
+    "data": {
+     "changed": false,
+     "entry": {
+      "addedAt": "<datetime>",
+      "addedBy": "James Richardson",
+      "host": "ledger.bank.test",
+      "modules": [],
+      "note": "Ledger",
+      "protection": null,
+      "templateId": null
+     },
+     "kind": "host",
+     "value": "ledger.bank.test"
+    },
+    "success": true
+   },
+   "sent": [
+    "note",
+    "value"
+   ],
+   "status": 200
+  },
+  "add range": {
+   "body": {
+    "data": {
+     "changed": true,
+     "entry": {
+      "addedAt": "<datetime>",
+      "addedBy": "James Richardson",
+      "cidr": "10.20.0.0/16",
+      "note": "Core network",
+      "protection": null,
+      "templateId": null
+     },
+     "kind": "range",
+     "value": "10.20.0.0/16"
+    },
+    "success": true
+   },
+   "sent": [
+    "note",
+    "value"
+   ],
+   "status": 201
+  },
+  "allow list": {
+   "body": {
+    "data": {
+     "hosts": [
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "api.equifax.ca",
+       "modules": [
+        {
+         "id": "mod_equifax",
+         "name": "Equifax credit"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "api.theworknumber.com",
+       "modules": [
+        {
+         "id": "mod_work_number",
+         "name": "The Work Number"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "cards.api.harborpine.internal",
+       "modules": [
+        {
+         "id": "mod_card_platform",
+         "name": "Card platform"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "casemgmt.harborpine.internal",
+       "modules": [
+        {
+         "id": "mod_case_mgmt",
+         "name": "Case management system"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "corebanking.api.harborpine.internal",
+       "modules": [
+        {
+         "id": "mod_core_banking",
+         "name": "Core banking"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "fincrime-mcp.harborpine.internal",
+       "modules": [
+        {
+         "id": "mod_compliance_mcp",
+         "name": "Compliance screening"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "graph.microsoft.com",
+       "modules": [
+        {
+         "id": "mod_m365_mail",
+         "name": "Microsoft 365 mail"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "harborpine.my.salesforce.com",
+       "modules": [
+        {
+         "id": "mod_salesforce",
+         "name": "Salesforce"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "harborpine.sharepoint.com",
+       "modules": [
+        {
+         "id": "mod_sharepoint",
+         "name": "SharePoint policies"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "James Richardson",
+       "host": "ledger.bank.test",
+       "modules": [],
+       "note": "Ledger",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "login.microsoftonline.com",
+       "modules": [
+        {
+         "id": "mod_m365_mail",
+         "name": "Microsoft 365 mail"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "los.harborpine.internal",
+       "modules": [
+        {
+         "id": "mod_loan_origination",
+         "name": "Loan origination"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "payments.harborpine.internal",
+       "modules": [
+        {
+         "id": "mod_payments_hub",
+         "name": "Payments hub"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      },
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "Sample data",
+       "host": "scheduler.harborpine.internal",
+       "modules": [
+        {
+         "id": "mod_branch_scheduler",
+         "name": "Branch scheduler"
+        }
+       ],
+       "note": "Called by the sample tool sets",
+       "protection": null,
+       "templateId": null
+      }
+     ],
+     "ranges": [
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "James Richardson",
+       "cidr": "10.20.0.0/16",
+       "note": "Core network",
+       "protection": null,
+       "templateId": null
+      }
+     ]
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "hosts page": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "addedAt": "<datetime>",
+       "addedBy": "James Richardson",
+       "host": "ledger.bank.test",
+       "modules": [],
+       "note": "Ledger",
+       "protection": null,
+       "templateId": null
+      }
+     ],
+     "facets": {},
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 2,
+      "total": 1,
+      "totalPages": 1
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "remove missing": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "message": "10.20.0.0/16 on the egress allow-list was not found.",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "sent": [
+    "value"
+   ],
+   "status": 404
+  },
+  "remove range": {
+   "body": {
+    "data": {
+     "changed": true,
+     "kind": "range",
+     "value": "10.20.0.0/16"
+    },
+    "success": true
+   },
+   "sent": [
+    "value"
+   ],
+   "status": 200
+  }
+ },
+ "gateway": {
+  "abandon": {
+   "body": {
+    "data": {
+     "abandoned": true,
+     "call": null
+    },
+    "success": true
+   },
+   "sent": [
+    "key",
+    "thread",
+    "tool"
+   ],
+   "status": 200
+  },
+  "abandon again": {
+   "body": {
+    "data": {
+     "abandoned": true,
+     "call": null
+    },
+    "success": true
+   },
+   "sent": [
+    "key",
+    "thread",
+    "tool"
+   ],
+   "status": 200
+  },
+  "abandon without tool": {
+   "body": {
+    "error": {
+     "code": "validation_failed",
+     "details": [
+      {
+       "loc": [
+        "body",
+        "tool"
+       ],
+       "msg": "Field required"
+      }
+     ],
+     "message": "tool: Field required",
+     "requestId": "<id:req>",
+     "status": 400
+    },
+    "success": false
+   },
+   "sent": [
+    "key"
+   ],
+   "status": 400
+  },
+  "code run call": {
+   "body": {
+    "error": {
+     "code": "scope_required",
+     "details": {
+      "scope": "tools:run"
+     },
+     "message": "This service token does not hold the tools:run scope.",
+     "requestId": "<id:req>",
+     "status": 403
+    },
+    "success": false
+   },
+   "sent": [
+    "input",
+    "tool"
+   ],
+   "status": 403
+  },
+  "code run call with tools:run": {
+   "body": {
+    "error": {
+     "code": "unauthorized",
+     "message": "Sign in, or send a valid API key.",
+     "requestId": "<id:req>",
+     "status": 401
+    },
+    "success": false
+   },
+   "sent": [
+    "input",
+    "tool"
+   ],
+   "status": 401
+  },
+  "fence": {
+   "body": {
+    "data": {
+     "generation": 2,
+     "thread": "thr_pin"
+    },
+    "success": true
+   },
+   "sent": [
+    "generation",
+    "thread"
+   ],
+   "status": 200
+  },
+  "fence again": {
+   "body": {
+    "data": {
+     "generation": 2,
+     "thread": "thr_pin"
+    },
+    "success": true
+   },
+   "sent": [
+    "generation",
+    "thread"
+   ],
+   "status": 200
+  },
+  "fence below": {
+   "body": {
+    "error": {
+     "code": "lease_superseded",
+     "details": {
+      "callId": "",
+      "reasons": [
+       "fence is at generation 2"
+      ]
+     },
+     "message": "fence is at generation 2",
+     "requestId": "<id:req>",
+     "status": 409
+    },
+    "success": false
+   },
+   "sent": [
+    "generation",
+    "thread"
+   ],
+   "status": 409
+  },
+  "fence of no generation": {
+   "body": {
+    "error": {
+     "code": "validation_failed",
+     "details": [
+      {
+       "loc": [
+        "body",
+        "generation"
+       ],
+       "msg": "Input should be greater than or equal to 1"
+      }
+     ],
+     "message": "generation: Input should be greater than or equal to 1",
+     "requestId": "<id:req>",
+     "status": 400
+    },
+    "success": false
+   },
+   "sent": [
+    "generation",
+    "thread"
+   ],
+   "status": 400
+  },
+  "fence unknown field": {
+   "body": {
+    "error": {
+     "code": "validation_failed",
+     "details": [
+      {
+       "loc": [
+        "body",
+        "owner"
+       ],
+       "msg": "Extra inputs are not permitted"
+      }
+     ],
+     "message": "owner: Extra inputs are not permitted",
+     "requestId": "<id:req>",
+     "status": 400
+    },
+    "success": false
+   },
+   "sent": [
+    "generation",
+    "owner",
+    "thread"
+   ],
+   "status": 400
+  },
+  "grantable": {
+   "body": {
+    "data": [
+     {
+      "access": "write",
+      "added": true,
+      "answer": "reviewer",
+      "approvers": 1,
+      "description": "Book a branch or advisor appointment",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "branch": {
+         "type": "string"
+        },
+        "slot": {
+         "type": "string"
+        },
+        "topic": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "branch",
+        "slot"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_branch_scheduler",
+      "moduleName": "Branch scheduler",
+      "name": "book_appointment",
+      "outputShape": null,
+      "requiresApproval": true,
+      "reviewerRole": null,
+      "source": "tool",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Book appointment"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Card transactions for a date range",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "cardAccount": {
+         "type": "string"
+        },
+        "from": {
+         "type": "string"
+        },
+        "to": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "cardAccount",
+        "from"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_card_platform",
+      "moduleName": "Card platform",
+      "name": "get_transactions",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Get transactions"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "reviewer",
+      "approvers": 2,
+      "description": "Post a provisional credit to a card account",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "amount": {
+         "description": "CAD",
+         "type": "number"
+        },
+        "cardAccount": {
+         "type": "string"
+        },
+        "disputeId": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "cardAccount",
+        "amount",
+        "disputeId"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_card_platform",
+      "moduleName": "Card platform",
+      "name": "issue_provisional_credit",
+      "outputShape": null,
+      "requiresApproval": true,
+      "reviewerRole": null,
+      "source": "tool",
+      "stepUp": true,
+      "testAccount": false,
+      "title": "Issue provisional credit"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "reviewer",
+      "approvers": 1,
+      "description": "Reverse a card fee",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "amount": {
+         "description": "CAD",
+         "type": "number"
+        },
+        "cardAccount": {
+         "type": "string"
+        },
+        "feeId": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "cardAccount",
+        "feeId",
+        "amount"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_card_platform",
+      "moduleName": "Card platform",
+      "name": "waive_fee",
+      "outputShape": null,
+      "requiresApproval": true,
+      "reviewerRole": null,
+      "source": "tool",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Waive fee"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Look up a business and its owners",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "jurisdiction": {
+         "type": "string"
+        },
+        "registryNumber": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "registryNumber"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_compliance_mcp",
+      "moduleName": "Compliance screening",
+      "name": "corporate_registry",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Corporate registry"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "PEP, sanctions and adverse media screening",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "country": {
+         "type": "string"
+        },
+        "dateOfBirth": {
+         "type": "string"
+        },
+        "name": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "name",
+        "country"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_compliance_mcp",
+      "moduleName": "Compliance screening",
+      "name": "screen_watchlists",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Screen watchlists"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "reviewer",
+      "approvers": 1,
+      "description": "Defer one or more loan payments under the hardship program",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "loanAccountId": {
+         "type": "string"
+        },
+        "payments": {
+         "description": "Number of payments to defer (1\u20133)",
+         "type": "integer"
+        },
+        "reasonCode": {
+         "enum": [
+          "job_loss",
+          "illness",
+          "disaster",
+          "other"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "loanAccountId",
+        "payments",
+        "reasonCode"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_core_banking",
+      "moduleName": "Core banking",
+      "name": "apply_payment_deferral",
+      "outputShape": null,
+      "requiresApproval": true,
+      "reviewerRole": null,
+      "source": "tool",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Apply payment deferral"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Name, contact details and products held by a customer",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "customerId": {
+         "description": "Customer number",
+         "examples": [
+          "CUS-118842"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "customerId"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_core_banking",
+      "moduleName": "Core banking",
+      "name": "get_customer_profile",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Get customer profile"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Balance, rate, next payment and arrears for a loan account",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "include": {
+         "description": "Extra sections: schedule, arrears, collateral",
+         "type": "array"
+        },
+        "loanAccountId": {
+         "description": "Loan account number",
+         "examples": [
+          "LN-0048213"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "loanAccountId"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_core_banking",
+      "moduleName": "Core banking",
+      "name": "get_loan_account",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Get loan account"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Payoff amount and per-diem interest for a loan as of a date",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "asOf": {
+         "description": "Payoff date",
+         "type": "string"
+        },
+        "loanAccountId": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "loanAccountId",
+        "asOf"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_core_banking",
+      "moduleName": "Core banking",
+      "name": "get_payoff_statement",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Get payoff statement"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "reviewer",
+      "approvers": 1,
+      "description": "Change a customer\u2019s mailing address",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "city": {
+         "type": "string"
+        },
+        "customerId": {
+         "description": "Customer number",
+         "type": "string"
+        },
+        "line1": {
+         "description": "Street address",
+         "type": "string"
+        },
+        "line2": {
+         "type": "string"
+        },
+        "postalCode": {
+         "type": "string"
+        },
+        "province": {
+         "enum": [
+          "AB",
+          "BC",
+          "MB",
+          "NB",
+          "NL",
+          "NS",
+          "ON",
+          "PE",
+          "QC",
+          "SK"
+         ],
+         "type": "string"
+        }
+       },
+       "required": [
+        "customerId",
+        "line1",
+        "city",
+        "province",
+        "postalCode"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_core_banking",
+      "moduleName": "Core banking",
+      "name": "update_address",
+      "outputShape": null,
+      "requiresApproval": true,
+      "reviewerRole": null,
+      "source": "tool",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Update address"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Pull a bureau report and score",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "applicantId": {
+         "type": "string"
+        },
+        "consentRef": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "applicantId",
+        "consentRef"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_equifax",
+      "moduleName": "Equifax credit",
+      "name": "run_credit_check",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Run credit check"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Semantic search with citations",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "allTeamKnowledgeBases": {
+         "description": "Search every knowledge base of the team instead of naming them",
+         "type": "boolean"
+        },
+        "collections": {
+         "description": "The team's knowledge bases to search, by id or name",
+         "type": "array"
+        },
+        "query": {
+         "description": "What to look for, in a sentence",
+         "type": "string"
+        }
+       },
+       "required": [
+        "query"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_knowledge",
+      "moduleName": "Knowledge search",
+      "name": "search_knowledge",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Search knowledge"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "reviewer",
+      "approvers": 1,
+      "description": "Create a pre-approval in the loan system",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "amount": {
+         "description": "CAD",
+         "type": "number"
+        },
+        "applicationId": {
+         "type": "string"
+        },
+        "rate": {
+         "description": "%",
+         "type": "number"
+        }
+       },
+       "required": [
+        "applicationId",
+        "amount",
+        "rate"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_loan_origination",
+      "moduleName": "Loan origination",
+      "name": "issue_preapproval",
+      "outputShape": null,
+      "requiresApproval": true,
+      "reviewerRole": null,
+      "source": "tool",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Issue preapproval"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Messages in the case\u2019s email thread",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "mailbox": {
+         "type": "string"
+        },
+        "messageId": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "mailbox",
+        "messageId"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_m365_mail",
+      "moduleName": "Microsoft 365 mail",
+      "name": "get_thread",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Get thread"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "reviewer",
+      "approvers": 1,
+      "description": "Reply to the customer on the case thread",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "body": {
+         "type": "string"
+        },
+        "mailbox": {
+         "type": "string"
+        },
+        "subject": {
+         "type": "string"
+        },
+        "to": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "to",
+        "subject",
+        "body"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_m365_mail",
+      "moduleName": "Microsoft 365 mail",
+      "name": "send_reply",
+      "outputShape": null,
+      "requiresApproval": true,
+      "reviewerRole": null,
+      "source": "tool",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Send reply"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Wire attempts and MFA results for an account",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "accountId": {
+         "type": "string"
+        },
+        "days": {
+         "description": "Look-back window, 1\u201330",
+         "type": "integer"
+        }
+       },
+       "required": [
+        "accountId"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_payments_hub",
+      "moduleName": "Payments hub",
+      "name": "get_wire_history",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Get wire history"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "reviewer",
+      "approvers": 2,
+      "description": "Place or release a hold on an outbound wire",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "hours": {
+         "type": "integer"
+        },
+        "reason": {
+         "type": "string"
+        },
+        "wireId": {
+         "description": "Wire id, e.g. W-88213",
+         "type": "string"
+        }
+       },
+       "required": [
+        "wireId",
+        "hours",
+        "reason"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_payments_hub",
+      "moduleName": "Payments hub",
+      "name": "place_wire_hold",
+      "outputShape": null,
+      "requiresApproval": true,
+      "reviewerRole": null,
+      "source": "tool",
+      "stepUp": true,
+      "testAccount": false,
+      "title": "Place wire hold"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Read a document's fields with one of the team's document types: each field's value, how sure the read is, and whether a person should check it.",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "documentType": {
+         "description": "The team's document type, by its id or name",
+         "type": "string"
+        },
+        "file": {
+         "description": "The file's id, or its name in the team's files",
+         "type": "string"
+        }
+       },
+       "required": [
+        "file",
+        "documentType"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_platform_tools",
+      "moduleName": "Platform tools",
+      "name": "read_document",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Read a document"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Read a file the team uploaded: its name, type and full text. Name it by its id or its name.",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "file": {
+         "description": "The file's id, or its name in the team's files",
+         "type": "string"
+        }
+       },
+       "required": [
+        "file"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_platform_tools",
+      "moduleName": "Platform tools",
+      "name": "read_file",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Read a file"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Email an automatic acknowledgement to the sender of a message; no approval.",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "body": {
+         "type": "string"
+        },
+        "mailbox": {
+         "type": "string"
+        },
+        "subject": {
+         "type": "string"
+        },
+        "to": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "to",
+        "subject",
+        "body"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_platform_tools",
+      "moduleName": "Platform tools",
+      "name": "send_acknowledgement",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "tool",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Send an acknowledgement"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Look up a Harbor & Pine deposit account by account number (e.g. CHQ-2219) or the account holder's name. Returns type, status, balance and wire limits.",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "query": {
+         "description": "Account number or holder name",
+         "type": "string"
+        }
+       },
+       "required": [
+        "query"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_runtime_demo",
+      "moduleName": "Runtime demo tools",
+      "name": "lookup_account",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Lookup account"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Look up a Harbor & Pine customer by name, customer id (e.g. CUS-4471) or email. Returns segment, home branch, status and open items.",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "query": {
+         "description": "Customer name, id or email",
+         "type": "string"
+        }
+       },
+       "required": [
+        "query"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_runtime_demo",
+      "moduleName": "Runtime demo tools",
+      "name": "lookup_customer",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Lookup customer"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Open a case for a customer issue in your team; returns its id. Calling again with the same call key returns the same case.",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "customerId": {
+         "description": "The customer's id in the bank's system",
+         "type": "string"
+        },
+        "customerName": {
+         "type": "string"
+        },
+        "priority": {
+         "enum": [
+          "low",
+          "normal",
+          "high",
+          "urgent"
+         ],
+         "type": "string"
+        },
+        "subject": {
+         "description": "What the issue is, in a line",
+         "type": "string"
+        }
+       },
+       "required": [
+        "subject"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_runtime_demo",
+      "moduleName": "Runtime demo tools",
+      "name": "open_case",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Open case"
+     },
+     {
+      "access": "write",
+      "added": true,
+      "answer": "reviewer",
+      "approvers": 1,
+      "description": "Ask a customer to provide a document (receipt, statement, proof of address, ID). Writes to the customer: each request is reviewed before it is sent.",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "customerId": {
+         "type": "string"
+        },
+        "document": {
+         "type": "string"
+        },
+        "reason": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "customerId",
+        "document",
+        "reason"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_runtime_demo",
+      "moduleName": "Runtime demo tools",
+      "name": "request_document",
+      "outputShape": null,
+      "requiresApproval": true,
+      "reviewerRole": null,
+      "source": "tool",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Request document"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Read a policy file",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "fileId": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "fileId"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_sharepoint",
+      "moduleName": "SharePoint policies",
+      "name": "get_file",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Get file"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Search policy pages and files",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "query": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "query"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_sharepoint",
+      "moduleName": "SharePoint policies",
+      "name": "search_sites",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Search sites"
+     },
+     {
+      "access": "read",
+      "added": true,
+      "answer": "none",
+      "approvers": 1,
+      "description": "Employment and income verification",
+      "inputSchema": {
+       "additionalProperties": false,
+       "properties": {
+        "applicantId": {
+         "type": "string"
+        },
+        "consentRef": {
+         "type": "string"
+        },
+        "employer": {
+         "type": "string"
+        }
+       },
+       "required": [
+        "applicantId",
+        "employer",
+        "consentRef"
+       ],
+       "type": "object"
+      },
+      "moduleId": "mod_work_number",
+      "moduleName": "The Work Number",
+      "name": "verify_employment",
+      "outputShape": null,
+      "requiresApproval": false,
+      "reviewerRole": null,
+      "source": "team",
+      "stepUp": false,
+      "testAccount": false,
+      "title": "Verify employment"
+     }
+    ],
+    "success": true
+   },
+   "status": 200
+  },
+  "grantable without tools:view": {
+   "body": {
+    "error": {
+     "code": "scope_required",
+     "details": {
+      "scope": "tools:view"
+     },
+     "message": "This service token does not hold the tools:view scope.",
+     "requestId": "<id:req>",
+     "status": 403
+    },
+    "success": false
+   },
+   "status": 403
+  },
+  "health": {
+   "body": {
+    "status": "ok"
+   },
+   "status": 200
+  }
+ },
+ "gateway_and_executions": {
+  "call ok": {
+   "body": {
+    "data": {
+     "callId": "<id:gwc>",
+     "decision": "allow",
+     "ok": true,
+     "output": {
+      "accountId": "CHQ-1",
+      "balance": 1200.5,
+      "holder": {
+       "name": "Marcus Webb",
+       "sin": "123-456-789"
+      }
+     },
+     "view": null
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "call refused for a missing secret": {
+   "body": {
+    "data": {
+     "callId": "<id:gwc>",
+     "decision": "allow",
+     "ok": false,
+     "output": {
+      "error": {
+       "code": "SECRET_MISSING",
+       "message": "The secret STATEMENTS_KEY is not set for this module's team."
+      }
+     },
+     "view": null
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "call unknown tool": {
+   "body": {
+    "error": {
+     "code": "gateway_refused",
+     "details": {
+      "callId": "<id:gwc>",
+      "reasons": [
+       "tool is not registered with the gateway"
+      ]
+     },
+     "message": "tool is not registered with the gateway",
+     "requestId": "<id:req>",
+     "status": 403
+    },
+    "success": false
+   },
+   "status": 403
+  },
+  "call without its key": {
+   "body": {
+    "error": {
+     "code": "validation_failed",
+     "details": [
+      {
+       "loc": [
+        "body",
+        "key"
+       ],
+       "msg": "Field required"
+      },
+      {
+       "loc": [
+        "body",
+        "runContext"
+       ],
+       "msg": "Field required"
+      }
+     ],
+     "message": "key: Field required",
+     "requestId": "<id:req>",
+     "status": 400
+    },
+    "success": false
+   },
+   "sent": [
+    "input",
+    "tool"
+   ],
+   "status": 400
+  },
+  "execution missing": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "message": "Call was not found.",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "status": 404
+  },
+  "execution one": {
+   "body": {
+    "data": {
+     "actor": {
+      "id": "dispute_email",
+      "kind": "workflow",
+      "name": "dispute_email"
+     },
+     "agentName": "",
+     "agentSlug": "",
+     "app": "Document service",
+     "approval": {
+      "kind": "none"
+     },
+     "at": "<datetime>",
+     "channel": "api",
+     "connectionId": "<id:con>",
+     "decision": "allow",
+     "effect": false,
+     "environment": "test",
+     "gateway": "data",
+     "id": "<id:gwc>",
+     "latencyMs": "<timing>",
+     "operation": "read",
+     "outcome": "ok",
+     "runAs": {
+      "kind": "team"
+     },
+     "runId": "",
+     "status": "ok",
+     "subject": {
+      "id": "service:agents",
+      "kind": "service",
+      "name": "service:agents"
+     },
+     "system": "Document service",
+     "target": "get_account",
+     "title": "Get account",
+     "workflowId": "dispute_email",
+     "workflowName": "dispute_email"
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "executions list": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "actor": {
+        "id": "dispute_email",
+        "kind": "workflow",
+        "name": "dispute_email"
+       },
+       "agentName": "",
+       "agentSlug": "",
+       "app": "Document service",
+       "approval": {
+        "kind": "none"
+       },
+       "at": "<datetime>",
+       "channel": "api",
+       "connectionId": "<id:con>",
+       "decision": "allow",
+       "effect": false,
+       "environment": "test",
+       "gateway": "data",
+       "id": "<id:gwc>",
+       "latencyMs": "<timing>",
+       "operation": "read",
+       "outcome": "ok",
+       "runAs": {
+        "kind": "team"
+       },
+       "runId": "",
+       "status": "ok",
+       "subject": {
+        "id": "service:agents",
+        "kind": "service",
+        "name": "service:agents"
+       },
+       "system": "Document service",
+       "target": "get_account",
+       "title": "Get account",
+       "workflowId": "dispute_email",
+       "workflowName": "dispute_email"
+      },
+      {
+       "actor": {
+        "id": "dispute_email",
+        "kind": "workflow",
+        "name": "dispute_email"
+       },
+       "agentName": "",
+       "agentSlug": "",
+       "app": "Document service",
+       "approval": {
+        "kind": "none"
+       },
+       "at": "<datetime>",
+       "channel": "api",
+       "connectionId": "<id:con>",
+       "decision": "allow",
+       "effect": false,
+       "environment": "test",
+       "errorCode": "SECRET_MISSING",
+       "errorMessage": "The secret STATEMENTS_KEY is not set for this module's team.",
+       "gateway": "data",
+       "id": "<id:gwc>",
+       "latencyMs": "<timing>",
+       "operation": "read",
+       "outcome": "error",
+       "runAs": {
+        "kind": "team"
+       },
+       "runId": "",
+       "status": "error",
+       "subject": {
+        "id": "service:agents",
+        "kind": "service",
+        "name": "service:agents"
+       },
+       "system": "Document service",
+       "target": "get_account",
+       "title": "Get account",
+       "workflowId": "dispute_email",
+       "workflowName": "dispute_email"
+      }
+     ],
+     "facets": {
+      "assistant": {
+       "Unnamed assistant": 2
+      },
+      "result": {
+       "Failed": 1,
+       "Ran": 1
+      }
+     },
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 2,
+      "totalPages": 1
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  }
+ },
+ "secrets": {
+  "create": {
+   "body": {
+    "data": {
+     "authConfig": null,
+     "connectionId": null,
+     "createdAt": "<datetime>",
+     "createdBy": "James Richardson",
+     "credentialId": null,
+     "ends": "er-1",
+     "label": null,
+     "name": "LEDGER_KEY",
+     "protection": null,
+     "readOnly": false,
+     "teamId": "team_lending",
+     "teams": [
+      "team_lending"
+     ],
+     "templateId": null,
+     "usedBy": [],
+     "version": 1
+    },
+    "success": true
+   },
+   "sent": [
+    "name",
+    "teamId",
+    "value"
+   ],
+   "status": 201
+  },
+  "create again": {
+   "body": {
+    "error": {
+     "code": "conflict",
+     "message": "A secret named LEDGER_KEY already exists. Rotate it to change its value.",
+     "requestId": "<id:req>",
+     "status": 409
+    },
+    "success": false
+   },
+   "sent": [
+    "name",
+    "teamId",
+    "value"
+   ],
+   "status": 409
+  },
+  "delete": {
+   "body": "",
+   "status": 204
+  },
+  "delete missing": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "message": "Secret LEDGER_API_KEY was not found.",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "status": 404
+  },
+  "list": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "authConfig": null,
+       "connectionId": null,
+       "createdAt": "<datetime>",
+       "createdBy": "James Richardson",
+       "credentialId": null,
+       "ends": "er-1",
+       "label": null,
+       "name": "LEDGER_KEY",
+       "protection": null,
+       "readOnly": false,
+       "teamId": "team_lending",
+       "teams": [
+        "team_lending"
+       ],
+       "templateId": null,
+       "usedBy": [],
+       "version": 1
+      }
+     ],
+     "facets": {},
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 1,
+      "totalPages": 1
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "rename": {
+   "body": {
+    "data": {
+     "authConfig": null,
+     "connectionId": null,
+     "createdAt": "<datetime>",
+     "createdBy": "James Richardson",
+     "credentialId": null,
+     "ends": "er-2",
+     "label": null,
+     "name": "LEDGER_API_KEY",
+     "protection": null,
+     "readOnly": false,
+     "rotatedAt": "<datetime>",
+     "teamId": "team_lending",
+     "teams": [
+      "team_lending"
+     ],
+     "templateId": null,
+     "usedBy": [],
+     "version": 2
+    },
+    "success": true
+   },
+   "sent": [
+    "name"
+   ],
+   "status": 200
+  },
+  "rotate": {
+   "body": {
+    "data": {
+     "authConfig": null,
+     "connectionId": null,
+     "createdAt": "<datetime>",
+     "createdBy": "James Richardson",
+     "credentialId": null,
+     "ends": "er-2",
+     "label": null,
+     "name": "LEDGER_KEY",
+     "protection": null,
+     "readOnly": false,
+     "rotatedAt": "<datetime>",
+     "teamId": "team_lending",
+     "teams": [
+      "team_lending"
+     ],
+     "templateId": null,
+     "usedBy": [],
+     "version": 2
+    },
+    "success": true
+   },
+   "sent": [
+    "value"
+   ],
+   "status": 200
+  },
+  "rotate missing": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "message": "Secret NO_SUCH was not found.",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "status": 404
+  }
+ },
+ "tool_module_lists": {
+  "grants": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_salesforce_apr2",
+       "justification": "Log each handled email on the contact so branches see it",
+       "major": 1,
+       "moduleId": "mod_salesforce",
+       "moduleName": "Salesforce",
+       "operations": [
+        "find_contact",
+        "log_activity"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Maya Okafor",
+       "status": "requested",
+       "workflowId": "wf_lending_inbox",
+       "workflowName": "Lending servicing inbox"
+      },
+      {
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_core_banking_apr3",
+       "justification": "Confirm the cardholder\u2019s contact details before posting a provisional credit",
+       "major": 3,
+       "moduleId": "mod_core_banking",
+       "moduleName": "Core banking",
+       "operations": [
+        "get_customer_profile"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Grace Liu",
+       "status": "requested",
+       "workflowId": "wf_dispute",
+       "workflowName": "Card dispute resolution"
+      },
+      {
+       "decidedAt": "<datetime>",
+       "decidedBy": "Maya Okafor",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_work_number_apr1",
+       "justification": "Income verification for pre-approval",
+       "major": 2,
+       "moduleId": "mod_work_number",
+       "moduleName": "The Work Number",
+       "operations": [
+        "verify_employment"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Maya Okafor",
+       "status": "approved",
+       "workflowId": "wf_mortgage",
+       "workflowName": "Mortgage pre-approval"
+      },
+      {
+       "decidedAt": "<datetime>",
+       "decidedBy": "Tom Haddad",
+       "environment": "test",
+       "expiresAt": "<datetime>",
+       "id": "mod_sharepoint_apr1",
+       "justification": "Pilot: cite investment policy in portfolio notes",
+       "major": 1,
+       "moduleId": "mod_sharepoint",
+       "moduleName": "SharePoint policies",
+       "operations": [
+        "search_sites",
+        "get_file"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Maya Okafor",
+       "status": "expired",
+       "workflowId": "wf_advisor",
+       "workflowName": "Quarterly portfolio review"
+      },
+      {
+       "decidedAt": "<datetime>",
+       "decidedBy": "Rafael Costa",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_salesforce_apr1",
+       "justification": "Show the agent prior service cases for the sender",
+       "major": 1,
+       "moduleId": "mod_salesforce",
+       "moduleName": "Salesforce",
+       "operations": [
+        "find_contact",
+        "get_case_history"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Maya Okafor",
+       "status": "approved",
+       "workflowId": "wf_card_inbox",
+       "workflowName": "Card services inbox"
+      },
+      {
+       "constraints": "Holds up to 72 hours",
+       "decidedAt": "<datetime>",
+       "decidedBy": "Maya Okafor",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_payments_hub_apr1",
+       "justification": "Hold risky new-payee wires for an analyst",
+       "major": 1,
+       "moduleId": "mod_payments_hub",
+       "moduleName": "Payments hub",
+       "operations": [
+        "get_wire_history",
+        "place_wire_hold"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Maya Okafor",
+       "status": "approved",
+       "workflowId": "wf_wire",
+       "workflowName": "Outbound wire review"
+      },
+      {
+       "decidedAt": "<datetime>",
+       "decidedBy": "Omar Siddiqui",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_m365_mail_apr1",
+       "justification": "Reply to customers who wrote to card services",
+       "major": 1,
+       "moduleId": "mod_m365_mail",
+       "moduleName": "Microsoft 365 mail",
+       "operations": [
+        "get_thread",
+        "send_reply"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Maya Okafor",
+       "status": "approved",
+       "workflowId": "wf_card_inbox",
+       "workflowName": "Card services inbox"
+      },
+      {
+       "decidedAt": "<datetime>",
+       "decidedBy": "Maya Okafor",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_loan_origination_apr1",
+       "justification": "Issue pre-approvals after underwriter sign-off",
+       "major": 4,
+       "moduleId": "mod_loan_origination",
+       "moduleName": "Loan origination",
+       "operations": [
+        "issue_preapproval"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Maya Okafor",
+       "status": "approved",
+       "workflowId": "wf_mortgage",
+       "workflowName": "Mortgage pre-approval"
+      },
+      {
+       "decidedAt": "<datetime>",
+       "decidedBy": "James Richardson",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_knowledge_apr1",
+       "justification": "Cite bank knowledge",
+       "major": 1,
+       "moduleId": "mod_knowledge",
+       "moduleName": "Knowledge search",
+       "operations": [
+        "search_knowledge"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Maya Okafor",
+       "status": "approved",
+       "workflowId": "wf_wire",
+       "workflowName": "Outbound wire review"
+      },
+      {
+       "decidedAt": "<datetime>",
+       "decidedBy": "Maya Okafor",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_equifax_apr1",
+       "justification": "Credit check at pre-approval",
+       "major": 1,
+       "moduleId": "mod_equifax",
+       "moduleName": "Equifax credit",
+       "operations": [
+        "run_credit_check"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Maya Okafor",
+       "status": "approved",
+       "workflowId": "wf_mortgage",
+       "workflowName": "Mortgage pre-approval"
+      },
+      {
+       "constraints": "Deferrals: at most 3 payments per request",
+       "decidedAt": "<datetime>",
+       "decidedBy": "Daniel Brooks",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_core_banking_apr1",
+       "justification": "Lending servicing inbox: hardship deferrals, payoff statements and address changes",
+       "major": 3,
+       "moduleId": "mod_core_banking",
+       "moduleName": "Core banking",
+       "operations": [
+        "get_loan_account",
+        "get_customer_profile",
+        "get_payoff_statement",
+        "apply_payment_deferral",
+        "update_address"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Maya Okafor",
+       "status": "approved",
+       "workflowId": "wf_lending_inbox",
+       "workflowName": "Lending servicing inbox"
+      },
+      {
+       "decidedAt": "<datetime>",
+       "decidedBy": "Priya Shah",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_compliance_mcp_apr1",
+       "justification": "Verify business owners before account opening",
+       "major": 2,
+       "moduleId": "mod_compliance_mcp",
+       "moduleName": "Compliance screening",
+       "operations": [
+        "screen_watchlists",
+        "corporate_registry"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Maya Okafor",
+       "status": "approved",
+       "workflowId": "wf_kyb",
+       "workflowName": "Business account onboarding"
+      },
+      {
+       "constraints": "Provisional credit up to $5,000",
+       "decidedAt": "<datetime>",
+       "decidedBy": "Grace Liu",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_card_platform_apr1",
+       "justification": "Dispute investigation and provisional credit under the Dispute Rights Guide",
+       "major": 2,
+       "moduleId": "mod_card_platform",
+       "moduleName": "Card platform",
+       "operations": [
+        "get_transactions",
+        "issue_provisional_credit"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Maya Okafor",
+       "status": "approved",
+       "workflowId": "wf_dispute",
+       "workflowName": "Card dispute resolution"
+      },
+      {
+       "decidedAt": "<datetime>",
+       "decidedBy": "Tom Haddad",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_branch_scheduler_apr1",
+       "justification": "Book appointments from chat",
+       "major": 1,
+       "moduleId": "mod_branch_scheduler",
+       "moduleName": "Branch scheduler",
+       "operations": [
+        "book_appointment"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Maya Okafor",
+       "status": "approved",
+       "workflowId": "wf_branch_chat",
+       "workflowName": "Branch chat"
+      },
+      {
+       "decidedAt": "<datetime>",
+       "decidedBy": "James Richardson",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_knowledge_apr5",
+       "justification": "Cite bank knowledge",
+       "major": 1,
+       "moduleId": "mod_knowledge",
+       "moduleName": "Knowledge search",
+       "operations": [
+        "search_knowledge"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Priya Shah",
+       "status": "approved",
+       "workflowId": "wf_branch_chat",
+       "workflowName": "Branch chat"
+      },
+      {
+       "decidedAt": "<datetime>",
+       "decidedBy": "Omar Siddiqui",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_m365_mail_apr2",
+       "justification": "Reply to customers who wrote to lending servicing",
+       "major": 1,
+       "moduleId": "mod_m365_mail",
+       "moduleName": "Microsoft 365 mail",
+       "operations": [
+        "get_thread",
+        "send_reply"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Priya Shah",
+       "status": "approved",
+       "workflowId": "wf_lending_inbox",
+       "workflowName": "Lending servicing inbox"
+      },
+      {
+       "decidedAt": "<datetime>",
+       "decidedBy": "James Richardson",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_knowledge_apr2",
+       "justification": "Cite bank knowledge",
+       "major": 1,
+       "moduleId": "mod_knowledge",
+       "moduleName": "Knowledge search",
+       "operations": [
+        "search_knowledge"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Priya Shah",
+       "status": "approved",
+       "workflowId": "wf_mortgage",
+       "workflowName": "Mortgage pre-approval"
+      },
+      {
+       "decidedAt": "<datetime>",
+       "decidedBy": "James Richardson",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_core_banking_apr2",
+       "justification": "Address changes requested by email to card services",
+       "major": 3,
+       "moduleId": "mod_core_banking",
+       "moduleName": "Core banking",
+       "operations": [
+        "get_customer_profile",
+        "update_address"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Priya Shah",
+       "status": "approved",
+       "workflowId": "wf_card_inbox",
+       "workflowName": "Card services inbox"
+      },
+      {
+       "decidedAt": "<datetime>",
+       "decidedBy": "Priya Shah",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_compliance_mcp_apr2",
+       "justification": "Self-employed applicants\u2019 businesses",
+       "major": 2,
+       "moduleId": "mod_compliance_mcp",
+       "moduleName": "Compliance screening",
+       "operations": [
+        "corporate_registry"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Priya Shah",
+       "status": "approved",
+       "workflowId": "wf_mortgage",
+       "workflowName": "Mortgage pre-approval"
+      },
+      {
+       "constraints": "Fee reversals up to $100",
+       "decidedAt": "<datetime>",
+       "decidedBy": "Grace Liu",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_card_platform_apr2",
+       "justification": "Card services inbox: disputes and fee complaints by email",
+       "major": 2,
+       "moduleId": "mod_card_platform",
+       "moduleName": "Card platform",
+       "operations": [
+        "get_transactions",
+        "issue_provisional_credit",
+        "waive_fee"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Priya Shah",
+       "status": "approved",
+       "workflowId": "wf_card_inbox",
+       "workflowName": "Card services inbox"
+      }
+     ],
+     "facets": {
+      "view": {
+       "active": 19,
+       "all": 22,
+       "ended": 0,
+       "expired": 1,
+       "expiring": 2,
+       "requested": 2
+      }
+     },
+     "pagination": {
+      "hasNext": true,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 22,
+      "totalPages": 2
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "grants expired": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "decidedAt": "<datetime>",
+       "decidedBy": "Tom Haddad",
+       "environment": "test",
+       "expiresAt": "<datetime>",
+       "id": "mod_sharepoint_apr1",
+       "justification": "Pilot: cite investment policy in portfolio notes",
+       "major": 1,
+       "moduleId": "mod_sharepoint",
+       "moduleName": "SharePoint policies",
+       "operations": [
+        "search_sites",
+        "get_file"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Maya Okafor",
+       "status": "expired",
+       "workflowId": "wf_advisor",
+       "workflowName": "Quarterly portfolio review"
+      }
+     ],
+     "facets": {
+      "view": {
+       "active": 19,
+       "all": 22,
+       "ended": 0,
+       "expired": 1,
+       "expiring": 2,
+       "requested": 2
+      }
+     },
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 1,
+      "totalPages": 1
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "grants page 2": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_core_banking_apr3",
+       "justification": "Confirm the cardholder\u2019s contact details before posting a provisional credit",
+       "major": 3,
+       "moduleId": "mod_core_banking",
+       "moduleName": "Core banking",
+       "operations": [
+        "get_customer_profile"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Grace Liu",
+       "status": "requested",
+       "workflowId": "wf_dispute",
+       "workflowName": "Card dispute resolution"
+      }
+     ],
+     "facets": {
+      "view": {
+       "active": 19,
+       "all": 22,
+       "ended": 0,
+       "expired": 1,
+       "expiring": 2,
+       "requested": 2
+      }
+     },
+     "pagination": {
+      "hasNext": true,
+      "hasPrev": true,
+      "page": 2,
+      "pageSize": 1,
+      "total": 22,
+      "totalPages": 22
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "grants past the end": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "decidedAt": "<datetime>",
+       "decidedBy": "James Richardson",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_knowledge_apr3",
+       "justification": "Cite bank knowledge",
+       "major": 1,
+       "moduleId": "mod_knowledge",
+       "moduleName": "Knowledge search",
+       "operations": [
+        "search_knowledge"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Anika Singh",
+       "status": "approved",
+       "workflowId": "wf_dispute",
+       "workflowName": "Card dispute resolution"
+      },
+      {
+       "decidedAt": "<datetime>",
+       "decidedBy": "James Richardson",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_knowledge_apr4",
+       "justification": "Cite bank knowledge",
+       "major": 1,
+       "moduleId": "mod_knowledge",
+       "moduleName": "Knowledge search",
+       "operations": [
+        "search_knowledge"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Maya Okafor",
+       "status": "approved",
+       "workflowId": "wf_kyb",
+       "workflowName": "Business account onboarding"
+      }
+     ],
+     "facets": {
+      "view": {
+       "active": 19,
+       "all": 22,
+       "ended": 0,
+       "expired": 1,
+       "expiring": 2,
+       "requested": 2
+      }
+     },
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": true,
+      "page": 11,
+      "pageSize": 2,
+      "total": 22,
+      "totalPages": 11
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "grants searched": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_core_banking_apr3",
+       "justification": "Confirm the cardholder\u2019s contact details before posting a provisional credit",
+       "major": 3,
+       "moduleId": "mod_core_banking",
+       "moduleName": "Core banking",
+       "operations": [
+        "get_customer_profile"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Grace Liu",
+       "status": "requested",
+       "workflowId": "wf_dispute",
+       "workflowName": "Card dispute resolution"
+      },
+      {
+       "constraints": "Provisional credit up to $5,000",
+       "decidedAt": "<datetime>",
+       "decidedBy": "Grace Liu",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_card_platform_apr1",
+       "justification": "Dispute investigation and provisional credit under the Dispute Rights Guide",
+       "major": 2,
+       "moduleId": "mod_card_platform",
+       "moduleName": "Card platform",
+       "operations": [
+        "get_transactions",
+        "issue_provisional_credit"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Maya Okafor",
+       "status": "approved",
+       "workflowId": "wf_dispute",
+       "workflowName": "Card dispute resolution"
+      },
+      {
+       "decidedAt": "<datetime>",
+       "decidedBy": "James Richardson",
+       "environment": "production",
+       "expiresAt": "<datetime>",
+       "id": "mod_knowledge_apr3",
+       "justification": "Cite bank knowledge",
+       "major": 1,
+       "moduleId": "mod_knowledge",
+       "moduleName": "Knowledge search",
+       "operations": [
+        "search_knowledge"
+       ],
+       "requestedAt": "<datetime>",
+       "requestedBy": "Anika Singh",
+       "status": "approved",
+       "workflowId": "wf_dispute",
+       "workflowName": "Card dispute resolution"
+      }
+     ],
+     "facets": {
+      "view": {
+       "active": 19,
+       "all": 22,
+       "ended": 0,
+       "expired": 1,
+       "expiring": 2,
+       "requested": 2
+      }
+     },
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 3,
+      "totalPages": 1
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "grants unknown view": {
+   "body": {
+    "error": {
+     "code": "validation_failed",
+     "message": "There is no view 'nothing': ask for one of active, expiring, requested, expired, ended, all.",
+     "requestId": "<id:req>",
+     "status": 400
+    },
+    "success": false
+   },
+   "status": 400
+  },
+  "list approval state": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "expiring",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://payments.harborpine.internal/api",
+        "expiresAt": "<datetime>",
+        "id": "int_payments_hub_team_platform",
+        "kind": "api_key",
+        "name": "Payments hub",
+        "status": "expiring"
+       },
+       "connectionId": "int_payments_hub_team_platform",
+       "description": "Wire history and holds on outbound wires.",
+       "displayName": "Payments hub",
+       "drift": false,
+       "endpoint": "https://payments.harborpine.internal/api",
+       "errorRate": 0,
+       "id": "mod_payments_hub",
+       "major": 1,
+       "name": "payments-hub",
+       "nextExpiry": "<datetime>",
+       "operationCount": 2,
+       "ownerTeam": "Payments Operations",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Payments Hub",
+       "templateId": null,
+       "type": "code",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.6.2",
+       "workflows": [
+        {
+         "id": "wf_wire",
+         "name": "Outbound wire review"
+        }
+       ]
+      }
+     ],
+     "facets": {
+      "access": {
+       "read": 1,
+       "write": 1
+      },
+      "approvalState": {
+       "approved": 9,
+       "draft": 1,
+       "expired": 1,
+       "expiring": 1,
+       "needs_approval": 3
+      },
+      "type": {
+       "code": 1
+      }
+     },
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 1,
+      "totalPages": 1
+     },
+     "stats": {
+      "calls24h": 0,
+      "errorRate": 0,
+      "expiringApprovals": 2,
+      "expiringModules": 2,
+      "modules": 15,
+      "operations": 31
+     },
+     "viewCounts": {
+      "all": 15,
+      "expired": 1,
+      "expiring": 2,
+      "failing": 1,
+      "needs_approval": 4,
+      "security_review": 1
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "list by name asc": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "accessClasses": [
+        "write"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://scheduler.harborpine.internal/api",
+        "expiresAt": "<datetime>",
+        "id": "int_branch_scheduler_team_retail",
+        "kind": "api_key",
+        "name": "Branch scheduler",
+        "status": "healthy"
+       },
+       "connectionId": "int_branch_scheduler_team_retail",
+       "description": "Branch and advisor appointment slots.",
+       "displayName": "Branch scheduler",
+       "drift": false,
+       "endpoint": "https://scheduler.harborpine.internal/api",
+       "errorRate": 0,
+       "id": "mod_branch_scheduler",
+       "major": 1,
+       "name": "branch-scheduler",
+       "nextExpiry": "<datetime>",
+       "operationCount": 1,
+       "ownerTeam": "Branch Network",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Branch Scheduler",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.1.0",
+       "workflows": [
+        {
+         "id": "wf_branch_chat",
+         "name": "Branch chat"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://cards.api.harborpine.internal/v2",
+        "expiresAt": "<datetime>",
+        "id": "int_card_platform_team_cards",
+        "kind": "none",
+        "name": "Card platform",
+        "status": "healthy"
+       },
+       "connectionId": "int_card_platform_team_cards",
+       "description": "Card transactions, provisional credits and fee adjustments.",
+       "displayName": "Card platform",
+       "drift": false,
+       "endpoint": "https://cards.api.harborpine.internal/v2",
+       "errorRate": 0,
+       "id": "mod_card_platform",
+       "major": 2,
+       "name": "card-platform",
+       "nextExpiry": "<datetime>",
+       "operationCount": 3,
+       "ownerTeam": "Card Services",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Card Platform",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "2.4.0",
+       "workflows": [
+        {
+         "id": "wf_dispute",
+         "name": "Card dispute resolution"
+        },
+        {
+         "id": "wf_card_inbox",
+         "name": "Card services inbox"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read"
+       ],
+       "approvalState": "needs_approval",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://casemgmt.harborpine.internal/mcp",
+        "expiresAt": "<datetime>",
+        "id": "int_case_mgmt_team_platform",
+        "kind": "none",
+        "name": "Case management system",
+        "status": "healthy"
+       },
+       "connectionId": "int_case_mgmt_team_platform",
+       "description": "The bank\u2019s case management system: signed agreements, statements and identity documents held on customer cases.",
+       "displayName": "Case management system",
+       "drift": false,
+       "endpoint": "https://casemgmt.harborpine.internal/mcp",
+       "errorRate": 0,
+       "id": "mod_case_mgmt",
+       "major": 0,
+       "name": "case-management",
+       "operationCount": 2,
+       "ownerTeam": "Enterprise Data",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": {
+        "id": "TMP-mod_case_mgmt_rev0",
+        "requestedAt": "<datetime>",
+        "requestedBy": "Anika Singh",
+        "version": "0.9.0"
+       },
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "in_review",
+       "system": "Case management system",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "0.9.0",
+       "workflows": []
+      },
+      {
+       "accessClasses": [
+        "read"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://fincrime-mcp.harborpine.internal/mcp",
+        "expiresAt": "<datetime>",
+        "id": "int_compliance_mcp_team_fraud",
+        "kind": "none",
+        "name": "Compliance MCP",
+        "status": "healthy"
+       },
+       "connectionId": "int_compliance_mcp_team_fraud",
+       "description": "Watchlist screening and corporate registry lookups, served by Financial Crime\u2019s MCP server.",
+       "displayName": "Compliance screening",
+       "drift": false,
+       "endpoint": "https://fincrime-mcp.harborpine.internal/mcp",
+       "errorRate": 0,
+       "id": "mod_compliance_mcp",
+       "major": 2,
+       "name": "compliance-screening",
+       "nextExpiry": "<datetime>",
+       "operationCount": 2,
+       "ownerTeam": "Financial Crime Ops",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Compliance MCP",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "2.1.0",
+       "workflows": [
+        {
+         "id": "wf_kyb",
+         "name": "Business account onboarding"
+        },
+        {
+         "id": "wf_mortgage",
+         "name": "Mortgage pre-approval"
+        }
+       ]
+      }
+     ],
+     "facets": {
+      "access": {
+       "read": 12,
+       "write": 8
+      },
+      "approvalState": {
+       "approved": 9,
+       "draft": 1,
+       "expired": 1,
+       "expiring": 1,
+       "needs_approval": 3
+      },
+      "type": {
+       "code": 4,
+       "http": 11
+      }
+     },
+     "pagination": {
+      "hasNext": true,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 4,
+      "total": 15,
+      "totalPages": 4
+     },
+     "stats": {
+      "calls24h": 0,
+      "errorRate": 0,
+      "expiringApprovals": 2,
+      "expiringModules": 2,
+      "modules": 15,
+      "operations": 31
+     },
+     "viewCounts": {
+      "all": 15,
+      "expired": 1,
+      "expiring": 2,
+      "failing": 1,
+      "needs_approval": 4,
+      "security_review": 1
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "list by operations desc": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "needs_approval",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://corebanking.api.harborpine.internal/v3",
+        "expiresAt": "<datetime>",
+        "id": "int_core_banking_team_platform",
+        "kind": "oauth2_client_credentials",
+        "name": "Core banking",
+        "status": "healthy"
+       },
+       "connectionId": "int_core_banking_team_platform",
+       "description": "Loan and deposit accounts, customer profiles and servicing actions in the core ledger.",
+       "displayName": "Core banking",
+       "drift": false,
+       "endpoint": "https://corebanking.api.harborpine.internal/v3",
+       "errorRate": 0,
+       "id": "mod_core_banking",
+       "major": 3,
+       "name": "core-banking",
+       "nextExpiry": "<datetime>",
+       "operationCount": 6,
+       "ownerTeam": "Core Banking Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 1,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Core Banking",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "3.2.1",
+       "workflows": [
+        {
+         "id": "wf_lending_inbox",
+         "name": "Lending servicing inbox"
+        },
+        {
+         "id": "wf_card_inbox",
+         "name": "Card services inbox"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": null,
+       "description": "Tools the Runtime runs in process for its demo agents and workflows.",
+       "displayName": "Runtime demo tools",
+       "drift": false,
+       "endpoint": "",
+       "errorRate": 0,
+       "id": "mod_runtime_demo",
+       "major": 1,
+       "name": "runtime-demo-tools",
+       "operationCount": 4,
+       "ownerTeam": "Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Runtime demo tools",
+       "templateId": null,
+       "type": "code",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.0.0",
+       "workflows": []
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "needs_approval",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://harborpine.my.salesforce.com/services/mcp/v1",
+        "expiresAt": "<datetime>",
+        "id": "int_salesforce_team_platform",
+        "kind": "oauth2_auth_code",
+        "name": "Salesforce",
+        "status": "expiring"
+       },
+       "connectionId": "int_salesforce_team_platform",
+       "description": "Contacts, service cases and activity history in the bank\u2019s Salesforce org, through its hosted MCP server.",
+       "displayName": "Salesforce",
+       "drift": true,
+       "endpoint": "https://harborpine.my.salesforce.com/services/mcp/v1",
+       "errorRate": 0,
+       "id": "mod_salesforce",
+       "major": 1,
+       "name": "salesforce-crm",
+       "nextExpiry": "<datetime>",
+       "operationCount": 3,
+       "ownerTeam": "CRM Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 1,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Salesforce",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.2.0",
+       "workflows": [
+        {
+         "id": "wf_card_inbox",
+         "name": "Card services inbox"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://cards.api.harborpine.internal/v2",
+        "expiresAt": "<datetime>",
+        "id": "int_card_platform_team_cards",
+        "kind": "none",
+        "name": "Card platform",
+        "status": "healthy"
+       },
+       "connectionId": "int_card_platform_team_cards",
+       "description": "Card transactions, provisional credits and fee adjustments.",
+       "displayName": "Card platform",
+       "drift": false,
+       "endpoint": "https://cards.api.harborpine.internal/v2",
+       "errorRate": 0,
+       "id": "mod_card_platform",
+       "major": 2,
+       "name": "card-platform",
+       "nextExpiry": "<datetime>",
+       "operationCount": 3,
+       "ownerTeam": "Card Services",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Card Platform",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "2.4.0",
+       "workflows": [
+        {
+         "id": "wf_dispute",
+         "name": "Card dispute resolution"
+        },
+        {
+         "id": "wf_card_inbox",
+         "name": "Card services inbox"
+        }
+       ]
+      }
+     ],
+     "facets": {
+      "access": {
+       "read": 12,
+       "write": 8
+      },
+      "approvalState": {
+       "approved": 9,
+       "draft": 1,
+       "expired": 1,
+       "expiring": 1,
+       "needs_approval": 3
+      },
+      "type": {
+       "code": 4,
+       "http": 11
+      }
+     },
+     "pagination": {
+      "hasNext": true,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 4,
+      "total": 15,
+      "totalPages": 4
+     },
+     "stats": {
+      "calls24h": 0,
+      "errorRate": 0,
+      "expiringApprovals": 2,
+      "expiringModules": 2,
+      "modules": 15,
+      "operations": 31
+     },
+     "viewCounts": {
+      "all": 15,
+      "expired": 1,
+      "expiring": 2,
+      "failing": 1,
+      "needs_approval": 4,
+      "security_review": 1
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "list code writes": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": null,
+       "description": "Tools the Runtime runs in process for its demo agents and workflows.",
+       "displayName": "Runtime demo tools",
+       "drift": false,
+       "endpoint": "",
+       "errorRate": 0,
+       "id": "mod_runtime_demo",
+       "major": 1,
+       "name": "runtime-demo-tools",
+       "operationCount": 4,
+       "ownerTeam": "Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Runtime demo tools",
+       "templateId": null,
+       "type": "code",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.0.0",
+       "workflows": []
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://graph.microsoft.com/v1.0",
+        "expiresAt": "<datetime>",
+        "id": "int_m365_mail_team_platform",
+        "kind": "oauth2_client_credentials",
+        "name": "Microsoft 365 \u00b7 outbound mail app",
+        "status": "healthy"
+       },
+       "connectionId": "int_m365_mail_team_platform",
+       "description": "Reads mail threads and sends replies from the bank\u2019s shared mailboxes.",
+       "displayName": "Microsoft 365 mail",
+       "drift": false,
+       "endpoint": "https://graph.microsoft.com/v1.0",
+       "errorRate": 0,
+       "id": "mod_m365_mail",
+       "major": 1,
+       "name": "m365-mail",
+       "nextExpiry": "<datetime>",
+       "operationCount": 2,
+       "ownerTeam": "Messaging Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Outbound mail",
+       "templateId": null,
+       "type": "code",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.1.0",
+       "workflows": [
+        {
+         "id": "wf_card_inbox",
+         "name": "Card services inbox"
+        },
+        {
+         "id": "wf_lending_inbox",
+         "name": "Lending servicing inbox"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "expiring",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://payments.harborpine.internal/api",
+        "expiresAt": "<datetime>",
+        "id": "int_payments_hub_team_platform",
+        "kind": "api_key",
+        "name": "Payments hub",
+        "status": "expiring"
+       },
+       "connectionId": "int_payments_hub_team_platform",
+       "description": "Wire history and holds on outbound wires.",
+       "displayName": "Payments hub",
+       "drift": false,
+       "endpoint": "https://payments.harborpine.internal/api",
+       "errorRate": 0,
+       "id": "mod_payments_hub",
+       "major": 1,
+       "name": "payments-hub",
+       "nextExpiry": "<datetime>",
+       "operationCount": 2,
+       "ownerTeam": "Payments Operations",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Payments Hub",
+       "templateId": null,
+       "type": "code",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.6.2",
+       "workflows": [
+        {
+         "id": "wf_wire",
+         "name": "Outbound wire review"
+        }
+       ]
+      }
+     ],
+     "facets": {
+      "access": {
+       "read": 4,
+       "write": 3
+      },
+      "approvalState": {
+       "approved": 2,
+       "expiring": 1
+      },
+      "type": {
+       "code": 3,
+       "http": 5
+      }
+     },
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 3,
+      "totalPages": 1
+     },
+     "stats": {
+      "calls24h": 0,
+      "errorRate": 0,
+      "expiringApprovals": 2,
+      "expiringModules": 2,
+      "modules": 15,
+      "operations": 31
+     },
+     "viewCounts": {
+      "all": 15,
+      "expired": 1,
+      "expiring": 2,
+      "failing": 1,
+      "needs_approval": 4,
+      "security_review": 1
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "list failing": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "accessClasses": [
+        "read"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://api.theworknumber.com/v2",
+        "expiresAt": "<datetime>",
+        "id": "int_work_number_team_lending",
+        "kind": "oauth2_client_credentials",
+        "name": "The Work Number",
+        "status": "error"
+       },
+       "connectionId": "int_work_number_team_lending",
+       "description": "Employment and income verification from Equifax Workforce Solutions.",
+       "displayName": "The Work Number",
+       "drift": false,
+       "endpoint": "https://api.theworknumber.com/v2",
+       "errorRate": 0,
+       "id": "mod_work_number",
+       "major": 2,
+       "name": "work-number",
+       "nextExpiry": "<datetime>",
+       "operationCount": 1,
+       "ownerTeam": "Lending Ops",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": false,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "The Work Number",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "2.0.1",
+       "workflows": [
+        {
+         "id": "wf_mortgage",
+         "name": "Mortgage pre-approval"
+        }
+       ]
+      }
+     ],
+     "facets": {
+      "access": {
+       "read": 1
+      },
+      "approvalState": {
+       "approved": 1
+      },
+      "type": {
+       "http": 1
+      }
+     },
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 1,
+      "totalPages": 1
+     },
+     "stats": {
+      "calls24h": 0,
+      "errorRate": 0,
+      "expiringApprovals": 2,
+      "expiringModules": 2,
+      "modules": 15,
+      "operations": 31
+     },
+     "viewCounts": {
+      "all": 15,
+      "expired": 1,
+      "expiring": 2,
+      "failing": 1,
+      "needs_approval": 4,
+      "security_review": 1
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "list needs approval page 2": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "needs_approval",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://harborpine.my.salesforce.com/services/mcp/v1",
+        "expiresAt": "<datetime>",
+        "id": "int_salesforce_team_platform",
+        "kind": "oauth2_auth_code",
+        "name": "Salesforce",
+        "status": "expiring"
+       },
+       "connectionId": "int_salesforce_team_platform",
+       "description": "Contacts, service cases and activity history in the bank\u2019s Salesforce org, through its hosted MCP server.",
+       "displayName": "Salesforce",
+       "drift": true,
+       "endpoint": "https://harborpine.my.salesforce.com/services/mcp/v1",
+       "errorRate": 0,
+       "id": "mod_salesforce",
+       "major": 1,
+       "name": "salesforce-crm",
+       "nextExpiry": "<datetime>",
+       "operationCount": 3,
+       "ownerTeam": "CRM Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 1,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Salesforce",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.2.0",
+       "workflows": [
+        {
+         "id": "wf_card_inbox",
+         "name": "Card services inbox"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "needs_approval",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://corebanking.api.harborpine.internal/v3",
+        "expiresAt": "<datetime>",
+        "id": "int_core_banking_team_platform",
+        "kind": "oauth2_client_credentials",
+        "name": "Core banking",
+        "status": "healthy"
+       },
+       "connectionId": "int_core_banking_team_platform",
+       "description": "Loan and deposit accounts, customer profiles and servicing actions in the core ledger.",
+       "displayName": "Core banking",
+       "drift": false,
+       "endpoint": "https://corebanking.api.harborpine.internal/v3",
+       "errorRate": 0,
+       "id": "mod_core_banking",
+       "major": 3,
+       "name": "core-banking",
+       "nextExpiry": "<datetime>",
+       "operationCount": 6,
+       "ownerTeam": "Core Banking Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 1,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Core Banking",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "3.2.1",
+       "workflows": [
+        {
+         "id": "wf_lending_inbox",
+         "name": "Lending servicing inbox"
+        },
+        {
+         "id": "wf_card_inbox",
+         "name": "Card services inbox"
+        }
+       ]
+      }
+     ],
+     "facets": {
+      "access": {
+       "read": 3,
+       "write": 2
+      },
+      "approvalState": {
+       "draft": 1,
+       "needs_approval": 3
+      },
+      "type": {
+       "http": 4
+      }
+     },
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": true,
+      "page": 2,
+      "pageSize": 2,
+      "total": 4,
+      "totalPages": 2
+     },
+     "stats": {
+      "calls24h": 0,
+      "errorRate": 0,
+      "expiringApprovals": 2,
+      "expiringModules": 2,
+      "modules": 15,
+      "operations": 31
+     },
+     "viewCounts": {
+      "all": 15,
+      "expired": 1,
+      "expiring": 2,
+      "failing": 1,
+      "needs_approval": 4,
+      "security_review": 1
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "list page too big": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "accessClasses": [],
+       "approvalState": "draft",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": null,
+       "description": "Fetches signed loan documents for the lending inbox.",
+       "displayName": "Document service",
+       "drift": false,
+       "endpoint": "",
+       "errorRate": 0,
+       "id": "mod_document_service",
+       "major": 0,
+       "name": "document-service",
+       "operationCount": 0,
+       "ownerTeam": "Lending Ops",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "draft",
+       "system": "Document service",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "0.1.0",
+       "workflows": []
+      },
+      {
+       "accessClasses": [
+        "read"
+       ],
+       "approvalState": "needs_approval",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://casemgmt.harborpine.internal/mcp",
+        "expiresAt": "<datetime>",
+        "id": "int_case_mgmt_team_platform",
+        "kind": "none",
+        "name": "Case management system",
+        "status": "healthy"
+       },
+       "connectionId": "int_case_mgmt_team_platform",
+       "description": "The bank\u2019s case management system: signed agreements, statements and identity documents held on customer cases.",
+       "displayName": "Case management system",
+       "drift": false,
+       "endpoint": "https://casemgmt.harborpine.internal/mcp",
+       "errorRate": 0,
+       "id": "mod_case_mgmt",
+       "major": 0,
+       "name": "case-management",
+       "operationCount": 2,
+       "ownerTeam": "Enterprise Data",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": {
+        "id": "TMP-mod_case_mgmt_rev0",
+        "requestedAt": "<datetime>",
+        "requestedBy": "Anika Singh",
+        "version": "0.9.0"
+       },
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "in_review",
+       "system": "Case management system",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "0.9.0",
+       "workflows": []
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": null,
+       "description": "Tools the Runtime runs in process for its demo agents and workflows.",
+       "displayName": "Runtime demo tools",
+       "drift": false,
+       "endpoint": "",
+       "errorRate": 0,
+       "id": "mod_runtime_demo",
+       "major": 1,
+       "name": "runtime-demo-tools",
+       "operationCount": 4,
+       "ownerTeam": "Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Runtime demo tools",
+       "templateId": null,
+       "type": "code",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.0.0",
+       "workflows": []
+      },
+      {
+       "accessClasses": [
+        "read"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": null,
+       "description": "Searches the knowledge bases in Data Hub with citations. Served by the platform.",
+       "displayName": "Knowledge search",
+       "drift": false,
+       "endpoint": "",
+       "errorRate": 0,
+       "id": "mod_knowledge",
+       "major": 1,
+       "name": "knowledge-search",
+       "nextExpiry": "<datetime>",
+       "operationCount": 1,
+       "ownerTeam": "Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Data Hub",
+       "templateId": null,
+       "type": "code",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.3.0",
+       "workflows": [
+        {
+         "id": "wf_wire",
+         "name": "Outbound wire review"
+        },
+        {
+         "id": "wf_mortgage",
+         "name": "Mortgage pre-approval"
+        },
+        {
+         "id": "wf_dispute",
+         "name": "Card dispute resolution"
+        },
+        {
+         "id": "wf_kyb",
+         "name": "Business account onboarding"
+        },
+        {
+         "id": "wf_branch_chat",
+         "name": "Branch chat"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "needs_approval",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://harborpine.my.salesforce.com/services/mcp/v1",
+        "expiresAt": "<datetime>",
+        "id": "int_salesforce_team_platform",
+        "kind": "oauth2_auth_code",
+        "name": "Salesforce",
+        "status": "expiring"
+       },
+       "connectionId": "int_salesforce_team_platform",
+       "description": "Contacts, service cases and activity history in the bank\u2019s Salesforce org, through its hosted MCP server.",
+       "displayName": "Salesforce",
+       "drift": true,
+       "endpoint": "https://harborpine.my.salesforce.com/services/mcp/v1",
+       "errorRate": 0,
+       "id": "mod_salesforce",
+       "major": 1,
+       "name": "salesforce-crm",
+       "nextExpiry": "<datetime>",
+       "operationCount": 3,
+       "ownerTeam": "CRM Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 1,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Salesforce",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.2.0",
+       "workflows": [
+        {
+         "id": "wf_card_inbox",
+         "name": "Card services inbox"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://fincrime-mcp.harborpine.internal/mcp",
+        "expiresAt": "<datetime>",
+        "id": "int_compliance_mcp_team_fraud",
+        "kind": "none",
+        "name": "Compliance MCP",
+        "status": "healthy"
+       },
+       "connectionId": "int_compliance_mcp_team_fraud",
+       "description": "Watchlist screening and corporate registry lookups, served by Financial Crime\u2019s MCP server.",
+       "displayName": "Compliance screening",
+       "drift": false,
+       "endpoint": "https://fincrime-mcp.harborpine.internal/mcp",
+       "errorRate": 0,
+       "id": "mod_compliance_mcp",
+       "major": 2,
+       "name": "compliance-screening",
+       "nextExpiry": "<datetime>",
+       "operationCount": 2,
+       "ownerTeam": "Financial Crime Ops",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Compliance MCP",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "2.1.0",
+       "workflows": [
+        {
+         "id": "wf_kyb",
+         "name": "Business account onboarding"
+        },
+        {
+         "id": "wf_mortgage",
+         "name": "Mortgage pre-approval"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "write"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://los.harborpine.internal/api/v4",
+        "expiresAt": "<datetime>",
+        "id": "int_loan_origination_team_lending",
+        "kind": "oauth2_client_credentials",
+        "name": "Loan origination",
+        "status": "healthy"
+       },
+       "connectionId": "int_loan_origination_team_lending",
+       "description": "Creates pre-approvals in the origination system.",
+       "displayName": "Loan origination",
+       "drift": false,
+       "endpoint": "https://los.harborpine.internal/api/v4",
+       "errorRate": 0,
+       "id": "mod_loan_origination",
+       "major": 4,
+       "name": "loan-origination",
+       "nextExpiry": "<datetime>",
+       "operationCount": 1,
+       "ownerTeam": "Lending Ops",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Loan Origination",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "4.2.0",
+       "workflows": [
+        {
+         "id": "wf_mortgage",
+         "name": "Mortgage pre-approval"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read"
+       ],
+       "approvalState": "expired",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://harborpine.sharepoint.com/_api/mcp",
+        "expiresAt": "<datetime>",
+        "id": "int_sharepoint_team_platform",
+        "kind": "oauth2_client_credentials",
+        "name": "SharePoint \u00b7 policy sites",
+        "status": "healthy"
+       },
+       "connectionId": "int_sharepoint_team_platform",
+       "description": "Read-only access to the policy and procedure sites.",
+       "displayName": "SharePoint policies",
+       "drift": false,
+       "endpoint": "https://harborpine.sharepoint.com/_api/mcp",
+       "errorRate": 0,
+       "id": "mod_sharepoint",
+       "major": 1,
+       "name": "sharepoint-policies",
+       "operationCount": 2,
+       "ownerTeam": "Digital Workplace",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "SharePoint",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.0.3",
+       "workflows": []
+      },
+      {
+       "accessClasses": [
+        "read"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://api.equifax.ca/credit/v1",
+        "expiresAt": "<datetime>",
+        "id": "int_equifax_team_lending",
+        "kind": "oauth2_client_credentials",
+        "name": "Equifax",
+        "status": "healthy"
+       },
+       "connectionId": "int_equifax_team_lending",
+       "description": "Bureau reports and scores for consenting applicants.",
+       "displayName": "Equifax credit",
+       "drift": false,
+       "endpoint": "https://api.equifax.ca/credit/v1",
+       "errorRate": 0,
+       "id": "mod_equifax",
+       "major": 1,
+       "name": "equifax-credit",
+       "nextExpiry": "<datetime>",
+       "operationCount": 1,
+       "ownerTeam": "Lending Ops",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Equifax",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.4.0",
+       "workflows": [
+        {
+         "id": "wf_mortgage",
+         "name": "Mortgage pre-approval"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://api.theworknumber.com/v2",
+        "expiresAt": "<datetime>",
+        "id": "int_work_number_team_lending",
+        "kind": "oauth2_client_credentials",
+        "name": "The Work Number",
+        "status": "error"
+       },
+       "connectionId": "int_work_number_team_lending",
+       "description": "Employment and income verification from Equifax Workforce Solutions.",
+       "displayName": "The Work Number",
+       "drift": false,
+       "endpoint": "https://api.theworknumber.com/v2",
+       "errorRate": 0,
+       "id": "mod_work_number",
+       "major": 2,
+       "name": "work-number",
+       "nextExpiry": "<datetime>",
+       "operationCount": 1,
+       "ownerTeam": "Lending Ops",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": false,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "The Work Number",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "2.0.1",
+       "workflows": [
+        {
+         "id": "wf_mortgage",
+         "name": "Mortgage pre-approval"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://graph.microsoft.com/v1.0",
+        "expiresAt": "<datetime>",
+        "id": "int_m365_mail_team_platform",
+        "kind": "oauth2_client_credentials",
+        "name": "Microsoft 365 \u00b7 outbound mail app",
+        "status": "healthy"
+       },
+       "connectionId": "int_m365_mail_team_platform",
+       "description": "Reads mail threads and sends replies from the bank\u2019s shared mailboxes.",
+       "displayName": "Microsoft 365 mail",
+       "drift": false,
+       "endpoint": "https://graph.microsoft.com/v1.0",
+       "errorRate": 0,
+       "id": "mod_m365_mail",
+       "major": 1,
+       "name": "m365-mail",
+       "nextExpiry": "<datetime>",
+       "operationCount": 2,
+       "ownerTeam": "Messaging Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Outbound mail",
+       "templateId": null,
+       "type": "code",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.1.0",
+       "workflows": [
+        {
+         "id": "wf_card_inbox",
+         "name": "Card services inbox"
+        },
+        {
+         "id": "wf_lending_inbox",
+         "name": "Lending servicing inbox"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "write"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://scheduler.harborpine.internal/api",
+        "expiresAt": "<datetime>",
+        "id": "int_branch_scheduler_team_retail",
+        "kind": "api_key",
+        "name": "Branch scheduler",
+        "status": "healthy"
+       },
+       "connectionId": "int_branch_scheduler_team_retail",
+       "description": "Branch and advisor appointment slots.",
+       "displayName": "Branch scheduler",
+       "drift": false,
+       "endpoint": "https://scheduler.harborpine.internal/api",
+       "errorRate": 0,
+       "id": "mod_branch_scheduler",
+       "major": 1,
+       "name": "branch-scheduler",
+       "nextExpiry": "<datetime>",
+       "operationCount": 1,
+       "ownerTeam": "Branch Network",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Branch Scheduler",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.1.0",
+       "workflows": [
+        {
+         "id": "wf_branch_chat",
+         "name": "Branch chat"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://cards.api.harborpine.internal/v2",
+        "expiresAt": "<datetime>",
+        "id": "int_card_platform_team_cards",
+        "kind": "none",
+        "name": "Card platform",
+        "status": "healthy"
+       },
+       "connectionId": "int_card_platform_team_cards",
+       "description": "Card transactions, provisional credits and fee adjustments.",
+       "displayName": "Card platform",
+       "drift": false,
+       "endpoint": "https://cards.api.harborpine.internal/v2",
+       "errorRate": 0,
+       "id": "mod_card_platform",
+       "major": 2,
+       "name": "card-platform",
+       "nextExpiry": "<datetime>",
+       "operationCount": 3,
+       "ownerTeam": "Card Services",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Card Platform",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "2.4.0",
+       "workflows": [
+        {
+         "id": "wf_dispute",
+         "name": "Card dispute resolution"
+        },
+        {
+         "id": "wf_card_inbox",
+         "name": "Card services inbox"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "expiring",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://payments.harborpine.internal/api",
+        "expiresAt": "<datetime>",
+        "id": "int_payments_hub_team_platform",
+        "kind": "api_key",
+        "name": "Payments hub",
+        "status": "expiring"
+       },
+       "connectionId": "int_payments_hub_team_platform",
+       "description": "Wire history and holds on outbound wires.",
+       "displayName": "Payments hub",
+       "drift": false,
+       "endpoint": "https://payments.harborpine.internal/api",
+       "errorRate": 0,
+       "id": "mod_payments_hub",
+       "major": 1,
+       "name": "payments-hub",
+       "nextExpiry": "<datetime>",
+       "operationCount": 2,
+       "ownerTeam": "Payments Operations",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Payments Hub",
+       "templateId": null,
+       "type": "code",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.6.2",
+       "workflows": [
+        {
+         "id": "wf_wire",
+         "name": "Outbound wire review"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "needs_approval",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://corebanking.api.harborpine.internal/v3",
+        "expiresAt": "<datetime>",
+        "id": "int_core_banking_team_platform",
+        "kind": "oauth2_client_credentials",
+        "name": "Core banking",
+        "status": "healthy"
+       },
+       "connectionId": "int_core_banking_team_platform",
+       "description": "Loan and deposit accounts, customer profiles and servicing actions in the core ledger.",
+       "displayName": "Core banking",
+       "drift": false,
+       "endpoint": "https://corebanking.api.harborpine.internal/v3",
+       "errorRate": 0,
+       "id": "mod_core_banking",
+       "major": 3,
+       "name": "core-banking",
+       "nextExpiry": "<datetime>",
+       "operationCount": 6,
+       "ownerTeam": "Core Banking Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 1,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Core Banking",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "3.2.1",
+       "workflows": [
+        {
+         "id": "wf_lending_inbox",
+         "name": "Lending servicing inbox"
+        },
+        {
+         "id": "wf_card_inbox",
+         "name": "Card services inbox"
+        }
+       ]
+      }
+     ],
+     "facets": {
+      "access": {
+       "read": 12,
+       "write": 8
+      },
+      "approvalState": {
+       "approved": 9,
+       "draft": 1,
+       "expired": 1,
+       "expiring": 1,
+       "needs_approval": 3
+      },
+      "type": {
+       "code": 4,
+       "http": 11
+      }
+     },
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 50,
+      "total": 15,
+      "totalPages": 1
+     },
+     "stats": {
+      "calls24h": 0,
+      "errorRate": 0,
+      "expiringApprovals": 2,
+      "expiringModules": 2,
+      "modules": 15,
+      "operations": 31
+     },
+     "viewCounts": {
+      "all": 15,
+      "expired": 1,
+      "expiring": 2,
+      "failing": 1,
+      "needs_approval": 4,
+      "security_review": 1
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "list past the end": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://graph.microsoft.com/v1.0",
+        "expiresAt": "<datetime>",
+        "id": "int_m365_mail_team_platform",
+        "kind": "oauth2_client_credentials",
+        "name": "Microsoft 365 \u00b7 outbound mail app",
+        "status": "healthy"
+       },
+       "connectionId": "int_m365_mail_team_platform",
+       "description": "Reads mail threads and sends replies from the bank\u2019s shared mailboxes.",
+       "displayName": "Microsoft 365 mail",
+       "drift": false,
+       "endpoint": "https://graph.microsoft.com/v1.0",
+       "errorRate": 0,
+       "id": "mod_m365_mail",
+       "major": 1,
+       "name": "m365-mail",
+       "nextExpiry": "<datetime>",
+       "operationCount": 2,
+       "ownerTeam": "Messaging Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Outbound mail",
+       "templateId": null,
+       "type": "code",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.1.0",
+       "workflows": [
+        {
+         "id": "wf_card_inbox",
+         "name": "Card services inbox"
+        },
+        {
+         "id": "wf_lending_inbox",
+         "name": "Lending servicing inbox"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "write"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://scheduler.harborpine.internal/api",
+        "expiresAt": "<datetime>",
+        "id": "int_branch_scheduler_team_retail",
+        "kind": "api_key",
+        "name": "Branch scheduler",
+        "status": "healthy"
+       },
+       "connectionId": "int_branch_scheduler_team_retail",
+       "description": "Branch and advisor appointment slots.",
+       "displayName": "Branch scheduler",
+       "drift": false,
+       "endpoint": "https://scheduler.harborpine.internal/api",
+       "errorRate": 0,
+       "id": "mod_branch_scheduler",
+       "major": 1,
+       "name": "branch-scheduler",
+       "nextExpiry": "<datetime>",
+       "operationCount": 1,
+       "ownerTeam": "Branch Network",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Branch Scheduler",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.1.0",
+       "workflows": [
+        {
+         "id": "wf_branch_chat",
+         "name": "Branch chat"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://cards.api.harborpine.internal/v2",
+        "expiresAt": "<datetime>",
+        "id": "int_card_platform_team_cards",
+        "kind": "none",
+        "name": "Card platform",
+        "status": "healthy"
+       },
+       "connectionId": "int_card_platform_team_cards",
+       "description": "Card transactions, provisional credits and fee adjustments.",
+       "displayName": "Card platform",
+       "drift": false,
+       "endpoint": "https://cards.api.harborpine.internal/v2",
+       "errorRate": 0,
+       "id": "mod_card_platform",
+       "major": 2,
+       "name": "card-platform",
+       "nextExpiry": "<datetime>",
+       "operationCount": 3,
+       "ownerTeam": "Card Services",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Card Platform",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "2.4.0",
+       "workflows": [
+        {
+         "id": "wf_dispute",
+         "name": "Card dispute resolution"
+        },
+        {
+         "id": "wf_card_inbox",
+         "name": "Card services inbox"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "expiring",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://payments.harborpine.internal/api",
+        "expiresAt": "<datetime>",
+        "id": "int_payments_hub_team_platform",
+        "kind": "api_key",
+        "name": "Payments hub",
+        "status": "expiring"
+       },
+       "connectionId": "int_payments_hub_team_platform",
+       "description": "Wire history and holds on outbound wires.",
+       "displayName": "Payments hub",
+       "drift": false,
+       "endpoint": "https://payments.harborpine.internal/api",
+       "errorRate": 0,
+       "id": "mod_payments_hub",
+       "major": 1,
+       "name": "payments-hub",
+       "nextExpiry": "<datetime>",
+       "operationCount": 2,
+       "ownerTeam": "Payments Operations",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Payments Hub",
+       "templateId": null,
+       "type": "code",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.6.2",
+       "workflows": [
+        {
+         "id": "wf_wire",
+         "name": "Outbound wire review"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "needs_approval",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://corebanking.api.harborpine.internal/v3",
+        "expiresAt": "<datetime>",
+        "id": "int_core_banking_team_platform",
+        "kind": "oauth2_client_credentials",
+        "name": "Core banking",
+        "status": "healthy"
+       },
+       "connectionId": "int_core_banking_team_platform",
+       "description": "Loan and deposit accounts, customer profiles and servicing actions in the core ledger.",
+       "displayName": "Core banking",
+       "drift": false,
+       "endpoint": "https://corebanking.api.harborpine.internal/v3",
+       "errorRate": 0,
+       "id": "mod_core_banking",
+       "major": 3,
+       "name": "core-banking",
+       "nextExpiry": "<datetime>",
+       "operationCount": 6,
+       "ownerTeam": "Core Banking Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 1,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Core Banking",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "3.2.1",
+       "workflows": [
+        {
+         "id": "wf_lending_inbox",
+         "name": "Lending servicing inbox"
+        },
+        {
+         "id": "wf_card_inbox",
+         "name": "Card services inbox"
+        }
+       ]
+      }
+     ],
+     "facets": {
+      "access": {
+       "read": 12,
+       "write": 8
+      },
+      "approvalState": {
+       "approved": 9,
+       "draft": 1,
+       "expired": 1,
+       "expiring": 1,
+       "needs_approval": 3
+      },
+      "type": {
+       "code": 4,
+       "http": 11
+      }
+     },
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": true,
+      "page": 3,
+      "pageSize": 5,
+      "total": 15,
+      "totalPages": 3
+     },
+     "stats": {
+      "calls24h": 0,
+      "errorRate": 0,
+      "expiringApprovals": 2,
+      "expiringModules": 2,
+      "modules": 15,
+      "operations": 31
+     },
+     "viewCounts": {
+      "all": 15,
+      "expired": 1,
+      "expiring": 2,
+      "failing": 1,
+      "needs_approval": 4,
+      "security_review": 1
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "list searched": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "accessClasses": [
+        "read"
+       ],
+       "approvalState": "needs_approval",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://casemgmt.harborpine.internal/mcp",
+        "expiresAt": "<datetime>",
+        "id": "int_case_mgmt_team_platform",
+        "kind": "none",
+        "name": "Case management system",
+        "status": "healthy"
+       },
+       "connectionId": "int_case_mgmt_team_platform",
+       "description": "The bank\u2019s case management system: signed agreements, statements and identity documents held on customer cases.",
+       "displayName": "Case management system",
+       "drift": false,
+       "endpoint": "https://casemgmt.harborpine.internal/mcp",
+       "errorRate": 0,
+       "id": "mod_case_mgmt",
+       "major": 0,
+       "name": "case-management",
+       "operationCount": 2,
+       "ownerTeam": "Enterprise Data",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": {
+        "id": "TMP-mod_case_mgmt_rev0",
+        "requestedAt": "<datetime>",
+        "requestedBy": "Anika Singh",
+        "version": "0.9.0"
+       },
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "in_review",
+       "system": "Case management system",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "0.9.0",
+       "workflows": []
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "needs_approval",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://harborpine.my.salesforce.com/services/mcp/v1",
+        "expiresAt": "<datetime>",
+        "id": "int_salesforce_team_platform",
+        "kind": "oauth2_auth_code",
+        "name": "Salesforce",
+        "status": "expiring"
+       },
+       "connectionId": "int_salesforce_team_platform",
+       "description": "Contacts, service cases and activity history in the bank\u2019s Salesforce org, through its hosted MCP server.",
+       "displayName": "Salesforce",
+       "drift": true,
+       "endpoint": "https://harborpine.my.salesforce.com/services/mcp/v1",
+       "errorRate": 0,
+       "id": "mod_salesforce",
+       "major": 1,
+       "name": "salesforce-crm",
+       "nextExpiry": "<datetime>",
+       "operationCount": 3,
+       "ownerTeam": "CRM Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 1,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Salesforce",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.2.0",
+       "workflows": [
+        {
+         "id": "wf_card_inbox",
+         "name": "Card services inbox"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://graph.microsoft.com/v1.0",
+        "expiresAt": "<datetime>",
+        "id": "int_m365_mail_team_platform",
+        "kind": "oauth2_client_credentials",
+        "name": "Microsoft 365 \u00b7 outbound mail app",
+        "status": "healthy"
+       },
+       "connectionId": "int_m365_mail_team_platform",
+       "description": "Reads mail threads and sends replies from the bank\u2019s shared mailboxes.",
+       "displayName": "Microsoft 365 mail",
+       "drift": false,
+       "endpoint": "https://graph.microsoft.com/v1.0",
+       "errorRate": 0,
+       "id": "mod_m365_mail",
+       "major": 1,
+       "name": "m365-mail",
+       "nextExpiry": "<datetime>",
+       "operationCount": 2,
+       "ownerTeam": "Messaging Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Outbound mail",
+       "templateId": null,
+       "type": "code",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.1.0",
+       "workflows": [
+        {
+         "id": "wf_card_inbox",
+         "name": "Card services inbox"
+        },
+        {
+         "id": "wf_lending_inbox",
+         "name": "Lending servicing inbox"
+        }
+       ]
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "needs_approval",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://corebanking.api.harborpine.internal/v3",
+        "expiresAt": "<datetime>",
+        "id": "int_core_banking_team_platform",
+        "kind": "oauth2_client_credentials",
+        "name": "Core banking",
+        "status": "healthy"
+       },
+       "connectionId": "int_core_banking_team_platform",
+       "description": "Loan and deposit accounts, customer profiles and servicing actions in the core ledger.",
+       "displayName": "Core banking",
+       "drift": false,
+       "endpoint": "https://corebanking.api.harborpine.internal/v3",
+       "errorRate": 0,
+       "id": "mod_core_banking",
+       "major": 3,
+       "name": "core-banking",
+       "nextExpiry": "<datetime>",
+       "operationCount": 6,
+       "ownerTeam": "Core Banking Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 1,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Core Banking",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "3.2.1",
+       "workflows": [
+        {
+         "id": "wf_lending_inbox",
+         "name": "Lending servicing inbox"
+        },
+        {
+         "id": "wf_card_inbox",
+         "name": "Card services inbox"
+        }
+       ]
+      }
+     ],
+     "facets": {
+      "access": {
+       "read": 4,
+       "write": 3
+      },
+      "approvalState": {
+       "approved": 1,
+       "needs_approval": 3
+      },
+      "type": {
+       "code": 1,
+       "http": 3
+      }
+     },
+     "pagination": {
+      "hasNext": false,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 20,
+      "total": 4,
+      "totalPages": 1
+     },
+     "stats": {
+      "calls24h": 0,
+      "errorRate": 0,
+      "expiringApprovals": 2,
+      "expiringModules": 2,
+      "modules": 15,
+      "operations": 31
+     },
+     "viewCounts": {
+      "all": 15,
+      "expired": 1,
+      "expiring": 2,
+      "failing": 1,
+      "needs_approval": 4,
+      "security_review": 1
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "list unknown view": {
+   "body": {
+    "error": {
+     "code": "validation_failed",
+     "message": "There is no view 'nothing': ask for one of all, needs_approval, expiring, expired, failing, security_review.",
+     "requestId": "<id:req>",
+     "status": 400
+    },
+    "success": false
+   },
+   "status": 400
+  }
+ },
+ "tool_modules": {
+  "activity": {
+   "body": {
+    "data": {
+     "days": [
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      },
+      {
+       "count": 0,
+       "date": "<date>",
+       "errors": 0,
+       "p95Ms": "<timing>"
+      }
+     ],
+     "denied24h": 0,
+     "recent": []
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "grants": {
+   "body": {
+    "error": {
+     "code": "team_required",
+     "message": "A service token on this route names its team.",
+     "requestId": "<id:req>",
+     "status": 403
+    },
+    "success": false
+   },
+   "status": 403
+  },
+  "list": {
+   "body": {
+    "data": {
+     "data": [
+      {
+       "accessClasses": [],
+       "approvalState": "draft",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": null,
+       "description": "Fetches signed loan documents for the lending inbox.",
+       "displayName": "Document service",
+       "drift": false,
+       "endpoint": "",
+       "errorRate": 0,
+       "id": "mod_document_service",
+       "major": 0,
+       "name": "document-service",
+       "operationCount": 0,
+       "ownerTeam": "Lending Ops",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "draft",
+       "system": "Document service",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "0.1.0",
+       "workflows": []
+      },
+      {
+       "accessClasses": [
+        "read"
+       ],
+       "approvalState": "needs_approval",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": {
+        "baseUrl": "https://casemgmt.harborpine.internal/mcp",
+        "expiresAt": "<datetime>",
+        "id": "int_case_mgmt_team_platform",
+        "kind": "none",
+        "name": "Case management system",
+        "status": "healthy"
+       },
+       "connectionId": "int_case_mgmt_team_platform",
+       "description": "The bank\u2019s case management system: signed agreements, statements and identity documents held on customer cases.",
+       "displayName": "Case management system",
+       "drift": false,
+       "endpoint": "https://casemgmt.harborpine.internal/mcp",
+       "errorRate": 0,
+       "id": "mod_case_mgmt",
+       "major": 0,
+       "name": "case-management",
+       "operationCount": 2,
+       "ownerTeam": "Enterprise Data",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": {
+        "id": "TMP-mod_case_mgmt_rev0",
+        "requestedAt": "<datetime>",
+        "requestedBy": "Anika Singh",
+        "version": "0.9.0"
+       },
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "in_review",
+       "system": "Case management system",
+       "templateId": null,
+       "type": "http",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "0.9.0",
+       "workflows": []
+      },
+      {
+       "accessClasses": [
+        "read",
+        "write"
+       ],
+       "approvalState": "approved",
+       "calls24h": 0,
+       "canEdit": true,
+       "connection": null,
+       "description": "Tools the Runtime runs in process for its demo agents and workflows.",
+       "displayName": "Runtime demo tools",
+       "drift": false,
+       "endpoint": "",
+       "errorRate": 0,
+       "id": "mod_runtime_demo",
+       "major": 1,
+       "name": "runtime-demo-tools",
+       "operationCount": 4,
+       "ownerTeam": "Platform",
+       "p95Ms": "<timing>",
+       "pendingApprovals": 0,
+       "pendingReview": null,
+       "protection": null,
+       "reachable": true,
+       "signIn": "person_or_team",
+       "status": "published",
+       "system": "Runtime demo tools",
+       "templateId": null,
+       "type": "code",
+       "unsetSecrets": 0,
+       "updatedAt": "<datetime>",
+       "version": "1.0.0",
+       "workflows": []
+      }
+     ],
+     "facets": {
+      "access": {
+       "read": 12,
+       "write": 8
+      },
+      "approvalState": {
+       "approved": 9,
+       "draft": 1,
+       "expired": 1,
+       "expiring": 1,
+       "needs_approval": 3
+      },
+      "type": {
+       "code": 4,
+       "http": 11
+      }
+     },
+     "pagination": {
+      "hasNext": true,
+      "hasPrev": false,
+      "page": 1,
+      "pageSize": 3,
+      "total": 15,
+      "totalPages": 5
+     },
+     "stats": {
+      "calls24h": 0,
+      "errorRate": 0,
+      "expiringApprovals": 2,
+      "expiringModules": 2,
+      "modules": 15,
+      "operations": 31
+     },
+     "viewCounts": {
+      "all": 15,
+      "expired": 1,
+      "expiring": 2,
+      "failing": 1,
+      "needs_approval": 4,
+      "security_review": 1
+     }
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "missing": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "message": "Module was not found.",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "status": 404
+  },
+  "one": {
+   "body": {
+    "data": {
+     "accessClasses": [],
+     "approvalState": "draft",
+     "approvals": [],
+     "auth": {
+      "kind": "none"
+     },
+     "calls24h": 0,
+     "canDelete": true,
+     "canEdit": true,
+     "canPublish": true,
+     "connection": null,
+     "dataClassification": "confidential",
+     "description": "Fetches signed loan documents for the lending inbox.",
+     "displayName": "Document service",
+     "drift": false,
+     "egressHosts": [],
+     "endpoint": "",
+     "errorRate": 0,
+     "id": "mod_document_service",
+     "major": 0,
+     "name": "document-service",
+     "operationCount": 0,
+     "operations": [],
+     "ownerContacts": [
+      "James Richardson"
+     ],
+     "ownerTeam": "Lending Ops",
+     "p95Ms": "<timing>",
+     "pendingApprovals": 0,
+     "pendingChanges": [],
+     "pendingReview": null,
+     "protection": null,
+     "reachable": true,
+     "runContexts": [
+      {
+       "bindings": {},
+       "caseId": "sample",
+       "id": "owner",
+       "label": "Owner, no case",
+       "workflowId": "",
+       "workflowName": ""
+      }
+     ],
+     "signIn": "person_or_team",
+     "status": "draft",
+     "system": "Document service",
+     "templateId": null,
+     "timeoutMs": 8000,
+     "type": "http",
+     "unsetSecrets": 0,
+     "updatedAt": "<datetime>",
+     "version": "0.1.0",
+     "versions": [
+      {
+       "changes": [],
+       "major": 0,
+       "note": "First version",
+       "pinnedBy": [],
+       "publishedBy": "James Richardson",
+       "reachability": [],
+       "status": "draft",
+       "version": "0.1.0"
+      }
+     ],
+     "workflows": []
+    },
+    "success": true
+   },
+   "status": 200
+  },
+  "tool": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "details": {
+      "callId": "",
+      "reasons": [
+       "tool lookup_case is not registered with the gateway"
+      ]
+     },
+     "message": "tool lookup_case is not registered with the gateway",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "status": 404
+  },
+  "tool missing": {
+   "body": {
+    "error": {
+     "code": "not_found",
+     "details": {
+      "callId": "",
+      "reasons": [
+       "tool no_such_tool is not registered with the gateway"
+      ]
+     },
+     "message": "tool no_such_tool is not registered with the gateway",
+     "requestId": "<id:req>",
+     "status": 404
+    },
+    "success": false
+   },
+   "status": 404
+  }
+ }
+}

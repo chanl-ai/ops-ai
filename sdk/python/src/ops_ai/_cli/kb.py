@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ops_ai import OpsAI
-from ops_ai._transport import page_items
+from ops_ai._transport import every_page
 
 from .common import client, emit, marked, parser, refuse, short, table, verb_options
 
@@ -85,26 +85,22 @@ def main(argv: list[str]) -> int:
         return refuse(exc)
 
 
-def _rows(found: Any) -> list[Any]:
-    return page_items(found)[0]
-
-
 def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
     kb = ops.raw.kb
     if ns.verb == "bases":
-        rows = _rows(kb.knowledge_bases_list_knowledge_bases(page_size=50, search=ns.search))
+        rows = every_page(kb.knowledge_bases_list_knowledge_bases, search=ns.search)
         return table(ns, rows, "id", "name", "owner", "description")
     if ns.verb == "show":
         return emit(ns, kb.knowledge_bases_get_knowledge_base(ns.kb))
     if ns.verb == "documents":
-        rows = _rows(kb.knowledge_bases_list_documents(ns.kb, page_size=50, search=ns.search))
+        rows = every_page(lambda **q: kb.knowledge_bases_list_documents(ns.kb, **q), search=ns.search)
         return table(ns, rows, "id", "title", "status", "sourceName")
     if ns.verb == "sources":
-        return table(ns, _rows(kb.sources_list_sources(page_size=50, search=ns.search)), "id", "type", "name", "status")
+        return table(ns, every_page(kb.sources_list_sources, search=ns.search), "id", "type", "name", "status")
     if ns.verb == "source":
         return emit(ns, kb.sources_get_source(ns.source))
     if ns.verb == "items":
-        rows = _rows(kb.sources_list_items(ns.source, page_size=50, search=ns.search))
+        rows = every_page(lambda **q: kb.sources_list_items(ns.source, **q), search=ns.search)
         return table(ns, rows, "id", "title", "status", "mime")
     if ns.verb == "create":
         return emit(ns, ops.knowledge.add_base(ns.name, owner=ns.owner))
@@ -137,7 +133,7 @@ def _dispatch(ns: argparse.Namespace, ops: OpsAI) -> int:
         answer = kb.knowledge_bases_query_knowledge_base(ns.kb, {"question": ns.question})
         return emit(ns, answer, text=_answer(answer))
     if ns.verb == "changes":
-        rows = _rows(kb.changes_list_changes(page_size=50, kb_id=ns.kb, view=ns.view))
+        rows = every_page(kb.changes_list_changes, kb_id=ns.kb, view=ns.view)
         return table(ns, rows, "id", "kind", "status", "title")
     if ns.verb == "change":
         return emit(ns, kb.changes_get_change(ns.change))

@@ -79,7 +79,7 @@ bare = _rig({})
 async def _card(client: httpx.AsyncClient, tenant: str) -> dict[str, Any]:
     got = await client.get("/v1/apps", headers=team_admin(tenant))
     assert got.status_code == 200, got.text
-    return next(c for c in got.json()["data"] if c["kind"] == "plugin")
+    return next(c for c in got.json()["data"]["data"] if c["kind"] == "plugin")
 
 
 async def test_an_install_client_signs_a_team_in_with_no_fields_and_no_admin_step(installed: Rig, tenant: str) -> None:

@@ -23,8 +23,6 @@ export interface EngineApi {
   startRun(input: EngineRunInput): Promise<EngineRunStarted>;
   /** Starts a run from the start form its trigger declares, through the entry the real source uses; 422 for a trigger with none. */
   startWorkflow(input: StartWorkflowInput): Promise<EngineRunStarted>;
-  /** The team's runs, newest first, a page at a time; `facets.status` counts each status under the other filters. */
-  runs(params: EngineRunsParams): Promise<ListResult<EngineRun>>;
   run(runId: string): Promise<EngineRunDetail>;
   /** Cancels a run that has not ended; 409 once it succeeded or failed. */
   cancelRun(runId: string): Promise<EngineRun>;

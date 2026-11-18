@@ -37,7 +37,7 @@ async def test_a_read_runs_through_the_gateway_and_is_logged(gateway: Gateway) -
     out = await executor(gateway).execute("lookup_account", {"query": "CHQ-2219"}, key="k1", approval_token=None)
     assert out.ok, out.output
     rows = await gateway.log.for_thread(gateway.thread, tenant_id="local")
-    assert [(r["tool"], r["access"], r["decision"]) for r in rows] == [("lookup_account", "read", "allow")]
+    assert [(r.tool, r.access, r.decision) for r in rows] == [("lookup_account", "read", "allow")]
 
 
 class KeptList:
@@ -114,7 +114,7 @@ async def test_write_carries_thread_and_step_from_the_run(gateway: Gateway) -> N
     out = await executor(gateway).execute("request_document", DOC, key="k3", approval_token=token)
     assert out.ok, out.output
     rows = await gateway.log.for_thread(gateway.thread, tenant_id="local")
-    assert [(r["step"], r["decision"]) for r in rows] == [("k3", "allow")]
+    assert [(r.step, r.decision) for r in rows] == [("k3", "allow")]
 
 
 async def test_graph_node_supplies_its_thread_without_the_port_carrying_it(gateway: Gateway) -> None:
@@ -141,4 +141,4 @@ async def test_graph_node_supplies_its_thread_without_the_port_carrying_it(gatew
     assert (sent.key, sent.to, sent.subject) == ("REV-1:reply", ("ana@example.com",), "Re: card dispute")
     assert out["sent"] == await gateway.mail.send(sent)
     rows = await gateway.log.for_thread(gateway.thread, tenant_id="local")
-    assert [(r["tool"], r["step"], r["decision"]) for r in rows] == [("send_reply", "REV-1:reply", "allow")]
+    assert [(r.tool, r.step, r.decision) for r in rows] == [("send_reply", "REV-1:reply", "allow")]

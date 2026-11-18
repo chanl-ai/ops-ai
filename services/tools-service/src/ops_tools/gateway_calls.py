@@ -25,6 +25,7 @@ from .auth import SIGNED_WITH, Authenticator
 from .environments import TEST
 from .executor import Executor, Trial, invalid_fields
 from .limits import amount_refusal
+from .modules.directory import Sees
 from .modules.policy import WriteApprovals, asker_refusal
 from .modules.review_events import SYSTEM_TOOLS
 from .opa import OpaClient
@@ -32,7 +33,7 @@ from .registry import Resolved, ToolRegistry
 from .secrets import scrub
 from .send_check import NEEDS_REVIEW, SendCheck
 from .store import CallAbandonedError, CallLog, LeaseSupersededError
-from .store.modules import Aggregate
+from .store.modules import Module
 from .store.rate_windows import RateWindows
 from .tokens import claims_of
 from .tools import ToolCaller
@@ -42,6 +43,8 @@ log = get_logger("ops_tools.gateway_calls")
 API, MCP = "api", "mcp"
 # A person's Real run from a tool page: the same checks as any call, logged under that person.
 CONSOLE = "console"
+# A write refused because the team's approval rules (appChanges, appChangesByApp) could not be read.
+RULES_UNAVAILABLE = "approval_rules_unavailable"
 
 # Turns a call's input into what is sent, and names the values to scrub from its answer (code runs).
 Prepare = Callable[[Resolved | None, dict[str, Any]], Awaitable[tuple[dict[str, Any], list[str]]]]
@@ -149,10 +152,11 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
     # A tool the team's plugin version lacks is refused as that (operation_hidden, naming the update below): adding it
     # from the catalog cannot help until the team takes the update.
     version_hidden = not op["enabled"] and bool(op.get("hidden_reason"))
-    if module.get("tools_on") is not None and op["name"] not in module["tools_on"] and not version_hidden:
+    tools_on = module.get("tools_on")
+    if tools_on is not None and op["name"] not in tools_on and not version_hidden:
         # The team has not added this tool from its app's catalog: refused before any sign-in is asked for.
         app = str(module.get("app_title") or module["display_name"])
-        title = str(cast(dict[str, Any], module.get("tool_titles") or {}).get(op["name"]) or op["name"])
+        title = str(module.get("tool_titles", {}).get(op["name"]) or op["name"])
         who = "someone who manages the team's apps"
         said = f"{app}'s {title} is not added to this team; {who} adds it from {app}'s Tools tab."
         # What the chat's card offers in place: Turn on <tool> on the app's Tools tab, or Ask an admin.
@@ -162,36 +166,35 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
     if module.get("sign_in_needed"):
         # Each person signs in, and the account has no instance yet: the plugin is on. Refused as a
         # missing sign-in, not as the plugin being off, so the tool page does not say the team admin must sign in.
-        return 403, "CONNECTION_NOT_LINKED", str(module["sign_in_needed"]), {}
+        return 403, "CONNECTION_NOT_LINKED", str(module.get("sign_in_needed")), {}
     if module.get("instance_missing"):
         # The team account has not signed in yet. The plugin is on.
-        return 403, "NOT_SIGNED_IN", str(module["instance_missing"]), dict(module.get("team_sign_in") or {})
+        return 403, "NOT_SIGNED_IN", str(module.get("instance_missing")), dict(module.get("team_sign_in") or {})
     if module.get("app_off"):
         # Installed and off for the caller's team: refused before approval, naming the app and team as
         # CONNECTION_NOT_LINKED names its account, so the caller can show who turns it on.
-        return 403, "APP_OFF_FOR_TEAM", str(module["plugin_off"]), dict(module["app_off"])
-    if module.get("account_choice"):
+        return 403, "APP_OFF_FOR_TEAM", str(module.get("plugin_off")), dict(module.get("app_off") or {})
+    if choice := module.get("account_choice"):
         # The person holds two accounts of the app and chose no default: refused before any sign-in is used, naming the
         # accounts, so chat asks which and the person may save it as their default.
-        choice = dict(module["account_choice"])
         said = f"You have {len(choice['accounts'])} {choice['app']} accounts connected; choose which this uses."
-        return 403, "ACCOUNT_CHOICE_NEEDED", said, choice
+        return 403, "ACCOUNT_CHOICE_NEEDED", said, dict(choice)
     if module.get("plugin_off"):
         # A plugin the install does not load: refused before approval, so no write waits for a person.
-        return 403, "PLUGIN_DISABLED", str(module["plugin_off"]), {}
+        return 403, "PLUGIN_DISABLED", str(module.get("plugin_off")), {}
     if module.get("account_missing"):
         # The account a call named is not one of the team's accounts of the app: refused, never defaulted.
-        return 404, "ACCOUNT_NOT_FOUND", str(module["account_missing"]), {}
+        return 404, "ACCOUNT_NOT_FOUND", str(module.get("account_missing")), {}
     if module.get("account_not_yours"):
         # One person's own account, named by a call that does not act for them (a step, a schedule, someone else).
-        return 403, "ACCOUNT_NOT_YOURS", str(module["account_not_yours"]), {}
+        return 403, "ACCOUNT_NOT_YOURS", str(module.get("account_not_yours")), {}
     if module.get("sandbox_required"):
         # A test run named a live account and the app has no test account to use in its place.
-        return 409, "SANDBOX_REQUIRED", str(module["sandbox_required"]), {}
+        return 409, "SANDBOX_REQUIRED", str(module.get("sandbox_required")), {}
     if module.get("package_missing"):
         # A package app on an account whose last Test found the package's objects missing: refused before the call
         # reaches the system, which would answer with an error naming an object nobody chose.
-        return 409, "PACKAGE_MISSING", str(module["package_missing"]), {}
+        return 409, "PACKAGE_MISSING", str(module.get("package_missing")), {}
     if not op["enabled"]:
         why = op.get("hidden_reason") or f"{op['name']} is hidden in {module['display_name']}"
         return 403, "operation_hidden", str(why), {}
@@ -213,16 +216,15 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
 async def sign_in_details(
     auth: Authenticator | None,
     tenant_id: str,
-    module: dict[str, Any] | None,
+    module: Module | None,
     person: ActingForPerson | None,
     access: str,
 ) -> dict[str, Any]:
     """A person's missing sign-in refused before the sign-in step names the account, its app and a link, as the one
     the sign-in step refuses does, so chat draws its Connect card; without them the chat showed a bare error."""
-    module = module or {}
-    connection_id = module.get("connection_id")
+    connection_id = module.get("connection_id") if module else None
     details: dict[str, Any] = {"reason": "not_connected", "access": "write" if access == "write" else "read"}
-    if module.get("display_name"):
+    if module and module.get("display_name"):
         details["app"] = str(module.get("app_title") or module["display_name"])
     if auth is not None and person is not None and connection_id:
         details |= await auth.sign_in_request(tenant_id, str(connection_id), person)
@@ -335,7 +337,7 @@ class GatewayCalls:
         channel: str = API,
         client_name: str | None = None,
         prepare: Prepare | None = None,
-        sees: Callable[[Aggregate], bool] | None = None,
+        sees: Sees | None = None,
         trial: Trial | None = None,
         secret_values: dict[str, str] | None = None,
         operation: tuple[Resolved, Run] | None = None,
@@ -423,7 +425,13 @@ class GatewayCalls:
                 await self.log.record(**row, outcome="refused", latency_ms=elapsed(), error=error)
             return Refused(call_id, 429, "RATE_LIMITED", [reason], {"limit": limit, "resetAt": spent.reset_at})
 
-        if sees is not None and resolved is not None and resolved.module is not None and not sees(resolved.module):
+        named = str(resolved.operation["name"]) if resolved is not None and resolved.operation is not None else None
+        if (
+            sees is not None
+            and resolved is not None
+            and resolved.module is not None
+            and not sees(resolved.module, named)
+        ):
             reason = f"{req.tool} belongs to a module outside this team"
             row.update(decision="deny", reasons=[reason])
             await self.log.record(
@@ -464,11 +472,21 @@ class GatewayCalls:
         # An answer of "person" is the asker's own confirmation in chat, so the four-eyes check below does not apply.
         confirmed_by_asker = False
         if access in WRITES:
+            levels = await self.approvals.levels(caller.tenant_id, caller.team_id)
+            if levels[0] is None:
+                # Whether this write needs an approval cannot be known, so it never runs; reads are unaffected.
+                reason = "The team's approval rules could not be read, so this write was not run. Try again shortly."
+                row.update(decision="deny", reasons=[reason])
+                await self.log.record(
+                    **row, outcome="refused", latency_ms=elapsed(), error={"code": RULES_UNAVAILABLE, "message": reason}
+                )
+                return Refused(call_id, 503, RULES_UNAVAILABLE, [reason])
             setting, setting_role = await self.registry.approval_setting(req.tool, caller.tenant_id, caller.team_id)
             answer = await self.approvals.answer(
                 caller.tenant_id,
                 caller.team_id,
                 module,
+                levels=levels,
                 access=access,
                 setting=setting,
                 reviewer_role=setting_role,
@@ -486,7 +504,12 @@ class GatewayCalls:
                 test_account=on_test_account,
                 tool=req.tool,
                 # Only a route-owned operation says it makes a draft (mcp_tools.py install_template).
-                draft=bool(own is not None and resolved is not None and (resolved.operation or {}).get("draft")),
+                draft=bool(
+                    own is not None
+                    and resolved is not None
+                    and resolved.operation is not None
+                    and resolved.operation.get("draft")
+                ),
             )
             needs = bool(answer["waits"])
             confirmed_by_asker = answer["answer"] == "person"
@@ -598,7 +621,7 @@ class GatewayCalls:
             await self.log.record(**row, outcome="refused", error={"code": "CALL_ABANDONED", "message": reason})
             return Refused(call_id, 409, "call_abandoned", [reason])
         if first is not None:
-            if first["outcome"] == "running":
+            if first.outcome == "running":
                 reason = "the same write is already running; retry after it finishes"
                 # A refusal like any other, so the log, the module's Denied count and the response agree.
                 row.update(decision="deny", reasons=[reason])
@@ -606,10 +629,8 @@ class GatewayCalls:
                 await self.log.record(**row, outcome="in_progress", latency_ms=elapsed(), error=error)
                 return Refused(call_id, 409, "write_in_progress", [reason])
             # The same approved write again: answer with the first result, run nothing.
-            await self.log.record(
-                **row, outcome="replayed", output=first["output"], view=first["view"], replay_of=first["id"]
-            )
-            return Allowed(call_id, first["outcome"] == "ok", first["output"], first["view"], replay_of=first["id"])
+            await self.log.record(**row, outcome="replayed", output=first.output, view=first.view, replay_of=first.id)
+            return Allowed(call_id, first.outcome == "ok", first.output, first.view, replay_of=first.id)
         if (limited := await over_rate()) is not None:
             return limited
         approvers = (caller.email,) if self_approved else tuple(_approvers(req.approval_token))

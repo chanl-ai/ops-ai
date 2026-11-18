@@ -1,0 +1,407 @@
+{
+  "activity": {
+    "body": {
+      "data": {
+        "data": [],
+        "facets": {
+          "kind": {},
+          "status": {}
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 25,
+          "total": 0,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "activity.badSource": {
+    "body": {
+      "error": {
+        "code": "bad_source",
+        "message": "A source is type:id with type one of workflow, agent, channel, case.",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
+  "activity.otherTeam": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Team team_nobody was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "activity.pageSizeOver": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "query",
+              "pageSize"
+            ],
+            "msg": "Input should be less than or equal to 100"
+          }
+        ],
+        "message": "query.pageSize: Input should be less than or equal to 100",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "activity.pastEnd": {
+    "body": {
+      "data": {
+        "data": [],
+        "facets": {
+          "kind": {},
+          "status": {}
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": true,
+          "page": 999,
+          "pageSize": 10,
+          "total": 0,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "health": {
+    "body": {
+      "data": {
+        "database": "ok",
+        "model": "ok",
+        "status": "ok"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "knowledgeUsage": {
+    "body": {
+      "data": [
+        {
+          "agents": [
+            {
+              "id": "ag_fraud",
+              "name": "Wire Fraud Sentinel"
+            }
+          ],
+          "elsewhere": 0,
+          "kbId": "kb_eng"
+        },
+        {
+          "agents": [
+            {
+              "id": "ag_dispute",
+              "name": "Card Dispute Resolver"
+            }
+          ],
+          "elsewhere": 0,
+          "kbId": "kb_legal"
+        },
+        {
+          "agents": [
+            {
+              "id": "ag_fraud",
+              "name": "Wire Fraud Sentinel"
+            }
+          ],
+          "elsewhere": 0,
+          "kbId": "kb_people"
+        },
+        {
+          "agents": [
+            {
+              "id": "ag_branch",
+              "name": "Branch Concierge"
+            }
+          ],
+          "elsewhere": 0,
+          "kbId": "kb_support"
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "knowledgeUsage.ids": {
+    "body": {
+      "data": [
+        {
+          "agents": [
+            {
+              "id": "ag_dispute",
+              "name": "Card Dispute Resolver"
+            }
+          ],
+          "elsewhere": 0,
+          "kbId": "kb_legal"
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "knowledgeUsage.noScope": {
+    "body": {
+      "error": {
+        "code": "scope_required",
+        "details": {
+          "scope": "agents:view"
+        },
+        "message": "This service token does not hold the agents:view scope.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "knowledgeUsage.otherTeam": {
+    "body": {
+      "data": [],
+      "success": true
+    },
+    "status": 200
+  },
+  "knowledgeUsage.person": {
+    "body": {
+      "data": [
+        {
+          "agents": [
+            {
+              "id": "ag_fraud",
+              "name": "Wire Fraud Sentinel"
+            }
+          ],
+          "elsewhere": 0,
+          "kbId": "kb_eng"
+        },
+        {
+          "agents": [
+            {
+              "id": "ag_dispute",
+              "name": "Card Dispute Resolver"
+            }
+          ],
+          "elsewhere": 0,
+          "kbId": "kb_legal"
+        },
+        {
+          "agents": [
+            {
+              "id": "ag_fraud",
+              "name": "Wire Fraud Sentinel"
+            }
+          ],
+          "elsewhere": 0,
+          "kbId": "kb_people"
+        },
+        {
+          "agents": [
+            {
+              "id": "ag_branch",
+              "name": "Branch Concierge"
+            }
+          ],
+          "elsewhere": 0,
+          "kbId": "kb_support"
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "modelAliases": {
+    "body": {
+      "data": [
+        {
+          "kind": "chat",
+          "name": "default"
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "overview": {
+    "body": {
+      "data": {
+        "cases": {
+          "awaitingApproval": 0,
+          "breaching": 0,
+          "open": 0
+        },
+        "casesDue": [],
+        "counts": {
+          "casesDue": 0,
+          "runsInFlight": 0,
+          "waitingForMe": 0
+        },
+        "openReviews": 0,
+        "overdueReviews": 0,
+        "runsInFlight": [],
+        "urgentReviews": [],
+        "waitingForMe": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "promptVariables": {
+    "body": {
+      "data": [],
+      "success": true
+    },
+    "status": 200
+  },
+  "reviews": {
+    "body": {
+      "data": {
+        "data": [],
+        "facets": {
+          "agentSlug": {},
+          "kind": {},
+          "risk": {},
+          "status": {},
+          "workflowId": {}
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 25,
+          "total": 0,
+          "totalPages": 1
+        },
+        "stats": {
+          "approvedAsProposedRate": 0,
+          "decidedToday": 0,
+          "medianDecisionMinutes": 0,
+          "medianDecisionTrendMinutes": 0,
+          "unassigned": 0
+        },
+        "viewCounts": {
+          "mine": 0,
+          "open": 0,
+          "overdue": 0,
+          "resolved": 0
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "reviews.badGroup": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "message": "Unknown group bogus; use case.",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "reviews.badView": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "message": "Unknown view bogus.",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "reviews.pastEnd": {
+    "body": {
+      "data": {
+        "data": [],
+        "facets": {
+          "agentSlug": {},
+          "kind": {},
+          "risk": {},
+          "status": {},
+          "workflowId": {}
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": true,
+          "page": 999,
+          "pageSize": 25,
+          "total": 0,
+          "totalPages": 1
+        },
+        "stats": {
+          "approvedAsProposedRate": 0,
+          "decidedToday": 0,
+          "medianDecisionMinutes": 0,
+          "medianDecisionTrendMinutes": 0,
+          "unassigned": 0
+        },
+        "viewCounts": {
+          "mine": 0,
+          "open": 0,
+          "overdue": 0,
+          "resolved": 0
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "teamUsage": {
+    "body": {
+      "data": {
+        "liveWorkflows": [
+          "Dispute email",
+          "Levy-case",
+          "Levy-intake",
+          "Wire hold review"
+        ],
+        "runsInProgress": 0
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "teamUsage.noScope": {
+    "body": {
+      "error": {
+        "code": "scope_required",
+        "details": {
+          "scope": "workflows:view"
+        },
+        "message": "This service token does not hold the workflows:view scope.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  }
+}

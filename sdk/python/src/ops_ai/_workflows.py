@@ -17,7 +17,7 @@ from ._io import (
     load_data,
     load_definition,
 )
-from ._transport import page_items
+from ._transport import iter_pages, iter_pages_async
 from .errors import NotFound
 
 PLANNED = "This command is planned; the public API for it is not shipped."
@@ -74,19 +74,32 @@ def _diff(next_def: dict[str, Any], current: dict[str, Any] | None) -> list[str]
     return changes or ["no changes"]
 
 
+def _batch_body(file_id: str, mode: str | None, dry_run: bool | None) -> dict[str, Any]:
+    body: dict[str, Any] = {"fileId": file_id}
+    if mode is not None:
+        body["mode"] = mode
+    if dry_run is not None:
+        body["dryRun"] = dry_run
+    return body
+
+
 class Workflows:
     def __init__(self, raw: Any, runs: Any) -> None:
         self._raw = raw
         self._runs = runs
 
     def list(self, **query: Any) -> Iterator[Any]:
-        nxt: dict[str, Any] = {}
-        while True:
-            items, nxt_more = page_items(self._raw.agents.workflows_list_definitions(**{**query, **nxt}))
-            yield from items
-            if nxt_more is None:
-                return
-            nxt = nxt_more
+        return iter_pages(self._raw.agents.workflows_list_definitions, **query)
+
+    def forms(self, workflow_id: str, **query: Any) -> Iterator[Any]:
+        """The workflow's forms, every page (`search`, `ids`)."""
+        return iter_pages(lambda **q: self._raw.agents.forms_workflow_forms(workflow_id, **q), **query)
+
+    def start_batch(
+        self, workflow_id: str, file_id: str, *, mode: str | None = None, dry_run: bool | None = None
+    ) -> Any:
+        """Starts a batch over the rows of an uploaded file. The API refuses a field it does not name."""
+        return self._raw.agents.batches_start_batch(workflow_id, _batch_body(file_id, mode, dry_run))
 
     def get(self, id: str, version: int | None = None) -> Any:
         return self.get_definition(id, version=version)
@@ -215,15 +228,16 @@ class AsyncWorkflows:
         self._raw = raw
         self._runs = runs
 
-    async def list(self, **query: Any) -> AsyncIterator[Any]:
-        nxt: dict[str, Any] = {}
-        while True:
-            items, nxt_more = page_items(await self._raw.agents.workflows_list_definitions(**{**query, **nxt}))
-            for item in items:
-                yield item
-            if nxt_more is None:
-                return
-            nxt = nxt_more
+    def list(self, **query: Any) -> AsyncIterator[Any]:
+        return iter_pages_async(self._raw.agents.workflows_list_definitions, **query)
+
+    def forms(self, workflow_id: str, **query: Any) -> AsyncIterator[Any]:
+        return iter_pages_async(lambda **q: self._raw.agents.forms_workflow_forms(workflow_id, **q), **query)
+
+    async def start_batch(
+        self, workflow_id: str, file_id: str, *, mode: str | None = None, dry_run: bool | None = None
+    ) -> Any:
+        return await self._raw.agents.batches_start_batch(workflow_id, _batch_body(file_id, mode, dry_run))
 
     async def get(self, id: str, version: int | None = None) -> Any:
         return await self.get_definition(id, version=version)

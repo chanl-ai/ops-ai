@@ -75,6 +75,9 @@ with (
         row,
     )
 
+    opened = gw.get(f"/v1/tool-modules/{mid}", headers=nadia)
+    check("Security opens the module waiting on its review", opened.status_code == 200, opened.text[:200])
+
     decide = f"/v1/publish-requests/{rid}/decision"
     own = api.post(decide, json={"decision": "approved"}, headers=james)
     check("the requester cannot decide their own review (403)", own.status_code == 403, own.text[:200])
@@ -87,7 +90,8 @@ with (
     bare = api.post(decide, json={"decision": "returned"}, headers=nadia)
     check("returning it needs a reason (400)", bare.status_code == 400, bare.text[:200])
     approved = api.post(decide, json={"decision": "approved"}, headers=nadia)
-    module = data(gw.get(f"/v1/tool-modules/{mid}", headers=nadia))
+    # Security reads a module only while it waits on its review; the owning team reads the outcome.
+    module = data(gw.get(f"/v1/tool-modules/{mid}", headers=james))
     check(
         "Security's approver approves in Reviews and the module is published",
         approved.status_code == 200 and module["status"] == "published",
@@ -100,7 +104,7 @@ with (
     changed = api.post(
         f"/v1/publish-requests/{other_rid}/decision", json={"decision": "returned", "reason": why[0]}, headers=nadia
     )
-    detail = data(gw.get(f"/v1/tool-modules/{other}", headers=nadia))
+    detail = data(gw.get(f"/v1/tool-modules/{other}", headers=james))
     finding = next((v.get("finding") for v in detail["versions"] if v.get("reviewId") == other_rid), None)
     check(
         "returning it sends a new module back to draft with the reason",

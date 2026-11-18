@@ -11,16 +11,24 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from typing import Any, cast
+from typing import Any
 
 import httpx
+from pydantic import TypeAdapter
+
+from ops_service_kit.http import JsonValue
 
 from .egress import for_tenant
 from .modules.openapi import NAME, kebab, snake
 from .modules.seed import fields_of
 
+# A JSON-RPC object an MCP server sent: its content is the server's own, so it is JsonValue all the way down.
+Json = dict[str, JsonValue]
+# An operation's input fields as the JSON the discovery answer carries.
+JSON_LIST = TypeAdapter(list[JsonValue])
+
 PROTOCOL_VERSION = "2025-06-18"
-CLIENT = {"name": "ops-tools-service", "version": "0.1.0"}
+CLIENT: Json = {"name": "ops-tools-service", "version": "0.1.0"}
 SESSION = "Mcp-Session-Id"
 # A server that pages its tool list past this is refused rather than followed forever.
 MAX_PAGES = 20
@@ -41,10 +49,10 @@ class McpError(RuntimeError):
         self.challenge = challenge
 
 
-def _message(res: httpx.Response, request_id: int) -> dict[str, Any]:
+def _message(res: httpx.Response, request_id: int) -> Json:
     """The JSON-RPC response to `request_id`, from a JSON body or an event stream."""
     kind = res.headers.get("content-type", "")
-    candidates: list[Any] = []
+    candidates: list[JsonValue] = []
     if kind.startswith("text/event-stream"):
         for line in res.text.splitlines():
             if line.startswith("data:"):
@@ -54,16 +62,16 @@ def _message(res: httpx.Response, request_id: int) -> dict[str, Any]:
                     continue
     else:
         try:
-            body: Any = res.json()
+            body: JsonValue = res.json()
         except ValueError as e:
             raise McpError("The server's answer is not JSON.") from e
-        candidates = cast(list[Any], body) if isinstance(body, list) else [body]
+        candidates = body if isinstance(body, list) else [body]
     for c in candidates:
-        if isinstance(c, dict) and cast(dict[str, Any], c).get("id") == request_id:
-            message = cast(dict[str, Any], c)
+        if isinstance(c, dict) and c.get("id") == request_id:
+            message = c
             if "error" in message:
-                error: Any = message["error"]
-                text = cast(dict[str, Any], error).get("message", "error") if isinstance(error, dict) else error
+                error = message["error"]
+                text = error.get("message", "error") if isinstance(error, dict) else error
                 raise McpError(f"The server refused the request: {text}")
             return message
     raise McpError("The server's answer carries no response to the request.")
@@ -90,8 +98,8 @@ class McpSession:
         self.headers = {"Accept": "application/json, text/event-stream", **(headers or {})}
         self.next_id = 0
 
-    async def _post(self, method: str, params: dict[str, Any] | None, *, notify: bool = False) -> dict[str, Any]:
-        body: dict[str, Any] = {"jsonrpc": "2.0", "method": method}
+    async def _post(self, method: str, params: Json | None, *, notify: bool = False) -> Json:
+        body: Json = {"jsonrpc": "2.0", "method": method}
         if params is not None:
             body["params"] = params
         if not notify:
@@ -117,54 +125,57 @@ class McpSession:
             )
         if SESSION in res.headers:
             self.headers[SESSION] = res.headers[SESSION]
-        result: Any = _message(res, self.next_id).get("result")
-        return cast(dict[str, Any], result) if isinstance(result, dict) else {}
+        result = _message(res, self.next_id).get("result")
+        return result if isinstance(result, dict) else {}
 
-    async def initialize(self) -> dict[str, Any]:
-        params = {"protocolVersion": PROTOCOL_VERSION, "capabilities": {}, "clientInfo": CLIENT}
+    async def initialize(self) -> Json:
+        params: Json = {"protocolVersion": PROTOCOL_VERSION, "capabilities": {}, "clientInfo": CLIENT}
         result = await self._post("initialize", params)
         await self._post("notifications/initialized", None, notify=True)
         return result
 
-    async def list_tools(self) -> list[dict[str, Any]]:
-        tools: list[dict[str, Any]] = []
+    async def list_tools(self) -> list[Json]:
+        tools: list[Json] = []
         cursor: str | None = None
         for _ in range(MAX_PAGES):
             page = await self._post("tools/list", {"cursor": cursor} if cursor else {})
-            tools.extend(
-                cast(dict[str, Any], t) for t in cast(list[Any], page.get("tools") or []) if isinstance(t, dict)
-            )
-            cursor = page.get("nextCursor")
+            listed = page.get("tools")
+            if isinstance(listed, list):
+                tools.extend(t for t in listed if isinstance(t, dict))
+            next_cursor = page.get("nextCursor")
+            cursor = next_cursor if isinstance(next_cursor, str) and next_cursor else None
             if not cursor:
                 return tools
         raise McpError(f"The server's tool list runs past {MAX_PAGES} pages.")
 
-    async def call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    async def call_tool(self, name: str, arguments: Json) -> Json:
         return await self._post("tools/call", {"name": name, "arguments": arguments})
 
 
-def tool_output(result: dict[str, Any]) -> tuple[bool, Any]:
+def tool_output(result: Json) -> tuple[bool, JsonValue]:
     """(ok, output) from a tools/call result: structured content when the server gives it, else its text."""
     if result.get("structuredContent") is not None:
-        output: Any = result["structuredContent"]
+        output: JsonValue = result["structuredContent"]
     else:
+        content = result.get("content")
         parts = [
-            str(cast(dict[str, Any], c).get("text", ""))
-            for c in cast(list[Any], result.get("content") or [])
-            if isinstance(c, dict) and cast(dict[str, Any], c).get("type") == "text"
+            str(c.get("text", ""))
+            for c in (content if isinstance(content, list) else [])
+            if isinstance(c, dict) and c.get("type") == "text"
         ]
         output = {"text": "\n".join(parts)}
     return not result.get("isError"), output
 
 
-def discovered(tools: list[dict[str, Any]], url: str, server: dict[str, Any]) -> dict[str, Any]:
+def discovered(tools: list[Json], url: str, server: Json) -> Json:
     """The console's DiscoveryResult for an MCP server's tools. A tool's operation name is its name in snake case;
     the server's own name is kept as the operation's `path`, which the mcp executor calls. Every tool is
     discovered as a write, as OpenAPI operations are."""
-    info: dict[str, Any] = server.get("serverInfo") or {}
+    given = server.get("serverInfo")
+    info: Json = given if isinstance(given, dict) else {}
     title = str(info.get("title") or info.get("name") or httpx.URL(url).host)
-    warnings: list[str] = []
-    operations: list[dict[str, Any]] = []
+    warnings: list[JsonValue] = []
+    operations: list[JsonValue] = []
     seen: set[str] = set()
     for t in tools:
         original = str(t.get("name", ""))
@@ -173,20 +184,19 @@ def discovered(tools: list[dict[str, Any]], url: str, server: dict[str, Any]) ->
             warnings.append(f"{original or 'A tool'} was skipped: no usable unique name.")
             continue
         seen.add(name)
-        schema: Any = t.get("inputSchema") or {}
-        operations.append(
-            {
-                "name": name,
-                "description": str(t.get("description") or name),
-                "access": "write",
-                "method": None,
-                "path": original,
-                "group": "tools",
-                "input": fields_of(cast(dict[str, Any], schema) if isinstance(schema, dict) else {}),
-                "headers": [],
-            }
-        )
-    return {
+        schema = t.get("inputSchema")
+        operation: Json = {
+            "name": name,
+            "description": str(t.get("description") or name),
+            "access": "write",
+            "method": None,
+            "path": original,
+            "group": "tools",
+            "input": JSON_LIST.validate_python(fields_of(schema if isinstance(schema, dict) else {})),
+            "headers": [],
+        }
+        operations.append(operation)
+    found: Json = {
         "type": "mcp",
         "system": title,
         "suggestedName": kebab(title),
@@ -195,3 +205,4 @@ def discovered(tools: list[dict[str, Any]], url: str, server: dict[str, Any]) ->
         "operations": operations,
         "warnings": warnings,
     }
+    return found

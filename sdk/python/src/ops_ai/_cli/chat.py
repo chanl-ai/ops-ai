@@ -19,7 +19,6 @@ from typing import Any
 
 from ops_ai import OpsAI
 from ops_ai._chat import action_body, connect_card
-from ops_ai._transport import page_items
 
 from .chat_script import evals, run_script
 from .common import MARK, client, console_url, emit, marked, parser, refuse, short, table, testing, values, verb_options
@@ -125,7 +124,7 @@ def _dispatch(ns: argparse.Namespace) -> int:
     if ns.verb == "transcript":
         return emit(ns, {"thread": ns.thread}, text=_transcript(ops, ns.thread, ns.all_turns))
     if ns.verb == "transcripts":
-        found = [t for test in (False, True) for t in ops.chat.threads(pageSize=100, test=test)]
+        found = [t for test in (False, True) for t in ops.chat.every_thread(test=test)]
         hits = [t for t in found if ns.search.lower() in str(t.get("title") or "").lower()]
         texts = [_transcript(ops, str(t["id"]), ns.all_turns) for t in hits]
         return emit(ns, [t["id"] for t in hits], text="\n\n---\n\n".join(texts) or "(no matching conversations)")
@@ -152,7 +151,7 @@ def agent_id(ops: OpsAI, name: str | None, *, test: bool) -> str | None:
     never published."""
     if not name:
         return None
-    agents = list(ops.agents.list(page_size=100)) if test else ops.chat.agents()
+    agents = list(ops.agents.list()) if test else ops.chat.agents()
     wanted = name.lower()
     hits = [
         a
@@ -207,7 +206,7 @@ def skill_pick(ops: OpsAI, wanted: str | None, given: list[str]) -> dict[str, An
             raise ValueError("--input needs --skill")
         return {}
     name, _, part = wanted.partition("/")
-    rows = page_items(ops.raw.agents.agents_list_skills(view="published", page_size=200))[0]
+    rows = list(ops.skills.list(view="published"))
     hits = [
         s
         for s in rows
@@ -278,7 +277,7 @@ def turn(ns: argparse.Namespace, ops: OpsAI, thread: str, text: str, **pick: Any
 
 def calls(ops: OpsAI, thread: str) -> list[dict[str, Any]]:
     """The call log rows of the thread, as the Logs tab reads them."""
-    return list(ops.usage.list(thread=thread, page=1, page_size=50))
+    return ops.usage.every(thread=thread)
 
 
 def _log_line(r: dict[str, Any]) -> str:

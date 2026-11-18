@@ -72,7 +72,7 @@ await withUiStack(
         const before = (await page.getByTestId('egress-host-notice').innerText()).replace(/\s+/g, ' ');
         await page.screenshot({ path: join(SHOTS, 'host-held-1280.png') });
         const james = await as(JAMES, 'team_ops');
-        const saved = (await (await fetch(`http://127.0.0.1:${TOOLS_PORT}/v1/tool-modules?pageSize=200&search=ping`, { headers: james })).json()).data?.data ?? [];
+        const saved = (await (await fetch(`http://127.0.0.1:${TOOLS_PORT}/v1/tool-modules?pageSize=50&search=ping`, { headers: james })).json()).data?.data ?? [];
         const task = await taskFor(REFUSED);
         check(
           '6 James saves a tool on an unlisted host: the dialog says it waits for Security, and nothing is saved',

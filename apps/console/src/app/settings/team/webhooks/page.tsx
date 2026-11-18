@@ -112,6 +112,7 @@ export default function WebhooksPage() {
   return (
     <SettingsPageLayout
       sample
+      gateBody={false}
       section="Webhooks"
       description="Send events to the bank’s other systems as they happen. Open one to see its deliveries."
       actions={
@@ -139,7 +140,7 @@ export default function WebhooksPage() {
           initialColumnVisibility={{ events: false }}
           onColumnFiltersChange={list.onColumnFiltersChange}
           serverPagination={serverPagination(list, query)}
-          emptyState={<ListEmpty icon={WebhookIcon} noun="webhooks" filtered={list.isFiltered} createLabel="Add webhook" onCreate={() => setAddOpen(true)} description="Send review decisions, failed runs or audit entries to a SIEM, case manager or ticketing system." />}
+          emptyState={<ListEmpty icon={WebhookIcon} noun="webhooks" filtered={list.isFiltered} description="Send review decisions, failed runs or audit entries to a SIEM, case manager or ticketing system." />}
         />
       )}
 

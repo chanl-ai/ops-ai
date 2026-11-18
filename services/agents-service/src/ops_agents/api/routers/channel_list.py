@@ -1,11 +1,16 @@
 """GET /v1/channels: every channel the caller's teams run, one row per existing record (a mailbox is email, a
 widget deployment is chat), with what it serves, a health dot from real checks, and its traffic, so the Channels hub
-neither joins records nor counts anything itself. `kinds` gives the gallery one row per channel type."""
+neither joins records nor counts anything itself. `kinds` gives the gallery one row per channel type.
+
+Retiring a chat channel answers in one request transaction (`Tx`). Every other route takes none: each reply asks
+platform-service for the teams' names (`replies`), and a change may ask it for the team's publish-review setting, so
+each store call takes and returns its own connection and none is held while platform-service answers. The list itself
+is one union of mailboxes, embeds and the local copy of platform's API keys, paged in SQL (store.channel_list).
+"""
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Depends, Query
@@ -13,15 +18,23 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from ops_access import can
-from ops_contracts.chat import WireModel
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, Unprocessable
-from ops_service_kit.http import Envelope, ListResult, Out, paged
+from ops_service_kit.http import Envelope, In, ListResult, Out
 from ops_service_kit.ids import now_iso
+from ops_service_kit.listing import ListParams
+from ops_store import isolation
 
-from ...store.channel_list import NOT_FOUND, STALE_READ, ChannelList
+from ...store.channel_list import (
+    KEY_EXPIRY_WARNING,
+    NOT_FOUND,
+    ChannelList,
+    ChannelRecord,
+    KindCount,
+    watched_address,
+)
 from ...store.mailboxes import MailboxStore
 from ...store.widget_deployments import WidgetDeployments
-from ...store.widget_keys import WidgetKeys
 from .. import deployment_reviews
 from ..auth import Principal, caller_in, caller_of, require_builder
 from ..deps import Runtime, runtime
@@ -49,7 +62,6 @@ KINDS: tuple[tuple[str, bool], ...] = (
     ("slack", False),
     ("teams", False),
 )
-WORST = {"error": 3, "warn": 2, "ok": 1, "idle": 0}
 
 
 class Serves(Out):
@@ -143,54 +155,32 @@ def _iso(at: datetime) -> str:
     return at.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-def email_health(row: dict[str, Any], now: datetime) -> dict[str, Any]:
-    checked = _iso(now)
-    if row["paused"]:
-        return {"state": "idle", "reason": "Paused", "checkedAt": checked}
-    if not row["serving"]:
-        return {"state": "idle", "reason": "No live workflow watches this mailbox", "checkedAt": checked}
-    read = row["last_read_at"]
-    if read is None:
-        return {"state": "warn", "reason": "Not read yet", "checkedAt": checked}
-    age = now - datetime.fromisoformat(str(read).replace("Z", "+00:00"))
-    if age > STALE_READ:
-        return {
-            "state": "warn",
-            "reason": f"Not read for {int(age.total_seconds() // 60)} minutes",
-            "checkedAt": checked,
-        }
-    return {"state": "ok", "checkedAt": checked}
-
-
-def chat_health(row: dict[str, Any], now: datetime) -> dict[str, Any]:
-    checked = _iso(now)
-    if row.get("retired_at"):
-        return {"state": "idle", "reason": "Retired", "checkedAt": checked}
-    if row["paused"]:
-        return {"state": "idle", "reason": "Paused", "checkedAt": checked}
-    if not list(row["origins"] or []):
-        return {"state": "error", "reason": "No allowed websites", "checkedAt": checked}
-    return {"state": "ok", "checkedAt": checked}
-
-
-# A key expiring sooner than this is amber, so someone rotates it before the systems calling it start failing.
-KEY_EXPIRY_WARNING = timedelta(days=14)
-
-
-def api_health(key: dict[str, Any], now: datetime) -> dict[str, Any]:
-    checked = _iso(now)
-    if key["status"] == "disabled":
-        return {"state": "error", "reason": "Disabled: its creator left the team", "checkedAt": checked}
-    expires = key.get("expiresAt")
-    if expires:
-        left = datetime.fromisoformat(str(expires).replace("Z", "+00:00")) - now
-        if left <= timedelta(0):
-            return {"state": "error", "reason": "Expired", "checkedAt": checked}
-        if left < KEY_EXPIRY_WARNING:
-            return {"state": "warn", "reason": f"Expires in {max(1, left.days)} days", "checkedAt": checked}
-    if not key.get("target"):
-        return {"state": "warn", "reason": "Starts any live workflow of its team", "checkedAt": checked}
-    return {"state": "ok", "checkedAt": checked}
+def _reason(row: ChannelRecord, now: datetime) -> str | None:
+    """Why a row is in its health state (the state is the store's, in SQL), for the dot's tooltip."""
+    state, kind = row.health, row.type
+    if kind == "email":
+        if state == "idle":
+            return "Paused" if row.paused else "No live workflow watches this mailbox"
+        if state == "warn":
+            read = row.read_at
+            if read is None:
+                return "Not read yet"
+            age = now - datetime.fromisoformat(str(read).replace("Z", "+00:00"))
+            return f"Not read for {int(age.total_seconds() // 60)} minutes"
+        return None
+    if kind == "chat":
+        if state == "idle":
+            return "Retired" if row.retired_at else "Paused"
+        return "No allowed websites" if state == "error" else None
+    if state == "ok":
+        return None
+    expires = row.expires_at
+    left = datetime.fromisoformat(str(expires).replace("Z", "+00:00")) - now if expires else None
+    if state == "error":
+        return "Disabled: its creator left the team" if row.key_status == "disabled" else "Expired"
+    if left is not None and left < KEY_EXPIRY_WARNING:
+        return f"Expires in {max(1, left.days)} days"
+    return "Starts any live workflow of its team"
 
 
 def _counts(c: Any) -> dict[str, Any]:
@@ -202,161 +192,105 @@ def _counts(c: Any) -> dict[str, Any]:
     }
 
 
-async def rows_of(rt: Runtime, me: Principal, teams: tuple[str, ...], *, retired: bool = False) -> list[dict[str, Any]]:
-    now = datetime.now(UTC)
-    listed = await ChannelList(rt.db).rows(teams, now=now, retired=retired)
-    keys_of = await WidgetKeys(rt.db).active_counts([str(w["id"]) for w in listed.chat])
+def _serves(row: ChannelRecord) -> dict[str, Any] | None:
+    if not row.serves_id:
+        return None
+    pinned, latest = row.pinned, row.latest_version
+    return {
+        "kind": row.serves_kind,
+        "id": row.serves_id,
+        "name": row.serves_name,
+        # A mailbox serves its workflows' live version; an embed or key its pin, or Latest.
+        "version": "latest" if pinned is None else int(pinned),
+        "latestVersion": latest,
+        "behind": max(0, int(latest) - int(pinned)) if latest is not None and pinned is not None else 0,
+    }
+
+
+async def replies(rt: Runtime, me: Principal, rows: list[ChannelRecord], now: datetime) -> list[dict[str, Any]]:
+    """The store's rows as the list answers them; asks platform-service for the teams' names with no transaction
+    open."""
     names = rt.team_names if isinstance(rt.team_names, PlatformTeamNames) else None
     out: list[dict[str, Any]] = []
-    for m in listed.email:
-        first = m["serving"][0] if m["serving"] else None
-        serves = first and {
-            "kind": "workflow",
-            "id": first["workflow_id"],
-            "name": first["name"] or first["workflow_id"],
-            "version": "latest",
-            "latestVersion": first["version"],
-            "behind": 0,
+    for r in rows:
+        checked = _iso(now)
+        reason = _reason(r, now)
+        origins = r.origins
+        row: dict[str, Any] = {
+            "id": r.id,
+            "type": r.type,
+            "name": r.name,
+            "detail": next(iter(origins), "") if r.type == "chat" else r.detail,
+            "teamId": r.team_id,
+            "teamName": await names.name(r.team_id) if names is not None else None,
+            "serves": _serves(r),
+            "servesCount": r.serves_count,
+            "health": {"state": r.health, "checkedAt": checked} | ({"reason": reason} if reason else {}),
+            "paused": bool(r.paused),
+            **_counts(r.counts),
+            # An API key changes in Settings, API keys, on platform-service: nothing here edits it.
+            "canEdit": r.type != "api" and _may(me, "edit", r.team_id),
         }
-        out.append(
-            {
-                "id": m["id"],
-                "type": "email",
-                "name": m["name"],
-                "detail": m["address"],
-                "teamId": m["team_id"],
-                "serves": serves,
-                "servesCount": len(m["serving"]),
-                "health": email_health(m, now),
-                "paused": bool(m["paused"]),
-                **_counts(m["counts"]),
+        if r.type == "chat":
+            pinned, latest = r.pinned, r.latest_version
+            row["embed"] = {
+                "agentId": r.serves_id,
+                "agentVersion": int(pinned) if pinned is not None else latest,
+                "origins": origins,
+                "retiredAt": r.retired_at,
+                "activeKeys": r.active_keys,
             }
-        )
-    for w in listed.chat:
-        pinned = w["agent_version"]
-        latest = w["published_version"]
-        version = "latest" if pinned is None else int(pinned)
-        out.append(
-            {
-                "id": w["id"],
-                "type": "chat",
-                "name": w["name"],
-                "detail": next(iter(list(w["origins"] or [])), ""),
-                "teamId": w["team_id"],
-                "serves": {
-                    "kind": "agent",
-                    "id": w["agent_id"],
-                    "name": w["agent_name"],
-                    "version": version,
-                    "latestVersion": latest,
-                    "behind": max(0, int(latest) - int(pinned)) if latest is not None and pinned is not None else 0,
-                },
-                "servesCount": 1,
-                "health": chat_health(w, now),
-                "paused": bool(w["paused"]),
-                **_counts(w["counts"]),
-                "embed": {
-                    "agentId": w["agent_id"],
-                    "agentVersion": int(pinned) if pinned is not None else latest,
-                    "origins": list(w["origins"] or []),
-                    "retiredAt": w.get("retired_at"),
-                    "activeKeys": keys_of.get(str(w["id"]), 0),
-                },
-            }
-        )
-    keys = cast(list[dict[str, Any]] | None, await rt.key_summaries.list() if rt.key_summaries is not None else None)
-    # A revoked key starts nothing and is kept only for the audit trail, so it is no channel.
-    mine = [k for k in keys or [] if k["status"] != "revoked" and k["teamId"] in teams]
-    for k in await ChannelList(rt.db).api_rows(mine, now=now):
-        target = k["target"]
-        serves = None
-        if target:
-            pinned, latest = target.get("version"), k["latest_version"]
-            serves = {
-                "kind": target["kind"],
-                "id": target["id"],
-                "name": k["serves_name"],
-                "version": "latest" if pinned is None else int(pinned),
-                "latestVersion": latest,
-                "behind": max(0, int(latest) - int(pinned)) if latest is not None and pinned is not None else 0,
-            }
-        out.append(
-            {
-                "id": k["id"],
-                "type": "api",
-                "name": k["name"],
-                "detail": k["prefix"],
-                "teamId": k["teamId"],
-                "serves": serves,
-                "servesCount": 1 if serves else 0,
-                "health": api_health(k, now),
-                "paused": False,
-                **_counts(k["counts"]),
-            }
-        )
-    for row in out:
-        row["teamName"] = await names.name(row["teamId"]) if names is not None else None
-        # An API key changes in Settings, API keys, on platform-service: nothing here edits it.
-        row["canEdit"] = row["type"] != "api" and _may(me, "edit", row["teamId"])
+        out.append(row)
     return out
 
 
-def kinds_of(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def kinds_of(counted: list[KindCount]) -> list[dict[str, Any]]:
+    by_type = {k.type: k for k in counted}
     out: list[dict[str, Any]] = []
     for kind, built in KINDS:
-        mine = [r for r in rows if r["type"] == kind]
-        states = [r["health"]["state"] for r in mine]
+        k = by_type.get(kind)
         out.append(
             {
                 "type": kind,
                 "built": built,
-                "health": max(states, key=lambda s: WORST[s]) if states else None,
-                "active": sum(1 for r in mine if not r["paused"]),
-                "attention": sum(1 for s in states if s in ("warn", "error")),
-                "total": len(mine),
+                "health": k.worst if k else None,
+                "active": k.active if k else 0,
+                "attention": k.attention if k else 0,
+                "total": k.total if k else 0,
             }
         )
     return out
-
-
-def _retired(row: dict[str, Any]) -> bool:
-    embed = cast(dict[str, Any] | None, row.get("embed"))
-    return bool(embed and embed.get("retiredAt"))
-
-
-def _serves_agent(row: dict[str, Any], agent_id: str) -> bool:
-    serves = cast(dict[str, Any] | None, row["serves"])
-    return bool(serves and serves["kind"] == "agent" and serves["id"] == agent_id)
 
 
 @router.get("", response_model=Envelope[ChannelPage])
 async def list_channels(rt: Rt, me: Me, q: Annotated[ChannelsQuery, Query()]) -> JSONResponse:
     """The channels of the selected team (`team=all`: every team the caller is in and may view channels of), filtered
-    by type, health and a search over name and detail. `facets` count by type and health under the other filters;
-    `kinds` describes every channel type, built or not, over the caller's whole list."""
+    by type, health and a search over name and detail, in the list's order (email, chat, then API, each by name), a
+    page at a time from one statement over the three (store.channel_list); a page past the end answers the last page.
+    `facets` count by type and health under the other filters; `kinds` describes every channel type, built or not,
+    over the caller's whole list."""
     asked = _teams(me, q.team)
     teams = tuple(t for t in asked if _may(me, "view", t))
-    rows = await rows_of(rt, me, teams, retired=q.includeRetired)
-    # Kinds describe the live channels; a retired embed serves nothing.
-    kinds = kinds_of([r for r in rows if not _retired(r)])
-    if q.agentId:
-        rows = [r for r in rows if _serves_agent(r, q.agentId)]
-    if q.search:
-        needle = q.search.lower()
-        rows = [r for r in rows if needle in r["name"].lower() or needle in r["detail"].lower()]
-    by_type = [r for r in rows if not q.health or r["health"]["state"] in q.health]
-    by_health = [r for r in rows if not q.type or r["type"] in q.type]
-    chosen = [r for r in by_type if not q.type or r["type"] in q.type]
-    start = (q.page - 1) * q.pageSize
-    listed = paged(chosen[start : start + q.pageSize], len(chosen), q.page, q.pageSize)
-    facets = {
-        "type": _count(str(r["type"]) for r in by_type),
-        "health": _count(str(r["health"]["state"]) for r in by_health),
-    }
-    return ok(listed | {"facets": facets, "kinds": kinds})
+    now = datetime.now(UTC)
+    params = ListParams(
+        page=q.page,
+        search=q.search,
+        filters={k: list(v) for k, v in (("type", q.type), ("health", q.health)) if v},
+    ).model_copy(update={"page_size": q.pageSize})
+    listed = await ChannelList(rt.db).page(teams, params, now=now, retired=q.includeRetired, agent_id=q.agentId)
+    page = listed.page | {"data": await replies(rt, me, listed.rows, now)}
+    return ok(page | {"kinds": kinds_of(listed.kinds)})
 
 
-class ChannelIn(WireModel):
+async def channel_row(rt: Runtime, me: Principal, channel_id: str, teams: tuple[str, ...]) -> dict[str, Any]:
+    now = datetime.now(UTC)
+    found = await replies(rt, me, await ChannelList(rt.db).rows(teams, now=now, ids=[channel_id]), now)
+    if not found:
+        raise NotFound(f"Channel {channel_id}")
+    return found[0]
+
+
+class ChannelIn(In):
     # Chat is the one made here; a mailbox is connected at /v1/channels/mailboxes, an API key in Settings.
     type: Literal["chat"]
     agent_id: str
@@ -371,17 +305,7 @@ async def create_channel(rt: Rt, me: Me, body: ChannelIn) -> JSONResponse:
     made = await make_deployment(
         rt, me, WidgetDeploymentInput(name=body.name, agent_id=body.agent_id, origins=body.origins)
     )
-    row = next((r for r in await rows_of(rt, me, (str(made["team_id"]),)) if r["id"] == made["id"]), None)
-    if row is None:
-        raise NotFound(f"Channel {made['id']}")
-    return ok(row, 201)
-
-
-def _count(keys: Iterable[str]) -> dict[str, int]:
-    out: dict[str, int] = {}
-    for k in keys:
-        out[k] = out.get(k, 0) + 1
-    return out
+    return ok(await channel_row(rt, me, str(made["id"]), (str(made["team_id"]),)), 201)
 
 
 live_router = APIRouter()
@@ -476,11 +400,14 @@ async def agent_live(rt: Rt, me: Me, agent_id: str) -> JSONResponse:
     """Where the agent serves: the chat channels on it, pinned or on Latest, and the live workflow steps that run it."""
     asked = _teams(me, "all")
     teams = tuple(t for t in asked if _may(me, "view", t))
-    latest = await ChannelList(rt.db).published_version(agent_id)
-    if latest is NOT_FOUND:
-        raise NotFound(f"Agent {agent_id}")
-    rows = [_place(r) for r in await rows_of(rt, me, teams) if r["type"] == "chat" and r["serves"]["id"] == agent_id]
-    live = await ChannelList(rt.db).live_definitions()
+    now = datetime.now(UTC)
+    async with isolation.request_transaction():
+        latest = await ChannelList(rt.db).published_version(agent_id)
+        if latest is NOT_FOUND:
+            raise NotFound(f"Agent {agent_id}")
+        serving = await ChannelList(rt.db).rows(teams, now=now, agent_id=agent_id, types=["chat"])
+        live = await ChannelList(rt.db).live_definitions()
+    rows = [_place(r) for r in await replies(rt, me, serving, now)]
     rows += _steps(live, "ops.ai.agent", "agent", agent_id, cast(int | None, latest))
     return ok({"latestVersion": latest, "versions": _versions(rows, cast(int | None, latest)), "rows": rows})
 
@@ -495,20 +422,21 @@ async def workflow_live(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
     if mine is None or mine["team_id"] not in teams:
         raise NotFound(f"Live workflow {workflow_id}")
     latest = int(mine["version"])
-    listed = await ChannelList(rt.db).rows(teams)
-    watching = {m["id"] for m in listed.email if any(s["workflow_id"] == workflow_id for s in m["serving"])}
-    rows = [_place(r) for r in await rows_of(rt, me, teams) if r["id"] in watching]
+    address = watched_address(mine["definition"])
+    now = datetime.now(UTC)
+    watching = await ChannelList(rt.db).rows(teams, now=now, mailbox=(str(mine["team_id"]), address)) if address else []
+    rows = [_place(r) for r in await replies(rt, me, watching, now)]
     rows += _steps(live, "ops.action.workflow", "workflow", workflow_id, latest)
     return ok({"latestVersion": latest, "versions": _versions(rows, latest), "rows": rows})
 
 
-class ServesPatch(WireModel):
+class ServesPatch(In):
     kind: Literal["workflow", "agent"]
     id: str
     version: int | Literal["latest"]
 
 
-class ChannelPatch(WireModel):
+class ChannelPatch(In):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     paused: bool | None = None
     serves: ServesPatch | None = None
@@ -602,14 +530,11 @@ async def update_channel(rt: Rt, me: Me, channel_id: str, body: ChannelPatch) ->
         )
     else:
         raise NotFound(f"Channel {channel_id}")
-    row_now = next((r for r in await rows_of(rt, me, me.team_ids) if r["id"] == channel_id), None)
-    if row_now is None:
-        raise NotFound(f"Channel {channel_id}")
-    return ok(row_now)
+    return ok(await channel_row(rt, me, channel_id, me.team_ids))
 
 
 @router.post("/{channel_id}/retire", response_model=Envelope[Retired])
-async def retire_channel(rt: Rt, me: Me, channel_id: str) -> JSONResponse:
+async def retire_channel(rt: Rt, me: Me, channel_id: str, _: Tx) -> JSONResponse:
     """Retires a chat channel for good: the embed answers no page again and cannot be changed. An email channel
     is removed on its mailbox's page, and an API channel is a key revoked in Settings."""
     if not channel_id.startswith("wd_"):

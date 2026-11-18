@@ -29,12 +29,13 @@ builder; a second on the store layer brings it to 5 to 6 working days.
 
 | Replaced | Kept |
 |---|---|
-| Every file under `store/`: classes extend `Store`; the 63 raw sites become `self.tx()` or take `conn`; every hand-written team filter becomes `team_visible()`; the 7 caught errors run inside `attempt()`; 21 functions return `Out` models; `store/event_relay.py` deleted; `store/secrets.py` stops writing `secret_audit` on a poller's read | The statements each function runs |
+| Every file under `store/`: classes extend `Store`; the 63 raw sites become `self.tx()` or take `conn`; every hand-written team filter becomes `team_visible()`; the 7 caught errors run inside `attempt()`; 21 functions return `Out` models; `store/event_relay.py` deleted; `store/secrets.py` writes one `secret_audit` row a day for each secret, tool and actor on a poller's read, not one per poll | The statements each function runs |
 | The migration chain: 16 tables marked `TEAM_OWNED` or `TENANT_SCOPED`, the policy DDL for both databases, a backfill statement per table from the column the policy reads, a down path; indexes on `secret_audit` and the five foreign keys | |
 | Route plumbing in `app.py`, `apps.py`, `modules/routes.py`, `connections/`, `mcp_links.py`, `send_policy_routes.py`, `egress_routes.py`, `expression_routes.py`, `mock_routes.py`: `Tx`, `ListQuery`, `In`, `Out`; `/v1/apps` with `view=`, `search=`, `ids=` and facets; the two lists in `modules/service.py` onto `list_page` | `gateway_calls.py`, `executor.py`, `egress.py`, `mcp_server.py`, `mcp_tools.py`, `mcp.py`, `transform.py`, `expressions.py`, `auth/`, `plugins/`, the connector logic in `connections/`: domain logic, inputs retyped |
 | `__main__.py` endpoint fields and `require()`; its `service_client()` and the 10 clients onto `ServiceClient.for_settings`; 3 fallbacks and 10 timeouts deleted; `opa.py`'s literal port onto a setting | The OPA policy evaluation itself |
 | The relay: `run_relay(relay(...))` with two route rows (`policy.changed` to `/v1/platform-events`, the rest to `/v1/events`); `retention(secret_audit, ...)` registered | |
 | The outbox gains `tool.module.published`, `tool.module.changed` and `tool.team_state.changed` (app on or off for a team, tool added, account linked) for the agents lane's catalogue copy | |
+| Wired to `ops_store.copies`: each of the three events carries the module's revision and, in its payload, its `id` (`"deleted": true` when it goes), and an internal full list of every tenant's modules and team states is what the agents lane's `resync` reads | |
 | Access, from the register: the 4 system locks in `gateway_calls.py`, `modules/review_events.py` and `registry.py` become a grid cell or a policy; `system_workflow_only` goes with them; `directory.py` and `send_policy_routes.py` raise the baseline codes; `modules/routes.py`'s service check becomes a scope check through `can()` | 16 lines kept with their register reason: refusals from a record's settings, an account's owner, a team's setup, the dev-caller lock, plugin modules |
 
 ## Target shapes
@@ -88,8 +89,8 @@ PROCESSES.append(retention(secret_audit, secret_audit.c.at, keep_s=90 * 86400, k
    any store call moves, because a policed table read as the owner would hide nothing and a hand filter removed before
    the policy exists would show everything.
 3. Store layer: every class extends `Store`; the 63 raw sites onto `self.tx()` or `conn`; hand filters onto
-   `team_visible()`; the 7 caught errors inside `attempt()`; 21 functions onto `rows()`; `secrets.py` stops writing an
-   audit row per poll.
+   `team_visible()`; the 7 caught errors inside `attempt()`; 21 functions onto `rows()`; `secrets.py` writes one audit
+   row a day per secret, tool and actor on a poll, not one per poll.
 4. Request layer: `Tx` on every route; the two lists and `/v1/apps` onto `list_page`; bodies `In`, replies `Out`; the
    two `create_task` sites onto `background.start()`.
 5. Access: the 9 conversions from the register; the 16 kept lines keep their reason comments; the use cases that
@@ -122,11 +123,12 @@ PROCESSES.append(retention(secret_audit, secret_audit.c.at, keep_s=90 * 86400, k
 | Markings | The 16 tables off the `WAITING` list; the credential tables locked; the migration backfills and downgrades on both databases |
 | Transactions | Zero raw engine sites; zero hand-written team filters; the 7 caught errors inside `attempt()` |
 | Lists and indexes | The two lists and `/v1/apps` paged, filtered and faceted in SQL; `secret_audit` and the five foreign keys indexed |
-| Audit retention | No `secret_audit` row on a poller's read; `retention()` on `PROCESSES` with a health test |
+| Audit retention | One `secret_audit` row a day for each secret, tool and actor on a poller's read, never one per poll; `retention()` on `PROCESSES` with a health test |
 | Access | The 9 conversions landed; zero role-name compares; the kept lines carry their reason; the 403 use cases pass |
 | Clients and settings | Zero fallbacks, timeouts and `httpx.AsyncClient` constructions outside the gateway's own egress client; `__main__` exits naming an unset required endpoint |
 | Typed boundaries | 21 store functions return models; every body an `In`, every reply an `Out`; zero bare tasks |
 | Relay, events and loops | `event_relay.py` gone; the three catalogue events on the outbox and received by agents-service; every `PROCESSES` key has a `loop_reports_failure` test |
+| Relay and loop baselines | `packages/ops_store/tests/relay_sites/tools-service.txt` deleted; `packages/ops_store/tests/loop_health/tools.txt` emptied (`sign_in_keepalive`, `tools_relay`) |
 | Budgets | 33 GET routes green at 5 and 50 rows on both databases |
 | Behaviour and staging | Tests, the 56 use cases and `make verify` green on the merge commit; staging deployed with every process up and the console walk green; Apps, Connections, Egress and MCP screens opened by hand, one tool run through the gateway |
 

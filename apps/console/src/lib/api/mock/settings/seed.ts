@@ -132,6 +132,9 @@ export function seedDeliveries(hook: Webhook, volume: number): WebhookDelivery[]
   });
 }
 
+/** What the service stores for the console's scopes: `read`, plus `write` for any scope that changes something. */
+export const serviceScopes = (scopes: string[]): ('read' | 'write')[] => (scopes.some((s) => s === 'write' || s.endsWith(':write')) ? ['read', 'write'] : ['read']);
+
 export function seedApiKeys(teamName: (id: string) => string): (ApiKey & { teamId: string })[] {
   const k = (id: string, teamId: string, name: string, prefix: string, scopes: string[], createdBy: string, createdDays: number, lastMin?: number, expiresInDays?: number): ApiKey & { teamId: string } => ({
     id,
@@ -139,11 +142,12 @@ export function seedApiKeys(teamName: (id: string) => string): (ApiKey & { teamI
     team: teamName(teamId),
     name,
     prefix,
-    scopes,
+    scopes: serviceScopes(scopes),
+    status: 'active',
     createdBy,
     createdAt: minsAgo(createdDays * D),
-    lastUsedAt: lastMin != null ? minsAgo(lastMin) : undefined,
-    expiresAt: expiresInDays != null ? inDays(expiresInDays) : undefined,
+    lastUsedAt: lastMin != null ? minsAgo(lastMin) : null,
+    expiresAt: expiresInDays != null ? inDays(expiresInDays) : null,
   });
   return [
     k('key_payhub', 'team_fraud', 'Payments Hub events', 'nfb_live_Wr2', ['runs:write'], 'James Richardson', 3, 1, 362),

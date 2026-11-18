@@ -2,7 +2,7 @@
 # on :8770 (docs/services/runner-service/overview.md). No database.
 SERVICE_NAME := runner-service
 SERVICE_STATUS := first slice: Python on WASM, ops.call back through tools-service, memory, time and call limits
-OWN_VERBS := install run test lint typecheck verify wasm clean
+OWN_VERBS := install run test lint typecheck verify openapi-check openapi wasm clean
 
 PY_DIRS := src tests
 
@@ -15,19 +15,25 @@ wasm: ## Fetch the pinned CPython WASI build into OPS_RUNNER_CACHE_DIR (.data/ru
 	uv run python -m ops_runner.fetch
 
 run: wasm ## Serve on :8770
-	uv run python -m ops_runner
+	$(call STACK_RUN,runner)
 
 lint: ## ruff format check and lint
 	uv run ruff format --check $(PY_DIRS)
 	uv run ruff check $(PY_DIRS)
 
-typecheck: ## Strict pyright
-	uv run pyright $(PY_DIRS)
+typecheck: ## Strict pyright, test-file errors held to tests-typecheck-baseline.txt
+	uv run python $(ROOT)/scripts/check_tests_typecheck.py $(PY_DIRS)
 
 test: wasm ## pytest; runs real guests on the pinned build; T= runs only those files
 	uv run pytest $(T)
 
-verify: lint typecheck test ## lint, typecheck and test
+verify: lint typecheck test openapi-check ## lint, typecheck, test and the OpenAPI gate
+
+openapi-check: ## openapi.json matches the app, every route named, tagged and typed (or on the shrinking allowlist)
+	uv run python scripts/check_openapi.py
+
+openapi: ## Regenerate openapi.json after a route change
+	uv run python scripts/check_openapi.py --write
 
 clean: ## Remove caches
 	rm -rf .pytest_cache .ruff_cache

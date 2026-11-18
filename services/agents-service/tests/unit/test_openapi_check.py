@@ -51,3 +51,16 @@ def test_a_default_name_and_a_missing_or_unknown_marking_are_findings(doc: dict[
     assert "list_agents_v1_agents_get: not named <tag>_<handler>" in found
     assert f"{d['paths']['/v1/workflows']['get']['operationId']}: x-ops-public is None" in found
     assert f"{d['paths']['/v1/tools']['get']['operationId']}: x-ops-public is 'public'" in found
+
+
+@pytest.mark.parametrize(
+    ("path", "names"),
+    [
+        ("/v1/agents", {"availability", "teamId"}),
+        ("/v1/skills", {"status", "ownerTeam", "origin", "loading"}),
+    ],
+)
+def test_a_lists_filters_are_named_in_the_document(doc: dict[str, Any], path: str, names: set[str]) -> None:
+    # A filter read from the query but not declared has no argument in the generated SDKs, so the console can't send it.
+    declared = {p["name"] for p in doc["paths"][path]["get"].get("parameters", []) if p["in"] == "query"}
+    assert names <= declared, f"{path}: {sorted(names - declared)} not declared"

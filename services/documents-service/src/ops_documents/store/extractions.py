@@ -12,19 +12,24 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Literal, cast
+from typing import Annotated, Any, Literal, cast
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection
 
+from ops_documents.store.columns import JSON_TEXT
 from ops_documents.store.document_types import EXAMPLES_KEPT_PER_FIELD, document_type_examples
 from ops_documents.store.metadata import RECOVER_PENDING, ROLE, SYSTEM_ROLE, metadata
+from ops_service_kit.http import Out
+from ops_service_kit.listing import ListParams
 from ops_store import isolation
+from ops_store.listing import ListPage, list_page
 from ops_store.outbox import add, outbox_table
+from ops_store.rows import one, rows
 from ops_store.schema import TENANT_SCOPED, team_owned
+from ops_store.store import Store
 from ops_store.team_scope import any_team, team_visible
 
 Status = Literal["queued", "running", "done", "failed", "unreadable"]
@@ -127,18 +132,19 @@ def file_read(
     return payload
 
 
-@dataclass(frozen=True)
-class ExtractionRow:
+class ExtractionRow(Out):
+    """An extraction's row, its request and answer read from their JSON."""
+
     id: str
     tenant_id: str
     team: str
     file_id: str
     file_digest: str
-    request: dict[str, Any]
+    request: Annotated[dict[str, Any], JSON_TEXT]
     alias: str
     status: Status
     outcome: str | None
-    result: dict[str, Any] | None
+    result: Annotated[dict[str, Any] | None, JSON_TEXT]
     error_code: str | None
     error: str | None
     attempts: int
@@ -149,46 +155,45 @@ class ExtractionRow:
     layout_fingerprint: str | None = None
 
 
-def _row(m: Any) -> ExtractionRow:
-    return ExtractionRow(
-        id=m["id"],
-        tenant_id=m["tenant_id"],
-        team=m["team"],
-        file_id=m["file_id"],
-        file_digest=m["file_digest"],
-        request=json.loads(m["request"]),
-        alias=m["alias"],
-        status=m["status"],
-        outcome=m["outcome"],
-        result=json.loads(m["result"]) if m["result"] else None,
-        error_code=m["error_code"],
-        error=m["error"],
-        attempts=int(m["attempts"]),
-        request_hash=m["request_hash"],
-        asked_by=m["asked_by"],
-        asked_at=m["asked_at"],
-        finished_at=m["finished_at"],
-        layout_fingerprint=m.get("layout_fingerprint"),
-    )
+class CorrectionRow(Out):
+    """One correction: the value it replaced, with its confidence, and the one a person put in its place."""
+
+    field: str
+    record: int | None
+    original: Annotated[Any, JSON_TEXT]
+    original_confidence: float
+    corrected: Annotated[Any, JSON_TEXT]
+    corrected_by: str
+    corrected_at: datetime
 
 
-class ExtractionsStore:
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+def _named(table: sa.Table, model: type[Out]) -> tuple[sa.Column[Any], ...]:
+    """The table's columns the row model names, in the model's order."""
+    return tuple(table.c[name] for name in model.model_fields)
+
+
+ROW = _named(extractions, ExtractionRow)
+CORRECTION = _named(extraction_corrections, CorrectionRow)
+
+
+class ExtractionsStore(Store):
+    role = ROLE
+    system_role = SYSTEM_ROLE
 
     async def insert(self, values: Mapping[str, Any]) -> ExtractionRow:
         """The new row, or the row that already holds its Idempotency-Key (the caller compares request hashes)."""
         row = {**values, "request": json.dumps(values["request"], sort_keys=True)}
-        try:
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                await c.execute(sa.insert(extractions).values(**row))
-        except IntegrityError:
-            held = await self._one(
-                extractions.c.tenant_id == values["tenant_id"], extractions.c.key_hash == values["key_hash"]
-            )
-            if held is None:
-                raise
-            return held
+        async with self.tx() as c:
+            try:
+                async with self.attempt(c):
+                    await c.execute(sa.insert(extractions).values(**row))
+            except IntegrityError:
+                held = await self._one(
+                    extractions.c.tenant_id == values["tenant_id"], extractions.c.key_hash == values["key_hash"]
+                )
+                if held is None:
+                    raise
+                return held
         found = await self.get(str(values["id"]))
         assert found is not None
         return found
@@ -203,14 +208,13 @@ class ExtractionsStore:
         return await self._one(extractions.c.tenant_id == tenant, extractions.c.id == extraction_id)
 
     async def _one(self, *where: Any) -> ExtractionRow | None:
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            m = (await c.execute(sa.select(extractions).where(*where, team_visible(extractions)))).mappings().first()
-        return _row(m) if m is not None else None
+        async with self.tx() as c:
+            return await one(c, sa.select(*ROW).where(*where, team_visible(extractions)), ExtractionRow)
 
     async def start(self, extraction_id: str, at: datetime) -> bool:
         """Marks a queued or running row running and counts the attempt; False when it is already finished."""
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             done = await c.execute(
                 sa.update(extractions)
                 .where(
@@ -225,7 +229,7 @@ class ExtractionsStore:
     async def requeue(self, extraction_id: str) -> ExtractionRow:
         """A failed extraction queued again, its error cleared, for a retry under the same Idempotency-Key."""
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(extractions)
                 .where(extractions.c.tenant_id == tenant, extractions.c.id == extraction_id)
@@ -261,7 +265,7 @@ class ExtractionsStore:
             values |= {"input_tokens": tokens[0], "output_tokens": tokens[1]}
         if fingerprint is not None:
             values["layout_fingerprint"] = fingerprint
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(extractions)
                 .where(extractions.c.tenant_id == tenant, extractions.c.id == extraction_id)
@@ -310,38 +314,32 @@ class ExtractionsStore:
             .subquery()
         )
         query = sa.select(sa.func.count(), sa.func.avg(recent.c.input_tokens), sa.func.avg(recent.c.output_tokens))
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             count, tokens_in, tokens_out = (await c.execute(query)).one()
         return (float(tokens_in), float(tokens_out)) if count else None
 
     async def recent_reads(self, team: str, type_id: str, *, last: int) -> list[ExtractionRow]:
         """The team's last `last` finished reads of a document type, newest first (the template offers)."""
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            rows = (
-                (
-                    await c.execute(
-                        sa.select(extractions)
-                        .where(
-                            extractions.c.tenant_id == tenant,
-                            extractions.c.team == team,
-                            extractions.c.type_id == type_id,
-                            extractions.c.status == "done",
-                            team_visible(extractions),
-                        )
-                        .order_by(extractions.c.finished_at.desc())
-                        .limit(last)
-                    )
-                )
-                .mappings()
-                .all()
+        query = (
+            sa.select(*ROW)
+            .where(
+                extractions.c.tenant_id == tenant,
+                extractions.c.team == team,
+                extractions.c.type_id == type_id,
+                extractions.c.status == "done",
+                team_visible(extractions),
             )
-        return [_row(m) for m in rows]
+            .order_by(extractions.c.finished_at.desc())
+            .limit(last)
+        )
+        async with self.tx() as c:
+            return await rows(c, query, ExtractionRow)
 
     async def keep_fingerprint(self, extraction_id: str, fingerprint: str) -> None:
         """A read saved before fingerprints were stored gets its own once."""
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(extractions)
                 .where(extractions.c.tenant_id == tenant, extractions.c.id == extraction_id)
@@ -352,39 +350,24 @@ class ExtractionsStore:
         """Every queued or running extraction, across tenants: what a restart picks up again, each then read as its
         own tenant and team."""
         t = extractions
-        async with isolation.system_tx(self.engine, RECOVER_PENDING, role=SYSTEM_ROLE) as c:
-            rows = (
-                (
-                    await c.execute(
-                        sa.select(t)
-                        .where(t.c.status.in_(PENDING), any_team(t, "a restart picks up every team's"))
-                        .order_by(extractions.c.asked_at)
-                    )
-                )
-                .mappings()
-                .all()
-            )
-        return [_row(m) for m in rows]
-
-    async def for_file(self, team: str, file_id: str, *, offset: int, limit: int) -> tuple[list[ExtractionRow], int]:
-        """One page of the team's extractions of one file, newest first, and how many there are."""
-        tenant = isolation.tenant()
-        where = (extractions.c.tenant_id == tenant, extractions.c.team == team, extractions.c.file_id == file_id)
         query = (
-            sa.select(extractions)
-            .where(*where, team_visible(extractions))
-            .order_by(extractions.c.asked_at.desc(), extractions.c.id)
+            sa.select(*ROW)
+            .where(t.c.status.in_(PENDING), any_team(t, RECOVER_PENDING))
+            .order_by(extractions.c.asked_at)
         )
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            rows = (await c.execute(query.offset(offset).limit(limit))).mappings().all()
-            total = int(
-                (
-                    await c.execute(
-                        sa.select(sa.func.count()).select_from(extractions).where(*where, team_visible(extractions))
-                    )
-                ).scalar_one()
-            )
-        return [_row(m) for m in rows], total
+        async with self.system_tx(RECOVER_PENDING) as c:
+            return await rows(c, query, ExtractionRow)
+
+    async def for_file(self, team: str, file_id: str, params: ListParams) -> tuple[list[ExtractionRow], ListPage]:
+        """One page of the team's extractions of one file on the shared list contract, newest first; the rows, and
+        the page whose `data` the caller fills with their answers."""
+        t = extractions.c
+        query = sa.select(*ROW).where(
+            t.tenant_id == isolation.tenant(), t.team == team, t.file_id == file_id, team_visible(extractions)
+        )
+        async with self.tx() as c:
+            page = await list_page(c, query, params, default_sort=t.asked_at.desc())
+        return [ExtractionRow.model_validate(r) for r in page["data"]], page
 
     async def correct(
         self,
@@ -396,7 +379,7 @@ class ExtractionsStore:
     ) -> None:
         """Records a correction and writes the extraction's answer with the corrected value, its event when given, and
         the example it teaches its document type, in one transaction."""
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             if example is not None:
                 await _keep_example(c, example)
             if event is not None:
@@ -432,43 +415,26 @@ class ExtractionsStore:
                 .values(result=json.dumps(result))
             )
 
-    async def corrections(self, extraction_id: str) -> list[dict[str, Any]]:
-        tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            rows = (
-                (
-                    await c.execute(
-                        sa.select(extraction_corrections)
-                        .where(
-                            extraction_corrections.c.tenant_id == tenant,
-                            extraction_corrections.c.extraction_id == extraction_id,
-                            team_visible(extraction_corrections),
-                        )
-                        .order_by(extraction_corrections.c.id)
-                    )
-                )
-                .mappings()
-                .all()
+    async def corrections(self, extraction_id: str) -> list[CorrectionRow]:
+        k = extraction_corrections.c
+        query = (
+            sa.select(*CORRECTION)
+            .where(
+                k.tenant_id == isolation.tenant(),
+                k.extraction_id == extraction_id,
+                team_visible(extraction_corrections),
             )
-        return [
-            {
-                "field": m["field"],
-                "record": m["record"],
-                "original": json.loads(m["original"]),
-                "originalConfidence": m["original_confidence"],
-                "corrected": json.loads(m["corrected"]),
-                "correctedBy": m["corrected_by"],
-                "correctedAt": m["corrected_at"].isoformat(),
-            }
-            for m in rows
-        ]
+            .order_by(k.id)
+        )
+        async with self.tx() as c:
+            return await rows(c, query, CorrectionRow)
 
     async def purge(self, team: str, file_id: str) -> int:
         """Removes the team's extractions of a deleted file, their corrections and the examples those taught; the number
         of extractions removed.
         Another team's reads of the file are its own purge's to remove."""
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             ids = [
                 r[0]
                 for r in await c.execute(

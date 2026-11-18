@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ops_agents.api.key_summaries import PlatformKeySummaries
 from ops_agents.api.people_names import PlatformPeopleNames
+from ops_agents.store.api_key_copies import ApiKeyCopies, KeySummary, listed_event
 from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.mailboxes import MailboxRow, MailboxStore
 from ops_agents.store.tenancy import tenant_scope
@@ -84,22 +84,18 @@ async def test_a_person_who_started_a_run_is_named(stack: Stack) -> None:  # noq
     assert platform.reads == 1, "the names are read once a minute, not per request"
 
 
-class KeyPlatform:
-    """platform-service's GET /v1/api-key-summaries, a revoked key among them."""
-
-    async def get(self, path: str) -> list[dict[str, str]]:
-        assert path == "/v1/api-key-summaries"
-        return [{"id": "key_sync", "name": "billing-sync", "status": "revoked"}]
-
-
 async def test_a_run_an_api_key_started_is_named_by_its_label(stack: Stack) -> None:  # noqa: F811
     # The Runs list and Activity showed `key_sync`, which says nothing to the person reading it.
     c, rt = stack
-    rt.key_summaries = PlatformKeySummaries(KeyPlatform())  # pyright: ignore[reportArgumentType]
     parent = await started_run(c, BUILDER, "ops_check")
     with tenant_scope(TENANT):
         base = await RunStore(EngineTransactions(rt.db)).get(parent)
         assert base is not None
+        # This service's copy of platform's keys, a revoked one: a run a retired key started keeps its key's name.
+        summary = {"id": "key_sync", "name": "billing-sync", "prefix": "key_sync", "teamId": base["team_id"]}
+        summary |= {"status": "revoked", "target": None, "lastUsedAt": None, "expiresAt": None}
+        summary |= {"createdAt": "2026-10-01T00:00:00.000Z"}
+        await ApiKeyCopies(rt.db).apply([listed_event(KeySummary.model_validate(summary), tenant_id=TENANT)])
         same = {k: base[k] for k in ("team_id", "workflow_id", "version", "digest", "mode", "input")}
         await RunStore(EngineTransactions(rt.db)).create(
             same | {"id": "wfrun_bykey", "run_key": "kk", "created_by": "key:key_sync"}

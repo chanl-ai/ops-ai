@@ -1,6 +1,7 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- Run as ops_migrator in the database after the bundle and after each upgrade; every statement runs again.
--- Each service's user: SELECT, INSERT, UPDATE, DELETE on its own tables and SELECT on its version table.
+-- Each service's user: SELECT, INSERT, UPDATE, DELETE on its own tables, less where its PostgreSQL tenant
+-- role holds less (an append-only log, a row never deleted), and SELECT on its version table.
 -- No other permission, so it can create, alter or drop nothing, read no other service's tables, and
 -- every security policy applies to it. A chain's user may also impersonate that chain's system user (no
 -- login), which reads every tenant's rows of the tables and columns granted to it below, as on PostgreSQL.
@@ -8,68 +9,106 @@
 IF USER_ID(N'ops_agents_runtime') IS NULL CREATE USER ops_agents_runtime FOR LOGIN ops_agents_runtime WITH DEFAULT_SCHEMA = dbo;
 GO
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.engine_definitions TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.engine_runs TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.engine_steps TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.engine_work TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.engine_waits TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_agents TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_publish_requests TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.background_heartbeats TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.background_jobs TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.cases TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.case_events TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.thread_leases TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.thread_events TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.trigger_events TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.form_links TO ops_agents_runtime;
+REVOKE DELETE ON dbo.engine_runs FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.engine_runs TO ops_agents_runtime;
+REVOKE DELETE ON dbo.engine_steps FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.engine_steps TO ops_agents_runtime;
+REVOKE DELETE ON dbo.engine_work FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.engine_work TO ops_agents_runtime;
+REVOKE UPDATE ON dbo.engine_waits FROM ops_agents_runtime;
+GRANT SELECT, INSERT, DELETE ON dbo.engine_waits TO ops_agents_runtime;
+REVOKE DELETE ON dbo.thread_leases FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.thread_leases TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.graph_threads TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.graph_versions TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_agents TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_publish_requests TO ops_agents_runtime;
+REVOKE SELECT, INSERT, UPDATE, DELETE ON dbo.background_heartbeats FROM ops_agents_runtime;
+REVOKE UPDATE ON dbo.background_jobs FROM ops_agents_runtime;
+GRANT SELECT, INSERT, DELETE ON dbo.background_jobs TO ops_agents_runtime;
+REVOKE DELETE ON dbo.cases FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.cases TO ops_agents_runtime;
+REVOKE UPDATE, DELETE ON dbo.case_events FROM ops_agents_runtime;
+GRANT SELECT, INSERT ON dbo.case_events TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.thread_events TO ops_agents_runtime;
+REVOKE UPDATE, DELETE ON dbo.trigger_events FROM ops_agents_runtime;
+GRANT SELECT, INSERT ON dbo.trigger_events TO ops_agents_runtime;
+GRANT UPDATE ON dbo.trigger_events (detail, item, outcome, run_id) TO ops_agents_runtime;
+REVOKE DELETE ON dbo.form_links FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.form_links TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.mailboxes TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.review_decisions TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.review_approvals TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.service_events TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.widget_deployments TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.run_batches TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.run_batch_rows TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.case_types TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.case_type_versions TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.poll_cursors TO ops_agents_runtime;
+REVOKE DELETE ON dbo.service_events FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.service_events TO ops_agents_runtime;
+REVOKE DELETE ON dbo.widget_deployments FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.widget_deployments TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.api_key_copies TO ops_agents_runtime;
+REVOKE UPDATE ON dbo.eval_cases FROM ops_agents_runtime;
+GRANT SELECT, INSERT, DELETE ON dbo.eval_cases TO ops_agents_runtime;
+REVOKE UPDATE, DELETE ON dbo.eval_runs FROM ops_agents_runtime;
+GRANT SELECT, INSERT ON dbo.eval_runs TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_skills TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_workflows TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_validations TO ops_agents_runtime;
+REVOKE DELETE ON dbo.run_batches FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.run_batches TO ops_agents_runtime;
+REVOKE DELETE ON dbo.run_batch_rows FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.run_batch_rows TO ops_agents_runtime;
+REVOKE DELETE ON dbo.case_types FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.case_types TO ops_agents_runtime;
+REVOKE DELETE ON dbo.case_type_versions FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.case_type_versions TO ops_agents_runtime;
+REVOKE DELETE ON dbo.poll_cursors FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.poll_cursors TO ops_agents_runtime;
+REVOKE DELETE ON dbo.widget_mint_keys FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.widget_mint_keys TO ops_agents_runtime;
+REVOKE UPDATE, DELETE ON dbo.widget_mint_key_audit FROM ops_agents_runtime;
+GRANT SELECT, INSERT ON dbo.widget_mint_key_audit TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.deployments TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.channel_messages TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.channel_cursors TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.thread_inbox TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.channel_files TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.chat_search TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.eval_cases TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.eval_runs TO ops_agents_runtime;
+REVOKE UPDATE ON dbo.chat_search FROM ops_agents_runtime;
+GRANT SELECT, INSERT, DELETE ON dbo.chat_search TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_guardrails TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.agent_memories TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.memory_audit TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.message_memory_use TO ops_agents_runtime;
+REVOKE UPDATE, DELETE ON dbo.message_memory_use FROM ops_agents_runtime;
+GRANT SELECT, INSERT ON dbo.message_memory_use TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_call_records TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.review_assignments TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_skills TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.task_assists TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.task_types TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.task_type_versions TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.team_default_agents TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.template_copies TO ops_agents_runtime;
+REVOKE SELECT, INSERT, UPDATE, DELETE ON dbo.model_call_records_unattributed FROM ops_agents_runtime;
+REVOKE UPDATE, DELETE ON dbo.review_assignments FROM ops_agents_runtime;
+GRANT SELECT, INSERT ON dbo.review_assignments TO ops_agents_runtime;
+REVOKE DELETE ON dbo.task_assists FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.task_assists TO ops_agents_runtime;
+REVOKE DELETE ON dbo.task_types FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.task_types TO ops_agents_runtime;
+REVOKE DELETE ON dbo.task_type_versions FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.task_type_versions TO ops_agents_runtime;
+REVOKE DELETE ON dbo.team_default_agents FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.team_default_agents TO ops_agents_runtime;
+REVOKE DELETE ON dbo.template_copies FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.template_copies TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tool_catalog TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tool_catalog_operations TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tool_team_state TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.thread_budgets TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.widget_mint_keys TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.widget_mint_key_audit TO ops_agents_runtime;
+REVOKE SELECT, INSERT, UPDATE, DELETE ON dbo.thread_budgets_unattributed FROM ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_widgets TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_workflows TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_validations TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.timers TO ops_agents_runtime;
+REVOKE DELETE ON dbo.timers FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.timers TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.ops_checkpoints TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.ops_checkpoint_writes TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.ops_checkpoint_fences TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_agent_versions TO ops_agents_runtime;
+REVOKE DELETE ON dbo.ops_checkpoint_fences FROM ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.ops_checkpoint_fences TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.graph_runs TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_guardrail_versions TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_agent_versions TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.agent_skill_pins TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_skill_versions TO ops_agents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_widget_versions TO ops_agents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_workflow_versions TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_guardrail_versions TO ops_agents_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.registry_widget_versions TO ops_agents_runtime;
 GRANT SELECT ON dbo.alembic_version TO ops_agents_runtime;
 GO
 IF USER_ID(N'ops_runtime_system') IS NULL CREATE USER ops_runtime_system WITHOUT LOGIN;
@@ -89,6 +128,7 @@ GRANT SELECT ON dbo.background_jobs TO ops_runtime_system;
 GRANT SELECT ON dbo.run_batches TO ops_runtime_system;
 GRANT SELECT ON dbo.run_batch_rows TO ops_runtime_system;
 GRANT SELECT ON dbo.team_default_agents TO ops_runtime_system;
+GRANT SELECT ON dbo.registry_agents (tenant_id, id, published_version, paused) TO ops_runtime_system;
 GRANT IMPERSONATE ON USER::ops_runtime_system TO ops_agents_runtime;
 GO
 -- tools-service
@@ -98,22 +138,26 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.gateway_calls TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.gateway_fences TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tool_modules TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.operation_mocks TO ops_tools_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.service_outbox TO ops_tools_runtime;
+REVOKE UPDATE, DELETE ON dbo.service_outbox FROM ops_tools_runtime;
+GRANT SELECT, INSERT ON dbo.service_outbox TO ops_tools_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.team_defaults TO ops_tools_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.app_cards TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.connections TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.app_credentials TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.oauth_states TO ops_tools_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.connection_audit TO ops_tools_runtime;
+REVOKE UPDATE, DELETE ON dbo.connection_audit FROM ops_tools_runtime;
+GRANT SELECT, INSERT ON dbo.connection_audit TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.egress_hosts TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.egress_ranges TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.egress_audit TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.operation_rate_windows TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.tool_secrets TO ops_tools_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.secret_audit TO ops_tools_runtime;
+REVOKE UPDATE, DELETE ON dbo.secret_audit FROM ops_tools_runtime;
+GRANT SELECT, INSERT ON dbo.secret_audit TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.mcp_links TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.plugin_bindings TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.send_policies TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.send_checks TO ops_tools_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.team_defaults TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.module_operations TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.module_versions TO ops_tools_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.module_approvals TO ops_tools_runtime;
@@ -122,14 +166,28 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.connection_tokens TO ops_tools_runti
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.connect_links TO ops_tools_runtime;
 GRANT SELECT ON dbo.alembic_version_tools TO ops_tools_runtime;
 GO
+IF USER_ID(N'ops_tools_system') IS NULL CREATE USER ops_tools_system WITHOUT LOGIN;
+GO
+GRANT SELECT ON dbo.team_defaults (tenant_id, team_id, version) TO ops_tools_system;
+GRANT SELECT ON dbo.tool_modules (tenant_id, id, team_id, display_name) TO ops_tools_system;
+GRANT SELECT ON dbo.module_versions (tenant_id, module_id, version, status, review_id, published_by) TO ops_tools_system;
+GRANT SELECT ON dbo.module_approvals (tenant_id, module_id, id, status, review_id, decider_team, workflow_id, workflow_name, operations, environment, expires_at, justification, requested_by, requested_by_email) TO ops_tools_system;
+GRANT SELECT, UPDATE, DELETE ON dbo.service_outbox TO ops_tools_system;
+GRANT SELECT, DELETE ON dbo.secret_audit TO ops_tools_system;
+GRANT IMPERSONATE ON USER::ops_tools_system TO ops_tools_runtime;
+GO
 -- models-service
 IF USER_ID(N'ops_models_runtime') IS NULL CREATE USER ops_models_runtime FOR LOGIN ops_models_runtime WITH DEFAULT_SCHEMA = dbo;
 GO
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.provider_connections TO ops_models_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.provider_keys TO ops_models_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_keys TO ops_models_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_key_tenants TO ops_models_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_call_log TO ops_models_runtime;
+REVOKE DELETE ON dbo.model_key_tenants FROM ops_models_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.model_key_tenants TO ops_models_runtime;
+REVOKE UPDATE, DELETE ON dbo.model_call_log FROM ops_models_runtime;
+GRANT SELECT, INSERT ON dbo.model_call_log TO ops_models_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_calls_untenanted TO ops_models_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_key_spend TO ops_models_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.model_aliases TO ops_models_runtime;
 GRANT SELECT ON dbo.alembic_version_models TO ops_models_runtime;
 GO
@@ -149,6 +207,12 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.kb_chunks TO ops_kb_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.kb_units TO ops_kb_runtime;
 GRANT SELECT ON dbo.alembic_version_kb TO ops_kb_runtime;
 GO
+IF USER_ID(N'ops_kb_system') IS NULL CREATE USER ops_kb_system WITHOUT LOGIN;
+GO
+GRANT SELECT ON dbo.kb_sources TO ops_kb_system;
+GRANT SELECT, UPDATE, DELETE ON dbo.kb_outbox TO ops_kb_system;
+GRANT IMPERSONATE ON USER::ops_kb_system TO ops_kb_runtime;
+GO
 -- platform-service
 IF USER_ID(N'ops_platform_runtime') IS NULL CREATE USER ops_platform_runtime FOR LOGIN ops_platform_runtime WITH DEFAULT_SCHEMA = dbo;
 GO
@@ -161,11 +225,13 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.teams TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.users TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.roles TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_secrets TO ops_platform_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.policies TO ops_platform_runtime;
+REVOKE DELETE ON dbo.policies FROM ops_platform_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.policies TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.members TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.api_keys TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.sessions TO ops_platform_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.audit_entries TO ops_platform_runtime;
+REVOKE UPDATE, DELETE ON dbo.audit_entries FROM ops_platform_runtime;
+GRANT SELECT, INSERT ON dbo.audit_entries TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.role_permissions TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.role_assignments TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_providers TO ops_platform_runtime;
@@ -180,6 +246,19 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_identities TO ops_platform_ru
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_flows TO ops_platform_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.signin_grants TO ops_platform_runtime;
 GRANT SELECT ON dbo.alembic_version_platform TO ops_platform_runtime;
+GO
+GRANT SELECT ON dbo.platform_users_by_email TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_session TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_key TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_team TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_signin_flow TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_signin_handoff TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_signin_domain TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_signin_sp TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_signin_watch TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_password_reset TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_invite TO ops_platform_runtime;
+GRANT SELECT ON dbo.platform_purge_due TO ops_platform_runtime;
 GO
 -- files-service
 IF USER_ID(N'ops_files_runtime') IS NULL CREATE USER ops_files_runtime FOR LOGIN ops_files_runtime WITH DEFAULT_SCHEMA = dbo;
@@ -217,7 +296,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.extraction_corrections TO ops_docume
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.documents_readings TO ops_documents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.documents_reading_pages TO ops_documents_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.documents_reading_files TO ops_documents_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON dbo.documents_template_copies TO ops_documents_runtime;
+REVOKE DELETE ON dbo.documents_template_copies FROM ops_documents_runtime;
+GRANT SELECT, INSERT, UPDATE ON dbo.documents_template_copies TO ops_documents_runtime;
 GRANT SELECT ON dbo.alembic_version_documents TO ops_documents_runtime;
 GO
 IF USER_ID(N'ops_documents_system') IS NULL CREATE USER ops_documents_system WITHOUT LOGIN;

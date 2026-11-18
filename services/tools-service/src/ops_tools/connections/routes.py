@@ -1,6 +1,11 @@
 """An app's accounts under `/v1/apps/{app_id}/accounts`, the caller's own under `/v1/me/accounts`, connect links and
 `/v1/connection-kinds`: the console's Apps pages and the SDK read these. An account is found only under its
-own app, so an id moved to another app's address answers 404."""
+own app, so an id moved to another app's address answers 404.
+
+A route that only reads and writes this service's database answers in one request transaction (`Tx`). A route that
+asks another party (the system's token or revocation address, agents-service for who uses an account, the platform's
+egress policy for an unlisted host, the account's test address) takes none: each store call is its own short
+transaction, so no connection is held while that party answers."""
 
 # No `from __future__ import annotations`: the routes' `caller` dependency is a local of accounts_router, and FastAPI
 # resolves string annotations against module globals, where it does not exist.
@@ -10,6 +15,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, Response
 
+from ops_identity.fastapi import Tx
 from ops_service_kit.http import Envelope, error_responses, ok
 
 from ..callers import caller_in
@@ -48,12 +54,12 @@ def accounts_router(service: ConnectionService, directory: Directory) -> APIRout
         return ok(service.kinds())
 
     @r.get(ACCOUNT, response_model=Envelope[AccountDetail])
-    async def get_account(app_id: str, account_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def get_account(app_id: str, account_id: str, who: Annotated[Caller, Depends(caller)], _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         return ok(await service.detail(who, await _of(who, app_id, account_id)))
 
     @r.patch(ACCOUNT, response_model=Envelope[AccountDetail])
     async def change_account(  # pyright: ignore[reportUnusedFunction]
-        app_id: str, account_id: str, body: AccountPatchIn, who: Annotated[Caller, Depends(caller)]
+        app_id: str, account_id: str, body: AccountPatchIn, who: Annotated[Caller, Depends(caller)], _: Tx
     ) -> JSONResponse:
         """The account's name, sign-in, card details, sandbox flag, settings and secret parts; a secret part left out
         keeps its stored value."""
@@ -61,7 +67,8 @@ def accounts_router(service: ConnectionService, directory: Directory) -> APIRout
 
     @r.delete(ACCOUNT, status_code=204, response_class=Response)
     async def delete_account(app_id: str, account_id: str, who: Annotated[Caller, Depends(caller)]) -> Response:  # pyright: ignore[reportUnusedFunction]
-        """409 connection_in_use while a module points at it."""
+        """409 connection_in_use while a module points at it. No request transaction: agents-service is asked
+        whether a workflow or agent names the account."""
         await service.delete(who, await _of(who, app_id, account_id))
         return Response(status_code=204)
 
@@ -100,24 +107,24 @@ def accounts_router(service: ConnectionService, directory: Directory) -> APIRout
         return ok(await service.test(who, await _of(who, app_id, account_id), body.account))
 
     @r.put(f"{ACCOUNT}/default", response_model=Envelope[AccountDetail])
-    async def pin_default(app_id: str, account_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def pin_default(app_id: str, account_id: str, who: Annotated[Caller, Depends(caller)], _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Makes this account the caller's default of its app: their calls that name no account use it."""
         return ok(await service.pin_default(who, await _of(who, app_id, account_id)))
 
     @r.post(f"{ACCOUNT}/sign-out", response_model=Envelope[AccountDetail])
-    async def sign_out(app_id: str, account_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def sign_out(app_id: str, account_id: str, who: Annotated[Caller, Depends(caller)], _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Ends the team's sign-in on the account; each person's own stays."""
         return ok(await service.sign_out(who, await _of(who, app_id, account_id)))
 
     @r.get("/v1/me/accounts", response_model=Envelope[list[MyAccount]])
-    async def my_accounts(who: Annotated[Caller, Depends(caller)], every: bool = False) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
+    async def my_accounts(who: Annotated[Caller, Depends(caller)], _: Tx, every: bool = False) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The caller's own sign-ins on their team's accounts: Your connections in the person menu. With
         `every`, also each account of the team they can connect themselves and have not."""
         return ok(await service.mine(who, every=every))
 
     @r.put("/v1/me/accounts/{account_id}/credentials", response_model=Envelope[MyAccount])
     async def give_own_credentials(  # pyright: ignore[reportUnusedFunction]
-        account_id: str, body: PersonCredentialsIn, who: Annotated[Caller, Depends(caller)]
+        account_id: str, body: PersonCredentialsIn, who: Annotated[Caller, Depends(caller)], _: Tx
     ) -> JSONResponse:
         """The caller's own key, password or token on an account each person signs in to, replacing any they
         gave before; answers their row in Your connections, never the values."""

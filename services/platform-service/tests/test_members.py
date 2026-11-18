@@ -9,9 +9,12 @@ from typing import Any
 import pytest
 import sqlalchemy as sa
 
+from ops_platform.store.roles import mirror_membership
 from ops_platform.store.tables import audit_entries, members, role_assignments, tenants
+from ops_platform.store.workspace import security_team_in
+from ops_service_kit.ids import now_iso
 
-from .conftest import SERVICE, Person, Platform
+from .conftest import SERVICE, Person, Platform, seed_tx
 from .test_permissions import grant
 
 
@@ -34,7 +37,7 @@ async def join(platform: Platform, admin: Person, role: str) -> Person:
     """Another person in the admin's tenant, an active member of the admin's team with `role`."""
     other = await platform.person(roles=(), tenant_id=admin.tenant_id)
     team = team_of(admin)
-    async with platform.engine.begin() as c:
+    async with seed_tx(platform.engine, admin.tenant_id) as c:
         await c.execute(
             members.insert().values(
                 id=f"mem_{other.user_id}",
@@ -48,6 +51,12 @@ async def join(platform: Platform, admin: Person, role: str) -> Person:
                 updated_at="2026-01-01T00:00:00.000Z",
             )
         )
+        # As every writer of a membership does: its role assignments follow it in the same transaction.
+        await mirror_membership(
+            c, tenant_id=admin.tenant_id, team_id=team, user_id=other.user_id, member_role=role,
+            security_team=await security_team_in(c, admin.tenant_id),
+            granted_by="test", at=now_iso(),
+        )  # fmt: skip
     other.teams[team] = role
     return other
 
@@ -171,6 +180,31 @@ async def test_the_last_admin_is_skipped_with_a_reason(platform: Platform) -> No
     assert r.json()["data"] == {"updated": [], "skipped": [{"id": me["id"], "reason": "last_admin"}]}
     r = await platform.public.post("/v1/settings/members/delete", headers=h, json={"ids": [me["id"]]})
     assert r.json()["data"] == {"updated": [], "skipped": [{"id": me["id"], "reason": "last_admin"}]}
+
+
+async def test_only_an_active_membership_as_admin_makes_a_team_admin(platform: Platform) -> None:
+    # The last-admin guards count a team's admins by membership: Admin given by a grant, an invite as admin and a
+    # removed admin each leave the one admin the last, for a role change, a removal and leaving the team alike.
+    admin, h = await as_admin(platform)
+    team = team_of(admin)
+    granted = await join(platform, admin, "viewer")
+    await grant(platform, granted, team, "admin")
+    r = await platform.public.post(
+        "/v1/settings/members/invite", headers=h, json={"emails": [f"inv@{admin.email.split('@')[1]}"], "role": "admin"}
+    )
+    assert r.status_code == 200 and r.json()["data"]["updated"], r.text
+    removed = await join(platform, admin, "admin")
+    [gone] = [m["id"] for m in await member_rows(platform, h) if m["email"] == removed.email]
+    r = await platform.public.post("/v1/settings/members/delete", headers=h, json={"ids": [gone]})
+    assert r.json()["data"] == {"updated": [gone], "skipped": []}, r.text
+    [me] = [m["id"] for m in await member_rows(platform, h) if m["email"] == admin.email]
+    last = {"updated": [], "skipped": [{"id": me, "reason": "last_admin"}]}
+    r = await platform.public.post("/v1/settings/members/role", headers=h, json={"ids": [me], "role": "viewer"})
+    assert r.json()["data"] == last, r.text
+    r = await platform.public.post("/v1/settings/members/delete", headers=h, json={"ids": [me]})
+    assert r.json()["data"] == last, r.text
+    r = await platform.public.post(f"/v1/settings/teams/{team}/leave", headers=h)
+    assert r.status_code == 409 and r.json()["error"]["code"] == "last_admin", r.text
 
 
 async def test_demoting_both_of_two_admins_keeps_one(platform: Platform) -> None:
@@ -338,3 +372,48 @@ async def test_member_writes_are_audited(platform: Platform) -> None:
             .all()
         )
     assert list(actions) == ["member.invite", "member.accept", "member.role", "member.remove"]
+
+
+async def test_the_member_list_never_shows_another_teams_or_tenants_people(platform: Platform) -> None:
+    # A filter, a search, a facet or `ids` naming them each still answers the acting team's rows only.
+    admin, h = await as_admin(platform)
+    mine = await join(platform, admin, "viewer")
+    other_team = await platform.person(roles=("viewer",), tenant_id=admin.tenant_id)
+    other_tenant = await platform.person(roles=("viewer",))
+    outside = {other_team.email, other_tenant.email}
+    ids = [f"mem_{p.user_id}" for p in (mine, other_team, other_tenant)]
+    async with platform.engine.begin() as c:
+        found = (await c.execute(sa.select(members.c.id).where(members.c.email.in_(outside)))).scalars().all()
+    for params in ({}, {"role": "viewer"}, {"search": "@"}, {"ids": [*ids, *found]}):
+        r = await platform.public.get("/v1/settings/members", headers=h, params=params)
+        assert r.status_code == 200, r.text
+        emails = {m["email"] for m in r.json()["data"]["data"]}
+        assert emails and not emails & outside, (params, emails)
+        assert r.json()["data"]["facets"]["role"].get("viewer", 0) == 1
+
+
+async def test_member_pages_follow_one_another_with_no_row_twice(platform: Platform) -> None:
+    # Every joined member shares one created_at, so only the id orders them between pages.
+    admin, h = await as_admin(platform)
+    for _ in range(4):
+        await join(platform, admin, "builder")
+    seen: list[str] = []
+    for page in (1, 2, 3):
+        r = await platform.public.get("/v1/settings/members", headers=h, params={"page": page, "pageSize": 2})
+        assert r.status_code == 200, r.text
+        seen += [m["id"] for m in r.json()["data"]["data"]]
+    assert len(seen) == 5 == len(set(seen)), seen
+    assert r.json()["data"]["pagination"]["total"] == 5
+
+
+async def test_members_sort_by_team_name_then_by_key(platform: Platform) -> None:
+    # `sortBy=teamId` is the team's name; the people of one team share it, so the key orders them in its direction.
+    admin, h = await as_admin(platform)
+    for _ in range(3):
+        await join(platform, admin, "builder")
+    for order in ("asc", "desc"):
+        params = {"sortBy": "teamId", "sortOrder": order}
+        r = await platform.public.get("/v1/settings/members", headers=h, params=params)
+        assert r.status_code == 200, r.text
+        joined = [m["id"] for m in r.json()["data"]["data"] if m["email"] != admin.email]
+        assert joined == sorted(joined, reverse=order == "desc"), (order, joined)

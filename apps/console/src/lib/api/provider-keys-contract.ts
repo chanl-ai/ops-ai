@@ -1,3 +1,4 @@
+import type { ListParams, ListResult } from '@/lib/types/query';
 import type { ChatModelChoice, KeyCheck, KeyWhere, ProviderModel, ProviderKey } from '@/lib/types/provider-keys';
 
 /**
@@ -6,7 +7,7 @@ import type { ChatModelChoice, KeyCheck, KeyWhere, ProviderModel, ProviderKey } 
  */
 export interface ProviderKeysApi {
   /** 403 `admin_only` for anyone else. */
-  list(): Promise<ProviderKey[]>;
+  list(p: ListParams): Promise<ListResult<ProviderKey>>;
   /** Saves the key, or replaces the value of the one with this name. The value is never returned. */
   save(name: string, value: string): Promise<ProviderKey>;
   /** 409 `key_in_use` while a provider connection signs in with it; 404 when none has the name. */

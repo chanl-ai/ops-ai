@@ -24,14 +24,18 @@ TEAM_COLUMNS = {"team_id", "team"}
 # table is marked; the test fails on a name that is marked or gone, so the list only shrinks.
 NOT_YET_MARKED = {
     # agents-service: work records, scoped by the acting team passed in, or by thread
+    # publish requests gained their subject's team in agents 0106; the registry stores read it by team with the
+    # registry tables' marking (docs/architecture/migration/agents-registry-tenancy.md)
+    "registry_publish_requests",
     # background process: the update notices of the account-level event workflows have no team
     "service_events",
     # ops_engine: runs and definitions, scoped by the team passed in
     "engine_definitions",
-    # tools-service
-    "send_policies",
-    "send_checks",
-    # the call log: Usage reads it by the acting team passed in; the database lock on it comes later
+    # tools-service: modules, held to their tenant by the database (tools_0086); a module with no team and one granted
+    # to another team's workflow are read across teams, so the store's team_modules and granted name the team
+    "tool_modules",
+    # tools-service: the call log, held to its tenant by the database (tools_0080); Usage reads it by the acting
+    # team passed in
     "gateway_calls",
     # files-service and documents-service: their `team` column
     # platform-service: identity and administration, read by team and role through platform's own routes
@@ -183,9 +187,25 @@ def joined(engine):
 
 def by_method(engine):
     return engine.execute(registry_agents.select())
+
+def union_scoped(engine):
+    both = sa.union_all(
+        sa.select(registry_agents.c.id).where(team_visible(registry_agents)),
+        sa.select(registry_skills.c.id).where(team_visible(registry_skills)),
+    ).subquery("u")
+    return engine.execute(sa.select(both))
+
+def union_one_branch(engine):
+    both = sa.union_all(
+        sa.select(registry_agents.c.id).where(team_visible(registry_agents)),
+        sa.select(registry_skills.c.id),
+    ).subquery("u")
+    return engine.execute(sa.select(both))
 """
-    assert unscoped_reads(planted, {"registry_agents"}) == [
+    # A list over several sources (ops_store.listing) is scoped in each branch of its union.
+    assert unscoped_reads(planted, {"registry_agents", "registry_skills"}) == [
         "<source>:3 rows registry_agents",
         "<source>:9 joined registry_agents",
         "<source>:12 by_method registry_agents",
+        "<source>:24 union_one_branch registry_skills",
     ]

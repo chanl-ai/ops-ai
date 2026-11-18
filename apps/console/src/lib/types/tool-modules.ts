@@ -23,6 +23,8 @@ export interface ModuleRef {
 
 export interface ToolModule {
   id: string;
+  /** Whether the caller may change this module: false for another team's module read through a grant. Absent before the API sends it. */
+  canEdit?: boolean;
   /** Stable kebab-case name workflows pin; never a row id. */
   name: string;
   displayName: string;
@@ -259,7 +261,6 @@ export interface RunContextOption {
 
 export interface ToolModuleDetail extends ToolModule {
   /** What the caller may do with it, by the routes' own checks; absent before the API sends them. */
-  canEdit?: boolean;
   canDelete?: boolean;
   canPublish?: boolean;
   ownerContacts: string[];

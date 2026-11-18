@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 
 import { ensureConsoleBuild, materializeConsoleBuild } from './console-build.ts';
 import { pgUrl } from './isolation.ts';
+export { requireStagingOrigin } from './deployed.ts';
 
 import { chromium as playwrightChromium, type Browser, type BrowserContext } from 'playwright';
 
@@ -72,12 +73,31 @@ const LOG_DIR = join(process.env.OPS_LOG_DIR ?? join(ROOT, '.logs'), 'usecase');
 let checked = 0;
 let failed = 0;
 
+/**
+ * What the watched browsers were refused or threw since the last report: a failed check or a crashed script prints
+ * these, so a timeout names the request behind it. A passing check does not clear them, since the run's own closing
+ * checks pass after a script has crashed. The latest 12 are kept: a page that polls a failing route repeats itself.
+ */
+const browserTrouble: string[] = [];
+function noteTrouble(line: string): void {
+  if (browserTrouble.includes(line)) return;
+  browserTrouble.push(line);
+  if (browserTrouble.length > 12) browserTrouble.shift();
+}
+function reportTrouble(): void {
+  for (const line of browserTrouble.splice(0)) console.log(`  browser: ${line}`);
+}
+process.once('exit', (code) => {
+  if (code !== 0) reportTrouble();
+});
+
 export function check(name: string, ok: boolean, detail: unknown = ''): boolean {
   checked++;
   if (ok) console.log(`PASS ${name}`);
   else {
     failed++;
     console.log(`FAIL ${name}: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`);
+    reportTrouble();
   }
   return ok;
 }
@@ -293,6 +313,15 @@ function watchContext(context: BrowserContext): BrowserContext {
     sampleReported.add(key);
     check(`the page draws no sample data: ${hit[2]}`, false, `${hit[1]} was answered by the console's mock; call expectSampleData('${hit[2]}') if the use case means it`);
   });
+  context.on('response', (response) => {
+    const url = new URL(response.url());
+    if (response.status() < 400 || !url.pathname.includes('/v1/')) return;
+    void response
+      .text()
+      .catch(() => '')
+      .then((body) => noteTrouble(`${response.status()} ${response.request().method()} ${url.pathname} ${refusalText(body).slice(0, 160)}`));
+  });
+  context.on('weberror', (error) => noteTrouble(`page error: ${error.error().message.slice(0, 200)}`));
   return context;
 }
 
@@ -736,10 +765,12 @@ export function stackEnv(base: NodeJS.ProcessEnv, extra: Record<string, string> 
   const inherited = { ...base };
   // The shared stack's fake bank CA and name map stay with it, as in usecase_harness._env: a use case's bank passes its own.
   // So does the shell's model endpoint (OPENAI_API_BASE and the rest), which would move openai-local off the fake.
-  for (const key of ['OPS_MODELS_URL', 'OPS_MODELS_KEY', 'OPS_MODELS_FAKE_OPENAI_URL', 'OPS_PLATFORM_URL', 'OPS_EGRESS_CA_FILE', 'OPS_EGRESS_RESOLVE', ...MODEL_ENDPOINT_ENV]) delete inherited[key];
+  for (const key of ['OPS_MODELS_URL', 'OPS_MODELS_KEY', 'OPS_MODELS_FAKE_OPENAI_URL', 'OPS_PLATFORM_URL', 'OPS_PLATFORM_INTERNAL_URL', 'OPS_EGRESS_CA_FILE', 'OPS_EGRESS_RESOLVE', ...MODEL_ENDPOINT_ENV]) delete inherited[key];
   // A run loads only the plugins its use case names (OPS_PLUGIN_PATHS); the repo's plugins/ folder holds whatever was
   // installed there last, and a plugin in both places loads from neither.
-  const env: NodeJS.ProcessEnv = { OPS_PLUGINS_DIR: EMPTY_PLUGINS, ...inherited, ...extra };
+  // A service signs callers in unless told otherwise (its default is platform), so a run without platform-service
+  // names the fixed dev user here; a run with it passes OPS_AUTH_MODE in `extra`.
+  const env: NodeJS.ProcessEnv = { OPS_PLUGINS_DIR: EMPTY_PLUGINS, OPS_AUTH_MODE: 'dev', ...inherited, ...extra };
   for (const key of ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'VIRTUAL_ENV']) delete env[key];
   return env;
 }
@@ -800,7 +831,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
       OPS_MODELS_FAKE_OPENAI_URL: `http://127.0.0.1:${FAKE_OPENAI_PORT}/v1`,
       // The console calls its provider key routes (Settings > Model providers) as the signed-in account admin.
       OPS_CORS_ORIGINS: JSON.stringify([consoleUrl]),
-      ...(options.platform ? { OPS_AUTH_MODE: 'platform', OPS_PLATFORM_URL: `http://127.0.0.1:${PLATFORM_PORT}`, OPS_PLATFORM_INTERNAL_PORT: String(PLATFORM_INTERNAL_PORT) } : {}),
+      ...(options.platform ? { OPS_AUTH_MODE: 'platform', OPS_PLATFORM_URL: `http://127.0.0.1:${PLATFORM_PORT}`, OPS_PLATFORM_INTERNAL_PORT: String(PLATFORM_INTERNAL_PORT), OPS_PLATFORM_INTERNAL_URL: `http://127.0.0.1:${PLATFORM_INTERNAL_PORT}` } : {}),
     });
     await runToEnd('models-migrate', ['uv', 'run', 'alembic', 'upgrade', 'head'], modelsDir, modelsEnv);
     modelsProc = await serve('models', MODELS_PORT, ['uv', 'run', 'python', '-m', 'ops_models'], modelsDir, modelsEnv, `http://127.0.0.1:${MODELS_PORT}/health`, 90_000);
@@ -822,7 +853,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
     // Under platform sign-in the agents service verifies the console's tokens against platform-service (started
     // below on known ports; its key set is read on first use), so dev headers no longer work there.
     (agentsEnv = stackEnv(process.env, {
-      ...(options.platform ? { OPS_AUTH_MODE: 'platform', OPS_PLATFORM_URL: `http://127.0.0.1:${PLATFORM_PORT}`, OPS_PLATFORM_INTERNAL_PORT: String(PLATFORM_INTERNAL_PORT) } : {}),
+      ...(options.platform ? { OPS_AUTH_MODE: 'platform', OPS_PLATFORM_URL: `http://127.0.0.1:${PLATFORM_PORT}`, OPS_PLATFORM_INTERNAL_PORT: String(PLATFORM_INTERNAL_PORT), OPS_PLATFORM_INTERNAL_URL: `http://127.0.0.1:${PLATFORM_INTERNAL_PORT}` } : {}),
       // kb-service starts below on its known port; agents ask it on first use. Without it agents that hold knowledge
       // bases are refused, so every ui stack has one.
       OPS_KB_URL: `http://127.0.0.1:${KB_PORT}`,
@@ -942,7 +973,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
         OPS_MAIL_FROM: 'ops@harborpine.example',
         OPS_MAIL_FAKE_OUT_DIR: mkdtempSync(join(tmpdir(), 'usecase-mail-out-')),
         // Under platform sign-in tools-service verifies the console's tokens too, so people are told apart by role.
-        ...(options.platform ? { OPS_AUTH_MODE: 'platform', OPS_PLATFORM_URL: `http://127.0.0.1:${PLATFORM_PORT}`, OPS_PLATFORM_INTERNAL_PORT: String(PLATFORM_INTERNAL_PORT) } : {}),
+        ...(options.platform ? { OPS_AUTH_MODE: 'platform', OPS_PLATFORM_URL: `http://127.0.0.1:${PLATFORM_PORT}`, OPS_PLATFORM_INTERNAL_PORT: String(PLATFORM_INTERNAL_PORT), OPS_PLATFORM_INTERNAL_URL: `http://127.0.0.1:${PLATFORM_INTERNAL_PORT}` } : {}),
         // Connect links and the sign-in's return page are the run's console.
         OPS_CONSOLE_URL: consoleUrl,
         ...bankSettings,
@@ -962,7 +993,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
     }
     if (options.platform && options.signIn) {
       // The fake DNS answers on the same port number over UDP, so a domain's TXT record can be proven.
-      idpProc = await serve('fake-idp', IDP_PORT, ['uv', 'run', 'python', '-m', 'ops_signin.fake_idp', '--port', String(IDP_PORT), '--dns-port', String(IDP_PORT)], ROOT, env, `http://127.0.0.1:${IDP_PORT}/health`, 60_000);
+      idpProc = await serve('fake-idp', IDP_PORT, ['uv', 'run', 'python', '-m', 'ops_signin.fake_idp', '--port', String(IDP_PORT), '--dns-port', String(IDP_PORT), '--base', `http://127.0.0.1:${IDP_PORT}`], ROOT, env, `http://127.0.0.1:${IDP_PORT}/health`, 60_000);
       stack.idpUrl = `http://127.0.0.1:${IDP_PORT}`;
       stack.mailDir = mkdtempSync(join(tmpdir(), 'usecase-mail-'));
     }
@@ -1006,7 +1037,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
     edge.catch(() => undefined);
     // files-service on the run's database: kb-service stores every upload there, as on the shared stack.
     // Scanning is off, as the owner decided for now; the hook stays for when a scanner is chosen.
-    const auth: Record<string, string> = options.platform ? { OPS_AUTH_MODE: 'platform', OPS_PLATFORM_URL: `http://127.0.0.1:${PLATFORM_PORT}`, OPS_PLATFORM_INTERNAL_PORT: String(PLATFORM_INTERNAL_PORT) } : {};
+    const auth: Record<string, string> = options.platform ? { OPS_AUTH_MODE: 'platform', OPS_PLATFORM_URL: `http://127.0.0.1:${PLATFORM_PORT}`, OPS_PLATFORM_INTERNAL_PORT: String(PLATFORM_INTERNAL_PORT), OPS_PLATFORM_INTERNAL_URL: `http://127.0.0.1:${PLATFORM_INTERNAL_PORT}` } : {};
     const filesSvcDir = join(ROOT, 'services/files-service');
     const filesEnv = stackEnv(process.env, {
       OPS_DATABASE_URL: pgUrl(DB),

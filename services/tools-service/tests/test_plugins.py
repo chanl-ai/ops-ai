@@ -127,7 +127,7 @@ async def test_a_plugins_tools_are_not_grantable_once_plugins_are_switched_off(
     }
     off = ToolRegistry(local_catalog, store, None)
     assert "desk_get_case" not in {t["name"] for t in await off.grantable(tenant)}
-    assert "desk_get_case" not in {t["name"] for t in await off.grantable(tenant, lambda _: True)}
+    assert "desk_get_case" not in {t["name"] for t in await off.grantable(tenant, lambda m, operation=None: True)}
 
 
 async def test_a_locked_field_wins_over_the_team(engine: AsyncEngine, store: ModuleStore, tenant: str) -> None:
@@ -148,7 +148,7 @@ async def test_the_instance_comes_from_the_token_and_only_from_the_systems_hosts
     b = await PluginBindings(engine).get(tenant, "team_a", ID)
     # The instance is the account's own (test_plugin_environments.py); no copy on the binding.
     assert b is not None
-    assert "instance_url" not in b["settings"], b["settings"]
+    assert "instance_url" not in b.settings, b.settings
 
 
 class AllowAll:

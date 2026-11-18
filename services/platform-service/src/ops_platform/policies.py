@@ -68,21 +68,21 @@ class Policies:
             entries = [cast(dict[str, Any], e) for e in cast(dict[str, Any], value).values() if isinstance(e, dict)]
         else:
             return
-        roles = self.members.roles or RoleStore(self.members.store.db)
+        roles = self.members.roles or RoleStore(self.members.store)
         for entry in entries:
             if entry.get("answer") != "reviewer":
                 continue
             role_id = entry.get("reviewerRole")
             if not role_id:
                 raise ValidationFailed("Choose the role that reviews.", code="reviewer_role_required")
-            role = await roles.role(actor.tenant_id, str(role_id))
+            role = await roles.role_by_id(actor.tenant_id, str(role_id))
             if role is None:
                 raise ValidationFailed(
                     f"There is no role {role_id}. Choose a role that can approve.", code="reviewer_role_unknown"
                 )
-            if not any(g[:2] == ("reviews", "decide") for g in role["grants"]):
+            if not any(g[:2] == ("reviews", "decide") for g in role.grants):
                 raise ValidationFailed(
-                    f"{role['name']} cannot decide reviews. Choose a role that can approve.", code="role_cannot_approve"
+                    f"{role.name} cannot decide reviews. Choose a role that can approve.", code="role_cannot_approve"
                 )
 
     @staticmethod

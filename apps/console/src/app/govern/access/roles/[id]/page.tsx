@@ -18,7 +18,8 @@ import { QueryError } from '@/components/shared/query-states';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useCreateRole, useEditRole, useManagesRoles, useRole, useRoleChanges, useRoleHolders, useRoles } from '@/hooks/me-queries';
+import { RoleSelect } from '@/components/access/role-select';
+import { useCreateRole, useEditRole, useManagesRoles, useRole, useRoleChanges, useRoleHolders, rolesWhere } from '@/hooks/me-queries';
 import { plural } from '@/lib/format';
 import type { RoleCell, RoleDetail } from '@/lib/types/settings';
 
@@ -37,7 +38,6 @@ export default function RolePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const role = useRole(id);
-  const all = useRoles();
   const { save, reset } = useEditRole(id);
   const { rename, remove } = useRoleChanges(id);
   const create = useCreateRole();
@@ -46,7 +46,8 @@ export default function RolePage() {
   const [dialog, setDialog] = React.useState<'copy' | 'rename' | 'delete' | null>(null);
   const holders = useRoleHolders(id, dialog === 'delete');
   const [moveTo, setMoveTo] = React.useState('');
-  const others = (all.data ?? []).filter((x) => x.id !== id);
+  // The role being deleted is not a place its holders can move to.
+  const moveTargets = React.useMemo(() => rolesWhere(`role-move-options:${id}`, [id]), [id]);
   const [draft, setDraft] = React.useState<Grid | null>(null);
   const [resetting, setResetting] = React.useState(false);
   React.useEffect(() => {
@@ -148,7 +149,6 @@ export default function RolePage() {
         <RoleDialog
           open={dialog === 'copy' || dialog === 'rename'}
           onOpenChange={(o) => !o && setDialog(null)}
-          roles={all.data ?? []}
           role={dialog === 'rename' ? r : null}
           copyOf={dialog === 'copy' ? r.id : null}
           pending={create.isPending || rename.isPending}
@@ -156,7 +156,7 @@ export default function RolePage() {
             dialog === 'rename'
               ? rename.mutateAsync({ name: input.name, description: input.description }).then(() => toast.success(`Renamed to ${input.name}`))
               : create.mutateAsync(input).then((made) => {
-                  toast.success(`Created ${made.name}`, made.leftOut.length ? { description: `Left out ${made.leftOut.length} secrets, egress and Security-team permissions: only a built-in role holds them.` } : undefined);
+                  toast.success(`Created ${made.name}`, (made.leftOut ?? []).length ? { description: `Left out ${(made.leftOut ?? []).length} secrets, egress and Security-team permissions: only a built-in role holds them.` } : undefined);
                   router.push(`/govern/access/roles/${encodeURIComponent(made.id)}`);
                 })
           }
@@ -171,12 +171,12 @@ export default function RolePage() {
           testIdPrefix="role"
           isLoading={remove.isPending}
           description={
-            holders.data?.length
-              ? `${holders.data.length === 1 ? 'One person holds' : `${holders.data.length} people hold`} this role. Choose the role they move to, so nobody loses their access.`
+            holders.data?.pagination.total
+              ? `${holders.data.pagination.total === 1 ? 'One holds' : `${holders.data.pagination.total} hold`} this role. Choose the role they move to, so nobody loses their access.`
               : 'Nobody holds this role. Deleting it is kept in the audit log.'
           }
           onConfirm={() => {
-            if (holders.data?.length && !moveTo) {
+            if (holders.data?.pagination.total && !moveTo) {
               toast.error('Choose the role its holders move to first.');
               return;
             }
@@ -192,25 +192,15 @@ export default function RolePage() {
             );
           }}
         >
-          {!!holders.data?.length && (
+          {!!holders.data?.pagination.total && (
             <div className="flex flex-col gap-3" data-testid="role-holders">
               <Rows className="max-h-40 overflow-auto rounded-md border">
-                {holders.data.map((h) => (
+                {holders.data.data.map((h) => (
                   <Row key={`${h.id}-${h.teamId}`} title={h.name} description={h.email ?? undefined} trailing={h.teamId === '*' ? 'Every team' : <TeamName teamId={h.teamId} />} />
                 ))}
               </Rows>
-              <Select value={moveTo} onValueChange={setMoveTo}>
-                <SelectTrigger aria-label="Move them to" data-testid="role-move-to">
-                  <SelectValue placeholder="Move them to…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {others.map((o) => (
-                    <SelectItem key={o.id} value={o.id}>
-                      {o.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {holders.data.pagination.hasNext && <p className="text-xs text-muted-foreground">Showing the first {holders.data.data.length} of {holders.data.pagination.total}.</p>}
+              <RoleSelect source={moveTargets} value={moveTo} onChange={setMoveTo} placeholder="Move them to…" ariaLabel="Move them to" testId="role-move-to" className="w-full" />
             </div>
           )}
         </DeleteDialog>

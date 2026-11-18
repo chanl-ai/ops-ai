@@ -115,6 +115,9 @@ export type ToolCallFilters = {
   moduleId?: string[];
   /** The calls made through one MCP link, as its Calls tab lists them. */
   link?: string[];
+  /** What the call ended as (Ran, Running, Refused or Failed) and the assistant that made it, as the Calls tab filters them. */
+  result?: string[];
+  assistant?: string[];
   /** A date range, as ISO times: from `since`, before `until`. */
   since?: string[];
   until?: string[];

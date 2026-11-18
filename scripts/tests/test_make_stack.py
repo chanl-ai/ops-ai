@@ -161,3 +161,26 @@ def test_a_service_started_from_another_checkout_is_stale(stack_repo: Path) -> N
     head = git(stack_repo, "rev-parse", "HEAD").strip()
     out = fresh(stack_repo, "/elsewhere/ops-ai", head)
     assert out.returncode == 1 and "runs from /elsewhere/ops-ai" in out.stderr, out.stderr
+
+
+def test_health_warns_for_a_service_whose_recorded_commit_is_not_head(stack_repo: Path) -> None:
+    older, head = git(stack_repo, "rev-parse", "HEAD~1").strip(), git(stack_repo, "rev-parse", "HEAD").strip()
+    env = {"PATH": os.environ["PATH"], "HOME": os.environ["HOME"]}
+
+    def health() -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["bash", "scripts/stack.sh", "health", "agents"],
+            cwd=stack_repo,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    (stack_repo / ".run/agents.rev").write_text(f"{stack_repo} {head}\n")
+    assert "WARNING" not in health().stdout
+    (stack_repo / ".run/agents.rev").write_text(f"{stack_repo} {older}\n")
+    out = health()
+    assert (
+        f"WARNING: agents runs {older[:8]}, tree is at {head[:8]}; restart with make restart SVC=agents" in out.stdout
+    )

@@ -67,6 +67,40 @@ async def list_api_keys(p: CurrentPrincipal, _: Tx, q: ListQuery, st: Stores) ->
 limit = policy(p, "chat.daily_budget")      # never a default read inline
 ```
 
+## Members: why the table stays tenant-only for now
+
+Checked 2026-11-16. `members` has a `team_id` on every row but is marked `TENANT_SCOPED`, so a team admin seeing only
+their own team rests on the routes' filters. Marking it team-owned (`TEAM_OWNED`) would make the database read only
+the acting team's rows, and today that would hide every row from every reader: `tenant_tx` enters
+`isolation.scope(tenant, None)`, a team scope with no team, and the team-owned policy then matches nothing. Every
+reader below runs that way, so each must first say which scope it reads in. The marking lands after that, in the same
+change as its migration, with a pin per reader that the same people are returned.
+
+| Reader or writer (`store/`) | Reads | Scope it needs |
+|---|---|---|
+| `members.py`: `members`, `member_page`, `role_in`, `set_role`, `end_membership`, `_member`, `_lock_admins` | One team's people, the header team | `scope(tenant, team)` |
+| `members.py`: `invite` | One team, but checks the email across the tenant's teams | the team, plus a named workspace-wide reason for the check |
+| `members.py`: `teams_of`, `people_options` | A person's teams; people across teams | `tenant_wide` with a named reason |
+| `teams.py`: `_listing`, `create`; `workspace.py`: `set` | Every team's counts; the Security mirror moves admins between two teams | `tenant_wide` (workspace admin) |
+| `holders.py`: `holders`; `roles.py`: `holdings_in`; `audit.py`: `page` | Who holds a role, and audit rows, across teams | `tenant_wide` (workspace admin) |
+| `lifecycle.py`: `leave`, `leave_team`, `delete_team` | Every team of one person; a team being deleted | `tenant_wide` with a named reason |
+| `identity.py`: `roles` | Every membership of the caller, to build `/v1/me` and the token | `tenant_wide`; sign-in path, pinned |
+| `signin.py`: `_join_groups`, `_group_given`, `_set_role`, `_add_member` | Memberships a sign-in gives, before any team is chosen | `tenant_wide`; sign-in path, pinned |
+| `members.py`: `_accept`; `seeding.py`: `write_seed` | Activates an invite already found by its token (the lookup itself runs in `system_tx(INVITE_LOOKUP)`); the first workspace | the invite's team; `tenant_wide` for the seed |
+
+The first column is verified (each runs a `members` statement under `tenant_tx`); the scope column is proposed from what each function is for and is confirmed when that reader is rewritten. The work belongs to step 2 below (every store on the base's `tx()`): that is where each reader chooses its scope.
+
+## Budgets on SQL Server: not run
+
+Checked 2026-11-16. The statement budget test (`tests/test_statement_budget.py`) and every other route test build the
+`signin` or `platform` rig on `database_url`, which is PostgreSQL only; only the store tests in
+`tests/test_store_both_databases.py` take `store_url` and run on SQL Server too. platform-service is not in the
+`store-mssql` job's list in `.github/workflows/ci.yml`, and no SQL Server was reachable where this was checked. The
+budgets are therefore held on PostgreSQL alone. Running them on SQL Server needs the two rigs built on `store_url`
+against the golden DDL (`deploy/database/golden/mssql/05-platform.sql`), then platform added to `store-mssql`. Known
+on SQL Server: a `system_tx` counts one extra transaction in `db.tx_count`, because its REVERT runs after the commit,
+so the invite, grants, consent and delete-check rows would read one higher there.
+
 ## Step order
 
 1. Inventory and characterisation tests, as in the pilot: routes and store functions reached by a use case or test;
@@ -111,7 +145,8 @@ limit = policy(p, "chat.daily_budget")      # never a default read inline
 | Clients and settings | Zero fallbacks, timeouts and `httpx.AsyncClient` constructions; `__main__` exits naming an unset required endpoint |
 | Typed boundaries | 24 store functions return models; every body an `In`, every reply an `Out`; zero bare tasks; `signin.py`'s string SQL resolved |
 | Relay and loops | `event_relay.py` gone; every `PROCESSES` key has a `loop_reports_failure` test |
-| Budgets | 41 GET routes green at 5 and 50 rows on both databases |
+| Relay and loop baselines | `packages/ops_store/tests/relay_sites/platform-service.txt` deleted; `packages/ops_store/tests/loop_health/platform.txt` emptied (`platform_relay`, `signin_watch`, `workspace_lifecycle`) |
+| Budgets | Every GET route green at 5 and 50 rows: met on PostgreSQL (2026-11-16); not run on SQL Server, see below |
 | Behaviour and staging | Tests, the 27 use cases and `make verify` green on the merge commit; staging deployed with every process up and the console walk green; Access, Teams, Sign-in and Security screens opened by hand |
 
 ## Branch and pull request

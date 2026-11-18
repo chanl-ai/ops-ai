@@ -18,7 +18,7 @@ from ops_platform.store.tables import members, role_assignments, teams, tenants
 from ops_service_kit.errors import Forbidden, Unauthorized
 from ops_service_kit.ids import new_id, now_iso
 
-from .conftest import CALLER, Person, Platform
+from .conftest import CALLER, Person, Platform, seed_tx
 
 
 async def bearer(platform: Platform, p: Person) -> dict[str, str]:
@@ -62,7 +62,7 @@ async def join(platform: Platform, p: Person, team: str, role: str, *, security_
 
 
 async def grant(platform: Platform, p: Person, team: str, role_id: str, *, expires_at: str | None = None) -> None:
-    async with platform.engine.begin() as c:
+    async with seed_tx(platform.engine, p.tenant_id) as c:
         await c.execute(
             role_assignments.insert().values(
                 id=new_id("ras"),
@@ -98,7 +98,7 @@ async def test_roles_lists_the_five_builtin_roles_with_their_grids(platform: Pla
     h = await bearer(platform, p)
     r = await platform.public.get("/v1/roles", headers=h)
     assert r.status_code == 200, r.text
-    listed = {x["id"]: x for x in r.json()["data"]}
+    listed = {x["id"]: x for x in r.json()["data"]["data"]}
     assert list(listed) == [b.id for b in BUILTIN_ROLES]
     assert listed["viewer"]["assignmentCount"] == 1
     r = await platform.public.get("/v1/roles/admin", headers=h)

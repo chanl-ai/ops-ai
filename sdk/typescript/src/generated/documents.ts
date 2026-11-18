@@ -50,7 +50,9 @@ export interface paths {
         };
         /**
          * List Types
-         * @description The team's types, and whether the caller may add one (the console's New type).
+         * @description The team's types on the shared list contract, by name and searched on it, and whether the caller may add
+         *     one (the console's New type). sortBy name or latestVersion with sortOrder sets the order; equal versions
+         *     keep name order.
          */
         get: operations["document_types_list_types"];
         put?: never;
@@ -330,7 +332,8 @@ export interface paths {
         };
         /**
          * File Extractions
-         * @description A file's extractions by the caller's team, newest first; a file the team cannot see is 404.
+         * @description A file's extractions by the caller's team on the shared list contract, newest first; a file the team
+         *     cannot see is 404.
          */
         get: operations["documents_file_extractions"];
         put?: never;
@@ -659,83 +662,6 @@ export interface components {
             waiting: number | null;
         };
         /**
-         * Block
-         * @description One run of content in reading order. A paragraph keeps its lines (and their boxes) so the page's text can put
-         *     each on its own line; a table keeps its cells.
-         */
-        Block: {
-            /** Box */
-            box?: number[] | null;
-            /** Caption */
-            caption?: string | null;
-            /** Cells */
-            cells?: components["schemas"]["Cell"][];
-            /**
-             * Furniture
-             * @default false
-             */
-            furniture: boolean;
-            /** Id */
-            id: string;
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "title" | "heading" | "paragraph" | "table";
-            /** Level */
-            level?: number | null;
-            /** Lines */
-            lines?: components["schemas"]["Line"][];
-            /**
-             * Main
-             * @default false
-             */
-            main: boolean;
-            /**
-             * Order
-             * @default 0
-             */
-            order: number;
-            /**
-             * Readby
-             * @default text
-             * @enum {string}
-             */
-            readBy: "text" | "ocr";
-            /** Sheet */
-            sheet?: string | null;
-            /** Text */
-            text: string;
-        };
-        /** Cell */
-        Cell: {
-            /** Box */
-            box?: number[] | null;
-            /** Col */
-            col: number;
-            /**
-             * Colspan
-             * @default 1
-             */
-            colSpan: number;
-            /**
-             * Header
-             * @default false
-             */
-            header: boolean;
-            /** Id */
-            id: string;
-            /** Row */
-            row: number;
-            /**
-             * Rowspan
-             * @default 1
-             */
-            rowSpan: number;
-            /** Text */
-            text: string;
-        };
-        /**
          * Classification
          * @description Which of the team's document types a file is: the model's choice and how sure it is, or none.
          *     `needsReview` when none fits or the confidence is under the floor.
@@ -767,7 +693,7 @@ export interface components {
         /** CopyRef */
         CopyRef: {
             /** Detachedat */
-            detachedAt?: string | null;
+            detachedAt: string | null;
             /** Id */
             id: string;
             /**
@@ -840,8 +766,7 @@ export interface components {
             line: string | null;
             /** Record */
             record: number | null;
-            /** Value */
-            value: unknown;
+            value: components["schemas"]["JsonValue"];
         };
         /**
          * DocumentTypeIn
@@ -894,12 +819,22 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
-        /** DocumentTypeList */
+        /**
+         * DocumentTypeList
+         * @description A page of the team's types on the shared list contract.
+         */
         DocumentTypeList: {
             /** Cancreate */
             canCreate: boolean;
-            /** Items */
-            items: components["schemas"]["DocumentTypeRow"][];
+            /** Data */
+            data: components["schemas"]["DocumentTypeRow"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
         };
         /** DocumentTypeRef */
         DocumentTypeRef: {
@@ -921,11 +856,15 @@ export interface components {
             /** Name */
             name: string;
         };
-        /** DocumentTypeVersion */
+        /**
+         * DocumentTypeVersion
+         * @description A saved version. Its field definitions, layout templates and checks are the documents the builder wrote, held
+         *     as JSON: the engine (`ops_extract`) reads them and DocumentTypeVersionIn bounds what is saved.
+         */
         DocumentTypeVersion: {
             /** Checks */
             checks: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /**
              * Createdat
@@ -941,7 +880,7 @@ export interface components {
             dateOrder: "MDY" | "DMY";
             /** Fields */
             fields: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /** Many */
             many: boolean;
@@ -958,7 +897,7 @@ export interface components {
             reviewBelow: number | null;
             /** Templates */
             templates: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /** Version */
             version: number;
@@ -1212,16 +1151,14 @@ export interface components {
         Extraction: {
             classification?: components["schemas"]["Classification"] | null;
             /** Corrections */
-            corrections?: {
-                [key: string]: unknown;
-            }[] | null;
+            corrections?: components["schemas"]["ExtractionCorrection"][] | null;
             /** Count */
             count?: number | null;
             documentType?: components["schemas"]["DocumentTypeRef"] | null;
             error?: components["schemas"]["ExtractionError"] | null;
             /** Fields */
             fields?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Fileid */
             fileId: string;
@@ -1230,18 +1167,16 @@ export interface components {
             /** Id */
             id: string;
             /** Imagecalls */
-            imageCalls?: {
-                [key: string]: unknown;
-            }[] | null;
+            imageCalls?: components["schemas"]["ImageCall"][] | null;
             /** Imagerefused */
             imageRefused?: string | null;
             /** Needsreview */
-            needsReview?: unknown[] | null;
+            needsReview?: (string | number)[] | null;
             /** Outcome */
             outcome?: ("ok" | "review" | "unreadable" | "unknown") | null;
             /** Pages */
             pages?: number | {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[] | null;
             /** Partial */
             partial?: boolean | null;
@@ -1249,13 +1184,13 @@ export interface components {
             path?: ("template" | "model") | null;
             /** Proposal */
             proposal?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Readpages */
             readPages?: number | null;
             /** Records */
             records?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[] | null;
             /** Rereadtokens */
             rereadTokens?: {
@@ -1263,7 +1198,7 @@ export interface components {
             } | null;
             /** Schema */
             schema?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[] | null;
             /**
              * Status
@@ -1275,6 +1210,27 @@ export interface components {
             templateMiss?: components["schemas"]["TemplateMiss"] | null;
             /** Text */
             text?: string | null;
+        };
+        /**
+         * ExtractionCorrection
+         * @description A person's value for a field, with the value and confidence it replaced (`record` for a read of several).
+         */
+        ExtractionCorrection: {
+            corrected: components["schemas"]["JsonValue"];
+            /**
+             * Correctedat
+             * Format: date-time
+             */
+            correctedAt: string;
+            /** Correctedby */
+            correctedBy: string;
+            /** Field */
+            field: string;
+            original: components["schemas"]["JsonValue"];
+            /** Originalconfidence */
+            originalConfidence: number;
+            /** Record */
+            record: number | null;
         };
         /** ExtractionError */
         ExtractionError: {
@@ -1344,15 +1300,22 @@ export interface components {
              * @enum {string}
              */
             outcome: "kept" | "taken" | "conflict";
-            /** Template */
-            template?: unknown;
-            /** Yours */
-            yours?: unknown;
+            template: components["schemas"]["JsonValue"];
+            yours: components["schemas"]["JsonValue"];
         };
         /**
-         * FileFacts
-         * @description What is known about a file before its pages are read.
+         * FieldScore
+         * @description How a version read one field across the samples.
          */
+        FieldScore: {
+            /** Accuracy */
+            accuracy: number | null;
+            /** Matches */
+            matches: number;
+            /** Misses */
+            misses: number;
+        };
+        /** FileFacts */
         FileFacts: {
             /** Author */
             author?: string | null;
@@ -1399,7 +1362,7 @@ export interface components {
             /** Fileid */
             fileId: string;
             /** Pages */
-            pages?: components["schemas"]["Page"][] | null;
+            pages?: components["schemas"]["ReadingPage"][] | null;
             /** Pagesdone */
             pagesDone: number;
             /** Pagestotal */
@@ -1414,31 +1377,31 @@ export interface components {
             status: "none" | "queued" | "reading" | "done" | "failed";
         };
         /**
-         * FormField
-         * @description A field of a fillable PDF form, read from the form dictionary: values typed into a form are not in the text
-         *     layer.
+         * Health
+         * @description 200 ok, or degraded with the reason: 503 when the database is out of reach, 200 when only OCR is missing.
          */
-        FormField: {
-            /** Box */
-            box?: number[] | null;
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "text" | "checkbox" | "choice" | "signature";
-            /** Name */
-            name: string;
-            /** Page */
-            page: number;
-            /** Value */
-            value: string;
-        };
-        /** Health */
         Health: {
             /** Reason */
-            reason?: string | null;
-            /** Status */
-            status: string;
+            reason?: ("database" | "ocr") | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "degraded";
+        };
+        /**
+         * ImageCall
+         * @description A model call that carried page images: its step, the pages shown, how many images and the alias.
+         */
+        ImageCall: {
+            /** Alias */
+            alias: string;
+            /** Images */
+            images: number;
+            /** Pages */
+            pages: number[];
+            /** Step */
+            step: string;
         };
         /** InstallInput */
         InstallInput: {
@@ -1471,6 +1434,7 @@ export interface components {
             /** Version */
             version: number | null;
         };
+        JsonValue: unknown;
         /**
          * Layout
          * @description A file's layout: pages, blocks in reading order with their table cells, and words.
@@ -1557,13 +1521,6 @@ export interface components {
             /** Text */
             text: string;
         };
-        /** Line */
-        Line: {
-            /** Box */
-            box?: number[] | null;
-            /** Text */
-            text: string;
-        };
         /** ListResult[Extraction] */
         ListResult_Extraction_: {
             /** Data */
@@ -1575,55 +1532,6 @@ export interface components {
                 };
             };
             pagination: components["schemas"]["Pagination"];
-        };
-        /** OcrQuality */
-        OcrQuality: {
-            /** Lowshare */
-            lowShare: number;
-            /** Mean */
-            mean: number;
-            /** Words */
-            words: number;
-        };
-        /** Page */
-        Page: {
-            /** Blocks */
-            blocks?: components["schemas"]["Block"][];
-            /**
-             * Durationms
-             * @default 0
-             */
-            durationMs: number;
-            /** Formfields */
-            formFields?: components["schemas"]["FormField"][];
-            /** Height */
-            height?: number | null;
-            /**
-             * Imageshare
-             * @default 0
-             */
-            imageShare: number;
-            /** Number */
-            number: number;
-            ocr?: components["schemas"]["OcrQuality"] | null;
-            /**
-             * Source
-             * @enum {string}
-             */
-            source: "text" | "ocr" | "mixed" | "none";
-            /**
-             * Text
-             * @default
-             */
-            text: string;
-            /** Unreadreason */
-            unreadReason?: string | null;
-            /** Warnings */
-            warnings?: string[];
-            /** Width */
-            width?: number | null;
-            /** Words */
-            words?: components["schemas"]["Word"][];
         };
         /** Pagination */
         Pagination: {
@@ -1661,12 +1569,101 @@ export interface components {
             /** Samples */
             samples: number;
         };
+        /** ReadingBlock */
+        ReadingBlock: {
+            /** Box */
+            box?: number[] | null;
+            /** Caption */
+            caption?: string | null;
+            /** Cells */
+            cells?: components["schemas"]["ReadingCell"][];
+            /**
+             * Furniture
+             * @default false
+             */
+            furniture: boolean;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "title" | "heading" | "paragraph" | "table";
+            /** Level */
+            level?: number | null;
+            /** Lines */
+            lines?: components["schemas"]["ReadingLine"][];
+            /**
+             * Main
+             * @default false
+             */
+            main: boolean;
+            /**
+             * Order
+             * @default 0
+             */
+            order: number;
+            /**
+             * Readby
+             * @default text
+             * @enum {string}
+             */
+            readBy: "text" | "ocr";
+            /** Sheet */
+            sheet?: string | null;
+            /** Text */
+            text: string;
+        };
+        /** ReadingCell */
+        ReadingCell: {
+            /** Box */
+            box?: number[] | null;
+            /** Col */
+            col: number;
+            /**
+             * Colspan
+             * @default 1
+             */
+            colSpan: number;
+            /**
+             * Header
+             * @default false
+             */
+            header: boolean;
+            /** Id */
+            id: string;
+            /** Row */
+            row: number;
+            /**
+             * Rowspan
+             * @default 1
+             */
+            rowSpan: number;
+            /** Text */
+            text: string;
+        };
         /** ReadingError */
         ReadingError: {
             /** Code */
             code: string;
             /** Message */
             message: string;
+        };
+        /** ReadingFormField */
+        ReadingFormField: {
+            /** Box */
+            box?: number[] | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "text" | "checkbox" | "choice" | "signature";
+            /** Name */
+            name: string;
+            /** Page */
+            page: number;
+            /** Value */
+            value: string;
         };
         /** ReadingIn */
         ReadingIn: {
@@ -1684,6 +1681,62 @@ export interface components {
              */
             ocr: "off" | "auto" | "always";
         };
+        /** ReadingLine */
+        ReadingLine: {
+            /** Box */
+            box?: number[] | null;
+            /** Text */
+            text: string;
+        };
+        /** ReadingOcrQuality */
+        ReadingOcrQuality: {
+            /** Lowshare */
+            lowShare: number;
+            /** Mean */
+            mean: number;
+            /** Words */
+            words: number;
+        };
+        /** ReadingPage */
+        ReadingPage: {
+            /** Blocks */
+            blocks?: components["schemas"]["ReadingBlock"][];
+            /**
+             * Durationms
+             * @default 0
+             */
+            durationMs: number;
+            /** Formfields */
+            formFields?: components["schemas"]["ReadingFormField"][];
+            /** Height */
+            height?: number | null;
+            /**
+             * Imageshare
+             * @default 0
+             */
+            imageShare: number;
+            /** Number */
+            number: number;
+            ocr?: components["schemas"]["ReadingOcrQuality"] | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "text" | "ocr" | "mixed" | "none";
+            /**
+             * Text
+             * @default
+             */
+            text: string;
+            /** Unreadreason */
+            unreadReason?: string | null;
+            /** Warnings */
+            warnings?: string[];
+            /** Width */
+            width?: number | null;
+            /** Words */
+            words?: components["schemas"]["ReadingWord"][];
+        };
         /** ReadingSettingsOut */
         ReadingSettingsOut: {
             /** Language */
@@ -1694,6 +1747,22 @@ export interface components {
              */
             ocr: "off" | "auto" | "always";
         };
+        /** ReadingWord */
+        ReadingWord: {
+            /** Box */
+            box: number[];
+            /** Confidence */
+            confidence: number;
+            /** Text */
+            text: string;
+        };
+        /** ReviewedDigests */
+        ReviewedDigests: {
+            /** Digest */
+            digest: string | null;
+            /** Recorddigest */
+            recordDigest: string | null;
+        };
         /** Sample */
         Sample: {
             /**
@@ -1703,8 +1772,7 @@ export interface components {
             addedAt: string;
             /** Addedby */
             addedBy: string;
-            /** Expected */
-            expected: unknown;
+            expected: components["schemas"]["JsonValue"];
             /** Fileid */
             fileId: string;
             /** Id */
@@ -1712,12 +1780,41 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** SampleComparison */
+        SampleComparison: {
+            expected: components["schemas"]["JsonValue"];
+            got: components["schemas"]["JsonValue"];
+            /** Match */
+            match: boolean;
+        };
         /** SampleIn */
         SampleIn: {
             /** Expected */
             expected: unknown;
             /** Fileid */
             fileId: string;
+        };
+        /**
+         * SampleResult
+         * @description One sample's read in a test: its extraction, how it was read and each field against what it should be.
+         */
+        SampleResult: {
+            /** Extractionid */
+            extractionId: string | null;
+            /** Fields */
+            fields: {
+                [key: string]: components["schemas"]["SampleComparison"][];
+            };
+            /** Name */
+            name: string;
+            /** Path */
+            path?: ("template" | "model") | null;
+            /** Sampleid */
+            sampleId: string;
+            /** Status */
+            status: string | null;
+            /** Templateid */
+            templateId?: string | null;
         };
         /** TemplateMiss */
         TemplateMiss: {
@@ -1756,7 +1853,7 @@ export interface components {
                 [key: string]: string;
             }[];
             /** Resources */
-            resources?: string[];
+            resources: string[];
             /** Tools */
             tools: string[];
         };
@@ -1776,11 +1873,11 @@ export interface components {
         TemplateSuggestion: {
             /** Checks */
             checks: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /** Template */
             template: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /** TemplateView */
@@ -1788,7 +1885,7 @@ export interface components {
             addCell: components["schemas"]["AddCell"];
             /** Canadd */
             canAdd: boolean;
-            copy?: components["schemas"]["CopyRef"] | null;
+            copy: components["schemas"]["CopyRef"] | null;
             /** Id */
             id: string;
             installed: components["schemas"]["Installed"];
@@ -1798,7 +1895,7 @@ export interface components {
              */
             kind: "document_type";
             plugin: components["schemas"]["TemplatePlugin"];
-            removeCell?: components["schemas"]["AddCell"] | null;
+            removeCell: components["schemas"]["AddCell"] | null;
             requires: components["schemas"]["TemplateRequires"];
             /** Source */
             source: string;
@@ -1839,6 +1936,17 @@ export interface components {
             /** Samples */
             samples: number;
         };
+        /** TestResult */
+        TestResult: {
+            /** Accuracy */
+            accuracy: number | null;
+            /** Fields */
+            fields: {
+                [key: string]: components["schemas"]["FieldScore"];
+            };
+            /** Samples */
+            samples: components["schemas"]["SampleResult"][];
+        };
         /** TestRun */
         TestRun: {
             /**
@@ -1852,10 +1960,7 @@ export interface components {
             error?: string | null;
             /** Id */
             id: string;
-            /** Result */
-            result?: {
-                [key: string]: unknown;
-            } | null;
+            result?: components["schemas"]["TestResult"] | null;
             /** Samples */
             samples: number;
             /**
@@ -1907,9 +2012,9 @@ export interface components {
             draftOpen: boolean;
             /** Edits */
             edits: string[];
-            expect?: components["schemas"]["UpdateExpect"];
+            expect: components["schemas"]["ReviewedDigests"];
             /** Fields */
-            fields?: components["schemas"]["FieldReview"][];
+            fields: components["schemas"]["FieldReview"][];
             /** Fromversion */
             fromVersion: number;
             /**
@@ -1920,16 +2025,7 @@ export interface components {
             /** Toversion */
             toVersion: number;
             /** Version */
-            version?: number | null;
-        };
-        /** Word */
-        Word: {
-            /** Box */
-            box: number[];
-            /** Confidence */
-            confidence: number;
-            /** Text */
-            text: string;
+            version: number | null;
         };
     };
     responses: never;
@@ -1991,7 +2087,14 @@ export interface operations {
     };
     document_types_list_types: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3656,7 +3759,11 @@ export interface operations {
             query: {
                 fileId: string;
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;

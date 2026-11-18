@@ -138,3 +138,14 @@ async def test_on_postgresql_the_test_is_one_statement_with_no_transaction(monke
     finally:
         await db.dispose()
     assert began == []
+
+
+def test_the_pool_is_read_from_the_db_settings_and_a_named_option_wins(monkeypatch: pytest.MonkeyPatch) -> None:
+    url = "postgresql+asyncpg://ops:ops@localhost:1/none"  # never connected: the pool is built with the engine
+    monkeypatch.setenv("OPS_DB__SIZE", "3")
+    monkeypatch.setenv("OPS_DB__OVERFLOW", "1")
+    monkeypatch.setenv("OPS_DB__WAIT_S", "7.5")
+    pool: Any = open_database(url).sync_engine.pool
+    assert (pool.size(), pool._max_overflow, pool._timeout) == (3, 1, 7.5)
+    own: Any = open_database(url, pool_size=12).sync_engine.pool
+    assert (own.size(), own._max_overflow) == (12, 1)

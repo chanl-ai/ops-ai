@@ -16,7 +16,7 @@ from langgraph.config import get_config
 from ops_access import can
 from ops_agent_kernel.ports import ToolOutcome
 from ops_agent_kernel.types import ToolGrant
-from ops_service_kit.errors import Forbidden
+from ops_service_kit.errors import Forbidden, NotFound
 from ops_service_kit.ids import new_id, now_iso
 
 from ..graphs.common import AGENT_TOOL_PREFIX
@@ -36,8 +36,12 @@ QUESTION_SCHEMA: dict[str, Any] = {
 
 
 async def agent_team(rt: Runtime, agent_id: str) -> str | None:
-    """The team that owns an agent; None for an agent with no registry row or no team, which every team may use."""
-    return await registry(rt).owner_team(agent_id)
+    """The team that owns an agent of the caller's tenant; None for one with no team, which every team of that tenant
+    may use. An id the caller's tenant does not hold is NotFound: the serving catalogue holds every tenant's agents."""
+    owners = await registry(rt).tenant_owners({agent_id})
+    if agent_id not in owners:
+        raise NotFound(f"Agent {agent_id}")
+    return owners[agent_id] or None
 
 
 class AgentCalls:
@@ -77,13 +81,15 @@ class AgentCalls:
         ]
         if person is not None and await TeamDefaults(self.rt.db).agent(str(thread["team_id"])) == agent_id:
             granted = list(dict.fromkeys([*[a.id for a in self.rt.catalog.agents if a.id != agent_id], *granted]))
+        # Only the agents of the thread's tenant: the catalogue holds every tenant's.
+        owners = await registry(self.rt).tenant_owners({sid for sid in granted if sid != agent_id})
         for sid in granted:
-            if sid == agent_id or sid in seen:
+            if sid == agent_id or sid in seen or sid not in owners:
                 continue
             a = self.rt.catalog.agent(sid)
             if a is None:
                 continue
-            if person is not None and (team := await agent_team(self.rt, a.id)):
+            if person is not None and (team := owners[sid]):
                 try:
                     can(caller_of(person), "chat", "run", team=team, what=a.name)
                 except Forbidden:

@@ -1,5 +1,6 @@
 """GET /v1/model-aliases: the chat aliases an agent may name, so the console's agent picker offers exactly what a
-publish request accepts. Read through `rt.model_aliases`, the port the publish check uses."""
+publish request accepts. Read through `rt.model_aliases`, the port the publish check uses, which asks models-service,
+so the route reads no row and takes no request transaction (`Tx`)."""
 
 from __future__ import annotations
 

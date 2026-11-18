@@ -1,0 +1,2008 @@
+{
+  "agent": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "activity7d": 0,
+            "canEdit": true,
+            "detail": "https://intranet.example",
+            "embed": {
+              "activeKeys": 0,
+              "agentId": "ag_branch",
+              "agentVersion": 1,
+              "origins": [
+                "https://intranet.example"
+              ],
+              "retiredAt": null
+            },
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "wd_branch",
+            "lastActivityAt": null,
+            "name": "Intranet help",
+            "paused": false,
+            "serves": {
+              "behind": 2,
+              "id": "ag_branch",
+              "kind": "agent",
+              "latestVersion": 3,
+              "name": "Branch Concierge",
+              "version": 1
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "chat"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_bot",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "key_bot",
+            "lastActivityAt": null,
+            "name": "Key key_bot",
+            "paused": false,
+            "serves": {
+              "behind": 0,
+              "id": "ag_branch",
+              "kind": "agent",
+              "latestVersion": 3,
+              "name": "Branch Concierge",
+              "version": "latest"
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          }
+        ],
+        "facets": {
+          "health": {
+            "ok": 2
+          },
+          "type": {
+            "api": 1,
+            "chat": 1
+          }
+        },
+        "kinds": [
+          {
+            "active": 4,
+            "attention": 2,
+            "built": true,
+            "health": "error",
+            "total": 4,
+            "type": "api"
+          },
+          {
+            "active": 1,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 1,
+            "type": "chat"
+          },
+          {
+            "active": 2,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 2,
+            "type": "email"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "mcp"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "slack"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "teams"
+          }
+        ],
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 50,
+          "total": 2,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "healthWarnError": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_gone",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "Disabled: its creator left the team",
+              "state": "error"
+            },
+            "id": "key_gone",
+            "lastActivityAt": null,
+            "name": "Key key_gone",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_soon",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "Expires in 2 days",
+              "state": "warn"
+            },
+            "id": "key_soon",
+            "lastActivityAt": null,
+            "name": "Key key_soon",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          }
+        ],
+        "facets": {
+          "health": {
+            "error": 1,
+            "idle": 1,
+            "ok": 4,
+            "warn": 1
+          },
+          "type": {
+            "api": 2
+          }
+        },
+        "kinds": [
+          {
+            "active": 4,
+            "attention": 2,
+            "built": true,
+            "health": "error",
+            "total": 4,
+            "type": "api"
+          },
+          {
+            "active": 1,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 1,
+            "type": "chat"
+          },
+          {
+            "active": 2,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 2,
+            "type": "email"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "mcp"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "slack"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "teams"
+          }
+        ],
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 50,
+          "total": 2,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "list": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "activity7d": 0,
+            "canEdit": true,
+            "detail": "idle@bank.example",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "No live workflow watches this mailbox",
+              "state": "idle"
+            },
+            "id": "mbx_idle",
+            "lastActivityAt": null,
+            "name": "Mail idle@bank.example",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "email"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": true,
+            "detail": "ops@bank.example",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "mbx_ops",
+            "lastActivityAt": null,
+            "name": "Mail ops@bank.example",
+            "paused": false,
+            "serves": {
+              "behind": 0,
+              "id": "intake_ops",
+              "kind": "workflow",
+              "latestVersion": 1,
+              "name": "Mailed documents",
+              "version": "latest"
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "email"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": true,
+            "detail": "https://intranet.example",
+            "embed": {
+              "activeKeys": 0,
+              "agentId": "ag_branch",
+              "agentVersion": 1,
+              "origins": [
+                "https://intranet.example"
+              ],
+              "retiredAt": null
+            },
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "wd_branch",
+            "lastActivityAt": null,
+            "name": "Intranet help",
+            "paused": false,
+            "serves": {
+              "behind": 2,
+              "id": "ag_branch",
+              "kind": "agent",
+              "latestVersion": 3,
+              "name": "Branch Concierge",
+              "version": 1
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "chat"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_ci",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "key_ci",
+            "lastActivityAt": null,
+            "name": "Intranet help",
+            "paused": false,
+            "serves": {
+              "behind": 0,
+              "id": "intake_ops",
+              "kind": "workflow",
+              "latestVersion": 1,
+              "name": "Mailed documents",
+              "version": "latest"
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_bot",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "key_bot",
+            "lastActivityAt": null,
+            "name": "Key key_bot",
+            "paused": false,
+            "serves": {
+              "behind": 0,
+              "id": "ag_branch",
+              "kind": "agent",
+              "latestVersion": 3,
+              "name": "Branch Concierge",
+              "version": "latest"
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_gone",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "Disabled: its creator left the team",
+              "state": "error"
+            },
+            "id": "key_gone",
+            "lastActivityAt": null,
+            "name": "Key key_gone",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_soon",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "Expires in 2 days",
+              "state": "warn"
+            },
+            "id": "key_soon",
+            "lastActivityAt": null,
+            "name": "Key key_soon",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          }
+        ],
+        "facets": {
+          "health": {
+            "error": 1,
+            "idle": 1,
+            "ok": 4,
+            "warn": 1
+          },
+          "type": {
+            "api": 4,
+            "chat": 1,
+            "email": 2
+          }
+        },
+        "kinds": [
+          {
+            "active": 4,
+            "attention": 2,
+            "built": true,
+            "health": "error",
+            "total": 4,
+            "type": "api"
+          },
+          {
+            "active": 1,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 1,
+            "type": "chat"
+          },
+          {
+            "active": 2,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 2,
+            "type": "email"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "mcp"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "slack"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "teams"
+          }
+        ],
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 50,
+          "total": 7,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "otherTeam": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "activity7d": 0,
+            "canEdit": true,
+            "detail": "fraud@bank.example",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "No live workflow watches this mailbox",
+              "state": "idle"
+            },
+            "id": "mbx_fraud",
+            "lastActivityAt": null,
+            "name": "Mail fraud@bank.example",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_fraud",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "email"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_fraud",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "Starts any live workflow of its team",
+              "state": "warn"
+            },
+            "id": "key_fraud",
+            "lastActivityAt": null,
+            "name": "Key key_fraud",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_fraud",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          }
+        ],
+        "facets": {
+          "health": {
+            "idle": 1,
+            "warn": 1
+          },
+          "type": {
+            "api": 1,
+            "email": 1
+          }
+        },
+        "kinds": [
+          {
+            "active": 1,
+            "attention": 1,
+            "built": true,
+            "health": "warn",
+            "total": 1,
+            "type": "api"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "chat"
+          },
+          {
+            "active": 1,
+            "attention": 0,
+            "built": true,
+            "health": "idle",
+            "total": 1,
+            "type": "email"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "mcp"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "slack"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "teams"
+          }
+        ],
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 50,
+          "total": 2,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "page2": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "activity7d": 0,
+            "canEdit": true,
+            "detail": "https://intranet.example",
+            "embed": {
+              "activeKeys": 0,
+              "agentId": "ag_branch",
+              "agentVersion": 1,
+              "origins": [
+                "https://intranet.example"
+              ],
+              "retiredAt": null
+            },
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "wd_branch",
+            "lastActivityAt": null,
+            "name": "Intranet help",
+            "paused": false,
+            "serves": {
+              "behind": 2,
+              "id": "ag_branch",
+              "kind": "agent",
+              "latestVersion": 3,
+              "name": "Branch Concierge",
+              "version": 1
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "chat"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_ci",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "key_ci",
+            "lastActivityAt": null,
+            "name": "Intranet help",
+            "paused": false,
+            "serves": {
+              "behind": 0,
+              "id": "intake_ops",
+              "kind": "workflow",
+              "latestVersion": 1,
+              "name": "Mailed documents",
+              "version": "latest"
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          }
+        ],
+        "facets": {
+          "health": {
+            "error": 1,
+            "idle": 1,
+            "ok": 4,
+            "warn": 1
+          },
+          "type": {
+            "api": 4,
+            "chat": 1,
+            "email": 2
+          }
+        },
+        "kinds": [
+          {
+            "active": 4,
+            "attention": 2,
+            "built": true,
+            "health": "error",
+            "total": 4,
+            "type": "api"
+          },
+          {
+            "active": 1,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 1,
+            "type": "chat"
+          },
+          {
+            "active": 2,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 2,
+            "type": "email"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "mcp"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "slack"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "teams"
+          }
+        ],
+        "pagination": {
+          "hasNext": true,
+          "hasPrev": true,
+          "page": 2,
+          "pageSize": 2,
+          "total": 7,
+          "totalPages": 4
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "pastEnd": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_gone",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "Disabled: its creator left the team",
+              "state": "error"
+            },
+            "id": "key_gone",
+            "lastActivityAt": null,
+            "name": "Key key_gone",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_soon",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "Expires in 2 days",
+              "state": "warn"
+            },
+            "id": "key_soon",
+            "lastActivityAt": null,
+            "name": "Key key_soon",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          }
+        ],
+        "facets": {
+          "health": {
+            "error": 1,
+            "ok": 2,
+            "warn": 1
+          },
+          "type": {
+            "api": 4,
+            "chat": 1,
+            "email": 2
+          }
+        },
+        "kinds": [
+          {
+            "active": 4,
+            "attention": 2,
+            "built": true,
+            "health": "error",
+            "total": 4,
+            "type": "api"
+          },
+          {
+            "active": 1,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 1,
+            "type": "chat"
+          },
+          {
+            "active": 2,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 2,
+            "type": "email"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "mcp"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "slack"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "teams"
+          }
+        ],
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": true,
+          "page": 2,
+          "pageSize": 2,
+          "total": 4,
+          "totalPages": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "searchDetail": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_soon",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "Expires in 2 days",
+              "state": "warn"
+            },
+            "id": "key_soon",
+            "lastActivityAt": null,
+            "name": "Key key_soon",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          }
+        ],
+        "facets": {
+          "health": {
+            "warn": 1
+          },
+          "type": {
+            "api": 1
+          }
+        },
+        "kinds": [
+          {
+            "active": 4,
+            "attention": 2,
+            "built": true,
+            "health": "error",
+            "total": 4,
+            "type": "api"
+          },
+          {
+            "active": 1,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 1,
+            "type": "chat"
+          },
+          {
+            "active": 2,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 2,
+            "type": "email"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "mcp"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "slack"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "teams"
+          }
+        ],
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 50,
+          "total": 1,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "searchName": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "activity7d": 0,
+            "canEdit": true,
+            "detail": "https://intranet.example",
+            "embed": {
+              "activeKeys": 0,
+              "agentId": "ag_branch",
+              "agentVersion": 1,
+              "origins": [
+                "https://intranet.example"
+              ],
+              "retiredAt": null
+            },
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "wd_branch",
+            "lastActivityAt": null,
+            "name": "Intranet help",
+            "paused": false,
+            "serves": {
+              "behind": 2,
+              "id": "ag_branch",
+              "kind": "agent",
+              "latestVersion": 3,
+              "name": "Branch Concierge",
+              "version": 1
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "chat"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_ci",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "key_ci",
+            "lastActivityAt": null,
+            "name": "Intranet help",
+            "paused": false,
+            "serves": {
+              "behind": 0,
+              "id": "intake_ops",
+              "kind": "workflow",
+              "latestVersion": 1,
+              "name": "Mailed documents",
+              "version": "latest"
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          }
+        ],
+        "facets": {
+          "health": {
+            "ok": 2
+          },
+          "type": {
+            "api": 1,
+            "chat": 1
+          }
+        },
+        "kinds": [
+          {
+            "active": 4,
+            "attention": 2,
+            "built": true,
+            "health": "error",
+            "total": 4,
+            "type": "api"
+          },
+          {
+            "active": 1,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 1,
+            "type": "chat"
+          },
+          {
+            "active": 2,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 2,
+            "type": "email"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "mcp"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "slack"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "teams"
+          }
+        ],
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 50,
+          "total": 2,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "teamAll": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "activity7d": 0,
+            "canEdit": true,
+            "detail": "idle@bank.example",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "No live workflow watches this mailbox",
+              "state": "idle"
+            },
+            "id": "mbx_idle",
+            "lastActivityAt": null,
+            "name": "Mail idle@bank.example",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "email"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": true,
+            "detail": "ops@bank.example",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "mbx_ops",
+            "lastActivityAt": null,
+            "name": "Mail ops@bank.example",
+            "paused": false,
+            "serves": {
+              "behind": 0,
+              "id": "intake_ops",
+              "kind": "workflow",
+              "latestVersion": 1,
+              "name": "Mailed documents",
+              "version": "latest"
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "email"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": true,
+            "detail": "https://intranet.example",
+            "embed": {
+              "activeKeys": 0,
+              "agentId": "ag_branch",
+              "agentVersion": 1,
+              "origins": [
+                "https://intranet.example"
+              ],
+              "retiredAt": null
+            },
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "wd_branch",
+            "lastActivityAt": null,
+            "name": "Intranet help",
+            "paused": false,
+            "serves": {
+              "behind": 2,
+              "id": "ag_branch",
+              "kind": "agent",
+              "latestVersion": 3,
+              "name": "Branch Concierge",
+              "version": 1
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "chat"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_ci",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "key_ci",
+            "lastActivityAt": null,
+            "name": "Intranet help",
+            "paused": false,
+            "serves": {
+              "behind": 0,
+              "id": "intake_ops",
+              "kind": "workflow",
+              "latestVersion": 1,
+              "name": "Mailed documents",
+              "version": "latest"
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_bot",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "key_bot",
+            "lastActivityAt": null,
+            "name": "Key key_bot",
+            "paused": false,
+            "serves": {
+              "behind": 0,
+              "id": "ag_branch",
+              "kind": "agent",
+              "latestVersion": 3,
+              "name": "Branch Concierge",
+              "version": "latest"
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_gone",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "Disabled: its creator left the team",
+              "state": "error"
+            },
+            "id": "key_gone",
+            "lastActivityAt": null,
+            "name": "Key key_gone",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_soon",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "Expires in 2 days",
+              "state": "warn"
+            },
+            "id": "key_soon",
+            "lastActivityAt": null,
+            "name": "Key key_soon",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          }
+        ],
+        "facets": {
+          "health": {
+            "error": 1,
+            "idle": 1,
+            "ok": 4,
+            "warn": 1
+          },
+          "type": {
+            "api": 4,
+            "chat": 1,
+            "email": 2
+          }
+        },
+        "kinds": [
+          {
+            "active": 4,
+            "attention": 2,
+            "built": true,
+            "health": "error",
+            "total": 4,
+            "type": "api"
+          },
+          {
+            "active": 1,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 1,
+            "type": "chat"
+          },
+          {
+            "active": 2,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 2,
+            "type": "email"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "mcp"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "slack"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "teams"
+          }
+        ],
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 50,
+          "total": 7,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "typeApi": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_ci",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "key_ci",
+            "lastActivityAt": null,
+            "name": "Intranet help",
+            "paused": false,
+            "serves": {
+              "behind": 0,
+              "id": "intake_ops",
+              "kind": "workflow",
+              "latestVersion": 1,
+              "name": "Mailed documents",
+              "version": "latest"
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_bot",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "key_bot",
+            "lastActivityAt": null,
+            "name": "Key key_bot",
+            "paused": false,
+            "serves": {
+              "behind": 0,
+              "id": "ag_branch",
+              "kind": "agent",
+              "latestVersion": 3,
+              "name": "Branch Concierge",
+              "version": "latest"
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_gone",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "Disabled: its creator left the team",
+              "state": "error"
+            },
+            "id": "key_gone",
+            "lastActivityAt": null,
+            "name": "Key key_gone",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_soon",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "Expires in 2 days",
+              "state": "warn"
+            },
+            "id": "key_soon",
+            "lastActivityAt": null,
+            "name": "Key key_soon",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          }
+        ],
+        "facets": {
+          "health": {
+            "error": 1,
+            "ok": 2,
+            "warn": 1
+          },
+          "type": {
+            "api": 4,
+            "chat": 1,
+            "email": 2
+          }
+        },
+        "kinds": [
+          {
+            "active": 4,
+            "attention": 2,
+            "built": true,
+            "health": "error",
+            "total": 4,
+            "type": "api"
+          },
+          {
+            "active": 1,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 1,
+            "type": "chat"
+          },
+          {
+            "active": 2,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 2,
+            "type": "email"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "mcp"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "slack"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "teams"
+          }
+        ],
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 50,
+          "total": 4,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "typeEmailChat": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "activity7d": 0,
+            "canEdit": true,
+            "detail": "idle@bank.example",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "No live workflow watches this mailbox",
+              "state": "idle"
+            },
+            "id": "mbx_idle",
+            "lastActivityAt": null,
+            "name": "Mail idle@bank.example",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "email"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": true,
+            "detail": "ops@bank.example",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "mbx_ops",
+            "lastActivityAt": null,
+            "name": "Mail ops@bank.example",
+            "paused": false,
+            "serves": {
+              "behind": 0,
+              "id": "intake_ops",
+              "kind": "workflow",
+              "latestVersion": 1,
+              "name": "Mailed documents",
+              "version": "latest"
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "email"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": true,
+            "detail": "https://intranet.example",
+            "embed": {
+              "activeKeys": 0,
+              "agentId": "ag_branch",
+              "agentVersion": 1,
+              "origins": [
+                "https://intranet.example"
+              ],
+              "retiredAt": null
+            },
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "wd_branch",
+            "lastActivityAt": null,
+            "name": "Intranet help",
+            "paused": false,
+            "serves": {
+              "behind": 2,
+              "id": "ag_branch",
+              "kind": "agent",
+              "latestVersion": 3,
+              "name": "Branch Concierge",
+              "version": 1
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "chat"
+          }
+        ],
+        "facets": {
+          "health": {
+            "idle": 1,
+            "ok": 2
+          },
+          "type": {
+            "api": 4,
+            "chat": 1,
+            "email": 2
+          }
+        },
+        "kinds": [
+          {
+            "active": 4,
+            "attention": 2,
+            "built": true,
+            "health": "error",
+            "total": 4,
+            "type": "api"
+          },
+          {
+            "active": 1,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 1,
+            "type": "chat"
+          },
+          {
+            "active": 2,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 2,
+            "type": "email"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "mcp"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "slack"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "teams"
+          }
+        ],
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 50,
+          "total": 3,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "viewer": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "idle@bank.example",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "No live workflow watches this mailbox",
+              "state": "idle"
+            },
+            "id": "mbx_idle",
+            "lastActivityAt": null,
+            "name": "Mail idle@bank.example",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "email"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "ops@bank.example",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "mbx_ops",
+            "lastActivityAt": null,
+            "name": "Mail ops@bank.example",
+            "paused": false,
+            "serves": {
+              "behind": 0,
+              "id": "intake_ops",
+              "kind": "workflow",
+              "latestVersion": 1,
+              "name": "Mailed documents",
+              "version": "latest"
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "email"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "https://intranet.example",
+            "embed": {
+              "activeKeys": 0,
+              "agentId": "ag_branch",
+              "agentVersion": 1,
+              "origins": [
+                "https://intranet.example"
+              ],
+              "retiredAt": null
+            },
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "wd_branch",
+            "lastActivityAt": null,
+            "name": "Intranet help",
+            "paused": false,
+            "serves": {
+              "behind": 2,
+              "id": "ag_branch",
+              "kind": "agent",
+              "latestVersion": 3,
+              "name": "Branch Concierge",
+              "version": 1
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "chat"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_ci",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "key_ci",
+            "lastActivityAt": null,
+            "name": "Intranet help",
+            "paused": false,
+            "serves": {
+              "behind": 0,
+              "id": "intake_ops",
+              "kind": "workflow",
+              "latestVersion": 1,
+              "name": "Mailed documents",
+              "version": "latest"
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_bot",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "state": "ok"
+            },
+            "id": "key_bot",
+            "lastActivityAt": null,
+            "name": "Key key_bot",
+            "paused": false,
+            "serves": {
+              "behind": 0,
+              "id": "ag_branch",
+              "kind": "agent",
+              "latestVersion": 3,
+              "name": "Branch Concierge",
+              "version": "latest"
+            },
+            "servesCount": 1,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_gone",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "Disabled: its creator left the team",
+              "state": "error"
+            },
+            "id": "key_gone",
+            "lastActivityAt": null,
+            "name": "Key key_gone",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          },
+          {
+            "activity7d": 0,
+            "canEdit": false,
+            "detail": "key_soon",
+            "errors24h": 0,
+            "health": {
+              "checkedAt": "<timeZ>",
+              "reason": "Expires in 2 days",
+              "state": "warn"
+            },
+            "id": "key_soon",
+            "lastActivityAt": null,
+            "name": "Key key_soon",
+            "paused": false,
+            "serves": null,
+            "servesCount": 0,
+            "teamId": "team_ops",
+            "teamName": null,
+            "traffic24h": 0,
+            "type": "api"
+          }
+        ],
+        "facets": {
+          "health": {
+            "error": 1,
+            "idle": 1,
+            "ok": 4,
+            "warn": 1
+          },
+          "type": {
+            "api": 4,
+            "chat": 1,
+            "email": 2
+          }
+        },
+        "kinds": [
+          {
+            "active": 4,
+            "attention": 2,
+            "built": true,
+            "health": "error",
+            "total": 4,
+            "type": "api"
+          },
+          {
+            "active": 1,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 1,
+            "type": "chat"
+          },
+          {
+            "active": 2,
+            "attention": 0,
+            "built": true,
+            "health": "ok",
+            "total": 2,
+            "type": "email"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "mcp"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "slack"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "teams"
+          }
+        ],
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 50,
+          "total": 7,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  }
+}

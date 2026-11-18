@@ -26,11 +26,11 @@ async function asAdmin() {
 
 /** Back to a workspace with no model key: the setup connection lets go of its key, then every key is removed. */
 async function noKeys(call) {
-  for (const c of (await (await call('GET', '/models/providers')).json()).data ?? []) {
+  for (const c of (await (await call('GET', '/models/providers?pageSize=50')).json()).data?.data ?? []) {
     if (c.name.startsWith('default-') && c.keyRef) await call('PUT', `/models/providers/${c.id}`, { baseUrl: c.baseUrl, keyRef: null, apiVersion: c.apiVersion ?? null });
   }
-  for (const k of (await (await call('GET', '/provider-keys')).json()).data ?? []) await call('DELETE', `/provider-keys/${k.name}`);
-  return ((await (await call('GET', '/provider-keys')).json()).data ?? []).length;
+  for (const k of (await (await call('GET', '/provider-keys?pageSize=50')).json()).data?.data ?? []) await call('DELETE', `/provider-keys/${k.name}`);
+  return ((await (await call('GET', '/provider-keys?pageSize=50')).json()).data?.data ?? []).length;
 }
 
 if (!KEY) {

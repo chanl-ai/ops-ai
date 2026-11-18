@@ -39,3 +39,8 @@ def upgrade() -> None:
     op.create_index(
         "ix_document_type_examples_type", "document_type_examples", ["tenant_id", "team", "type_id", "created_at"]
     )
+
+
+def downgrade() -> None:
+    op.drop_index("ix_document_type_examples_type", table_name="document_type_examples")
+    op.drop_table("document_type_examples")

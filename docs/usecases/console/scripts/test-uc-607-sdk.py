@@ -7,6 +7,7 @@ layer in the screen's words (task K1) calls today's routes. No model call."""
 from __future__ import annotations
 
 from apps_layer import attempt
+from ops_ai._transport import every_page
 from apps_walk import app_path, apps_stack, signed_sdk
 from usecase_harness import check, data, finish
 
@@ -33,5 +34,22 @@ with apps_stack() as w:
         and page_sdk["card"]["name"] == page_api["card"]["name"],
         {"sdk": through_sdk},
     )
+
+    # 24b. A list read two rows at a time comes back whole: the helper follows every page, whatever the size, so secrets
+    # and members hold as many rows as their first page says the list has.
+    lists = {
+        "secrets": ops.raw.tools.secrets_list_secrets,
+        "members": ops.raw.platform.members_list_members,
+    }
+    for name, call in lists.items():
+        first = call(page_size=2)
+        total = (first.get("pagination") or {}).get("total")
+        small = every_page(call, page_size=2)
+        whole = every_page(call)
+        check(
+            f"24b {name}: two rows a page and fifty a page give the same {total} rows, past the first page",
+            isinstance(total, int) and len(small) == total == len(whole) and small == whole,
+            {"total": total, "small": len(small), "whole": len(whole)},
+        )
 
 finish()

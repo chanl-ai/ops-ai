@@ -42,7 +42,7 @@ async def test_the_list_carries_and_filters_what_each_file_was_read_as(client: C
     assert rows[read]["data"]["fieldsToCheck"] == 3 and rows[read]["data"]["typeName"] == "Restraining notice", rows
     assert rows[other]["data"] is None
     assert [r["id"] for r in model["data"]] == [read] and typed["data"] == []
-    assert listed["facets"]["readAs"] == {"restraining_notice": 1, "None": 1}, listed["facets"]
+    assert listed["facets"]["readAs"] == {"restraining_notice": 1}, "a file not read is not counted"
 
 
 async def test_only_a_caller_who_may_change_files_records_data(client: Client, tenant: str) -> None:

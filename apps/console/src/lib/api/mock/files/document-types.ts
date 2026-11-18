@@ -10,11 +10,11 @@ import type {
   ExpectedRecord,
   FieldComparison,
 } from "@/lib/types/document-types";
-import type { FileReference } from "@/lib/types/files";
+import type { FileReference, NewFileReference } from "@/lib/types/files";
 
 import { ApiError } from "../../contract";
 import type { FilesApi } from "../../files-contract";
-import { id, notFound, respond } from "../runtime";
+import { id, list, notFound, respond } from "../runtime";
 import { inTeam, teamOwner } from "../teams";
 import { daysAgo, type FileSeed } from "./seed";
 
@@ -37,7 +37,7 @@ const ID = /^[a-z][a-z0-9_]{2,63}$/;
 const KEY = /^[a-z0-9_]+$/;
 
 const LEVY = "levy_notice";
-const levyRef = (sampleId: string): Omit<FileReference, "addedAt"> => ({
+const levyRef = (sampleId: string): NewFileReference => ({
   type: "test_set",
   id: sampleId,
   name: "Levy notice",
@@ -116,7 +116,7 @@ export interface DocumentTypesDeps {
   /** The name of a file in the caller's team that can be read now; throws when it cannot. */
   sampleFile: (fileId: string) => string;
   /** Records the sample on the file, so Files keeps it while the sample names it. */
-  reference: (fileId: string, ref: Omit<FileReference, "addedAt">) => void;
+  reference: (fileId: string, ref: NewFileReference) => void;
   unreference: (fileId: string, refId: string) => void;
 }
 
@@ -192,6 +192,7 @@ export function createDocumentTypesMock(
     version: n,
     fields,
     many: true,
+    dateOrder: 'MDY', pageImages: false, offerAt: 20, checks: [], templates: [],
     reviewBelow: 0.8,
     note,
     createdBy: by,
@@ -353,19 +354,27 @@ export function createDocumentTypesMock(
   };
 
   return {
-    list: () =>
+    list: (p) =>
       respond((m) => ({
-        items:
-          m === "empty"
-            ? []
-            : types
-                .filter((t) => inTeam(t.team))
-                .map((t) => ({
-                  id: t.id,
-                  name: t.name,
-                  description: t.description,
-                  latestVersion: t.versions[0].version,
-                })),
+        ...list(
+          types
+            .filter((t) => inTeam(t.team))
+            .map((t) => ({
+              id: t.id,
+              name: t.name,
+              description: t.description,
+              latestVersion: t.versions[0].version,
+            })),
+          p,
+          {
+            text: (t) => t.name,
+            value: () => "",
+            facetKeys: [],
+            id: (t) => t.id,
+            sort: (t, key) => (key === "name" ? t.name.toLowerCase() : undefined),
+          },
+          m,
+        ),
         canCreate: true,
       })),
 
@@ -408,6 +417,7 @@ export function createDocumentTypesMock(
               version: 1,
               fields: input.fields,
               many: !!input.many,
+              dateOrder: 'MDY', pageImages: false, offerAt: 20, checks: [], templates: [],
               reviewBelow: input.reviewBelow ?? null,
               note: input.note?.trim() || null,
               createdBy: me,
@@ -428,6 +438,7 @@ export function createDocumentTypesMock(
           version: t.versions[0].version + 1,
           fields: input.fields,
           many: !!input.many,
+          dateOrder: 'MDY', pageImages: false, offerAt: 20, checks: [], templates: [],
           reviewBelow: input.reviewBelow ?? null,
           note: input.note?.trim() || null,
           createdBy: me,
@@ -502,6 +513,7 @@ export function createDocumentTypesMock(
           calls: samples,
           maxCalls: samples * 2,
           alias: ALIAS,
+          basis: 'default' as const,
           capped: MAX_TEST_SAMPLES,
           estimatedCost: (PRICE_PER_CALL * samples).toFixed(4),
           maxCost: (PRICE_PER_CALL * samples * 2).toFixed(4),

@@ -13,6 +13,7 @@ integration tests (pytest in the Python services); use cases only drive what a c
 | Prerequisite: PostgreSQL :5477 and OPA :8181 | `make db-up` |
 | One use case, every layer it lists | `make usecase-test UC=uc-001` |
 | One layer | `make usecase-test UC=uc-002 LAYER=ui` |
+| An api script against a deployed host | `OPS_USECASE_BASE_URL=https://<host> make usecase-test UC=uc-002 LAYER=api`: the script calls that origin for every service and starts nothing, runs no migration or seed and makes no database; a script that needs the services' internal ports or a fake provider cannot run there. The host must be exactly the one in `OPS_USECASE_STAGING_HOST` (the staging workflow sets it from its app variable; unset, every host is refused, and a name that says production is refused even then), only `LAYER=api` runs, only a use case whose `Deployed` column says `safe` runs (unmarked is not safe; none is marked yet), and a seed is refused. The runner and `lib/deployed_guard.py` apply the same rules |
 | All of them | `make usecase-test` |
 | Registry, one entry, coverage | `make usecase-list`, `make usecase-show UC=uc-002`, `make usecase-coverage SERVICE=agents-service` |
 | Register a new one | `make usecase-add AREA=<area> TITLE="<short title>" [LAYERS=api,sdk,cli]` (`usecase-new` is the older form) |
@@ -87,8 +88,8 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 
 ## Registry
 
-| Id | Service | Title | Layers | Status |
-|---|---|---|---|---|
+| Id | Service | Title | Layers | Status | Deployed |
+|---|---|---|---|---|---|
 | uc-001 | agents-service | Chat turn with citation | api | passing |
 | uc-002 | agents-service | Write tool pauses and approval resumes with step-up | api, ui | passing |
 | uc-003 | agents-service | Simple workflow through the four thread calls | api | passing |
@@ -260,6 +261,7 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-257 | console | Tables size each column by what it holds: names trimmed to one line with the whole value on hover, numbers right-aligned, a dash for an empty cell, and the name pinned on a phone | ui | passing |
 | uc-248 | agents-service | A hold on a customer's account: matched, worked out, approved in time or by a supervisor after the deadline, placed, noted on a case, and the outside system told | ui | passing |
 | uc-249 | agents-service | A complaint email: each attachment recognised and its read kept, the complaint read and triaged by an agent, a case by urgency, a hold started, and an approved reply | ui | passing |
+| uc-250 | documents-service | Every fixture of four document types is read end to end | api | current |
 | uc-251 | agents-service | A case reads assembled: typed fields in its case type's order, what it waits on and the drafted action, its run, workflow and file; decided on the task page, the action reads decided | api, ui | passing |
 | uc-252 | agents-service | A builder archives a workflow: it starts no run and leaves both lists, its run kept; restored, it serves its live version again | api, ui | passing |
 | uc-400 | agents-service | A workflow forks into two checks and a Join: the step after it runs once with both by the step they came from; a skipped branch is null; a fork meeting at a plain step is warned | api, ui | passing |
@@ -378,3 +380,8 @@ malformed registry, 3 nothing ran because the requested layer is not available y
 | uc-workflows-1 | agents-service | A Schedule trigger starts one run when its tick is due, the same tick key starts no second run, and a tick due later stays queued | api, sdk | failing |
 | uc-platform-1 | platform-service | A team's running work is counted for that team only, and the delete check names it and stops the deletion | api | passing |
 | uc-751 | agents-service | Evals keep saved cases and runs for the team | api, sdk, ui | draft |
+| uc-752 | agents-service | An agent answers from a knowledge source with a citation, in mock and real mode | api, sdk, ui | works |
+| uc-753 | tools-service | An agent reads with a tool, asks for approval, and the write runs only after approval, in mock and real mode | api, sdk, cli, ui | works |
+| uc-754 | tools-service | Approval fails closed: when the approval rules cannot be read, a write that needs approval is refused and never runs | api | works |
+| uc-755 | tools-service | A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it | api, ui | works |
+| uc-756 | agents-service | A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record | api, ui | works |

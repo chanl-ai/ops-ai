@@ -4,7 +4,6 @@ import type { ListParams, ListResult, OptionsPage, OptionsParams } from '@/lib/t
 import type {
   SkillLoading,
   AgentSkills,
-  ChatMenuSkill,
   GeneratedSkill,
   Skill,
   SkillCreateInput,
@@ -34,10 +33,6 @@ import type {
  * draft. Create, generate, publish, deprecate, attach and detach write the audit log.
  */
 export interface SkillsApi {
-  list(params: ListParams<SkillFilters> & { view: SkillView }): Promise<ListResult<Skill> & { viewCounts: SkillViewCounts }>;
-  /** The published skills the chat's / menu offers in a chat with this agent, under its skill menu setting. 403 without
-   *  skills: view in the team. */
-  chatMenu(agentId: string): Promise<ChatMenuSkill[]>;
   get(id: string): Promise<SkillDetail>;
   create(input: SkillCreateInput): Promise<Skill>;
   /** Edits the newest draft, or opens one on top of the published version. 409 when `baseVersion` is stale. */

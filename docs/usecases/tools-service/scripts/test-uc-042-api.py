@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fake_bank_https import HOST, fake_bank
-from usecase_harness import AGENTS_PORT, agents, approve_tool_review, check, data, finish, service_headers, tools
+from usecase_harness import AGENTS_PORT, agents, approve_tool_review, check, data, every_page, finish, service_headers, tools
 
 from ops_service_kit.ids import input_hash
 from ops_tools.tokens import Binding, mint
@@ -62,7 +62,7 @@ def op(detail: dict[str, Any], name: str) -> dict[str, Any]:
 
 
 settings = {"OPS_AGENTS_URL": f"http://127.0.0.1:{AGENTS_PORT}"}
-with fake_bank() as bank, agents(), tools(settings={**bank.settings, **settings}) as gw:
+with fake_bank() as bank, agents(), tools(settings={**bank.settings, **settings}, approval_rules=True) as gw:
     gw.post("/v1/egress/hosts", json={"value": HOST, "note": "uc-042 fake bank"})
     gw.post("/v1/egress/ranges", json={"value": bank.range, "note": "uc-042 fake bank network"})
     url = f"https://{HOST}/v1"
@@ -149,7 +149,7 @@ with fake_bank() as bank, agents(), tools(settings={**bank.settings, **settings}
     )
     check("the refused write is counted as denied", activity["denied24h"] == 1, activity["denied24h"])
 
-    log = data(gw.get("/v1/executions", params={"moduleId": busy, "pageSize": 200}))["data"]
+    log = every_page(gw, "/v1/executions", moduleId=busy)
     by: dict[str, int] = {}
     for r in log:
         by[r["status"]] = by.get(r["status"], 0) + 1

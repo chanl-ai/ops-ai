@@ -18,6 +18,7 @@ from ops_agents.api.app import create_app
 from ops_agents.api.deps import Runtime
 from ops_agents.store.base import metadata
 from ops_agents.store.reviews import review_decisions
+from ops_engine.store import metadata as engine_metadata
 from ops_service_kit.settings import Settings
 from tests.api.test_chat import new_thread, send
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, step_up
@@ -31,6 +32,7 @@ async def stack() -> AsyncIterator[tuple[AsyncClient, Runtime]]:
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     app = create_app(
         Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED),
         model=scripted_model(),
@@ -54,7 +56,7 @@ async def test_a_conversation_is_a_graph_thread_and_a_message_is_a_run(stack: tu
     client, _ = stack
     thread = await new_thread(client)
     await send(client, thread["id"], {"content": QUESTION})
-    listed = (await client.get("/v1/threads", params={"graph": "agent_wrapper"})).json()["data"]
+    listed = (await client.get("/v1/threads", params={"graph": "agent_wrapper"})).json()["data"]["data"]
     assert thread["id"] in [t["threadId"] for t in listed]
     runs = (await client.get(f"/v1/threads/{thread['id']}/runs")).json()["data"]
     assert [r["kind"] for r in runs] == ["input"] and runs[0]["status"] == "done"

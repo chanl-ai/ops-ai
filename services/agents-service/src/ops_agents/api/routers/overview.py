@@ -1,18 +1,22 @@
 """`/v1/overview`: what waits on a person, counted on the server. Reviews come from the same list Human Tasks
 reads (hitl_facade.all_reviews), so the two never disagree; cases from the cases store, in the team the request acts
 in. The Overview page, the sidebar's count and Chat's hints read the lists here already joined, so the console
-fetches nothing beside this one request."""
+fetches nothing beside this one request. The route takes no request transaction (`Tx`): building the reviews asks
+tools-service for each held write's policy, so it holds two transactions, 2 by design: one to read what the reviews
+name, then, once tools-service has answered with none open, one for everything else. No connection is held while
+tools-service answers (`tests/api/test_review_routes_hold_nothing.py`)."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, TypeAlias
+from typing import Annotated, TypeAlias
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from ops_engine.store import RunStore
-from ops_service_kit.http import Envelope, Out
+from ops_service_kit.http import Envelope, JsonValue, Out
+from ops_store import isolation
 
 from ...store.cases import CaseStore
 from ...store.engine import EngineTransactions
@@ -79,7 +83,8 @@ class OverviewCounts(Out):
     open_reviews: int
     overdue_reviews: int
     # The open reviews soonest past their SLA, for the Needs a decision table.
-    urgent_reviews: list[dict[str, Any]]
+    # The review rows as the Reviews list serves them; a model here would add every default key to the reply.
+    urgent_reviews: list[dict[str, JsonValue]]
     cases: CaseCounts
     counts: OverviewListCounts
     # Oldest first: the task waiting longest comes first.
@@ -93,28 +98,32 @@ class OverviewCounts(Out):
 @router.get("", response_model=Envelope[OverviewCounts])
 async def overview(rt: Rt, me: Me) -> JSONResponse:
     with one_read_per_tool():
-        rows = await hitl_facade.all_reviews(rt)
-        open_rows = [r for r in rows if hitl_facade.REVIEW_VIEWS["open"](r)]
-        overdue = [r for r in rows if hitl_facade.REVIEW_VIEWS["overdue"](r)]
-        # A review with no SLA sorts last: nothing makes it urgent.
-        urgent = sorted(open_rows, key=lambda r: (r.get("slaMinutes") is None, r.get("slaMinutes") or 0))[:URGENT]
-        urgent = await engine_reviews.expand(rt, urgent)
-        names = {me.email, me.name}
-        mine = sorted((r for r in open_rows if r.get("assignee") in names), key=lambda r: str(r.get("createdAt") or ""))
-        mine_listed = await engine_reviews.expand(rt, mine[:LISTED])
-    team = current_team()
-    teams = [team] if team else teams_of(me)
-    # The engine's runs, as the Runs page lists them: newest first, each named by its workflow version.
-    flight, flight_total, _ = await RunStore(EngineTransactions(rt.db)).page(
-        statuses=["queued", "running", "waiting"], team_id=team, limit=LISTED
-    )
-    now = datetime.now(UTC)
-    store = CaseStore(rt.db)
-    counts = await store.counts(teams)
-    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    due_rows, due_total = await store.list(
-        teams, due_before=tomorrow.isoformat(timespec="milliseconds").replace("+00:00", "Z"), size=LISTED
-    )
+        reads = await hitl_facade.read_then_ask(rt)
+        async with isolation.request_transaction():
+            rows, _ = await hitl_facade.build_reviews(rt, reads)
+            open_rows = [r for r in rows if hitl_facade.REVIEW_VIEWS["open"](r)]
+            overdue = [r for r in rows if hitl_facade.REVIEW_VIEWS["overdue"](r)]
+            # A review with no SLA sorts last: nothing makes it urgent.
+            urgent = sorted(open_rows, key=lambda r: (r.get("slaMinutes") is None, r.get("slaMinutes") or 0))[:URGENT]
+            urgent = await engine_reviews.expand(rt, urgent)
+            names = {me.email, me.name}
+            mine = sorted(
+                (r for r in open_rows if r.get("assignee") in names), key=lambda r: str(r.get("createdAt") or "")
+            )
+            mine_listed = await engine_reviews.expand(rt, mine[:LISTED])
+            team = current_team()
+            teams = [team] if team else teams_of(me)
+            # The engine's runs, as the Runs page lists them: newest first, each named by its workflow version.
+            flight, flight_total, _ = await RunStore(EngineTransactions(rt.db)).page(
+                statuses=["queued", "running", "waiting"], team_id=team, limit=LISTED
+            )
+            now = datetime.now(UTC)
+            store = CaseStore(rt.db)
+            counts = await store.counts(teams)
+            tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+            due_rows, due_total = await store.list(
+                teams, due_before=tomorrow.isoformat(timespec="milliseconds").replace("+00:00", "Z"), size=LISTED
+            )
     awaiting = len({r["caseId"] for r in open_rows if r.get("caseId")})
     body = OverviewCounts(
         open_reviews=len(open_rows),

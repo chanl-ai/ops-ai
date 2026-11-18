@@ -4,6 +4,10 @@ The decision body is the reviews decide shape (`ReviewDecisionInput`: decision, 
 rule: the person who asked cannot decide, and for an agent neither can the person who saved the version
 (maker-checker). Rejecting or returning needs a reason. Approving publishes what the request recorded: the agent
 version, or the workflow definition as compiled when it was requested, with the agent pins the reviewer saw.
+
+No route here takes a request transaction (`Tx`): each asks another party between its reads and writes, with no
+connection held. Every request names the review's team, which for a security change or a new host is the Security
+team read from platform-service; a held tool module decision is sent to tools-service on read and on decide.
 """
 
 from __future__ import annotations
@@ -14,9 +18,8 @@ from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import Field
 
-from ops_contracts.chat import WireModel
 from ops_service_kit.errors import ValidationFailed
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, In
 
 from .. import egress_host_reviews, publish_reviews, tool_module_reviews
 from ..auth import Principal, caller, principal
@@ -35,12 +38,12 @@ Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 Caller: TypeAlias = Annotated[Principal, Depends(caller)]  # noqa: UP040
 
 
-class DecisionInput(WireModel):
+class DecisionInput(In):
     decision: Literal["approved", "rejected", "returned"]
     reason: str | None = None
 
 
-class _Op(WireModel):
+class _Op(In):
     name: str
     method: str | None = None
     path: str | None = None
@@ -51,7 +54,7 @@ class _Changed(_Op):
     fields: list[str]
 
 
-class ToolModuleDiffInput(WireModel):
+class ToolModuleDiffInput(In):
     """What tools-service computed the version changes since the published one."""
 
     added: list[_Op] = Field(default_factory=list[_Op])
@@ -61,7 +64,7 @@ class ToolModuleDiffInput(WireModel):
     secrets: list[str] = Field(default_factory=list[str])
 
 
-class ToolModuleReviewInput(WireModel):
+class ToolModuleReviewInput(In):
     kind: Literal["tool_module"]
     subject_id: str
     module_name: str
@@ -103,7 +106,7 @@ async def open_publish_request(
     return ok(await publish_reviews.view(rt, req), status=201)
 
 
-class EgressHostReviewInput(WireModel):
+class EgressHostReviewInput(In):
     host: str = Field(min_length=1, max_length=253)
     app: str = Field(min_length=1, max_length=200)
 

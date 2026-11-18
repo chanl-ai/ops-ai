@@ -25,7 +25,7 @@ import { Section } from '@/components/shared/surface';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useStartCredentialCheck } from '@/hooks/connections-queries';
-import { type AppCredentialDetail, useAppCredential, useConnectionKinds, useSignOutTeam, useStartSignIn, useSystems } from '@/hooks/systems-queries';
+import { type AppCredentialDetail, useAppCredential, useConnectionKinds, useSignOutTeam, useStartSignIn, useSystemCard } from '@/hooks/systems-queries';
 import { useTeam } from '@/hooks/use-team';
 import type { Kinds } from '@/lib/connect-plan';
 import { shortDate } from '@/lib/format';
@@ -100,7 +100,6 @@ export default function AppCredentialPage() {
   const { id } = useParams<{ id: string }>();
   const q = useAppCredential(decodeURIComponent(id));
   const c = q.data;
-  const systems = useSystems();
   const kinds = useConnectionKinds();
   const { team, teamId, teams, switchTeam } = useTeam();
   const router = useRouter();
@@ -109,7 +108,7 @@ export default function AppCredentialPage() {
   React.useEffect(() => {
     if (wanted && wanted !== teamId && teams.some((t) => t.id === wanted)) switchTeam(wanted);
   }, [wanted, teamId, teams, switchTeam]);
-  const card = (systems.data ?? []).find((s) => s.id === c?.app);
+  const card = useSystemCard(c?.app).data ?? undefined;
   const all = kinds.data as Kinds | undefined;
   const connects = Boolean(card && all && connectsInWindow(card, all));
   const [connecting, setConnecting] = React.useState(false);

@@ -1,150 +1,73 @@
 /** Team settings: members, notification routing, webhooks, API keys and usage. Scoped to the current team. */
 
-import type { BulkResult } from './domain';
-import type { FeatureFlag } from './flags';
+import type { OpsAI } from '@chanl-ai/ops-ai';
 
-export type MemberRole = 'admin' | 'builder' | 'approver' | 'viewer';
+import type { Narrow } from './served';
+
+// Entity types come from the generated SDK (platform-service's OpenAPI document), so a field renamed there fails the console's typecheck.
+type Platform = OpsAI['raw']['platform'];
+type Reply<K extends keyof Platform> = Awaited<ReturnType<Platform[K]>>;
+type Body<K extends keyof Platform> = NonNullable<NonNullable<Parameters<Platform[K]>[0]>['body']>;
+
+export type MemberRole = 'admin' | 'builder' | 'approver' | 'viewer' | 'chat_user';
 
 /** The signed-in person and their role on each of their teams (platform-service GET /v1/me). */
-export interface Me {
-  user: { id: string; email: string; name: string };
-  tenantId: string;
-  /** The workspace's own name (platform-service), for the header. */
-  tenantName?: string;
-  teams: { id: string; name: string; role: MemberRole }[];
-  /** Every feature flag with whether the install config turns it on; read through hooks/flag-queries. */
-  flags?: FeatureFlag[];
-}
+export type Me = Narrow<Reply<'me_me'>, { teams: { id: string; name: string; role: MemberRole }[]; permissions: MyPermissions }>;
 
 /** One action the person may take, as `can()` decides it (platform-service GET /v1/me/permissions). */
-export interface EffectivePermission {
-  area: string;
-  action: string;
-  scope: 'all' | 'own';
-  /** Held in the Security team whichever team a request acts in. */
-  securityTeamOnly: boolean;
-  /** The roles that grant it, and whether the person holds each directly or through a team. */
-  roles: { id: string; name: string; via: 'person' | 'team' }[];
-}
+export type EffectivePermission = Reply<'me_my_permissions'>['workspace'][number];
 
 /** What the person may do in each of their teams, and in every team at once (`workspace`, from a `*` role). */
-export interface MyPermissions {
-  personId: string;
-  permissionVersion: number;
-  workspace: EffectivePermission[];
-  teams: { teamId: string; teamName: string; permissions: EffectivePermission[] }[];
-}
+export type MyPermissions = Reply<'me_my_permissions'>;
 
-export interface Member {
-  id: string;
-  name: string;
-  email: string;
-  role: MemberRole;
-  teamId: string;
-  team: string;
-  status: 'active' | 'invited';
+export type Member = Narrow<Reply<'members_list_members'>['data'][number], { role: MemberRole }> & {
+  /** Not returned by platform-service yet. */
   lastActiveAt?: string;
-  invitedAt?: string;
-  /** Invited members: the token of their invitation link, opened at /invite/[token]. */
+  /** Invited members: the token of their invitation link, opened at /invite/[token]. platform-service does not return it on the list yet. */
   inviteToken?: string;
-  /** The person's own id once joined; their page is /access/people/[userId]. */
-  userId?: string | null;
-  /** Roles held in every team, by name: where access beyond the team role comes from (platform-service). */
-  workspaceRoles?: string[];
-}
+};
 
 /** A role of the workspace (GET /v1/roles): what it grants and how many hold it. */
-export interface RoleSummary {
-  id: string;
-  name: string;
-  builtin: boolean;
-  description: string;
-  permissionCount: number;
-  assignmentCount: number;
-}
+export type RoleSummary = Reply<'roles_list_roles'>['data'][number];
+
+type Grid = { area: string; actions: Record<string, 'own' | 'all' | null> }[];
 
 /** A role and its grid (GET /v1/roles/{id}): every area, each action's scope or null when not granted. */
-export interface RoleDetail extends RoleSummary {
-  grid: { area: string; actions: Record<string, 'own' | 'all' | null> }[];
-  /** Whether the signed-in person may change this role's cells: a workspace admin, for any role but Admin. */
-  canEdit?: boolean;
-  /** Why the signed-in person may not change it, in words. */
-  lockedReason?: string | null;
-  /** Cells this role may never hold (area.action): a custom role's secrets, egress and Security-team ones. */
-  notHeld?: string[];
-}
+export type RoleDetail = Narrow<Reply<'roles_read_role'>, { grid: Grid }>;
 
 /** A new custom role (POST /v1/roles): from nothing, from `permissions`, or a copy of `copyOf`. */
-export interface RoleInput {
-  name: string;
-  description?: string;
-  copyOf?: string | null;
-  permissions?: RoleCell[];
-}
+export type RoleInput = Body<'roles_create_role'>;
 
 /** The answer to a create: the role, and the cells of the copied role a custom role may not hold, left out. */
-export interface RoleCreated extends RoleDetail {
-  leftOut: string[];
-}
+export type RoleCreated = Narrow<Reply<'roles_create_role'>, { grid: Grid }>;
 
 /** A custom role given to a person in one of their teams (GET /v1/people/{id}/role-grants). */
-export interface RoleGrant {
-  id: string;
-  roleId: string;
-  roleName: string;
-  teamId: string;
-  expiresAt?: string | null;
-  grantedBy: string;
-  createdAt: string;
-}
+export type RoleGrant = Reply<'people_person_role_grants'>['data'][number];
 
 /** Who holds a role and in which team (GET /v1/roles/{id}/holders). */
-export interface RoleHolder {
-  kind: 'person' | 'team';
-  id: string;
-  teamId: string;
-  name: string;
-  email?: string | null;
-}
+export type RoleHolder = Reply<'roles_role_holders'>['data'][number];
 
 /** One cell a role holds after a save (PUT /v1/roles/{id}/permissions). */
-export interface RoleCell {
-  area: string;
-  action: string;
-  scope: 'own' | 'all';
-}
+export type RoleCell = NonNullable<Body<'roles_create_role'>['permissions']>[number];
 
 /** One action checked for one person (POST /v1/access/check): allowed with the granting roles, or refused. */
-export interface AccessCheck {
-  personId: string;
-  teamId: string;
-  area: string;
-  action: string;
-  allowed: boolean;
-  scope: 'own' | 'all' | null;
-  grantedBy: { id: string; name: string; via: 'person' | 'team' }[];
-  refusedBy: { code: string; reason: string } | null;
-}
+export type AccessCheck = Reply<'access_check_access'>;
 
 /** The signed-in person's own answer for one action (GET /v1/me/why): why it is refused and who to ask. */
-export type WhyNot = AccessCheck & { roles: { id: string; name: string }[]; askable: string[] };
+export type WhyNot = Reply<'me_why_not'>;
 
 /** What a person may do (GET /v1/people/{id}/permissions), with their name and address. */
-export type PersonPermissions = MyPermissions & { name?: string | null; email?: string | null };
+export type PersonPermissions = Reply<'people_person_permissions'>;
 
 export type MemberFilters = { role?: string[]; status?: string[]; teamId?: string[] };
 
 /** An invite's result: per email, done or skipped with why, and each new invite's link token, shown once. */
-export interface InviteResult extends BulkResult {
-  invites?: { email: string; token: string }[];
-}
+export type InviteResult = Reply<'members_invite_members'>;
 
-export interface InviteInput {
-  emails: string[];
-  role: MemberRole;
+export type InviteInput = Narrow<Body<'members_invite_members'>, { role: MemberRole }> & {
   /** Platform scope only: the team to invite into. Ignored inside a team, which always invites into itself. */
   teamId?: string;
-}
+};
 
 // ── Notifications ──────────────────────────────────────────────────────────
 
@@ -225,29 +148,13 @@ export type DeliveryFilters = { status?: string[] };
 
 // ── API keys ───────────────────────────────────────────────────────────────
 
-export interface ApiKey {
-  id: string;
-  name: string;
-  prefix: string;
-  scopes: string[];
-  createdBy: string;
-  createdAt: string;
-  lastUsedAt?: string;
-  expiresAt?: string;
-  team: string;
-  /** What the key is for: an agent or workflow it starts, or the one MCP link it opens. */
-  target?: { kind: 'agent' | 'workflow' | 'mcp_link'; id: string } | null;
-}
+export type ApiKey = Reply<'api_keys_list_api_keys'>['data'][number];
 
-export interface ApiKeyInput {
-  name: string;
-  scopes: string[];
-  expiresInDays: number | null;
+/** `scopes` names what the console offers (`runs:write`); the client sends the service its `read` and `write`. */
+export type ApiKeyInput = Narrow<Body<'api_keys_create_api_key'>, { scopes: string[] }> & {
   /** Platform scope only: the team the key acts for. Ignored inside a team. */
   teamId?: string;
-  /** The one MCP link the key opens; such a key reads only. */
-  target?: { kind: 'mcp_link'; id: string };
-}
+};
 
 // ── Usage ──────────────────────────────────────────────────────────────────
 
@@ -289,8 +196,4 @@ export interface SettingsLookups {
 }
 
 /** Who in a team may take an action: the roles that grant it and the people holding them (GET /v1/access/holders). */
-export interface Holders {
-  teamId: string;
-  roles: { id: string; name: string }[];
-  holders: { id: string; name: string; email: string; roles: string[]; inTeam?: boolean }[];
-}
+export type Holders = Reply<'access_access_holders'>;

@@ -1,0 +1,3 @@
+# 24 boundaries crossed without a model in packages/ops_documents_client (scripts/check_typed_boundaries.py). A row may only fall.
+17 dict-any packages/ops_documents_client/src/ops_documents_client/__init__.py
+7 dict-any packages/ops_documents_client/src/ops_documents_client/testing.py

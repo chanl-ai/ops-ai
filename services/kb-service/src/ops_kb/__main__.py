@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 
 import httpx
 import uvicorn
 
-from ops_identity import Auth
+from ops_identity import Auth, ServiceClient
 from ops_service_kit.logging import configure_logging, get_logger
 from ops_service_kit.settings import Settings
 from ops_store import isolation
@@ -46,8 +47,8 @@ async def _seed(settings: Settings) -> None:
         ocr=settings.kb_ocr,
     )
     try:
-        await _files_ready(settings)
-        if settings.files_url:
+        await wait_for_files(settings)
+        if settings.files is not None:
             await move_to_files_service(service, KnowledgeFiles(settings.kb_files_dir))
         with isolation.tenant_wide(DEMO_SEED, tenant_id=TENANT):
             await seed_demo(service)
@@ -66,30 +67,41 @@ async def move_to_files_service(
     for tenant in tenants if tenants is not None else await service.store.tenants():
         with isolation.tenant_wide(MOVE_FILES, tenant_id=tenant):
             for s in await service.store.sources(tenant):
-                names: dict[str, str] = s.get("file_names") or {}
-                moved = await move_files(tenant, source_team(s), list(s["file_ids"]), names, to=service.files, old=old)
+                names: dict[str, str] = s.file_names or {}
+                moved = await move_files(tenant, source_team(s), list(s.file_ids), names, to=service.files, old=old)
                 if moved:
-                    await service.store.swap_files(tenant, str(s["id"]), moved)
-                    log.info("kb_files_moved_to_files_service", source=s["id"], files=len(moved))
+                    await service.store.swap_files(tenant, str(s.id), moved)
+                    log.info("kb_files_moved_to_files_service", source=s.id, files=len(moved))
 
 
-async def _files_ready(settings: Settings) -> None:
-    """The stack starts files-service just before kb-service; the seed uploads through it, so wait up to a minute."""
-    if not settings.files_url:
+async def wait_for_files(settings: Settings) -> None:
+    """The stack starts files-service just before kb-service; the seed uploads through it, so wait up to
+    `ready_wait_s`. Each probe gives up after `ready_probe_s`, not the files endpoint's upload timeout, so a
+    files-service that accepts and never answers cannot stretch the wait to many times that."""
+    if settings.files is None:
         return
-    async with httpx.AsyncClient(base_url=settings.files_url, timeout=2) as http:
-        for _ in range(60):
+    files = ServiceClient.for_settings(settings, service="kb", audience="files")
+    deadline = time.monotonic() + settings.ready_wait_s
+    try:
+        while time.monotonic() < deadline:
             try:
-                if (await http.get("/health")).status_code == 200:
+                if (await files.http.get("/health", timeout=settings.ready_probe_s)).status_code == 200:
                     return
             except httpx.HTTPError:
                 pass
-            await asyncio.sleep(1)
-    log.warning("files_service_not_ready", url=settings.files_url)
+            await asyncio.sleep(max(0.0, min(settings.ready_probe_s, deadline - time.monotonic())))
+    finally:
+        await files.aclose()
+    log.warning("files_service_not_ready", url=settings.files.base)
 
 
 def main() -> None:
     settings = Settings()
+    # agents-service says which agents use a knowledge base and runs the workflows that listen to its events.
+    # With platform-service on the stack, its internal port also keeps the audit log of settings changes.
+    settings.require(
+        "agents", *(("platform_internal",) if settings.platform is not None else settings.identity_endpoints)
+    )
     require_current_schema(settings.database_url, MIGRATIONS)
     configure_logging(service="kb-service")
     if settings.environment == "dev":

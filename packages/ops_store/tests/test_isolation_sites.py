@@ -2,23 +2,51 @@
 call site, or a service setting its own tenant or team fails here naming the file; each list only changes with the
 card that changes the call. Tests are not scanned: they act for whichever tenant they set up.
 
-platform-service names the tenant per transaction (it issues the tokens), so its one `scope` entry is its binding."""
+platform-service names the tenant per transaction (it issues the tokens), so its one `scope` entry is its binding.
+
+Two more lists, one file per service under `isolation_sites/`, each row `<count> <kind> <file>`:
+
+  raw     a transaction opened on the engine itself (`engine.begin()`, `engine.connect()`, the same on a `db` handle)
+          instead of through `Store.tx()`, so it is a second connection beside the request's and carries no caller
+  caught  a handler that catches a database error and carries on with no savepoint (`Store.attempt`) around the
+          statement; on the request's one transaction PostgreSQL refuses every statement after the failed one
+  install a block with no tenant (`Store.install_tx`, `isolation.install_wide`): counted per file, so a second one in a
+          file already listed by reason above fails here too
+
+`isolation_sites/install/` lists install blocks by reason and declared tables, and those that declare none.
+
+A row may only fall: a new site fails here naming its line, and a site that is gone fails until its row is lowered."""
 
 from __future__ import annotations
 
 import ast
-from collections import defaultdict
+import sys
+from collections import Counter, defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 SOURCES = sorted(p for p in (*ROOT.glob("packages/*/src"), *ROOT.glob("services/*/src")) if p.is_dir())
 MECHANISM = {"packages/ops_store/src/ops_store/isolation.py", "packages/ops_store/src/ops_store/dialect.py"}
+BASELINES = Path(__file__).parent / "isolation_sites"
+# The names a service gives its database handle; a transaction opened on one of them is a raw site.
+HANDLES = {"engine", "db", "database"}
+DB_ERRORS = {
+    "DataError",
+    "DBAPIError",
+    "IntegrityError",
+    "InterfaceError",
+    "OperationalError",
+    "ProgrammingError",
+    "SQLAlchemyError",
+    "StatementError",
+}
 
 # Reason (as written at the call) -> the files that widen for it. `reason` is a binding that passes its caller's on.
 WIDENINGS: dict[str, set[str]] = {
     "reason": {
-        "services/agents-service/src/ops_agents/store/engine.py",
+        "packages/ops_store/src/ops_store/store.py",
         "services/agents-service/src/ops_agents/store/tenancy.py",
+        # The base's system_tx as the tenant role on PostgreSQL and as the login's own user on SQL Server.
         "services/platform-service/src/ops_platform/store/tenancy.py",
     },
     "SIGNIN_LOOKUP": {
@@ -27,8 +55,22 @@ WIDENINGS: dict[str, set[str]] = {
     },
     "SESSION_LOOKUP": {"services/platform-service/src/ops_platform/store/identity.py"},
     "WIDGET_LOOKUP": {"services/agents-service/src/ops_agents/api/routers/widget.py"},
+    # Whether the caller's tenant holds an agent and which of its teams owns it, before the serving catalogue (every
+    # tenant's agents by id) serves it.
+    "OWNER": {"services/agents-service/src/ops_agents/store/agent_registry.py"},
+    # Under the registry's team policy (agents 0109) a chosen agent slug, widget id or workflow id is checked against
+    # every team of the tenant before it is taken.
+    "UNIQUE_KEY": {
+        "services/agents-service/src/ops_agents/store/agent_registry.py",
+        "services/agents-service/src/ops_agents/store/widgets.py",
+        "services/agents-service/src/ops_agents/store/workflow_registry.py",
+    },
+    # A service checks a tool grant against the workflow's own team, so it reads every team's workflows.
+    "TOOL_GRANTS": {"services/agents-service/src/ops_agents/store/workflow_registry.py"},
     # The workflow worker reads every tenant's pending batch rows, then starts each in its own tenant and team.
     "BATCH_START": {"services/agents-service/src/ops_agents/store/batches.py"},
+    # The operator preflight before agents 0106 reads every tenant's references and teams; it writes nothing.
+    "REGISTRY_TENANT_PREFLIGHT": {"services/agents-service/src/ops_agents/store/registry_tenants.py"},
     "KEY_LOOKUP": {"services/platform-service/src/ops_platform/store/identity.py"},
     "INVITE_LOOKUP": {"services/platform-service/src/ops_platform/store/members.py"},
     "SIGNIN_LOCKOUT": {"services/platform-service/src/ops_platform/store/signin.py"},
@@ -36,6 +78,8 @@ WIDENINGS: dict[str, set[str]] = {
     "SIGNIN_WATCH": {"services/platform-service/src/ops_platform/store/signin.py"},
     "RESET_LOOKUP": {"services/platform-service/src/ops_platform/store/signin.py"},
     "PURGE_LOOKUP": {"services/platform-service/src/ops_platform/store/lifecycle.py"},
+    # The dev seed checks whether another tenant holds a seeded id, as its own login (platform write_seed).
+    "SEED_ID_CHECK": {"services/platform-service/src/ops_platform/store/seeding.py"},
     "TESTS": {"services/agents-service/src/ops_agents/store/tenancy.py"},
     "SEED": {
         "services/agents-service/src/ops_agents/api/app.py",
@@ -53,6 +97,26 @@ WIDENINGS: dict[str, set[str]] = {
     "RETENTION_TENANTS": {"services/agents-service/src/ops_agents/store/memories.py"},
     "ASSISTANT_TEAMS": {"services/agents-service/src/ops_agents/store/team_defaults.py"},
     "ASSISTANT_CATCH_UP": {"services/agents-service/src/ops_agents/api/ops_tools.py"},
+    # The tool catalogue copy's resync applies one tenant's catalogue, every team's grants, as that tenant.
+    "TOOL_CATALOG_RESYNC": {"services/agents-service/src/ops_agents/api/tool_catalog_copy.py"},
+    # The API key copy's resync makes one tenant's copy equal to platform's list of its keys, every team's.
+    "API_KEY_RESYNC": {"services/agents-service/src/ops_agents/api/api_key_copy.py"},
+    # Start-up: every tenant's published agent pointers past the tenant, then each tenant's specs under its own.
+    "SERVE_PUBLISHED": {
+        "services/agents-service/src/ops_agents/api/agent_registry.py",
+        "services/agents-service/src/ops_agents/store/agent_registry.py",
+    },
+    "EVERY_TEAM": {"services/tools-service/src/ops_tools/store/team_defaults.py"},
+    "CATCH_UP": {"services/tools-service/src/ops_tools/store/team_defaults.py"},
+    "HANDOFF_LIST": {"services/tools-service/src/ops_tools/store/review_handoffs.py"},
+    "HANDOFF_SETTLE": {"services/tools-service/src/ops_tools/store/review_handoffs.py"},
+    "BINDING_BY_CONNECTION": {"services/tools-service/src/ops_tools/store/plugin_bindings.py"},
+    "STAMP_VERSIONS": {"services/tools-service/src/ops_tools/store/plugin_bindings.py"},
+    "ALLOW_LIST": {"services/tools-service/src/ops_tools/store/egress.py"},
+    "HEADER_KEYS": {"services/tools-service/src/ops_tools/store/modules.py"},
+    # The MCP links list of a caller who may see channels in several teams names each team in its query.
+    "LINK_TEAMS": {"services/tools-service/src/ops_tools/store/mcp_links.py"},
+    "AUDIT_RETENTION": {"services/tools-service/src/ops_tools/__main__.py"},
     "CLAIM_WORK": {"packages/ops_engine/src/ops_engine/store/work.py"},
     "LIVE_WORKFLOWS": {"packages/ops_engine/src/ops_engine/store/definitions.py"},
     # The run reconciler reads every tenant's unfinished runs, then marks each in its own tenant.
@@ -75,9 +139,19 @@ WIDENINGS: dict[str, set[str]] = {
     "PURGE_WITHDRAWN": {"services/kb-service/src/ops_kb/schedule.py"},
     "FIND_PENDING": {"services/kb-service/src/ops_kb/embedding.py"},
     "RELAY": {"packages/ops_store/src/ops_store/outbox.py"},
+    # The install's model provider connections, read by every tenant's calls (`Store.install_tx`, no tenant).
+    "CONNECTIONS": {"services/models-service/src/ops_models/store/providers.py"},
+    # Its aliases, model keys and their spend, read by a completion that authenticates by a model key and names no
+    # tenant; a call that names none is written there too.
+    "ALIASES": {"services/models-service/src/ops_models/store/aliases.py"},
+    "MODEL_KEYS": {"services/models-service/src/ops_models/store/keys.py"},
+    "KEY_SPEND": {"services/models-service/src/ops_models/store/calls.py"},
     # Heartbeats describe a process, which serves every tenant; the Background page reads every team's jobs.
     "HEARTBEAT": {"packages/ops_store/src/ops_store/background.py"},
     "BACKGROUND_PAGE": {"services/agents-service/src/ops_agents/store/background.py"},
+    # A thread's lease and timers, taken, swept, fenced and fired by thread id before its tenant is known.
+    "THREAD_LEASES": {"services/agents-service/src/ops_agents/store/leases.py"},
+    "TIMERS": {"services/agents-service/src/ops_agents/store/timers.py"},
     "RECOVER_PENDING": {
         "services/documents-service/src/ops_documents/store/document_types.py",
         "services/documents-service/src/ops_documents/store/extractions.py",
@@ -133,6 +207,15 @@ ENTRIES: dict[str, set[str]] = {
         "services/tools-service/src/ops_tools/store/mcp_links.py",
         # The sign-in keep-alive refreshes each team's sign-ins in that team's own scope.
         "services/tools-service/src/ops_tools/connections/keepalive.py",
+        # The start-up catch-up brings each team's defaults up to date in that team's own scope.
+        "services/tools-service/src/ops_tools/defaults.py",
+        # A plugin binding is read and written in the team its caller names, which a service caller acting for the
+        # whole tenant names on each call.
+        "services/tools-service/src/ops_tools/store/plugin_bindings.py",
+        # A team's defaults version is read and recorded in the team being provisioned.
+        "services/tools-service/src/ops_tools/store/team_defaults.py",
+        # A team's sending policy and judgements are read and kept in the team the gateway call names.
+        "services/tools-service/src/ops_tools/store/send_policies.py",
         # A model call reads its tenant's provider key, or the deployment's when it names none.
         "services/models-service/src/ops_models/provider_keys.py",
         # A per-tenant model key's call spends from the share of the tenant it names (X-Tenant-Id).
@@ -173,11 +256,15 @@ def _reason(call: ast.Call) -> str | None:
     return arg.attr if isinstance(arg, ast.Attribute) else ast.unparse(arg)
 
 
+# `install_wide` and `Store.install_tx` narrow to no tenant; they are listed by reason as the two that widen are.
+WIDENING_CALLS = {"tenant_wide", "tenant_wide_on", "system_tx", "install_wide", "install_tx"}
+
+
 def test_every_widening_names_a_listed_reason_at_a_listed_site() -> None:
     found: dict[str, set[str]] = defaultdict(set)
     unnamed: list[str] = []
     for rel, call, name in _calls():
-        if name not in {"tenant_wide", "system_tx"}:
+        if name not in WIDENING_CALLS:
             continue
         reason = _reason(call)
         if reason is None or reason.startswith(("'", '"', "f'", 'f"')):
@@ -207,3 +294,379 @@ def test_no_service_sets_its_own_tenant_or_team() -> None:
     assert refused == []
     acting = {rel for rel, _call, name in _calls() if name == "set_acting_team"}
     assert acting == ACTING_TEAM
+
+
+def _handle(node: ast.expr) -> str | None:
+    name = node.attr if isinstance(node, ast.Attribute) else node.id if isinstance(node, ast.Name) else None
+    return name.lstrip("_") if name else None
+
+
+def _names(node: ast.AST) -> set[str]:
+    return {
+        n.attr if isinstance(n, ast.Attribute) else n.id
+        for n in ast.walk(node)
+        if isinstance(n, ast.Attribute | ast.Name)
+    }
+
+
+def _in_savepoint(attempt: ast.Try) -> bool:
+    """Whether the guarded statements run inside `attempt(...)`, which rolls back to its savepoint first."""
+    return any(
+        isinstance(item.context_expr, ast.Call) and _handle(item.context_expr.func) == "attempt"
+        for stmt in attempt.body
+        for node in ast.walk(stmt)
+        if isinstance(node, ast.With | ast.AsyncWith)
+        for item in node.items
+    )
+
+
+INSTALL_CALLS = {"install_tx", "install_wide"}
+# Calls that send a statement; a catch around one is a catch around the database.
+STATEMENTS = {"execute", "executemany", "scalar", "scalars", "commit", "flush"}
+BROAD = {"Exception", "BaseException"}
+
+
+def _sends_statement(nodes: list[ast.stmt]) -> bool:
+    return any(
+        isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr in STATEMENTS
+        for stmt in nodes
+        for n in ast.walk(stmt)
+    )
+
+
+def site_findings(source: str) -> list[tuple[int, str]]:
+    """(line, kind) for each raw transaction, each caught database error and each broad catch or `suppress` around a
+    statement, with no savepoint, in one file."""
+    out: set[tuple[int, str]] = set()
+    for node in ast.walk(ast.parse(source)):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in {"begin", "connect"}
+            and _handle(node.func.value) in HANDLES
+        ):
+            out.add((node.lineno, "raw"))
+        # Whatever the handle is called (`self.registry`, `get_engine()`), a transaction opened by `async with`
+        # outside ops_store is a second connection beside the request's.
+        if isinstance(node, ast.AsyncWith):
+            out |= {
+                (item.context_expr.lineno, "raw")
+                for item in node.items
+                if isinstance(item.context_expr, ast.Call)
+                and isinstance(item.context_expr.func, ast.Attribute)
+                and item.context_expr.func.attr in {"begin", "connect"}
+            }
+        if isinstance(node, ast.Call) and _handle(node.func) in INSTALL_CALLS:
+            out.add((node.lineno, "install"))
+        if isinstance(node, ast.With | ast.AsyncWith):
+            for item in node.items:
+                call = item.context_expr
+                if not (isinstance(call, ast.Call) and _handle(call.func) == "suppress"):
+                    continue
+                caught = {n for arg in call.args for n in _names(arg)}
+                if caught & DB_ERRORS or (caught & BROAD and _sends_statement(node.body)):
+                    out.add((node.lineno, "suppressed"))
+        if isinstance(node, ast.Try) and not _in_savepoint(node):
+            for h in node.handlers:
+                # A handler whose last statement raises does not carry on; one that retries or answers does.
+                if isinstance(h.body[-1], ast.Raise):
+                    continue
+                caught: set[str] = _names(h.type) if h.type is not None else set()
+                if caught & DB_ERRORS:
+                    out.add((h.lineno, "caught"))
+                elif (h.type is None or caught & BROAD) and _sends_statement(node.body):
+                    out.add((h.lineno, "broad"))
+    return sorted(out)
+
+
+def _found() -> tuple[dict[str, Counter[str]], dict[str, list[int]]]:
+    """Counts by service and row key, and the lines behind each key."""
+    counts: dict[str, Counter[str]] = defaultdict(Counter)
+    lines: dict[str, list[int]] = defaultdict(list)
+    for src in sorted([*ROOT.glob("services/*/src"), *ROOT.glob("packages/*/src")]):
+        if src.parent.name == "ops_store":
+            continue
+        for path in sorted(src.rglob("*.py")):
+            for line, kind in site_findings(path.read_text()):
+                key = f"{kind} {path.relative_to(ROOT).as_posix()}"
+                counts[src.parent.name][key] += 1
+                lines[key].append(line)
+    return counts, lines
+
+
+def _listed(service: str) -> Counter[str]:
+    path = BASELINES / f"{service}.txt"
+    rows = (
+        [r.split(" ", 1) for r in path.read_text().splitlines() if r and not r.startswith("#")] if path.exists() else []
+    )
+    return Counter({key: int(n) for n, key in rows})
+
+
+def test_raw_transactions_and_caught_errors_are_only_the_listed_ones() -> None:
+    counts, lines = _found()
+    problems: list[str] = []
+    for service in sorted({*counts, *(p.stem for p in BASELINES.glob("*.txt"))}):
+        listed, now = _listed(service), counts.get(service, Counter())
+        for key in sorted({*listed, *now}):
+            kind, rel = key.split(" ", 1)
+            where = ", ".join(f"{rel}:{n}" for n in lines.get(key, []))
+            if now[key] > listed[key]:
+                fix = {
+                    "raw": "use Store.tx()",
+                    "install": "reach a system(...) table through an existing install block, or a tenant's own tx()",
+                }.get(kind, "run the statement inside Store.attempt(conn)")
+                problems.append(f"{service}: {kind} {now[key]} > {listed[key]} at {where}; {fix}")
+            elif now[key] < listed[key]:
+                problems.append(f"{service}: {key} fell to {now[key]}; lower its row in isolation_sites/{service}.txt")
+    assert problems == [], "\n".join(problems)
+
+
+# ops_store's own sites, which are the door itself and so on no service's baseline: each count is exact, so a new
+# connection, catch or install block inside the package fails here naming its file.
+OWNED: dict[str, int] = {
+    # The conformance suites open their own transactions on the backend under test.
+    "raw packages/ops_store/src/ops_store/conformance.py": 2,
+    "caught packages/ops_store/src/ops_store/conformance.py": 1,
+    # /health's probe: one statement naming no table, False on any failure (`database.reachable`).
+    "raw packages/ops_store/src/ops_store/database.py": 1,
+    # prove_chain's schema read in a migration test: reflection of a test database the chain just migrated.
+    "raw packages/ops_store/src/ops_store/testing.py": 1,
+    "broad packages/ops_store/src/ops_store/database.py": 1,
+    # The system transaction, which runs as a role before any tenant is known.
+    "raw packages/ops_store/src/ops_store/dialect.py": 2,
+    # The isolated transaction itself, and its restore of a connection a cancellation left unusable.
+    "raw packages/ops_store/src/ops_store/isolation.py": 2,
+    "suppressed packages/ops_store/src/ops_store/isolation.py": 2,
+    # The reference audit log, for a service that has none.
+    "raw packages/ops_store/src/ops_store/reference.py": 4,
+    # The schema check at start-up, before any request.
+    "raw packages/ops_store/src/ops_store/schema_version.py": 2,
+    "caught packages/ops_store/src/ops_store/schema_version.py": 1,
+    "install packages/ops_store/src/ops_store/store.py": 1,
+}
+
+
+def test_ops_store_opens_and_catches_only_at_its_owned_sites() -> None:
+    found: Counter[str] = Counter()
+    for path in sorted((ROOT / "packages/ops_store/src").rglob("*.py")):
+        for _line, kind in site_findings(path.read_text()):
+            found[f"{kind} {path.relative_to(ROOT).as_posix()}"] += 1
+    assert dict(found) == OWNED
+
+
+def test_the_site_scan_finds_each_kind_and_passes_the_savepoint_form() -> None:
+    planted = """
+async def raw(self):
+    async with self.engine.begin() as c: ...
+    async with self._db.connect() as c: ...
+
+async def caught(self, conn):
+    try:
+        await conn.execute(q)
+    except IntegrityError:
+        return False
+
+async def retried(self, conn):
+    for attempt in range(3):
+        try:
+            await conn.execute(q)
+        except sa.exc.OperationalError:
+            if attempt == 2:
+                raise
+
+async def passed_on(self, conn):
+    try:
+        await conn.execute(q)
+    except IntegrityError as e:
+        raise Conflict("taken") from e
+
+async def savepoint(self, conn):
+    try:
+        async with self.attempt(conn):
+            await conn.execute(q)
+    except IntegrityError:
+        return False
+    async with self.tx() as c: ...
+"""
+    assert site_findings(planted) == [(3, "raw"), (4, "raw"), (9, "caught"), (16, "caught")]
+
+
+def test_the_site_scan_finds_a_transaction_on_any_handle_and_a_broad_catch_around_a_statement() -> None:
+    planted = """
+async def registry(self):
+    async with self.registry.begin() as c: ...
+    async with get_engine().connect() as c: ...
+    async with self.engine.begin() as c: ...
+
+async def broad(self, conn):
+    try:
+        await conn.execute(q)
+    except Exception:
+        return False
+
+async def bare(self, conn):
+    try:
+        await conn.execute(q)
+    except:
+        pass
+
+async def quiet(self, conn):
+    with suppress(IntegrityError):
+        await conn.execute(q)
+
+async def quiet_broad(self, conn):
+    with contextlib.suppress(Exception):
+        await conn.execute(q)
+
+async def quiet_other(self):
+    with suppress(KeyError):
+        await notify()
+
+async def no_statement(self):
+    try:
+        await notify()
+    except Exception:
+        pass
+
+async def passed_on(self, conn):
+    try:
+        await conn.execute(q)
+    except Exception as e:
+        raise Wrapped() from e
+
+async def savepoint(self, conn):
+    try:
+        async with self.attempt(conn):
+            await conn.execute(q)
+    except Exception:
+        return False
+"""
+    assert site_findings(planted) == [
+        (3, "raw"),
+        (4, "raw"),
+        (5, "raw"),
+        (10, "broad"),
+        (16, "broad"),
+        (20, "suppressed"),
+        (24, "suppressed"),
+    ]
+
+
+def test_the_site_scan_counts_each_install_block() -> None:
+    planted = """
+async def two(self):
+    async with self.install_tx(KEYS) as c: ...
+    async with self.install_tx(KEYS) as c: ...
+    with isolation.install_wide(KEYS): ...
+"""
+    assert site_findings(planted) == [(3, "install"), (4, "install"), (5, "install")]
+
+
+def test_a_baseline_only_falls_in_the_history() -> None:
+    """A row raised, or a file added, in a commit with no `Standards-exception:` trailer: the working tree alone
+    cannot show it, since the baseline and the code are changed together."""
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import baseline_history  # noqa: PLC0415
+
+    assert (
+        baseline_history.judged(
+            baseline_history.problems(
+                ROOT, "fe46c615f0a2e3fc501853005e71564d2fc5edd1", ["packages/ops_store/tests/isolation_sites"]
+            )
+        )
+        == []
+    )
+
+
+# Install-wide blocks by the tables they declare, one file per service under `isolation_sites/install/`, each row
+# `<count> <reason> <table>,<table>` for the sites declaring that set (`Store.install_tx(REASON, tables=(...))`, where
+# `tables` is required). A block is held to its declared tables when it runs (`isolation._refuse_outside_install`); a
+# row may only fall, so a new set fails here, as does a call whose tables the scan cannot read.
+INSTALL_TABLES = BASELINES / "install"
+
+
+def install_findings(source: str, rel: str) -> list[tuple[int, str]]:
+    """(line, row key) for each install-wide block in one file, and an `alias` row for each use of `install_tx` or
+    `install_wide` other than a call, which no count could follow."""
+    tree = ast.parse(source)
+    # `from .tables import model_aliases as t`: a declared name is listed by the table's own name.
+    imported = {
+        alias.asname or alias.name: alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        for alias in node.names
+    }
+    called = {id(node.func) for node in ast.walk(tree) if isinstance(node, ast.Call)}
+    out: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Attribute | ast.Name) or _handle(node) not in INSTALL_CALLS:
+            continue
+        if not isinstance(node.ctx, ast.Store) and id(node) not in called:
+            out.append((node.lineno, f"alias {rel}"))
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and _handle(node.func) in INSTALL_CALLS):
+            continue
+        declared = next((kw.value for kw in node.keywords if kw.arg == "tables"), None)
+        if isinstance(declared, ast.Tuple | ast.List) and all(isinstance(e, ast.Name) for e in declared.elts):
+            tables = sorted({imported.get(e.id, e.id) for e in declared.elts if isinstance(e, ast.Name)})
+            out.append((node.lineno, f"{_reason(node)} {','.join(tables)}"))
+        else:
+            out.append((node.lineno, f"unreadable {rel}"))
+    return sorted(out)
+
+
+def _install_found() -> tuple[dict[str, Counter[str]], dict[str, list[str]]]:
+    counts: dict[str, Counter[str]] = defaultdict(Counter)
+    lines: dict[str, list[str]] = defaultdict(list)
+    for src in SOURCES:
+        if src.parent.name == "ops_store":
+            continue  # the door itself: store.py passes its caller's tables on
+        for path in sorted(src.rglob("*.py")):
+            rel = path.relative_to(ROOT).as_posix()
+            for line, key in install_findings(path.read_text(), rel):
+                counts[src.parent.name][key] += 1
+                lines[key].append(f"{rel}:{line}")
+    return counts, lines
+
+
+def _install_listed(service: str) -> Counter[str]:
+    path = INSTALL_TABLES / f"{service}.txt"
+    if not path.exists():
+        return Counter()
+    rows = [r.split(" ", 1) for r in path.read_text().splitlines() if r and not r.startswith("#")]
+    return Counter({key: int(n) for n, key in rows})
+
+
+def test_install_blocks_declare_only_the_listed_tables() -> None:
+    counts, lines = _install_found()
+    problems: list[str] = []
+    for service in sorted({*counts, *(p.stem for p in INSTALL_TABLES.glob("*.txt"))}):
+        listed, now = _install_listed(service), counts.get(service, Counter())
+        for key in sorted({*listed, *now}):
+            where = ", ".join(lines.get(key, []))
+            if key.startswith(("alias ", "unreadable ")):
+                problems.append(f"{service}: {key} at {where}; call install_tx(REASON, tables=(t, ...)) directly")
+            elif now[key] > listed[key]:
+                problems.append(f"{service}: {key} {now[key]} > {listed[key]} at {where}; declare the tables")
+            elif now[key] < listed[key]:
+                problems.append(f"{service}: {key} fell to {now[key]}; lower its row in isolation_sites/install/")
+    assert problems == [], "\n".join(problems)
+
+
+def test_the_install_scan_reads_declared_tables_and_refuses_aliases_and_unread_ones() -> None:
+    planted = """
+from .tables import model_aliases as t
+from .tables import provider_connections
+
+async def blocks(self):
+    async with self.install_tx(ALIASES, tables=(t, provider_connections)) as c: ...
+    async with self.install_tx(ALIASES) as c: ...
+    run = self.install_tx
+    async with self.install_tx(ALIASES, tables=TABLES) as c: ...
+"""
+    assert install_findings(planted, "x.py") == [
+        (6, "ALIASES model_aliases,provider_connections"),
+        (7, "unreadable x.py"),
+        (8, "alias x.py"),
+        (9, "unreadable x.py"),
+    ]

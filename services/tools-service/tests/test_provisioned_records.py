@@ -198,7 +198,7 @@ async def test_a_record_made_without_a_template_reads_as_neither(
     allow = _data(await c.get("/v1/egress", headers=people["james"]))
     assert all(h["templateId"] is None and h["protection"] is None for h in allow["hosts"])
     _data(await c.post("/v1/secrets", json={"name": "TEAM_KEY", "value": "k"}, headers=people["sam"]), 201)
-    assert all(s["protection"] is None for s in _data(await c.get("/v1/secrets", headers=people["sam"])))
+    assert all(s["protection"] is None for s in _data(await c.get("/v1/secrets", headers=people["sam"]))["data"])
     _data(await c.post("/v1/egress/hosts/remove", json={"value": HOST}, headers=people["sam"]))
 
 

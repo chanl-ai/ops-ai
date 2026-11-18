@@ -44,7 +44,7 @@ class Members:
     ) -> None:
         """`can(area, action)` in the actor's team, from the roles the database holds now rather than the token's, so a
         demoted admin loses the right at once. The refusal keeps its documented code, `admin_required`."""
-        roles = self.roles or RoleStore(self.store.db)
+        roles = self.roles or RoleStore(self.store)
         p, access = await roles.live(actor.tenant_id, actor.user_id, team=actor.team_id)
         access.can(p, area, action, team=actor.team_id, what="this team", code="admin_required", in_team=in_team)
 

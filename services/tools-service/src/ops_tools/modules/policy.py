@@ -13,6 +13,8 @@ from ops_access import BY_KEY, Access, effective_answer, publish_mode, team_on
 from ops_identity import ActingForPerson, Principal, ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import Forbidden
 
+from ..store.modules import Module, ModuleColumns, Operation
+
 Mode = Literal["always", "major", "never"]
 MODES: tuple[Mode, ...] = ("always", "major", "never")
 # The identity headers a caller sent; agents-service resolves them exactly as tools-service did.
@@ -43,24 +45,34 @@ class PublishPolicy:
             return ToolsMode("always", unreadable=True)
 
 
+# appChanges switches whose off value lets a write run that would otherwise wait.
+LOOSENING = frozenset({"makersAsk", "testRunsAsk"})
+
+
 class WriteApprovals:
     def __init__(self, platform: ServiceClient | None = None) -> None:
         """The team's approval settings for agent changes (`appChanges`, `appChangesByApp`), read live from
         platform-service on each call with this service's `settings:view` token for the tenant, as PublishPolicy
-        reads publishReview. Without `platform` no team has set anything."""
+        reads publishReview. Without `platform` the settings cannot be read, which is answered as a failed read."""
         self.platform = platform
 
     async def levels(self, tenant_id: str, team_id: str | None) -> tuple[Any, dict[str, Any]]:
-        """(team level, per-app levels) for `team_id`. The team level is None when the policy cannot be read, which
-        `effective_answer` counts as waiting, so a failed read never lets a write through unapproved."""
+        """(team level, per-app levels) for `team_id`. The team level is None when the policy cannot be read: the
+        gateway then refuses the write (approval_rules_unavailable) and `effective_answer` shows it as waiting."""
         if self.platform is None:
-            return {}, {}
+            return None, {}
         try:
             team = await self.platform.get("/v1/policies/appChanges", tenant=tenant_id)
             by_app = await self.platform.get("/v1/policies/appChangesByApp", tenant=tenant_id)
             held = dict(team.get("value") or {})
             # `*` is the workspace's own value (a new workspace's makersAsk off); a team's saved part wins over it.
-            of_team = {**dict(held.get("*") or {}), **dict(held.get(team_id) or {})} if team_id else None
+            workspace = dict(held.get("*") or {})
+            if team_id:
+                of_team = {**workspace, **dict(held.get(team_id) or {})}
+            else:
+                # A caller naming no team waits where the workspace asks, and keeps every wait it had: the switches
+                # that only let writes through (makers' asks off, test runs not asking) are not taken from `*`.
+                of_team = {k: v for k, v in workspace.items() if not (k in LOOSENING and v is False)}
             apps = dict(by_app.get("value") or {}).get(team_id) if team_id else None
             return (of_team or {}), dict(apps or {})
         except (ServiceCallError, ServiceUnreachable, KeyError, TypeError, ValueError, AttributeError):
@@ -70,7 +82,7 @@ class WriteApprovals:
         self,
         tenant_id: str,
         team_id: str | None,
-        module: dict[str, Any] | None,
+        module: Module | None,
         *,
         access: str,
         setting: str | bool | None,
@@ -112,12 +124,12 @@ class WriteApprovals:
         return effective_answer(tool=own, app=app, team=team, channel=channel, test_account=test_account)
 
 
-def maker_asks(module: dict[str, Any] | None, tool: str | None) -> bool:
+def maker_asks(module: Module | None, tool: str | None) -> bool:
     """Whether the tool's reviewer answer is its maker's: a plugin's operation (its row has no editor, so the answer is
     the manifest's) or a seeded one that declared the wait (requires_approval true beside it)."""
     if not module or not tool:
         return False
-    operations: list[dict[str, Any]] = module.get("operations") or []
+    operations = module["operations"]
     op = next((o for o in operations if o.get("name") == tool), None)
     if op is None or op.get("approval_mode") != "reviewer":
         return False
@@ -129,7 +141,7 @@ def tool_key(tool: str) -> str:
     return f"tool:{tool}"
 
 
-def tool_mode(op: dict[str, Any]) -> str | None:
+def tool_mode(op: Operation) -> str | None:
     """The tool's own answer (none, person or reviewer) from its operation row: its approval_mode only. The older
     requires_approval flag is not read: a stored true cannot be told from the old default, so it follows the tool's
     app, then the team."""
@@ -202,7 +214,7 @@ def own_request_refusal(
     return None
 
 
-def app_ids(module: dict[str, Any]) -> set[str]:
+def app_ids(module: ModuleColumns) -> set[str]:
     """The ids a module's app goes by on the Apps page: its plugin's card, its connection, or the module itself."""
     template = str(module.get("template_id") or "")
     ids = {f"module:{module['id']}"}

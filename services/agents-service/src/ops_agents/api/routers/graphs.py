@@ -22,7 +22,7 @@ from sse_starlette import EventSourceResponse
 
 from ops_agents.graphs.definition import InvalidDefinitionError, WorkflowDefinition, validate
 from ops_agents.graphs.metering import budget_from
-from ops_contracts.chat import WireModel
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import (
     Conflict,
     Forbidden,
@@ -31,12 +31,16 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, In, ListResult
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListQuery
+from ops_store import isolation
 
 from ...store.leases import LeaseHeldError
+from ...store.thread_list import threads_page
 from .. import hitl_facade
-from ..agent_registry import refuse_new_turns
+from ..agent_calls import agent_team
+from ..agent_registry import live_agent, refuse_new_turns, registry
 from ..auth import (
     Principal,
     graph_target,
@@ -50,13 +54,13 @@ from ..auth import (
     started_by,
 )
 from ..chat_budget import cap_at_agent, run_api_answer
-from ..chat_threads import may_read_thread
+from ..chat_threads import may_read_thread, thread_reader
 from ..child_runs import acting_for
 from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..event_log import REVIEW_KINDS
 from ..publish_policy import decide
-from ..review_text import describe_call
+from ..review_text import describe_call, operations
 from ..runs import config, definition, execute, graph_store, pending, require_graphs, resolve
 from ..schemas import (
     SSE_RESPONSE,
@@ -82,7 +86,7 @@ MAX_CONCURRENCY = 4
 RECURSION_LIMIT = 60
 
 
-class BudgetInput(WireModel):
+class BudgetInput(In):
     """Caps for one thread (E12); an unset cap does not limit. Cost is in the price table's currency."""
 
     max_calls: int | None = Field(default=None, ge=0)
@@ -90,7 +94,7 @@ class BudgetInput(WireModel):
     max_cost: Decimal | None = Field(default=None, ge=0)
 
 
-class ThreadInput(WireModel):
+class ThreadInput(In):
     graph: str
     metadata: dict[str, Any] = Field(default_factory=dict[str, Any])
     # For a definition-built workflow: the version to pin; the latest when left out.
@@ -103,15 +107,15 @@ class ThreadInput(WireModel):
     budget: BudgetInput | None = None
 
 
-class MigrateInput(WireModel):
+class MigrateInput(In):
     to_version: int
 
 
-class PublishInput(WireModel):
+class PublishInput(In):
     definition: dict[str, Any]
 
 
-class Decision(WireModel):
+class Decision(In):
     decision: Literal["approved", "rejected"]
     reason: str | None = None
     step_up_token: str | None = None
@@ -122,7 +126,7 @@ class Decision(WireModel):
     budget: BudgetInput | None = None
 
 
-class RunInput(WireModel):
+class RunInput(In):
     run_id: str | None = None
     input: dict[str, Any] | None = None
     resume: Decision | None = None
@@ -161,7 +165,9 @@ def _thread_view(row: dict[str, Any]) -> dict[str, Any]:
     status_code=201,
     responses={200: {"model": Envelope[ThreadCreated], "description": "An existing thread with that external key"}},
 )
-async def create_thread(rt: Rt, me: Me, body: ThreadInput) -> JSONResponse:
+async def create_thread(rt: Rt, me: Me, _: Tx, body: ThreadInput) -> JSONResponse:
+    """A thread and its budget, written in the request transaction, so a failure between the two leaves no thread
+    without its budget. Nothing here calls another service: the key admission port answers in this process."""
     # A thread is made to run: the run-start rule, in the team it is made in.
     require_runs_start(me, team_id=None, what=f"graph {body.graph}")
     key_pin = require_key_reaches(me, *graph_target(body.graph))
@@ -175,6 +181,11 @@ async def create_thread(rt: Rt, me: Me, body: ThreadInput) -> JSONResponse:
     thread_id = new_id("gth")
     version: int | None = None
     digest: str | None = None
+    if body.graph.startswith("agent:") and body.graph.removeprefix("agent:") not in await registry(rt).tenant_owners(
+        {body.graph.removeprefix("agent:")}
+    ):
+        # A deleted agent and another tenant's read the same: the catalogue holds every tenant's.
+        raise ValidationFailed(f"Unknown graph {body.graph}: no such agent.")
     if body.graph.startswith("agent:") and rt.catalog.agent(body.graph.removeprefix("agent:")) is None:
         # Its graph stays compiled while turns under way drain; no new thread starts on it.
         await refuse_new_turns(rt, body.graph.removeprefix("agent:"))
@@ -249,9 +260,14 @@ async def _thread_for(rt: Runtime, me: Principal, thread_id: str) -> tuple[dict[
     return row, graph
 
 
-@router.get("", response_model=Envelope[list[ThreadView]])
-async def list_threads(rt: Rt, me: Me, graph: str | None = None) -> JSONResponse:
-    return ok([_thread_view(r) for r in await _store(rt).threads(graph) if may_read_thread(r, me)])
+@router.get("", response_model=Envelope[ListResult[ThreadView]])
+async def list_threads(rt: Rt, me: Me, _: Tx, q: ListQuery, graph: str | None = None) -> JSONResponse:
+    """The threads the caller may read on the shared list contract, of one graph when `graph` is given: newest update
+    first (`sortBy` updatedAt), then by id. Who reads which thread (`may_read_thread`) is decided in the
+    list's SQL (`store.thread_list`), so the page and its total count only readable threads."""
+    del graph  # read from `q.filters`; declared so the document and the SDKs name it
+    listed = await threads_page(rt.db, q, thread_reader(me))
+    return ok({**listed, "data": [_thread_view(dict(r)) for r in listed["data"]]})
 
 
 async def _worded_failure(rt: Runtime, values: dict[str, Any]) -> dict[str, Any]:
@@ -271,9 +287,23 @@ async def _worded_failure(rt: Runtime, values: dict[str, Any]) -> dict[str, Any]
 
 @router.get("/{thread_id}/state", response_model=Envelope[ThreadState])
 async def thread_state(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
-    row, graph = await _thread_for(rt, me, thread_id)
-    snap = await graph.aget_state(_config(thread_id))
-    pending = _pending(snap)
+    """One transaction for the thread, its checkpoint, timers and usage. The tool directory is asked after it, with
+    nothing open, for the wording of a refused call and of a step's options; a step with options then reads its
+    workflow version in a second."""
+    async with isolation.request_transaction():
+        row, graph = await _thread_for(rt, me, thread_id)
+        snap = await graph.aget_state(_config(thread_id))
+        pending = _pending(snap)
+        sla = await sla_view(rt, thread_id)
+        cost = totals_view(await rt.usage.totals(thread_id)) if rt.usage else None
+        budget = budget_view(await rt.usage.budget(thread_id)) if rt.usage else None
+    values = with_children(snap.values or {}, row["meta"] or {})
+    if values.get("tool_error") or pending:
+        await operations(rt)
+    interrupt = None
+    if pending:
+        async with isolation.request_transaction():
+            interrupt = await hitl_facade.interrupt_view(rt, row, pending[0])
     return ok(
         {
             "threadId": thread_id,
@@ -281,12 +311,12 @@ async def thread_state(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
             "version": row["version"],
             "digest": row["digest"],
             "status": row["status"],
-            "values": jsonable_encoder(await _worded_failure(rt, with_children(snap.values or {}, row["meta"] or {}))),
+            "values": jsonable_encoder(await _worded_failure(rt, values)),
             "next": list(snap.next),
-            "interrupt": await hitl_facade.interrupt_view(rt, row, pending[0]) if pending else None,
-            "sla": await sla_view(rt, thread_id),
-            "cost": totals_view(await rt.usage.totals(thread_id)) if rt.usage else None,
-            "budget": budget_view(await rt.usage.budget(thread_id)) if rt.usage else None,
+            "interrupt": interrupt,
+            "sla": sla,
+            "cost": cost,
+            "budget": budget,
         }
     )
 
@@ -297,6 +327,9 @@ def _frame(event: dict[str, Any]) -> dict[str, str]:
 
 @router.post("/{thread_id}/runs/stream", response_model=None, responses=SSE_RESPONSE)
 async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSourceResponse:
+    """A run of the thread, streamed as it goes. No request transaction: the run calls models and tools while it
+    streams, and each step's store call (the run's journal, the lease, the thread's status) commits on its own so a
+    frame sent is a frame kept even if the stream breaks."""
     store = _store(rt)
     row, graph = await _thread_for(rt, me, thread_id)
     if (body.input is None) == (body.resume is None):
@@ -378,10 +411,12 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
             agent_id = row["graph"].removeprefix("agent:")
         elif row["graph"] == "agent_wrapper" and isinstance(body.input, dict) and body.input.get("agent_id"):
             agent_id = str(body.input["agent_id"])
+            # The caller names the agent: another tenant's id is NotFound, since the catalogue holds every tenant's.
+            await agent_team(rt, agent_id)
         if agent_id is not None:
             await refuse_new_turns(rt, agent_id)
             # The thread's budget is the agent's caps, or the caller's where lower, from its first turn on.
-            if (agent := rt.catalog.agent(agent_id)) is not None:
+            if (agent := await live_agent(rt, agent_id)) is not None:
                 await cap_at_agent(rt, thread_id, agent)
         graph_input = body.input
         journal_input = {"input": body.input}
@@ -411,7 +446,7 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
 
 
 @router.get("/{thread_id}/runs", response_model=Envelope[list[RunJournalEntry]])
-async def thread_runs(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
+async def thread_runs(rt: Rt, me: Me, _: Tx, thread_id: str) -> JSONResponse:
     """The thread's run journal: each run's kind (input, resume, recovery), status and node sequence."""
     await _thread_for(rt, me, thread_id)
     rows = await _store(rt).runs(thread_id)
@@ -442,7 +477,8 @@ async def thread_runs(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
 async def migrate(rt: Rt, me: Me, thread_id: str, body: MigrateInput) -> JSONResponse:
     """Moves a paused thread to another version of its workflow. Allowed only while it waits on an interrupt, and only
     when every node it is waiting in exists under the same name in the target, so the resume lands on a real node.
-    Choosing the version a run continues on is a builder's step: a builder or admin of the thread's team."""
+    Choosing the version a run continues on is a builder's step: a builder or admin of the thread's team.
+    No request transaction: the thread's checkpoint is read through the checkpointer, which keeps its own."""
     row, graph = await _thread(rt, thread_id)
     require_builder(
         me,
@@ -478,7 +514,8 @@ versions_router = APIRouter(prefix="/v1/graphs", dependencies=[Depends(principal
 
 
 @versions_router.get("/{name}/versions", response_model=Envelope[list[GraphVersion]])
-async def list_versions(rt: Rt, name: str) -> JSONResponse:
+async def list_versions(rt: Rt, _: Tx, name: str) -> JSONResponse:
+    """The graph's stored versions, oldest first."""
     return ok(
         [
             {"name": v["name"], "version": v["version"], "digest": v["digest"], "createdAt": v["created_at"]}
@@ -492,7 +529,8 @@ async def publish_version(rt: Rt, me: Me, name: str, body: PublishInput) -> JSON
     """Stores the definition as the graph's next version and points new threads at it, with no review. A builder or
     admin of the team that owns the graph's registry workflow publishes (the acting team for a graph the registry does
     not hold). A registry workflow goes live through its review (POST /v1/workflows/{id}/publish-requests), so outside
-    the team's publish policy this route refuses one with 409 `review_required`."""
+    the team's publish policy this route refuses one with 409 `review_required`. No request transaction: the
+    publish policy is read from platform-service between its reads and its write."""
     held = await registry_held(rt, name)
     if held is None:
         require_builder(me, area="workflows", team_id=me.team_id, action="publish", what=f"graph {name}")
@@ -567,7 +605,7 @@ def owned(metadata: dict[str, Any] | None, me: Principal) -> dict[str, Any]:
 async def _agent_budget(rt: Runtime, thread_id: str, graph: str) -> None:
     """An agent's own thread takes the agent's caps when it is made, or the caller's where lower; the shared wrapper
     learns its agent from the first input and takes them then."""
-    if graph.startswith("agent:") and (agent := rt.catalog.agent(graph.removeprefix("agent:"))) is not None:
+    if graph.startswith("agent:") and (agent := await live_agent(rt, graph.removeprefix("agent:"))) is not None:
         await cap_at_agent(rt, thread_id, agent)
 
 

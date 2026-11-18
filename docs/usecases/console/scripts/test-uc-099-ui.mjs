@@ -1,6 +1,6 @@
 // uc-099 a viewer sees the team's records read-only, ui layer: docs/usecases/console/viewer-sees-read-only-pages.md.
 // Signed in through platform-service as Ravi (viewer on team_ops) and, as the control, James (builder on team_ops).
-// The console reads what can() grants each person from GET /v1/me/permissions and shows create, edit, publish,
+// The console reads what can() grants each person from the `permissions` field of GET /v1/me and shows create, edit, publish,
 // pause and delete only to someone it lets edit the team's records.
 import { AGENTS_PORT, PLATFORM_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
@@ -11,7 +11,7 @@ const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFO
 async function signIn(browser, consoleUrl, email, errors, mes) {
   const page = await (await browser.newContext({ viewport: { width: 1440, height: 1000 } })).newPage();
   page.on('pageerror', (e) => errors.push(`${email}: ${e.message}`));
-  page.on('response', (r) => r.url().endsWith('/v1/me/permissions') && mes.push(`${email} ${r.status()}`));
+  page.on('response', (r) => /\/v1\/me(\?|$)/.test(r.url()) && r.json().then((b) => b?.data?.permissions && mes.push(`${email} ${r.status()}`), () => undefined));
   await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill('northfield-demo');
@@ -83,7 +83,7 @@ await withUiStack(
       const jamesWorkflow = { notice: await james.getByTestId('read-only-notice').count(), more: await james.getByRole('button', { name: 'More actions' }).count() };
       check('a builder opens the same workflow with its actions and no View only notice', jamesWorkflow.notice === 0 && jamesWorkflow.more === 1, jamesWorkflow);
 
-      check('what each person may do is read from GET /v1/me/permissions', mes.some((m) => m.startsWith(`${RAVI} 200`)) && mes.some((m) => m.startsWith(`${JAMES} 200`)), mes);
+      check('what each person may do is read from the permissions GET /v1/me returns', mes.some((m) => m.startsWith(`${RAVI} 200`)) && mes.some((m) => m.startsWith(`${JAMES} 200`)), mes);
       check('no page errors', errors.length === 0, errors);
     } finally {
       await browser.close();

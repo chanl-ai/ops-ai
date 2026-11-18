@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { ThemeProvider } from 'next-themes';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 
 import { AppToaster } from '@/components/shared/app-toaster';
@@ -69,6 +70,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
       }),
   );
   return (
+    // next-themes holds the choice and updates the class after load; layout.tsx sets it before the first paint.
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange scriptProps={{ type: "application/json" }}>
     <QueryClientProvider client={client}>
       <SavedQueries />
       <TooltipProvider delayDuration={200}>
@@ -77,5 +80,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <UiFeedback enabled={uiFeedback} />
       </TooltipProvider>
     </QueryClientProvider>
+    </ThemeProvider>
   );
 }

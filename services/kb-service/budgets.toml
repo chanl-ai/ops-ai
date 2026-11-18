@@ -1,0 +1,72 @@
+# The statement budget of each kb-service GET at 5 and 50 rows (ops_service_kit.testing.budget_check, data-access
+# standard DA1 and DA6), measured on PostgreSQL by tests/test_statement_budget.py. A route is one transaction on one
+# connection, with no other service called while it is open, unless its row lists more and says why.
+
+["GET /health"]
+queries = 0
+
+["GET /health/background"]
+queries = 0
+
+# The item, its source, pieces, versions and copy in one transaction; documents-service is asked with none open.
+["GET /v1/items/{item_id}"]
+queries = 6
+
+# The page, its count, the health GROUP BY, the page's links, and its sources with their item counts.
+["GET /v1/knowledge-bases"]
+queries = 6
+
+["GET /v1/knowledge-bases/options"]
+queries = 1
+
+["GET /v1/knowledge-bases/refs"]
+queries = 1
+
+# The base's reads in one transaction; agents-service is asked who uses the base with none open.
+["GET /v1/knowledge-bases/{kb_id}"]
+queries = 8
+
+["GET /v1/knowledge-bases/{kb_id}/documents"]
+# The base, its links and sources, then the page in SQL: a count, the page, and one per facet (seven); rows are no
+# longer all read, so the number holds at any size.
+queries = 13
+
+["GET /v1/knowledge-changes"]
+queries = 8
+
+["GET /v1/knowledge-changes/{change_id}"]
+queries = 5
+
+["GET /v1/knowledge/lookups"]
+queries = 4
+
+["GET /v1/knowledge/source-kinds"]
+queries = 0
+
+# The page, its count, a GROUP BY per facet, and the page's item counts, bases fed and running runs.
+["GET /v1/sources"]
+queries = 7
+
+["GET /v1/sources/from-plugin"]
+not_budgeted = "requires the plugin query parameter, which the budget's call by path cannot send"
+
+["GET /v1/sources/{source_id}"]
+queries = 8
+
+# Two transactions, one per store read (the source, its items); the sampled files are read from storage with none open.
+["GET /v1/sources/{source_id}/ai-estimate"]
+queries = 3
+transactions = 2
+connections = 2
+
+["GET /v1/sources/{source_id}/items"]
+queries = 5
+
+["GET /v1/sources/{source_id}/runs"]
+queries = 5
+
+["GET /v1/sources/{source_id}/tombstones"]
+queries = 2
+
+["GET /v1/sync-runs/{run_id}"]
+queries = 1

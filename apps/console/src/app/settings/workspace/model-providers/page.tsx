@@ -22,6 +22,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCan } from '@/hooks/me-queries';
+import { serverPagination } from '@/components/shared/server-pagination';
+import { useCreatedRows } from '@/hooks/use-created-rows';
+import { useListParams } from '@/hooks/use-list-params';
 import { useCreateProviderConnection, useProviderConnections } from '@/hooks/provider-connection-queries';
 import { useProviderKeys, useRemoveProviderKey, useSaveProviderKey } from '@/hooks/provider-key-queries';
 import { relativeTime } from '@/lib/format';
@@ -32,7 +35,7 @@ import type { ProviderKey } from '@/lib/types/provider-keys';
 const NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,119}$/;
 
 /** Adds a key, or replaces the value of `replacing`. The value goes to models-service once and is never shown again. */
-function KeyDialog({ open, onOpenChange, replacing }: { open: boolean; onOpenChange: (o: boolean) => void; replacing: string | null }) {
+function KeyDialog({ open, onOpenChange, replacing, onSaved }: { open: boolean; onOpenChange: (o: boolean) => void; replacing: string | null; onSaved: (key: ProviderKey) => void }) {
   const save = useSaveProviderKey();
   const [name, setName] = React.useState('');
   const [value, setValue] = React.useState('');
@@ -44,7 +47,8 @@ function KeyDialog({ open, onOpenChange, replacing }: { open: boolean; onOpenCha
     if (!NAME.test(name)) return setError('Use letters, digits, _, . and -, starting with a letter or digit, up to 120.');
     if (!value.trim()) return setError('Paste the provider’s key.');
     try {
-      await save.mutateAsync({ name, value: value.trim() });
+      const saved = await save.mutateAsync({ name, value: value.trim() });
+      if (!replacing) onSaved(saved);
       // Cleared at once, so the key leaves the page with the dialog.
       setValue('');
       toast.success(replacing ? `Replaced ${name}` : `Saved ${name}`, { description: 'The next model call that signs in with it uses this value.' });
@@ -184,9 +188,13 @@ function columns(onReplace: (k: ProviderKey) => void, onRemove: (k: ProviderKey)
  */
 export default function ModelProvidersPage() {
   const admin = useCan('settings', 'manage') === true;
-  const keys = useProviderKeys(admin);
-  const connections = useProviderConnections(admin);
+  const keyList = useListParams('name');
+  const connectionList = useListParams('name');
+  const keys = useProviderKeys(keyList.params, admin);
+  const connections = useProviderConnections(connectionList.params, admin);
   const connect = useCreateProviderConnection();
+  const newKeys = useCreatedRows<ProviderKey>();
+  const newConnections = useCreatedRows<ProviderConnection>();
   const [connecting, setConnecting] = React.useState(false);
   const remove = useRemoveProviderKey();
   const [editing, setEditing] = React.useState<{ replacing: string | null } | null>(null);
@@ -228,12 +236,15 @@ export default function ModelProvidersPage() {
             ) : (
               <DataTableWithViews
                 columns={connectionColumns}
-                data={connections.data ?? []}
+                data={connections.data?.data ?? []}
                 getRowId={(c) => c.id}
                 searchColumn="name"
                 searchPlaceholder="Search connections…"
+                created={newConnections}
+                onColumnFiltersChange={connectionList.onColumnFiltersChange}
+                serverPagination={serverPagination(connectionList, connections)}
                 hideViewSwitcher
-                emptyState={<ListEmpty icon={Cpu} noun="provider connections" filtered={false} createLabel="Connect a provider" onCreate={() => setConnecting(true)} description="Connect the endpoint your model calls go to, such as an Azure OpenAI resource." />}
+                emptyState={<ListEmpty icon={Cpu} noun="provider connections" filtered={connectionList.isFiltered} createLabel="Connect a provider" onCreate={() => setConnecting(true)} description="Connect the endpoint your model calls go to, such as an Azure OpenAI resource." />}
               />
             )}
           </section>
@@ -241,24 +252,28 @@ export default function ModelProvidersPage() {
             <h2 className="text-sm font-medium">Keys</h2>
             <DataTableWithViews
               columns={cols}
-              data={keys.data ?? []}
+              data={keys.data?.data ?? []}
               getRowId={(k) => k.name}
               searchColumn="name"
               searchPlaceholder="Search key names…"
+              created={newKeys}
+              onColumnFiltersChange={keyList.onColumnFiltersChange}
+              serverPagination={serverPagination(keyList, keys)}
               hideViewSwitcher
-              emptyState={<ListEmpty icon={KeyRound} noun="model provider keys" filtered={false} createLabel="Add key" onCreate={() => setEditing({ replacing: null })} description="Add the key your model provider gave you, named the way its connection refers to it." />}
+              emptyState={<ListEmpty icon={KeyRound} noun="model provider keys" filtered={keyList.isFiltered} createLabel="Add key" onCreate={() => setEditing({ replacing: null })} description="Add the key your model provider gave you, named the way its connection refers to it." />}
             />
           </section>
         </div>
       )}
-      <KeyDialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)} replacing={editing?.replacing ?? null} />
+      <KeyDialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)} replacing={editing?.replacing ?? null} onSaved={newKeys.show} />
       <ConnectProviderDialog
         open={connecting}
         onOpenChange={setConnecting}
-        keys={(keys.data ?? []).map((k) => k.name)}
+        hasKeys={!!keys.data?.pagination.total}
         saving={connect.isPending}
         onSave={async (input) => {
-          await connect.mutateAsync(input);
+          const made = await connect.mutateAsync(input);
+          newConnections.show({ apiVersion: null, region: null, observedRegion: null, regionMismatch: null, ...input, id: made.id });
           toast.success(`Connected ${input.name}`, { description: 'Point an alias at it to use it.' });
         }}
       />

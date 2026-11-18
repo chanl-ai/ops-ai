@@ -28,6 +28,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from deployed_guard import STAGING_HOST_VAR, host_refusal, script_refusal
 from ops_service_kit.opa_server import opa_server
 from ops_signin.fake_idp import self_signed
 
@@ -46,6 +47,12 @@ def _start(
     argv: list[str], *, cwd: Path, env: dict[str, str], stdin: Any = None, stdout: Any = None, stderr: Any = None
 ) -> subprocess.Popen[bytes]:
     """A process in its own group, so stopping it reaches what its wrapper (uv) started."""
+    # A service signs callers in unless told otherwise, so a run that names no sign-in gets the fixed dev user; and one
+    # given platform-service's internal port is given its address, as every service here runs on this machine.
+    env = {"OPS_AUTH_MODE": "dev", **env}
+    # Whatever address the shell exported is the shared stack's, so the run's own port decides.
+    if internal_port := env.get("OPS_PLATFORM_INTERNAL_PORT"):
+        env["OPS_PLATFORM_INTERNAL_URL"] = f"http://127.0.0.1:{internal_port}"
     return subprocess.Popen(argv, cwd=cwd, env=env, stdin=stdin, stdout=stdout, stderr=stderr, start_new_session=True)
 
 
@@ -69,6 +76,12 @@ def _stop(proc: subprocess.Popen[bytes], grace: float = 10) -> None:
 
 
 ROOT = Path(__file__).resolve().parents[3]
+# A deployed host to run the same scripts against (`OPS_USECASE_BASE_URL=https://<host>`): its one origin answers for
+# every service, its database is migrated by its own deploy, and nothing here starts a process or makes a database.
+BASE_URL = os.environ.get("OPS_USECASE_BASE_URL", "").rstrip("/")
+USECASES = Path(__file__).resolve().parents[1]
+# The services a deployed host runs; a fake provider, a proxy or a sign-in server stays on this machine.
+DEPLOYED = frozenset({"agents", "tools", "models", "kb", "files", "documents", "platform", "runner"})
 # The plugins checkout every use case loads plugins from; nightly and worktree runs point it elsewhere.
 PLUGINS_REPO = Path(os.environ.get("OPS_PLUGINS_REPO") or ROOT.parent / "ops-ai-plugins")
 AGENTS_DIR = ROOT / "services" / "agents-service"
@@ -213,13 +226,52 @@ def _env() -> dict[str, str]:
     # A run loads only the plugins its use case names (OPS_PLUGIN_PATHS); the repo's plugins/ folder holds whatever was
     # installed there last, and a plugin in both places loads from neither.
     env.setdefault("OPS_PLUGINS_DIR", _EMPTY_PLUGINS)
+    # Where the run's platform-service keeps its internal port, for every process a use case starts with sign-in on:
+    # the address make exports is the shared stack's.
+    env["OPS_PLATFORM_INTERNAL_URL"] = f"http://127.0.0.1:{PLATFORM_INTERNAL_PORT}"
+    # A service signs callers in unless told otherwise; a run that names no sign-in gets the fixed dev user.
+    env.setdefault("OPS_AUTH_MODE", "dev")
     return env
+
+
+_GUARDED = False
+
+
+def _deployed_guard() -> None:
+    """Every use of a deployed host passes here first: its host is the one in OPS_USECASE_STAGING_HOST and not named
+    for production, and the script that is running is an api script the registry marks safe for a deployed host."""
+    global _GUARDED
+    if not BASE_URL or _GUARDED:
+        return
+    main = getattr(sys.modules.get("__main__"), "__file__", None)
+    reason = host_refusal(BASE_URL, os.environ.get(STAGING_HOST_VAR)) or script_refusal(
+        main, (USECASES / "README.md").read_text()
+    )
+    if reason:
+        raise SystemExit(f"FAIL refused by the deployed-host guard: {reason}")
+    _GUARDED = True
+
+
+def _prepare(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes] | None:
+    """A migration or seed a run does before it starts a service. A deployed host (OPS_USECASE_BASE_URL) had its
+    own at deploy, and a script must not write to its database."""
+    if BASE_URL:
+        _deployed_guard()
+        return None
+    return subprocess.run(argv, **kwargs)
 
 
 @contextmanager
 def _serve(
     name: str, argv: list[str], port: int, env: dict[str, str], *, health: str = "/health", cwd: Path = AGENTS_DIR
 ) -> Generator[str]:
+    if BASE_URL and name in DEPLOYED:
+        _deployed_guard()
+        # The service is already up behind the origin: it must answer its health route, and it is never stopped here.
+        if httpx.get(f"{BASE_URL}{health}", timeout=15).status_code != 200:
+            raise SystemExit(f"FAIL {BASE_URL}{health} is not healthy")
+        yield BASE_URL
+        return
     if not _port_free(port):
         raise SystemExit(f"FAIL port {port} is already in use; stop that process or set OPS_USECASE_*_PORT")
     LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -313,12 +365,12 @@ def models(settings: dict[str, str] | None = None) -> Generator[str]:
     """models-service on the use-case database, seeded with its scripted aliases (bank-standard, bank-reasoning,
     bank-embed). `settings` adds OPS_* values, e.g. OPS_MODELS_FAKE_OPENAI_URL. Yields its base URL."""
     migrate = ["uv", "run", "python", "scripts/scripted_server.py", "--port", "0", "--db", DB, "--migrate-only"]
-    subprocess.run(migrate, cwd=AGENTS_DIR, env=_env(), check=True, capture_output=True)
+    _prepare(migrate, cwd=AGENTS_DIR, env=_env(), check=True, capture_output=True)
     env = _env()
     env["OPS_DATABASE_URL"] = pg_url()
     env["OPS_MODELS_PORT"] = str(MODELS_PORT)
     env.update(settings or {})
-    subprocess.run(
+    _prepare(
         ["uv", "run", "alembic", "upgrade", "head"],
         cwd=ROOT / "services" / "models-service",
         env=env,
@@ -359,7 +411,7 @@ def kb(
     of the use case's own takes the same port."""
     # The agents chain creates the run's database; files-service and kb-service migrate into it after.
     migrate = ["uv", "run", "python", "scripts/scripted_server.py", "--port", "0", "--db", DB, "--migrate-only"]
-    subprocess.run(migrate, cwd=AGENTS_DIR, env=_env(), check=True, capture_output=True)
+    _prepare(migrate, cwd=AGENTS_DIR, env=_env(), check=True, capture_output=True)
     with ExitStack() as stack:
         store = stack.enter_context(files(files_dir, scanning="off", platform_auth=False, agents_url=agents_url))
         files_url = str(store.base_url).rstrip("/")
@@ -373,7 +425,7 @@ def kb(
         documents_url = str(reader.base_url).rstrip("/")
         if document_types:
             # The demo's document types (levy_notice v1 and its samples), which the seeded levy workflows name.
-            subprocess.run(
+            _prepare(
                 [
                     "uv", "run", "python", "scripts/seed_document_types.py",
                     "--documents", documents_url, "--files", files_url, "--dev",
@@ -396,7 +448,7 @@ def kb(
         # models-service and key that embed and write questions, the plugins it may read.
         env.update(given)
         kb_dir = ROOT / "services" / "kb-service"
-        subprocess.run(
+        _prepare(
             ["uv", "run", "alembic", "upgrade", "head"], cwd=kb_dir, env=env, check=True, capture_output=True
         )
         argv = ["uv", "run", "python", "-m", "ops_kb"]
@@ -419,8 +471,9 @@ def files(
     env["OPS_FILES_PORT"] = str(port)
     env["OPS_FILES_DIR"] = str(files_dir)
     env["OPS_FILES_SCANNING"] = scanning
-    if agents_url:
-        env["OPS_AGENTS_URL"] = agents_url
+    # files-service exits at start without an agents address: the run's agents-service, or its port when the run
+    # starts none, where the events wait in the outbox as nothing answers.
+    env["OPS_AGENTS_URL"] = agents_url or f"http://127.0.0.1:{AGENTS_PORT}"
     if platform_auth:
         env["OPS_AUTH_MODE"] = "platform"
         env["OPS_PLATFORM_URL"] = f"http://127.0.0.1:{PLATFORM_PORT}"
@@ -430,7 +483,7 @@ def files(
         # services in through platform-service would start this one in platform mode with no URL, and it exits.
         env["OPS_AUTH_MODE"] = "dev"
     files_dir_svc = ROOT / "services" / "files-service"
-    subprocess.run(
+    _prepare(
         ["uv", "run", "alembic", "upgrade", "head"], cwd=files_dir_svc, env=env, check=True, capture_output=True
     )
     argv = ["uv", "run", "python", "-m", "ops_files"]
@@ -469,7 +522,7 @@ def documents(
     # `env` adds OPS_* values a use case needs, e.g. platform sign-in (OPS_AUTH_MODE) beside agents and tools.
     env.update(extra)
     svc = ROOT / "services" / "documents-service"
-    subprocess.run(["uv", "run", "alembic", "upgrade", "head"], cwd=svc, env=env, check=True, capture_output=True)
+    _prepare(["uv", "run", "alembic", "upgrade", "head"], cwd=svc, env=env, check=True, capture_output=True)
     argv = ["uv", "run", "python", "-m", "ops_documents"]
     with _serve("documents", argv, port, env, cwd=svc) as base, httpx.Client(base_url=base, timeout=30) as c:
         yield c
@@ -493,7 +546,7 @@ def seed_fixture_knowledge(kb_url: str, files_url: str, platform_url: str | None
     script = str(Path(__file__).with_name("seed_fixture_knowledge.py"))
     argv = ["uv", "run", "python", script, "--kb", kb_url, "--files", files_url]
     argv += ["--platform", platform_url] if platform_url else []
-    subprocess.run(argv, cwd=ROOT, env=_env(), check=True, capture_output=True)
+    _prepare(argv, cwd=ROOT, env=_env(), check=True, capture_output=True)
 
 
 def free_port() -> int:
@@ -529,19 +582,20 @@ def runner() -> Generator[str]:
 
 
 @contextmanager
-def tools(settings: dict[str, str] | None = None) -> Generator[httpx.Client]:
+def tools(settings: dict[str, str] | None = None, *, approval_rules: bool = False) -> Generator[httpx.Client]:
     """The tools service (tool gateway) on the use-case database, deciding with an OPA of its own: the compose OPA's
     key and policy are rewritten by every other tools-service that starts."""
     migrate = ["uv", "run", "python", "scripts/scripted_server.py", "--port", "0", "--db", DB, "--migrate-only"]
-    subprocess.run(migrate, cwd=AGENTS_DIR, env=_env(), check=True, capture_output=True)
+    _prepare(migrate, cwd=AGENTS_DIR, env=_env(), check=True, capture_output=True)
     env = _env()
     env["OPS_DATABASE_URL"] = pg_url()
     env["OPS_GATEWAY_PORT"] = str(TOOLS_PORT)
     # A tool module review opens in agents-service's Reviews; a stack that publishes modules runs agents too.
     env.setdefault("OPS_AGENTS_URL", f"http://127.0.0.1:{AGENTS_PORT}")
-    # An app's resources join the copies documents-service keeps, on this run's port when the run names one.
-    if DOCUMENTS_PORT:
-        env.setdefault("OPS_DOCUMENTS_URL", f"http://127.0.0.1:{DOCUMENTS_PORT}")
+    # An app's resources join the copies documents-service keeps, and the file tools read through it and
+    # files-service: on this run's ports, or on a port nothing answers when the run starts neither.
+    env.setdefault("OPS_DOCUMENTS_URL", f"http://127.0.0.1:{DOCUMENTS_PORT or free_port()}")
+    env.setdefault("OPS_FILES_URL", f"http://127.0.0.1:{FILES_PORT or free_port()}")
     # and the knowledge sources the team made from a plugin, from this run's kb-service.
     env.setdefault("OPS_KB_URL", f"http://127.0.0.1:{KB_PORT}")
     # send_reply sends through the provider settings pick and fails with none: the dev fake writes each mail
@@ -553,12 +607,24 @@ def tools(settings: dict[str, str] | None = None) -> Generator[httpx.Client]:
     env.update(settings or {})
     # tools-service's own chain: the registry's tables, which its dev seed fills at start.
     tools_dir = ROOT / "services" / "tools-service"
-    subprocess.run(["uv", "run", "alembic", "upgrade", "head"], cwd=tools_dir, env=env, check=True, capture_output=True)
+    _prepare(["uv", "run", "alembic", "upgrade", "head"], cwd=tools_dir, env=env, check=True, capture_output=True)
     argv = ["uv", "run", "python", "-m", "ops_tools"]
-    with opa_server() as opa_url:
-        env["OPS_OPA_URL"] = opa_url
-        with _serve("tools", argv, TOOLS_PORT, env) as base, httpx.Client(base_url=base, timeout=30) as c:
-            yield c
+    with ExitStack() as stack:
+        # Every write is decided by the team's approval rules in platform-service, and without them tools-service
+        # refuses it (503 approval_rules_unavailable): `approval_rules` starts the run's own when the caller names
+        # none. Off by default: platform-service also feeds the new-host, publish and check-before-send readers, and
+        # use cases that make no writes are pinned to their answers without it.
+        if approval_rules and "OPS_PLATFORM_URL" not in env:
+            if not _PLATFORM_UP:
+                stack.enter_context(platform())
+            env["OPS_PLATFORM_URL"] = f"http://127.0.0.1:{PLATFORM_PORT}"
+        env["OPS_OPA_URL"] = stack.enter_context(opa_server())
+        base = stack.enter_context(_serve("tools", argv, TOOLS_PORT, env))
+        yield stack.enter_context(httpx.Client(base_url=base, timeout=30))
+
+
+# Set while this run's platform-service is up, so tools() points at it instead of starting a second one.
+_PLATFORM_UP = False
 
 
 @contextmanager
@@ -569,7 +635,7 @@ def platform(
     Shah admin, James Richardson builder, Maya Okafor approver; password `northfield-demo`), the public app and the
     internal one. Yields a client for each; the internal one answers only service tokens. `env` adds settings."""
     migrate = ["uv", "run", "python", "scripts/scripted_server.py", "--port", "0", "--db", DB, "--migrate-only"]
-    subprocess.run(migrate, cwd=AGENTS_DIR, env=_env(), check=True, capture_output=True)
+    _prepare(migrate, cwd=AGENTS_DIR, env=_env(), check=True, capture_output=True)
     settings = _env()
     settings["OPS_DATABASE_URL"] = pg_url()
     settings["OPS_PLATFORM_PORT"] = str(PLATFORM_PORT)
@@ -581,19 +647,26 @@ def platform(
     # Its events (a removed member's accounts) go to the run's own tools-service, never the shared stack's
     # that make exports; the relay keeps an event until that service answers.
     settings["OPS_TOOLS_URL"] = f"http://127.0.0.1:{TOOLS_PORT}"
+    # What a team still runs is asked of the run's own agents-service before the team is deleted.
+    settings["OPS_AGENTS_URL"] = f"http://127.0.0.1:{AGENTS_PORT}"
     settings |= env or {}
     platform_dir = ROOT / "services" / "platform-service"
-    subprocess.run(
+    _prepare(
         ["uv", "run", "alembic", "upgrade", "head"], cwd=platform_dir, env=settings, check=True, capture_output=True
     )
     argv = ["uv", "run", "python", "-m", "ops_platform"]
     internal = f"http://127.0.0.1:{PLATFORM_INTERNAL_PORT}"
+    global _PLATFORM_UP
     with (
         _serve("platform", argv, PLATFORM_PORT, settings, health="/v1/health", cwd=platform_dir) as base,
         httpx.Client(base_url=base, timeout=30) as public,
         httpx.Client(base_url=internal, timeout=30) as inner,
     ):
-        yield public, inner
+        _PLATFORM_UP = True
+        try:
+            yield public, inner
+        finally:
+            _PLATFORM_UP = False
 
 
 PROXY_PORT = int(os.environ.get("OPS_USECASE_PROXY_PORT", "8890"))
@@ -636,6 +709,7 @@ def fake_idp() -> Generator[str]:
     path (`/oidc/<name>`, `/saml/<name>`)."""
     port = str(IDP_PORT)
     argv = ["uv", "run", "python", "-m", "ops_signin.fake_idp", "--port", port, "--dns-port", port]
+    argv += ["--base", f"http://127.0.0.1:{port}"]
     with _serve("fake-idp", argv, IDP_PORT, _env(), health="/health", cwd=ROOT) as base:
         yield base
 
@@ -898,6 +972,20 @@ def data(res: httpx.Response) -> Any:
     return body.get("data") if isinstance(body, dict) else None
 
 
+def every_page(client: httpx.Client, path: str, *, headers: Any = None, **params: Any) -> list[dict[str, Any]]:
+    """Every row of a list on the shared list contract, page by page until `pagination.hasNext` is false; a page
+    holds at most the install's maximum, so one read is not the whole list."""
+    rows: list[dict[str, Any]] = []
+    page = 1
+    while True:
+        body: dict[str, Any] = data(client.get(path, params={**params, "page": page}, headers=headers)) or {}
+        rows += body.get("data") or []
+        paging: dict[str, Any] = body.get("pagination") or {}
+        if not paging.get("hasNext"):
+            return rows
+        page += 1
+
+
 # The four thread calls (POST /v1/threads, POST .../runs/stream, GET .../state, GET /v1/threads).
 SEED = AGENTS_DIR / "tests" / "fixtures" / "seed"
 EMAILS: list[dict[str, Any]] = json.loads((SEED / "dispute_emails.json").read_text())
@@ -976,7 +1064,7 @@ def publish_bank_module(gw: httpx.Client, host: str) -> str:
         )
     )
     hold = next(o for o in made["operations"] if o["name"] == "place_hold")
-    policy = {"approvers": 1, "stepUp": True}
+    policy = {"approvers": 1, "stepUp": True, "approvalMode": "reviewer"}
     data(gw.patch(f"/v1/tool-modules/{made['id']}/operations/{hold['id']}", json=policy))
     # The levy demo's webhook runs at once, as reimport_bank_module.py sets it.
     if hook := next((o for o in made["operations"] if o["name"] == "notify_webhook"), None):
@@ -989,6 +1077,10 @@ def publish_bank_module(gw: httpx.Client, host: str) -> str:
 def seed_demo_knowledge(kb_url: str, files_url: str, *, agents_url: str | None = None, fees: str = "v1") -> str:
     """services/kb-service/scripts/seed_demo_knowledge.py under dev auth: the two bases (reused on a second run), the
     K12 scores it prints, and with `agents_url` the demo agents wired to their bases and reads."""
+    if BASE_URL:
+        # The seed writes through the API, and a deployed host was seeded by its own deploy.
+        _deployed_guard()
+        raise SystemExit("FAIL refused by the deployed-host guard: a deployed host is not seeded from a use case")
     argv = ["uv", "run", "python", "scripts/seed_demo_knowledge.py", "--kb", kb_url, "--files", files_url, "--dev"]
     argv += ["--fees", fees]
     argv += ["--agents", agents_url] if agents_url else []
@@ -1022,7 +1114,7 @@ def demo() -> Generator[Demo]:
     through models-service on the fake OpenAI with the committed demo rules, agents call the core bank through
     tools-service, and kb-service holds the demo knowledge with ag_advisor and ag_policy wired to it."""
     migrate = ["uv", "run", "python", "scripts/scripted_server.py", "--port", "0", "--db", DB, "--migrate-only"]
-    subprocess.run(migrate, cwd=AGENTS_DIR, env=_env(), check=True, capture_output=True)
+    _prepare(migrate, cwd=AGENTS_DIR, env=_env(), check=True, capture_output=True)
     with ExitStack() as stack:
         provider = ExitStack()
         stack.callback(provider.close)
@@ -1030,7 +1122,7 @@ def demo() -> Generator[Demo]:
         models_url = stack.enter_context(models({"OPS_MODELS_FAKE_OPENAI_URL": fake}))
         bank = stack.enter_context(core_bank())
         agents_url = f"http://127.0.0.1:{AGENTS_PORT}"
-        gw = stack.enter_context(tools({**bank["settings"], "OPS_AGENTS_URL": agents_url}))
+        gw = stack.enter_context(tools({**bank["settings"], "OPS_AGENTS_URL": agents_url}, approval_rules=True))
         files = stack.enter_context(tempfile.TemporaryDirectory(prefix="usecase-kb-"))
         kb_client = stack.enter_context(kb(Path(files)))
         kb_url = str(kb_client.base_url).rstrip("/")

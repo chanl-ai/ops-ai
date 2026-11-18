@@ -136,6 +136,30 @@ async def test_a_draft_answers_only_once_approved_and_cites_its_source_passage(c
     assert again.status_code == 409 and again.json()["error"]["code"] == "draft_decided", again.text
 
 
+async def test_a_reviewers_reason_is_stored_with_the_decision_and_served(client: httpx.AsyncClient) -> None:
+    await drafted(client)
+    waiting = await queue(client)
+    assert all(d["decisionReason"] is None for d in waiting), "no decision, no reason"
+    first, second = waiting
+    url = "/v1/knowledge-changes/decide"
+    approved = data(await client.post(url, json={"ids": [first["id"]], "decision": "approve", "reason": "Checked."}))
+    rejected = data(await client.post(url, json={"ids": [second["id"]], "decision": "reject", "reason": "Wrong."}))
+    assert (approved[0]["decisionReason"], rejected[0]["decisionReason"]) == ("Checked.", "Wrong.")
+    served = data(await client.get(f"/v1/knowledge-changes/{first['id']}"))
+    assert served["decisionReason"] == "Checked."
+    too_long = await client.post(url, json={"ids": [first["id"]], "decision": "reject", "reason": "x" * 501})
+    assert too_long.status_code == 400, too_long.text
+
+
+async def test_a_decision_with_no_reason_serves_null(client: httpx.AsyncClient) -> None:
+    await drafted(client)
+    [first, _] = await queue(client)
+    [decided] = data(
+        await client.post("/v1/knowledge-changes/decide", json={"ids": [first["id"]], "decision": "approve"})
+    )
+    assert decided["status"] == "approved" and decided["decisionReason"] is None
+
+
 async def test_a_changed_section_is_drafted_again_and_its_approved_pair_marked_for_a_second_look(
     client: httpx.AsyncClient, ai: Ai
 ) -> None:
@@ -166,7 +190,9 @@ async def test_the_queue_filters_by_origin_on_the_server_and_offers_decisions_on
     assert all(d["canDecide"] for d in drafts["data"]), "the builder who owns the source may decide"
     async with _signed_in(engine, tenant, "vera@harborpine.example", "team_ops", {"team_ops": "viewer"}) as vera:
         seen = data(await vera.get("/v1/knowledge-changes", params={"view": "open"}))["data"]
-        refused = await vera.post("/v1/knowledge-changes/decide", json={"ids": [seen[0]["id"]], "decision": "approve"})
+        refused = await vera.post(
+            "/v1/knowledge-changes/decide", json={"ids": [seen[0]["id"]], "decision": "approve", "reason": "ok"}
+        )
     assert seen and not any(d["canDecide"] for d in seen), seen
     assert refused.status_code == 403, refused.text
 

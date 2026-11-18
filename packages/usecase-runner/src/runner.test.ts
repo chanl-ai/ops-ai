@@ -1,7 +1,7 @@
 // One test per way the runner could report a use case wrongly.
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -359,6 +359,14 @@ test('explicit use-case ports and database win, are never dropped, and a chosen 
   assert.ok(PORT_VARS.includes('OPS_USECASE_KB_PORT') && PORT_VARS.includes('OPS_USECASE_FAKE_OPENAI_PORT') && PORT_VARS.includes('OPS_USECASE_FILES_PORT'));
 });
 
+test('a deployed host starts no stack: no ports are chosen and no database is made', async () => {
+  const run = await isolate({ OPS_USECASE_BASE_URL: 'https://staging.example' });
+  assert.equal(run.ownedDb, undefined);
+  assert.equal(run.env[DB_VAR], undefined);
+  assert.ok(PORT_VARS.every((k) => run.env[k] === undefined));
+  assert.equal(run.env.OPS_USECASE_BASE_URL, 'https://staging.example');
+});
+
 test("a console build is keyed on What's new: a changed entry or roadmap item makes a new build", async () => {
   const { buildKey } = await import('./console-build.ts');
   const root = mkdtempSync(join(tmpdir(), 'console-key-'));
@@ -374,4 +382,46 @@ test("a console build is keyed on What's new: a changed entry or roadmap item ma
   writeFileSync(join(root, 'roadmap.json'), '[{"title":"Next"}]');
   assert.notEqual(entryChanged, before);
   assert.notEqual(buildKey(app, {}), entryChanged);
+});
+
+// A use case run against a deployed host: each refusal happens before any script starts.
+const DEPLOYED_TABLE = TABLE.replace('| Id | Service | Title | Layers | Status |\n|---|---|---|---|---|', '| Id | Service | Title | Layers | Status | Deployed |\n|---|---|---|---|---|---|').replace('| passing |\n| uc-002', '| passing | safe |\n| uc-002');
+const STAGING = 'https://acme-web.fly.dev';
+
+function deployedRepo(): { root: string; ran: () => boolean } {
+  const root = repo();
+  writeFileSync(join(root, 'docs/usecases/README.md'), DEPLOYED_TABLE);
+  for (const id of ['uc-001', 'uc-002']) writeFileSync(join(root, `docs/usecases/agents-service/scripts/test-${id}-api.mjs`), `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(join(root, 'ran'))}, '1'); console.log('PASS ran');\n`);
+  return { root, ran: () => existsSync(join(root, 'ran')) };
+}
+
+async function deployedRun(url: string, uc: string | undefined, layer: string | undefined, staging: string | null = 'acme-web.fly.dev') {
+  const { root, ran } = deployedRepo();
+  const drop = async () => true;
+  const parent = { ...process.env, OPS_USECASE_BASE_URL: url, ...(staging === null ? {} : { OPS_USECASE_STAGING_HOST: staging }) };
+  delete (staging === null ? parent : {}).OPS_USECASE_STAGING_HOST;
+  const code = await runUseCases(root, parseRegistry(DEPLOYED_TABLE), uc, layer, { parent, drop });
+  return { code, ran: ran() };
+}
+
+test('the staging host named in the environment runs a use case marked safe', async () => {
+  assert.deepEqual(await deployedRun(STAGING, 'uc-001', 'api'), { code: EXIT.ok, ran: true });
+});
+
+for (const host of ['https://example.com', 'https://other-web.fly.dev', 'https://acme-web.fly.dev.', 'https://acme-web.fly.dev.evil.example', 'http://acme-web.fly.dev', 'https://acme-web.fly.dev/api', 'https://user@acme-web.fly.dev', 'https://prod-web.fly.dev', 'https://acme-production-web.fly.dev']) {
+  test(`a deployed run refuses ${host} before any script starts`, async () => {
+    assert.deepEqual(await deployedRun(host, 'uc-001', 'api'), { code: EXIT.usage, ran: false });
+  });
+}
+
+test('a deployed run refuses a layer other than api, and a use case not marked safe', async () => {
+  assert.deepEqual(await deployedRun(STAGING, 'uc-002', 'ui'), { code: EXIT.usage, ran: false });
+  assert.deepEqual(await deployedRun(STAGING, 'uc-001', undefined), { code: EXIT.usage, ran: false });
+  assert.deepEqual(await deployedRun(STAGING, 'uc-002', 'api'), { code: EXIT.usage, ran: false });
+});
+
+test('a deployed run is refused when the staging host is unset or is a pattern', async () => {
+  assert.deepEqual(await deployedRun(STAGING, 'uc-001', 'api', null), { code: EXIT.usage, ran: false });
+  assert.deepEqual(await deployedRun(STAGING, 'uc-001', 'api', '*-web.fly.dev'), { code: EXIT.usage, ran: false });
+  assert.deepEqual(await deployedRun(STAGING, 'uc-001', 'api', '.fly.dev'), { code: EXIT.usage, ran: false });
 });

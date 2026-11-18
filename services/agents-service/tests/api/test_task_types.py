@@ -20,6 +20,7 @@ from ops_agents.api.task_view import worded
 from ops_agents.store.base import metadata
 from ops_agents.store.task_types import TaskTypeStore
 from ops_agents.store.tenancy import tenant_scope
+from ops_engine.store import metadata as engine_metadata
 from tests.engine.test_lifecycle_rights import ADMIN, BUILDER, VIEWER, person
 
 from .role_app import ok, role_app
@@ -39,7 +40,7 @@ async def _copy(c: AsyncClient, type_id: str = "vendor_bank_change") -> dict[str
 
 
 async def test_seeded_types_are_listed_and_changed_by_whoever_holds_manage(c: AsyncClient) -> None:
-    listed = ok(await c.get("/v1/task-types", headers=VIEWER))
+    listed = ok(await c.get("/v1/task-types", headers=VIEWER))["data"]
     ids = {t["id"] for t in listed if t["origin"] == "seed"}
     assert {"generic_decision", "document_check", "write_approval", "acknowledgement", "data_entry"} <= ids
     seed = next(t for t in listed if t["id"] == "write_approval")
@@ -139,6 +140,7 @@ async def test_a_newer_seed_version_reaches_a_tenant_that_has_the_old_one() -> N
     db = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with db.begin() as conn:
         await conn.run_sync(metadata.create_all)
+        await conn.run_sync(engine_metadata.create_all)
     seed = next(s for s in tt.seeds() if s["id"] == "generic_decision")
     with tenant_scope("t1"):
         store = TaskTypeStore(db, "team_ops")
@@ -208,6 +210,6 @@ async def test_dev_header_caller_reads_the_types_of_the_team_it_names(client: As
     """The dev header caller reads tenant-wide, yet a type belongs to one team: its X-Team-Id names the team whose
     seeded types it lists and opens."""
     team = {"X-Team-Id": "team_all", "X-Dev-User": "lee@harborpine.example"}
-    listed = ok(await client.get("/v1/task-types", headers=team))
+    listed = ok(await client.get("/v1/task-types", headers=team))["data"]
     assert "write_approval" in {t["id"] for t in listed}
     assert ok(await client.get("/v1/task-types/write_approval", headers=team))["id"] == "write_approval"

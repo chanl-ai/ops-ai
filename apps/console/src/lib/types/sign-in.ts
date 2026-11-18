@@ -1,3 +1,11 @@
+import type { OpsAI } from '@chanl-ai/ops-ai';
+
+import type { Narrow } from './served';
+
+type Platform = OpsAI['raw']['platform'];
+type Reply<K extends keyof Platform> = Awaited<ReturnType<Platform[K]>>;
+type Body<K extends keyof Platform> = NonNullable<NonNullable<Parameters<Platform[K]>[0]>['body']>;
+
 /**
  * How people sign in to this workspace. The login screen offers only what the policy allows; a bank turns on SSO
  * by verified domain, requires MFA and invites people instead of letting them sign up.
@@ -6,10 +14,7 @@ export type SsoProvider = 'entra' | 'okta' | 'oidc' | 'saml';
 
 /** How one email signs in, read from its domain alone before anyone is signed in: a password, the workspace's SSO
  * provider, or both. The sign-in page shows only these. */
-export interface SignInOptions {
-  password: boolean;
-  sso: { kind: 'oidc' | 'saml' | 'sso'; label: string } | null;
-}
+export type SignInOptions = Reply<'auth_sign_in_options'>;
 
 export interface SsoDomain {
   domain: string;
@@ -54,60 +59,33 @@ export type SignInProviderKind = 'password' | 'oidc' | 'saml';
 export type JitRole = 'chat_user' | 'viewer' | 'builder' | 'approver';
 
 /** A listed domain: it routes sign-in only once `verifiedAt` is set, after `record` was published in its DNS. */
-export interface DomainCheck {
-  domain: string;
-  verifiedAt: string | null;
-  record: { name: string; value: string };
-}
+export type DomainCheck = Reply<'sign_in_providers_list_signin_providers'>[number]['verification'][number];
 
-export interface OidcSettings {
-  issuer: string;
-  clientId: string;
-  /** A name from the installation's sign-in secrets; the value never reaches the console. */
-  clientSecretRef: string | null;
-  scopes: string[] | null;
-}
+export type OidcSettings = NonNullable<Reply<'sign_in_providers_list_signin_providers'>[number]['oidc']>;
 
-export interface SamlSettings {
-  idpEntityId: string;
-  ssoUrl: string;
-  certificate: string;
-  emailAttribute: string | null;
-  nameAttribute: string | null;
-  /** Sign each request to the identity provider with the installation's service provider key. */
-  signRequests?: boolean;
-  /** Refuse an assertion the identity provider did not encrypt to the service provider certificate. */
-  requireEncryption?: boolean;
-}
+export type SamlSettings = NonNullable<Reply<'sign_in_providers_list_signin_providers'>[number]['saml']>;
 
-export interface GroupRule {
-  group: string;
-  team: string;
-  role: JitRole;
-}
+export type GroupRule = Narrow<NonNullable<Reply<'sign_in_providers_list_signin_providers'>[number]['groups']>['map'][number], { role: JitRole }>;
 
-export interface SignInProvider {
-  id: string;
-  kind: SignInProviderKind;
-  label: string;
-  enabled: boolean;
-  domains: string[];
-  oidc: OidcSettings | null;
-  saml: SamlSettings | null;
-  /** Where a person new to the workspace lands on their first sign-in; no team means the workspace's default team. */
-  jit: { team: string | null; role: JitRole } | null;
-  /** Identity provider groups to teams; set through the API, kept as is by the console's form. */
-  groups: { source: string | null; map: GroupRule[] } | null;
-  verification: DomainCheck[];
-}
+export type SignInProvider = Narrow<
+  Reply<'sign_in_providers_list_signin_providers'>[number],
+  {
+    jit: { team: string | null; role: JitRole } | null;
+    /** Identity provider groups to teams; set through the API, kept as is by the console's form. */
+    groups: (Omit<NonNullable<Reply<'sign_in_providers_list_signin_providers'>[number]['groups']>, 'map'> & { map: GroupRule[] }) | null;
+  }
+>;
 
-export interface SignInProviderInput {
-  kind: SignInProviderKind;
-  label: string;
-  enabled: boolean;
-  domains: string[];
-  oidc?: OidcSettings;
-  saml?: SamlSettings;
-  jit?: { team: string | null; role: JitRole };
-  groups?: { source: string | null; map: GroupRule[] };
-}
+type ProviderIn = Body<'sign_in_providers_save_signin_provider'>;
+type SamlIn = NonNullable<ProviderIn['saml']>;
+
+/** The schema lists the SAML switches as required although platform-service defaults them, so the console may leave them out. */
+export type SignInProviderInput = Narrow<
+  ProviderIn,
+  {
+    domains: string[];
+    saml?: (Omit<SamlIn, 'requireEncryption' | 'signRequests' | 'tiles'> & Partial<Pick<SamlIn, 'requireEncryption' | 'signRequests' | 'tiles'>>) | null;
+    jit?: { team: string | null; role: JitRole } | null;
+    groups?: (Omit<NonNullable<ProviderIn['groups']>, 'map'> & { map: GroupRule[] }) | null;
+  }
+>;

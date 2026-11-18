@@ -1,4 +1,3 @@
-import type { KnowledgeUsage } from '@/lib/types/knowledge-usage';
 import type { PublishPreview } from '@/lib/types/publish-preview';
 import type { CasesApi } from './cases-contract';
 import type { ChannelsApi } from './channels-contract';
@@ -24,18 +23,15 @@ import type { ModelRiskApi } from './model-risk-contract';
 import type { ToolModulesApi } from './tool-modules-contract';
 import type { ToolDirectory, ToolRow, ToolRowFilters } from '@/lib/types/tool-directory';
 import type { EgressApi } from './egress-contract';
-import type { SecretsApi } from './secrets-contract';
 import type { ConnectionsApi } from './connections-contract';
 import type { IntegrationsApi } from './integrations-contract';
 import type { FilesApi } from './files-contract';
 import type { TemplatesApi } from './templates-contract';
 import type { PromptsApi } from './prompts-contract';
-import type { GuardrailsApi } from './guardrails-contract';
 import type { SkillsApi } from './skills-contract';
 import type { WidgetsApi } from './widgets-contract';
 import type { WidgetDeploymentsApi } from './widget-deployments-contract';
 import type { BatchesApi } from './batches-contract';
-import type { FormsApi } from './forms-contract';
 import type { ActivityApi } from './activity-contract';
 import type { CaseRecordsApi } from './case-records-contract';
 import type { AssuranceApi } from './assurance-contract';
@@ -107,7 +103,6 @@ export interface OpsApi {
     get(): Promise<Overview>;
   };
   agents: {
-    list(params: ListParams<AgentFilters>): Promise<ListResult<Agent>>;
     get(id: string): Promise<Agent>;
     create(input: AgentInput): Promise<Agent>;
     /** Saves a new draft version. Workflows keep pinning the published one until it is published and they republish. */
@@ -137,8 +132,6 @@ export interface OpsApi {
     modelAliases(): Promise<ModelAlias[]>;
     /** One kernel turn on the agent's newest version, nothing kept; a write tool stops at its gate. */
     test(id: string, message: string): Promise<AgentTestTurn>;
-    /** For each knowledge base, the caller's team's agents citing it. */
-    knowledgeUsage(): Promise<KnowledgeUsage[]>;
     /** Absent when the backend has no bulk route (the agents-service registry); the list then offers no bulk actions. */
     bulkUpdate?(ids: string[], patch: { paused?: boolean; owner?: string }): Promise<BulkResult>;
     bulkRemove?(ids: string[]): Promise<BulkResult>;
@@ -148,7 +141,6 @@ export interface OpsApi {
   /** Channels > Email: the team's mailboxes. */
   channels: ChannelsApi;
   workflows: {
-    list(params: ListParams<WorkflowFilters>): Promise<ListResult<Workflow>>;
     get(id: string): Promise<WorkflowDetail>;
     create(input: WorkflowInput): Promise<Workflow>;
     /** Runs the workflow's test cases against a draft graph (and the live version for comparison). Advisory: never blocks. */
@@ -165,7 +157,6 @@ export interface OpsApi {
     update(id: string, input: WorkflowSettingsInput): Promise<Workflow>;
     setStatus(id: string, status: LifecycleStatus): Promise<Workflow>;
     remove(id: string): Promise<void>;
-    runs(id: string, params: ListParams<RunFilters>): Promise<ListResult<WorkflowRun>>;
     versions(id: string): Promise<Version[]>;
     restore(id: string, version: number): Promise<Workflow>;
     /** Absent when the backend has no bulk route (the agents-service registry). */
@@ -218,7 +209,6 @@ export interface OpsApi {
   /** The tenant's egress allow-list (tools-service). */
   egress: EgressApi;
   /** Credentials tool calls send; values never come back (tools-service). */
-  secrets: SecretsApi;
   /** A connected system's sign-in: whose account, Test connection, and each person's own (tools-service). */
   connections: ConnectionsApi;
   integrations: IntegrationsApi;
@@ -228,14 +218,11 @@ export interface OpsApi {
   skills: SkillsApi;
   widgets: WidgetsApi;
   widgetDeployments: WidgetDeploymentsApi;
-  /** A workflow's start form shared as a page (agents-service /v1/workflows/{id}/forms). */
-  forms: FormsApi;
   /** A workflow started once per row of a file, and the batch's page (agents-service /v1/workflows/{id}/batches). */
   batches: BatchesApi;
   /** The team's customer issues with their deadlines and timelines (agents-service /v1/cases). */
   caseRecords: CaseRecordsApi;
   activity: ActivityApi;
-  guardrails: GuardrailsApi;
   assurance: AssuranceApi;
   /** The team's MCP links (tools-service): a named address for a chosen set of its tools. */
   mcpLinks: McpLinksApi;
@@ -285,15 +272,12 @@ export interface OpsApi {
     /** The person's role on each team, read fresh from platform-service so a role change shows without signing in
      * again. Absent off platform sign-in, where the session's role stands in. */
     me?(): Promise<Me>;
-    /** What `can()` grants the person in each team and in every team (`*`), from platform-service
-     * (GET /v1/me/permissions). Absent off platform sign-in, where the session's role stands in. */
-    permissions?(): Promise<MyPermissions>;
     /** The roles that grant `area.action` in `team` (the current team when omitted) and who holds them there
      * (GET /v1/access/holders); asking about a team the person is not in is refused. */
     holders?(area: string, action: string, team?: string): Promise<Holders>;
     /** The workspace's roles, one role's grid, and a person's grants with the role behind each. Absent off
      * platform sign-in. */
-    roles?(): Promise<RoleSummary[]>;
+    roles?(p: ListParams): Promise<ListResult<RoleSummary>>;
     role?(id: string): Promise<RoleDetail>;
     /** Sets every cell a role holds; a workspace admin's, audited. */
     editRole?(id: string, permissions: RoleCell[]): Promise<RoleDetail>;
@@ -303,9 +287,9 @@ export interface OpsApi {
     createRole?(input: RoleInput): Promise<RoleCreated>;
     renameRole?(id: string, input: { name: string; description?: string }): Promise<RoleDetail>;
     deleteRole?(id: string, moveTo?: string): Promise<void>;
-    roleHolders?(id: string): Promise<RoleHolder[]>;
+    roleHolders?(id: string, p: ListParams): Promise<ListResult<RoleHolder>>;
     /** The custom roles given to a person, each in one of their teams; given and taken by that team's admins. */
-    roleGrants?(personId: string): Promise<RoleGrant[]>;
+    roleGrants?(personId: string, p: ListParams): Promise<ListResult<RoleGrant>>;
     /** Gives the role in the team the console acts in. */
     giveRole?(personId: string, input: { roleId: string }): Promise<RoleGrant>;
     takeRole?(personId: string, grantId: string): Promise<void>;

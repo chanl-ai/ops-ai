@@ -1,0 +1,3 @@
+# ops_engine: 2 caught outside Store.tx() or with no savepoint (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
+1 caught packages/ops_engine/src/ops_engine/store/runs.py
+1 caught packages/ops_engine/src/ops_engine/store/work.py

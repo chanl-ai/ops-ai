@@ -107,7 +107,9 @@ async def test_the_test_run_goes_through_its_review_to_the_end(client: AsyncClie
     assert out["status"] == "completed" and out["pausesApproved"] == 1, out
     assert out["visited"] == ["t", "agent", "review", "review__decide", "done"], out
     assert out["output"], "the agent step's reply is the output"
-    assert all(t["graph"] != wf["id"] for t in _ok(await client.get("/v1/threads"))), "a test run keeps no thread"
+    assert all(t["graph"] != wf["id"] for t in _ok(await client.get("/v1/threads"))["data"]), (
+        "a test run keeps no thread"
+    )
 
 
 async def test_publish_starts_on_the_pointer_and_pause_and_delete_refuse_new_threads(client: AsyncClient) -> None:

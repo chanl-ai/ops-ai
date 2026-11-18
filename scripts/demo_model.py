@@ -84,13 +84,15 @@ def main() -> int:
     to_fake = model == "fake"
     token = mint_service_token(dev_service_signer(), service="agents", audience="models", tenant_id="team_ops")
     with httpx.Client(base_url=MODELS, headers={"Authorization": f"Bearer {token}"}, timeout=20) as m:
-        listed = data(m.get("/v1/models/providers"))
+        # PROVIDER is a connection's id or its name: `ids` finds the one, `search` the other.
+        listed = data(m.get("/v1/models/providers", params={"ids": PROVIDER}))["data"]
+        listed += data(m.get("/v1/models/providers", params={"search": PROVIDER}))["data"]
         before = next((p for p in listed if PROVIDER in (p["id"], p.get("name"))), None)
         if before is None and os.environ.get("CREATE") == "1":
             body = {"name": PROVIDER, "type": "openai-compatible", "baseUrl": FAKE}
             made = data(m.post("/v1/models/providers", json=body))
             print(f"provider {PROVIDER}: created on the fake as {made['id']}")
-            before = next(p for p in data(m.get("/v1/models/providers")) if p["id"] == made["id"])
+            before = data(m.get("/v1/models/providers", params={"ids": made["id"]}))["data"][0]
         if before is None:
             raise SystemExit(f"demo-model: models-service at {MODELS} has no provider connection {PROVIDER}")
         provider = str(before["id"])
@@ -119,7 +121,7 @@ def main() -> int:
         if created:
             # A new alias (guardrail-check, for the guardrail checks) starts on the runtime alias's clearance; `default`
             # is the one every dev seed has.
-            chat = data(m.get("/v1/models/aliases/default/versions"))[-1]
+            chat = data(m.get("/v1/models/aliases", params={"ids": "default"}))["data"][0]
             price_in, price_out = PRICES.get(model_id, ("0", "0"))
             body = {"name": alias, "kind": "chat", "providerId": provider, "modelId": model_id}
             body |= {"clearedSensitivity": chat["clearedSensitivity"], "inputPerMillion": price_in}
@@ -128,9 +130,8 @@ def main() -> int:
                 body["reasoningEffort"] = effort
             data(m.post("/v1/models/aliases", json=body | {"outputPerMillion": price_out}))
             print(f"alias {alias}: created on {model_id}")
-            found = m.get(f"/v1/models/aliases/{alias}/versions")
-        versions = data(found)
-        current = next((v for v in reversed(versions) if v["status"] == "current"), versions[-1])
+        # The serving version, which the versions list (oldest first, a page at a time) may not reach.
+        current = data(m.get("/v1/models/aliases", params={"ids": alias}))["data"][0]
         if os.environ.get("KEEP_ADMIN_CHOICE") == "1" and current.get("providerId") not in (None, provider):
             # make up passes this: an alias an admin pointed at another connection (the console's model setup) stays
             # there; only `make demo-model` itself moves it.

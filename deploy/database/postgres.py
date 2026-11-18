@@ -229,7 +229,7 @@ class Postgres:
                 "AND table_type = 'BASE TABLE' ORDER BY table_name",
             )
         ]
-        return [n for n in names if self.query(url, f'SELECT EXISTS (SELECT 1 FROM public."{n}") AS has')[0]["has"]]
+        return [n for n in names if self.query(url, f'SELECT EXISTS (SELECT 1 FROM public."{n}") AS has')[0]["has"]]  # noqa: S608
 
     def dump_rows(self, url: str, tables: Iterable[str]) -> Dump:
         """The rows a fresh migration writes (version rows, reference rows), as INSERT statements."""
@@ -247,7 +247,7 @@ class Postgres:
                 "AND table_name LIKE 'alembic_version%'",
             )
         ]
-        return {t: [r["version_num"] for r in self.query(url, f'SELECT version_num FROM public."{t}"')] for t in tables}
+        return {t: [r["version_num"] for r in self.query(url, f'SELECT version_num FROM public."{t}"')] for t in tables}  # noqa: S608
 
     def roles(self, url: str, names: Iterable[str]) -> dict[str, dict[str, bool]]:
         wanted = sorted(set(names))
@@ -255,7 +255,8 @@ class Postgres:
             return {}
         listed = ", ".join(f"'{n}'" for n in wanted)
         rows = self.query(
-            url, f"SELECT rolname, rolcanlogin, rolbypassrls, rolinherit FROM pg_roles WHERE rolname IN ({listed})"
+            url,
+            f"SELECT rolname, rolcanlogin, rolbypassrls, rolinherit FROM pg_roles WHERE rolname IN ({listed})",  # noqa: S608
         )
         return {
             r["rolname"]: {"login": r["rolcanlogin"], "bypassrls": r["rolbypassrls"], "inherit": r["rolinherit"]}
@@ -280,11 +281,11 @@ class Postgres:
         """Raises before a step's DDL when the database is not at the revision the step starts from."""
         if expected is None:
             check = (
-                f"to_regclass('public.{version_table}') IS NULL OR NOT EXISTS (SELECT 1 FROM public.{version_table})"
+                f"to_regclass('public.{version_table}') IS NULL OR NOT EXISTS (SELECT 1 FROM public.{version_table})"  # noqa: S608
             )
             want = "no version row"
         else:
-            check = f"EXISTS (SELECT 1 FROM public.{version_table} WHERE version_num = '{expected}')"
+            check = f"EXISTS (SELECT 1 FROM public.{version_table} WHERE version_num = '{expected}')"  # noqa: S608
             want = expected
         return (
             "DO $$ BEGIN\n"

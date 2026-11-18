@@ -39,7 +39,7 @@ from ._generated.platform.operations import Operations as PlatformOps
 from ._generated.tools.operations import AsyncOperations as AsyncToolsOps
 from ._generated.tools.operations import Operations as ToolsOps
 from ._models import AsyncModels, Models
-from ._transport import AsyncTransport, Transport, _headers, _result, page_items
+from ._transport import AsyncTransport, Transport, _headers, _result, iter_pages, iter_pages_async, page_items
 from ._words import (
     Accounts,
     Apps,
@@ -78,10 +78,11 @@ class Noun:
     list: str | None = None
     get: str | None = None
     create: str | None = None
+    paged: bool = True  # False: the list is one array, whatever the query
 
 
 NOUNS: dict[str, Noun] = {
-    "teams": Noun("platform", list="teams_list_teams"),
+    "teams": Noun("platform", list="teams_list_teams", paged=False),
     "agents": Noun("agents", list="agents_list_agents", get="agents_get_agent", create="agents_create_agent"),
     "workflows": Noun("agents", list="workflows_list_workflows", get="workflows_get_workflow"),
     "threads": Noun("agents", list="threads_list_threads", get="threads_thread_state", create="threads_create_thread"),
@@ -96,6 +97,11 @@ NOUNS: dict[str, Noun] = {
     "files": Noun("files", list="files_list_files", get="files_get_file"),
     "runs": Noun("agents", list="workflows_list_engine_runs", get="workflows_get_engine_run"),
     "tasks": Noun("agents", list="reviews_list_reviews", get="reviews_get_review"),
+    "skills": Noun("agents", list="agents_list_skills", get="agents_get_skill"),
+    "guardrails": Noun("agents", list="agents_list_guardrails", get="agents_get_guardrail"),
+    "widgets": Noun("agents", list="agents_list_widgets", get="agents_get_widget"),
+    "case_types": Noun("agents", list="cases_list_case_types", get="cases_get_case_type"),
+    "task_types": Noun("agents", list="reviews_list_task_types", get="reviews_get_task_type"),
 }
 
 
@@ -141,18 +147,25 @@ class Resource:
 
     def list(self, **query: Any) -> Iterator[Any]:
         """Every item, page after page, whichever paging the route uses."""
-        call, nxt = self._op("list"), {}
-        while True:
-            items, nxt = page_items(call(**{**query, **nxt}))
-            yield from items
-            if nxt is None:
-                return
+        call = self._op("list")
+        return iter_pages(call, **query) if self._noun.paged else iter(page_items(call(**query))[0])
 
     def get(self, id: str) -> Any:
         return self._op("get")(id)
 
     def create(self, body: Any) -> Any:
         return self._op("create")(body)
+
+
+async def _once(call: Any, query: dict[str, Any]) -> AsyncIterator[Any]:
+    for item in page_items(await call(**query))[0]:
+        yield item
+
+
+class Threads(Resource):
+    def inbox(self, thread_id: str) -> Any:
+        """A thread's channel messages. A person who cannot read the thread gets NotFound, as for another team's."""
+        return self._raw.agents.threads_get_inbox(thread_id)
 
 
 class AsyncResource:
@@ -165,20 +178,20 @@ class AsyncResource:
             raise AttributeError(f"{verb} is not offered here; use ops.raw.{self._noun.service}")
         return getattr(getattr(self._raw, self._noun.service), op_id)
 
-    async def list(self, **query: Any) -> AsyncIterator[Any]:
-        call, nxt = self._op("list"), {}
-        while True:
-            items, nxt = page_items(await call(**{**query, **nxt}))
-            for item in items:
-                yield item
-            if nxt is None:
-                return
+    def list(self, **query: Any) -> AsyncIterator[Any]:
+        call = self._op("list")
+        return iter_pages_async(call, **query) if self._noun.paged else _once(call, query)
 
     async def get(self, id: str) -> Any:
         return await self._op("get")(id)
 
     async def create(self, body: Any) -> Any:
         return await self._op("create")(body)
+
+
+class AsyncThreads(AsyncResource):
+    async def inbox(self, thread_id: str) -> Any:
+        return await self._raw.agents.threads_get_inbox(thread_id)
 
 
 class Runs(Resource):
@@ -364,7 +377,11 @@ class OpsAI:
         self.config = Config.resolve(**config)
         self._t = Transport(self.config, http)
         self.raw = Raw(self._t)
-        self.teams, self.threads, self.cases = (Resource(self.raw, NOUNS[n]) for n in ("teams", "threads", "cases"))
+        self.teams, self.cases = (Resource(self.raw, NOUNS[n]) for n in ("teams", "cases"))
+        self.threads = Threads(self.raw, NOUNS["threads"])
+        self.skills, self.guardrails, self.widgets, self.case_types, self.task_types = (
+            Resource(self.raw, NOUNS[n]) for n in ("skills", "guardrails", "widgets", "case_types", "task_types")
+        )
         self.knowledge = Knowledge(self.raw, NOUNS["knowledge"])
         self.files = Files(self.raw, NOUNS["files"])
         self.runs = Runs(self.raw, NOUNS["runs"])
@@ -431,8 +448,10 @@ class AsyncOpsAI:
         self.config = Config.resolve(**config)
         self._t = AsyncTransport(self.config, http)
         self.raw = AsyncRaw(self._t)
-        self.teams, self.threads, self.cases = (
-            AsyncResource(self.raw, NOUNS[n]) for n in ("teams", "threads", "cases")
+        self.teams, self.cases = (AsyncResource(self.raw, NOUNS[n]) for n in ("teams", "cases"))
+        self.threads = AsyncThreads(self.raw, NOUNS["threads"])
+        self.skills, self.guardrails, self.widgets, self.case_types, self.task_types = (
+            AsyncResource(self.raw, NOUNS[n]) for n in ("skills", "guardrails", "widgets", "case_types", "task_types")
         )
         self.knowledge = AsyncKnowledge(self.raw, NOUNS["knowledge"])
         self.files = AsyncFiles(self.raw, NOUNS["files"])

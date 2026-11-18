@@ -1,42 +1,41 @@
-"""What the Evals page reads: one snapshot of the acting team's suites, runs and publish checks, joined with the
-names the page shows, so the console joins nothing. Agents and skills come from the saved cases and runs
-(`store/evals.py`); a workflow's runs are its stored test runs; publish checks come from the publish requests."""
+"""What the Evals page reads: the acting team's suites, runs and publish checks a page at a time, joined with the
+names the page shows, so the console joins nothing. Each list, its facets, total and the page's figures come from SQL
+(`store/assurance_list.py`) in one transaction; the owner team names are read from platform-service after it closes,
+for the page's teams only."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Callable
 from typing import Any, cast
 
 from ops_agents.domain.evals import (
     ASSET_AGENT,
     ASSET_SKILL,
     ASSET_WORKFLOW,
-    CASE_ACTIVE,
-    CASE_DRAFT,
     DEFAULT_TIER,
+    MODE_BLOCKING,
     STEP_FAIL,
     STEP_PASS,
     STEP_PENDING,
-    TRIGGER_MANUAL,
     pass_rate,
     step_mode,
 )
+from ops_service_kit.listing import ListParams
 
-from ..store.evals import EvalStore
-from ..store.skills import SkillRegistry
-from .agent_registry import registry as agent_registry
+from ..store.assurance_list import Checks, Listed, Stats, read_list
 from .deps import Runtime
 from .team_names import team_name
-from .workflow_registry import registry as workflow_registry
 
 HREF = {ASSET_AGENT: "/build/agents", ASSET_SKILL: "/build/skills", ASSET_WORKFLOW: "/build/workflows"}
 PASS, FAIL = "pass", "fail"
 STEP_LABELS = {"structural": "Structure checks", "pass_rate": "Pass rate", "regressions": "Regressions"}
 OPEN_STATUS = "pending"
+REVIEW_STATUSES = ("pending", "approved", "rejected", "returned")
 
 
-def _asset(kind: str, asset_id: str, name: str) -> dict[str, Any]:
-    return {"kind": kind, "id": asset_id, "name": name, "href": f"{HREF[kind]}/{asset_id}"}
+def _asset(row: dict[str, Any]) -> dict[str, Any]:
+    kind, asset_id = str(row["kind"]), str(row["asset_id"])
+    return {"kind": kind, "id": asset_id, "name": str(row["name"]), "href": f"{HREF[kind]}/{asset_id}"}
 
 
 def _outcome(value: Any) -> str | None:
@@ -44,235 +43,127 @@ def _outcome(value: Any) -> str | None:
     return (PASS if status == PASS else FAIL) if status else None
 
 
-@dataclass
-class Snapshot:
-    suites: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
-    runs: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
-    gates: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
-    stats: dict[str, int] = field(default_factory=dict[str, int])
-
-    @property
-    def counts(self) -> dict[str, int]:
-        return {"suites": len(self.suites), "runs": len(self.runs), "gates": len(self.gates)}
-
-
-async def snapshot(rt: Runtime) -> Snapshot:
-    """Everything the acting team sees, read once for a request."""
-    store = EvalStore(rt.db)
-    agents_reg, skills_reg, workflows_reg = agent_registry(rt), SkillRegistry(rt.db), workflow_registry(rt)
-    agents = {str(r["id"]): r for r in await agents_reg.rows()}
-    skills = {str(r["id"]): r for r in await skills_reg.rows()}
-    workflows = {str(r["id"]): r for r in await workflows_reg.rows()}
-    cases, runs = await store.cases(), await store.runs()
-    validations = await workflows_reg.validations(set(workflows))
-
-    agent_names = await agents_reg.named_versions({(i, int(r["version"])) for i, r in agents.items()})
-    names: dict[tuple[str, str], str] = {
-        (ASSET_AGENT, i): agent_names.get((i, int(r["version"])), (str(r["slug"]), ""))[0] for i, r in agents.items()
+def _figures(s: Stats) -> dict[str, Any]:
+    return {
+        "stats": {
+            "failingSuites": s.failing_suites,
+            "gatesBlocked": s.gates_blocked,
+            "liveUntested": s.live_untested,
+            "notRun": s.not_run,
+        },
+        "tabCounts": {"suites": s.suites, "runs": s.runs, "gates": s.gates},
     }
-    for i, r in skills.items():
-        version = await skills_reg.version(i, int(r["version"]))
-        content = cast(dict[str, Any], (version or {}).get("content") or {})
-        names[(ASSET_SKILL, i)] = str(content.get("name") or r["slug"])
-    names |= {(ASSET_WORKFLOW, i): str(r["name"]) for i, r in workflows.items()}
-    teams = (
-        {(ASSET_AGENT, i): str(r["team_id"]) for i, r in agents.items()}
-        | {(ASSET_SKILL, i): str(r["team_id"]) for i, r in skills.items()}
-        | {(ASSET_WORKFLOW, i): str(r["team_id"]) for i, r in workflows.items()}
-    )
-    team_labels: dict[str, str] = {}
-    for team in set(teams.values()):
-        team_labels[team] = (await team_name(rt, team))["teamName"] or team
 
-    def asset(kind: str, asset_id: str) -> dict[str, Any]:
-        return _asset(kind, asset_id, names[(kind, asset_id)])
 
-    latest_run: dict[tuple[str, str], dict[str, Any]] = {}
-    for r in runs:  # newest first
-        latest_run.setdefault((str(r["kind"]), str(r["asset_id"])), r)
-    latest_validation: dict[str, dict[str, Any]] = {}
-    for v in validations:
-        latest_validation.setdefault(str(v["workflow_id"]), v)
+Shape = Callable[[dict[str, Any], Listed, float], dict[str, Any]]
 
-    snap = Snapshot()
-    kept = {key for key in latest_run if key in names} | {(str(c["kind"]), str(c["asset_id"])) for c in cases}
-    for kind, asset_id in sorted(k for k in kept if k in names):
-        mine = [c for c in cases if (c["kind"], c["asset_id"]) == (kind, asset_id)]
-        active = [c for c in mine if c["status"] == CASE_ACTIVE]
-        drafts = [c for c in mine if c["status"] == CASE_DRAFT]
-        run = latest_run.get((kind, asset_id))
-        total = int(run["total"]) if run else 0
-        results = [
+
+def _checks(rt: Runtime) -> Checks:
+    blocking = frozenset(step for step in STEP_LABELS if step_mode(DEFAULT_TIER, step) == MODE_BLOCKING)
+    return Checks(tier=DEFAULT_TIER, blocking=blocking, min_pass_rate=rt.settings.eval_min_pass_rate)
+
+
+async def _answer(rt: Runtime, tab: str, params: ListParams, shape: Shape) -> dict[str, Any]:
+    """Reads the page, its extras and the figures in one transaction, then names the page's teams with none open."""
+    checks = _checks(rt)
+    listed = await read_list(rt.db, tab, params, checks)
+    rows = cast(list[dict[str, Any]], listed.page["data"])
+    teams: dict[str, str] = {}
+    for team in sorted({str(r["team_id"]) for r in rows if r.get("team_id")}):
+        teams[team] = (await team_name(rt, team))["teamName"] or team
+    data = [{**shape(row, listed, checks.min_pass_rate), **_owner(row, teams, tab)} for row in rows]
+    return {**listed.page, "data": data, **_figures(listed.stats)}
+
+
+def _owner(row: dict[str, Any], teams: dict[str, str], tab: str) -> dict[str, Any]:
+    return {"owner": teams.get(str(row["team_id"]), str(row["team_id"]))} if tab == "suites" else {}
+
+
+async def suites(rt: Runtime, params: ListParams) -> dict[str, Any]:
+    """One suite per agent, skill or workflow with saved cases or a run, with its newest run's case results."""
+    return await _answer(rt, "suites", params, _suite)
+
+
+def _suite(row: dict[str, Any], listed: Listed, _minimum: float) -> dict[str, Any]:
+    kind, asset_id = str(row["kind"]), str(row["asset_id"])
+    details = listed.extras[f"{kind}:{asset_id}"]
+    ran = row["run_id"] is not None
+    passed, total = int(row["passed"] or 0), int(row["total"] or 0)
+    workflow = kind == ASSET_WORKFLOW
+    results = [
+        {
+            "caseId": str(x.get("caseId", i)) if workflow else str(i),
+            "name": str(x.get("caseName", x.get("name", ""))) if workflow else x["caseName"],
+            "candidate": _outcome(x.get("draft")) or FAIL,
+            "live": _outcome(x.get("live")),
+            "regression": bool(x.get("regression")),
+            "humanVerdict": None,
+        }
+        for i, x in enumerate(cast(list[dict[str, Any]], details.results))
+    ]
+    return {
+        "id": f"{kind}:{asset_id}",
+        "asset": _asset(row),
+        "owner": "",
+        "tier": row["tier"],
+        "cases": int(row["cases"]),
+        "draftCases": int(row["draft_cases"]),
+        "passRate": pass_rate(passed, total) if ran else None,
+        "livePassRate": pass_rate(int(row["live_passed"]), total) if ran and row["live_passed"] is not None else None,
+        "regressions": int(row["regressions"]) if ran else None,
+        "candidateVersion": row["version"] if ran else None,
+        "liveVersion": row["live_version"] if ran else None,
+        "lastRunAt": row["ran_at"] if ran else None,
+        "failing": ran and passed < total,
+        "results": results,
+        "drafts": [
             {
-                "caseId": str(i),
-                "name": x["caseName"],
-                "candidate": _outcome(x["draft"]) or FAIL,
-                "live": _outcome(x.get("live")),
-                "regression": bool(x.get("regression")),
-                "humanVerdict": None,
+                "id": d.id,
+                "name": d.name,
+                "input": d.input,
+                "source": "review",
+                "status": "draft",
+                "reviewId": d.review_id or "",
+                "reason": d.reason,
+                "createdBy": d.created_by,
+                "createdAt": d.created_at,
             }
-            for i, x in enumerate(run["results"] if run else [])
-        ]
-        snap.suites.append(
-            {
-                "id": f"{kind}:{asset_id}",
-                "asset": asset(kind, asset_id),
-                "owner": team_labels[teams[(kind, asset_id)]],
-                "tier": DEFAULT_TIER,
-                "cases": len(active),
-                "draftCases": len(drafts),
-                "passRate": pass_rate(int(run["passed"]), total) if run else None,
-                "livePassRate": pass_rate(int(run["live_passed"]), total)
-                if run and run["live_passed"] is not None
-                else None,
-                "regressions": int(run["regressions"]) if run else None,
-                "candidateVersion": int(run["version"]) if run else None,
-                "liveVersion": run["live_version"] if run else None,
-                "lastRunAt": run["ran_at"] if run else None,
-                "failing": bool(run) and int(run["passed"]) < total,
-                "results": results,
-                "drafts": [
-                    {
-                        "id": d["id"],
-                        "name": d["name"],
-                        "input": str(d["body"].get("input", "")),
-                        "source": "review",
-                        "status": "draft",
-                        "reviewId": d["review_id"] or "",
-                        "reason": d["reason"],
-                        "createdBy": d["created_by"],
-                        "createdAt": d["created_at"],
-                    }
-                    for d in drafts
-                ],
-            }
-        )
-    for wid, v in sorted(latest_validation.items()):
-        summary = v["summary"]
-        total, passed = int(summary["total"]), int(summary["passed"])
-        snap.suites.append(
-            {
-                "id": f"{ASSET_WORKFLOW}:{wid}",
-                "asset": asset(ASSET_WORKFLOW, wid),
-                "owner": team_labels[teams[(ASSET_WORKFLOW, wid)]],
-                "tier": DEFAULT_TIER,
-                "cases": total,
-                "draftCases": 0,
-                "passRate": pass_rate(passed, total),
-                "livePassRate": None,
-                "regressions": int(summary.get("regressions", 0)),
-                "candidateVersion": workflows[wid]["published_version"],
-                "liveVersion": workflows[wid]["published_version"],
-                "lastRunAt": v["ran_at"],
-                "failing": passed < total,
-                "results": [
-                    {
-                        "caseId": str(x.get("caseId", i)),
-                        "name": str(x.get("caseName", x.get("name", ""))),
-                        "candidate": _outcome(x.get("draft")) or FAIL,
-                        "live": _outcome(x.get("live")),
-                        "regression": bool(x.get("regression")),
-                        "humanVerdict": None,
-                    }
-                    for i, x in enumerate(v["results"])
-                ],
-                "drafts": [],
-            }
-        )
-    snap.suites.sort(key=lambda s: (s["asset"]["name"].lower(), s["id"]))
-
-    for r in runs:
-        key = (str(r["kind"]), str(r["asset_id"]))
-        if key not in names:
-            continue
-        total = int(r["total"])
-        snap.runs.append(
-            {
-                "id": r["id"],
-                "asset": asset(*key),
-                "version": int(r["version"]),
-                "trigger": r["trigger"],
-                "passed": int(r["passed"]),
-                "total": total,
-                "passRate": pass_rate(int(r["passed"]), total) or 0.0,
-                "regressions": int(r["regressions"]),
-                "durationMs": int(r["duration_ms"]),
-                "costUsd": float(r["cost_usd"]),
-                "ranAt": r["ran_at"],
-                "reviewId": None,
-            }
-        )
-    for v in validations:
-        summary, total = v["summary"], int(v["summary"]["total"])
-        wid = str(v["workflow_id"])
-        snap.runs.append(
-            {
-                "id": v["id"],
-                "asset": asset(ASSET_WORKFLOW, wid),
-                "version": int(workflows[wid]["published_version"] or 0),
-                "trigger": TRIGGER_MANUAL,
-                "passed": int(summary["passed"]),
-                "total": total,
-                "passRate": pass_rate(int(summary["passed"]), total) or 0.0,
-                "regressions": int(summary.get("regressions", 0)),
-                "durationMs": 0,
-                "costUsd": 0.0,
-                "ranAt": v["ran_at"],
-                "reviewId": None,
-            }
-        )
-    snap.runs.sort(key=lambda r: (r["ranAt"], r["id"]), reverse=True)
-
-    by_version: dict[tuple[str, str, int], dict[str, Any]] = {}
-    for r in runs:
-        by_version.setdefault((str(r["kind"]), str(r["asset_id"]), int(r["version"])), r)
-    for q in await agents_reg.all_requests():
-        kind, subject = str(q["kind"]), str(q["subject_id"])
-        if (kind, subject) not in names or kind not in HREF:
-            continue
-        snap.gates.append(
-            _gate(
-                rt,
-                q,
-                kind,
-                asset=asset(kind, subject),
-                by_version=by_version,
-                validation=latest_validation.get(subject),
-                published=_published(kind, subject, agents, skills, workflows),
-            )
-        )
-    snap.stats = _stats(
-        snap,
-        latest_run=latest_run,
-        latest_validation=latest_validation,
-        agents=agents,
-        skills=skills,
-        workflows=workflows,
-        cases=cases,
-    )
-    return snap
+            for d in details.drafts
+        ],
+    }
 
 
-def _published(
-    kind: str, subject: str, agents: dict[str, Any], skills: dict[str, Any], workflows: dict[str, Any]
-) -> int | None:
-    found = {ASSET_AGENT: agents, ASSET_SKILL: skills, ASSET_WORKFLOW: workflows}[kind].get(subject)
-    return found["published_version"] if found else None
+async def runs(rt: Runtime, params: ListParams) -> dict[str, Any]:
+    """Every stored run of the team's agents and skills and every test run of its workflows, newest first."""
+
+    return await _answer(rt, "runs", params, _run)
 
 
-def _gate(
-    rt: Runtime,
-    q: dict[str, Any],
-    kind: str,
-    *,
-    asset: dict[str, Any],
-    by_version: dict[tuple[str, str, int], dict[str, Any]],
-    validation: dict[str, Any] | None,
-    published: int | None,
-) -> dict[str, Any]:
-    version = int(q["version"])
-    tier = DEFAULT_TIER
-    minimum = rt.settings.eval_min_pass_rate
+def _run(row: dict[str, Any], _listed: Listed, _minimum: float) -> dict[str, Any]:
+    passed, total = int(row["passed"]), int(row["total"])
+    return {
+        "id": row["id"],
+        "asset": _asset(row),
+        "version": int(row["version"]),
+        "trigger": row["trigger"],
+        "passed": passed,
+        "total": total,
+        "passRate": pass_rate(passed, total) or 0.0,
+        "regressions": int(row["regressions"]),
+        "durationMs": int(row["duration_ms"]),
+        "costUsd": float(row["cost_usd"]),
+        "ranAt": row["ran_at"],
+        "reviewId": None,
+    }
+
+
+async def gates(rt: Runtime, params: ListParams) -> dict[str, Any]:
+    """The publish checks of the team's publish requests: each step's result and whether the request is blocked."""
+    return await _answer(rt, "gates", params, _gate)
+
+
+def _gate(row: dict[str, Any], _listed: Listed, minimum: float) -> dict[str, Any]:
+    version, tier = int(row["version"]), str(row["tier"])
     steps: list[dict[str, Any]] = []
 
     def add(step: str, result: str, detail: str) -> None:
@@ -286,39 +177,29 @@ def _gate(
             }
         )
 
-    if kind == ASSET_WORKFLOW:
-        summary = validation["summary"] if validation else None
-        if summary is None:
+    summarised = row["summary_id"] is not None
+    if row["kind"] == ASSET_WORKFLOW:
+        if not summarised:
             add("structural", STEP_PENDING, "No test run of this workflow yet.")
         else:
-            failing = int(summary.get("checksFailing", 0))
+            failing = int(row["checks_failing"] or 0)
             add(
                 "structural",
                 STEP_FAIL if failing else STEP_PASS,
                 f"{failing} structure checks fail." if failing else "Every structure check passes.",
             )
-        passed, total, regressions = (
-            (int(summary["passed"]), int(summary["total"]), int(summary.get("regressions", 0)))
-            if summary
-            else (0, 0, 0)
-        )
-    else:
-        run = by_version.get((kind, str(q["subject_id"]), version))
-        passed, total, regressions = (
-            (int(run["passed"]), int(run["total"]), int(run["regressions"])) if run else (0, 0, 0)
-        )
-        summary = run
-    if summary is None or total == 0:
+    passed, total, regressions = int(row["passed"]), int(row["total"]), int(row["regressions"])
+    if not summarised or total == 0:
         pending = f"No saved cases have run on version {version}."
         add("pass_rate", STEP_PENDING, pending)
         add("regressions", STEP_PENDING, pending)
     else:
-        rate = passed / total
-        ok_rate = rate >= minimum
+        ok_rate = passed / total >= float(minimum)
         add(
             "pass_rate",
             STEP_PASS if ok_rate else STEP_FAIL,
-            f"{passed} of {total} cases pass" + ("." if ok_rate else f"; at least {round(minimum * 100)}% must."),
+            f"{passed} of {total} cases pass"
+            + ("." if ok_rate else f"; at least {round(float(minimum) * 100)}% must."),
         )
         add(
             "regressions",
@@ -327,49 +208,17 @@ def _gate(
             if regressions
             else "No case that passes live fails here.",
         )
-    opened = q["status"] == OPEN_STATUS
+    published = row["published_version"]
+    status = str(row["status"])
     return {
-        "reviewId": q["id"],
-        "asset": asset,
+        "reviewId": row["id"],
+        "asset": _asset(row),
         "fromVersion": published if published is not None and published < version else None,
         "toVersion": version,
         "tier": tier,
-        "requestedBy": q["requested_by"],
-        "requestedAt": q["created_at"],
-        "reviewStatus": q["status"] if q["status"] in ("pending", "approved", "rejected", "returned") else "pending",
+        "requestedBy": row["requested_by"],
+        "requestedAt": row["created_at"],
+        "reviewStatus": status if status in REVIEW_STATUSES else OPEN_STATUS,
         "steps": steps,
-        "blocked": opened and any(s["mode"] == "blocking" and s["result"] == STEP_FAIL for s in steps),
-    }
-
-
-def _stats(
-    snap: Snapshot,
-    *,
-    latest_run: dict[tuple[str, str], dict[str, Any]],
-    latest_validation: dict[str, dict[str, Any]],
-    agents: dict[str, Any],
-    skills: dict[str, Any],
-    workflows: dict[str, Any],
-    cases: list[dict[str, Any]],
-) -> dict[str, int]:
-    def passing(kind: str, asset_id: str) -> bool:
-        if kind == ASSET_WORKFLOW:
-            v = latest_validation.get(asset_id)
-            return (
-                bool(v) and int(v["summary"]["total"]) > 0 and int(v["summary"]["passed"]) == int(v["summary"]["total"])
-            )
-        r = latest_run.get((kind, asset_id))
-        return bool(r) and int(r["total"]) > 0 and int(r["passed"]) == int(r["total"])
-
-    live = (
-        [(ASSET_AGENT, i) for i, r in agents.items() if r["published_version"] is not None]
-        + [(ASSET_SKILL, i) for i, r in skills.items() if r["published_version"] is not None]
-        + [(ASSET_WORKFLOW, i) for i, r in workflows.items() if r["status"] == "live"]
-    )
-    with_cases = {(str(c["kind"]), str(c["asset_id"])) for c in cases if c["status"] == CASE_ACTIVE}
-    return {
-        "failingSuites": sum(1 for s in snap.suites if s["failing"]),
-        "gatesBlocked": sum(1 for g in snap.gates if g["blocked"]),
-        "liveUntested": sum(1 for kind, i in live if not passing(kind, i)),
-        "notRun": sum(1 for key in with_cases if key not in latest_run),
+        "blocked": bool(row["blocked"]),
     }

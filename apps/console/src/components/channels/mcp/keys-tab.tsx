@@ -18,6 +18,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCan } from '@/hooks/me-queries';
+import { useCreatedRows } from '@/hooks/use-created-rows';
+import { useListParams } from '@/hooks/use-list-params';
 import { useApiKeys, useCreateApiKey, useRevokeApiKey } from '@/hooks/settings-queries';
 import { relativeTime } from '@/lib/format';
 import type { ApiKey } from '@/lib/types/settings';
@@ -34,7 +36,9 @@ const day = (iso: string) => new Date(iso).toLocaleDateString([], { day: 'numeri
  * tools only over MCP; a key made here can read and nothing else, always expires, and shows its secret once.
  */
 export function KeysTab({ linkId }: { linkId: string }) {
-  const q = useApiKeys({ page: 1, pageSize: 100, filters: { mcpLink: [linkId] } });
+  const list = useListParams<Record<string, never>>('name');
+  const newKeys = useCreatedRows<ApiKey>();
+  const q = useApiKeys({ ...list.params, filters: { mcpLink: [linkId] } });
   const canCreate = useCan('access', 'create') === true;
   const canRevoke = useCan('access', 'delete') === true;
   const revoke = useRevokeApiKey();
@@ -42,6 +46,7 @@ export function KeysTab({ linkId }: { linkId: string }) {
   const [making, setMaking] = React.useState(false);
   if (q.isPending) return <PageSkeleton statCards={0} tableRows={3} />;
   if (q.isError && !q.data) return <QueryError what="the team’s keys" error={q.error} onRetry={() => void q.refetch()} retrying={q.isFetching} />;
+  // The keys route has no `status` filter yet, so a revoked key arrives on its page and is hidden here (parameter needed: status).
   const rows = (q.data?.data ?? []).filter((k) => (k as ApiKey & { status?: string }).status !== 'revoked');
   const columns: ColumnDef<ApiKey>[] = [
     {
@@ -100,10 +105,12 @@ export function KeysTab({ linkId }: { linkId: string }) {
         searchColumn="name"
         searchPlaceholder="Search keys…"
         hideViewSwitcher
-        hidePaginationOnOnePage
-        emptyState={<ListEmpty icon={KeyRound} noun="keys" filtered={false} description="A key lets a script or another system read through this link without a person signing in." />}
+        created={newKeys}
+        onColumnFiltersChange={list.onColumnFiltersChange}
+        serverPagination={{ enabled: true, total: q.data?.pagination.total ?? 0, page: list.pagination.page, pageSize: list.pagination.pageSize, totalPages: q.data?.pagination.totalPages, onPaginationChange: list.setPagination, isLoading: q.isFetching && q.isPlaceholderData }}
+        emptyState={<ListEmpty icon={KeyRound} noun="keys" filtered={list.isFiltered} description="A key lets a script or another system read through this link without a person signing in." />}
       />
-      <NewKeyDialog open={making} onOpenChange={setMaking} linkId={linkId} />
+      <NewKeyDialog open={making} onOpenChange={setMaking} linkId={linkId} onMade={newKeys.show} />
       {revoking && (
         <ConfirmActionDialog
           open
@@ -129,7 +136,7 @@ export function KeysTab({ linkId }: { linkId: string }) {
   );
 }
 
-function NewKeyDialog({ open, onOpenChange, linkId }: { open: boolean; onOpenChange: (open: boolean) => void; linkId: string }) {
+function NewKeyDialog({ open, onOpenChange, linkId, onMade }: { open: boolean; onOpenChange: (open: boolean) => void; linkId: string; onMade: (key: ApiKey) => void }) {
   const create = useCreateApiKey();
   const [name, setName] = React.useState('');
   const [expiry, setExpiry] = React.useState('90');
@@ -146,7 +153,10 @@ function NewKeyDialog({ open, onOpenChange, linkId }: { open: boolean; onOpenCha
     if (!name.trim()) return setError('Name the key after the system that will use it.');
     create.mutate(
       { name: name.trim(), scopes: ['read'], expiresInDays: Number(expiry), target: { kind: 'mcp_link', id: linkId } },
-      { onSuccess: (r) => setSecret(r.key), onError: (e) => setError(e.message) },
+      { onSuccess: (r) => {
+          setSecret(r.key);
+          if (r.apiKey) onMade(r.apiKey);
+        }, onError: (e) => setError(e.message) },
     );
   };
   return (

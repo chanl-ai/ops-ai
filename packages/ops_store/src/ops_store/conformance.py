@@ -15,8 +15,10 @@ from __future__ import annotations
 import asyncio
 import secrets
 import time
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import AsyncGenerator, Awaitable, Callable, Generator, Mapping, Sequence
+from contextlib import asynccontextmanager, contextmanager
 from datetime import UTC, datetime
+from itertools import pairwise
 from secrets import token_hex
 from typing import Any
 
@@ -24,12 +26,12 @@ import sqlalchemy as sa
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
 from .guarantees import Backend, unmet
 from .isolation import isolated_tx, scope, tenant_wide
 from .ports import AuditPort, LeasePort, TimerClaimPort
-from .schema import isolation_kind, team_column, tenant_column
+from .schema import MSSQL_COLLATION, MSSQL_SECURITY, isolation_kind, team_column, tenant_column
 
 CONTENDERS = 8
 
@@ -49,13 +51,64 @@ async def engine_for(backend: Backend) -> AsyncEngine:
     return create_async_engine(url)
 
 
+@contextmanager
+def sql_server_database(
+    prefix: str, server: str | None, password: str | None, *, batches: Sequence[str] | None = None
+) -> Generator[str | None]:
+    """The async URL of a scratch SQL Server database, dropped afterwards, for a test that runs on both databases.
+    `server` is `host,port` and `password` the administrator's, which a test reads from OPS_MSSQL_SERVER and
+    MSSQL_SA_PASSWORD; None where either is unset, and the test skips. With `batches` (a service's schema), the
+    database is made as roles.sql makes a deployment's, with its collation and read-committed snapshot, and the
+    batches run in it in order; the first that fails raises and the database is still dropped."""
+    if not server or not password:
+        yield None
+        return
+    host, port = server.split(",")
+    odbc = {"driver": "ODBC Driver 18 for SQL Server", "TrustServerCertificate": "yes"}
+    master = sa.URL.create("mssql+pyodbc", "sa", password, host, int(port), "master", odbc)
+    name = f"{prefix}_{token_hex(4)}"
+    admin = sa.create_engine(master, isolation_level="AUTOCOMMIT")
+    with admin.connect() as c:
+        if batches is None:
+            c.execute(text(f"CREATE DATABASE [{name}]"))
+        else:
+            c.execute(text(f"CREATE DATABASE [{name}] COLLATE {MSSQL_COLLATION}"))
+            c.execute(text(f"ALTER DATABASE [{name}] SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE"))
+    try:
+        if batches is not None:
+            _run_batches(master.set(database=name), batches)
+        yield master.set(drivername="mssql+aioodbc", database=name).render_as_string(hide_password=False)
+    finally:
+        with admin.connect() as c:
+            c.execute(text(f"ALTER DATABASE [{name}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE"))
+            c.execute(text(f"DROP DATABASE [{name}]"))
+        admin.dispose()
+
+
+def _run_batches(url: sa.URL, batches: Sequence[str]) -> None:
+    """Each batch as sqlcmd runs one between GO lines, outside a transaction (as full-text DDL needs). Every result
+    set is read: the driver raises a THROW after a batch's first statement only when its result is reached."""
+    engine = sa.create_engine(url, isolation_level="AUTOCOMMIT")
+    raw = engine.raw_connection()
+    try:
+        cursor = raw.cursor()
+        for batch in batches:
+            cursor.execute(batch)
+            while cursor.nextset():
+                pass
+        cursor.close()
+    finally:
+        raw.close()
+        engine.dispose()
+
+
 def _guarantees(repo: object, backend: Backend) -> None:
     missing = unmet(repo, backend)  # pyright: ignore[reportArgumentType]
     names = sorted(g.value for g in missing)
     assert not missing, f"{type(repo).__name__} needs {names}, which {backend.name} does not provide"
 
 
-async def _until[T](attempt: Callable[[], Awaitable[T | None]], timeout: float = 10.0) -> T:
+async def _until[T](attempt: Callable[[], Awaitable[T | None]], timeout: float = 10.0) -> T:  # noqa: ASYNC109
     deadline = time.monotonic() + timeout
     while (result := await attempt()) is None:
         assert time.monotonic() < deadline, "the condition did not hold in time"
@@ -80,11 +133,37 @@ async def lease_suite(backend: Backend, make: Callable[[], Awaitable[LeasePort]]
 
     racers = [await make() for _ in range(CONTENDERS)]
     fresh = f"lease-{token_hex(4)}"
-    won = [g for g in await asyncio.gather(*(r.try_acquire(fresh, f"r{i}") for i, r in enumerate(racers))) if g]
-    assert len(won) == 1, f"{len(won)} contenders took one free key"
+    won = await _race(racers, fresh, "r")
+    assert _one_at_a_time(won, a.ttl), f"{len(won)} contenders took one free key: {won}"
     await asyncio.sleep(a.ttl * 1.5)
-    won = [g for g in await asyncio.gather(*(r.try_acquire(fresh, f"s{i}") for i, r in enumerate(racers))) if g]
-    assert len(won) == 1, f"{len(won)} contenders took one lapsed lease"
+    won = await _race(racers, fresh, "s")
+    assert _one_at_a_time(won, a.ttl), f"{len(won)} contenders took one lapsed lease: {won}"
+
+
+# A winner of a race: its generation and when its try_acquire started and returned, in seconds on one clock.
+_Win = tuple[int, float, float]
+
+
+async def _race(racers: Sequence[LeasePort], key: str, prefix: str) -> list[_Win]:
+    async def one(i: int, r: LeasePort) -> _Win | None:
+        start = time.monotonic()
+        g = await r.try_acquire(key, f"{prefix}{i}")
+        return (g, start, time.monotonic()) if g else None
+
+    # In the order the winners got the key, so the generations are checked in that order, not sorted into it.
+    return sorted(
+        (w for w in await asyncio.gather(*(one(i, r) for i, r in enumerate(racers))) if w), key=lambda w: w[2]
+    )
+
+
+def _one_at_a_time(won: list[_Win], ttl: float) -> bool:
+    """One winner, or each later one only after the lease before it lapsed: a contender held up past the ttl (a slow
+    connection on a loaded host) takes the key once the first holder's lease ran out, which a correct lease allows. A
+    later winner that returned less than a ttl after the earlier one started took a lease that was still live, and one
+    without a newer generation than the winner before it would let that holder's fenced writes still land."""
+    return len(won) >= 1 and all(
+        later[0] > earlier[0] and later[2] - earlier[1] >= ttl for earlier, later in pairwise(won)
+    )
 
 
 async def timer_claim_suite(backend: Backend, make: Callable[[], Awaitable[TimerClaimPort]]) -> None:
@@ -128,7 +207,8 @@ async def isolation_suite(
 ) -> list[str]:
     """Every way the database lets a transaction see or change rows its context should not, one line per failure, each
     starting with the table's name; empty when every team-owned and tenant table holds. Rows are written past
-    row-level security (as the engine's own user, which must bypass it: a superuser or a BYPASSRLS role) and read back
+    row-level security (on PostgreSQL as the engine's own user, which must bypass it: a superuser or a BYPASSRLS role;
+    on SQL Server with the table's policy off for that transaction) and read back
     as `role`
     with raw SQL and no WHERE clause, so only the policy can filter: for a team table (T1, A), (T1, B), (T1, no team
     where the column allows it, which no team reads) and (T2, A); for a tenant table one row of each tenant.
@@ -149,7 +229,7 @@ async def isolation_suite(
             if team is not None
             else [(t1, None), (t2, None)]
         )
-        async with engine.begin() as c:
+        async with _past_the_policy(engine, table) as c:
             for row_tenant, row_team in rows:
                 values = {**make(row_tenant, row_team), tenant.name: row_tenant}
                 if team is not None:
@@ -161,9 +241,33 @@ async def isolation_suite(
                 for f in await _isolation_checks(engine, table, role=role, ids=(t1, t2, a, b), make=make)
             ]
         finally:
-            async with engine.begin() as c:
+            async with _past_the_policy(engine, table) as c:
                 await c.execute(table.delete().where(tenant.in_([t1, t2])))
     return failures
+
+
+def _policy_state(table: sa.Table, state: str) -> list[str]:
+    """SQL Server: the table's policy, a team or a tenant one, turned on or off; deferred in EXEC, since SQL Server
+    resolves the policy's name when it compiles the batch and a dropped one would fail it."""
+    names = (f"{MSSQL_SECURITY}.{table.name}_{kind}" for kind in ("isolation", "tenant"))
+    return [
+        f"IF OBJECT_ID(N'{n}', N'SP') IS NOT NULL EXEC (N'ALTER SECURITY POLICY {n} WITH (STATE = {state})')"
+        for n in names
+    ]
+
+
+@asynccontextmanager
+async def _past_the_policy(engine: AsyncEngine, table: sa.Table) -> AsyncGenerator[AsyncConnection]:
+    """One transaction that reads and writes `table` past its policy. On PostgreSQL the engine's own user bypasses
+    row-level security; SQL Server applies a policy to every user, its owner too, so the policy is off for this
+    transaction only (a rollback turns it back on as well)."""
+    async with engine.begin() as c:
+        mssql = c.dialect.name == "mssql"
+        for statement in _policy_state(table, "OFF") if mssql else []:
+            await c.execute(text(statement))
+        yield c
+        for statement in _policy_state(table, "ON") if mssql else []:
+            await c.execute(text(statement))
 
 
 async def _isolation_checks(
@@ -230,7 +334,7 @@ async def _isolation_checks(
 async def _all(
     engine: AsyncEngine, table: sa.Table, tenant: sa.Column[Any], team: sa.Column[Any] | None
 ) -> list[tuple[str, str | None]]:
-    async with engine.connect() as c:
+    async with _past_the_policy(engine, table) as c:
         cols = [tenant] + ([team] if team is not None else [])
         got = (await c.execute(sa.select(*cols).select_from(table))).all()
     return _pairs(got, team is not None)

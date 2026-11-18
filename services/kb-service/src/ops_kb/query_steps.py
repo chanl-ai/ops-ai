@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, replace
-from typing import Any, Protocol, cast
+from typing import NotRequired, Protocol, TypedDict
 
+from pydantic import BaseModel, ValidationError
+
+from ops_service_kit.http import JsonValue
 from ops_service_kit.model_calls import ModelCallError, ModelCalls
 
 QUERY_STEP = "kb:query"
@@ -28,12 +31,12 @@ RERANK_SYSTEM = (
     "You score how well each numbered passage answers the question, from 0 (does not answer it) to 10 (answers it "
     "fully). Score every passage once, by its number."
 )
-REWRITE_SCHEMA: dict[str, Any] = {
+REWRITE_SCHEMA: dict[str, JsonValue] = {
     "type": "object",
     "properties": {"question": {"type": "string"}},
     "required": ["question"],
 }
-RERANK_SCHEMA: dict[str, Any] = {
+RERANK_SCHEMA: dict[str, JsonValue] = {
     "type": "object",
     "properties": {
         "scores": {
@@ -47,6 +50,38 @@ RERANK_SCHEMA: dict[str, Any] = {
     },
     "required": ["scores"],
 }
+
+
+class RewriteTrace(TypedDict):
+    """What the answer shows of the rewrite: the question asked, what it became, and why it did not run."""
+
+    asked: str
+    rewritten: str | None
+    skipped: NotRequired[str]
+    ms: NotRequired[int]
+
+
+class RerankTrace(TypedDict):
+    """What the answer shows of the rerank: whether it ran, on which model, how many pieces it scored."""
+
+    ran: bool
+    model: str
+    scored: int
+    skipped: NotRequired[str]
+    ms: NotRequired[int]
+
+
+class _Rewritten(BaseModel):
+    question: str | None = None
+
+
+class _Scored(BaseModel):
+    scores: list[JsonValue] = []
+
+
+class _Score(BaseModel):
+    n: int
+    score: float
 
 
 class QueryStepFailed(Exception):
@@ -71,7 +106,7 @@ class ModelsQuery:
 
     calls: ModelCalls
 
-    async def _ask(self, system: str, user: str, schema: dict[str, Any], *, alias: str, tenant: str) -> Any:
+    async def _ask(self, system: str, user: str, schema: dict[str, JsonValue], *, alias: str, tenant: str) -> object:
         try:
             return await replace(self.calls, alias=alias).structured(
                 system, user, schema, tenant=tenant, step=QUERY_STEP
@@ -82,7 +117,10 @@ class ModelsQuery:
     async def rewrite(self, question: str, instruction: str, *, alias: str, tenant: str) -> str:
         user = f"Instruction: {instruction or 'Make the question a clear search query.'}\n\nQuestion: {question}"
         answer = await self._ask(REWRITE_SYSTEM, user, REWRITE_SCHEMA, alias=alias, tenant=tenant)
-        rewritten = str(cast(dict[str, Any], answer).get("question") or "").strip() if isinstance(answer, dict) else ""
+        try:
+            rewritten = (_Rewritten.model_validate(answer).question or "").strip()
+        except ValidationError:
+            rewritten = ""
         if not rewritten:
             raise QueryStepFailed("unreadable_answer")
         return rewritten
@@ -91,15 +129,17 @@ class ModelsQuery:
         numbered = "\n\n".join(f"[{n}] {p[:RERANK_CHARS]}" for n, p in enumerate(pieces, start=1))
         user = f"Question: {question}\n\nPassages:\n{numbered}"
         answer = await self._ask(RERANK_SYSTEM, user, RERANK_SCHEMA, alias=alias, tenant=tenant)
-        rows = cast(list[Any], cast(dict[str, Any], answer).get("scores") or []) if isinstance(answer, dict) else []
+        try:
+            rows = _Scored.model_validate(answer).scores
+        except ValidationError:
+            rows = []
         by_n: dict[int, float] = {}
         for r in rows:
-            if isinstance(r, dict):
-                row = cast(dict[str, Any], r)
-                try:
-                    by_n[int(row["n"])] = max(0.0, min(10.0, float(row["score"])))
-                except (KeyError, TypeError, ValueError):
-                    continue
+            try:
+                row = _Score.model_validate(r)
+            except ValidationError:
+                continue
+            by_n[row.n] = max(0.0, min(10.0, row.score))
         if not by_n:
             raise QueryStepFailed("unreadable_answer")
         # A piece the model left out scores 0, so it falls below every piece it scored.
@@ -116,11 +156,11 @@ class QuerySteps:
     instruction: str = ""
 
 
-def steps_for(settings: list[dict[str, Any]], default_alias: str) -> QuerySteps:
+def steps_for(settings: list[dict[str, JsonValue]], default_alias: str) -> QuerySteps:
     reranking = [r for r in settings if r.get("rerank")]
     rewriting = [r for r in settings if r.get("rewrite") == "rewrite"]
 
-    def alias(r: dict[str, Any]) -> str:
+    def alias(r: dict[str, JsonValue]) -> str:
         return str(r.get("queryModel") or default_alias)
 
     return QuerySteps(

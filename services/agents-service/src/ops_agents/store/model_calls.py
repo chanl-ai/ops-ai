@@ -17,14 +17,20 @@ from typing import Any, ClassVar
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_metering import MICRO, Totals
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
-from ops_store.dialect import insert_ignore
+from ops_store.dialect import db_now, insert_ignore
+from ops_store.rows import rows
+from ops_store.schema import TENANT_SCOPED, system
 
 from .base import metadata
+from .tenancy import RuntimeStore, current_tenant
+
+# Why the side tables of model_call_records and thread_budgets hold no tenant.
+UNATTRIBUTED = "unattributed rows kept from before tenancy: a thread gone and no other row naming its tenant (0104)"
 
 model_call_records = sa.Table(
     "model_call_records",
@@ -45,9 +51,37 @@ model_call_records = sa.Table(
     sa.Column("request_hash", sa.String(64)),
     sa.Column("response", sa.JSON()),
     sa.Column("created_at", sa.String(40), nullable=False),
+    # The thread's tenant, set from the request's or loop's context, never from a body (migration 0104).
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant),
     # One recorded response per task and request: the first one written wins (CAS).
     sa.UniqueConstraint("thread_id", "task", "request_hash", name="uq_model_call_replay"),
     sa.Index("ix_model_call_records_thread_id", "thread_id"),
+    info=TENANT_SCOPED,
+)
+
+# The calls recorded before 0104 whose thread is gone and that nothing else names a tenant for: kept, as recorded spend,
+# for operators. No store reads or writes it, and neither tenant transactions nor the SQL Server runtime user hold a
+# grant on it, so no tenant reads it.
+model_call_records_unattributed = sa.Table(
+    "model_call_records_unattributed",
+    metadata,
+    sa.Column("id", sa.String(64), primary_key=True),
+    sa.Column("thread_id", sa.String(64), nullable=False),
+    sa.Column("run_id", sa.String(64)),
+    sa.Column("step", sa.String(120), nullable=False),
+    sa.Column("task", sa.String(200)),
+    sa.Column("kind", sa.String(40), nullable=False),
+    sa.Column("model_alias", sa.String(120), nullable=False),
+    sa.Column("calls", sa.Integer(), nullable=False),
+    sa.Column("input_tokens", sa.BigInteger(), nullable=False),
+    sa.Column("output_tokens", sa.BigInteger(), nullable=False),
+    sa.Column("cost_micros", sa.BigInteger(), nullable=False),
+    sa.Column("latency_ms", sa.Integer()),
+    sa.Column("request_hash", sa.String(64)),
+    sa.Column("response", sa.JSON()),
+    sa.Column("created_at", sa.String(40), nullable=False),
+    sa.Column("moved_at", sa.DateTime(timezone=True), nullable=False, server_default=db_now()),
+    info=system(UNATTRIBUTED),
 )
 
 
@@ -68,24 +102,61 @@ class ModelCall:
     response: Any = None
 
 
-class ModelCallLedger:
+class ModelCallOut(Out):
+    """One recorded model call, as the journal and tests read it."""
+
+    id: str
+    thread_id: str
+    run_id: str | None
+    step: str
+    task: str | None
+    kind: str
+    model_alias: str
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    cost_micros: int
+    latency_ms: int | None
+    request_hash: str | None
+    response: Any
+    created_at: str
+
+
+_m = model_call_records.c
+CALL_COLUMNS = (
+    _m.id,
+    _m.thread_id,
+    _m.run_id,
+    _m.step,
+    _m.task,
+    _m.kind,
+    _m.model_alias,
+    _m.calls,
+    _m.input_tokens,
+    _m.output_tokens,
+    _m.cost_micros,
+    _m.latency_ms,
+    _m.request_hash,
+    _m.response,
+    _m.created_at,
+)
+
+
+class ModelCallLedger(RuntimeStore):
     # Replay depends on the first response recorded for a (thread, task, request) winning (CAS); a record and the sum
     # a budget check reads are each one statement, so no transaction spans them.
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS})
 
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
-
     async def record(self, call: ModelCall) -> bool:
         """Writes the record; False when a response for the same task and request is already there."""
-        values = {"id": new_id("mc"), "created_at": now_iso(), **call.__dict__}
+        values = {"id": new_id("mc"), "created_at": now_iso(), "tenant_id": current_tenant(), **call.__dict__}
         stmt: sa.Executable = (
             insert_ignore(self.engine, model_call_records, values, keys=["thread_id", "task", "request_hash"])
             if call.request_hash is not None
             else model_call_records.insert().values(**values)
         )
         try:
-            async with self.engine.begin() as c:
+            async with self.tx() as c, self.attempt(c):
                 return (await c.execute(stmt)).rowcount != 0
         except IntegrityError:
             return False
@@ -93,14 +164,13 @@ class ModelCallLedger:
     async def response(self, thread_id: str, task: str, request_hash: str) -> Any:
         m = model_call_records.c
         q = sa.select(m.response).where(m.thread_id == thread_id, m.task == task, m.request_hash == request_hash)
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return (await c.execute(q)).scalar_one_or_none()
 
-    async def calls(self, thread_id: str) -> list[dict[str, Any]]:
-        q = model_call_records.select().where(model_call_records.c.thread_id == thread_id)
-        async with self.engine.connect() as c:
-            rows = (await c.execute(q.order_by(model_call_records.c.created_at))).mappings().all()
-        return [dict(r) for r in rows]
+    async def calls(self, thread_id: str) -> list[ModelCallOut]:
+        q = sa.select(*CALL_COLUMNS).where(_m.thread_id == thread_id).order_by(_m.created_at, _m.id)
+        async with self.tx() as c:
+            return await rows(c, q, ModelCallOut)
 
     async def sums(self, thread_id: str, *, by_run: bool) -> dict[str | None, Totals]:
         m = model_call_records.c
@@ -114,6 +184,6 @@ class ModelCallLedger:
         q = sa.select(key, *cols).where(m.thread_id == thread_id)
         if by_run:
             q = q.group_by(m.run_id)
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             rows: list[tuple[Any, ...]] = [tuple(r) for r in (await c.execute(q)).all()]
         return {r[0]: Totals(int(r[1]), int(r[2]), int(r[3]), MICRO * int(r[4])) for r in rows}

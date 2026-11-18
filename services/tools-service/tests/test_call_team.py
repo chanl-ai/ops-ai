@@ -93,3 +93,14 @@ async def test_usage_never_shows_another_teams_call_on_a_shared_module(gw: httpx
 async def test_usage_says_whom_a_call_ran_as(gw: httpx.AsyncClient, tenant: str) -> None:
     call_id = await _call(gw, tenant, LENDING, "open_case", "as")
     assert (await _listed(gw, tenant, LENDING))[call_id]["runAs"] == {"kind": "team"}
+
+
+async def test_a_refused_call_on_a_tool_no_module_holds_is_in_the_calling_teams_log_only(
+    gw: httpx.AsyncClient, tenant: str
+) -> None:
+    # Refusals are audit evidence: one on no module was recorded but filtered out with every team's module list.
+    call_id = await _call(gw, tenant, LENDING, "drop_tables", "unknown")
+    assert (await _listed(gw, tenant, LENDING))[call_id]["status"] == "denied"
+    assert (await gw.get(f"/v1/executions/{call_id}", headers=reader_of(LENDING))).status_code == 200
+    assert call_id not in await _listed(gw, tenant, CARDS), "another team sees nothing of it"
+    assert (await gw.get(f"/v1/executions/{call_id}", headers=reader_of(CARDS))).status_code == 404

@@ -20,6 +20,7 @@ from ops_service_kit.errors import Conflict, NotFound, Unprocessable, Validation
 from ops_service_kit.logging import get_logger
 
 from ..activities.catalog import AgentDefinition, kernel_skills
+from ..store.skill_list import pinning_agents, published_pinning
 from ..store.skills import SkillRegistry, slug_of
 from .agent_registry import SEED_BY, SEED_TEAM, seed_agent_version
 from .agent_registry import registry as agent_registry
@@ -288,34 +289,25 @@ async def _requests(rt: Runtime, skill_id: str) -> list[dict[str, Any]]:
     return await agent_registry(rt).requests("skill", skill_id)
 
 
-async def _pinning(rt: Runtime) -> list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]]:
-    """(agent row, agent version spec, pin) for each skill pin on an agent's newest version."""
-    reg = agent_registry(rt)
-    out: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]] = []
-    for row in await reg.rows():
-        spec = (await reg.version(row["id"], int(row["version"])))["spec"]
-        out.extend((row, spec, p) for p in cast(list[dict[str, Any]], spec.get("skillPins") or []))
-    return out
-
-
 async def pinned_by(rt: Runtime, skill_id: str) -> list[str]:
     """Agents whose newest or published version pins the skill (the published one serves chat), and published
-    workflows whose agent steps carry it (a workflow keeps the agent version it was published with)."""
-    reg = agent_registry(rt)
-    names: set[str] = set()
-    for row in await reg.rows():
-        for n in {row["version"], row["published_version"]} - {None}:
-            spec = (await reg.version(row["id"], int(n)))["spec"]
-            pins: list[dict[str, Any]] = list(spec.get("skillPins") or [])
-            if any(p["skillId"] == skill_id for p in pins):
-                names.add(str(spec["name"]))
+    workflows whose agent steps carry it (a workflow keeps the agent version it was published with). The acting
+    team's agents only, as the skills list counts them."""
+    names = {str(a.spec["name"]) for a in await pinning_agents(rt.db, skill_id)}
+    names.update(await published_pinning(rt.db, skill_id))
     names.update(await workflows_pinning(rt, "skills", "skill_id", skill_id))
     return sorted(names)
 
 
 async def workflows_pinning(rt: Runtime, field: str, key: str, value: str) -> set[str]:
     """Published workflows with an agent step whose pinned agent carries `value` under `field[].key`."""
-    out: set[str] = set()
+    return (await workflows_pinning_each(rt, field, key)).get(value, set())
+
+
+async def workflows_pinning_each(rt: Runtime, field: str, key: str) -> dict[str, set[str]]:
+    """Each value held under `field[].key` by an agent step of a published workflow, to those workflows' labels; one
+    pass over the published workflows answers for every record a page shows."""
+    out: dict[str, set[str]] = {}
     if rt.graph_store is None:
         return out
     for row in await published_workflows(rt):
@@ -326,8 +318,10 @@ async def workflows_pinning(rt: Runtime, field: str, key: str, value: str) -> se
             config: dict[str, Any] = dict(n.get("config") or {})
             agent: dict[str, Any] = dict(config.get("agent") or {})
             held: list[dict[str, Any]] = list(agent.get(field) or [])
-            if n.get("kind") == "agent_turn" and any(x.get(key) == value for x in held):
-                out.add(f"workflow {row['name']}")
+            if n.get("kind") == "agent_turn":
+                for x in held:
+                    if x.get(key) is not None:
+                        out.setdefault(str(x[key]), set()).add(f"workflow {row['name']}")
     return out
 
 
@@ -353,49 +347,37 @@ def _version_state(row: dict[str, Any], v: dict[str, Any], requests: list[dict[s
     return "draft"
 
 
-async def row_view(
-    rt: Runtime,
-    row: dict[str, Any],
-    pins: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]],
-    *,
-    served: bool = False,
-) -> dict[str, Any]:
-    """One list row. `served` describes the published version (what chat and the MCP prompts use) instead of the
-    newest one an editor sees."""
-    reg = skills(rt)
-    newest = await reg.version(row["id"], int(row["published_version"] if served else row["version"]))
-    assert newest is not None
-    requests = await _requests(rt, row["id"])
-    pending = next((r for r in requests if r["status"] == "pending"), None)
-    content = newest["content"]
-    users = [(a, s) for a, s, p in pins if p["skillId"] == row["id"]]
+def list_row(r: dict[str, Any]) -> dict[str, Any]:
+    """One list row from a `store.skill_list` row: the skill with the version it shows (`content`, `tokens`), its
+    status, its newest pending review and how many of the team's agents pin it (`used_by`, `live_agents`)."""
+    content: dict[str, Any] = r["content"]
     return {
-        "id": row["id"],
+        "id": r["id"],
         "name": content["name"],
-        "slug": row["slug"],
+        "slug": r["slug"],
         "useWhen": content["useWhen"],
         "loading": content["loading"],
-        "ownerTeam": row["owner_team"],
-        "status": _status(row, pending),
-        "version": row["version"],
-        "publishedVersion": row["published_version"],
-        "draftVersion": row["version"] if row["version"] != row["published_version"] else None,
-        "usedBy": len(users),
-        "liveAgents": sum(1 for a, _ in users if a["published_version"] is not None and not a["paused"]),
+        "ownerTeam": r["owner_team"],
+        "status": r["status"],
+        "version": r["version"],
+        "publishedVersion": r["published_version"],
+        "draftVersion": r["version"] if r["version"] != r["published_version"] else None,
+        "usedBy": int(r["used_by"]),
+        "liveAgents": int(r["live_agents"]),
         "toolCount": len(content["tools"]),
         "kbCount": len(content["knowledgeBases"]),
         # Skill tests are not built yet (spec 11 4.4), so there is no pass rate to report.
         "lastEvalPassRate": None,
-        "tokens": newest["tokens"],
-        "updatedAt": row["updated_at"],
-        "updatedBy": row["updated_by"],
-        "origin": row["origin"],
+        "tokens": r["tokens"],
+        "updatedAt": r["updated_at"],
+        "updatedBy": r["updated_by"],
+        "origin": r["origin"],
         "inputs": content.get("inputs") or [],
         "parts": [
             {"slug": p["slug"], "name": p["name"], "useWhen": p["useWhen"], "inputs": p.get("inputs") or []}
             for p in cast(list[dict[str, Any]], content.get("parts") or [])
         ],
-        **({"pendingReviewId": pending["id"]} if pending else {}),
+        **({"pendingReviewId": r["pending_id"]} if r["pending_id"] else {}),
     }
 
 
@@ -414,12 +396,22 @@ def over_budget(v: dict[str, Any]) -> str | None:
 async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
     reg = skills(rt)
     row = await reg.row(skill_id)
-    pins = await _pinning(rt)
-    base = await row_view(rt, row, pins)
+    users = await pinning_agents(rt.db, skill_id)
     versions = await reg.versions(skill_id)
     requests = await _requests(rt, skill_id)
     pending = next((r for r in requests if r["status"] == "pending"), None)
     newest = versions[0]
+    base = list_row(
+        {
+            **row,
+            "content": newest["content"],
+            "tokens": newest["tokens"],
+            "status": _status(row, pending),
+            "pending_id": pending["id"] if pending else None,
+            "used_by": len(users),
+            "live_agents": sum(1 for a in users if a.published_version is not None and not a.paused),
+        }
+    )
     blockers: list[str] = []
     if row["deprecated_reason"]:
         blockers.append("The skill is deprecated.")
@@ -430,23 +422,26 @@ async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
     if too_long := over_budget(newest):
         blockers.append(too_long)
     latest = row["published_version"]
+    published = next((v for v in versions if v["version"] == latest), None)
     usage: list[dict[str, Any]] = []
-    for a, spec, p in pins:
-        if p["skillId"] != skill_id:
-            continue
-        newer = await reg.version(skill_id, int(latest)) if latest and latest > p["version"] else None
+    for a in users:
+        spec: dict[str, Any] = dict(a.spec)
+        newer = published if latest and latest > a.pinned_version else None
         blocked = missing_for(newer["content"], spec) if newer else []
+        held = cast(list[dict[str, Any]], spec.get("skillPins") or [])
+        none: dict[str, Any] = {}
+        pin = next((p for p in held if p["skillId"] == skill_id), none)
         usage.append(
             {
-                "agentId": a["id"],
+                "agentId": a.id,
                 "agentName": spec["name"],
-                "agentTeamId": a["team_id"],
+                "agentTeamId": a.team_id,
                 "agentAvailability": "paused"
-                if a["paused"]
+                if a.paused
                 else "published"
-                if a["published_version"] is not None
+                if a.published_version is not None
                 else "not_published",
-                "pinnedVersion": p["version"],
+                "pinnedVersion": a.pinned_version,
                 "latestPublished": latest,
                 "upgradeAvailable": newer is not None,
                 **(
@@ -456,8 +451,8 @@ async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
                 "loads7d": 0,
                 "share7d": 0,
                 "lastLoadedAt": None,
-                "attachedAt": p.get("attachedAt") or a["updated_at"],
-                "attachedBy": p.get("attachedBy") or "",
+                "attachedAt": pin.get("attachedAt") or a.updated_at,
+                "attachedBy": pin.get("attachedBy") or "",
             }
         )
     return {
@@ -643,10 +638,10 @@ async def load_seed(rt: Runtime, path: Path) -> None:
     """Seeds each skill in `path` with no row yet, published at v1, and attaches it to the agents it names
     (`seed_agent_version`: published in dev, reviewed elsewhere, never over a person's draft). An existing skill is
     left as it is, so console edits survive a restart."""
-    if not path.is_file():
+    if not path.is_file():  # noqa: ASYNC240
         return
     reg = skills(rt)
-    seeds: list[dict[str, Any]] = json.loads(path.read_text())
+    seeds: list[dict[str, Any]] = json.loads(path.read_text())  # noqa: ASYNC240
     for s in seeds:
         if await reg.find(s["id"]) is not None:
             continue

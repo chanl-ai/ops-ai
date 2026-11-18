@@ -17,10 +17,8 @@ import { RestTool } from '@/components/tools/rest-tool';
 import { baseOfApp, draftOf, patchOf, ToolAddress, ToolWorkbench, type WorkbenchDraft } from '@/components/tools/tool-workbench';
 import { Button } from '@/components/ui/button';
 import { useToolRow } from '@/hooks/queries';
-import { useConnectionOptions } from '@/hooks/systems-queries';
 import { useSetModuleConnection, useTestModule, useToolModule, useUpdateOperation } from '@/hooks/tool-module-queries';
 import { ApiError } from '@/lib/api/contract';
-import type { IntegrationStatus } from '@/lib/types/integrations';
 import type { ModuleTestInput, OperationPatch } from '@/lib/types/tool-modules';
 
 /** One tool operation on its own page: edit its call, inputs, mock and transform, and try them before staging. A
@@ -37,7 +35,6 @@ export default function OperationWorkbenchPage() {
   const [inputErrors, setInputErrors] = React.useState<Record<string, string>>({});
   const [saveProblems, setSaveProblems] = React.useState<string[]>([]);
   const setConnection = useSetModuleConnection();
-  const connections = useConnectionOptions();
   const m = mod.data;
   const op = m?.operations.find((o) => o.name === name);
   const [draft, setDraft] = React.useState<WorkbenchDraft | null>(null);
@@ -116,8 +113,6 @@ export default function OperationWorkbenchPage() {
           dirty={Object.keys(patch).length > 0}
           saveProblems={saveProblems}
           connection={m.connection}
-          connections={connections.data?.map((c) => ({ id: c.id, name: c.name, status: c.status as IntegrationStatus }))}
-          connectionsLoading={connections.isPending}
           settingConnection={setConnection.isPending}
           onConnectionChange={(connectionId) =>
             setConnection.mutate(
@@ -127,7 +122,8 @@ export default function OperationWorkbenchPage() {
           }
           stagedCall={stagedCall}
           inputErrors={inputErrors}
-          extraActions={policy}
+          canEdit={m.canEdit}
+          extraActions={m.canEdit === false ? undefined : policy}
           {...run}
         />
       ) : (
@@ -150,7 +146,8 @@ export default function OperationWorkbenchPage() {
         {...run}
         stagedCall={stagedCall}
         inputErrors={inputErrors}
-        extraActions={policy}
+        canEdit={m.canEdit}
+        extraActions={m.canEdit === false ? undefined : policy}
       />
       )}
       <OperationSheet policyOnly op={policyOpen ? op : null} base={base} stagedCall={stagedCall} onOpenChange={setPolicyOpen} saving={update.isPending} onSave={(p) => stage(p, `Staged changes to ${op.name}`)} />

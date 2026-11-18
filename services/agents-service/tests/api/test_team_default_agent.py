@@ -20,9 +20,10 @@ from ops_agents.api.app import create_app
 from ops_agents.api.auth import Principal
 from ops_agents.api.child_runs import acting_for
 from ops_agents.api.deps import Runtime
+from ops_agents.api.ops_tools import ops_assistant_id
 from ops_agents.store.agent_registry import registry_agents
 from ops_agents.store.base import metadata
-from ops_agents.store.tenancy import tenant_scope
+from ops_agents.store.tenancy import LOCAL_TENANT, tenant_scope
 from ops_engine.store import metadata as engine_metadata
 from ops_identity import Auth, Identity, ServiceAuth, service_verifiers
 from ops_service_kit.settings import Settings
@@ -111,10 +112,11 @@ async def test_only_a_team_admin_sets_the_default(stack: Stack) -> None:
 async def test_a_chat_without_an_agent_starts_only_on_a_live_default_of_the_team(stack: Stack) -> None:
     c, rt = stack
     # A team that has set no default gets its own Ops Assistant on the first chat, rather than a refusal.
-    assert (await start(c, VIEWER))["agentId"] == "ag_ops_team_ops"
-    assert (await c.get(URL, headers=VIEWER)).json()["data"]["agentId"] == "ag_ops_team_ops"
+    assert (await start(c, VIEWER))["agentId"] == ops_assistant_id(LOCAL_TENANT, "team_ops")
+    assert (await c.get(URL, headers=VIEWER)).json()["data"]["agentId"] == ops_assistant_id(LOCAL_TENANT, "team_ops")
+    # An id the tenant does not hold reads as another tenant's would: not found.
     gone = await c.put(URL, json={"agentId": "ag_missing"}, headers=ADMIN)
-    assert gone.status_code == 422 and gone.json()["error"]["code"] == "agent_not_live", gone.text
+    assert gone.status_code == 404 and gone.json()["error"]["code"] == "not_found", gone.text
     await move(rt, "ag_fraud", "team_fraud")
     other = await c.put(URL, json={"agentId": "ag_fraud"}, headers=ADMIN)
     assert other.status_code == 422 and other.json()["error"]["code"] == "other_team_agent", other.text
@@ -169,7 +171,7 @@ async def test_a_handover_is_checked_like_a_start_and_back_restores_the_start_ag
     refused = await c.patch(url, json={"agentId": "ag_fraud"}, headers=VIEWER)
     assert refused.status_code == 403, refused.text
     gone = await c.patch(url, json={"agentId": "ag_missing"}, headers=VIEWER)
-    assert gone.status_code == 422 and gone.json()["error"]["code"] == "agent_not_live", gone.text
+    assert gone.status_code == 404 and gone.json()["error"]["code"] == "not_found", gone.text
     moved = (await c.patch(url, json={"agentId": "ag_dispute"}, headers=VIEWER)).json()["data"]
     assert (moved["agentId"], moved["startAgentId"]) == ("ag_dispute", "ag_branch"), moved
     await say(c, thread, "Hello", VIEWER)

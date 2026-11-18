@@ -145,7 +145,7 @@ fi
   || { tail -20 "$work/pnpm.log"; exit 1; }
 # Counted through tee, so a walk that crashes after some OK lines would pass; its exit status becomes a FAIL line.
 {
-  STG_ORIGIN="$origin" STG_EMAIL=$(pair OPS_BOOTSTRAP_ADMIN_EMAIL) STG_PASSWORD=$(pair OPS_BOOTSTRAP_ADMIN_PASSWORD) \
+  OPS_USECASE_STAGING_HOST="$app.fly.dev" STG_ORIGIN="$origin" STG_EMAIL=$(pair OPS_BOOTSTRAP_ADMIN_EMAIL) STG_PASSWORD=$(pair OPS_BOOTSTRAP_ADMIN_PASSWORD) \
     node "$root/docs/usecases/lib/stg_click_walk.mjs" || echo "FAIL click walk exited $?"
 } | tee "$work/walk.txt"
 ok=$(grep -c '^OK' "$work/walk.txt" || true)

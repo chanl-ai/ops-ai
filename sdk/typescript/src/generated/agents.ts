@@ -28,7 +28,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Health Background */
+        /**
+         * Health Background
+         * @description This service's processes and their state, for `make health`. No request transaction: it has no caller, so no
+         *     tenant to hold one in, and its one read is the heartbeat table.
+         */
         get: operations["background_health_background"];
         put?: never;
         post?: never;
@@ -45,7 +49,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Reviews */
+        /**
+         * List Reviews
+         * @description Human Tasks: one page of every review the team may see, with counts per view, facets and stats. The page is cut
+         *     after merging three sources in Python (hitl_facade.list_reviews): graph threads waiting on a person, agent and
+         *     workflow publish requests, and workflow runs waiting on a review step. They live in different tables (a thread's
+         *     pending step is in its checkpoint, not a column), so no one query can sort and count them together, and the counts
+         *     and facets cover every row, not the page. Each source therefore reads at most `review_list_rows_per_source` rows
+         *     (Settings), newest first, logging `review_source_capped` at the cap; the decisions and policies read are those of
+         *     the rows kept. The route stays off `Tx`: building a review asks tools-service for its write policy, so it holds
+         *     two transactions, 2 by design: one to read what the reviews name, then, once tools-service has answered with none
+         *     open, one to build the list.
+         */
         get: operations["reviews_list_reviews"];
         put?: never;
         post?: never;
@@ -278,7 +293,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Agents */
+        /**
+         * List Agents
+         * @description One page of the team's agents on the shared list contract, by name: `search` matches the name, role and slug;
+         *     `sortBy` is one of name, updatedAt, tasks24h, version, teamId and availability; the filters `availability`,
+         *     `teamId` and `templateId` narrow the page, and the first two are counted in `facets`.
+         */
         get: operations["agents_list_agents"];
         put?: never;
         /** Create Agent */
@@ -618,7 +638,8 @@ export interface paths {
          * Run Ai Step
          * @description One AI step's answer; 422 `ai_steps_off` where the team has AI steps off, `text_too_long` past the service's
          *     bound, `invalid_settings` naming a setting the step's type refuses, `document_type_not_found` for a document type
-         *     the team cannot read; 429 past the team's calls a minute; 503 with no model configured.
+         *     the team cannot read; 429 past the team's calls a minute; 503 with no model configured. No request transaction:
+         *     it reads no row of its own, and documents-service and the model are called with none open.
          */
         post: operations["workflows_run_ai_step"];
         delete?: never;
@@ -636,7 +657,8 @@ export interface paths {
         };
         /**
          * List Gates
-         * @description The publish checks of the team's publish requests: each step's result and whether the request is blocked.
+         * @description The publish checks of the team's publish requests, newest request first: each step's result and whether the
+         *     request is blocked. Filters: `tier`, `result` (blocked, ready, decided).
          */
         get: operations["assurance_list_gates"];
         put?: never;
@@ -656,7 +678,8 @@ export interface paths {
         };
         /**
          * List Runs
-         * @description Every stored run of the team's agents and skills and every test run of its workflows, newest first.
+         * @description Every stored run of the team's agents and skills and every test run of its workflows, newest first, then by
+         *     id. Filters: `kind`, `trigger`.
          */
         get: operations["assurance_list_runs"];
         put?: never;
@@ -677,7 +700,8 @@ export interface paths {
         /**
          * List Suites
          * @description One suite per agent, skill or workflow in the acting team that has saved cases or a run, with the latest
-         *     result of each case. Filters: `kind`, `tier`, `result` (failing, passing, not_run).
+         *     result of each case, by asset name then kind and id. Filters: `kind`, `tier`, `result` (failing, passing,
+         *     not_run); each facet counts under the search and the other filters. A page past the end answers the last page.
          */
         get: operations["assurance_list_suites"];
         put?: never;
@@ -733,7 +757,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Background Processes */
+        /**
+         * Background Processes
+         * @description Every listed process of every service and the latest jobs, for an account admin. No request transaction: the
+         *     other services' /health/background are read between this service's reads, with none open.
+         */
         get: operations["background_background_processes"];
         put?: never;
         post?: never;
@@ -796,6 +824,8 @@ export interface paths {
         /**
          * Retry Batch
          * @description A new attempt for each failed row only; the worker starts them. A row that succeeded is never run again.
+         *     No request transaction: the rows are queued for the workflow worker, and committing them with the request's reads
+         *     would change when the worker sees them.
          */
         post: operations["batches_retry_batch"];
         delete?: never;
@@ -813,7 +843,8 @@ export interface paths {
         };
         /**
          * List Case Types
-         * @description Every case type in the tenant: the seeded ones first, then the teams' own.
+         * @description Every case type of the team on the shared list contract: the seeded ones first, then the team's own, each by
+         *     name, then by id; `search` matches the name and description and `ids` names types.
          */
         get: operations["cases_list_case_types"];
         put?: never;
@@ -897,8 +928,10 @@ export interface paths {
         };
         /**
          * List Cases
-         * @description The acting team's cases, the soonest resolution deadline first. `overdue` keeps the open ones past it, leaving
-         *     out a case that waits on the customer.
+         * @description The acting team's cases on the shared list contract, the soonest resolution deadline first, then by id.
+         *     `search` keeps the cases holding every word in the subject, the customer's name or id; `status`, `priority`,
+         *     `assignee` and `customerId` filter (declared here so a value outside a status or priority is refused); `overdue`
+         *     keeps the open ones past their deadline, leaving out a case that waits on the customer.
          */
         get: operations["cases_list_cases"];
         put?: never;
@@ -924,7 +957,10 @@ export interface paths {
          * Get Case
          * @description The case assembled for its page: its timeline, oldest entry first, and who owns it, its clocks, what
          *     it waits on and the actions drafted there, its fields in its case type's order, what it links to, its newest
-         *     activity and what the caller may do.
+         *     activity and what the caller may do. Two transactions by design: the first reads the case, its runs and everything
+         *     the page names (a case the caller may not see is not found before any other service is asked); people's names, the
+         *     masking policy, file names and the tools-service policy of each Human Task's calls are then asked with none open;
+         *     the second builds the Human Task views, which need those policies.
          */
         get: operations["cases_get_case"];
         put?: never;
@@ -990,8 +1026,10 @@ export interface paths {
         /**
          * List Channels
          * @description The channels of the selected team (`team=all`: every team the caller is in and may view channels of), filtered
-         *     by type, health and a search over name and detail. `facets` count by type and health under the other filters;
-         *     `kinds` describes every channel type, built or not, over the caller's whole list.
+         *     by type, health and a search over name and detail, in the list's order (email, chat, then API, each by name), a
+         *     page at a time from one statement over the three (store.channel_list); a page past the end answers the last page.
+         *     `facets` count by type and health under the other filters; `kinds` describes every channel type, built or not,
+         *     over the caller's whole list.
          */
         get: operations["channels_list_channels"];
         put?: never;
@@ -1205,7 +1243,8 @@ export interface paths {
         /**
          * Team Stream
          * @description Thread lifecycle events for the caller's team: started, waiting, waiting_review, decided, finished, failed.
-         *     The SSE `id` is the stream position to pass back as `after`.
+         *     The SSE `id` is the stream position to pass back as `after`. No request transaction: a stream holds none while it
+         *     streams.
          */
         get: operations["threads_team_stream"];
         put?: never;
@@ -1333,7 +1372,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Graphs */
+        /**
+         * List Graphs
+         * @description Every graph the caller's tenant can run, with the input each needs.
+         */
         get: operations["graphs_list_graphs"];
         put?: never;
         post?: never;
@@ -1350,7 +1392,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Versions */
+        /**
+         * List Versions
+         * @description The graph's stored versions, oldest first.
+         */
         get: operations["graphs_list_versions"];
         put?: never;
         /**
@@ -1358,7 +1403,8 @@ export interface paths {
          * @description Stores the definition as the graph's next version and points new threads at it, with no review. A builder or
          *     admin of the team that owns the graph's registry workflow publishes (the acting team for a graph the registry does
          *     not hold). A registry workflow goes live through its review (POST /v1/workflows/{id}/publish-requests), so outside
-         *     the team's publish policy this route refuses one with 409 `review_required`.
+         *     the team's publish policy this route refuses one with 409 `review_required`. No request transaction: the
+         *     publish policy is read from platform-service between its reads and its write.
          */
         post: operations["graphs_publish_version"];
         delete?: never;
@@ -1376,8 +1422,9 @@ export interface paths {
         };
         /**
          * List Guardrails
-         * @description Every guardrail, which the agent page's pin picker reads whole; with `page`, one page of those whose name or
-         *     owner matches `search`, as the Guardrails list reads it. The page and its count are queried, not sliced.
+         * @description One page of the guardrails the caller sees on the shared list contract, by name then id: `search` matches the
+         *     name or owner, `ids` names guardrails exactly, whatever their state. The page and its count are queried, not
+         *     sliced.
          */
         get: operations["agents_list_guardrails"];
         put?: never;
@@ -1448,7 +1495,9 @@ export interface paths {
         put?: never;
         /**
          * Request Guardrail Publish
-         * @description Opens a publish request for the newest draft; approved at once under the dev auto-approve setting.
+         * @description Opens a publish request for the newest draft; approved at once under the dev auto-approve setting. Off the
+         *     request transaction: the team's publish-review policy is read from platform-service between the reads and the
+         *     writes.
          */
         post: operations["agents_request_guardrail_publish"];
         delete?: never;
@@ -1880,8 +1929,12 @@ export interface paths {
         };
         /**
          * List Engine Runs
-         * @description The selected team's runs, newest first, a page at a time; `status` repeats to keep several. `facets.status`
-         *     counts the runs per status under the other filters. A scoped API key lists its own workflow's runs only.
+         * @description The selected team's runs on the shared list contract, newest first, then by id; `workflowId` and `status`
+         *     repeat to keep several; `facets.status` and `facets.workflowId` count the runs per status
+         *     and per workflow under the other filters, and `labels.workflowId` names each counted workflow, so the workflow
+         *     filter is filled from this reply. A scoped API key lists its own workflow's runs only.
+         *     One transaction for the runs, outcomes and actors read; people's names and the masking policy come from
+         *     platform-service with none open.
          */
         get: operations["workflows_list_engine_runs"];
         put?: never;
@@ -1891,6 +1944,7 @@ export interface paths {
          *     running the run stays queued. A live run is refused (409) unless it pins the live version: `not_live` before a
          *     version is approved or for another version, `workflow_paused` while the workflow is paused. An API key scoped to
          *     one workflow starts that one only, on the version it pins when it pins one.
+         *     No request transaction: the run and its work row keep start_run's own transaction, which a worker claims from.
          */
         post: operations["workflows_start_engine_run"];
         delete?: never;
@@ -1914,6 +1968,7 @@ export interface paths {
          *     the email's own run key, as the person, and the kept copy of the email is dropped. Who may start the workflow may
          *     run it; 404 when there is no such email in the team or it already ran, 503 when Files did not store an attachment
          *     (the email stays set aside).
+         *     No request transaction: the email's attachments are stored in files-service between its reads and its write.
          */
         post: operations["workflows_run_set_aside_email"];
         delete?: never;
@@ -1938,6 +1993,7 @@ export interface paths {
          *     input and steps a mailbox email gets; a form's values become the input. The run records the person and how they
          *     started it (`startedBy.via`). The same callers may start it as for POST /v1/runs; 422 `no_start_form` for a trigger
          *     only its source starts, `email_filtered` for a test email the trigger's filters would skip.
+         *     No request transaction: a test email's attachments go to files-service between its reads and its writes.
          */
         post: operations["workflows_start_by_hand"];
         delete?: never;
@@ -1956,6 +2012,9 @@ export interface paths {
         /**
          * Get Engine Run
          * @description The run with every step from the journal: per node its input, output, port, attempts and errors.
+         *     No request transaction. One transaction reads the run (a run the caller may not see is not found before any other
+         *     service is asked) and what it is told from; names, the masking policy and file names come from platform-service and
+         *     files-service with none open; the reply is then built from those answers.
          */
         get: operations["workflows_get_engine_run"];
         put?: never;
@@ -1980,6 +2039,7 @@ export interface paths {
          * @description Cancels a run that has not ended: a queued run never starts, a waiting run's review leaves Reviews, a running
          *     pass finishes and journals the step under way and begins no other. Cancelling a cancelled run returns it; a run
          *     that succeeded or failed is refused (409).
+         *     No request transaction: the masking policy (platform-service) is asked after the writes, with none open.
          */
         post: operations["workflows_cancel_engine_run"];
         delete?: never;
@@ -1999,6 +2059,7 @@ export interface paths {
          * Engine Run Events
          * @description The run's events with `seq` above `after`; the SSE `id` is the seq to resume from. With `follow` it keeps
          *     polling until the run ends or waits for a person.
+         *     No request transaction: the masking policy comes from platform-service, and each frame's read opens its own.
          */
         get: operations["workflows_engine_run_events"];
         put?: never;
@@ -2023,6 +2084,7 @@ export interface paths {
          * @description Queues a Stuck run again from its last recorded step: recorded steps are not run again and a write
          *     with a record at the gateway is never sent again. Who may cancel the run may retry it; a run that is not Stuck is
          *     refused (409 run_not_stuck).
+         *     No request transaction: the masking policy (platform-service) is asked after the write, with none open.
          */
         post: operations["workflows_retry_engine_run"];
         delete?: never;
@@ -2042,7 +2104,9 @@ export interface paths {
         put?: never;
         /**
          * Resume Step
-         * @description Resumes the step parked on outside work with the posted result, which the step goes on with.
+         * @description Resumes the step parked on outside work with the posted result, which the step goes on with. No request
+         *     transaction: resuming queues the run for the worker, and folding that commit into the request's would change when
+         *     the worker sees it.
          */
         post: operations["workflows_resume_step"];
         delete?: never;
@@ -2060,8 +2124,12 @@ export interface paths {
         };
         /**
          * List Skills
-         * @description The team's skills. `view=published` rows describe the published version, its inputs and parts, which is
-         *     what chat and the MCP prompts use; every other view describes the newest version an editor sees.
+         * @description One page of the team's skills on the shared list contract, by name then id: `search` matches the name, use-when
+         *     or slug, `ids` names skills exactly. `view=published` rows describe the published version, its inputs and parts,
+         *     which is what chat and the MCP prompts use; every other view describes the newest version an editor sees. `status`,
+         *     `ownerTeam`, `origin` and `loading` filter by facet; `knowledgeBases` keeps skills naming any base given. The view
+         *     counts and facets cover every skill the search leaves, before the view and the facet filters; the page, its counts
+         *     and its facets are read in SQL (`store/skill_list.py`).
          *
          *     Every view needs skills: view in the acting team (403 `forbidden`); `usableBy=agent` is the chat / menu's list.
          *     With `agentId` it keeps what that agent's skill menu setting offers (its newest version) and marks a skill needing
@@ -2069,7 +2137,11 @@ export interface paths {
          */
         get: operations["agents_list_skills"];
         put?: never;
-        /** Create Skill */
+        /**
+         * Create Skill
+         * @description The tools the body names are checked against tools-service's directory before the transaction opens. With
+         *     `requestReview` the publish request follows the commit, as `POST .../publish-requests` does.
+         */
         post: operations["agents_create_skill"];
         delete?: never;
         options?: never;
@@ -2086,7 +2158,8 @@ export interface paths {
         };
         /**
          * Skill Options
-         * @description What a skill may name: the tools the directory offers, the knowledge bases agents hold, and owner teams.
+         * @description What a skill may name: the tools the directory offers, the knowledge bases agents hold, and owner teams. The
+         *     directory is read from tools-service first, with nothing open, then the rows in one transaction.
          */
         get: operations["agents_skill_options"];
         put?: never;
@@ -2151,7 +2224,9 @@ export interface paths {
         /**
          * Save Skill Draft
          * @description Edits the newest draft, or opens the next version on top of the published one. 409 when `baseVersion` is
-         *     not the newest version, or the skill is deprecated or in review.
+         *     not the newest version, or the skill is deprecated or in review. The checks run again in the transaction that
+         *     writes, after the tools are checked against tools-service with nothing open, so a save landing in between answers
+         *     `stale_base`.
          */
         put: operations["agents_save_skill_draft"];
         post?: never;
@@ -2191,7 +2266,8 @@ export interface paths {
         /**
          * Request Skill Publish
          * @description Opens a publish request for the newest draft, decided like an agent publish (by someone other than who asked
-         *     or saved it); approved at once under the dev auto-approve setting.
+         *     or saved it); approved at once under the dev auto-approve setting. Off the request transaction: the team's
+         *     publish-review policy is read from platform-service between the reads and the writes.
          */
         post: operations["agents_request_skill_publish"];
         delete?: never;
@@ -2232,7 +2308,8 @@ export interface paths {
         };
         /**
          * List Task Types
-         * @description Every type in the tenant: the seeded general types first, then the teams' own.
+         * @description Every task type of the team on the shared list contract: the seeded ones first, then the team's own, each by
+         *     name, then by id; `search` matches the name and description and `ids` names types.
          */
         get: operations["reviews_list_task_types"];
         put?: never;
@@ -2416,10 +2493,19 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Threads */
+        /**
+         * List Threads
+         * @description The threads the caller may read on the shared list contract, of one graph when `graph` is given: newest update
+         *     first (`sortBy` updatedAt), then by id. Who reads which thread (`may_read_thread`) is decided in the
+         *     list's SQL (`store.thread_list`), so the page and its total count only readable threads.
+         */
         get: operations["threads_list_threads"];
         put?: never;
-        /** Create Thread */
+        /**
+         * Create Thread
+         * @description A thread and its budget, written in the request transaction, so a failure between the two leaves no thread
+         *     without its budget. Nothing here calls another service: the key admission port answers in this process.
+         */
         post: operations["threads_create_thread"];
         delete?: never;
         options?: never;
@@ -2456,7 +2542,9 @@ export interface paths {
         /**
          * Thread Event
          * @description A channel event, as the mailbox adapter delivers it: a builder or admin of the thread's team, the role the
-         *     inbox route takes, since restarting an SLA clock changes when the case escalates.
+         *     inbox route takes, since restarting an SLA clock changes when the case escalates. No request transaction: the
+         *     re-armed timers are rows the poller claims, and folding their commit into the request's would change when they
+         *     fire.
          */
         post: operations["threads_thread_event"];
         delete?: never;
@@ -2472,7 +2560,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Inbox */
+        /**
+         * Get Inbox
+         * @description The thread's channel messages, to a caller who may read the thread (`may_read_thread`, as the thread's own
+         *     routes): a teammate's chat, a scoped key's other target, and another team's or tenant's thread are not found.
+         */
         get: operations["threads_get_inbox"];
         put?: never;
         /**
@@ -2501,6 +2593,7 @@ export interface paths {
          * @description Moves a paused thread to another version of its workflow. Allowed only while it waits on an interrupt, and only
          *     when every node it is waiting in exists under the same name in the target, so the resume lands on a real node.
          *     Choosing the version a run continues on is a builder's step: a builder or admin of the thread's team.
+         *     No request transaction: the thread's checkpoint is read through the checkpointer, which keeps its own.
          */
         post: operations["threads_migrate"];
         delete?: never;
@@ -2558,7 +2651,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Stream Run */
+        /**
+         * Stream Run
+         * @description A run of the thread, streamed as it goes. No request transaction: the run calls models and tools while it
+         *     streams, and each step's store call (the run's journal, the lease, the thread's status) commits on its own so a
+         *     frame sent is a frame kept even if the stream breaks.
+         */
         post: operations["threads_stream_run"];
         delete?: never;
         options?: never;
@@ -2576,7 +2674,8 @@ export interface paths {
         /**
          * Reattach
          * @description The run's events with `seq` above `after`, in the designed shape; the SSE `id` is the seq to resume from. Not
-         *     found for a run of a thread the caller may not read (`may_read_thread`).
+         *     found for a run of a thread the caller may not read (`may_read_thread`). No request transaction: a run's stream
+         *     holds none while it streams, and each poll reads the log afresh as the worker writes it.
          */
         get: operations["threads_reattach"];
         put?: never;
@@ -2594,7 +2693,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Thread State */
+        /**
+         * Thread State
+         * @description One transaction for the thread, its checkpoint, timers and usage. The tool directory is asked after it, with
+         *     nothing open, for the wording of a refused call and of a step's options; a step with options then reads its
+         *     workflow version in a second.
+         */
         get: operations["threads_thread_state"];
         put?: never;
         post?: never;
@@ -2719,9 +2823,10 @@ export interface paths {
         };
         /**
          * List Widgets
-         * @description The seeded library, then the caller's teams' widgets, newest version each, by name; the agent page's picker
-         *     reads it whole. With `page`, one page of those whose name matches `search`: the seeded library's few matches come
-         *     first, then the registry's, whose page and count are queried, not sliced.
+         * @description One page of the seeded library, then the caller's teams' widgets, newest version each, by name, on the shared
+         *     list contract: `search` matches the name and `ids` names widgets exactly. The seeded library is a fixed handful
+         *     held in memory (seed/widgets.json), so its matches are cut to the page here; the registry's page and count are
+         *     queried, not sliced.
          */
         get: operations["agents_list_widgets"];
         put?: never;
@@ -2743,8 +2848,9 @@ export interface paths {
         /**
          * Widget Options
          * @description The agent page's widget picker: the seeded library's matches first, then the caller's teams' published,
-         *     unretired widgets, searched and limited in the query. A widget whose buttons need a tool outside `granted` (the
-         *     draft's tools) is offered disabled with the reason, as a pin of it is refused.
+         *     unretired widgets with the content of the version a pin takes, searched and limited in one query. A widget whose
+         *     buttons need a tool outside `granted` (the draft's tools) is offered disabled with the reason, as a pin of it is
+         *     refused.
          */
         get: operations["agents_widget_options"];
         put?: never;
@@ -2762,7 +2868,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Widget */
+        /**
+         * Get Widget
+         * @description The rows and the caller's rights in one transaction; platform-service names the team after.
+         */
         get: operations["agents_get_widget"];
         put?: never;
         post?: never;
@@ -2788,7 +2897,9 @@ export interface paths {
         put?: never;
         /**
          * Request Widget Publish
-         * @description Opens a publish request for the newest draft; 409 when it is already published, in review or retired.
+         * @description Opens a publish request for the newest draft; 409 when it is already published, in review or retired. Off the
+         *     request transaction: the team's publish-review policy is read from platform-service between the reads and the
+         *     writes.
          */
         post: operations["agents_request_widget_publish"];
         delete?: never;
@@ -2848,10 +2959,11 @@ export interface paths {
         };
         /**
          * List Workflows
-         * @description The team's workflows of both engines, a page at a time. `startable` keeps those a person starts by hand (Start
-         *     run), `takesFiles` those whose start form takes a file (Files' "Start a workflow with this file"); each row's
-         *     `start` says how it starts. `engine=current` leaves out the earlier engine's workflows before the page,
-         *     the total and the status counts are taken, since the console no longer shows them.
+         * @description The team's workflows of both engines, a page at a time, from one statement over both (store.workflow_list).
+         *     `startable` keeps those a person starts by hand (Start run), `takesFiles` those whose start form takes a file
+         *     (Files' "Start a workflow with this file"); each row's `start` says how it starts. `engine=current` leaves out the
+         *     earlier engine's workflows, since the console no longer shows them. Sorted by the sort column (name unless one of
+         *     SORTS), then by engine and id; a page past the end answers the last page.
          */
         get: operations["workflows_list_workflows"];
         put?: never;
@@ -2875,9 +2987,10 @@ export interface paths {
         };
         /**
          * List Definitions
-         * @description The team's v2 workflows, each at its latest version, with the shared list pattern: search over name and id,
-         *     status facets (draft, in review, live, paused) before the status filter, sort and pages. v1 workflows stay on
-         *     /v1/workflows.
+         * @description The team's v2 workflows on the shared list contract, each at its latest version: search over name and id,
+         *     `status` facets (draft, in review, live, paused, archived) under the search and before the status filter, sorted
+         *     by `sortBy` then by the key, a page at a time; an archived workflow is listed only when `status` asks for it.
+         *     v1 workflows stay on /v1/workflows.
          */
         get: operations["workflows_list_definitions"];
         put?: never;
@@ -2886,6 +2999,8 @@ export interface paths {
          * @description Stores the definition as the workflow's next version, once it passes every check; the same definition again
          *     returns its version (200). A definition with failing checks is refused with them in `details.checks`. 403 unless
          *     the caller is a builder or admin of the team that owns the workflow (the acting team for a new one).
+         *     No request transaction: the AI-steps policy (platform-service) and document types (documents-service) are asked
+         *     between its reads and its write, with none open.
          */
         post: operations["workflows_create_definition"];
         delete?: never;
@@ -2928,6 +3043,7 @@ export interface paths {
          * @description Per-node checks against the type registry: unknown type or version, unknown port, an out port that leads
          *     nowhere (End has none), an unreachable node, parameters that do not match the type's schema; and warnings that
          *     never refuse a save (level `warning`, e.g. a step two branches meet at without a Join). Saves nothing.
+         *     No request transaction: it reads no row, and documents-service is asked for field shapes.
          */
         post: operations["workflows_validate_definition"];
         delete?: never;
@@ -2943,7 +3059,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Definition */
+        /**
+         * Get Definition
+         * @description One definition at a version (its newest when left out), its versions and its open review.
+         */
         get: operations["workflows_get_definition"];
         put?: never;
         post?: never;
@@ -3015,6 +3134,8 @@ export interface paths {
          *     under the dev auto-approve setting). 409 when the version is not a draft or a request is already open, 422 when it
          *     no longer passes its checks, 403 unless the caller is a builder or admin of the owning team (an admin for a
          *     workflow no team owns). The request lists what each step acts on: its operation, agent and approver.
+         *     No request transaction: the team's accounts (tools-service) and the review deadline (platform-service) are asked
+         *     with none open.
          */
         post: operations["workflows_request_definition_publish"];
         delete?: never;
@@ -3074,6 +3195,7 @@ export interface paths {
          * Definition Shapes
          * @description What each step of a saved version outputs, by port, before it has run: fixed by its type, built from
          *     its settings, or read from its document type or operation. A mapping picker reads it.
+         *     No request transaction: the version is read, then documents-service is asked with none open.
          */
         get: operations["workflows_definition_shapes"];
         put?: never;
@@ -3094,7 +3216,8 @@ export interface paths {
         /**
          * Node Types
          * @description Every registered node type at every version: ports with their connection types, parameters as JSON Schema with
-         *     the form generated from them, effects, retry and executor, and why the acting team cannot use one now.
+         *     the form generated from them, effects, retry and executor, and why the acting team cannot use one now. No request
+         *     transaction: it reads no row, and the AI-steps policy comes from platform-service.
          */
         get: operations["workflows_node_types"];
         put?: never;
@@ -3117,6 +3240,7 @@ export interface paths {
          * @description The choices a node form offers for a field with an option source (`ui.fields.*.source`): published agents,
          *     registry operations, live v2 workflows, the acting team's mailboxes (Channels > Email). `steps` comes from
          *     the definition being edited; `knowledge` is not served yet, since no built node type reads a knowledge base.
+         *     No request transaction: the tools source is asked of tools-service.
          */
         get: operations["workflows_option_sources"];
         put?: never;
@@ -3182,7 +3306,8 @@ export interface paths {
         /**
          * Start Batch
          * @description Reads the file's rows and either shows how they map (dryRun) or writes the batch, whose rows the workflow
-         *     worker starts a few at a time (202).
+         *     worker starts a few at a time (202). No request transaction: the file is read from Files between the workflow
+         *     read and the batch write, with none open.
          */
         post: operations["batches_start_batch"];
         delete?: never;
@@ -3216,7 +3341,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Workflow Forms */
+        /**
+         * Workflow Forms
+         * @description The workflow's forms in the caller's team on the shared list contract: newest first, then by id; `search`
+         *     matches the title and slug, `ids` names forms.
+         */
         get: operations["forms_workflow_forms"];
         put?: never;
         /**
@@ -3299,7 +3428,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Runs */
+        /**
+         * List Runs
+         * @description The workflow's runs, most recently changed first then by id, a page at a time; `status` keeps those
+         *     statuses, and the status counts are over every run.
+         */
         get: operations["workflows_list_runs"];
         put?: never;
         post?: never;
@@ -3723,8 +3856,7 @@ export interface components {
             approvalsNeeded: 1 | 2;
             /** Blockers */
             blockers: string[];
-            /** Candidate */
-            candidate?: unknown;
+            candidate?: components["schemas"]["PublishEvalSummary"] | null;
             /** Changes */
             changes: string[];
             /** Failing */
@@ -3740,8 +3872,7 @@ export interface components {
             note: string;
             /** Policy */
             policy?: ("always" | "major" | "never") | null;
-            /** Published */
-            published?: unknown;
+            published?: components["schemas"]["PublishEvalSummary"] | null;
             /** Requestedby */
             requestedBy: string;
             /** Reviewreason */
@@ -3860,9 +3991,7 @@ export interface components {
              */
             searched: boolean;
             /** Skills */
-            skills?: {
-                [key: string]: unknown;
-            }[];
+            skills?: components["schemas"]["LoadedSkill"][];
             /** Tookms */
             tookMs: number;
             /** Toolcalls */
@@ -3920,7 +4049,7 @@ export interface components {
         AiStepOut: {
             /** Output */
             output: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Port */
             port: string;
@@ -4207,12 +4336,11 @@ export interface components {
             error?: string | null;
             /** Input */
             input: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Outcome */
             outcome?: string | null;
-            /** Output */
-            output?: unknown;
+            output?: components["schemas"]["JsonValue"];
             /** Row */
             row: number;
             /** Runid */
@@ -4353,7 +4481,7 @@ export interface components {
             events: components["schemas"]["CaseEventView"][];
             /** Fields */
             fields?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Id */
             id: string;
@@ -4396,7 +4524,7 @@ export interface components {
             by: string;
             /** Detail */
             detail: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Id */
             id: string;
@@ -4506,7 +4634,7 @@ export interface components {
             feed: components["schemas"]["CaseFeed"];
             /** Fields */
             fields?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Id */
             id: string;
@@ -4603,7 +4731,7 @@ export interface components {
             customerName: string | null;
             /** Fields */
             fields?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Id */
             id: string;
@@ -4654,7 +4782,7 @@ export interface components {
             caseId: string | null;
             /** Children */
             children?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[] | null;
             /** Durationms */
             durationMs: number;
@@ -4743,10 +4871,7 @@ export interface components {
         };
         /** CaseTypeDetail */
         CaseTypeDetail: {
-            /** Copiedfrom */
-            copiedFrom: {
-                [key: string]: unknown;
-            } | null;
+            copiedFrom: components["schemas"]["CopiedFrom"] | null;
             /** Description */
             description: string;
             /** Id */
@@ -4783,7 +4908,7 @@ export interface components {
             publishedAt: string | null;
             /** Record */
             record: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Savedat */
             savedAt: string;
@@ -4794,10 +4919,7 @@ export interface components {
         };
         /** CaseTypeView */
         CaseTypeView: {
-            /** Copiedfrom */
-            copiedFrom: {
-                [key: string]: unknown;
-            } | null;
+            copiedFrom: components["schemas"]["CopiedFrom"] | null;
             /** Description */
             description: string;
             /** Id */
@@ -4831,7 +4953,7 @@ export interface components {
             customerName: string | null;
             /** Fields */
             fields?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Id */
             id: string;
@@ -5006,6 +5128,13 @@ export interface components {
              */
             teamAccount: boolean;
         };
+        /** CopiedFrom */
+        CopiedFrom: {
+            /** Id */
+            id: string;
+            /** Version */
+            version: number;
+        };
         /** CopyRef */
         CopyRef: {
             /** Detachedat */
@@ -5107,7 +5236,7 @@ export interface components {
         DefinitionInput: {
             /** Definition */
             definition?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Yaml */
             yaml?: string | null;
@@ -5165,7 +5294,7 @@ export interface components {
             steps: {
                 [key: string]: {
                     [key: string]: {
-                        [key: string]: unknown;
+                        [key: string]: components["schemas"]["JsonValue"];
                     };
                 };
             };
@@ -5207,7 +5336,7 @@ export interface components {
             archivedAt?: string | null;
             /** Definition */
             definition: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Digest */
             digest: string;
@@ -5239,6 +5368,18 @@ export interface components {
             message: string;
             /** Node */
             node: string;
+        };
+        /**
+         * DeploymentBudget
+         * @description Caps for the thread a deployment starts; stored as the request gave them, so the names stay snake_case.
+         */
+        DeploymentBudget: {
+            /** Max Calls */
+            max_calls?: number | null;
+            /** Max Cost */
+            max_cost?: string | null;
+            /** Max Tokens */
+            max_tokens?: number | null;
         };
         /** DeploymentInput */
         DeploymentInput: {
@@ -5273,10 +5414,7 @@ export interface components {
         };
         /** DeploymentView */
         DeploymentView: {
-            /** Budget */
-            budget?: {
-                [key: string]: unknown;
-            } | null;
+            budget?: components["schemas"]["DeploymentBudget"] | null;
             /**
              * Channel
              * @enum {string}
@@ -5308,7 +5446,7 @@ export interface components {
         DocumentRead: {
             /** Corrected */
             corrected: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[] | null;
             /** Editable */
             editable: boolean;
@@ -5361,7 +5499,7 @@ export interface components {
             rows: number;
             /** Sample */
             sample: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
         };
         /**
@@ -5449,14 +5587,12 @@ export interface components {
             attempts: components["schemas"]["StepAttempt"][];
             /** Error */
             error: string | null;
-            /** Input */
-            input: unknown;
+            input: components["schemas"]["JsonValue"];
             /** Iteration */
             iteration: number;
             /** Nodeid */
             nodeId: string;
-            /** Output */
-            output: unknown;
+            output: components["schemas"]["JsonValue"];
             /** Port */
             port: string | null;
             /** Status */
@@ -5759,6 +5895,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[GuardrailList] */
+        Envelope_GuardrailList_: {
+            data: components["schemas"]["GuardrailList"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[Guardrail] */
         Envelope_Guardrail_: {
             data: components["schemas"]["Guardrail"];
@@ -5804,6 +5949,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[LabelledListResult[RunRow]] */
+        Envelope_LabelledListResult_RunRow__: {
+            data: components["schemas"]["LabelledListResult_RunRow_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ListResult[ActivityRow]] */
         Envelope_ListResult_ActivityRow__: {
             data: components["schemas"]["ListResult_ActivityRow_"];
@@ -5831,6 +5985,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[ListResult[CaseTypeView]] */
+        Envelope_ListResult_CaseTypeView__: {
+            data: components["schemas"]["ListResult_CaseTypeView_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[ListResult[DefinitionRow]] */
         Envelope_ListResult_DefinitionRow__: {
             data: components["schemas"]["ListResult_DefinitionRow_"];
@@ -5840,9 +6003,27 @@ export interface components {
              */
             success: true;
         };
-        /** Envelope[ListResult[RunRow]] */
-        Envelope_ListResult_RunRow__: {
-            data: components["schemas"]["ListResult_RunRow_"];
+        /** Envelope[ListResult[FormView]] */
+        Envelope_ListResult_FormView__: {
+            data: components["schemas"]["ListResult_FormView_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ListResult[TaskTypeView]] */
+        Envelope_ListResult_TaskTypeView__: {
+            data: components["schemas"]["ListResult_TaskTypeView_"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ListResult[ThreadView]] */
+        Envelope_ListResult_ThreadView__: {
+            data: components["schemas"]["ListResult_ThreadView_"];
             /**
              * Success
              * @constant
@@ -6293,26 +6474,6 @@ export interface components {
              */
             success: true;
         };
-        /** Envelope[Union[list[Guardrail], GuardrailList]] */
-        Envelope_Union_list_Guardrail___GuardrailList__: {
-            /** Data */
-            data: components["schemas"]["Guardrail"][] | components["schemas"]["GuardrailList"];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[Union[list[WidgetTemplateOut], WidgetTemplateList]] */
-        Envelope_Union_list_WidgetTemplateOut___WidgetTemplateList__: {
-            /** Data */
-            data: components["schemas"]["WidgetTemplateOut"][] | components["schemas"]["WidgetTemplateList"];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
         /** Envelope[UpdateReview] */
         Envelope_UpdateReview_: {
             data: components["schemas"]["UpdateReview"];
@@ -6334,6 +6495,15 @@ export interface components {
         /** Envelope[ValidationRun] */
         Envelope_ValidationRun_: {
             data: components["schemas"]["ValidationRun"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[WidgetTemplateList] */
+        Envelope_WidgetTemplateList_: {
+            data: components["schemas"]["WidgetTemplateList"];
             /**
              * Success
              * @constant
@@ -6411,26 +6581,6 @@ export interface components {
         Envelope_list_AgentVersion__: {
             /** Data */
             data: components["schemas"]["AgentVersion"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[CaseTypeView]] */
-        Envelope_list_CaseTypeView__: {
-            /** Data */
-            data: components["schemas"]["CaseTypeView"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[FormView]] */
-        Envelope_list_FormView__: {
-            /** Data */
-            data: components["schemas"]["FormView"][];
             /**
              * Success
              * @constant
@@ -6547,30 +6697,10 @@ export interface components {
              */
             success: true;
         };
-        /** Envelope[list[TaskTypeView]] */
-        Envelope_list_TaskTypeView__: {
-            /** Data */
-            data: components["schemas"]["TaskTypeView"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
         /** Envelope[list[TemplateView]] */
         Envelope_list_TemplateView__: {
             /** Data */
             data: components["schemas"]["TemplateView"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[list[ThreadView]] */
-        Envelope_list_ThreadView__: {
-            /** Data */
-            data: components["schemas"]["ThreadView"][];
             /**
              * Success
              * @constant
@@ -6737,7 +6867,7 @@ export interface components {
             boxes?: components["schemas"]["ReadBox"][];
             /** Bysource */
             bySource?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             citation: components["schemas"]["ReadCitation"] | null;
             /** Confidence */
@@ -6747,12 +6877,10 @@ export interface components {
              * @default false
              */
             conflict: boolean;
-            /** Extractedvalue */
-            extractedValue?: unknown;
+            extractedValue?: components["schemas"]["JsonValue"];
             /** Needsreview */
             needsReview: boolean;
-            /** Value */
-            value?: unknown;
+            value?: components["schemas"]["JsonValue"];
         };
         /** FieldReview */
         FieldReview: {
@@ -6765,10 +6893,8 @@ export interface components {
              * @enum {string}
              */
             outcome: "kept" | "taken" | "conflict";
-            /** Template */
-            template?: unknown;
-            /** Yours */
-            yours?: unknown;
+            template?: components["schemas"]["JsonValue"];
+            yours?: components["schemas"]["JsonValue"];
         };
         /** FileLink */
         FileLink: {
@@ -6788,7 +6914,7 @@ export interface components {
         FormFields: {
             /** Schema */
             schema: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Takesfiles */
             takesFiles?: boolean | null;
@@ -6837,6 +6963,8 @@ export interface components {
         FormView: {
             /** Aftertext */
             afterText: string;
+            /** Canedit */
+            canEdit: boolean;
             /** Dailycap */
             dailyCap: number;
             /** Description */
@@ -6952,7 +7080,7 @@ export interface components {
         GraphNode: {
             /** Data */
             data: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Id */
             id: string;
@@ -7292,6 +7420,15 @@ export interface components {
             /** Threadid */
             threadId: string;
         };
+        /** InjectionTally */
+        InjectionTally: {
+            /** Passed */
+            passed: number;
+            /** Regressions */
+            regressions: number;
+            /** Total */
+            total: number;
+        };
         /** InstallInput */
         InstallInput: {
             /** Copies */
@@ -7366,6 +7503,7 @@ export interface components {
              */
             message: string;
         };
+        JsonValue: unknown;
         /** KindRow */
         KindRow: {
             /** Active */
@@ -7396,6 +7534,24 @@ export interface components {
             elsewhere: number;
             /** Kbid */
             kbId: string;
+        };
+        /** LabelledListResult[RunRow] */
+        LabelledListResult_RunRow_: {
+            /** Data */
+            data: components["schemas"]["RunRow"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            /** Labels */
+            labels: {
+                [key: string]: {
+                    [key: string]: string;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
         };
         /** LeftItem */
         LeftItem: {
@@ -7463,6 +7619,18 @@ export interface components {
             };
             pagination: components["schemas"]["Pagination"];
         };
+        /** ListResult[CaseTypeView] */
+        ListResult_CaseTypeView_: {
+            /** Data */
+            data: components["schemas"]["CaseTypeView"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
         /** ListResult[DefinitionRow] */
         ListResult_DefinitionRow_: {
             /** Data */
@@ -7475,10 +7643,34 @@ export interface components {
             };
             pagination: components["schemas"]["Pagination"];
         };
-        /** ListResult[RunRow] */
-        ListResult_RunRow_: {
+        /** ListResult[FormView] */
+        ListResult_FormView_: {
             /** Data */
-            data: components["schemas"]["RunRow"][];
+            data: components["schemas"]["FormView"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[TaskTypeView] */
+        ListResult_TaskTypeView_: {
+            /** Data */
+            data: components["schemas"]["TaskTypeView"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+        };
+        /** ListResult[ThreadView] */
+        ListResult_ThreadView_: {
+            /** Data */
+            data: components["schemas"]["ThreadView"][];
             /** Facets */
             facets: {
                 [key: string]: {
@@ -7541,6 +7733,27 @@ export interface components {
         LiveVersion: {
             /** Places */
             places: number;
+            /** Version */
+            version: number;
+        };
+        /**
+         * LoadedSkill
+         * @description A skill a turn loaded, as the kernel journals it (`skills.loaded_entry`); part and inputs are left out when
+         *     there are none.
+         */
+        LoadedSkill: {
+            /** Inputs */
+            inputs?: {
+                [key: string]: string;
+            } | null;
+            /** Matched */
+            matched: string;
+            /** Name */
+            name: string;
+            /** Part */
+            part?: string | null;
+            /** Skillid */
+            skillId: string;
             /** Version */
             version: number;
         };
@@ -7704,7 +7917,7 @@ export interface components {
         MemoryExport: {
             /** Audit */
             audit: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /** Memories */
             memories: components["schemas"]["MemoryView"][];
@@ -7834,14 +8047,14 @@ export interface components {
             outputsUnless?: components["schemas"]["OptionalPortView"][];
             /** Parameters */
             parameters: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             retry: components["schemas"]["RetryView"];
             /** Timeoutseconds */
             timeoutSeconds: number;
             /** Ui */
             ui: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Unavailable */
             unavailable?: string | null;
@@ -7890,10 +8103,9 @@ export interface components {
          * @description One input a reviewer may set when choosing an option, declared from the operation's input schema.
          */
         OptionInput: {
-            /** Default */
-            default?: unknown;
+            default?: components["schemas"]["JsonValue"];
             /** Enum */
-            enum?: unknown[] | null;
+            enum?: components["schemas"]["JsonValue"][] | null;
             /** Maximum */
             maximum?: number | null;
             /** Minimum */
@@ -7920,8 +8132,7 @@ export interface components {
             parameter: string;
             /** Port */
             port: string;
-            /** Value */
-            value: unknown;
+            value: components["schemas"]["JsonValue"];
         };
         /**
          * OptionsPage
@@ -7961,7 +8172,7 @@ export interface components {
             runsInFlight: components["schemas"]["OverviewRunRow"][];
             /** Urgentreviews */
             urgentReviews: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /** Waitingforme */
             waitingForMe: components["schemas"]["OverviewTaskRow"][];
@@ -8171,6 +8382,23 @@ export interface components {
             /** Reviewrequired */
             reviewRequired?: boolean | null;
         };
+        /**
+         * PublishEvalSummary
+         * @description An eval run against one agent version, as a publish request shows it. Nothing sends one yet: both are null.
+         */
+        PublishEvalSummary: {
+            injection: components["schemas"]["InjectionTally"];
+            /** Passed */
+            passed: number;
+            /** Ranat */
+            ranAt: string;
+            /** Regressions */
+            regressions: number;
+            /** Runid */
+            runId: string;
+            /** Total */
+            total: number;
+        };
         /** PublishIn */
         PublishIn: {
             /** Version */
@@ -8246,7 +8474,7 @@ export interface components {
             decisionReason?: string | null;
             egressHost?: components["schemas"]["EgressHostRef"] | null;
             /** Evidence */
-            evidence: unknown[];
+            evidence: components["schemas"]["Evidence"][];
             /** Id */
             id: string;
             /**
@@ -8341,7 +8569,7 @@ export interface components {
             };
             /** Values */
             values: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /** Received */
@@ -8506,7 +8734,7 @@ export interface components {
         ReviewOption: {
             /** Call */
             call?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Consequence */
             consequence?: string | null;
@@ -8692,7 +8920,7 @@ export interface components {
             id: string;
             /** Input */
             input: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Mode */
             mode: string;
@@ -8700,8 +8928,7 @@ export interface components {
             outcome: string | null;
             /** Outcometext */
             outcomeText?: string | null;
-            /** Output */
-            output: unknown;
+            output: components["schemas"]["JsonValue"];
             result: components["schemas"]["RunResult"] | null;
             startedBy?: components["schemas"]["ActorView"] | null;
             /** Status */
@@ -8763,7 +8990,7 @@ export interface components {
             cost: components["schemas"]["CostTotals"] | null;
             /** Crashed */
             crashed: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Createdat */
             createdAt: string;
@@ -8815,8 +9042,7 @@ export interface components {
             node: string | null;
             /** Outcome */
             outcome: string;
-            /** Output */
-            output: unknown;
+            output: components["schemas"]["JsonValue"];
         };
         /** RunRow */
         RunRow: {
@@ -8838,7 +9064,7 @@ export interface components {
             id: string;
             /** Input */
             input: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Mode */
             mode: string;
@@ -8846,8 +9072,7 @@ export interface components {
             outcome: string | null;
             /** Outcometext */
             outcomeText?: string | null;
-            /** Output */
-            output: unknown;
+            output: components["schemas"]["JsonValue"];
             startedBy?: components["schemas"]["ActorView"] | null;
             /** Status */
             status: string;
@@ -8917,19 +9142,14 @@ export interface components {
             node: string;
             /** Payload */
             payload: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /** SavedCase */
         SavedCase: {
             /** Checks */
-            checks: {
-                [key: string]: unknown;
-            }[];
-            /** Context */
-            context: {
-                [key: string]: unknown;
-            } | null;
+            checks: components["schemas"]["SavedCaseCheck"][];
+            context: components["schemas"]["SavedCaseContext"] | null;
             /** Createdat */
             createdAt: string;
             /** Createdby */
@@ -8946,6 +9166,20 @@ export interface components {
             source: string;
             /** Status */
             status: string;
+        };
+        /** SavedCaseCheck */
+        SavedCaseCheck: {
+            /** Text */
+            text?: string | null;
+            /** Tool */
+            tool?: string | null;
+            /** Type */
+            type: string;
+        };
+        /** SavedCaseContext */
+        SavedCaseContext: {
+            /** Collections */
+            collections?: string[];
         };
         /** SavedCases */
         SavedCases: {
@@ -9051,6 +9285,37 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** SkillActivity */
+        SkillActivity: {
+            /** Agents */
+            agents: string[];
+            /** Loads30D */
+            loads30d: number;
+            /** Loadsperday */
+            loadsPerDay: components["schemas"]["SkillLoadsDay"][];
+            /** Samples */
+            samples: components["schemas"]["SkillTrace"][];
+            /** Successrate */
+            successRate: number | null;
+        };
+        /** SkillCitation */
+        SkillCitation: {
+            /** Detail */
+            detail?: string | null;
+            /** Href */
+            href?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "document" | "case" | "run" | "chat" | "template" | "description";
+            /** Label */
+            label: string;
+            /** Section */
+            section: string;
+        };
         /** SkillContent */
         SkillContent: {
             /** Guardrails */
@@ -9073,9 +9338,7 @@ export interface components {
             /** Refusal */
             refusal?: string | null;
             /** Resources */
-            resources: {
-                [key: string]: unknown;
-            }[];
+            resources: components["schemas"]["SkillResource"][];
             /** Slug */
             slug: string;
             /** Tools */
@@ -9138,10 +9401,7 @@ export interface components {
         };
         /** SkillDetail */
         SkillDetail: {
-            /** Activity */
-            activity: {
-                [key: string]: unknown;
-            };
+            activity: components["schemas"]["SkillActivity"];
             content: components["schemas"]["SkillContent"];
             /** Draftversion */
             draftVersion: number | null;
@@ -9175,23 +9435,15 @@ export interface components {
             ownerTeam: string;
             /** Parts */
             parts?: components["schemas"]["SkillPartSummary"][];
-            /** Pendingreview */
-            pendingReview?: {
-                [key: string]: unknown;
-            } | null;
+            pendingReview?: components["schemas"]["SkillPendingReview"] | null;
             /** Pendingreviewid */
             pendingReviewId?: string | null;
-            /** Provenance */
-            provenance: {
-                [key: string]: unknown;
-            };
+            provenance: components["schemas"]["SkillProvenance"];
             publishCheck: components["schemas"]["SkillPublishCheck"];
             /** Publishedversion */
             publishedVersion: number | null;
             /** Runs */
-            runs: {
-                [key: string]: unknown;
-            }[];
+            runs: components["schemas"]["JsonValue"][];
             /** Slug */
             slug: string;
             /**
@@ -9200,9 +9452,7 @@ export interface components {
              */
             status: "draft" | "in_review" | "published" | "deprecated";
             /** Tests */
-            tests: {
-                [key: string]: unknown;
-            }[];
+            tests: components["schemas"]["JsonValue"][];
             /** Tokens */
             tokens: number;
             /** Toolcount */
@@ -9313,6 +9563,17 @@ export interface components {
                 [key: string]: number;
             };
         };
+        /** SkillLoadsDay */
+        SkillLoadsDay: {
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Date */
+            date: string;
+            /** Total */
+            total: number;
+        };
         /** SkillOptions */
         SkillOptions: {
             /** Knowledgebases */
@@ -9383,6 +9644,31 @@ export interface components {
             /** Usewhen */
             useWhen: string;
         };
+        /** SkillPendingReview */
+        SkillPendingReview: {
+            /** Approvals */
+            approvals: number;
+            /**
+             * Editclass
+             * @enum {string}
+             */
+            editClass: "free" | "re_test" | "re_approval";
+            /** Id */
+            id: string;
+            /** Needed */
+            needed: number;
+            /** Version */
+            version: number;
+        };
+        /** SkillProvenance */
+        SkillProvenance: {
+            /** Citations */
+            citations: components["schemas"]["SkillCitation"][];
+            /** Detail */
+            detail: string;
+            /** Origin */
+            origin: string;
+        };
         /** SkillPublishCheck */
         SkillPublishCheck: {
             /** Approversneeded */
@@ -9426,6 +9712,35 @@ export interface components {
             /** Version */
             version: number;
         };
+        /**
+         * SkillResource
+         * @description A file or a text template kept on a skill version; a file is stored through the Files API.
+         */
+        SkillResource: {
+            /** Addedat */
+            addedAt: string;
+            /** Addedby */
+            addedBy: string;
+            /** Blocked */
+            blocked?: string | null;
+            /** Body */
+            body?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Fileid */
+            fileId?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "file" | "template";
+            /** Name */
+            name: string;
+            /** Size */
+            size?: number | null;
+        };
         /** SkillToolRef */
         SkillToolRef: {
             /** Access */
@@ -9438,6 +9753,28 @@ export interface components {
             system: string;
             /** Toolid */
             toolId: string;
+        };
+        /** SkillTrace */
+        SkillTrace: {
+            /** Agentname */
+            agentName: string;
+            /** At */
+            at: string;
+            /** Id */
+            id: string;
+            /** Input */
+            input: string;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "completed" | "handed_off" | "failed";
+            /** Tookms */
+            tookMs: number;
+            /** Toolcalls */
+            toolCalls: string[];
+            /** Version */
+            version: number;
         };
         /** SkillUsage */
         SkillUsage: {
@@ -9499,9 +9836,7 @@ export interface components {
              */
             state: "draft" | "in_review" | "published" | "superseded" | "deprecated" | "rejected";
             /** Testrun */
-            testRun: {
-                [key: string]: unknown;
-            } | null;
+            testRun: null;
             /** Tokens */
             tokens: number;
             /** Version */
@@ -9509,8 +9844,7 @@ export interface components {
         };
         /** SlaEvent */
         SlaEvent: {
-            /** Data */
-            data?: unknown;
+            data?: components["schemas"]["JsonValue"];
             /** Event */
             event: string;
         };
@@ -9561,7 +9895,7 @@ export interface components {
             kind: string;
             /** Schema */
             schema: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Takesfiles */
             takesFiles: boolean;
@@ -9605,12 +9939,10 @@ export interface components {
             error: string | null;
             /** Finishedat */
             finishedAt: string | null;
-            /** Input */
-            input: unknown;
+            input: components["schemas"]["JsonValue"];
             /** Key */
             key: string;
-            /** Output */
-            output: unknown;
+            output: components["schemas"]["JsonValue"];
             /** Port */
             port: string | null;
             /** Startedat */
@@ -9854,7 +10186,7 @@ export interface components {
             consequence: string | null;
             /** Inputs */
             inputs: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /** Label */
             label: string;
@@ -9910,7 +10242,7 @@ export interface components {
             collapsed: boolean;
             /** Data */
             data: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /**
              * Region
@@ -9934,15 +10266,12 @@ export interface components {
             status: string;
             /** Values */
             values: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
         };
         /** TaskTypeDetail */
         TaskTypeDetail: {
-            /** Copiedfrom */
-            copiedFrom: {
-                [key: string]: unknown;
-            } | null;
+            copiedFrom: components["schemas"]["CopiedFrom"] | null;
             /** Description */
             description: string;
             /** Id */
@@ -9979,7 +10308,7 @@ export interface components {
             publishedAt: string | null;
             /** Record */
             record: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Savedat */
             savedAt: string;
@@ -9990,10 +10319,7 @@ export interface components {
         };
         /** TaskTypeView */
         TaskTypeView: {
-            /** Copiedfrom */
-            copiedFrom: {
-                [key: string]: unknown;
-            } | null;
+            copiedFrom: components["schemas"]["CopiedFrom"] | null;
             /** Description */
             description: string;
             /** Id */
@@ -10163,9 +10489,7 @@ export interface components {
         /** ThreadEventResult */
         ThreadEventResult: {
             /** Restarted */
-            restarted: {
-                [key: string]: unknown;
-            }[];
+            restarted: components["schemas"]["TimerRestart"][];
             /** Type */
             type: string;
         };
@@ -10206,7 +10530,7 @@ export interface components {
             assignee?: string | null;
             /** Calls */
             calls?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Candecide */
             canDecide?: boolean | null;
@@ -10236,7 +10560,7 @@ export interface components {
             dueAt?: string | null;
             /** Error */
             error?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Evidence */
             evidence: components["schemas"]["Evidence"][];
@@ -10265,7 +10589,7 @@ export interface components {
             reply?: components["schemas"]["ReplyPreview"] | null;
             /** Resume */
             resume?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /**
              * Risk
@@ -10309,7 +10633,7 @@ export interface components {
             graph: string;
             /** Interrupt */
             interrupt: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Next */
             next: string[];
@@ -10320,7 +10644,7 @@ export interface components {
             threadId: string;
             /** Values */
             values: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Version */
             version: number | null;
@@ -10333,7 +10657,7 @@ export interface components {
             graph: string;
             /** Metadata */
             metadata: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Status */
             status: string;
@@ -10343,6 +10667,15 @@ export interface components {
             updatedAt: string;
             /** Version */
             version: number | null;
+        };
+        /** TimerRestart */
+        TimerRestart: {
+            /** Dueat */
+            dueAt: string;
+            /** Kind */
+            kind: string;
+            /** Timerid */
+            timerId: string;
         };
         /** ToolApp */
         ToolApp: {
@@ -10476,7 +10809,7 @@ export interface components {
             id: string;
             /** Inputschema */
             inputSchema?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Label */
             label: string;
@@ -10510,7 +10843,7 @@ export interface components {
             id: string;
             /** Inputschema */
             inputSchema: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /**
              * Kind
@@ -10594,8 +10927,7 @@ export interface components {
             key: string;
             /** Label */
             label: string;
-            /** Raw */
-            raw?: unknown;
+            raw?: components["schemas"]["JsonValue"];
             /** Required */
             required: boolean;
             /** Type */
@@ -10617,6 +10949,13 @@ export interface components {
         };
         /** UpdateExpect */
         UpdateExpect: {
+            /** Digest */
+            digest?: string | null;
+            /** Recorddigest */
+            recordDigest?: string | null;
+        };
+        /** UpdateExpectView */
+        UpdateExpectView: {
             /** Digest */
             digest?: string | null;
             /** Recorddigest */
@@ -10649,7 +10988,7 @@ export interface components {
             draftOpen: boolean;
             /** Edits */
             edits: string[];
-            expect?: components["schemas"]["UpdateExpect"];
+            expect?: components["schemas"]["UpdateExpectView"];
             /** Fields */
             fields?: components["schemas"]["FieldReview"][];
             /** Fromversion */
@@ -10861,7 +11200,7 @@ export interface components {
             canPublish?: boolean | null;
             /** Dataschema */
             dataSchema: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Name */
             name: string;
@@ -10869,7 +11208,7 @@ export interface components {
             requiresTools?: string[];
             /** Sample */
             sample?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /**
              * Status
@@ -10883,7 +11222,7 @@ export interface components {
             teamName?: string | null;
             /** Tree */
             tree: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Updatedat */
             updatedAt?: string | null;
@@ -12819,12 +13158,14 @@ export interface operations {
     agents_list_agents: {
         parameters: {
             query?: {
+                availability?: string[] | null;
+                teamId?: string[] | null;
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
                 search?: string | null;
                 sortBy?: string | null;
                 sortOrder?: "asc" | "desc";
-                templateId?: string | null;
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -13561,7 +13902,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["EvalRunInput"] | null;
+                "application/json": components["schemas"]["EvalRunInput"];
             };
         };
         responses: {
@@ -16080,7 +16421,14 @@ export interface operations {
     };
     cases_list_case_types: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -16093,7 +16441,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_CaseTypeView__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_CaseTypeView__"];
                 };
             };
             /** @description Invalid request */
@@ -16604,14 +16952,17 @@ export interface operations {
     cases_list_cases: {
         parameters: {
             query?: {
-                status?: ("open" | "waiting_on_customer" | "waiting_on_us" | "resolved" | "closed")[];
-                priority?: ("low" | "normal" | "high" | "urgent")[];
+                status?: ("open" | "waiting_on_customer" | "waiting_on_us" | "resolved" | "closed")[] | null;
+                priority?: ("low" | "normal" | "high" | "urgent")[] | null;
                 assignee?: string | null;
                 customerId?: string | null;
                 overdue?: boolean;
-                search?: string | null;
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -19775,9 +20126,12 @@ export interface operations {
     agents_list_guardrails: {
         parameters: {
             query?: {
-                page?: number | null;
-                pageSize?: number;
-                search?: string;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -19791,7 +20145,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_Union_list_Guardrail___GuardrailList__"];
+                    "application/json": components["schemas"]["Envelope_GuardrailList_"];
                 };
             };
             /** @description Invalid request */
@@ -20723,7 +21077,9 @@ export interface operations {
     };
     agents_knowledge_usage: {
         parameters: {
-            query?: never;
+            query?: {
+                ids?: string[] | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -22920,11 +23276,14 @@ export interface operations {
     workflows_list_engine_runs: {
         parameters: {
             query?: {
-                workflowId?: string | null;
-                workflow_id?: string | null;
-                status?: string[];
+                workflowId?: string[] | null;
+                status?: string[] | null;
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -22938,7 +23297,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_ListResult_RunRow__"];
+                    "application/json": components["schemas"]["Envelope_LabelledListResult_RunRow__"];
                 };
             };
             /** @description Invalid request */
@@ -23885,11 +24244,19 @@ export interface operations {
         parameters: {
             query?: {
                 view?: "all" | "published" | "always" | "drafts" | "in_review" | "deprecated" | "unused";
-                page?: number;
-                pageSize?: number;
-                search?: string | null;
                 usableBy?: "agent" | null;
                 agentId?: string | null;
+                status?: string[] | null;
+                ownerTeam?: string[] | null;
+                origin?: string[] | null;
+                loading?: string[] | null;
+                knowledgeBases?: string[] | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -25039,7 +25406,14 @@ export interface operations {
     };
     reviews_list_task_types: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -25052,7 +25426,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_TaskTypeView__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_TaskTypeView__"];
                 };
             };
             /** @description Invalid request */
@@ -26084,6 +26458,12 @@ export interface operations {
         parameters: {
             query?: {
                 graph?: string | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -26097,7 +26477,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_ThreadView__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_ThreadView__"];
                 };
             };
             /** @description Invalid request */
@@ -27883,9 +28263,12 @@ export interface operations {
     agents_list_widgets: {
         parameters: {
             query?: {
-                page?: number | null;
-                pageSize?: number;
-                search?: string;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -27899,7 +28282,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_Union_list_WidgetTemplateOut___WidgetTemplateList__"];
+                    "application/json": components["schemas"]["Envelope_WidgetTemplateList_"];
                 };
             };
             /** @description Invalid request */
@@ -28730,6 +29113,7 @@ export interface operations {
                 search?: string | null;
                 sortBy?: string | null;
                 sortOrder?: "asc" | "desc";
+                status?: string[];
                 startable?: boolean;
                 takesFiles?: boolean;
                 engine?: "all" | "current";
@@ -28940,11 +29324,13 @@ export interface operations {
     workflows_list_definitions: {
         parameters: {
             query?: {
+                status?: string[] | null;
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
                 search?: string | null;
                 sortBy?: string | null;
                 sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -31131,7 +31517,14 @@ export interface operations {
     };
     forms_workflow_forms: {
         parameters: {
-            query?: never;
+            query?: {
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path: {
                 workflow_id: string;
@@ -31146,7 +31539,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_FormView__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_FormView__"];
                 };
             };
             /** @description Invalid request */
@@ -31661,6 +32054,7 @@ export interface operations {
             query?: {
                 page?: number;
                 pageSize?: number;
+                status?: string[];
             };
             header?: never;
             path: {

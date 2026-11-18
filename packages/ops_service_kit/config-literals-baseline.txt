@@ -1,0 +1,2 @@
+# 1 literal timeouts and HTTP clients built in packages/ops_service_kit (scripts/check_config_literals.py). A row may only fall.
+1 timeout packages/ops_service_kit/src/ops_service_kit/opa_server.py

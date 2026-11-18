@@ -4,7 +4,7 @@ run what its key should not, run a write without a person, or go unseen in the c
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -22,7 +22,7 @@ from ops_service_kit.settings import Settings
 from ops_tools.app import MCP_OFF
 from ops_tools.modules.seed import load
 from ops_tools.store.calls import gateway_calls
-from ops_tools.store.mcp_links import McpLinks
+from ops_tools.store.mcp_links import LinkedTool, McpLinks
 from ops_tools.store.modules import ModuleStore
 
 from .conftest import Api, build_app, no_keys, opa_client
@@ -174,6 +174,54 @@ async def test_a_tool_of_a_module_outside_the_team_is_refused_and_logged(stack: 
     assert (row["channel"], row["outcome"]) == ("mcp", "refused")
 
 
+async def _grant_cards_lookup(stack: Stack, ends: datetime) -> None:
+    """Card Services' workflow granted lookup_case alone of Lending Ops' module, ending at `ends`."""
+    store = ModuleStore(stack.engine)
+    m = await store.get(stack.api.tenant, "mod_document_service")
+    assert m is not None
+    now = datetime.now(UTC)
+    m["approvals"] = [a for a in m["approvals"] if a["id"] != "apr_cards_lookup"] + [
+        {
+            "id": "apr_cards_lookup",
+            "workflow_id": "wf_card_inbox",
+            "workflow_name": "Card inbox",
+            "workflow_team_id": "team_cards",
+            "environment": "production",
+            "major": 1,
+            "operations": ["lookup_case"],
+            "constraints": None,
+            "requested_by": "Maya Okafor",
+            "requested_by_email": None,
+            "justification": "test",
+            "requested_at": now,
+            "decided_by": "Maya Okafor",
+            "decided_at": now,
+            "status": "approved",
+            "expires_at": ends,
+            "reason": None,
+            "decider_team": None,
+            "review_id": None,
+        }
+    ]
+    await store.put(m, expected_revision=m["revision"])
+
+
+async def test_an_ended_grant_lists_and_calls_nothing_over_mcp(stack: Stack) -> None:
+    seen: dict[str, Any] = {}
+    for when, ends in (("live", timedelta(days=1)), ("ended", timedelta(days=-1))):
+        await _grant_cards_lookup(stack, datetime.now(UTC) + ends)
+        async with stack.running(), stack.http("ok_cards") as http, stack.client(http, "/mcp/team_cards") as c:
+            listed = "lookup_case" in {t.name for t in (await c.list_tools()).tools}
+            result = await c.call_tool("lookup_case", {"caseId": "CASE-4112"})
+        out: dict[str, Any] = dict(result.structured_content or {})
+        error: dict[str, Any] = out.get("error") or {}
+        seen[when] = (listed, out.get("code") or error.get("code"))
+    # Live, the call passes the team check and stops at Card Services' missing account; ended, it is refused there.
+    assert seen == {"live": (True, "CONNECTION_NOT_SET"), "ended": (False, "gateway_refused")}
+    # The live call's row ends as an error (no account); the ended grant's refusal is logged as one.
+    assert sorted(r["outcome"] for r in await stack.rows("lookup_case")) == ["error", "refused"]
+
+
 @pytest.fixture(autouse=True)
 def issuer_url(monkeypatch: pytest.MonkeyPatch) -> None:
     """These tests run on an install that names its public address, as an install with MCP on does; one that names none
@@ -228,10 +276,10 @@ async def test_a_key_made_for_one_link_opens_that_link_alone(stack: Stack) -> No
     """A key a link's Keys tab made is bound to that link: refused (401) on the team's whole address and on another
     link."""
     links = McpLinks(stack.engine)
-    tools = [{"name": "lookup_case", "title": "Look up a case", "kind": "tool", "access": "read"}]
+    tools = [LinkedTool(name="lookup_case", title="Look up a case", kind="tool", access="read")]
     own = await links.create(stack.api.tenant, "team_lending", slug="claims", name="Claims", tools=tools, by="Priya")
     await links.create(stack.api.tenant, "team_lending", slug="other", name="Other", tools=tools, by="Priya")
-    LINK_TARGET.update(id=own["id"])
+    LINK_TARGET.update(id=own.id)
     body: dict[str, Any] = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
     accept = {"Accept": "application/json, text/event-stream"}
     async with stack.running(), stack.http("ok_linked") as http:

@@ -47,7 +47,7 @@ def person(
         "kind": "person",
         "security_team": "team_security",
         "aud": ["agents"],
-        "tenant_id": "acme",
+        "tenant_id": "local",
         "team_ids": teams,
         "roles": dict.fromkeys(teams, role),
         **({"auth_method": auth_method} if auth_method else {}),

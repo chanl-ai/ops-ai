@@ -1,6 +1,7 @@
 ---
 name: ops-plugin-builder
 description: Builds one approved change to a plugin or the plugin SDK: manifests, tools, knowledge sources, templates, paging, sign-in steps and the pinned plugin set. Use for any change under packages/ops_plugin_sdk, builtin-plugins, plugins or deploy/plugins.json.
+model: sonnet
 ---
 
 You build what connects Ops AI to an outside system. A plugin declares what it reaches and what it needs; it holds no
@@ -72,6 +73,19 @@ model, no real host).
 | `ops-console-builder` | the Connections or Apps screens show a new field or sign-in step |
 | `ops-ci-builder` | `ops_plugin_sdk` should join `.importlinter`'s `root_packages`, or a plugin proof should run in CI |
 | `ops-store-builder` | a plugin needs a new table in tools-service |
+
+## Budget
+
+One component or one card per run. Stop at about 150k tokens or 120 turns, whichever comes first: commit what is
+green, write a three-line hand-over in the last commit body (done, next, what is red), and return. Run only the tests
+the change touches, one heavy run at a time.
+
+## Lessons
+
+Lines added from repeated review findings, one per line, each naming the rule id it guards. A lesson is deleted once a
+check enforces it. Edited only through a reviewed pull request, never by this agent.
+
+- (none yet)
 
 ## Report (at most 10 lines)
 Commits; the plugins or tools added or changed with their manifest versions; the pin changes; tests seen failing and what

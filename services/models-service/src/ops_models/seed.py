@@ -15,6 +15,7 @@ from ops_store.database import Database
 from .app import secret_hash
 from .connection_settings import ModelConnectionSettings
 from .store import Aliases, ModelKeys, Providers
+from .store.providers import InstallConnection
 
 SCRIPTED = "prov_scripted"
 # alias: (kind, model id, cleared sensitivity, input and output price per million)
@@ -55,7 +56,7 @@ OPENAI_URL = "https://api.openai.com/v1"
 OPENAI_KEY_NAME = "openai"
 
 
-def install_connection(settings: ModelConnectionSettings) -> dict[str, str | None] | None:
+def install_connection(settings: ModelConnectionSettings) -> InstallConnection | None:
     """openai-local's fields from the install's model settings, or None when neither OPENAI_API_TYPE nor
     OPENAI_API_BASE is set. A base with no type is an OpenAI-compatible endpoint. The settings class has already refused
     a combination that cannot work."""
@@ -87,32 +88,66 @@ def dev_secret(agent: str) -> str:
 async def seed(
     db: Database,
     fake_openai_url: str | None = None,
-    install: dict[str, str | None] | None = None,
+    install: InstallConnection | None = None,
     *,
     kb_daily_cap: float = 50.0,
 ) -> None:
     providers, aliases, keys = Providers(db), Aliases(db), ModelKeys(db)
-    scripted = {"id": SCRIPTED, "name": "scripted", "type": "scripted", "base_url": None, "key_ref": None}
-    await providers.ensure({**scripted, "created_at": now_iso()})
+    await providers.ensure(
+        {
+            "id": SCRIPTED,
+            "name": "scripted",
+            "type": "scripted",
+            "base_url": None,
+            "key_ref": None,
+            "created_at": now_iso(),
+        }
+    )
     bound = {name: (SCRIPTED, *row) for name, row in ALIASES.items()}
     if install is not None:
         # The settings win over whatever the row held, type included, so setting OPENAI_API_TYPE moves the stack's
         # default model on the next start; the fake is not used.
-        await providers.ensure({"id": OPENAI_LOCAL, "name": OPENAI_LOCAL, **install, "created_at": now_iso()})
+        await providers.ensure(
+            {
+                "id": OPENAI_LOCAL,
+                "name": OPENAI_LOCAL,
+                "type": install["type"],
+                "base_url": install["base_url"],
+                "key_ref": install["key_ref"],
+                "api_version": install["api_version"],
+                "region": install["region"],
+                "created_at": now_iso(),
+            }
+        )
         await providers.rebind(OPENAI_LOCAL, install)
         bound |= {name: (OPENAI_LOCAL, *row) for name, row in OPENAI_ALIASES.items()}
     elif fake_openai_url:
-        local = {"id": OPENAI_LOCAL, "name": OPENAI_LOCAL, "type": "openai-compatible", "key_ref": None}
-        await providers.ensure({**local, "base_url": fake_openai_url, "created_at": now_iso()})
+        await providers.ensure(
+            {
+                "id": OPENAI_LOCAL,
+                "name": OPENAI_LOCAL,
+                "type": "openai-compatible",
+                "key_ref": None,
+                "base_url": fake_openai_url,
+                "created_at": now_iso(),
+            }
+        )
         # The fake's URL wins over whatever a dev database kept (an old port, a provider with no credential), so
         # `default` does not reach a real provider by accident. A row with a credential name was bound to a real
         # provider on purpose (`make demo-model`, the shared stack's make up) and keeps it. Dev only.
         await providers.follow_url(OPENAI_LOCAL, fake_openai_url)
         bound |= {name: (OPENAI_LOCAL, *row) for name, row in OPENAI_ALIASES.items()}
     for name, (provider, kind, model, ceiling, price_in, price_out) in bound.items():
-        prices = {"input_per_million": Decimal(price_in), "output_per_million": Decimal(price_out)}
         await aliases.create(
-            name, kind, {"provider_id": provider, "model_id": model, "cleared_sensitivity": ceiling, **prices}
+            name,
+            kind,
+            {
+                "provider_id": provider,
+                "model_id": model,
+                "cleared_sensitivity": ceiling,
+                "input_per_million": Decimal(price_in),
+                "output_per_million": Decimal(price_out),
+            },
         )
     identities = [(f"agent:{a}", "agent", dev_secret(a)) for a in AGENTS] + [
         (RUNTIME_KEY, "purpose", RUNTIME_SECRET),
@@ -121,8 +156,17 @@ async def seed(
         (KB_KEY, "purpose", KB_SECRET),
     ]
     for key_id, kind, secret in identities:
-        row = {"id": key_id, "kind": kind, "budget": Decimal(50), "spent": Decimal(0), "status": "active"}
-        await keys.ensure({**row, "rate_limit_per_minute": 600, "secret_hash": secret_hash(secret)})
+        await keys.ensure(
+            {
+                "id": key_id,
+                "kind": kind,
+                "budget": Decimal(50),
+                "spent": Decimal(0),
+                "status": "active",
+                "rate_limit_per_minute": 600,
+                "secret_hash": secret_hash(secret),
+            }
+        )
     # files-service extracts for every tenant on one key; each tenant spends from its own share. Set on a key
     # seeded before the column existed, too.
     await keys.set_tenant_budget(EXTRACT_KEY, EXTRACT_TENANT_BUDGET)

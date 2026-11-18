@@ -82,7 +82,7 @@ async def test_a_late_resume_renews_the_token_from_the_recorded_approvals(
     assert (await last_run(client, tid))["status"] == "done"
     rows = await gateway.log.for_thread(tid, tenant_id="local")
     # The expired token was refused once, then the renewed one sent the reply exactly once.
-    assert [(r["decision"], r["outcome"]) for r in rows] == [("deny", "refused"), ("allow", "ok")]
+    assert [(r.decision, r.outcome) for r in rows] == [("deny", "refused"), ("allow", "ok")]
 
 
 async def test_an_approval_older_than_the_renewal_age_needs_a_fresh_review(
@@ -91,6 +91,6 @@ async def test_an_approval_older_than_the_renewal_age_needs_a_fresh_review(
     client, app = strict
     tid = await decided_then_expired(client, app)
     assert (await last_run(client, tid))["status"] == "error"
-    assert [(r["decision"], r["outcome"]) for r in await gateway.log.for_thread(tid, tenant_id="local")] == [
+    assert [(r.decision, r.outcome) for r in await gateway.log.for_thread(tid, tenant_id="local")] == [
         ("deny", "refused")
     ]

@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- tools-service, stamped at tools_0079_mcp_link_isolation
+-- tools-service, stamped at tools_0088_app_card_account
 CREATE TABLE gateway_calls (
 	id VARCHAR(64) NOT NULL, 
 	tool VARCHAR(64) NOT NULL, 
@@ -50,9 +50,10 @@ GO
 CREATE UNIQUE INDEX ux_gateway_calls_effect_scope ON gateway_calls (tenant_id, effect_scope, step, tool, input_hash) WHERE tenant_id IS NOT NULL AND step IS NOT NULL;
 GO
 CREATE TABLE gateway_fences (
+	tenant_id VARCHAR(64) NOT NULL, 
 	thread_id VARCHAR(64) NOT NULL, 
 	generation BIGINT NOT NULL, 
-	CONSTRAINT gateway_fences_pkey PRIMARY KEY (thread_id)
+	CONSTRAINT gateway_fences_pkey PRIMARY KEY (tenant_id, thread_id)
 );
 GO
 CREATE TABLE tool_modules (
@@ -85,9 +86,17 @@ CREATE TABLE tool_modules (
 	CONSTRAINT tool_modules_pkey PRIMARY KEY (tenant_id, id)
 );
 GO
+CREATE INDEX ix_tool_modules_display_name ON tool_modules (display_name);
+GO
+CREATE INDEX ix_tool_modules_list_name ON tool_modules (name);
+GO
+CREATE INDEX ix_tool_modules_owner_team ON tool_modules (owner_team);
+GO
 CREATE INDEX ix_tool_modules_template_id ON tool_modules (template_id);
 GO
-CREATE UNIQUE INDEX ux_tool_modules_name ON tool_modules (tenant_id, team_id, name) WHERE team_id IS NOT NULL AND team_id IS NOT NULL;
+CREATE INDEX ix_tool_modules_updated_at ON tool_modules (updated_at);
+GO
+CREATE UNIQUE INDEX ux_tool_modules_name ON tool_modules (tenant_id, team_id, name) WHERE team_id IS NOT NULL;
 GO
 CREATE UNIQUE INDEX ux_tool_modules_shared_name ON tool_modules (tenant_id, name) WHERE team_id IS NULL;
 GO
@@ -133,6 +142,36 @@ CREATE TABLE service_outbox (
 GO
 CREATE INDEX ix_service_outbox_due ON service_outbox (sent_at, next_at);
 GO
+CREATE TABLE team_defaults (
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	version INTEGER NOT NULL, 
+	applied_at DATETIMEOFFSET NOT NULL, 
+	cards_stamp VARCHAR(64) NULL, 
+	CONSTRAINT team_defaults_pkey PRIMARY KEY (tenant_id, team_id)
+);
+GO
+CREATE TABLE app_cards (
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	id VARCHAR(120) NOT NULL, 
+	kind VARCHAR(16) NOT NULL, 
+	name VARCHAR(200) NOT NULL, 
+	category VARCHAR(120) NULL, 
+	state VARCHAR(24) NULL, 
+	sign_in VARCHAR(16) NULL, 
+	own_account VARCHAR(64) NULL, 
+	connection_id VARCHAR(64) NULL, 
+	due_at DATETIMEOFFSET NULL, 
+	CONSTRAINT app_cards_pkey PRIMARY KEY (tenant_id, team_id, id)
+);
+GO
+CREATE INDEX ix_app_cards_category ON app_cards (tenant_id, team_id, category);
+GO
+CREATE INDEX ix_app_cards_kind ON app_cards (tenant_id, team_id, kind);
+GO
+CREATE INDEX ix_app_cards_name ON app_cards (tenant_id, team_id, name);
+GO
 CREATE TABLE connections (
 	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
@@ -172,7 +211,7 @@ CREATE INDEX ix_connections_app ON connections (tenant_id, team_id, app_id);
 GO
 CREATE INDEX ix_connections_team ON connections (tenant_id, team_id);
 GO
-CREATE UNIQUE INDEX uq_connections_account_key ON connections (tenant_id, team_id, app_id, owner_key, account_key) WHERE account_key IS NOT NULL AND account_key IS NOT NULL;
+CREATE UNIQUE INDEX uq_connections_account_key ON connections (tenant_id, team_id, app_id, owner_key, account_key) WHERE account_key IS NOT NULL;
 GO
 CREATE TABLE app_credentials (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -302,6 +341,8 @@ CREATE TABLE secret_audit (
 	CONSTRAINT secret_audit_pkey PRIMARY KEY (id)
 );
 GO
+CREATE INDEX ix_secret_audit_at ON secret_audit (at);
+GO
 CREATE INDEX ix_secret_audit_tenant_id ON secret_audit (tenant_id);
 GO
 CREATE TABLE mcp_links (
@@ -357,14 +398,6 @@ CREATE TABLE send_checks (
 	reason VARCHAR(max) NOT NULL, 
 	checked_at VARCHAR(32) NOT NULL, 
 	CONSTRAINT send_checks_pkey PRIMARY KEY (tenant_id, team_id, input_hash, policy_version)
-);
-GO
-CREATE TABLE team_defaults (
-	tenant_id VARCHAR(64) NOT NULL, 
-	team_id VARCHAR(64) NOT NULL, 
-	version INTEGER NOT NULL, 
-	applied_at DATETIMEOFFSET NOT NULL, 
-	CONSTRAINT team_defaults_pkey PRIMARY KEY (tenant_id, team_id)
 );
 GO
 CREATE TABLE module_operations (
@@ -475,6 +508,8 @@ CREATE TABLE module_egress_hosts (
 	CONSTRAINT module_egress_hosts_tenant_id_host_fkey FOREIGN KEY(tenant_id, host) REFERENCES egress_hosts (tenant_id, host) ON DELETE NO ACTION
 );
 GO
+CREATE INDEX ix_module_egress_hosts_host ON module_egress_hosts (tenant_id, host);
+GO
 CREATE TABLE connection_tokens (
 	tenant_id VARCHAR(64) NOT NULL, 
 	connection_id VARCHAR(64) NOT NULL, 
@@ -512,15 +547,61 @@ CREATE TABLE connect_links (
 	CONSTRAINT connect_links_tenant_id_connection_id_fkey FOREIGN KEY(tenant_id, connection_id) REFERENCES connections (tenant_id, id) ON DELETE CASCADE
 );
 GO
+CREATE INDEX ix_connect_links_connection ON connect_links (tenant_id, connection_id);
+GO
 IF SCHEMA_ID(N'ops_security') IS NULL EXEC (N'CREATE SCHEMA ops_security AUTHORIZATION dbo');
+GO
+CREATE FUNCTION ops_security.tools_tenant_read (@tenant_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) OR USER_NAME() = N'ops_tools_system';
+GO
+CREATE FUNCTION ops_security.tools_tenant_write (@tenant_id VARCHAR(64))
+RETURNS TABLE WITH SCHEMABINDING AS RETURN
+SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) OR USER_NAME() = N'ops_tools_system';
 GO
 CREATE FUNCTION ops_security.tools_team_read (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
 RETURNS TABLE WITH SCHEMABINDING AS RETURN
-SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64)));
+SELECT 1 AS visible WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64))) OR USER_NAME() = N'ops_tools_system';
 GO
 CREATE FUNCTION ops_security.tools_team_write (@tenant_id VARCHAR(64), @team_id VARCHAR(64))
 RETURNS TABLE WITH SCHEMABINDING AS RETURN
-SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64)));
+SELECT 1 AS allowed WHERE @tenant_id = CAST(SESSION_CONTEXT(N'tenant_id') AS VARCHAR(64)) AND (CAST(SESSION_CONTEXT(N'scope') AS NVARCHAR(16)) = N'tenant' OR @team_id = CAST(SESSION_CONTEXT(N'team_id') AS VARCHAR(64))) OR USER_NAME() = N'ops_tools_system';
+GO
+CREATE SECURITY POLICY ops_security.gateway_calls_tenant
+    ADD FILTER PREDICATE ops_security.tools_tenant_read(tenant_id) ON dbo.gateway_calls,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.gateway_calls AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.gateway_calls AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.gateway_fences_tenant
+    ADD FILTER PREDICATE ops_security.tools_tenant_read(tenant_id) ON dbo.gateway_fences,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.gateway_fences AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.gateway_fences AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.tool_modules_tenant
+    ADD FILTER PREDICATE ops_security.tools_tenant_read(tenant_id) ON dbo.tool_modules,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.tool_modules AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.tool_modules AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.operation_mocks_tenant
+    ADD FILTER PREDICATE ops_security.tools_tenant_read(tenant_id) ON dbo.operation_mocks,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.operation_mocks AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.operation_mocks AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.team_defaults_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.team_defaults,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.team_defaults AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.team_defaults AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.app_cards_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.app_cards,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.app_cards AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.app_cards AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.connections_isolation
     ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.connections,
@@ -546,6 +627,30 @@ CREATE SECURITY POLICY ops_security.connection_audit_isolation
     ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.connection_audit AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.egress_hosts_tenant
+    ADD FILTER PREDICATE ops_security.tools_tenant_read(tenant_id) ON dbo.egress_hosts,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.egress_hosts AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.egress_hosts AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.egress_ranges_tenant
+    ADD FILTER PREDICATE ops_security.tools_tenant_read(tenant_id) ON dbo.egress_ranges,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.egress_ranges AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.egress_ranges AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.egress_audit_tenant
+    ADD FILTER PREDICATE ops_security.tools_tenant_read(tenant_id) ON dbo.egress_audit,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.egress_audit AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.egress_audit AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.operation_rate_windows_tenant
+    ADD FILTER PREDICATE ops_security.tools_tenant_read(tenant_id) ON dbo.operation_rate_windows,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.operation_rate_windows AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.operation_rate_windows AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.tool_secrets_isolation
     ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.tool_secrets,
     ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.tool_secrets AFTER INSERT,
@@ -562,6 +667,48 @@ CREATE SECURITY POLICY ops_security.mcp_links_isolation
     ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.mcp_links,
     ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.mcp_links AFTER INSERT,
     ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.mcp_links AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.plugin_bindings_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.plugin_bindings,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.plugin_bindings AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.plugin_bindings AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.send_policies_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.send_policies,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.send_policies AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.send_policies AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.send_checks_isolation
+    ADD FILTER PREDICATE ops_security.tools_team_read(tenant_id, team_id) ON dbo.send_checks,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.send_checks AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_team_write(tenant_id, team_id) ON dbo.send_checks AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.module_operations_tenant
+    ADD FILTER PREDICATE ops_security.tools_tenant_read(tenant_id) ON dbo.module_operations,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.module_operations AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.module_operations AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.module_versions_tenant
+    ADD FILTER PREDICATE ops_security.tools_tenant_read(tenant_id) ON dbo.module_versions,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.module_versions AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.module_versions AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.module_approvals_tenant
+    ADD FILTER PREDICATE ops_security.tools_tenant_read(tenant_id) ON dbo.module_approvals,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.module_approvals AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.module_approvals AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.module_egress_hosts_tenant
+    ADD FILTER PREDICATE ops_security.tools_tenant_read(tenant_id) ON dbo.module_egress_hosts,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.module_egress_hosts AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.tools_tenant_write(tenant_id) ON dbo.module_egress_hosts AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.connection_tokens_isolation
@@ -581,5 +728,5 @@ CREATE TABLE alembic_version_tools (
     CONSTRAINT alembic_version_tools_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0079_mcp_link_isolation');
+INSERT INTO alembic_version_tools (version_num) VALUES ('tools_0088_app_card_account');
 GO

@@ -14,7 +14,6 @@ from ops_service_kit.http import Out
 
 from ..store.actor_names import ActorNames
 from .deps import Runtime
-from .key_summaries import PlatformKeySummaries
 from .people_names import PlatformPeopleNames
 
 EMAIL_TRIGGER = "trigger:email:"
@@ -88,27 +87,46 @@ def parse(raw: str) -> Parsed:
     return Parsed("person", who)
 
 
-async def actors(rt: Runtime, raws: Iterable[str]) -> dict[str, dict[str, Any]]:
-    """Each raw string as `{kind, id, name}`, and `runId` for a run started by another run. People and API keys are
-    named by platform-service: a person's display name, a key's label. Anything not found keeps its id as its name."""
+NamedActors = dict[str, dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class ActorReads:
+    """What this service's own rows say about a set of raw actors: the part of `actors` that reads the database."""
+
+    parsed: dict[str, Parsed]
+    names: dict[tuple[str, str], str]
+
+
+async def actor_reads(rt: Runtime, raws: Iterable[str]) -> ActorReads:
+    """The local reads of `actors`, for a route that holds one transaction: `named_actors` then asks platform-service
+    with nothing open."""
     parsed = {raw: parse(raw) for raw in set(raws) if raw}
     addresses = {p.id for p in parsed.values() if p.kind == "trigger"}
     run_ids = {p.id for p in parsed.values() if p.kind == "run"}
     agent_ids = {p.id for p in parsed.values() if p.kind == "agent"} | {
         p.via[1] for p in parsed.values() if p.via and p.via[0] == "agent"
     }
-    names = await ActorNames(rt.db).names(addresses=addresses, run_ids=run_ids, agent_ids=agent_ids)
+    key_ids = frozenset(p.id for p in parsed.values() if p.kind == "key")
+    names = await ActorNames(rt.db).names(addresses=addresses, run_ids=run_ids, agent_ids=agent_ids, key_ids=key_ids)
+    return ActorReads(parsed, dict(names))
+
+
+async def actors(rt: Runtime, raws: Iterable[str]) -> NamedActors:
+    """Each raw string as `{kind, id, name}`, and `runId` for a run started by another run. People and API keys are
+    named: a person's display name by platform-service, a key's label from this service's copy of the keys. Anything
+    not found keeps its id as its name."""
+    return await named_actors(rt, await actor_reads(rt, raws))
+
+
+async def named_actors(rt: Runtime, reads: ActorReads) -> NamedActors:
+    """`actors`' answer from its local reads; a person's display name is the one call, to platform-service."""
+    parsed, names = reads.parsed, dict(reads.names)
     people = getattr(rt, "people_names", None)
     if isinstance(people, PlatformPeopleNames):
         emails = {p.id for p in parsed.values() if p.kind == "person" and "@" in p.id}
         names |= {("person", e): n for e, n in (await people.names(emails)).items()}
-    key_ids = {p.id for p in parsed.values() if p.kind == "key"}
-    keys = getattr(rt, "key_summaries", None)
-    if key_ids and isinstance(keys, PlatformKeySummaries):
-        # Revoked keys stay in the list, so a run a retired key started keeps its key's name.
-        listed = await keys.list() or []
-        names |= {("key", str(k["id"])): str(k["name"]) for k in listed if k["id"] in key_ids}
-    out: dict[str, dict[str, Any]] = {}
+    out: NamedActors = {}
     for raw, p in parsed.items():
         view: dict[str, Any] = {"kind": p.kind, "id": p.id, "name": names.get((p.kind, p.id), p.id)}
         if p.kind == "run":

@@ -1,0 +1,7 @@
+# 47 boundaries crossed without a model in services/models-service (scripts/check_typed_boundaries.py). A row may only fall.
+1 body completions_completions
+7 dict-any services/models-service/src/ops_models/app.py
+1 task services/models-service/src/ops_models/app.py
+1 dict-any services/models-service/src/ops_models/key_check.py
+35 dict-any services/models-service/src/ops_models/providers.py
+2 dict-any services/models-service/src/ops_models/schemas.py

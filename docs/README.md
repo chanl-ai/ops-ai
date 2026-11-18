@@ -135,11 +135,15 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `architecture/migration/README.md` | The migration to the standards: goal, phases, sizes and calendar, what is replaced and kept, the rules every lane follows, how to verify |
 | `architecture/migration/components.md` | Phase 0: the eight shared components, their files, target interfaces, three builder tracks, checks and branches |
 | `architecture/migration/pilot.md` | Phase 1: documents, files, models and runner on every component; the coverage gap measured and published |
+| `architecture/migration/api-changes.md` | Every API change the migration makes, per service, with what a caller must change; read by the console and SDK steps |
+| `architecture/migration/baseline-rises.md` | Every exception list (baseline) that holds more rows on the migration branch than on develop, with counts; the work list for bringing them down |
 | `architecture/migration/lane-platform.md` | Phase 2: platform-service's store and request layers replaced wholesale; the page shell as one call |
 | `architecture/migration/lane-kb.md` | Phase 2: kb-service's four lists in SQL, typed rows, the `kb.changed` event |
 | `architecture/migration/lane-tools.md` | Phase 2: tools-service's sixteen tables policed, hand filters onto `team_visible()`, the catalogue events |
 | `architecture/migration/lane-agents.md` | Phase 2: agents-service's 43 store files on the base, 21 tables policed, lists and labels in SQL from local copies |
+| `architecture/migration/agents-registry-tenancy.md` | The agents registry, graph version and channel tables: where each row's tenant comes from, key changes, the two migrations |
 | `architecture/migration/lane-console.md` | Phase 3: the console's data layer onto the list contract and the fields the lanes return |
+| `architecture/migration/test-pruning.md` | Where the service test suites spend time, parallel runs, and every test deleted as redundant with its surviving cover |
 | `architecture/definitions-and-versions.md` | Draft to publish, pointers, the pin per thread, what happens without it, migrate |
 | `architecture/durability-failure-and-audit.md` | Leases, sweeper, fencing, re-execution, idempotency, side-effect classes, journal, checkpoint growth and pruning |
 | `architecture/data.md` | Tables per service, the checkpointer package, designed stores, retention |
@@ -537,6 +541,8 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `packages/ops_service_kit/logging.md` | Logging: one JSON line per event on stdout, its fields and ids, what is redacted, the rules and checks |
 | `sdk/python.md` | Python SDK: connect with an API key, run workflows and decide their tasks, the client's resources and errors |
 | `sdk/typescript.md` | TypeScript SDK: the same client for Node, typed from the API reference |
+| `sdk/changelog-next-major.md` | Draft changelog of the coming SDK major version: each changed route and the nouns and commands that follow |
+| `sdk/upgrading.md` | Upgrading to SDK 1.0.0: list paging and the 50-row cap, unknown body fields refused, the error format, each with before and after code |
 | `guide/ops-assistant.md` | The Ops Assistant: checklist, Connect card, Think harder, Save read-back, reused reads, suggestion chips, memories |
 | `guide/whats-new.md` | What's new: every change a person would notice, newest first, built from the changelog |
 | `guide/use-cases/card-disputes.md` | Use case: card disputes, from the request to the approved credit, with SDK code |
@@ -599,3 +605,8 @@ title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
 | `usecases/agents-service/a-schedule-starts-a-run-once.md` | uc-workflows-1: A Schedule trigger starts one run per tick key |
 | `usecases/platform-service/team-usage-guards-team-deletion.md` | uc-platform-1: A team's running work is counted for that team only and stops its deletion |
 | `usecases/agents-service/evals-keep-saved-cases-and-runs.md` | uc-751: Evals keep saved cases and runs for the team |
+| `usecases/agents-service/an-agent-answers-from-a-knowledge.md` | uc-752: An agent answers from a knowledge source with a citation, in mock and real mode |
+| `usecases/tools-service/an-agent-reads-with-a-tool.md` | uc-753: An agent reads with a tool, asks for approval, and the write runs only after approval, in mock and real mode |
+| `usecases/tools-service/approval-fails-closed-when-the-approval.md` | uc-754: Approval fails closed: when the approval rules cannot be read, a write that needs approval is refused and never runs |
+| `usecases/tools-service/a-team-holding-only-a-workflow.md` | uc-755: A team holding only a workflow grant on another team's tool module uses it through the workflow and cannot edit, publish, run, revoke or delete it |
+| `usecases/agents-service/a-shared-form-filled-in-signed.md` | uc-756: A shared form filled in signed out starts a workflow with knowledge and a tool, a person approves a step, and the run finishes with a record |

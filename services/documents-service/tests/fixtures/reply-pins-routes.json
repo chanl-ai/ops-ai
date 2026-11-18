@@ -1,0 +1,254 @@
+{
+  "classify": {
+    "confidence": 0.95,
+    "floor": 0.5,
+    "name": "Invoice notice",
+    "needsReview": false,
+    "reason": "The page says Invoice.",
+    "typeId": "invoice_notice"
+  },
+  "copy": {
+    "copy": {
+      "detachedAt": null,
+      "id": "<tcp>",
+      "kind": "document_type",
+      "recordId": "<dt>",
+      "source": "plugin:test.templates",
+      "templateId": "case-letter",
+      "version": 1
+    },
+    "created": true,
+    "needs": []
+  },
+  "copyAgain": {
+    "copy": {
+      "detachedAt": null,
+      "id": "<tcp>",
+      "kind": "document_type",
+      "recordId": "<dt>",
+      "source": "plugin:test.templates",
+      "templateId": "case-letter",
+      "version": 1
+    },
+    "created": false,
+    "needs": []
+  },
+  "delete": [
+    204,
+    ""
+  ],
+  "detach": {
+    "detachedAt": "<timeZ>",
+    "id": "<tcp>",
+    "kind": "document_type",
+    "recordId": "<dt>",
+    "source": "plugin:test.templates",
+    "templateId": "case-letter",
+    "version": 1
+  },
+  "extract": {
+    "documentType": {
+      "id": "invoice_notice",
+      "name": "Invoice notice",
+      "version": 1
+    },
+    "fields": {
+      "amount": {
+        "citation": {
+          "fileId": "fil_0001",
+          "page": 1,
+          "quote": "Amount due: 1,250.00 CAD"
+        },
+        "confidence": 0.9,
+        "extractedValue": "1,250.00 CAD",
+        "needsReview": false,
+        "value": 1250.0
+      },
+      "invoice": {
+        "citation": {
+          "fileId": "fil_0001",
+          "page": 1,
+          "quote": "Invoice INV-2207"
+        },
+        "confidence": 1.0,
+        "extractedValue": "INV-2207",
+        "needsReview": false,
+        "value": "INV-2207"
+      }
+    },
+    "fileId": "fil_0001",
+    "floor": 0.5,
+    "id": "<ext>",
+    "needsReview": [],
+    "outcome": "ok",
+    "path": "model",
+    "schema": [
+      {
+        "key": "invoice",
+        "label": "invoice",
+        "required": true,
+        "type": "text"
+      },
+      {
+        "key": "amount",
+        "label": "amount",
+        "required": true,
+        "type": "money"
+      }
+    ],
+    "status": "done"
+  },
+  "layout": {
+    "blocks": [
+      {
+        "box": null,
+        "id": "p1.b0",
+        "kind": "paragraph",
+        "order": 0,
+        "page": 1,
+        "text": "Invoice INV-2207 Amount due: 1,250.00 CAD Customer: Marcus Bell"
+      }
+    ],
+    "engine": "reading-4",
+    "pages": [
+      {
+        "height": null,
+        "number": 1,
+        "source": "text",
+        "width": null
+      }
+    ],
+    "words": []
+  },
+  "layoutBefore": {
+    "blocks": [
+      {
+        "box": null,
+        "id": "p1.b0",
+        "kind": "paragraph",
+        "order": 0,
+        "page": 1,
+        "text": "Invoice INV-2207 Amount due: 1,250.00 CAD Customer: Marcus Bell"
+      }
+    ],
+    "engine": "reading-4",
+    "pages": [
+      {
+        "height": null,
+        "number": 1,
+        "source": "text",
+        "width": null
+      }
+    ],
+    "words": []
+  },
+  "layoutPage": {
+    "blocks": [
+      {
+        "box": null,
+        "id": "p1.b0",
+        "kind": "paragraph",
+        "order": 0,
+        "page": 1,
+        "text": "Invoice INV-2207 Amount due: 1,250.00 CAD Customer: Marcus Bell"
+      }
+    ],
+    "engine": "reading-4",
+    "pages": [
+      {
+        "height": null,
+        "number": 1,
+        "source": "text",
+        "width": null
+      }
+    ],
+    "words": []
+  },
+  "offers": [],
+  "purge": {
+    "extractions": 1,
+    "readings": 1,
+    "samples": 0
+  },
+  "review": {
+    "appliesNow": true,
+    "changes": [],
+    "copy": {
+      "detachedAt": null,
+      "id": "<tcp>",
+      "kind": "document_type",
+      "recordId": "<dt>",
+      "source": "plugin:test.templates",
+      "templateId": "case-letter",
+      "version": 1
+    },
+    "draftOpen": false,
+    "edits": [],
+    "expect": {
+      "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "recordDigest": "43bcf4f6a7cb79a245389bd0f7b1bf6cb1814ed65a46601964d05ed37d7f2d2f"
+    },
+    "fields": [],
+    "fromVersion": 1,
+    "taken": false,
+    "toVersion": 1,
+    "version": null
+  },
+  "take": {
+    "appliesNow": true,
+    "changes": [],
+    "copy": {
+      "detachedAt": null,
+      "id": "<tcp>",
+      "kind": "document_type",
+      "recordId": "<dt>",
+      "source": "plugin:test.templates",
+      "templateId": "case-letter",
+      "version": 1
+    },
+    "draftOpen": false,
+    "edits": [],
+    "expect": {
+      "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "recordDigest": "43bcf4f6a7cb79a245389bd0f7b1bf6cb1814ed65a46601964d05ed37d7f2d2f"
+    },
+    "fields": [],
+    "fromVersion": 1,
+    "taken": true,
+    "toVersion": 1,
+    "version": null
+  },
+  "templates": [
+    {
+      "addCell": {
+        "action": "edit",
+        "area": "documents"
+      },
+      "canAdd": true,
+      "copy": null,
+      "id": "case-letter",
+      "installed": {
+        "changed": false,
+        "copies": 0,
+        "newerAvailable": false,
+        "version": null
+      },
+      "kind": "document_type",
+      "plugin": {
+        "id": "test.templates",
+        "title": "Case desk",
+        "version": "0.2.0"
+      },
+      "removeCell": null,
+      "requires": {
+        "bind": [],
+        "resources": [],
+        "tools": []
+      },
+      "source": "plugin:test.templates",
+      "state": "available",
+      "title": "Case letter",
+      "version": 1
+    }
+  ]
+}

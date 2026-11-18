@@ -1,6 +1,5 @@
 """The Egress and Secrets lists a page at a time, through the real routes. Failure modes: a page answering every row, a
-total that ignores the search, a page that loads the whole table, and earlier callers of GET /v1/secrets getting a
-page instead of the whole list."""
+total that ignores the search, and a page that loads the whole table."""
 
 from __future__ import annotations
 
@@ -30,9 +29,6 @@ async def test_hosts_and_secrets_page_on_the_server(
     for i in range(5):
         _data(await client.post("/v1/egress/hosts", json={"value": f"paging-{i}.example.com"}, headers=sam))
         _data(await client.post("/v1/secrets", json={"name": f"PAGING_{i}", "value": "x"}, headers=sam))
-
-    whole = _data(await client.get("/v1/secrets", headers=sam))
-    assert isinstance(whole, list), "without page, earlier callers still read the whole list"
 
     # A page reads only its own rows: the whole-table reads are never called.
     async def no_whole_table(*_: Any) -> Any:

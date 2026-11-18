@@ -137,7 +137,7 @@ uv run python deploy/fly/staging/mailbox_demo.py walk --origin https://<your-app
   --send-smtp smtp.ethereal.email:587 --send-user <account>@ethereal.email --read-imap imap.ethereal.email:993
 ```
 
-Screenshots of the case, the task and the run, headless: `STG_ORIGIN=... STG_EMAIL=... STG_PASSWORD=... OUT=<dir>
+Screenshots of the case, the task and the run, headless: `OPS_USECASE_STAGING_HOST=<host> STG_ORIGIN=https://<host> STG_EMAIL=... STG_PASSWORD=... OUT=<dir>
 node deploy/fly/staging/mailbox_demo_shots.mjs cases/<case id> reviews/<run id>:review:1 workflows/runs/<run id>`.
 
 Walked with `--upload` on 2026-10-20, every step PASS: document run `wfrun_ae2d63cb7d1b`; cases `case_49a13613a105`

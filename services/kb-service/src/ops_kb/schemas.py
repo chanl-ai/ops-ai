@@ -3,26 +3,21 @@ console owns the shape of (retrieval, access, ingest) are documented as objects;
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
 
-from ops_service_kit.http import ListResult, Out
+from ops_service_kit.http import In, JsonValue, ListResult, Out
 
-Json = dict[str, Any]
-
-
-class In(BaseModel):
-    # The console sends its whole input type; fields this slice does not run are accepted and ignored.
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="ignore")
+# A body's section, patch or stage settings: keys checked as a whole by the service (settings sections, source stages),
+# so any JSON object here.
+Json = dict[str, JsonValue]
 
 
-class _Section(BaseModel):
-    """One section of a base's stored settings. A field it does not keep is refused (`invalid_settings`), so a caller
-    never saves a value nothing reads; the defaults and presets are service.py's."""
-
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+class _Section(Out):
+    """One section of a base's stored settings, validated on a save and answered as it is stored. A field it does not
+    keep is refused (`invalid_settings`), so a caller never saves a value nothing reads; the defaults and presets are
+    service.py's."""
 
 
 class FilterCondition(_Section):
@@ -100,6 +95,159 @@ class SourceDefaults(_Section):
     child_size: int
 
 
+class PrecedenceRule(Out):
+    """A rule choosing between two returned pieces on one topic; the index applies one: a newer version wins."""
+
+    id: str
+    label: str
+    kind: str
+    winner: str
+    loser: str
+
+
+class MetadataProfile(Out):
+    required: list[str]
+
+
+class AccessMembers(Out):
+    mode: str
+    principals: list[str]
+
+
+class PublicLink(Out):
+    enabled: bool
+    slug: str
+    answer_style: str
+    rate_limit: int
+    show_source_links: bool
+
+
+class KbAccess(Out):
+    """What the console shows of who may search a base: the stored MCP offer beside the fixed facts of the team."""
+
+    members: AccessMembers
+    any_api_key: bool
+    mcp: McpAccess
+    public_link: PublicLink
+    document_permissions: str
+
+
+class KbStats(Out):
+    documents: int
+    chunks: int
+    failures: int
+    stale: int
+    queries7d: int = Field(alias="queries7d")
+    queries_change7d: int = Field(alias="queriesChange7d")
+    no_answer_rate: int
+    median_latency_ms: int
+
+
+class IndexJob(Out):
+    id: str
+    started_at: str
+    duration_sec: float
+    processed: int
+    failed: int
+    status: str
+    trigger: str
+
+
+class IndexingProgress(Out):
+    done: int
+    total: int
+    task_id: str
+
+
+class ScheduleManual(Out):
+    kind: Literal["manual"]
+
+
+class ScheduleHourly(Out):
+    kind: Literal["hourly"]
+    every: int
+
+
+class ScheduleDaily(Out):
+    kind: Literal["daily"]
+    time: str
+    tz: str
+
+
+class ScheduleWeekly(Out):
+    kind: Literal["weekly"]
+    time: str
+    tz: str
+    day: str
+
+
+SourceSchedule = Annotated[
+    ScheduleManual | ScheduleHourly | ScheduleDaily | ScheduleWeekly, Field(discriminator="kind")
+]
+
+
+class SourceParsing(Out):
+    ocr: Literal["off", "auto", "always"]
+    tables: bool
+    vision: bool
+
+
+class SourceCleaning(Out):
+    furniture: bool
+    main_content: bool
+    site_repeats: bool
+    duplicates: Literal["flag", "skip"]
+
+
+class IngestColumn(Out):
+    name: str
+    role: Literal["searchable", "metadata", "ignored"]
+    key: bool
+
+
+class IngestApproval(Out):
+    status: Literal["not_needed", "pending", "approved"]
+    approved_steps: list[str]
+    requested_by: str | None
+    decided_by: str | None
+    decided_at: str | None
+
+
+class SourceIngest(Out):
+    preset: str
+    strategies: list[str]
+    size: int
+    overlap: int
+    child_size: int
+    questions_per_section: int
+    columns: list[IngestColumn]
+    model: str
+    approval: IngestApproval
+
+
+class SourceRule(Out):
+    id: str
+    kind: Literal["include", "exclude"]
+    field: Literal["path", "title", "mime", "modified_after", "size_under"]
+    value: str
+
+
+class SourceMetadataMapping(Out):
+    key: str
+    from_: str = Field(alias="from")
+
+
+class SourceStages(Out):
+    """The stages' settings of a source, or of a kind's defaults: what a sync applies."""
+
+    parsing: SourceParsing
+    cleaning: SourceCleaning
+    ingest: SourceIngest
+    rules: list[SourceRule]
+    metadata_mapping: list[SourceMetadataMapping]
+    ai_ceiling: float
+
+
 class KnowledgeBaseIn(In):
     # A caller-chosen id, for knowledge bases that agents were granted before they moved here; kb-service makes one.
     id: str | None = Field(default=None, pattern=r"^kb_[a-z0-9_]{1,60}$")
@@ -110,10 +258,10 @@ class KnowledgeBaseIn(In):
     owner: str | None = None
     description: str = ""
     color: str = "blue"
-    source_ids: list[str] = []
+    source_ids: list[str] = Field(default=[])
     # Fills every settings section as a starting point; `raw` is shown as "Search only". The base does not remember it.
     preset: Literal["balanced", "precise", "raw"] = "balanced"
-    collections: list[str] = []
+    collections: list[str] = Field(default=[])
     # Values over the preset's, section by section, checked as a patch is.
     retrieval: Json | None = None
     answer: Json | None = None
@@ -131,6 +279,9 @@ class KnowledgeBasePatch(In):
     description: str | None = None
     color: str | None = None
     collections: list[str] | None = None
+    # Sent by the console's settings form; not kept yet, so accepted and ignored.
+    precedence: list[Json] | None = None
+    metadata_profile: Json | None = None
     # Each section merges over what is stored: the keys sent change, the rest stay.
     retrieval: Json | None = None
     answer: Json | None = None
@@ -150,13 +301,13 @@ class SourceIn(In):
     owner: str | None = None
     sensitivity: str = "internal"
     status: str | None = None
-    tags: list[str] = []
-    file_ids: list[str] = []
-    kb_ids: list[str] = []
+    tags: list[str] = Field(default=[])
+    file_ids: list[str] = Field(default=[])
+    kb_ids: list[str] = Field(default=[])
     sync: bool = False
     # A "tool" source's plugin and source names: {"plugin": "opsai.salesforce", "source": "articles"}. Any
     # values: the console's Add source sends its whole draft config for every type, and only a tool source reads it.
-    config: dict[str, Any] | None = None
+    config: dict[str, JsonValue] | None = None
     # Each stage's settings (source_settings.py), over the kind's defaults; validated as a whole.
     schedule: Json | None = None
     parsing: Json | None = None
@@ -171,7 +322,7 @@ class SourceIn(In):
 class KbSourceLink(Out):
     source_id: str
     items_contributed: int
-    rules: list[Json]
+    rules: list[SourceRule]
 
 
 class KnowledgeBase(Out):
@@ -186,24 +337,24 @@ class KnowledgeBase(Out):
     owner: str
     sources: list[KbSourceLink]
     collections: list[str]
-    precedence: list[Json]
-    metadata_profile: Json
-    retrieval: Json
-    answer: Json
-    sync: Json
-    source_defaults: Json
-    access: Json
+    precedence: list[PrecedenceRule]
+    metadata_profile: MetadataProfile
+    retrieval: RetrievalSettings
+    answer: AnswerSettings
+    sync: SyncSettings
+    source_defaults: SourceDefaults
+    access: KbAccess
     # suggest when the sync settings hold changes for review, act when they apply them.
     automation: str
-    stats: Json
+    stats: KbStats
     health: str
     health_reasons: list[str]
     # When an index last changed what the base holds.
     last_refreshed_at: str | None = None
     # When its sources were last read: the newest of their syncs.
     last_sync_at: str | None = None
-    indexing: Json | None = None
-    jobs: list[Json]
+    indexing: IndexingProgress | None = None
+    jobs: list[IndexJob]
     created_at: str
 
 
@@ -216,6 +367,93 @@ class KnowledgeBaseRow(KnowledgeBase):
     agents_known: bool = True
 
 
+class RunPhase(Out):
+    """One step of a run as the console draws it; no run records its steps yet, so the list is empty."""
+
+    name: str
+    duration_ms: int
+    status: Literal["done", "running", "skipped", "failed"]
+
+
+class RunError(Out):
+    """One failure a run recorded: the step (list, get, store or parse), its class and message, and the item when one
+    was reached (a listing failure names none; an app's item may have no title)."""
+
+    item_id: str | None = None
+    item_title: str | None = None
+    phase: str
+    error_class: str
+    message: str
+
+
+class SyncRun(Out):
+    id: str
+    source_id: str
+    trigger: str
+    started_at: str
+    duration_sec: float
+    status: str
+    counts: dict[str, int]
+    phases: list[RunPhase]
+    errors: list[RunError]
+    log: list[str]
+    # A run in the background (a rebuild after a settings change): when it ended, and who asked it to stop.
+    finished_at: str | None = None
+    cancelled_by: str | None = None
+
+
+class FileSourceConfig(Out):
+    file_ids: list[str]
+
+
+class ToolSourceConfig(Out):
+    """What an app's source keeps of its settings for the screen: the plugin and source it reads, its tools and
+    connection, and the values it was set up with."""
+
+    plugin: str | None
+    source: str | None
+    title: str | None
+    list_tool: str | None
+    get_tool: str | None
+    connection_id: str | None
+    # needs_reconnect while its connection waits to be signed in again.
+    paused: bool | str | None
+    site: bool | None
+    # The source's own settings, shaped by what its plugin declares for them (start addresses, sites, spaces), so any
+    # JSON value a plugin accepts.
+    values: dict[str, JsonValue] | None
+
+
+class WaitingHost(Out):
+    host: str
+    run_key: str | None
+
+
+class SourcePermissions(Out):
+    mode: str
+
+
+class SourceHealth(Out):
+    state: Literal["needs_reconnect", "failing", "healthy", "never"]
+    last_good_sync_at: str | None = None
+    failing_since: str | None = None
+    days_failing: int
+    failed_runs: int
+    tombstoned: int
+
+
+class ErrorGroup(Out):
+    message: str
+    count: int
+
+
+class Governance(Out):
+    excluded: int
+    held: int
+    duplicates: int
+    superseded: int
+
+
 class Source(Out):
     id: str
     type: str
@@ -225,23 +463,23 @@ class Source(Out):
     kind_label: str
     name: str
     scope_summary: str
-    config: Json
-    parsing: Json
-    cleaning: Json
-    ingest: Json
+    config: ToolSourceConfig | FileSourceConfig
+    parsing: SourceParsing
+    cleaning: SourceCleaning
+    ingest: SourceIngest
     # The most one sync may spend on model calls for its AI steps.
     ai_ceiling: float = 5.0
     # The AI steps chosen and not yet approved by the knowledge owner; syncs run without them until then.
     ai_steps_waiting: list[str]
     # Each host of the source's own site an admin has yet to approve (`host`, and `runKey`, the Security task it waits
     # on when the account's policy asks Security); syncs answer 409 host_waiting until none is left.
-    waiting_hosts: list[Json]
-    rules: list[Json]
-    metadata_mapping: list[Json]
+    waiting_hosts: list[WaitingHost]
+    rules: list[SourceRule]
+    metadata_mapping: list[SourceMetadataMapping]
     tags: list[str]
     title_from: str
-    permissions: Json
-    schedule: Json
+    permissions: SourcePermissions
+    schedule: SourceSchedule
     deleted_at_source: str
     stale_after_days: int
     notify_on_failure: bool
@@ -260,7 +498,7 @@ class Source(Out):
     rebuild: SyncRun | None = None
     # When the schedule next syncs it, and its health in one place (state, last good sync, days failing, tombstones).
     next_sync_at: str | None = None
-    health: Json = Field(default_factory=dict[str, Any])
+    health: SourceHealth
 
 
 class NamedRef(Out):
@@ -318,33 +556,24 @@ class Reader(Out):
 class SourceDetail(Source):
     readers: list[Reader]
     last_run_duration_sec: float | None = None
-    running: Json | None = None
-    recent_runs: list[Json]
-    error_groups: list[Json]
+    running: SyncRun | None = None
+    recent_runs: list[SyncRun]
+    error_groups: list[ErrorGroup]
     item_count: int
     reindex_needed: bool
     required_metadata: list[str]
-    governance: Json
+    governance: Governance
     # What the caller may do with it, from the write routes' own check.
     can_edit: bool | None = None
     can_delete: bool | None = None
     can_publish: bool | None = None
 
 
-class SyncRun(Out):
-    id: str
-    source_id: str
-    trigger: str
-    started_at: str
-    duration_sec: float
-    status: str
-    counts: dict[str, int]
-    phases: list[Json]
-    errors: list[Json]
-    log: list[str]
-    # A run in the background (a rebuild after a settings change): when it ended, and who asked it to stop.
-    finished_at: str | None = None
-    cancelled_by: str | None = None
+class DuplicateCopy(Out):
+    """The item a duplicate repeats, named as the caller knows it."""
+
+    title: str
+    source_name: str
 
 
 class Item(Out):
@@ -363,6 +592,8 @@ class Item(Out):
     warning: str | None = None
     # The newer item with the same cleaned text, which search returns instead of this one.
     duplicate_of: str | None = None
+    # That item's title and source; absent when the caller's team cannot see it.
+    duplicate_copy: DuplicateCopy | None = None
     # Where a fetched item sits at its source: a library folder, a space's page tree.
     folder: str | None = None
     # Its address at its source, which a citation links to: a fetched page's, or the url a pushed item was sent with.
@@ -390,24 +621,102 @@ class Item(Out):
 
 class DocumentRow(Item):
     source_name: str
-    # What the document is, for the Documents table's Type column and filter (service.doc_type).
+    # What the document is, for the Documents table's Type column and filter (store.document_list.doc_type).
     doc_type: Literal["pdf", "word", "spreadsheet", "slides", "web", "text", "typed", "app", "other"]
+
+
+class ItemUnit(Out):
+    """What search matches for a piece: its own text (`self`), a child, or a question written for it."""
+
+    kind: str
+    text: str
+
+
+class ItemChunk(Out):
+    index: int
+    tokens: int
+    location: str
+    page: int | None = None
+    kind: str
+    text: str
+    units: list[ItemUnit]
+    # The source's own fields for the document, as its metadata mapping kept them.
+    metadata: dict[str, JsonValue]
+
+
+class ItemRevision(Out):
+    """An edit to the document; nothing records edits yet, so the list is empty."""
+
+    n: int
+    author: str
+    date: str
+    size_delta: int
+    note: str | None = None
+
+
+class ItemVersion(Out):
+    item_id: str
+    title: str
+    version: str
+    effective_date: str
+    status: str
+    digest: str
+    source_name: str
+    # Who the source system lets see this version, as it sent it; stored, not yet enforced.
+    allowed: list[JsonValue] | None = None
+
+
+class ItemDetail(Out):
+    content: str
+    chunks: list[ItemChunk]
+    revisions: list[ItemRevision]
+    versions: list[ItemVersion]
+
+
+class ReadingPage(Out):
+    """One page of the stored reading: how it was read, its blocks by kind after cleaning, and what cleaning removed.
+    Number and reader are documents-service's, passed on as it sent them."""
+
+    number: int | None
+    read_by: str | None
+    blocks: dict[str, int]
+    removed_chars: int
+    ocr_confidence: float | None = None
+
+
+class ItemReading(Out):
+    reader_version: str | None
+    ocr: str
+    pages: list[ReadingPage]
+
+
+class ItemSettingsUsed(Out):
+    preset: str
+    strategies: list[str]
+    indexed_with: str | None
+    current: bool
 
 
 class ItemWithDetail(Item):
     source_name: str
     source_type: str
-    detail: Json
+    detail: ItemDetail
     # How the file was read and what cleaning removed, page by page, from its stored reading.
-    reading: Json | None = None
+    reading: ItemReading | None = None
     # The splitting it was built under, and whether that is still the source's.
-    settings_used: Json | None = None
+    settings_used: ItemSettingsUsed | None = None
 
 
 class QueryIn(In):
     question: str
     # Only pieces of this collection, on top of the base's own scope (the Test sheet's filter).
     collection: str | None = Field(default=None, min_length=1, max_length=120)
+    # Sent by the console's QueryInput; not run yet, so accepted and ignored.
+    settings: Json | None = None
+    overrides: Json | None = None
+    runtime: Json | None = None
+    run_as_id: str | None = None
+    also_kb_ids: list[str] | None = None
 
 
 class PageIn(In):
@@ -443,6 +752,11 @@ class SearchIn(In):
     limit: int | None = Field(default=None, ge=1, le=20)
     # Only pieces of this collection, on top of each base's own scope (the Test sheet's filter).
     collection: str | None = Field(default=None, min_length=1, max_length=120)
+    # Sent by the console's RetrieveInput; not run yet, so accepted and ignored.
+    settings: Json | None = None
+    overrides: Json | None = None
+    runtime: Json | None = None
+    run_as_id: str | None = None
 
 
 class PassageOut(Out):
@@ -514,13 +828,40 @@ class SearchOut(Out):
     answers: dict[str, AnswerSettings] = Field(default_factory=dict[str, AnswerSettings])
 
 
+class PlaygroundCitation(Out):
+    """A passage the answer cites, numbered as the answer cites it."""
+
+    n: int
+    document_id: str
+    title: str
+    section: str
+    page: int | None = None
+    version: str
+    snippet: str
+
+
+class PlaygroundChunk(Out):
+    """A piece the search found, with each lane's score."""
+
+    chunk_id: str
+    document_id: str
+    document_title: str
+    source_name: str
+    score: float
+    lanes: dict[str, float]
+    location: str
+    text: str
+    rejected: bool
+    version: str
+
+
 class PlaygroundAnswer(Out):
     id: str
     question: str
     matchers: list[str]
     answer: str
-    citations: list[Json]
-    chunks: list[Json]
+    citations: list[PlaygroundCitation]
+    chunks: list[PlaygroundChunk]
     no_answer: bool | None = None
     passages: list[PassageOut]
     lanes: Lanes
@@ -545,11 +886,21 @@ class FaqDraft(Out):
 class DecideIn(In):
     ids: list[str] = Field(min_length=1, max_length=200)
     decision: Literal["approve", "reject"]
+    reason: str | None = Field(default=None, max_length=500)
 
 
 class DraftEdit(In):
     question: str = Field(min_length=1, max_length=500)
     answer: str = Field(min_length=1, max_length=4000)
+
+
+class ChangeCitation(Out):
+    """A workflow whose runs cited the changed passage; nothing records citations yet, so the list is empty."""
+
+    workflow_id: str
+    workflow_name: str
+    citations30d: int
+    tests: int
 
 
 class KnowledgeChange(Out):
@@ -571,13 +922,15 @@ class KnowledgeChange(Out):
     trust: str
     freshness: str
     review_by: str
-    cited_by: list[Json]
+    cited_by: list[ChangeCitation]
     owner: str
     can_decide: bool
     status: str
     created_at: str
     decided_at: str | None = None
     decided_by: str | None = None
+    # The reviewer's reason given when the change was approved or rejected; null when none was given.
+    decision_reason: str | None = None
     # An FAQ draft's pair and the passage it quotes; absent for a sync's change.
     faq: FaqDraft | None = None
 
@@ -593,13 +946,16 @@ class ChangeList(ListResult[KnowledgeChange]):
     view_counts: ChangeViewCounts
 
 
-class SyncIn(BaseModel):
+class SyncIn(In):
     """The console's SyncOptions. Unknown fields are refused rather than ignored, so a caller never believes an option
     it sent was honoured."""
 
-    model_config = ConfigDict(extra="forbid")
     full: bool = False
     retry: bool = False
+
+
+class SourceKindDefaults(SourceStages):
+    schedule: SourceSchedule
 
 
 class SourceKind(Out):
@@ -623,11 +979,12 @@ class SourceKind(Out):
     previews: bool = False
     pickers: bool = False
     # What a source of this kind is set up with (start addresses, sites, spaces).
-    inputs: Json = Field(default_factory=dict[str, Any])
+    # Declared by the app's plugin, one entry per input: its type, label and limits, whatever the plugin states.
+    inputs: dict[str, JsonValue] = Field(default_factory=dict[str, JsonValue])
     # file, web or tool: the kind its defaults are chosen by.
     kind: str
     # The settings and schedule a new source of this kind starts with, as create applies them.
-    defaults: Json
+    defaults: SourceKindDefaults
 
 
 class AiApprovalIn(In):
@@ -689,7 +1046,7 @@ class ScopesPage(Out):
 
 class PreviewIn(In):
     # The plugin, its source and the source's own settings, as a create would send them.
-    config: dict[str, Any]
+    config: dict[str, JsonValue]
 
 
 class PreviewPage(Out):

@@ -11,8 +11,8 @@ import asyncio
 import contextlib
 import json
 import math
-import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -602,14 +602,63 @@ def _risk(policies: list[WritePolicy]) -> str:
 
 
 async def team_runs(rt: Runtime) -> list[dict[str, Any]]:
-    """The team's runs a task list reads, newest first: the newest 200, for the decided tasks they hold, and every run
-    waiting for a person however old, so a busy team never loses an open task from the list or its count."""
+    """The team's runs a task list reads, newest first: the newest 200, for the decided tasks they hold, and the
+    newest `review_list_rows_per_source` runs waiting for a person, so an open task leaves the list only past that
+    many waiting runs (logged as `review_source_capped`)."""
     store = _runs(rt)
+    cap = rt.settings.review_list_rows_per_source
     recent = await store.list(team_id=current_team())
-    waiting = await store.list(team_id=current_team(), status="waiting", limit=None)
+    waiting = await store.list(team_id=current_team(), status="waiting", limit=cap)
+    if len(waiting) >= cap:
+        log.warning("review_source_capped", source="waiting_runs", cap=cap)
     seen = {str(r["id"]) for r in recent}
     rows = recent + [r for r in waiting if str(r["id"]) not in seen]
     return sorted(rows, key=lambda r: str(r["created_at"]), reverse=True)
+
+
+# One run, or one decision of it, as the runner's store returns it.
+Row = dict[str, Any]
+
+
+@dataclass(frozen=True)
+class RowReads:
+    """What `all_rows` reads from this service's own tables: the runs, the case each is on, and the review steps they
+    hold, so a route can ask tools-service about `tools` with nothing open before `build_rows`."""
+
+    on_case: dict[str, str]
+    steps: list[tuple[Row, Row | None]]
+    payloads: list[Row]
+
+    @property
+    def tools(self) -> list[str]:
+        return sorted({str(c["tool"]) for p in self.payloads for c in _calls(p) if c.get("tool")})
+
+
+def tools_of(steps: list[tuple[Row, Row | None]]) -> list[str]:
+    """The tools the calls of these review steps (a run and its decision, None for the one it waits on) name."""
+    return sorted({str(c["tool"]) for run, d in steps for c in _calls(_payload(run, d)) if c.get("tool")})
+
+
+async def ask_policies(rt: Runtime, tools: list[str]) -> None:
+    """Each tool's write policy from tools-service, all at once."""
+    await asyncio.gather(*(policy_of(rt, t) for t in tools))
+
+
+async def read_rows(rt: Runtime) -> RowReads | None:
+    """The local reads of `all_rows`; None when the database is not yet migrated to the runner's tables."""
+    try:
+        runs = await team_runs(rt)
+    except DatabaseError as e:  # A database not yet migrated to the runner's tables lists v1 reviews alone.
+        log.warning("engine_reviews_unavailable", error=type(e).__name__)
+        return None
+    on_case = await CaseStore(rt.db).cases_of_runs([str(r["id"]) for r in runs])
+    decisions = await _runs(rt).resumes([str(r["id"]) for r in runs])
+    steps: list[tuple[Row, Row | None]] = []
+    for run in runs:
+        steps += [(run, d) for d in decisions.get(str(run["id"]), [])]
+        if run["status"] == "waiting" and run.get("waiting"):
+            steps.append((run, None))
+    return RowReads(on_case, steps, [_payload(run, d) for run, d in steps])
 
 
 async def all_rows(rt: Runtime) -> list[dict[str, Any]]:
@@ -617,22 +666,16 @@ async def all_rows(rt: Runtime) -> list[dict[str, Any]]:
     row holding what the list counts, filters, facets and pages on: id, status, title, risk, workflow, deadline, case
     and when it opened and was decided. No typed task, wording or reply preview is read; `expand` builds the full
     review for the rows a page shows, so a count reads no more than its rows."""
-    try:
-        runs = await team_runs(rt)
-    except DatabaseError as e:  # A database not yet migrated to the runner's tables lists v1 reviews alone.
-        log.warning("engine_reviews_unavailable", error=type(e).__name__)
+    return await build_rows(rt, await read_rows(rt))
+
+
+async def build_rows(rt: Runtime, reads: RowReads | None) -> list[dict[str, Any]]:
+    """`all_rows` from its local reads. Every tool the steps call is asked at once; within one_read_per_tool each is
+    then asked once for the request, so a caller that asked first (`prefetch_policies`) makes this call none."""
+    if reads is None:
         return []
-    on_case = await CaseStore(rt.db).cases_of_runs([str(r["id"]) for r in runs])
-    decisions = await _runs(rt).resumes([str(r["id"]) for r in runs])
-    steps: list[tuple[dict[str, Any], dict[str, Any] | None]] = []
-    for run in runs:
-        steps += [(run, d) for d in decisions.get(str(run["id"]), [])]
-        if run["status"] == "waiting" and run.get("waiting"):
-            steps.append((run, None))
-    payloads = [_payload(run, d) for run, d in steps]
-    # Every tool the steps call, asked at once; within one_read_per_tool each is then asked once for the request.
-    tools = sorted({str(c["tool"]) for p in payloads for c in _calls(p) if c.get("tool")})
-    await asyncio.gather(*(policy_of(rt, t) for t in tools))
+    on_case, steps, payloads = reads.on_case, reads.steps, reads.payloads
+    await ask_policies(rt, reads.tools)
     hours = await sla_hours(rt)
     now = datetime.now(UTC)
     out: list[dict[str, Any]] = []
@@ -948,7 +991,16 @@ async def _typed_action(rt: Runtime, run: dict[str, Any], paused: dict[str, Any]
 
 # An action input naming a person (a task type's `format: person`), and the shape that names one.
 PERSON = "person"
-_EMAIL = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+
+
+def _is_email(text: str) -> bool:
+    """One "@", a local part and a dotted domain with no whitespace. Plain splits, not a regex, so a long
+    hostile string costs linear time."""
+    local, at, domain = text.partition("@")
+    if not at or "@" in domain or not local or any(c.isspace() for c in text):
+        return False
+    labels = domain.split(".")
+    return len(labels) >= 2 and all(labels)
 
 
 def _action_inputs(action: dict[str, Any], inputs: dict[str, Any]) -> dict[str, Any]:
@@ -963,7 +1015,7 @@ def _action_inputs(action: dict[str, Any], inputs: dict[str, Any]) -> dict[str, 
     if named := sorted(
         n
         for n, i in declared.items()
-        if i.get("format") == PERSON and inputs.get(n) not in (None, "") and not _EMAIL.fullmatch(str(inputs[n]))
+        if i.get("format") == PERSON and inputs.get(n) not in (None, "") and not _is_email(str(inputs[n]))
     ):
         raise ValidationFailed(f"{', '.join(named)} names a person by email.")
     return dict(inputs)

@@ -17,7 +17,9 @@ from .test_plugin_sign_in import (
 
 
 async def app_state(r: Rig, tenant: str) -> str:
-    cards = (await r.client.get("/v1/apps", headers=admin(tenant))).json()["data"]
+    cards = (await r.client.get("/v1/apps", params={"ids": "plugin:test.client"}, headers=admin(tenant))).json()[
+        "data"
+    ]["data"]
     return str(next(c for c in cards if c["id"] == "plugin:test.client")["appState"])
 
 

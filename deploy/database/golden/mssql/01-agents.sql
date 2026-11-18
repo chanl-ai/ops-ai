@@ -1,6 +1,6 @@
 -- Ops AI schema for SQL Server, compiled from the store models by deploy/database/mssql.py; do not edit.
 -- For review; apply bundle.sql, not these.
--- agents-service, stamped at 0103_eval_cases_runs
+-- agents-service, stamped at 0119_unattributed_side_tables
 CREATE TABLE engine_definitions (
 	tenant_id VARCHAR(64) NOT NULL, 
 	workflow_id VARCHAR(64) NOT NULL, 
@@ -14,11 +14,22 @@ CREATE TABLE engine_definitions (
 	stage VARCHAR(16) NOT NULL DEFAULT 'draft', 
 	archived_at VARCHAR(32) NULL, 
 	archived_by VARCHAR(200) NULL, 
+	description VARCHAR(max) NOT NULL, 
+	[trigger] VARCHAR(max) NOT NULL, 
+	startable BIT NOT NULL, 
+	takes_files BIT NOT NULL, 
+	mailbox VARCHAR(320) NULL, 
 	CONSTRAINT engine_definitions_pkey PRIMARY KEY (tenant_id, workflow_id, version), 
 	CONSTRAINT uq_engine_definitions_digest UNIQUE (tenant_id, workflow_id, digest)
 );
 GO
 CREATE INDEX ix_engine_definitions_live ON engine_definitions (tenant_id, workflow_id) WHERE stage = 'live';
+GO
+CREATE INDEX ix_engine_definitions_mailbox ON engine_definitions (tenant_id, mailbox);
+GO
+CREATE INDEX ix_engine_definitions_team_created ON engine_definitions (tenant_id, team_id, created_at);
+GO
+CREATE INDEX ix_engine_definitions_team_name ON engine_definitions (tenant_id, team_id, name);
 GO
 CREATE TABLE engine_runs (
 	id VARCHAR(64) NOT NULL, 
@@ -118,7 +129,66 @@ CREATE TABLE engine_waits (
 GO
 CREATE INDEX ix_engine_waits_event ON engine_waits (tenant_id, team_id, event, wait_key);
 GO
+CREATE TABLE thread_leases (
+	thread_id VARCHAR(64) NOT NULL, 
+	owner VARCHAR(120) NOT NULL, 
+	run_id VARCHAR(64) NOT NULL, 
+	acquired_at FLOAT NOT NULL, 
+	heartbeat_at FLOAT NOT NULL, 
+	expires_at FLOAT NOT NULL, 
+	generation BIGINT NOT NULL DEFAULT '1', 
+	released_at FLOAT NULL, 
+	CONSTRAINT thread_leases_pkey PRIMARY KEY (thread_id)
+);
+GO
+CREATE INDEX ix_thread_leases_expires_at ON thread_leases (expires_at);
+GO
+CREATE TABLE graph_threads (
+	id VARCHAR(64) NOT NULL, 
+	graph VARCHAR(64) NOT NULL, 
+	meta NVARCHAR(max) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	created_at VARCHAR(32) NOT NULL, 
+	updated_at VARCHAR(32) NOT NULL, 
+	status VARCHAR(16) NOT NULL, 
+	version INTEGER NULL, 
+	digest VARCHAR(64) NULL, 
+	external_key VARCHAR(512) NULL, 
+	deployment_id VARCHAR(64) NULL, 
+	parent_thread_id VARCHAR(64) NULL, 
+	overrides NVARCHAR(max) NULL, 
+	owner VARCHAR(320) NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	CONSTRAINT graph_threads_pkey PRIMARY KEY (id)
+);
+GO
+CREATE INDEX ix_graph_threads_deployment_id ON graph_threads (deployment_id);
+GO
+CREATE INDEX ix_graph_threads_graph ON graph_threads (graph);
+GO
+CREATE INDEX ix_graph_threads_owner ON graph_threads (tenant_id, owner);
+GO
+CREATE INDEX ix_graph_threads_parent_thread_id ON graph_threads (parent_thread_id);
+GO
+CREATE INDEX ix_graph_threads_team_updated ON graph_threads (tenant_id, team_id, updated_at);
+GO
+CREATE INDEX ix_graph_threads_tenant_id ON graph_threads (tenant_id);
+GO
+CREATE UNIQUE INDEX uq_graph_threads_tenant_external_key ON graph_threads (tenant_id, external_key) WHERE external_key IS NOT NULL;
+GO
+CREATE TABLE graph_versions (
+	tenant_id VARCHAR(64) NOT NULL, 
+	name VARCHAR(64) NOT NULL, 
+	version INTEGER NOT NULL, 
+	digest VARCHAR(64) NOT NULL, 
+	definition NVARCHAR(max) NOT NULL, 
+	created_at VARCHAR(32) NOT NULL, 
+	CONSTRAINT graph_versions_pkey PRIMARY KEY (tenant_id, name, version), 
+	CONSTRAINT uq_graph_versions_tenant_digest UNIQUE (tenant_id, digest)
+);
+GO
 CREATE TABLE registry_agents (
+	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
 	slug VARCHAR(120) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
@@ -130,13 +200,17 @@ CREATE TABLE registry_agents (
 	template_id VARCHAR(120) NULL, 
 	protection VARCHAR(16) NULL, 
 	CONSTRAINT registry_agents_pkey PRIMARY KEY (id), 
-	CONSTRAINT registry_agents_slug_key UNIQUE (slug)
+	CONSTRAINT uq_registry_agents_tenant_slug UNIQUE (tenant_id, slug)
 );
+GO
+CREATE INDEX ix_registry_agents_team_updated ON registry_agents (tenant_id, team_id, updated_at);
+GO
+CREATE INDEX ix_registry_agents_team_version ON registry_agents (tenant_id, team_id, version);
 GO
 CREATE INDEX ix_registry_agents_template_id ON registry_agents (template_id);
 GO
 CREATE TABLE registry_publish_requests (
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
 	kind VARCHAR(16) NOT NULL, 
 	subject_id VARCHAR(64) NOT NULL, 
@@ -149,12 +223,17 @@ CREATE TABLE registry_publish_requests (
 	decided_by VARCHAR(200) NULL, 
 	decision_reason VARCHAR(max) NULL, 
 	body NVARCHAR(max) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL DEFAULT '', 
 	CONSTRAINT registry_publish_requests_pkey PRIMARY KEY (tenant_id, id)
 );
 GO
 CREATE INDEX ix_registry_publish_requests_subject ON registry_publish_requests (kind, subject_id);
 GO
+CREATE INDEX ix_registry_publish_requests_team ON registry_publish_requests (tenant_id, team_id);
+GO
 CREATE INDEX ix_registry_publish_requests_tenant_id ON registry_publish_requests (tenant_id);
+GO
+CREATE INDEX ix_registry_publish_requests_tenant_subject ON registry_publish_requests (tenant_id, subject_id);
 GO
 CREATE TABLE background_heartbeats (
 	process VARCHAR(64) NOT NULL, 
@@ -207,7 +286,15 @@ CREATE TABLE cases (
 	CONSTRAINT cases_pkey PRIMARY KEY (id)
 );
 GO
+CREATE INDEX ix_cases_team_assignee ON cases (tenant_id, team_id, assignee);
+GO
+CREATE INDEX ix_cases_team_customer ON cases (tenant_id, team_id, customer_id);
+GO
 CREATE INDEX ix_cases_team_due ON cases (tenant_id, team_id, resolution_due_at);
+GO
+CREATE INDEX ix_cases_team_priority ON cases (tenant_id, team_id, priority);
+GO
+CREATE INDEX ix_cases_team_status ON cases (tenant_id, team_id, status);
 GO
 CREATE UNIQUE INDEX uq_cases_producer_key ON cases (tenant_id, team_id, producer_key) WHERE producer_key IS NOT NULL;
 GO
@@ -227,20 +314,6 @@ CREATE INDEX ix_case_events_case_id ON case_events (case_id);
 GO
 CREATE INDEX ix_case_events_tenant_id ON case_events (tenant_id);
 GO
-CREATE TABLE thread_leases (
-	thread_id VARCHAR(64) NOT NULL, 
-	owner VARCHAR(120) NOT NULL, 
-	run_id VARCHAR(64) NOT NULL, 
-	acquired_at FLOAT NOT NULL, 
-	heartbeat_at FLOAT NOT NULL, 
-	expires_at FLOAT NOT NULL, 
-	generation BIGINT NOT NULL DEFAULT '1', 
-	released_at FLOAT NULL, 
-	CONSTRAINT thread_leases_pkey PRIMARY KEY (thread_id)
-);
-GO
-CREATE INDEX ix_thread_leases_expires_at ON thread_leases (expires_at);
-GO
 CREATE TABLE thread_events (
 	position BIGINT NOT NULL IDENTITY, 
 	id VARCHAR(40) NOT NULL, 
@@ -252,7 +325,7 @@ CREATE TABLE thread_events (
 	at VARCHAR(32) NOT NULL, 
 	data NVARCHAR(max) NULL, 
 	team_id VARCHAR(64) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	CONSTRAINT thread_events_pkey PRIMARY KEY (position), 
 	CONSTRAINT uq_thread_events_thread_seq UNIQUE (thread_id, seq), 
 	CONSTRAINT thread_events_id_key UNIQUE (id)
@@ -307,46 +380,6 @@ CREATE TABLE form_links (
 GO
 CREATE INDEX ix_form_links_workflow ON form_links (tenant_id, workflow_id);
 GO
-CREATE TABLE graph_threads (
-	id VARCHAR(64) NOT NULL, 
-	graph VARCHAR(64) NOT NULL, 
-	meta NVARCHAR(max) NOT NULL, 
-	team_id VARCHAR(64) NOT NULL, 
-	created_at VARCHAR(32) NOT NULL, 
-	updated_at VARCHAR(32) NOT NULL, 
-	status VARCHAR(16) NOT NULL, 
-	version INTEGER NULL, 
-	digest VARCHAR(64) NULL, 
-	external_key VARCHAR(512) NULL, 
-	deployment_id VARCHAR(64) NULL, 
-	parent_thread_id VARCHAR(64) NULL, 
-	overrides NVARCHAR(max) NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
-	CONSTRAINT graph_threads_pkey PRIMARY KEY (id)
-);
-GO
-CREATE INDEX ix_graph_threads_deployment_id ON graph_threads (deployment_id);
-GO
-CREATE INDEX ix_graph_threads_graph ON graph_threads (graph);
-GO
-CREATE INDEX ix_graph_threads_parent_thread_id ON graph_threads (parent_thread_id);
-GO
-CREATE INDEX ix_graph_threads_team_updated ON graph_threads (tenant_id, team_id, updated_at);
-GO
-CREATE INDEX ix_graph_threads_tenant_id ON graph_threads (tenant_id);
-GO
-CREATE UNIQUE INDEX uq_graph_threads_tenant_external_key ON graph_threads (tenant_id, external_key) WHERE external_key IS NOT NULL;
-GO
-CREATE TABLE graph_versions (
-	name VARCHAR(64) NOT NULL, 
-	version INTEGER NOT NULL, 
-	digest VARCHAR(64) NOT NULL, 
-	definition NVARCHAR(max) NOT NULL, 
-	created_at VARCHAR(32) NOT NULL, 
-	CONSTRAINT graph_versions_pkey PRIMARY KEY (name, version), 
-	CONSTRAINT graph_versions_digest_key UNIQUE (digest)
-);
-GO
 CREATE TABLE mailboxes (
 	id VARCHAR(64) NOT NULL, 
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -387,7 +420,7 @@ CREATE TABLE review_decisions (
 	attempts INTEGER NOT NULL DEFAULT '0', 
 	run_id VARCHAR(80) NULL, 
 	resumed_at VARCHAR(32) NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
 	step_up_ref VARCHAR(40) NULL, 
 	CONSTRAINT review_decisions_pkey PRIMARY KEY (thread_id, decision_id)
@@ -401,7 +434,7 @@ CREATE TABLE review_approvals (
 	approver VARCHAR(200) NOT NULL, 
 	input_hash VARCHAR(64) NOT NULL, 
 	approved_at VARCHAR(32) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
 	CONSTRAINT review_approvals_pkey PRIMARY KEY (thread_id, step, approver)
 );
@@ -428,7 +461,7 @@ CREATE TABLE service_events (
 GO
 CREATE TABLE widget_deployments (
 	id VARCHAR(64) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
 	agent_id VARCHAR(64) NOT NULL, 
@@ -443,6 +476,129 @@ CREATE TABLE widget_deployments (
 );
 GO
 CREATE INDEX ix_widget_deployments_tenant_id ON widget_deployments (tenant_id);
+GO
+CREATE TABLE api_key_copies (
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	id VARCHAR(200) NOT NULL, 
+	revision BIGINT NOT NULL, 
+	deleted BIT NOT NULL, 
+	deleted_at FLOAT NULL, 
+	name VARCHAR(200) NOT NULL, 
+	prefix VARCHAR(64) NOT NULL, 
+	status VARCHAR(16) NOT NULL, 
+	target_kind VARCHAR(16) NULL, 
+	target_id VARCHAR(64) NULL, 
+	target_version INTEGER NULL, 
+	created_at VARCHAR(40) NOT NULL, 
+	last_used_at VARCHAR(40) NULL, 
+	expires_at VARCHAR(40) NULL, 
+	CONSTRAINT api_key_copies_pkey PRIMARY KEY (tenant_id, team_id, id)
+);
+GO
+CREATE INDEX ix_api_key_copies_team_name ON api_key_copies (tenant_id, team_id, name);
+GO
+CREATE TABLE eval_cases (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	kind VARCHAR(16) NOT NULL, 
+	asset_id VARCHAR(64) NOT NULL, 
+	position INTEGER NOT NULL, 
+	name VARCHAR(200) NOT NULL, 
+	status VARCHAR(16) NOT NULL, 
+	source VARCHAR(16) NOT NULL, 
+	review_id VARCHAR(64) NULL, 
+	reason VARCHAR(max) NOT NULL, 
+	body NVARCHAR(max) NOT NULL, 
+	created_by VARCHAR(320) NOT NULL, 
+	created_at VARCHAR(32) NOT NULL, 
+	CONSTRAINT eval_cases_pkey PRIMARY KEY (id)
+);
+GO
+CREATE INDEX ix_eval_cases_asset ON eval_cases (tenant_id, team_id, kind, asset_id);
+GO
+CREATE TABLE eval_runs (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	kind VARCHAR(16) NOT NULL, 
+	asset_id VARCHAR(64) NOT NULL, 
+	version INTEGER NOT NULL, 
+	live_version INTEGER NULL, 
+	[trigger] VARCHAR(24) NOT NULL, 
+	passed INTEGER NOT NULL, 
+	total INTEGER NOT NULL, 
+	live_passed INTEGER NULL, 
+	regressions INTEGER NOT NULL, 
+	duration_ms INTEGER NOT NULL, 
+	cost_usd FLOAT NOT NULL, 
+	results NVARCHAR(max) NOT NULL, 
+	started_by VARCHAR(320) NOT NULL, 
+	ran_at VARCHAR(32) NOT NULL, 
+	CONSTRAINT eval_runs_pkey PRIMARY KEY (id)
+);
+GO
+CREATE INDEX ix_eval_runs_asset ON eval_runs (tenant_id, team_id, kind, asset_id, ran_at);
+GO
+CREATE TABLE registry_skills (
+	tenant_id VARCHAR(64) NOT NULL, 
+	id VARCHAR(64) NOT NULL, 
+	slug VARCHAR(64) NOT NULL, 
+	owner_team VARCHAR(200) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	origin VARCHAR(16) NOT NULL, 
+	version INTEGER NOT NULL, 
+	published_version INTEGER NULL, 
+	deprecated_reason VARCHAR(max) NULL, 
+	created_at VARCHAR(32) NOT NULL, 
+	updated_at VARCHAR(32) NOT NULL, 
+	updated_by VARCHAR(200) NOT NULL, 
+	created_by VARCHAR(200) NOT NULL DEFAULT '', 
+	published_loading VARCHAR(16) NULL, 
+	CONSTRAINT registry_skills_pkey PRIMARY KEY (id), 
+	CONSTRAINT uq_registry_skills_team_slug UNIQUE (team_id, slug)
+);
+GO
+CREATE INDEX ix_registry_skills_team_origin ON registry_skills (tenant_id, team_id, origin);
+GO
+CREATE INDEX ix_registry_skills_team_owner ON registry_skills (tenant_id, team_id, owner_team);
+GO
+CREATE INDEX ix_registry_skills_tenant_team ON registry_skills (tenant_id, team_id);
+GO
+CREATE TABLE registry_workflows (
+	tenant_id VARCHAR(64) NOT NULL, 
+	id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	name VARCHAR(200) NOT NULL, 
+	description VARCHAR(max) NOT NULL, 
+	[trigger] VARCHAR(200) NOT NULL, 
+	status VARCHAR(16) NOT NULL, 
+	published_version INTEGER NULL, 
+	draft NVARCHAR(max) NULL, 
+	draft_saved_at VARCHAR(32) NULL, 
+	draft_saved_by VARCHAR(200) NULL, 
+	created_at VARCHAR(32) NOT NULL, 
+	updated_at VARCHAR(32) NOT NULL, 
+	CONSTRAINT registry_workflows_pkey PRIMARY KEY (tenant_id, id)
+);
+GO
+CREATE TABLE registry_validations (
+	tenant_id VARCHAR(64) NOT NULL, 
+	id VARCHAR(64) NOT NULL, 
+	workflow_id VARCHAR(64) NOT NULL, 
+	ran_at VARCHAR(32) NOT NULL, 
+	target VARCHAR(8) NOT NULL, 
+	results NVARCHAR(max) NOT NULL, 
+	summary NVARCHAR(max) NOT NULL, 
+	passed INTEGER NOT NULL, 
+	total INTEGER NOT NULL, 
+	regressions INTEGER NOT NULL, 
+	checks_failing INTEGER NOT NULL, 
+	CONSTRAINT registry_validations_pkey PRIMARY KEY (id)
+);
+GO
+CREATE INDEX ix_registry_validations_workflow_id ON registry_validations (workflow_id);
 GO
 CREATE TABLE run_batches (
 	id VARCHAR(64) NOT NULL, 
@@ -517,7 +673,41 @@ CREATE TABLE poll_cursors (
 	CONSTRAINT poll_cursors_pkey PRIMARY KEY (tenant_id, binding_id)
 );
 GO
+CREATE TABLE widget_mint_keys (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	deployment_id VARCHAR(64) NOT NULL, 
+	name VARCHAR(200) NOT NULL, 
+	secret_hash VARCHAR(64) NOT NULL, 
+	created_by VARCHAR(320) NOT NULL, 
+	created_at VARCHAR(32) NOT NULL, 
+	last_used_at VARCHAR(32) NULL, 
+	revoked_at VARCHAR(32) NULL, 
+	expires_at VARCHAR(32) NULL, 
+	CONSTRAINT widget_mint_keys_pkey PRIMARY KEY (id)
+);
+GO
+CREATE INDEX ix_widget_mint_keys_deployment_id ON widget_mint_keys (deployment_id);
+GO
+CREATE INDEX ix_widget_mint_keys_tenant_id ON widget_mint_keys (tenant_id);
+GO
+CREATE TABLE widget_mint_key_audit (
+	id VARCHAR(64) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	deployment_id VARCHAR(64) NOT NULL, 
+	key_id VARCHAR(64) NOT NULL, 
+	action VARCHAR(16) NOT NULL, 
+	actor VARCHAR(320) NOT NULL, 
+	at VARCHAR(32) NOT NULL, 
+	CONSTRAINT widget_mint_key_audit_pkey PRIMARY KEY (id)
+);
+GO
+CREATE INDEX ix_widget_mint_key_audit_deployment_id ON widget_mint_key_audit (deployment_id);
+GO
+CREATE INDEX ix_widget_mint_key_audit_tenant_id ON widget_mint_key_audit (tenant_id);
+GO
 CREATE TABLE deployments (
+	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
 	graph VARCHAR(64) NOT NULL, 
 	channel VARCHAR(32) NOT NULL, 
@@ -526,10 +716,11 @@ CREATE TABLE deployments (
 	created_at VARCHAR(32) NOT NULL, 
 	budget NVARCHAR(max) NULL, 
 	team_id VARCHAR(64) NOT NULL DEFAULT '', 
-	CONSTRAINT deployments_pkey PRIMARY KEY (id)
+	CONSTRAINT deployments_pkey PRIMARY KEY (tenant_id, id)
 );
 GO
 CREATE TABLE channel_messages (
+	tenant_id VARCHAR(64) NOT NULL, 
 	deployment_id VARCHAR(64) NOT NULL, 
 	message_key VARCHAR(512) NOT NULL, 
 	thread_id VARCHAR(64) NULL, 
@@ -537,17 +728,19 @@ CREATE TABLE channel_messages (
 	status VARCHAR(16) NOT NULL, 
 	payload NVARCHAR(max) NULL, 
 	received_at VARCHAR(32) NOT NULL, 
-	CONSTRAINT channel_messages_pkey PRIMARY KEY (deployment_id, message_key)
+	CONSTRAINT channel_messages_pkey PRIMARY KEY (tenant_id, deployment_id, message_key)
 );
 GO
 CREATE TABLE channel_cursors (
+	tenant_id VARCHAR(64) NOT NULL, 
 	deployment_id VARCHAR(64) NOT NULL, 
 	delta_link VARCHAR(max) NOT NULL, 
 	updated_at VARCHAR(32) NOT NULL, 
-	CONSTRAINT channel_cursors_pkey PRIMARY KEY (deployment_id)
+	CONSTRAINT channel_cursors_pkey PRIMARY KEY (tenant_id, deployment_id)
 );
 GO
 CREATE TABLE thread_inbox (
+	tenant_id VARCHAR(64) NOT NULL, 
 	thread_id VARCHAR(64) NOT NULL, 
 	message_key VARCHAR(512) NOT NULL, 
 	seq BIGINT NOT NULL, 
@@ -559,19 +752,9 @@ CREATE TABLE thread_inbox (
 	CONSTRAINT thread_inbox_pkey PRIMARY KEY (thread_id, message_key)
 );
 GO
-CREATE TABLE channel_files (
-	file_id VARCHAR(64) NOT NULL, 
-	name VARCHAR(512) NOT NULL, 
-	content_type VARCHAR(128) NOT NULL, 
-	size INTEGER NOT NULL, 
-	sha256 VARCHAR(64) NOT NULL, 
-	content VARCHAR(max) NOT NULL, 
-	CONSTRAINT channel_files_pkey PRIMARY KEY (file_id)
-);
-GO
 CREATE TABLE chat_search (
 	thread_id VARCHAR(64) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
+	tenant_id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
 	title VARCHAR(200) NOT NULL, 
 	agent_name VARCHAR(200) NOT NULL, 
@@ -585,50 +768,8 @@ CREATE INDEX ix_chat_search_team_id ON chat_search (team_id);
 GO
 CREATE INDEX ix_chat_search_tenant_id ON chat_search (tenant_id);
 GO
-CREATE TABLE eval_cases (
-	id VARCHAR(64) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL, 
-	team_id VARCHAR(64) NOT NULL, 
-	kind VARCHAR(16) NOT NULL, 
-	asset_id VARCHAR(64) NOT NULL, 
-	position INTEGER NOT NULL, 
-	name VARCHAR(200) NOT NULL, 
-	status VARCHAR(16) NOT NULL, 
-	source VARCHAR(16) NOT NULL, 
-	review_id VARCHAR(64) NULL, 
-	reason VARCHAR(max) NOT NULL, 
-	body NVARCHAR(max) NOT NULL, 
-	created_by VARCHAR(320) NOT NULL, 
-	created_at VARCHAR(32) NOT NULL, 
-	CONSTRAINT eval_cases_pkey PRIMARY KEY (id)
-);
-GO
-CREATE INDEX ix_eval_cases_asset ON eval_cases (tenant_id, team_id, kind, asset_id);
-GO
-CREATE TABLE eval_runs (
-	id VARCHAR(64) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL, 
-	team_id VARCHAR(64) NOT NULL, 
-	kind VARCHAR(16) NOT NULL, 
-	asset_id VARCHAR(64) NOT NULL, 
-	version INTEGER NOT NULL, 
-	live_version INTEGER NULL, 
-	[trigger] VARCHAR(24) NOT NULL, 
-	passed INTEGER NOT NULL, 
-	total INTEGER NOT NULL, 
-	live_passed INTEGER NULL, 
-	regressions INTEGER NOT NULL, 
-	duration_ms INTEGER NOT NULL, 
-	cost_usd FLOAT NOT NULL, 
-	results NVARCHAR(max) NOT NULL, 
-	started_by VARCHAR(320) NOT NULL, 
-	ran_at VARCHAR(32) NOT NULL, 
-	CONSTRAINT eval_runs_pkey PRIMARY KEY (id)
-);
-GO
-CREATE INDEX ix_eval_runs_asset ON eval_runs (tenant_id, team_id, kind, asset_id, ran_at);
-GO
 CREATE TABLE registry_guardrails (
+	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
 	slug VARCHAR(120) NOT NULL, 
 	name VARCHAR(200) NOT NULL, 
@@ -643,6 +784,8 @@ CREATE TABLE registry_guardrails (
 	CONSTRAINT registry_guardrails_pkey PRIMARY KEY (id), 
 	CONSTRAINT uq_registry_guardrails_team_slug UNIQUE (team_id, slug)
 );
+GO
+CREATE INDEX ix_registry_guardrails_tenant_team ON registry_guardrails (tenant_id, team_id);
 GO
 CREATE TABLE agent_memories (
 	id VARCHAR(64) NOT NULL, 
@@ -674,7 +817,7 @@ CREATE INDEX ix_agent_memories_owner ON agent_memories (tenant_id, person, agent
 GO
 CREATE INDEX ix_agent_memories_tenant_id ON agent_memories (tenant_id);
 GO
-CREATE UNIQUE INDEX ux_agent_memories_in_use ON agent_memories (tenant_id, team_id, person, agent_id, [key]) WHERE status = 'active' AND "key" IS NOT NULL AND [key] IS NOT NULL;
+CREATE UNIQUE INDEX ux_agent_memories_in_use ON agent_memories (tenant_id, team_id, person, agent_id, [key]) WHERE status = 'active' AND "key" IS NOT NULL;
 GO
 CREATE TABLE memory_audit (
 	id VARCHAR(64) NOT NULL, 
@@ -718,12 +861,33 @@ CREATE TABLE model_call_records (
 	request_hash VARCHAR(64) NULL, 
 	response NVARCHAR(max) NULL, 
 	created_at VARCHAR(40) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
 	CONSTRAINT model_call_records_pkey PRIMARY KEY (id)
 );
 GO
 CREATE INDEX ix_model_call_records_thread_id ON model_call_records (thread_id);
 GO
 CREATE UNIQUE INDEX uq_model_call_replay ON model_call_records (thread_id, task, request_hash) WHERE task IS NOT NULL AND request_hash IS NOT NULL;
+GO
+CREATE TABLE model_call_records_unattributed (
+	id VARCHAR(64) NOT NULL, 
+	thread_id VARCHAR(64) NOT NULL, 
+	run_id VARCHAR(64) NULL, 
+	step VARCHAR(120) NOT NULL, 
+	task VARCHAR(200) NULL, 
+	kind VARCHAR(40) NOT NULL, 
+	model_alias VARCHAR(120) NOT NULL, 
+	calls INTEGER NOT NULL, 
+	input_tokens BIGINT NOT NULL, 
+	output_tokens BIGINT NOT NULL, 
+	cost_micros BIGINT NOT NULL, 
+	latency_ms INTEGER NULL, 
+	request_hash VARCHAR(64) NULL, 
+	response NVARCHAR(max) NULL, 
+	created_at VARCHAR(40) NOT NULL, 
+	moved_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(), 
+	CONSTRAINT model_call_records_unattributed_pkey PRIMARY KEY (id)
+);
 GO
 CREATE TABLE review_assignments (
 	id VARCHAR(64) NOT NULL, 
@@ -736,24 +900,6 @@ CREATE TABLE review_assignments (
 );
 GO
 CREATE INDEX ix_review_assignments_review ON review_assignments (tenant_id, review_id, assigned_at);
-GO
-CREATE TABLE registry_skills (
-	id VARCHAR(64) NOT NULL, 
-	slug VARCHAR(64) NOT NULL, 
-	owner_team VARCHAR(200) NOT NULL, 
-	team_id VARCHAR(64) NOT NULL, 
-	origin VARCHAR(16) NOT NULL, 
-	version INTEGER NOT NULL, 
-	published_version INTEGER NULL, 
-	deprecated_reason VARCHAR(max) NULL, 
-	created_at VARCHAR(32) NOT NULL, 
-	updated_at VARCHAR(32) NOT NULL, 
-	updated_by VARCHAR(200) NOT NULL, 
-	created_by VARCHAR(200) NOT NULL DEFAULT '', 
-	published_loading VARCHAR(16) NULL, 
-	CONSTRAINT registry_skills_pkey PRIMARY KEY (id), 
-	CONSTRAINT uq_registry_skills_team_slug UNIQUE (team_id, slug)
-);
 GO
 CREATE TABLE task_assists (
 	tenant_id VARCHAR(64) NOT NULL, 
@@ -824,49 +970,74 @@ CREATE TABLE template_copies (
 GO
 CREATE UNIQUE INDEX uq_template_copies_live ON template_copies (tenant_id, team_id, source, template_id) WHERE removed_at IS NULL AND detached_at IS NULL;
 GO
+CREATE TABLE tool_catalog (
+	tenant_id VARCHAR(64) NOT NULL, 
+	id VARCHAR(200) NOT NULL, 
+	revision BIGINT NOT NULL, 
+	deleted BIT NOT NULL, 
+	deleted_at FLOAT NULL, 
+	name VARCHAR(200) NOT NULL, 
+	title VARCHAR(200) NULL, 
+	app VARCHAR(200) NULL, 
+	owner_team VARCHAR(64) NULL, 
+	status VARCHAR(32) NULL, 
+	version VARCHAR(64) NULL, 
+	CONSTRAINT tool_catalog_pkey PRIMARY KEY (tenant_id, id)
+);
+GO
+CREATE INDEX ix_tool_catalog_owner_team ON tool_catalog (tenant_id, owner_team);
+GO
+CREATE TABLE tool_catalog_operations (
+	tenant_id VARCHAR(64) NOT NULL, 
+	module_id VARCHAR(200) NOT NULL, 
+	id VARCHAR(200) NOT NULL, 
+	name VARCHAR(200) NOT NULL, 
+	access VARCHAR(16) NOT NULL, 
+	requires_approval BIT NOT NULL, 
+	enabled BIT NOT NULL, 
+	CONSTRAINT tool_catalog_operations_pkey PRIMARY KEY (tenant_id, module_id, id)
+);
+GO
+CREATE INDEX ix_tool_catalog_operations_name ON tool_catalog_operations (tenant_id, name, module_id, id);
+GO
+CREATE TABLE tool_team_state (
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	id VARCHAR(200) NOT NULL, 
+	revision BIGINT NOT NULL, 
+	deleted BIT NOT NULL, 
+	deleted_at FLOAT NULL, 
+	module_id VARCHAR(200) NOT NULL, 
+	via VARCHAR(32) NOT NULL, 
+	operations NVARCHAR(max) NOT NULL, 
+	expires_at VARCHAR(40) NULL, 
+	CONSTRAINT tool_team_state_pkey PRIMARY KEY (tenant_id, team_id, id)
+);
+GO
+CREATE INDEX ix_tool_team_state_module ON tool_team_state (tenant_id, team_id, module_id);
+GO
 CREATE TABLE thread_budgets (
 	thread_id VARCHAR(64) NOT NULL, 
 	max_calls INTEGER NULL, 
 	max_tokens BIGINT NULL, 
 	max_cost_micros BIGINT NULL, 
 	updated_at VARCHAR(40) NOT NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
 	CONSTRAINT thread_budgets_pkey PRIMARY KEY (thread_id)
 );
 GO
-CREATE TABLE widget_mint_keys (
-	id VARCHAR(64) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
-	deployment_id VARCHAR(64) NOT NULL, 
-	name VARCHAR(200) NOT NULL, 
-	secret_hash VARCHAR(64) NOT NULL, 
-	created_by VARCHAR(320) NOT NULL, 
-	created_at VARCHAR(32) NOT NULL, 
-	last_used_at VARCHAR(32) NULL, 
-	revoked_at VARCHAR(32) NULL, 
-	expires_at VARCHAR(32) NULL, 
-	CONSTRAINT widget_mint_keys_pkey PRIMARY KEY (id)
+CREATE TABLE thread_budgets_unattributed (
+	thread_id VARCHAR(64) NOT NULL, 
+	max_calls INTEGER NULL, 
+	max_tokens BIGINT NULL, 
+	max_cost_micros BIGINT NULL, 
+	updated_at VARCHAR(40) NOT NULL, 
+	moved_at DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(), 
+	CONSTRAINT thread_budgets_unattributed_pkey PRIMARY KEY (thread_id)
 );
-GO
-CREATE INDEX ix_widget_mint_keys_deployment_id ON widget_mint_keys (deployment_id);
-GO
-CREATE INDEX ix_widget_mint_keys_tenant_id ON widget_mint_keys (tenant_id);
-GO
-CREATE TABLE widget_mint_key_audit (
-	id VARCHAR(64) NOT NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
-	deployment_id VARCHAR(64) NOT NULL, 
-	key_id VARCHAR(64) NOT NULL, 
-	action VARCHAR(16) NOT NULL, 
-	actor VARCHAR(320) NOT NULL, 
-	at VARCHAR(32) NOT NULL, 
-	CONSTRAINT widget_mint_key_audit_pkey PRIMARY KEY (id)
-);
-GO
-CREATE INDEX ix_widget_mint_key_audit_deployment_id ON widget_mint_key_audit (deployment_id);
-GO
-CREATE INDEX ix_widget_mint_key_audit_tenant_id ON widget_mint_key_audit (tenant_id);
 GO
 CREATE TABLE registry_widgets (
+	tenant_id VARCHAR(64) NOT NULL, 
 	id VARCHAR(64) NOT NULL, 
 	team_id VARCHAR(64) NOT NULL, 
 	name VARCHAR(200) NOT NULL DEFAULT '', 
@@ -876,36 +1047,8 @@ CREATE TABLE registry_widgets (
 	created_at VARCHAR(32) NOT NULL, 
 	updated_at VARCHAR(32) NOT NULL, 
 	updated_by VARCHAR(200) NOT NULL, 
-	CONSTRAINT registry_widgets_pkey PRIMARY KEY (id)
+	CONSTRAINT registry_widgets_pkey PRIMARY KEY (tenant_id, id)
 );
-GO
-CREATE TABLE registry_workflows (
-	id VARCHAR(64) NOT NULL, 
-	team_id VARCHAR(64) NOT NULL, 
-	name VARCHAR(200) NOT NULL, 
-	description VARCHAR(max) NOT NULL, 
-	[trigger] VARCHAR(200) NOT NULL, 
-	status VARCHAR(16) NOT NULL, 
-	published_version INTEGER NULL, 
-	draft NVARCHAR(max) NULL, 
-	draft_saved_at VARCHAR(32) NULL, 
-	draft_saved_by VARCHAR(200) NULL, 
-	created_at VARCHAR(32) NOT NULL, 
-	updated_at VARCHAR(32) NOT NULL, 
-	CONSTRAINT registry_workflows_pkey PRIMARY KEY (id)
-);
-GO
-CREATE TABLE registry_validations (
-	id VARCHAR(64) NOT NULL, 
-	workflow_id VARCHAR(64) NOT NULL, 
-	ran_at VARCHAR(32) NOT NULL, 
-	target VARCHAR(8) NOT NULL, 
-	results NVARCHAR(max) NOT NULL, 
-	summary NVARCHAR(max) NOT NULL, 
-	CONSTRAINT registry_validations_pkey PRIMARY KEY (id)
-);
-GO
-CREATE INDEX ix_registry_validations_workflow_id ON registry_validations (workflow_id);
 GO
 CREATE TABLE timers (
 	thread_id VARCHAR(64) NOT NULL, 
@@ -969,7 +1112,27 @@ CREATE TABLE ops_checkpoint_fences (
 	CONSTRAINT ops_checkpoint_fences_pkey PRIMARY KEY (tenant_id, team_id, thread_id)
 );
 GO
+CREATE TABLE graph_runs (
+	id VARCHAR(64) NOT NULL, 
+	thread_id VARCHAR(64) NOT NULL, 
+	kind VARCHAR(16) NOT NULL, 
+	status VARCHAR(16) NOT NULL, 
+	events NVARCHAR(max) NOT NULL, 
+	input NVARCHAR(max) NULL, 
+	created_at VARCHAR(32) NOT NULL, 
+	finished_at VARCHAR(32) NULL, 
+	tenant_id VARCHAR(64) NOT NULL, 
+	team_id VARCHAR(64) NOT NULL, 
+	CONSTRAINT graph_runs_pkey PRIMARY KEY (id), 
+	CONSTRAINT graph_runs_thread_id_fkey FOREIGN KEY(thread_id) REFERENCES graph_threads (id)
+);
+GO
+CREATE INDEX ix_graph_runs_tenant_id ON graph_runs (tenant_id);
+GO
+CREATE INDEX ix_graph_runs_thread_id ON graph_runs (thread_id);
+GO
 CREATE TABLE registry_agent_versions (
+	tenant_id VARCHAR(64) NOT NULL, 
 	agent_id VARCHAR(64) NOT NULL, 
 	version INTEGER NOT NULL, 
 	spec NVARCHAR(max) NOT NULL, 
@@ -985,41 +1148,20 @@ CREATE TABLE registry_agent_versions (
 	CONSTRAINT registry_agent_versions_agent_id_fkey FOREIGN KEY(agent_id) REFERENCES registry_agents (id) ON DELETE CASCADE
 );
 GO
-CREATE TABLE graph_runs (
-	id VARCHAR(64) NOT NULL, 
-	thread_id VARCHAR(64) NOT NULL, 
-	kind VARCHAR(16) NOT NULL, 
-	status VARCHAR(16) NOT NULL, 
-	events NVARCHAR(max) NOT NULL, 
-	input NVARCHAR(max) NULL, 
-	created_at VARCHAR(32) NOT NULL, 
-	finished_at VARCHAR(32) NULL, 
-	tenant_id VARCHAR(64) NOT NULL DEFAULT 'local', 
-	team_id VARCHAR(64) NOT NULL, 
-	CONSTRAINT graph_runs_pkey PRIMARY KEY (id), 
-	CONSTRAINT graph_runs_thread_id_fkey FOREIGN KEY(thread_id) REFERENCES graph_threads (id)
-);
-GO
-CREATE INDEX ix_graph_runs_tenant_id ON graph_runs (tenant_id);
-GO
-CREATE INDEX ix_graph_runs_thread_id ON graph_runs (thread_id);
-GO
-CREATE TABLE registry_guardrail_versions (
-	guardrail_id VARCHAR(64) NOT NULL, 
+CREATE TABLE agent_skill_pins (
+	tenant_id VARCHAR(64) NOT NULL, 
+	agent_id VARCHAR(64) NOT NULL, 
+	skill_id VARCHAR(64) NOT NULL, 
 	version INTEGER NOT NULL, 
-	config NVARCHAR(max) NOT NULL, 
-	digest VARCHAR(64) NOT NULL, 
-	note VARCHAR(max) NOT NULL, 
-	saved_at VARCHAR(32) NOT NULL, 
-	saved_by VARCHAR(200) NOT NULL, 
-	published_at VARCHAR(32) NULL, 
-	published_by VARCHAR(200) NULL, 
-	review_id VARCHAR(64) NULL, 
-	CONSTRAINT registry_guardrail_versions_pkey PRIMARY KEY (guardrail_id, version), 
-	CONSTRAINT registry_guardrail_versions_guardrail_id_fkey FOREIGN KEY(guardrail_id) REFERENCES registry_guardrails (id) ON DELETE CASCADE
+	team_id VARCHAR(64) NOT NULL, 
+	CONSTRAINT agent_skill_pins_pkey PRIMARY KEY (agent_id, skill_id), 
+	CONSTRAINT agent_skill_pins_agent_id_fkey FOREIGN KEY(agent_id) REFERENCES registry_agents (id) ON DELETE CASCADE
 );
+GO
+CREATE INDEX ix_agent_skill_pins_team_skill ON agent_skill_pins (tenant_id, team_id, skill_id);
 GO
 CREATE TABLE registry_skill_versions (
+	tenant_id VARCHAR(64) NOT NULL, 
 	skill_id VARCHAR(64) NOT NULL, 
 	version INTEGER NOT NULL, 
 	content NVARCHAR(max) NOT NULL, 
@@ -1036,7 +1178,38 @@ CREATE TABLE registry_skill_versions (
 	CONSTRAINT registry_skill_versions_skill_id_fkey FOREIGN KEY(skill_id) REFERENCES registry_skills (id) ON DELETE CASCADE
 );
 GO
+CREATE TABLE registry_workflow_versions (
+	tenant_id VARCHAR(64) NOT NULL, 
+	workflow_id VARCHAR(64) NOT NULL, 
+	version INTEGER NOT NULL, 
+	graph NVARCHAR(max) NOT NULL, 
+	note VARCHAR(max) NOT NULL, 
+	changes NVARCHAR(max) NOT NULL, 
+	published_at VARCHAR(32) NOT NULL, 
+	published_by VARCHAR(200) NOT NULL, 
+	review_id VARCHAR(64) NULL, 
+	CONSTRAINT registry_workflow_versions_pkey PRIMARY KEY (tenant_id, workflow_id, version), 
+	CONSTRAINT registry_workflow_versions_tenant_id_workflow_id_fkey FOREIGN KEY(tenant_id, workflow_id) REFERENCES registry_workflows (tenant_id, id) ON DELETE CASCADE ON UPDATE CASCADE
+);
+GO
+CREATE TABLE registry_guardrail_versions (
+	tenant_id VARCHAR(64) NOT NULL, 
+	guardrail_id VARCHAR(64) NOT NULL, 
+	version INTEGER NOT NULL, 
+	config NVARCHAR(max) NOT NULL, 
+	digest VARCHAR(64) NOT NULL, 
+	note VARCHAR(max) NOT NULL, 
+	saved_at VARCHAR(32) NOT NULL, 
+	saved_by VARCHAR(200) NOT NULL, 
+	published_at VARCHAR(32) NULL, 
+	published_by VARCHAR(200) NULL, 
+	review_id VARCHAR(64) NULL, 
+	CONSTRAINT registry_guardrail_versions_pkey PRIMARY KEY (guardrail_id, version), 
+	CONSTRAINT registry_guardrail_versions_guardrail_id_fkey FOREIGN KEY(guardrail_id) REFERENCES registry_guardrails (id) ON DELETE CASCADE
+);
+GO
 CREATE TABLE registry_widget_versions (
+	tenant_id VARCHAR(64) NOT NULL, 
 	widget_id VARCHAR(64) NOT NULL, 
 	version INTEGER NOT NULL, 
 	content NVARCHAR(max) NOT NULL, 
@@ -1047,21 +1220,8 @@ CREATE TABLE registry_widget_versions (
 	published_at VARCHAR(32) NULL, 
 	published_by VARCHAR(200) NULL, 
 	review_id VARCHAR(64) NULL, 
-	CONSTRAINT registry_widget_versions_pkey PRIMARY KEY (widget_id, version), 
-	CONSTRAINT registry_widget_versions_widget_id_fkey FOREIGN KEY(widget_id) REFERENCES registry_widgets (id) ON DELETE CASCADE
-);
-GO
-CREATE TABLE registry_workflow_versions (
-	workflow_id VARCHAR(64) NOT NULL, 
-	version INTEGER NOT NULL, 
-	graph NVARCHAR(max) NOT NULL, 
-	note VARCHAR(max) NOT NULL, 
-	changes NVARCHAR(max) NOT NULL, 
-	published_at VARCHAR(32) NOT NULL, 
-	published_by VARCHAR(200) NOT NULL, 
-	review_id VARCHAR(64) NULL, 
-	CONSTRAINT registry_workflow_versions_pkey PRIMARY KEY (workflow_id, version), 
-	CONSTRAINT registry_workflow_versions_workflow_id_fkey FOREIGN KEY(workflow_id) REFERENCES registry_workflows (id) ON DELETE CASCADE
+	CONSTRAINT registry_widget_versions_pkey PRIMARY KEY (tenant_id, widget_id, version), 
+	CONSTRAINT registry_widget_versions_tenant_id_widget_id_fkey FOREIGN KEY(tenant_id, widget_id) REFERENCES registry_widgets (tenant_id, id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 GO
 IF SCHEMA_ID(N'ops_security') IS NULL EXEC (N'CREATE SCHEMA ops_security AUTHORIZATION dbo');
@@ -1112,6 +1272,24 @@ CREATE SECURITY POLICY ops_security.engine_waits_isolation
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.engine_waits AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.graph_threads_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.graph_threads,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.graph_threads AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.graph_threads AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.graph_versions_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.graph_versions,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.graph_versions AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.graph_versions AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.registry_agents_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.registry_agents,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_agents AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_agents AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.registry_publish_requests_tenant
     ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.registry_publish_requests,
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_publish_requests AFTER INSERT,
@@ -1154,12 +1332,6 @@ CREATE SECURITY POLICY ops_security.form_links_isolation
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.form_links AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.graph_threads_isolation
-    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.graph_threads,
-    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.graph_threads AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.graph_threads AFTER UPDATE
-    WITH (STATE = ON, SCHEMABINDING = ON);
-GO
 CREATE SECURITY POLICY ops_security.mailboxes_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.mailboxes,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.mailboxes AFTER INSERT,
@@ -1188,6 +1360,42 @@ CREATE SECURITY POLICY ops_security.widget_deployments_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.widget_deployments,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.widget_deployments AFTER INSERT,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.widget_deployments AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.api_key_copies_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.api_key_copies,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.api_key_copies AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.api_key_copies AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.eval_cases_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.eval_cases,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.eval_cases AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.eval_cases AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.eval_runs_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.eval_runs,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.eval_runs AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.eval_runs AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.registry_skills_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.registry_skills,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_skills AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_skills AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.registry_workflows_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.registry_workflows,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_workflows AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_workflows AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.registry_validations_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.registry_validations,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_validations AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_validations AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.run_batches_isolation
@@ -1220,22 +1428,52 @@ CREATE SECURITY POLICY ops_security.poll_cursors_tenant
     ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.poll_cursors AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.widget_mint_keys_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.widget_mint_keys,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.widget_mint_keys AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.widget_mint_keys AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.widget_mint_key_audit_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.widget_mint_key_audit,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.widget_mint_key_audit AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.widget_mint_key_audit AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.deployments_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.deployments,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.deployments AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.deployments AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.channel_messages_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.channel_messages,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.channel_messages AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.channel_messages AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.channel_cursors_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.channel_cursors,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.channel_cursors AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.channel_cursors AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.thread_inbox_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.thread_inbox,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.thread_inbox AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.thread_inbox AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 CREATE SECURITY POLICY ops_security.chat_search_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.chat_search,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.chat_search AFTER INSERT,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.chat_search AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.eval_cases_isolation
-    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.eval_cases,
-    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.eval_cases AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.eval_cases AFTER UPDATE
-    WITH (STATE = ON, SCHEMABINDING = ON);
-GO
-CREATE SECURITY POLICY ops_security.eval_runs_isolation
-    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.eval_runs,
-    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.eval_runs AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.eval_runs AFTER UPDATE
+CREATE SECURITY POLICY ops_security.registry_guardrails_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.registry_guardrails,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_guardrails AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_guardrails AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.agent_memories_isolation
@@ -1254,6 +1492,12 @@ CREATE SECURITY POLICY ops_security.message_memory_use_isolation
     ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.message_memory_use,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.message_memory_use AFTER INSERT,
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.message_memory_use AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.model_call_records_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.model_call_records,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.model_call_records AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.model_call_records AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.review_assignments_tenant
@@ -1292,16 +1536,34 @@ CREATE SECURITY POLICY ops_security.template_copies_isolation
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.template_copies AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.widget_mint_keys_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.widget_mint_keys,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.widget_mint_keys AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.widget_mint_keys AFTER UPDATE
+CREATE SECURITY POLICY ops_security.tool_catalog_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.tool_catalog,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.tool_catalog AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.tool_catalog AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
-CREATE SECURITY POLICY ops_security.widget_mint_key_audit_tenant
-    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.widget_mint_key_audit,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.widget_mint_key_audit AFTER INSERT,
-    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.widget_mint_key_audit AFTER UPDATE
+CREATE SECURITY POLICY ops_security.tool_catalog_operations_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.tool_catalog_operations,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.tool_catalog_operations AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.tool_catalog_operations AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.tool_team_state_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.tool_team_state,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.tool_team_state AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.tool_team_state AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.thread_budgets_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.thread_budgets,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.thread_budgets AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.thread_budgets AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.registry_widgets_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.registry_widgets,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_widgets AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.registry_widgets AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
 CREATE SECURITY POLICY ops_security.ops_checkpoints_isolation
@@ -1328,6 +1590,42 @@ CREATE SECURITY POLICY ops_security.graph_runs_isolation
     ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.graph_runs AFTER UPDATE
     WITH (STATE = ON, SCHEMABINDING = ON);
 GO
+CREATE SECURITY POLICY ops_security.registry_agent_versions_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.registry_agent_versions,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_agent_versions AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_agent_versions AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.agent_skill_pins_isolation
+    ADD FILTER PREDICATE ops_security.agents_team_read(tenant_id, team_id) ON dbo.agent_skill_pins,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.agent_skill_pins AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_team_write(tenant_id, team_id) ON dbo.agent_skill_pins AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.registry_skill_versions_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.registry_skill_versions,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_skill_versions AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_skill_versions AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.registry_workflow_versions_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.registry_workflow_versions,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_workflow_versions AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_workflow_versions AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.registry_guardrail_versions_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.registry_guardrail_versions,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_guardrail_versions AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_guardrail_versions AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
+CREATE SECURITY POLICY ops_security.registry_widget_versions_tenant
+    ADD FILTER PREDICATE ops_security.agents_tenant_read(tenant_id) ON dbo.registry_widget_versions,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_widget_versions AFTER INSERT,
+    ADD BLOCK PREDICATE ops_security.agents_tenant_write(tenant_id) ON dbo.registry_widget_versions AFTER UPDATE
+    WITH (STATE = ON, SCHEMABINDING = ON);
+GO
 IF FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') = 1 BEGIN IF NOT EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = 'ops_memory') EXEC('CREATE FULLTEXT CATALOG ops_memory'); IF NOT EXISTS (SELECT 1 FROM sys.fulltext_indexes WHERE object_id = OBJECT_ID('agent_memories')) EXEC('CREATE FULLTEXT INDEX ON agent_memories ([key], value) KEY INDEX agent_memories_pkey ON ops_memory WITH CHANGE_TRACKING AUTO'); END
 GO
 CREATE TABLE alembic_version (
@@ -1335,5 +1633,5 @@ CREATE TABLE alembic_version (
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
 GO
-INSERT INTO alembic_version (version_num) VALUES ('0103_eval_cases_runs');
+INSERT INTO alembic_version (version_num) VALUES ('0119_unattributed_side_tables');
 GO

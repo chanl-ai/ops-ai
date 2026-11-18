@@ -84,7 +84,7 @@ async def test_two_teams_hold_the_same_name_and_a_caller_naming_several_teams_is
         "/v1/secrets/LEDGER_API_KEY/rotate", json={"value": "k2"}, headers=builder(tenant, "team_fraud", role="admin")
     )
     assert mine.json()["data"]["version"] == 2, mine.text
-    theirs = (await c.get("/v1/secrets", headers=builder(tenant, "team_platform"))).json()["data"]
+    theirs = (await c.get("/v1/secrets", headers=builder(tenant, "team_platform"))).json()["data"]["data"]
     assert [(s["name"], s["version"]) for s in theirs if s["name"] == "LEDGER_API_KEY"] == [("LEDGER_API_KEY", 1)]
     several = {"name": "SHARED_KEY", "value": "k1", "teams": ["team_platform", "team_fraud"]}
     refused = await c.post("/v1/secrets", json=several, headers=people["sam"])

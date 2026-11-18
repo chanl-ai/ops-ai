@@ -108,10 +108,18 @@ async def test_the_apps_card_counts_the_tools_added_of_its_catalog(
 ) -> None:
     (c, _, _, _), _ = desk_rig
     await _on(c, tenant)
-    card = next(x for x in (await c.get("/v1/apps", headers=admin(tenant))).json()["data"] if x["id"] == APP)
+    card = next(
+        x
+        for x in (await c.get("/v1/apps", params={"ids": APP}, headers=admin(tenant))).json()["data"]["data"]
+        if x["id"] == APP
+    )
     assert (card["toolsCount"], card["toolsAdded"]) == (5, 5), card
     await c.delete(f"/v1/apps/{APP}/tools/fields_transfer", headers=admin(tenant))
-    card = next(x for x in (await c.get("/v1/apps", headers=admin(tenant))).json()["data"] if x["id"] == APP)
+    card = next(
+        x
+        for x in (await c.get("/v1/apps", params={"ids": APP}, headers=admin(tenant))).json()["data"]["data"]
+        if x["id"] == APP
+    )
     assert card["toolsAdded"] == 4, card
 
 
@@ -165,5 +173,9 @@ async def test_deleting_a_plugins_app_turns_it_off_and_takes_its_accounts(
     gone = await c.delete(f"/v1/apps/{APP}", headers=admin(tenant))
     assert gone.status_code == 200 and gone.json()["data"]["accounts"], gone.text
     assert await store.get(tenant, account) is None
-    card = next(a for a in (await c.get("/v1/apps", headers=admin(tenant))).json()["data"] if a["id"] == APP)
+    card = next(
+        a
+        for a in (await c.get("/v1/apps", params={"ids": APP}, headers=admin(tenant))).json()["data"]["data"]
+        if a["id"] == APP
+    )
     assert not card.get("connectionId") and card["appState"] != "connected", card

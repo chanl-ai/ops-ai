@@ -8,41 +8,55 @@ import re
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
+from pydantic import BaseModel, Field, JsonValue, TypeAdapter
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.errors import Conflict, NotFound
 from ops_service_kit.ids import canonical_json, new_id, now_iso
-from ops_store import Guarantee
+from ops_service_kit.listing import ListParams
+from ops_store import Guarantee, isolation
+from ops_store.dialect import json_text
+from ops_store.listing import LISTED, ListPage, list_page
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
-from .tenancy import LOCAL_TENANT, current_tenant, tenant_tx
+from .graphs import graph_threads, mine
+from .tenancy import OWNER, SERVE_PUBLISHED, UNIQUE_KEY, RuntimeStore, current_tenant
 
 registry_agents = sa.Table(
     "registry_agents",
     metadata,
+    # The tenant the row belongs to, the caller's on insert, with no default (agents 0109).
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant),
     sa.Column("id", sa.String(64), primary_key=True),
-    sa.Column("slug", sa.String(120), nullable=False, unique=True),
-    sa.Column("team_id", sa.String(64), nullable=False),
+    sa.Column("slug", sa.String(120), nullable=False),
+    sa.Column("team_id", sa.String(64), nullable=False, info=LISTED),
     # Newest saved version, draft or published.
-    sa.Column("version", sa.Integer, nullable=False),
+    sa.Column("version", sa.Integer, nullable=False, info=LISTED),
     # The version the runtime serves; null until the first publish.
     sa.Column("published_version", sa.Integer),
     sa.Column("paused", sa.Boolean, nullable=False, default=False),
     sa.Column("created_at", sa.String(32), nullable=False),
-    sa.Column("updated_at", sa.String(32), nullable=False),
+    sa.Column("updated_at", sa.String(32), nullable=False, info=LISTED),
     # The template the provisioning service made it from, and how the platform protects it: `system` cannot be
     # changed by a person, `managed` can, and the template's fields come back on the next provisioning run.
-    sa.Column("template_id", sa.String(120), index=True),
+    sa.Column("template_id", sa.String(120), index=True, info=LISTED),
     sa.Column("protection", sa.String(16)),
-    info=TEAM_OWNED,
+    # A slug is unique within its tenant only.
+    sa.UniqueConstraint("tenant_id", "slug", name="uq_registry_agents_tenant_slug"),
+    # The agents list, one team's page by update time or version.
+    sa.Index("ix_registry_agents_team_updated", "tenant_id", "team_id", "updated_at"),
+    sa.Index("ix_registry_agents_team_version", "tenant_id", "team_id", "version"),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 registry_agent_versions = sa.Table(
     "registry_agent_versions",
     metadata,
+    # The tenant the row belongs to, the caller's on insert, with no default (agents 0109).
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant),
     sa.Column("agent_id", sa.String(64), sa.ForeignKey("registry_agents.id", ondelete="CASCADE"), primary_key=True),
     sa.Column("version", sa.Integer, primary_key=True),
     sa.Column("spec", sa.JSON, nullable=False),
@@ -54,7 +68,25 @@ registry_agent_versions = sa.Table(
     sa.Column("published_at", sa.String(32)),
     sa.Column("published_by", sa.String(200)),
     sa.Column("review_id", sa.String(64)),
-    info=team_owned_via("registry_agents", "agent_id"),
+    info={**TENANT_SCOPED, **team_owned_via("registry_agents", "agent_id")},
+)
+
+# The skills each agent's newest version pins (`spec.skillPins`), one row per agent and skill, written in the
+# transaction that saves the version (agents 0113), so the skills list counts an agent's pins in SQL. Rows go with
+# their agent (the delete and the foreign key); a skill's delete leaves them, as it leaves the specs that pin it.
+agent_skill_pins = sa.Table(
+    "agent_skill_pins",
+    metadata,
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant),
+    sa.Column("agent_id", sa.String(64), sa.ForeignKey("registry_agents.id", ondelete="CASCADE"), primary_key=True),
+    sa.Column("skill_id", sa.String(64), primary_key=True),
+    # The skill version the agent pins.
+    sa.Column("version", sa.Integer, nullable=False),
+    # The agent's team.
+    sa.Column("team_id", sa.String(64), nullable=False),
+    # The skills list counts one team's pins of each skill.
+    sa.Index("ix_agent_skill_pins_team_skill", "tenant_id", "team_id", "skill_id"),
+    info={**TENANT_SCOPED, **TEAM_OWNED},
 )
 
 publish_requests = sa.Table(
@@ -62,7 +94,7 @@ publish_requests = sa.Table(
     metadata,
     # Per tenant (migration 0067): a request id is unique within its tenant, and RLS shows a tenant only
     # its own. The records a request publishes (agents, guardrails, skills, widgets) are not per tenant yet (phase B).
-    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant, server_default=LOCAL_TENANT),
+    sa.Column("tenant_id", sa.String(64), primary_key=True, default=current_tenant),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("kind", sa.String(16), nullable=False),  # agent | workflow
     sa.Column("subject_id", sa.String(64), nullable=False),
@@ -75,11 +107,16 @@ publish_requests = sa.Table(
     sa.Column("decided_by", sa.String(200)),
     sa.Column("decision_reason", sa.Text),
     sa.Column("body", sa.JSON, nullable=False),
+    # The team of the agent or workflow the request publishes (agents 0106); empty until the stores write it.
+    sa.Column("team_id", sa.String(64), nullable=False, server_default=""),
+    sa.Index("ix_registry_publish_requests_team", "tenant_id", "team_id"),
     # The primary key leads with tenant_id, so this adds nothing; it stays until a migration drops it.
     sa.Index("ix_registry_publish_requests_tenant_id", "tenant_id"),
     info=TENANT_SCOPED,
 )
 sa.Index("ix_registry_publish_requests_subject", publish_requests.c.kind, publish_requests.c.subject_id)
+# Whether one workflow's request is pending, within the tenant (agents 0112).
+sa.Index("ix_registry_publish_requests_tenant_subject", publish_requests.c.tenant_id, publish_requests.c.subject_id)
 # A request id's prefix by kind; workflow kinds take WFP.
 REQUEST_PREFIXES = {
     "agent": "AGP",
@@ -107,6 +144,21 @@ SPEC_FIELDS = (
     "widgetPins",
     "widgets",
 )
+
+
+# (agent, version) pairs per statement of published_specs: two parameters each, under SQL Server's 2100.
+PAIRS_PER_QUERY = 500
+# Ids tenant_owners names in its statement; past this it reads the tenant's agents and keeps those asked for, as SQL
+# Server takes at most 2100 parameters a statement and a caller may ask with the whole serving catalogue.
+OWNER_IDS_PER_QUERY = 1000
+# A JSON boolean as text: 'true' on PostgreSQL and SQL Server, '1' on SQLite.
+_TRUE = ("true", "1")
+
+
+def _word(word: str) -> sa.ColumnClause[str]:
+    """A fixed word written into the statement, not bound: a GROUP BY must name the same expression the select does,
+    and two bound copies of one value are two parameters to SQL Server."""
+    return sa.literal_column(f"'{word}'", sa.String())
 
 
 def digest_of(spec: dict[str, Any]) -> str:
@@ -153,6 +205,35 @@ async def _name_tenant(c: AsyncConnection) -> None:
         await c.execute(sa.text("SELECT set_config('app.tenant_id', :t, true)"), {"t": current_tenant()})
 
 
+class SkillPin(BaseModel):
+    """What the pins table reads of a spec's `skillPins` entry."""
+
+    skill_id: str = Field(alias="skillId")
+    version: int
+
+
+_PINS = TypeAdapter(list[SkillPin])
+
+
+def pins_of(held: JsonValue) -> dict[str, int]:
+    """The skill versions a spec's `skillPins` pins, by skill (the first pin of a skill named twice)."""
+    out: dict[str, int] = {}
+    for p in _PINS.validate_python(held or []):
+        out.setdefault(p.skill_id, p.version)
+    return out
+
+
+async def hold_pins(c: AsyncConnection, agent_id: str, team_id: str, held: JsonValue) -> None:
+    """The agent's `agent_skill_pins` rows made those of `held` (the `skillPins` of the spec the caller's transaction
+    saves as the agent's newest version)."""
+    p = agent_skill_pins
+    await c.execute(p.delete().where(mine(p), p.c.agent_id == agent_id))
+    pins = pins_of(held)
+    if pins:
+        rows = [{"agent_id": agent_id, "skill_id": s, "version": v, "team_id": team_id} for s, v in pins.items()]
+        await c.execute(p.insert(), rows)
+
+
 async def publish_requested(c: AsyncConnection, kind: str, subject_id: str, version: int) -> bool:
     """Whether a publish request names this version, decided or not. A saver that finds one opens the next version
     instead of rewriting the draft a reviewer saw. The request table is read under RLS, so the tenant is named for
@@ -167,56 +248,85 @@ async def publish_requested(c: AsyncConnection, kind: str, subject_id: str, vers
     return (await c.execute(q)).first() is not None
 
 
-class AgentRegistry:
+class AgentRegistry(RuntimeStore):
     # A slug and a version number are unique keys (CAS); a save writes its version row and moves the agent in one
     # transaction, as does a publish (TRANSACTION). Only one publish request per subject may be pending (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION})
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
 
     async def set_template(self, agent_id: str, *, template_id: str | None, protection: str | None) -> None:
         """Sets what the provisioning service owns on the row; a None leaves that column as it is."""
         values = {k: v for k, v in {"template_id": template_id, "protection": protection}.items() if v is not None}
         if values:
-            async with self.engine.begin() as c:
+            async with self.tx() as c:
                 await c.execute(registry_agents.update().where(registry_agents.c.id == agent_id).values(**values))
 
     async def rows(self) -> list[dict[str, Any]]:
-        """The acting team's agents (every agent with no acting team: a loop or the dev header caller)."""
-        q = sa.select(registry_agents).where(team_visible(registry_agents))
-        async with self.engine.connect() as c:
+        """The acting team's agents of the caller's tenant (every team's with no acting team: a loop or the seed)."""
+        q = (
+            sa.select(registry_agents)
+            .where(registry_agents.c.tenant_id == current_tenant(), team_visible(registry_agents))
+            .order_by(registry_agents.c.id)
+        )
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
-    async def owner_team(self, agent_id: str) -> str | None:
+    async def published_pointers(self) -> list[tuple[str, str, int | None, bool]]:
+        """Every tenant's agents as (tenant, id, published version, paused), read past the tenant at start: the system
+        role is granted these four columns of the table only (agents 0107), never a spec."""
+        a = registry_agents
+        q = sa.select(a.c.tenant_id, a.c.id, a.c.published_version, a.c.paused).where(
+            any_team(a, "the start-up serves every team's published agents")
+        )
+        async with self.system_tx(SERVE_PUBLISHED) as c:
+            rows = (await c.execute(q)).all()
+        return [(str(t), str(i), None if v is None else int(v), bool(p)) for t, i, v, p in rows]
+
+    async def published_specs(self, keys: set[tuple[str, int]]) -> dict[tuple[str, int], dict[str, JsonValue]]:
+        """The spec of each (agent, version) of `keys` in the caller's tenant, in queries of at most PAIRS_PER_QUERY
+        pairs (SQL Server takes at most 2100 parameters a statement)."""
+        v = registry_agent_versions
+        ordered = sorted(keys)
+        out: dict[tuple[str, int], dict[str, JsonValue]] = {}
+        async with self.tx() as c:
+            for i in range(0, len(ordered), PAIRS_PER_QUERY):
+                chunk = ordered[i : i + PAIRS_PER_QUERY]
+                pairs = sa.or_(*(sa.and_(v.c.agent_id == agent, v.c.version == n) for agent, n in chunk))
+                q = sa.select(v.c.agent_id, v.c.version, v.c.spec).where(
+                    v.c.tenant_id == current_tenant(), pairs, team_visible(v)
+                )
+                for agent, n, spec in (await c.execute(q)).all():
+                    out[(str(agent), int(n))] = dict(spec)
+        return out
+
+    async def owner_team(self, agent_id: str, conn: AsyncConnection | None = None) -> str | None:
         """The team that owns an agent, whoever is acting; None when there is no such agent. Only for deciding a
         refusal by the owning team, never for showing the agent."""
-        q = sa.select(registry_agents.c.team_id).where(
-            registry_agents.c.id == agent_id, any_team(registry_agents, "the owning team a refusal is decided on")
-        )
-        async with self.engine.connect() as c:
-            team = (await c.execute(q)).scalar()
-        return str(team) if team else None
+        return (await self.owner_teams(conn, registry_agents, {agent_id}, OWNER)).get(agent_id)
 
-    async def owner_teams(self, agent_ids: set[str]) -> dict[str, str]:
-        """owner_team for each of these agents in one query, so a list of publish requests finds each one's team
-        without a read per request; an agent with no team is left out. Never for showing the agents."""
-        if not agent_ids:
+    async def tenant_owners(self, ids: set[str]) -> dict[str, str]:
+        """Of `ids`, the agents the caller's tenant holds, each with its owning team ('' for none), whoever is acting.
+        The serving catalogue holds every tenant's agents by id, so a route asks this before it serves one from it;
+        only for deciding a refusal, never for showing the agent."""
+        if not ids:
             return {}
-        a = registry_agents
-        q = sa.select(a.c.id, a.c.team_id).where(
-            a.c.id.in_(sorted(agent_ids)), any_team(a, "the team each publish request is a task of")
+        named = registry_agents.c.id.in_(sorted(ids)) if len(ids) <= OWNER_IDS_PER_QUERY else sa.true()
+        q = sa.select(registry_agents.c.id, registry_agents.c.team_id).where(
+            registry_agents.c.tenant_id == current_tenant(), named, any_team(registry_agents, OWNER)
         )
-        async with self.engine.connect() as c:
-            return {str(i): str(t) for i, t in (await c.execute(q)).all() if t}
+        with isolation.tenant_wide(OWNER):
+            async with self.tx() as c:
+                found = (await c.execute(q)).all()
+        return {str(i): str(team or "") for i, team in found if str(i) in ids}
 
     async def row(self, agent_id: str, c: AsyncConnection | None = None, *, lock: bool = False) -> dict[str, Any]:
         """The agent, when the acting team owns it; another team's agent is NotFound, so its routes answer 404."""
-        q = sa.select(registry_agents).where(registry_agents.c.id == agent_id, team_visible(registry_agents))
+        q = sa.select(registry_agents).where(
+            mine(registry_agents), registry_agents.c.id == agent_id, team_visible(registry_agents)
+        )
         if lock:
             q = q.with_for_update()
         if c is None:
-            async with self.engine.connect() as conn:
+            async with self.tx() as conn:
                 r = (await conn.execute(q)).mappings().first()
         else:
             r = (await c.execute(q)).mappings().first()
@@ -224,22 +334,78 @@ class AgentRegistry:
             raise NotFound(f"Agent {agent_id}")
         return dict(r)
 
+    async def page(self, params: ListParams, *, since: str) -> ListPage:
+        """One page of the acting team's agents, each row with its newest version's spec and `tasks_24h`, the threads
+        started on it since `since` (chats naming it and threads on its own graph, a builder's test left out). Sorted
+        by name, then the key; `search` matches name, role and slug; `availability`, `teamId` and `templateId` filter,
+        and the first two are counted."""
+        a, v, t = registry_agents, registry_agent_versions, graph_threads
+        name, role = json_text(v.c.spec, "name"), json_text(v.c.spec, "role")
+        tasks = (
+            sa.select(sa.func.count())
+            .select_from(t)
+            .where(
+                mine(t),
+                team_visible(t),
+                t.c.created_at >= since,
+                sa.or_(
+                    t.c.graph == sa.literal("agent:") + a.c.id,
+                    sa.and_(t.c.graph == "agent_wrapper", json_text(t.c.meta, "agentId") == a.c.id),
+                ),
+                sa.func.coalesce(json_text(t.c.meta, "test"), "false").not_in(_TRUE),
+            )
+            .scalar_subquery()
+        )
+        availability = sa.case(
+            (a.c.paused == sa.true(), _word("paused")),
+            (a.c.published_version.is_not(None), _word("published")),
+            else_=_word("not_published"),
+        )
+        q = (
+            sa.select(a, v.c.spec, tasks.label("tasks_24h"))
+            .join(v, sa.and_(v.c.tenant_id == a.c.tenant_id, v.c.agent_id == a.c.id, v.c.version == a.c.version))
+            .where(a.c.tenant_id == current_tenant(), team_visible(a), team_visible(v))
+        )
+        async with self.tx() as c:
+            return await list_page(
+                c,
+                q,
+                params,
+                search=[name, role, a.c.slug],
+                sortable={
+                    "name": name,
+                    "updatedAt": a.c.updated_at,
+                    "tasks24h": tasks,
+                    "version": a.c.version,
+                    "teamId": a.c.team_id,
+                    "availability": availability,
+                },
+                default_sort=name.asc(),
+                filters={"availability": availability, "teamId": a.c.team_id, "templateId": a.c.template_id},
+                facets={"availability": availability, "teamId": a.c.team_id},
+            )
+
     async def versions(self, agent_id: str) -> list[dict[str, Any]]:
         q = (
             sa.select(registry_agent_versions)
-            .where(registry_agent_versions.c.agent_id == agent_id, team_visible(registry_agent_versions))
+            .where(
+                mine(registry_agent_versions),
+                registry_agent_versions.c.agent_id == agent_id,
+                team_visible(registry_agent_versions),
+            )
             .order_by(registry_agent_versions.c.version.desc())
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def version(self, agent_id: str, version: int) -> dict[str, Any]:
         q = sa.select(registry_agent_versions).where(
+            mine(registry_agent_versions),
             registry_agent_versions.c.agent_id == agent_id,
             registry_agent_versions.c.version == version,
             team_visible(registry_agent_versions),
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             r = (await c.execute(q)).mappings().first()
         if r is None:
             raise NotFound(f"Agent {agent_id} version {version}")
@@ -257,7 +423,7 @@ class AgentRegistry:
             .join(a, a.c.id == v.c.agent_id)
             .where(pairs, team_visible(a), team_visible(v))
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             rows = (await c.execute(q)).mappings().all()
         return {(str(r["agent_id"]), int(r["version"])): (str(r["spec"]["name"]), str(r["slug"])) for r in rows}
 
@@ -269,7 +435,7 @@ class AgentRegistry:
             registry_agent_versions.c.version == version,
             team_visible(registry_agent_versions),
         )
-        async with self.engine.connect() as c:
+        async with self.tx() as c:
             r = (await c.execute(q)).first()
         return dict(r[0]) if r is not None and r[1] is not None else None
 
@@ -279,32 +445,35 @@ class AgentRegistry:
             .where(_mine(), publish_requests.c.kind == kind, publish_requests.c.subject_id == subject_id)
             .order_by(publish_requests.c.created_at.desc())
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def _unique_slug(self, c: AsyncConnection, name: str) -> str:
         base = slugify(name)
-        taken = {
-            str(s)
-            for s in (
-                await c.execute(
-                    sa.select(registry_agents.c.slug).where(
-                        registry_agents.c.slug.like(f"{base}%"),
-                        any_team(registry_agents, "a slug is unique across every team"),
-                    )
-                )
-            ).scalars()
-        }
+        q = sa.select(registry_agents.c.slug).where(
+            mine(registry_agents),
+            registry_agents.c.slug.like(f"{base}%"),
+            any_team(registry_agents, "a slug is unique across every team"),
+        )
+        # The team policy shows a team only its own rows; the slug is unique across the tenant's teams.
+        async with isolation.tenant_wide_on(c, UNIQUE_KEY) as wide:
+            taken = {str(s) for s in (await wide.execute(q)).scalars()}
         n, slug = 2, base
         while slug in taken:
             slug, n = f"{base}-{n}", n + 1
         return slug
 
-    async def create_if_absent(self, spec: dict[str, Any], *, by: str, team_id: str, agent_id: str) -> bool:
-        """`create` for an agent whose id is fixed (a team's Ops Assistant): False when a row of that id, or one
-        racing it for the same slug, is already there, so two first chats at once leave one agent."""
+    async def create_if_absent(
+        self, spec: dict[str, Any], *, by: str, team_id: str, agent_id: str, version: int = 1
+    ) -> bool:
+        """`create` for an agent whose id is fixed (a team's Ops Assistant, a seed agent): False when a row of that id,
+        in any tenant, or one racing it for the same slug, is already there, so two first chats at once leave one
+        agent and a seed id another tenant holds does not stop the start."""
         try:
-            await self.create(spec, by=by, team_id=team_id, agent_id=agent_id, published=True)
+            async with self.tx() as c, self.attempt(c):
+                await self.create(
+                    spec, by=by, team_id=team_id, agent_id=agent_id, version=version, published=True, conn=c
+                )
         except IntegrityError:
             return False
         return True
@@ -320,39 +489,54 @@ class AgentRegistry:
         published: bool = False,
         template_id: str | None = None,
         protection: str | None = None,
+        conn: AsyncConnection | None = None,
     ) -> str:
-        aid = agent_id or new_id("ag")
-        at = now_iso()
-        async with self.engine.begin() as c:
-            slug = await self._unique_slug(c, spec["name"])
-            await c.execute(
-                registry_agents.insert().values(
-                    id=aid,
-                    slug=slug,
+        if conn is None:
+            async with self.tx() as c:
+                return await self.create(
+                    spec,
+                    by=by,
                     team_id=team_id,
+                    agent_id=agent_id,
                     version=version,
-                    published_version=version if published else None,
-                    paused=False,
-                    created_at=at,
-                    updated_at=at,
+                    published=published,
                     template_id=template_id,
                     protection=protection,
+                    conn=c,
                 )
+        c = conn
+        aid = agent_id or new_id("ag")
+        at = now_iso()
+        slug = await self._unique_slug(c, spec["name"])
+        await c.execute(
+            registry_agents.insert().values(
+                id=aid,
+                slug=slug,
+                team_id=team_id,
+                version=version,
+                published_version=version if published else None,
+                paused=False,
+                created_at=at,
+                updated_at=at,
+                template_id=template_id,
+                protection=protection,
             )
-            await c.execute(
-                registry_agent_versions.insert().values(
-                    agent_id=aid,
-                    version=version,
-                    spec=spec,
-                    digest=digest_of(spec),
-                    note="Seeded" if published else "",
-                    changes=["Created"],
-                    saved_at=at,
-                    saved_by=by,
-                    published_at=at if published else None,
-                    published_by=by if published else None,
-                )
+        )
+        await c.execute(
+            registry_agent_versions.insert().values(
+                agent_id=aid,
+                version=version,
+                spec=spec,
+                digest=digest_of(spec),
+                note="Seeded" if published else "",
+                changes=["Created"],
+                saved_at=at,
+                saved_by=by,
+                published_at=at if published else None,
+                published_by=by if published else None,
             )
+        )
+        await hold_pins(c, aid, team_id, spec.get("skillPins"))
         return aid
 
     async def save(self, agent_id: str, spec: dict[str, Any], *, by: str, note: str = "") -> int:
@@ -361,7 +545,7 @@ class AgentRegistry:
         what runs nor what a reviewer saw ever changes. The published pointer does not move."""
         at = now_iso()
         v = registry_agent_versions
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             # Locked so two saves at once (two tabs, or autosave racing a slow save) take turns: unlocked, both read the
             # same newest version, both open the next one, and the second fails on the version key.
             row = await self.row(agent_id, c, lock=True)
@@ -404,11 +588,12 @@ class AgentRegistry:
             await c.execute(
                 registry_agents.update().where(registry_agents.c.id == agent_id).values(version=n, updated_at=at)
             )
+            await hold_pins(c, agent_id, str(row["team_id"]), spec.get("skillPins"))
         return n
 
     async def publish(self, agent_id: str, version: int, *, by: str, review_id: str) -> None:
         at = now_iso()
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await c.execute(
                 registry_agent_versions.update()
                 .where(registry_agent_versions.c.agent_id == agent_id, registry_agent_versions.c.version == version)
@@ -421,7 +606,7 @@ class AgentRegistry:
             )
 
     async def set_paused(self, agent_id: str, paused: bool) -> None:
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await c.execute(
                 registry_agents.update()
                 .where(registry_agents.c.id == agent_id)
@@ -429,12 +614,13 @@ class AgentRegistry:
             )
 
     async def delete(self, agent_id: str) -> None:
-        async with self.engine.begin() as c:
+        async with self.tx() as c:
             await self.row(agent_id, c)
+            await c.execute(
+                agent_skill_pins.delete().where(mine(agent_skill_pins), agent_skill_pins.c.agent_id == agent_id)
+            )
             await c.execute(registry_agent_versions.delete().where(registry_agent_versions.c.agent_id == agent_id))
             await c.execute(registry_agents.delete().where(registry_agents.c.id == agent_id))
-        # Requests are per tenant (RLS), the agent row not yet: the tenant's own requests go in their own transaction.
-        async with tenant_tx(self.engine) as c:
             await c.execute(
                 publish_requests.delete().where(
                     _mine(), publish_requests.c.kind == "agent", publish_requests.c.subject_id == agent_id
@@ -458,16 +644,18 @@ class AgentRegistry:
         the older one could only ever put a version live that lacks what was saved since."""
         for attempt in range(3):
             try:
-                return await self._open_request(
-                    kind,
-                    subject_id,
-                    version,
-                    note=note,
-                    by=by,
-                    body=body,
-                    approved=approved,
-                    replaces_older=replaces_older,
-                )
+                async with self.tx() as c, self.attempt(c):
+                    return await self._open_request(
+                        c,
+                        kind,
+                        subject_id,
+                        version,
+                        note=note,
+                        by=by,
+                        body=body,
+                        approved=approved,
+                        replaces_older=replaces_older,
+                    )
             except IntegrityError:
                 # Two opens in the tenant took the same number; the next attempt reads the one that landed.
                 if attempt == 2:
@@ -476,6 +664,7 @@ class AgentRegistry:
 
     async def _open_request(
         self,
+        c: AsyncConnection,
         kind: str,
         subject_id: str,
         version: int,
@@ -488,71 +677,68 @@ class AgentRegistry:
     ) -> dict[str, Any]:
         at = now_iso()
         prefix = REQUEST_PREFIXES.get(kind, "WFP")
-        async with tenant_tx(self.engine) as c:
-            pending = (
-                await c.execute(
-                    sa.select(publish_requests.c.id, publish_requests.c.version).where(
-                        _mine(),
-                        publish_requests.c.kind == kind,
-                        publish_requests.c.subject_id == subject_id,
-                        publish_requests.c.status == "pending",
-                    )
+        pending = (
+            await c.execute(
+                sa.select(publish_requests.c.id, publish_requests.c.version).where(
+                    _mine(),
+                    publish_requests.c.kind == kind,
+                    publish_requests.c.subject_id == subject_id,
+                    publish_requests.c.status == "pending",
                 )
-            ).first()
-            if pending is not None and not (replaces_older and int(pending[1]) < version):
-                raise Conflict(f"Publish request {pending[0]} is already open.", code="review_open")
-            if pending is not None:
-                # Returned, the state a reviewer's send-back leaves, so a late approval of it answers already_decided.
-                await c.execute(
-                    publish_requests.update()
-                    .where(_mine(), publish_requests.c.id == pending[0], publish_requests.c.status == "pending")
-                    .values(
-                        status="returned",
-                        decided_at=at,
-                        decided_by=by,
-                        decision_reason=f"Replaced by the request for version {version}.",
-                    )
+            )
+        ).first()
+        if pending is not None and not (replaces_older and int(pending[1]) < version):
+            raise Conflict(f"Publish request {pending[0]} is already open.", code="review_open")
+        if pending is not None:
+            # Returned, the state a reviewer's send-back leaves, so a late approval of it answers already_decided.
+            await c.execute(
+                publish_requests.update()
+                .where(_mine(), publish_requests.c.id == pending[0], publish_requests.c.status == "pending")
+                .values(
+                    status="returned",
+                    decided_at=at,
+                    decided_by=by,
+                    decision_reason=f"Replaced by the request for version {version}.",
                 )
-            # The next number after the tenant's highest for this prefix. A row count repeats a number once a request
-            # is deleted (an agent's are deleted with it).
-            taken = (
-                await c.execute(
-                    sa.select(publish_requests.c.id).where(_mine(), publish_requests.c.id.like(f"{prefix}-%"))
-                )
-            ).scalars()
-            numbers = [int(i.rsplit("-", 1)[1]) for i in taken if i.rsplit("-", 1)[1].isdigit()]
-            row = {
-                "id": f"{prefix}-{max(numbers, default=1000) + 1}",
-                "kind": kind,
-                "subject_id": subject_id,
-                "version": version,
-                "status": "approved" if approved else "pending",
-                "note": note,
-                "requested_by": by,
-                "created_at": at,
-                "decided_at": at if approved else None,
-                "decided_by": "auto-approve (dev)" if approved else None,
-                "decision_reason": None,
-                "body": body,
-            }
-            await c.execute(publish_requests.insert().values(**row))
+            )
+        # The next number after the tenant's highest for this prefix. A row count repeats a number once a request
+        # is deleted (an agent's are deleted with it).
+        taken = (
+            await c.execute(sa.select(publish_requests.c.id).where(_mine(), publish_requests.c.id.like(f"{prefix}-%")))
+        ).scalars()
+        numbers = [int(i.rsplit("-", 1)[1]) for i in taken if i.rsplit("-", 1)[1].isdigit()]
+        row = {
+            "id": f"{prefix}-{max(numbers, default=1000) + 1}",
+            "kind": kind,
+            "subject_id": subject_id,
+            "version": version,
+            "status": "approved" if approved else "pending",
+            "note": note,
+            "requested_by": by,
+            "created_at": at,
+            "decided_at": at if approved else None,
+            "decided_by": "auto-approve (dev)" if approved else None,
+            "decision_reason": None,
+            "body": body,
+        }
+        await c.execute(publish_requests.insert().values(**row))
         return row
 
     async def all_requests(self) -> list[dict[str, Any]]:
         q = sa.select(publish_requests).where(_mine()).order_by(publish_requests.c.created_at.desc())
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def request(self, request_id: str) -> dict[str, Any]:
         q = sa.select(publish_requests).where(_mine(), publish_requests.c.id == request_id)
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             r = (await c.execute(q)).mappings().first()
         if r is None:
             raise NotFound(f"Publish request {request_id}")
         return dict(r)
 
     async def set_body(self, request_id: str, body: dict[str, Any]) -> None:
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(
                 publish_requests.update().where(_mine(), publish_requests.c.id == request_id).values(body=body)
             )
@@ -560,7 +746,7 @@ class AgentRegistry:
     async def import_request(self, row: dict[str, Any]) -> bool:
         """Stores a request copied from another store under the id it was given; False when it is already here, so a
         copy can run again."""
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             if (
                 await c.execute(sa.select(publish_requests.c.id).where(_mine(), publish_requests.c.id == row["id"]))
             ).first():
@@ -575,5 +761,5 @@ class AgentRegistry:
             .where(_mine(), publish_requests.c.id == request_id, publish_requests.c.status == "pending")
             .values(status=status, decided_at=now_iso(), decided_by=by, decision_reason=reason)
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return (await c.execute(q)).rowcount == 1

@@ -1,0 +1,304 @@
+{
+  "confirm.notSuggested": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Memory was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "correct": {
+    "body": {
+      "data": {
+        "agentId": "",
+        "agentName": "",
+        "confidence": 1.0,
+        "createdAt": "<timeZ>",
+        "id": "<mem>",
+        "key": "preferred account",
+        "kind": "fact",
+        "source": "person",
+        "sourceThreadId": "<th>",
+        "value": "Preferred account CHQ-3300"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "correct.empty": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "value"
+            ],
+            "msg": "String should have at least 1 character"
+          }
+        ],
+        "message": "value: String should have at least 1 character",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "correct.otherPerson": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Memory was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "correct.superseded": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Memory was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "correct.unknownField": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "k"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "k: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "erase": {
+    "body": null,
+    "status": 204
+  },
+  "erase.again": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Memory was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "erase.otherPerson": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Memory was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "export": {
+    "body": {
+      "data": {
+        "audit": [
+          {
+            "action": "export",
+            "actor": "vera@harborpine.example",
+            "agent_id": "*",
+            "at": "<timeZ>",
+            "id": "<mau>",
+            "memory_id": null,
+            "person": "vera",
+            "team_id": "team_ops",
+            "tenant_id": "local"
+          },
+          {
+            "action": "erase",
+            "actor": "vera@harborpine.example",
+            "agent_id": "",
+            "at": "<timeZ>",
+            "id": "<mau>",
+            "memory_id": "<mem>",
+            "person": "vera",
+            "team_id": "team_ops",
+            "tenant_id": "local"
+          },
+          {
+            "action": "erase",
+            "actor": "vera@harborpine.example",
+            "agent_id": "",
+            "at": "<timeZ>",
+            "id": "<mau>",
+            "memory_id": "<mem>",
+            "person": "vera",
+            "team_id": "team_ops",
+            "tenant_id": "local"
+          },
+          {
+            "action": "restore",
+            "actor": "vera@harborpine.example",
+            "agent_id": "",
+            "at": "<timeZ>",
+            "id": "<mau>",
+            "memory_id": "<mem>",
+            "person": "vera",
+            "team_id": "team_ops",
+            "tenant_id": "local"
+          },
+          {
+            "action": "forget",
+            "actor": "vera@harborpine.example",
+            "agent_id": "",
+            "at": "<timeZ>",
+            "id": "<mau>",
+            "memory_id": "<mem>",
+            "person": "vera",
+            "team_id": "team_ops",
+            "tenant_id": "local"
+          },
+          {
+            "action": "correct",
+            "actor": "vera@harborpine.example",
+            "agent_id": "",
+            "at": "<timeZ>",
+            "id": "<mau>",
+            "memory_id": "<mem>",
+            "person": "vera",
+            "team_id": "team_ops",
+            "tenant_id": "local"
+          }
+        ],
+        "memories": [],
+        "person": "vera"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "forget": {
+    "body": null,
+    "status": 204
+  },
+  "forget.again": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Memory was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "forgetAll": {
+    "body": {
+      "data": {
+        "forgotten": 0
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "forgetAll.noAgent": {
+    "body": {
+      "error": {
+        "code": "agent_required",
+        "message": "Name the agent whose memories to forget (agentId).",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "list": {
+    "body": {
+      "data": [
+        {
+          "agentId": "",
+          "agentName": "",
+          "confidence": 1.0,
+          "createdAt": "<timeZ>",
+          "id": "<mem>",
+          "key": "preferred account",
+          "kind": "fact",
+          "source": "asked",
+          "sourceThreadId": "<th>",
+          "value": "<CHQ>"
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "list.otherAgent": {
+    "body": {
+      "data": [
+        {
+          "agentId": "",
+          "agentName": "",
+          "confidence": 1.0,
+          "createdAt": "<timeZ>",
+          "id": "<mem>",
+          "key": "preferred account",
+          "kind": "fact",
+          "source": "asked",
+          "sourceThreadId": "<th>",
+          "value": "<CHQ>"
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "list.otherPerson": {
+    "body": {
+      "data": [],
+      "success": true
+    },
+    "status": 200
+  },
+  "undo": {
+    "body": null,
+    "status": 204
+  },
+  "undo.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Memory was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  }
+}

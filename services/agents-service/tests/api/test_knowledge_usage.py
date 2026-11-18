@@ -1,6 +1,6 @@
 """Which agents cite each knowledge base, for kb-service's "used by", by failure mode: a saved but
-unpublished grant counted as live, a published grant missed, a token without `agents:view`, a team named in a query
-instead of the token, and a person shown another team's agents by name."""
+unpublished grant counted as live, a published grant missed, a team named in a query instead of the token, and a
+person shown another team's agents by name. A token without `agents:view` is pinned in test_summary_reads.py."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ async def test_a_caller_naming_no_team_sees_nothing(client: AsyncClient) -> None
     assert rows == [], rows
 
 
-async def test_a_person_reads_their_teams_usage_and_a_service_needs_its_scope(client: AsyncClient) -> None:
+async def test_a_person_reads_their_teams_usage(client: AsyncClient) -> None:
     """A person calls it too: their team's agents are named; another team's base reads as cited by none."""
     agents: list[dict[str, Any]] = (await client.get("/v1/agents", params={"pageSize": 200})).json()["data"]["data"]
     live = next(a for a in agents if a["publishedVersion"] and a["collections"])
@@ -68,5 +68,3 @@ async def test_a_person_reads_their_teams_usage_and_a_service_needs_its_scope(cl
     other = (await client.get(URL, headers={"X-Team-Id": "team_nobody"})).json()["data"]
     assert live["id"] in [a["id"] for a in mine["agents"]], mine
     assert kb not in [x["kbId"] for x in other], other
-    unscoped = await client.get(URL, headers=service(team=SEED_TEAM, scopes=()))
-    assert unscoped.status_code == 403 and unscoped.json()["error"]["code"] == "scope_required", unscoped.text

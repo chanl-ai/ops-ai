@@ -19,6 +19,7 @@ from sqlalchemy.pool import StaticPool
 
 from ops_agents.api.app import create_app
 from ops_agents.store.base import metadata
+from ops_engine.store import metadata as engine_metadata
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, scripted_model, sse_events
@@ -62,6 +63,7 @@ async def kb_app() -> AsyncIterator[tuple[AsyncClient, FakeKb, Any]]:
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     kb_http = httpx.AsyncClient(transport=httpx.MockTransport(kb.handle), base_url="http://kb")
     app = create_app(
         settings,

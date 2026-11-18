@@ -7,16 +7,20 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from typing import Any
+from typing import get_args
 
-from ops_files.store import AsyncEngine, FilesStore
+from ops_files.models import FilePurpose
+from ops_files.store import AsyncEngine, FilesStore, NewUpload, NewVersion, UploadCompleted
+from ops_service_kit.listing import ListParams
 from ops_store import isolation
+
+PURPOSES = get_args(FilePurpose)
 
 DIGEST = "a" * 64
 NOW = datetime(2026, 10, 17, 9, 0, tzinfo=UTC)
 
 
-def _upload(file_id: str, tenant: str, team: str = "team_ops") -> dict[str, Any]:
+def _upload(file_id: str, tenant: str, team: str = "team_ops") -> NewUpload:
     return {
         "id": file_id,
         "tenant_id": tenant,
@@ -41,11 +45,18 @@ def _upload(file_id: str, tenant: str, team: str = "team_ops") -> dict[str, Any]
     }
 
 
-def _available() -> dict[str, Any]:
-    return {"digest": DIGEST, "status": "available", "version_count": 1}
+def _available() -> UploadCompleted:
+    return {
+        "digest": DIGEST,
+        "mime": "application/pdf",
+        "sniffed_mime": None,
+        "status": "available",
+        "upload_expires_at": None,
+        "version_count": 1,
+    }
 
 
-def _version(file_id: str, tenant: str) -> dict[str, Any]:
+def _version(file_id: str, tenant: str) -> NewVersion:
     return {
         "version": 1,
         "digest": DIGEST,
@@ -72,10 +83,10 @@ async def test_two_completions_of_the_same_bytes_leave_one_available_file(engine
     loser = ids[1 - results.index(None)]
     assert results[ids.index(loser)] == winner
     with isolation.scope(tenant, "team_ops"):
-        listed = await store.list("team_ops", page=1, page_size=10)
+        listed, _ = await store.list("team_ops", ListParams(page_size=10), purposes=PURPOSES)
         loser_row = await store.get(loser)
-    assert [row["id"] for row in listed.rows] == [winner]
-    assert loser_row is not None and loser_row["status"] == "uploading"
+    assert [row["id"] for row in listed["data"]] == [winner]
+    assert loser_row is not None and loser_row.file.status == "uploading"
 
 
 async def test_the_same_bytes_in_another_team_are_a_second_file(engine: AsyncEngine, tenant: str) -> None:
@@ -96,4 +107,4 @@ async def test_a_file_is_not_found_from_another_tenant(engine: AsyncEngine, tena
         await store.insert_upload(_upload(mine, tenant))
     with isolation.scope(f"{tenant}_other", "team_ops"):
         assert await store.get(mine) is None
-        assert (await store.list("team_ops", page=1, page_size=10)).total == 0
+        assert (await store.list("team_ops", ListParams(), purposes=PURPOSES))[0]["pagination"]["total"] == 0

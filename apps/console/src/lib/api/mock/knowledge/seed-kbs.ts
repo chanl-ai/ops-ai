@@ -1,4 +1,4 @@
-import type { KnowledgeBase, PlaygroundAnswer, RetrievalSettings } from "@/lib/types/knowledge"
+import type { AnswerSettings, BaseSourceDefaults, KnowledgeBase, RetrievalSettings, SyncSettings } from "@/lib/types/knowledge"
 import { ago, daysAgo } from "./time"
 
 export const NO_ANSWER = "I could not find that in the knowledge base."
@@ -8,6 +8,10 @@ export const retrievalPresets: Record<"balanced" | "precise" | "raw", Partial<Re
   precise: { searchMode: "hybrid", rerank: true, chunkLimit: 5, threshold: 0.65, answerShape: "answer_with_citations", temperature: 0 },
   raw: { searchMode: "hybrid", rerank: false, chunkLimit: 10, threshold: 0.4, answerShape: "chunks" },
 }
+
+export const defaultAnswer: AnswerSettings = { shape: "answer_with_citations", withholdUncited: true, noAnswerMessage: NO_ANSWER }
+export const defaultSync: SyncSettings = { changes: "apply", removedAtSource: "remove", staleAfterDays: 90, notifyOnFailure: true }
+export const defaultSourceDefaults: BaseSourceDefaults = { strategies: ["structure", "context_headers"], size: 400, overlap: 40, childSize: 120 }
 
 export const defaultRetrieval: RetrievalSettings = {
   searchMode: "hybrid",
@@ -79,6 +83,10 @@ export const kbs: KnowledgeBase[] = [
       { id: "kb_eng_j2", startedAt: ago(3), durationSec: 14, processed: 3, failed: 0, status: "success", trigger: "webhook" },
       { id: "kb_eng_j3", startedAt: daysAgo(7), durationSec: 80, processed: 20, failed: 0, status: "success", trigger: "schedule" },
     ],
+    owner: "j.richardson@harborpine.example",
+    answer: defaultAnswer,
+    sync: defaultSync,
+    sourceDefaults: defaultSourceDefaults,
     createdAt: daysAgo(178),
   },
   {
@@ -109,6 +117,10 @@ export const kbs: KnowledgeBase[] = [
     healthReasons: ["3 items failed to parse", "41 items older than 90 days"],
     lastRefreshedAt: ago(9),
     jobs: jobsFor("kb_eng", "partial"),
+    owner: "nadia@harborpine.example",
+    answer: defaultAnswer,
+    sync: defaultSync,
+    sourceDefaults: defaultSourceDefaults,
     createdAt: daysAgo(140),
   },
   {
@@ -138,6 +150,10 @@ export const kbs: KnowledgeBase[] = [
     healthReasons: ["Last refresh succeeded 2 hours ago", "No failed or stale items"],
     lastRefreshedAt: ago(2),
     jobs: jobsFor("kb_support", "success"),
+    owner: "cardservices@harborpine.example",
+    answer: defaultAnswer,
+    sync: defaultSync,
+    sourceDefaults: defaultSourceDefaults,
     createdAt: daysAgo(88),
   },
   {
@@ -171,6 +187,10 @@ export const kbs: KnowledgeBase[] = [
       { id: "kb_lending_j1", startedAt: daysAgo(1), durationSec: 44, processed: 2, failed: 0, status: "success", trigger: "manual" },
       { id: "kb_lending_j2", startedAt: daysAgo(20), durationSec: 90, processed: 9, failed: 0, status: "success", trigger: "manual" },
     ],
+    owner: "lendingservicing@harborpine.example",
+    answer: defaultAnswer,
+    sync: defaultSync,
+    sourceDefaults: defaultSourceDefaults,
     createdAt: daysAgo(74),
   },
   {
@@ -200,6 +220,10 @@ export const kbs: KnowledgeBase[] = [
     healthReasons: ["1 item failed to parse (Dispute time limits — schedule, encrypted PDF)"],
     lastRefreshedAt: daysAgo(3),
     jobs: [{ id: "kb_legal_j1", startedAt: daysAgo(3), durationSec: 96, processed: 11, failed: 1, status: "partial", trigger: "manual" }],
+    owner: "cardservices@harborpine.example",
+    answer: defaultAnswer,
+    sync: defaultSync,
+    sourceDefaults: defaultSourceDefaults,
     createdAt: daysAgo(58),
   },
   {
@@ -242,135 +266,13 @@ export const kbs: KnowledgeBase[] = [
       { id: "kb_all_j0", startedAt: ago(0.05), durationSec: 0, processed: 112, failed: 0, status: "running", trigger: "source sync" },
       ...jobsFor("kb_all", "partial"),
     ],
+    owner: "nadia@harborpine.example",
+    answer: defaultAnswer,
+    sync: defaultSync,
+    sourceDefaults: defaultSourceDefaults,
     createdAt: daysAgo(120),
   },
 ]
-
-// ---- Playground answers ---------------------------------------------------
-
-export const playgroundAnswers: PlaygroundAnswer[] = [
-  {
-    id: "pa_card_fee",
-    question: "What is the refund window for an annual card fee?",
-    matchers: ["refund", "annual fee", "annual card fee"],
-    answer:
-      "The annual fee on a credit card is refunded in full if the card is closed within 30 days of the fee posting [1]. After 30 days the fee is not refunded, but the customer can move to a no-fee card from the next statement [2]. Refund requests go through the branch or the contact centre; closing the card online refunds the fee automatically within one statement cycle [1].",
-    followed: "Pricing site · /pricing/credit-cards/annual-fee (v3.1) — pricing page beats Branch FAQ",
-    citations: [
-      { n: 1, documentId: "src_pricing_crawl_it_23", title: "Annual fee", section: "Cancellation and refunds", page: undefined, version: "v3.1", snippet: "The annual fee is refunded in full when the card is closed within 30 days of the fee posting.", url: "https://www.harborpine.example/pricing/credit-cards/annual-fee" },
-      { n: 2, documentId: "src_branch_faq_it_0", title: "Branch FAQ", section: "Q: Can a customer get an annual card fee refunded?", version: "v1.3", snippet: "After the first 30 days we do not refund the fee; we can move the customer to a no-fee card from the next statement." },
-    ],
-    chunks: [
-      { chunkId: "c1", documentId: "src_pricing_crawl_it_23", documentTitle: "Annual fee", sourceName: "Pricing site", score: 0.91, location: "Section: Cancellation and refunds", text: "The annual fee is refunded in full when the card is closed within 30 days of the fee posting. After 30 days the fee is not refunded.", rejected: false, version: "v3.1" },
-      { chunkId: "c2", documentId: "src_branch_faq_it_0", documentTitle: "Branch FAQ", sourceName: "Branch FAQ", score: 0.84, location: "Q: Can a customer get an annual card fee refunded?", text: "Within 30 days it is a full refund. After the first 30 days we do not refund the fee; we can move the customer to a no-fee card from the next statement.", rejected: false, version: "v1.3" },
-      { chunkId: "c3", documentId: "src_pricing_crawl_it_0", documentTitle: "Pricing overview", sourceName: "Pricing site", score: 0.63, location: "Section: Accounts and cards", text: "Compare chequing, savings and credit card pricing in one place.", rejected: false, version: "v3.1" },
-      { chunkId: "c4", documentId: "src_pricing_crawl_it_17", documentTitle: "Account closure", sourceName: "Pricing site", score: 0.44, location: "Section: Fees", text: "Closing an account within 90 days of opening carries a $20 fee.", rejected: true, version: "v3.1" },
-      { chunkId: "c5", documentId: "src_pricing_crawl_it_14", documentTitle: "NSF and overdraft", sourceName: "Pricing site", score: 0.31, location: "Section: NSF fee", text: "A non-sufficient funds fee of $45 applies per returned item.", rejected: true, version: "v3.1" },
-    ],
-    retrievalMs: 412,
-    synthesisMs: 1_900,
-  },
-  {
-    id: "pa_retention",
-    question: "How long do we keep customer due diligence records?",
-    matchers: ["retention", "due diligence records", "keep customer"],
-    answer:
-      "Customer due diligence records are kept for 7 years after the relationship ends [1]. In Ontario the clock starts at account closure, not at the last transaction, and records for a reported suspicious transaction are kept for the same period [2]. Records may be held in the case system rather than on paper, provided they can be produced within 30 days [1].",
-    followed: "Record keeping and retention v4.1 — bank-wide procedure beats Ontario addendum; addendum used only for when the clock starts",
-    citations: [
-      { n: 1, documentId: "src_hr_sharepoint_it_12", title: "Record keeping and retention", section: "3. Retention periods", page: 2, version: "v4.1", snippet: "Customer due diligence records: 7 years after the relationship ends. Records must be producible within 30 days of a request." },
-      { n: 2, documentId: "src_hr_sharepoint_it_42", title: "Record keeping and retention — Ontario addendum", section: "2. Start of the retention period", page: 1, version: "v2.0", snippet: "The period starts at account closure. Records tied to a suspicious transaction report follow the same period." },
-    ],
-    chunks: [
-      { chunkId: "c1", documentId: "src_hr_sharepoint_it_12", documentTitle: "Record keeping and retention", sourceName: "AML & KYC procedures", score: 0.93, location: "p.2 · 3. Retention periods", text: "Customer due diligence records: 7 years after the relationship ends. Records must be producible within 30 days of a request.", rejected: false, version: "v4.1" },
-      { chunkId: "c2", documentId: "src_hr_sharepoint_it_42", documentTitle: "Record keeping and retention — Ontario addendum", sourceName: "AML & KYC procedures", score: 0.88, location: "p.1 · 2. Start of the retention period", text: "The period starts at account closure. Records tied to a suspicious transaction report follow the same period.", rejected: false, version: "v2.0" },
-      { chunkId: "c3", documentId: "src_hr_sharepoint_it_402", documentTitle: "Record keeping and retention (2025)", sourceName: "AML & KYC procedures", score: 0.79, location: "p.2 · 3. Retention periods", text: "Customer due diligence records: 5 years after the relationship ends.", rejected: false, version: "v3.2" },
-      { chunkId: "c4", documentId: "src_hr_sharepoint_it_162", documentTitle: "Record keeping and retention — FAQ", sourceName: "AML & KYC procedures", score: 0.71, location: "Q: How do we store records?", text: "Store records in the case system; paper copies are scanned and shredded after 30 days.", rejected: false, version: "v1.0" },
-      { chunkId: "c5", documentId: "src_hr_sharepoint_it_15", documentTitle: "Account closure and exit procedure", sourceName: "AML & KYC procedures", score: 0.42, location: "p.1", text: "Closing an account does not end the bank's record keeping duties.", rejected: true, version: "v2.3" },
-    ],
-    retrievalMs: 388,
-    synthesisMs: 2_140,
-  },
-  {
-    id: "pa_fees",
-    question: "What is the origination fee on a small business loan over $250k?",
-    matchers: ["origination", "fee schedule", "small business loan"],
-    answer:
-      "For small business term loans above $250,000 the origination fee is 0.75% of the principal, with a minimum of $1,500 and a maximum of $7,500 [1]. Loans secured by commercial property qualify for the reduced 0.50% rate [1]. The fee is deducted at funding and is non-refundable [2].",
-    followed: "Fee schedule 2026 Q3 v6.0 (row: Small business term loan > $250k) — bank-wide policy beats guideline",
-    structured: [
-      { label: "Origination fee", value: "0.75", unit: "% of principal", from: "Fee schedule 2026 Q3 · row 14" },
-      { label: "Minimum", value: "1,500", unit: "CAD", from: "Fee schedule 2026 Q3 · row 14" },
-      { label: "Maximum", value: "7,500", unit: "CAD", from: "Fee schedule 2026 Q3 · row 14" },
-      { label: "Secured by property", value: "0.50", unit: "% of principal", from: "Fee schedule 2026 Q3 · row 15" },
-    ],
-    citations: [
-      { n: 1, documentId: "src_lending_policies_it_2", title: "Fee schedule 2026 Q3", section: "Sheet: Business lending · rows 14–15", version: "v6.0", snippet: "Small business term loan > $250k: 0.75%, min $1,500, max $7,500. Secured by commercial property: 0.50%." },
-      { n: 2, documentId: "src_lending_policies_it_1", title: "Lending policy v6 — small business", section: "7.2 Fees at funding", page: 19, version: "v6.0", snippet: "Origination fees are deducted from the advance at funding and are not refundable if the facility is repaid early." },
-    ],
-    chunks: [
-      { chunkId: "c1", documentId: "src_lending_policies_it_2", documentTitle: "Fee schedule 2026 Q3", sourceName: "Lending policies and fee schedules", score: 0.95, location: "Business lending · row 14", text: "Product: Small business term loan | Band: > $250,000 | Origination: 0.75% | Min: $1,500 | Max: $7,500", rejected: false, version: "v6.0" },
-      { chunkId: "c2", documentId: "src_lending_policies_it_2", documentTitle: "Fee schedule 2026 Q3", sourceName: "Lending policies and fee schedules", score: 0.9, location: "Business lending · row 15", text: "Product: Small business term loan (secured by commercial property) | Band: > $250,000 | Origination: 0.50% | Min: $1,000 | Max: $5,000", rejected: false, version: "v6.0" },
-      { chunkId: "c3", documentId: "src_lending_policies_it_1", documentTitle: "Lending policy v6 — small business", sourceName: "Lending policies and fee schedules", score: 0.81, location: "p.19 · 7.2 Fees at funding", text: "Origination fees are deducted from the advance at funding and are not refundable if the facility is repaid early.", rejected: false, version: "v6.0" },
-      { chunkId: "c4", documentId: "src_lending_policies_it_8", documentTitle: "Lending policy v5 — personal loans (superseded)", sourceName: "Lending policies and fee schedules", score: 0.66, location: "p.12 · 6.1 Fees", text: "Origination fee 1.00% on all business term loans.", rejected: true, version: "v5.2" },
-    ],
-    retrievalMs: 301,
-    synthesisMs: 1_620,
-  },
-  {
-    id: "pa_newpayee",
-    question: "How long do we hold a wire to a new payee?",
-    matchers: ["new payee", "new-payee", "wire hold", "wire to a new"],
-    answer:
-      "Wires above $10,000 to a payee added in the last 24 hours are held for a call-back to the customer before release[^1]. An analyst can release the hold once the call-back succeeds; at a risk score of 70 or above the duty lead must approve[^2]. If the customer cannot be reached within 4 business hours, the wire is returned and the case is closed as unverified[^1].",
-    followed: "Wire Fraud Playbook §4.2 v5.0 — playbook beats guidance note",
-    citations: [
-      { n: 1, documentId: "src_eng_confluence_it_0", title: "Wire Fraud Playbook §4.2 New-payee wires", section: "4.2 New-payee wires", version: "v5.0", snippet: "Wire above $10,000 to a payee added in the last 24 hours: hold, call back on the number on file, release only after verification. No answer in 4 business hours: return the wire." },
-      { n: 2, documentId: "src_eng_confluence_it_1", title: "Wire release and escalation authority", section: "Release authority", version: "v3.4", snippet: "Release authority: analyst below risk score 70; duty lead at 70 or above." },
-    ],
-    chunks: [
-      { chunkId: "c1", documentId: "src_eng_confluence_it_0", documentTitle: "Wire Fraud Playbook §4.2 New-payee wires", sourceName: "Wire fraud playbook", score: 0.9, location: "4.2 New-payee wires", text: "Wire above $10,000 to a payee added in the last 24 hours: hold, call back on the number on file, release only after verification. No answer in 4 business hours: return the wire.", rejected: false, version: "v5.0" },
-      { chunkId: "c2", documentId: "src_eng_confluence_it_1", documentTitle: "Wire release and escalation authority", sourceName: "Wire fraud playbook", score: 0.86, location: "Release authority", text: "Release authority: analyst below risk score 70; duty lead at 70 or above.", rejected: false, version: "v3.4" },
-      { chunkId: "c3", documentId: "src_github_docs_it_3", documentTitle: "Wire risk score thresholds", sourceName: "Model risk documentation", score: 0.58, location: "docs/models/wire-risk-score-thresholds.md · Bands", text: "Scores of 70 and above are high risk and route to the duty lead; 40 to 69 route to an analyst.", rejected: false, version: "v2.1" },
-    ],
-    retrievalMs: 356,
-    synthesisMs: 1_710,
-  },
-  {
-    id: "pa_noanswer",
-    question: "What is the wire cut-off time at the Halifax branch?",
-    matchers: ["halifax", "cut-off"],
-    answer: "",
-    noAnswer: true,
-    citations: [],
-    chunks: [
-      { chunkId: "c1", documentId: "src_hr_sharepoint_it_10", documentTitle: "Travel rule for wire transfers", sourceName: "AML & KYC procedures", score: 0.47, location: "p.1", text: "Originator and beneficiary details accompany every wire above the reporting threshold.", rejected: true, version: "v1.2" },
-      { chunkId: "c2", documentId: "src_hr_sharepoint_it_27", documentTitle: "Regulatory reporting calendar", sourceName: "AML & KYC procedures", score: 0.38, location: "p.2", text: "Quarterly returns are filed by the fifth business day after quarter end.", rejected: true, version: "v2.0" },
-    ],
-    retrievalMs: 290,
-    synthesisMs: 0,
-  },
-]
-
-export const genericAnswer: PlaygroundAnswer = {
-  id: "pa_generic",
-  question: "",
-  matchers: [],
-  answer:
-    "Based on the indexed documents, the closest match is the procedure section cited below [1]. It states the rule in general terms; the FAQ adds who to contact for the local process [2]. If you need the exact figure, open the cited document at the section shown.",
-  followed: "Highest-scoring document after precedence rules",
-  citations: [
-    { n: 1, documentId: "src_hr_sharepoint_it_3", title: "Suspicious transaction reporting", section: "1. Scope", page: 1, version: "v3.0", snippet: "This procedure applies to all employees, contractors and directors of Harbor & Pine Bank." },
-    { n: 2, documentId: "src_hr_sharepoint_it_150", title: "Customer due diligence standard — FAQ", section: "Q: Who do I ask?", version: "v1.0", snippet: "Contact your Financial Crime Operations partner for anything the standard does not cover." },
-  ],
-  chunks: [
-    { chunkId: "c1", documentId: "src_hr_sharepoint_it_3", documentTitle: "Suspicious transaction reporting", sourceName: "AML & KYC procedures", score: 0.72, location: "p.1 · 1. Scope", text: "This procedure applies to all employees, contractors and directors of Harbor & Pine Bank.", rejected: false, version: "v3.0" },
-    { chunkId: "c2", documentId: "src_hr_sharepoint_it_150", documentTitle: "Customer due diligence standard — FAQ", sourceName: "AML & KYC procedures", score: 0.61, location: "Q: Who do I ask?", text: "Contact your Financial Crime Operations partner for anything the standard does not cover.", rejected: false, version: "v1.0" },
-    { chunkId: "c3", documentId: "src_hr_sharepoint_it_14", documentTitle: "Account opening identity checks", sourceName: "AML & KYC procedures", score: 0.41, location: "p.1", text: "Collect two forms of ID and record the verification method.", rejected: true, version: "v2.1" },
-  ],
-  retrievalMs: 402,
-  synthesisMs: 1_830,
-}
 
 /** Questions that show the query modes apart on each knowledge base's seeded documents. */
 export const suggestedQuestions: Record<string, string[]> = {

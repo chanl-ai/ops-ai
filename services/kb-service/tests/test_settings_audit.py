@@ -11,7 +11,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import ServiceClient, dev_service_signer
-from ops_kb.store.event_relay import relay
+from ops_kb.store.knowledge import outbox_relay
 from ops_store.audit import AUDIT_ROUTE
 
 from .test_bases_and_sources import data
@@ -45,7 +45,7 @@ async def test_a_source_settings_change_is_one_entry_naming_each_field_before_an
     patched = await client.patch(f"/v1/sources/{src['id']}", json={"name": "Lending policy PDFs", "tags": ["policy"]})
     assert patched.status_code == 200, patched.text
     log = AuditLog()
-    await relay(engine, log.client()).once()
+    await outbox_relay(engine, {"platform": log.client()}).once()
     [entry] = log.about(src["id"])
     assert (entry["name"], entry["payload"]["action"]) == ("audit.recorded", "knowledge.source.settings")
     assert entry["actor"] and "teamId" not in entry
@@ -65,7 +65,7 @@ async def test_a_base_retrieval_change_names_only_the_keys_that_moved(
     patch = {"retrieval": {"threshold": 0.6, "chunkLimit": 8}}
     assert (await client.patch(f"/v1/knowledge-bases/{kb['id']}", json=patch)).status_code == 200
     log = AuditLog()
-    await relay(engine, log.client()).once()
+    await outbox_relay(engine, {"platform": log.client()}).once()
     [entry] = log.about(kb["id"])
     assert entry["payload"]["detail"]["changes"] == {"retrieval": {"threshold": {"from": 0.5, "to": 0.6}}}
 
@@ -78,7 +78,7 @@ async def test_a_save_that_changes_nothing_logs_nothing_and_a_sent_entry_is_not_
     assert same.status_code == 200, same.text
     await client.patch(f"/v1/sources/{src['id']}", json={"collection": "Retail lending"})
     log = AuditLog()
-    hand_off = relay(engine, log.client())
+    hand_off = outbox_relay(engine, {"platform": log.client()})
     await hand_off.once()
     await hand_off.once()
     assert [e["payload"]["detail"]["changes"] for e in log.about(src["id"])] == [

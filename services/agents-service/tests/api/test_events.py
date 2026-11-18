@@ -17,19 +17,27 @@ from httpx import ASGITransport, AsyncClient
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.config import get_config
 from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.pool import StaticPool
 
 from ops_agents.api.app import create_app
 from ops_agents.api.auth import Principal
 from ops_agents.api.deps import Runtime
 from ops_agents.api.routers.events import team_frames
 from ops_agents.graphs.models import Grade
-from ops_agents.store.base import metadata
 from ops_agents.store.events import thread_events
 from ops_identity.fastapi import DEV_TEAM
 from ops_service_kit.settings import Settings
 from tests.api.test_graphs import EMAILS, run
-from tests.conftest import SEED, FakeGraphModels, decide, fixture_knowledge, last_run, scripted_model, sse_events
+from tests.conftest import (
+    SEED,
+    FakeGraphModels,
+    decide,
+    empty_engine,
+    fixture_knowledge,
+    last_run,
+    scripted_model,
+    sse_events,
+    started,
+)
 
 ROOT = Path(__file__).parents[2]
 # The team stream leaves out threads its reader may not read; these are workflow threads every member reads.
@@ -88,23 +96,10 @@ async def pg_stack(migrated: str) -> AsyncIterator[tuple[AsyncClient, Spy]]:
 
 
 @pytest.fixture
-async def stack() -> AsyncIterator[tuple[AsyncClient, Runtime, Spy]]:
-    engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
-    async with engine.begin() as c:
-        await c.run_sync(metadata.create_all)
+async def stack(database_url: str) -> AsyncIterator[tuple[AsyncClient, Runtime, Spy]]:
     spy = Spy()
-    app = create_app(
-        Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED),
-        model=scripted_model(),
-        engine=engine,
-        checkpointer=InMemorySaver(),
-        graph_models=spy,
-        knowledge=fixture_knowledge(),
-    )
-    async with (
-        app.router.lifespan_context(app),
-        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
-    ):
+    settings = Settings(database_url=database_url, seed_dir=SEED)
+    async with empty_engine(database_url) as engine, started(engine, settings, spy) as (app, client):
         spy.rt = app.state.runtime
         yield client, app.state.runtime, spy
 

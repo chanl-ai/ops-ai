@@ -18,8 +18,9 @@ from ops_agents.store.base import metadata
 from ops_engine.store import metadata as engine_metadata
 from ops_identity import Auth, Identity, ServiceAuth, dev_service_signer, mint_service_token, service_verifiers
 from ops_service_kit.settings import Settings
-from tests.engine.test_lifecycle_rights import ADMIN, BUILDER, BUILDER_WITHOUT_MANAGE, jwks
+from tests.engine.test_lifecycle_rights import ADMIN, BUILDER, BUILDER_WITHOUT_MANAGE, TENANT, jwks
 
+# The provisioner acts in the people's tenant: an agent is read only in its own.
 # Signed-in people: a builder of team_ops, and its admin, who also holds agents.manage.
 PERSON = BUILDER
 SCOPES = ["agents:provision", "agents:create", "agents:edit", "agents:delete", "agents:view"]
@@ -30,7 +31,7 @@ def provisioner(scopes: list[str] = SCOPES) -> dict[str, str]:
         dev_service_signer(),
         service="platform",
         audience="agents",
-        tenant_id="acme",
+        tenant_id=TENANT,
         scopes=scopes,
         team_id="team_ops",
     )

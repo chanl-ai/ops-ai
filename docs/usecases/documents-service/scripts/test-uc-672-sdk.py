@@ -15,6 +15,7 @@ from usecase_harness import ROOT, check, finish, kb, put_in_files, until
 
 sys.path.insert(0, str(ROOT / "sdk" / "python" / "src"))
 from ops_ai import OpsAI
+from ops_ai._transport import every_page
 
 SCAN = ROOT / "packages" / "ops_ingest" / "tests" / "fixtures" / "scanned.pdf"
 
@@ -37,6 +38,18 @@ def main() -> None:
             asked["status"] == "queued" and page.get("source") == "ocr" and "LATE PAYMENT FEE" in page.get("text", "").upper(),
             {"asked": asked["status"], "source": page.get("source"), "text": page.get("text", "")[:100]},
         )  # fmt: skip
+
+        # 2. Files listed one row a page come back whole: the helper follows every page, whatever the size.
+        for n in range(2):
+            put_in_files(k.files_url, f"extra-{n}.pdf", SCAN.read_bytes() + bytes([n]))
+        files = OpsAI(base_url="http://127.0.0.1", services={"files": k.files_url}, team="team_ops").raw.files
+        small = every_page(files.files_list_files, page_size=1)
+        whole = every_page(files.files_list_files)
+        check(
+            "2 files read one row a page and fifty a page are the same rows, three of them past the first page",
+            len(small) >= 3 and [f["id"] for f in small] == [f["id"] for f in whole],
+            {"small": len(small), "whole": len(whole)},
+        )
 
 
 main()

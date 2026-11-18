@@ -47,6 +47,9 @@ const VIEW_EMPTY: Record<ModuleView, string> = {
   security_review: 'No tool set has a security review waiting on Security.',
 };
 
+/** A plugin's tools change only with the plugin: the server answers 403 `plugin_module` to a delete, whoever asks. */
+const fromPlugin = (m: ToolModule) => !!m.templateId?.startsWith('plugin:');
+
 function columns(onDelete: (m: ToolModule) => void, canBuild: boolean): ColumnDef<Row>[] {
   return [
     selectColumn<Row>((m) => m.displayName),
@@ -162,7 +165,7 @@ function columns(onDelete: (m: ToolModule) => void, canBuild: boolean): ColumnDe
             row={row}
             actions={[
               { label: 'Open', icon: ArrowRight, onClick: (r) => r.original.onRowClick(r.original) },
-              ...(canBuild ? [{ label: 'Delete', icon: Trash2, variant: 'destructive' as const, onClick: (r: { original: Row }) => onDelete(r.original) }] : []),
+              ...(canBuild && row.original.canEdit !== false && !fromPlugin(row.original) ? [{ label: 'Delete', icon: Trash2, variant: 'destructive' as const, onClick: (r: { original: Row }) => onDelete(r.original) }] : []),
             ]}
           />
         </StopRowClick>
@@ -177,7 +180,7 @@ export default function CustomToolsPage() {
   const router = useRouter();
   // `workflows` lists workflow tools from the tools API; every other view is a module view.
   const [view, setView] = React.useState<ModuleView | 'workflows'>('all');
-  const workflowTools = useTools({ page: 1, pageSize: 100, filters: { type: ['workflow'] } });
+  const workflowTools = useTools({ page: 1, pageSize: 1, filters: { type: ['workflow'] } });
   const list = useListParams<ModuleFilters>('displayName');
   const query = useToolModules({ ...list.params, view: view === 'workflows' ? 'all' : view });
   const discover = useDiscoverModule();
@@ -200,7 +203,10 @@ export default function CustomToolsPage() {
   const canBuild = useCanBuild();
   const cols = React.useMemo(() => columns(setDeleting, canBuild), [canBuild]);
   const rows: Row[] = React.useMemo(() => modules.map((m) => ({ ...m, onRowClick: (x: ToolModule) => router.push(`/data/tools/${x.id}`), href: `/data/tools/${m.id}` })), [modules, router]);
-  const bulkNames = (shownBulk ?? []).map((m) => m.displayName);
+  // Tools the caller cannot edit are left out of the bulk delete: the route would refuse them one by one.
+  const deletable = (shownBulk ?? []).filter((m) => m.canEdit !== false && !fromPlugin(m));
+  const notDeletable = (shownBulk ?? []).filter((m) => m.canEdit === false || fromPlugin(m));
+  const bulkNames = deletable.map((m) => m.displayName);
 
   return (
     <PageLayout
@@ -258,7 +264,7 @@ export default function CustomToolsPage() {
             canSave={false}
           />
           {view === 'workflows' ? (
-            <WorkflowToolsTable tools={workflowTools.data?.data ?? []} total={workflowTools.data?.pagination.total ?? 0} />
+            <WorkflowToolsTable />
           ) : (
           <DataTableWithViews
             columns={cols}
@@ -274,7 +280,7 @@ export default function CustomToolsPage() {
             onColumnFiltersChange={list.onColumnFiltersChange}
             selectionResetKey={resetKey}
             filterResetKey={filterResetKey}
-            bulkActions={canBuild ? [{ label: 'Delete', icon: Trash2, variant: 'destructive', onClick: (rs) => setBulk(rs) }] : undefined}
+            bulkActions={canBuild ? [{ label: 'Delete', icon: Trash2, variant: 'destructive', onClick: (rs) => (rs.some((m) => m.canEdit !== false && !fromPlugin(m)) ? setBulk(rs) : toast.error('You can’t edit the selected tools, so none can be deleted.')) }] : undefined}
             serverPagination={serverPagination(list, query)}
             emptyState={<ListEmpty icon={Boxes} noun={view === 'all' ? 'tools' : 'tools in this view'} filtered={list.isFiltered} onClear={() => setFilterResetKey((k) => k + 1)} description={VIEW_EMPTY[view]} createLabel={view === 'all' && canBuild ? 'Import operations' : undefined} onCreate={view === 'all' && canBuild ? () => setAdding(true) : undefined} />}
           />
@@ -330,11 +336,12 @@ export default function CustomToolsPage() {
         onOpenChange={(o) => !o && setBulk(null)}
         entityType="tools"
         count={bulkNames.length}
-        description="Tools a workflow still holds an approval for are skipped; revoke those approvals first."
+        description={`Tools a workflow still holds an approval for are skipped; revoke those approvals first.${notDeletable.length ? ` ${plural(notDeletable.length, 'selected tool')} you can’t edit will be skipped.` : ''}`}
         isLoading={bulkRemove.isPending}
         onConfirm={async () => {
-          const res = await bulkRemove.mutateAsync(bulk!.map((m) => m.id));
-          toastBulk(res, 'Deleted', 'module', (id) => shownBulk?.find((m) => m.id === id)?.displayName ?? id);
+          const res = await bulkRemove.mutateAsync(bulk!.filter((m) => m.canEdit !== false && !fromPlugin(m)).map((m) => m.id));
+          const kept = bulk!.filter((m) => m.canEdit === false || fromPlugin(m)).map((m) => ({ id: m.id, reason: 'You can’t edit it' }));
+          toastBulk({ updated: res.updated, skipped: [...res.skipped, ...kept] }, 'Deleted', 'module', (id) => shownBulk?.find((m) => m.id === id)?.displayName ?? id);
           setBulk(null);
           setResetKey((k) => k + 1);
         }}

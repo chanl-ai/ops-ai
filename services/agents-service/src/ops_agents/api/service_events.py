@@ -123,9 +123,11 @@ async def _follow_seed(rt: Runtime, store: DefinitionStore, d: WorkflowDefinitio
 # Which service reports which events (the catalogue in docs/architecture/service-map.md): a service reports only events
 # about its own records, so one holding events:emit cannot start another service's reactions.
 EVENT_OWNERS: dict[str, tuple[str, ...]] = {
-    "tools": ("tool_access.", "tool_module.", "module_review.", "app_account."),
+    # tool.module.* and tool.team_state.changed also keep this service's copy of the catalogue (store/tool_copies.py).
+    "tools": ("tool_access.", "tool_module.", "module_review.", "app_account.", "tool.module.", "tool.team_state."),
     "files": ("file.",),
     "documents": ("extraction.",),
+    "kb": ("kb.", "knowledge."),
     # The task API records a posted task as its own event, so the task runs as the api_task workflow.
     "agents": ("task.",),
 }

@@ -1,0 +1,2 @@
+# 2 literal timeouts and HTTP clients built in services/documents-service (scripts/check_config_literals.py). A row may only fall.
+2 client services/documents-service/src/ops_documents/extraction.py

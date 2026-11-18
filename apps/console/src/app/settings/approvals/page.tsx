@@ -20,7 +20,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { appOptions, useOptionLabels } from '@/hooks/options-queries';
-import { useCan, useRoles } from '@/hooks/me-queries';
+import { RoleSelect } from '@/components/access/role-select';
+import { rolesWhere, useCan } from '@/hooks/me-queries';
 import { TOOL_KEY, usePolicyEditor, useSetWorkspacePolicy, useWorkspacePolicies } from '@/hooks/policy-queries';
 import { usePoliciesAreSample } from '@/hooks/use-preview';
 import { useTeam } from '@/hooks/use-team';
@@ -33,7 +34,8 @@ const OWN_REQUESTS = 'People can approve their own requests';
 const TEST_ACCOUNTS = 'Test accounts never ask';
 const TEST_RUNS = 'Test runs on live accounts ask first';
 const MAKERS = 'Writes an app or template marks “ask first” wait for approval';
-const NOT_THESE_ROLES = new Set(['viewer', 'chat_user', 'owner', 'builder']);
+/** Roles that hold the `reviews.decide` cell; platform-service filters them. */
+const REVIEWER_ROLES = rolesWhere('role-reviewer-options', [], { canDecideReviews: ['true'] });
 
 const teamSchema = z
   .object({ ask: z.boolean(), answer: z.enum(['person', 'reviewer']), reviewerRole: z.string().nullable(), requesterMayDecide: z.boolean(), testAccountsNeverAsk: z.boolean(), testRunsAsk: z.boolean(), makersAsk: z.boolean() })
@@ -63,7 +65,6 @@ export default function ApprovalsPage() {
   const { team } = useTeam();
   const teamId = team?.id ?? '';
   const set = useSetWorkspacePolicy();
-  const roles = useRoles();
   const changes = policies.data?.find((p) => p.key === 'appChanges');
   const byApp = policies.data?.find((p) => p.key === 'appChangesByApp');
   const saved = ofTeam(changes?.value, teamId);
@@ -74,7 +75,6 @@ export default function ApprovalsPage() {
   const savedTools = React.useMemo(() => Object.fromEntries(Object.entries(savedAll).filter(([k]) => k.startsWith(TOOL_KEY))), [savedAll]);
   // Both policies are changed under settings.manage; the cell is held in the Security team or the acting team.
   const locked = useCan('settings', 'manage') !== true || sample;
-  const roleList = (roles.data ?? []).filter((r: { id: string }) => !NOT_THESE_ROLES.has(r.id));
 
   const form = useForm<TeamForm>({
     resolver: zodResolver(teamSchema),
@@ -199,18 +199,7 @@ export default function ApprovalsPage() {
                       name="reviewerRole"
                       render={({ field, fieldState }) => (
                         <div className="flex flex-col gap-1">
-                          <Select value={field.value ?? ''} onValueChange={field.onChange} disabled={locked}>
-                            <SelectTrigger className="w-64 bg-card" aria-label="Reviewer role">
-                              <SelectValue placeholder="Choose a role" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {roleList.map((r: { id: string; name: string }) => (
-                                <SelectItem key={r.id} value={r.id}>
-                                  {r.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <RoleSelect source={REVIEWER_ROLES} value={field.value ?? ''} onChange={field.onChange} disabled={locked} placeholder="Choose a role" ariaLabel="Reviewer role" className="w-64 bg-card" />
                           {fieldState.error && <p className="text-xs text-destructive">{fieldState.error.message}</p>}
                         </div>
                       )}
@@ -337,6 +326,8 @@ export default function ApprovalsPage() {
                       <Select
                         value={overrides[id]?.answer ?? 'team'}
                         onValueChange={(v) => {
+                          // Inside the card's form an untouched select reports an empty value; it is not a choice.
+                          if (!v) return;
                           const next = { ...overrides };
                           if (v === 'team') delete next[id];
                           else next[id] = { answer: v as Entry['answer'], reviewerRole: v === BY_REVIEWER ? (overrides[id]?.reviewerRole ?? (saved.reviewerRole as string | null)) : undefined };

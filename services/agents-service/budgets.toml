@@ -1,0 +1,381 @@
+# The statement budget of each agents-service GET at 5 and 50 rows (ops_service_kit.testing.budget_check, data-access
+# standard DA1 and DA6), measured on PostgreSQL by tests/api/test_statement_budget.py. Each row is today's count at 50
+# rows. The seed adds rows to agents (each holding a tool and an account), skills, guardrails, widgets, cases, workflows
+# of each engine, runs of the registry workflow (each waiting at its review), queued engine runs and a batch of `n`
+# rows only; a chat thread, a live form workflow with a link and a members form, and a publish request are made once;
+# a row for any other list proves its count, not that it stays flat as rows grow. Rows listing more than one
+# transaction or connection open one per store read and are budgeted as they run until their route is converted. A
+# `not_budgeted` row that grows names its counts.
+
+["GET /chat/agents"]
+queries = 1
+
+["GET /chat/connectors"]
+queries = 2
+
+["GET /chat/default-agent"]
+queries = 2
+
+["GET /chat/threads"]
+queries = 8
+
+["GET /chat/threads/{thread_id}"]
+queries = 3
+
+["GET /chat/threads/{thread_id}/connectors"]
+queries = 2
+
+["GET /chat/threads/{thread_id}/settings"]
+queries = 2
+
+["GET /embed/v1.js"]
+queries = 0
+
+["GET /health"]
+queries = 1
+
+["GET /health/background"]
+queries = 1
+
+# Two transactions by design: the reads that name the held writes, then (tools-service asked with none open) the build.
+["GET /reviews"]
+queries = 12
+transactions = 2
+connections = 2
+
+["GET /reviews/by-run-key/{run_key}"]
+not_budgeted = "needs a run waiting at a review step; the budget seed starts none yet"
+
+["GET /reviews/{review_id}/place"]
+queries = 9
+
+# Two transactions by design: the reads that name the held writes, then (tools-service asked with none open) the build.
+["GET /reviews/{thread_id}"]
+queries = 7
+transactions = 2
+connections = 2
+
+["GET /runs"]
+queries = 7
+
+["GET /runs/{thread_id}"]
+queries = 6
+
+["GET /v1/account-uses"]
+queries = 4
+query = { app = "salesforce", name = "Main" }
+
+["GET /v1/activity"]
+queries = 6
+
+["GET /v1/agents"]
+queries = 15
+
+["GET /v1/agents/{agent_id}"]
+queries = 17
+
+["GET /v1/agents/{agent_id}/eval-cases"]
+queries = 2
+
+["GET /v1/agents/{agent_id}/live"]
+queries = 9
+
+["GET /v1/agents/{agent_id}/publish-preview"]
+queries = 2
+query = { version = "1" }
+
+["GET /v1/agents/{agent_id}/runs"]
+queries = 3
+
+["GET /v1/agents/{agent_id}/skills"]
+queries = 3
+
+["GET /v1/agents/{agent_id}/skills/options"]
+queries = 3
+
+["GET /v1/agents/{agent_id}/versions"]
+queries = 3
+
+["GET /v1/assurance/gates"]
+queries = 5
+transactions = 1
+connections = 1
+
+["GET /v1/assurance/runs"]
+queries = 5
+transactions = 1
+connections = 1
+
+["GET /v1/assurance/suites"]
+queries = 9
+transactions = 1
+connections = 1
+
+["GET /v1/background"]
+queries = 2
+transactions = 2
+connections = 2
+
+["GET /v1/batches/{batch_id}"]
+queries = 2
+
+["GET /v1/batches/{batch_id}/results.csv"]
+queries = 2
+
+["GET /v1/case-types"]
+queries = 2
+
+["GET /v1/case-types/{type_id}"]
+queries = 2
+
+["GET /v1/cases"]
+queries = 2
+
+# One transaction reads the case and what its page names, the other services are asked with none open, and the page is
+# built. A case with a waiting Human Task opens a second to build its views, which need tools-service's policy of the
+# calls the first read named; the seed's case waits on none.
+["GET /v1/cases/{case_id}"]
+queries = 5
+
+["GET /v1/channels"]
+queries = 7
+
+["GET /v1/channels/mailboxes"]
+queries = 2
+
+["GET /v1/channels/mailboxes/{mailbox_id}"]
+queries = 2
+
+["GET /v1/chat/agents"]
+queries = 1
+
+["GET /v1/chat/connectors"]
+queries = 2
+
+["GET /v1/chat/default-agent"]
+queries = 2
+
+["GET /v1/chat/threads"]
+queries = 8
+
+["GET /v1/chat/threads/{thread_id}"]
+queries = 3
+
+["GET /v1/chat/threads/{thread_id}/connectors"]
+queries = 2
+
+["GET /v1/document-type-uses"]
+queries = 1
+query = { types = "dt_budget" }
+
+# A stream holds no transaction while it is open: each read it makes opens and closes its own, so the count is
+# the reads of one pass with `follow=false`.
+["GET /v1/events"]
+queries = 2
+transactions = 2
+connections = 2
+query = { follow = "false" }
+
+["GET /v1/forms/public/{slug}"]
+queries = 2
+query = { t = "{form_token}" }
+
+["GET /v1/forms/{slug}/members"]
+queries = 2
+
+["GET /v1/graphs"]
+queries = 2
+
+["GET /v1/graphs/{name}/versions"]
+queries = 1
+
+["GET /v1/guardrails"]
+queries = 10
+
+["GET /v1/guardrails/options"]
+queries = 1
+
+["GET /v1/guardrails/{guardrail_id}"]
+queries = 9
+
+["GET /v1/knowledge-usage"]
+queries = 1
+
+["GET /v1/me/memories"]
+queries = 1
+
+["GET /v1/me/memories/export"]
+queries = 3
+
+["GET /v1/model-aliases"]
+queries = 0
+
+# Two transactions by design: the reads that name the held writes, then (tools-service asked with none open) the build.
+["GET /v1/overview"]
+queries = 18
+transactions = 2
+connections = 2
+
+["GET /v1/prompts/variables"]
+queries = 0
+
+# Two by design: the request and the acting-team check come first (a request of another team is not found before any
+# other service is asked), then the deadline policy is read with nothing open, then the view is built.
+["GET /v1/publish-requests/{request_id}"]
+queries = 2
+transactions = 2
+connections = 2
+
+["GET /v1/resources/{resource}/copies/{copy}/update"]
+not_budgeted = "needs an installed template copy; the budget seed installs none yet"
+
+["GET /v1/runs"]
+# The page, the total, the status and workflow facets, and the facet's workflow names.
+queries = 5
+
+["GET /v1/runs/{run_id}"]
+queries = 5
+
+# A stream holds no transaction while it is open: each read it makes opens and closes its own, so the count is
+# the reads of one pass with `follow=false`.
+["GET /v1/runs/{run_id}/events"]
+queries = 2
+transactions = 2
+connections = 2
+query = { follow = "false" }
+
+["GET /v1/skills"]
+queries = 7
+
+["GET /v1/skills/options"]
+queries = 6
+
+["GET /v1/skills/{skill_id}"]
+queries = 5
+
+["GET /v1/skills/{skill_id}/eval-cases"]
+queries = 2
+
+["GET /v1/task-types"]
+queries = 2
+
+["GET /v1/task-types/{type_id}"]
+queries = 2
+
+["GET /v1/tasks/{task_id}"]
+not_budgeted = "needs a task waiting at its step: opening one waits for a run worker, which the API test app does not run"
+
+["GET /v1/teams/usage"]
+queries = 7
+
+["GET /v1/templates"]
+not_budgeted = "refuses the dev caller (team_required: a dev session acts across teams); needs a person token in the seed"
+
+["GET /v1/threads"]
+queries = 2
+
+["GET /v1/threads/{thread_id}/inbox"]
+queries = 2
+
+["GET /v1/threads/{thread_id}/runs"]
+queries = 3
+
+# A stream holds no transaction while it is open: each read it makes opens and closes its own, so the count is
+# the reads of one pass with `follow=false`.
+["GET /v1/threads/{thread_id}/runs/{run_id}/events"]
+queries = 3
+transactions = 3
+connections = 3
+query = { follow = "false" }
+
+["GET /v1/threads/{thread_id}/state"]
+queries = 5
+
+["GET /v1/tool-uses"]
+queries = 14
+query = { tools = "lookup_account" }
+
+["GET /v1/tools"]
+queries = 18
+
+["GET /v1/tools/options"]
+queries = 5
+
+["GET /v1/tools/{tool_id}"]
+queries = 18
+
+["GET /v1/widget-deployments"]
+# The list, its conversations and its keys: 1 was measured while the seed made no deployment.
+queries = 3
+
+["GET /v1/widget-deployments/{deployment_id}/keys"]
+queries = 2
+
+["GET /v1/widget-deployments/{deployment_id}/keys/audit"]
+queries = 2
+
+["GET /v1/widget/{deployment_id}/config"]
+not_budgeted = "needs an embed of a live agent and its listed origin: on the seed's embed it answers 404 (Agent ... was not found)"
+
+["GET /v1/widget/{deployment_id}/threads/{thread_id}"]
+not_budgeted = "needs a widget deployment and its visitor's thread; the budget seed makes none yet (a missing id answers 404 and measures nothing)"
+
+["GET /v1/widgets"]
+queries = 2
+
+["GET /v1/widgets/options"]
+queries = 1
+
+["GET /v1/widgets/{widget_id}"]
+queries = 7
+
+["GET /v1/workflow-refs"]
+queries = 2
+
+["GET /v1/workflows"]
+queries = 8
+
+["GET /v1/workflows/definitions"]
+queries = 3
+
+["GET /v1/workflows/definitions/account-uses"]
+queries = 4
+query = { app = "salesforce", name = "Main" }
+
+["GET /v1/workflows/definitions/{workflow_id}"]
+queries = 4
+
+["GET /v1/workflows/definitions/{workflow_id}/versions/{version}/shapes"]
+queries = 1
+
+["GET /v1/workflows/node-types"]
+queries = 0
+
+["GET /v1/workflows/option-sources"]
+queries = 1
+query = { source = "agents" }
+
+["GET /v1/workflows/route-fields"]
+queries = 0
+
+["GET /v1/workflows/{workflow_id}"]
+queries = 9
+
+["GET /v1/workflows/{workflow_id}/forms"]
+queries = 2
+
+["GET /v1/workflows/{workflow_id}/live"]
+queries = 1
+
+["GET /v1/workflows/{workflow_id}/runs"]
+queries = 6
+
+["GET /v1/workflows/{workflow_id}/validations/latest"]
+queries = 2
+
+["GET /v1/workflows/{workflow_id}/versions"]
+queries = 2
+
+["GET /widget/v1.js"]
+queries = 0
+status = 410       # listed: the retired loader answers Gone by design

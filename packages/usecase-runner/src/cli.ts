@@ -3,10 +3,11 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { coverage, formatCoverage } from './coverage.ts';
+import { deployedRefusal } from './deployed.ts';
 import { isLayer, LAYERS, type Layer } from './layers.ts';
 import { findUseCase, parseRegistry, RegistryError, type UseCase } from './registry.ts';
 import { EXIT, exitFor, parseChecks, summary, verdict, type Outcome } from './report.ts';
-import { DB_VAR, dropDatabase, isolate, rebuildIfStale, runDatabaseName, sweepFinished } from './isolation.ts';
+import { BASE_URL_VAR, DB_VAR, dropDatabase, isolate, rebuildIfStale, runDatabaseName, sweepFinished } from './isolation.ts';
 import { resolveScript, USECASE_DIR } from './resolve.ts';
 import { childEnv, commandFor, runScript } from './run.ts';
 import { scaffold } from './scaffold.ts';
@@ -35,6 +36,10 @@ export interface TestDeps {
   rebuild?: (root: string, env: NodeJS.ProcessEnv, name: string) => Promise<boolean>;
 }
 
+function parentDeployed(env: NodeJS.ProcessEnv): boolean {
+  return Boolean(env[BASE_URL_VAR]);
+}
+
 export async function test(
   root: string,
   registry: UseCase[],
@@ -46,12 +51,23 @@ export async function test(
     console.error(`unknown layer ${layerArg}; one of ${LAYERS.join(', ')}`);
     return EXIT.usage;
   }
-  const targets = ucId ? [findUseCase(registry, ucId)] : registry;
+  const named = ucId ? [findUseCase(registry, ucId)] : registry;
+  // A whole-registry run on a deployed host takes only the use cases marked safe; a named one is refused unless marked.
+  const targets = !ucId && parentDeployed(deps.parent) ? registry.filter((uc) => uc.deployed) : named;
   const { env: base, realCalls } = childEnv(deps.parent, root);
   console.log(realCalls ? `real model calls approved: ${realCalls}` : 'scripted model only (model keys removed; APPROVED_REAL_CALLS=<n> to allow real calls)');
-  if (deps.sweep && !(await deps.sweep(root, base))) console.error('could not sweep finished runs\' databases; make db-sweep retries');
+  // A deployed host (OPS_USECASE_BASE_URL) has its own database, which no run here makes, sweeps or drops.
+  const deployed = Boolean(base[BASE_URL_VAR]);
+  // Refused before anything runs: a host other than the staging host, any layer but api, and a use case nobody marked safe.
+  const refusal = deployed ? deployedRefusal(String(base[BASE_URL_VAR]).replace(/\/+$/, ''), base, targets, layerArg) : undefined;
+  if (refusal) {
+    console.error(`refused by the deployed-host guard: ${refusal}`);
+    return EXIT.usage;
+  }
+  if (deployed) console.log(`api scripts run against ${base[BASE_URL_VAR]}; no stack or database is started`);
+  if (!deployed && deps.sweep && !(await deps.sweep(root, base))) console.error('could not sweep finished runs\' databases; make db-sweep retries');
   const { env, ownedDb } = await isolate(base);
-  if (!ownedDb && deps.rebuild && !(await deps.rebuild(root, env, String(env[DB_VAR])))) {
+  if (!deployed && !ownedDb && deps.rebuild && !(await deps.rebuild(root, env, String(env[DB_VAR])))) {
     console.error(`could not check ${env[DB_VAR]}'s migrations; a chain behind may stop the scripts at start`);
   }
   // Each script gets its own database when the run owns the name: a stack's files folder is new per script, so rows an
@@ -74,7 +90,7 @@ export async function test(
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
-  console.log(`database ${ownedDb ? 'one per use case, each dropped after it' : env.OPS_USECASE_DB}; ports agents ${env.OPS_USECASE_AGENTS_PORT}, tools ${env.OPS_USECASE_TOOLS_PORT}, models ${env.OPS_USECASE_MODELS_PORT}, kb ${env.OPS_USECASE_KB_PORT}, files ${env.OPS_USECASE_FILES_PORT}, fake openai ${env.OPS_USECASE_FAKE_OPENAI_PORT}, platform ${env.OPS_USECASE_PLATFORM_PORT}, console ${env.OPS_USECASE_CONSOLE_PORT}`);
+  if (!deployed) console.log(`database ${ownedDb ? 'one per use case, each dropped after it' : env.OPS_USECASE_DB}; ports agents ${env.OPS_USECASE_AGENTS_PORT}, tools ${env.OPS_USECASE_TOOLS_PORT}, models ${env.OPS_USECASE_MODELS_PORT}, kb ${env.OPS_USECASE_KB_PORT}, files ${env.OPS_USECASE_FILES_PORT}, fake openai ${env.OPS_USECASE_FAKE_OPENAI_PORT}, platform ${env.OPS_USECASE_PLATFORM_PORT}, console ${env.OPS_USECASE_CONSOLE_PORT}`);
   return await runAll(root, targets, layerArg, databaseFor);
 }
 

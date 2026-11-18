@@ -26,7 +26,7 @@ import json
 import re
 import ssl
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import parse_qsl, quote, quote_plus, urlencode, urlsplit
@@ -47,6 +47,8 @@ from .mocks import MockAnswers
 from .plugins.host import plugin_id_of
 from .registry import Resolved
 from .secrets import SecretMissing, SecretResolver, scrub
+from .store.mocks import MockRow
+from .store.modules import Header, InputField, Module, Operation
 from .tools import ToolCaller, ToolRunner
 
 if TYPE_CHECKING:
@@ -75,7 +77,7 @@ PYTHON_TYPES: dict[str, tuple[type, ...]] = {
 SOURCE_SYNC_SCOPE = "knowledge:run"
 
 
-def invalid_fields(fields: list[dict[str, Any]], args: dict[str, Any]) -> list[dict[str, str]]:
+def invalid_fields(fields: list[InputField], args: dict[str, Any]) -> list[dict[str, str]]:
     """Per-field problems with `args` against the operation's input fields; empty when the input is valid. Unknown
     arguments are refused too, so a caller cannot smuggle a field the reviewer never saw."""
     problems: list[dict[str, str]] = []
@@ -90,18 +92,19 @@ def invalid_fields(fields: list[dict[str, Any]], args: dict[str, Any]) -> list[d
         # bool is an int in Python; a true/false is never a number here.
         if not isinstance(value, allowed) or (isinstance(value, bool) and f["type"] != "boolean"):
             problems.append({"field": f["name"], "message": f"Expected {f['type']}."})
-        elif f.get("enum") and value not in f["enum"]:
-            problems.append({"field": f["name"], "message": f"Must be one of {', '.join(f['enum'])}."})
+        elif (enum := f.get("enum")) and value not in enum:
+            problems.append({"field": f["name"], "message": f"Must be one of {', '.join(enum)}."})
     problems.extend({"field": k, "message": "Not an input of this operation."} for k in args if k not in known)
     return problems
 
 
-def with_defaults(fields: list[dict[str, Any]], args: dict[str, Any]) -> dict[str, Any]:
+def with_defaults(fields: list[InputField], args: dict[str, Any]) -> dict[str, Any]:
     """`args` with each optional field the call left out set to its default, as the agent's schema promised."""
     filled = dict(args)
     for f in fields:
-        if f.get("default") is not None and args.get(f["name"]) in (None, ""):
-            filled[f["name"]] = f["default"]
+        default = f.get("default")
+        if default is not None and args.get(f["name"]) in (None, ""):
+            filled[f["name"]] = default
     return filled
 
 
@@ -225,14 +228,18 @@ class Trial:
         self.log.append((round((time.perf_counter() - self.started) * 1000, 1), message))
 
 
-def secret_names(op: dict[str, Any]) -> list[str]:
+def secret_refs(headers: Sequence[Header], path: str | None) -> list[str]:
     """The secrets an operation's headers and path name, each once."""
-    texts = [h["value"] for h in cast(list[dict[str, str]], op.get("headers") or [])] + [op.get("path") or ""]
+    texts = [h["value"] for h in headers] + [path or ""]
     return sorted({n for t in texts for n in SECRET_REF.findall(t)})
 
 
+def secret_names(op: Operation) -> list[str]:
+    return secret_refs(op.get("headers") or [], op.get("path"))
+
+
 def build_request(
-    module: dict[str, Any], op: dict[str, Any], args: dict[str, Any], secrets: dict[str, str] | None = None
+    module: Module, op: Operation, args: dict[str, Any], secrets: dict[str, str] | None = None
 ) -> HttpRequest:
     """The request an operation makes. `secrets` resolves the `{{NAME}}` references; without it they stay as written,
     which is enough to read the host. The path's own query (`?api_key={{KEY}}`, `?email={email}`) is sent alongside the
@@ -254,7 +261,7 @@ def build_request(
     path = URL_VAR.sub(
         lambda m: quote(str(args.get(m.group(1), "")), safe=""), SECRET_REF.sub(lambda m: secret(m, True), template)
     )
-    url = module["endpoint"].rstrip("/") + path
+    url = module.get("endpoint", "").rstrip("/") + path
     # One pass over each query value, so an argument's value is never read again as a reference: `{name}` takes the
     # argument (left out when it is not given and is the whole value), `{{NAME}}` the secret.
     fixed: dict[str, str] = {}
@@ -270,19 +277,19 @@ def build_request(
     form: dict[str, str] | None = None
     content: str | None = None
     encoding = op.get("body_encoding") or "json"
-    if op.get("body") and encoding == "form":
-        form = form_fields(cast(dict[str, str], json.loads(op["body"])), args)
-    elif op.get("body") and encoding == "raw":
-        content = BODY_VAR.sub(lambda m: _as_text(args.get(m.group(1))), op["body"])
-    elif op.get("body"):
-        body = json.loads(BODY_VAR.sub(lambda m: json.dumps(args.get(m.group(1))), op["body"]))
+    template_body = op.get("body")
+    if template_body and encoding == "form":
+        form = form_fields(cast(dict[str, str], json.loads(template_body)), args)
+    elif template_body and encoding == "raw":
+        content = BODY_VAR.sub(lambda m: _as_text(args.get(m.group(1))), template_body)
+    elif template_body:
+        body = json.loads(BODY_VAR.sub(lambda m: json.dumps(args.get(m.group(1))), template_body))
     elif method in ("GET", "DELETE"):
         # The operation's own query wins over an argument of the same name: a caller cannot replace a credential.
         params = {**rest, **fixed}
     else:
         body = rest
-    pairs: list[dict[str, str]] = op.get("headers") or []
-    headers = {h["key"]: SECRET_REF.sub(lambda m: secret(m, False), h["value"]) for h in pairs}
+    headers = {h["key"]: SECRET_REF.sub(lambda m: secret(m, False), h["value"]) for h in op.get("headers") or []}
     return HttpRequest(method, url, params, body, headers, form, content)
 
 
@@ -335,8 +342,8 @@ class _Secrets:
 
     async def _signed_in(
         self,
-        module: dict[str, Any],
-        op: dict[str, Any],
+        module: Module,
+        op: Operation,
         environment: str,
         actor: str,
         *,
@@ -366,8 +373,8 @@ class _Secrets:
 
     async def _resolve(
         self,
-        module: dict[str, Any],
-        op: dict[str, Any],
+        module: Module,
+        op: Operation,
         actor: str,
         given: dict[str, str] | None = None,
         trial: Trial | None = None,
@@ -438,8 +445,8 @@ class HttpExecutor(_Secrets):
 
     async def run(
         self,
-        module: dict[str, Any],
-        op: dict[str, Any],
+        module: Module,
+        op: Operation,
         args: dict[str, Any],
         *,
         actor: str = "gateway",
@@ -558,17 +565,15 @@ class HttpExecutor(_Secrets):
             # draft to try; so the gateway shapes its answer here, once, as for an agent's call.
             if plugin_id_of(module) is None:
                 return ToolOutcome(True, output)
-        if op.get("response_transform"):
+        if template := op.get("response_transform"):
             # A plugin's transform also reads the team's merged settings; every other module's sees none.
-            shaped, failed = await transform.apply(op["response_transform"], output, module.get("plugin_settings"))
+            shaped, failed = await transform.apply(template, output, module.get("plugin_settings"))
             # A transform that fails on a real answer still returns the answer, with why, instead of failing the call.
             output = shaped if failed is None else {"response": output, "transform_error": failed}
         # After the transform, so a template that repeats a header cannot carry a secret out.
         return ToolOutcome(True, scrub(output, used))
 
-    async def _send(
-        self, module: dict[str, Any], req: HttpRequest, prepared: Prepared | None, limit_ms: int
-    ) -> httpx.Response:
+    async def _send(self, module: Module, req: HttpRequest, prepared: Prepared | None, limit_ms: int) -> httpx.Response:
         params, headers = _with_auth(req, prepared)
         return await self.client.request(
             req.method,
@@ -604,15 +609,15 @@ class McpExecutor(_Secrets):
 
     async def _call(
         self,
-        module: dict[str, Any],
-        op: dict[str, Any],
+        module: Module,
+        op: Operation,
         args: dict[str, Any],
         headers: dict[str, str],
         prepared: Prepared | None,
     ) -> dict[str, Any]:
         session = mcp.McpSession(
             self.client,
-            str(module["endpoint"]),
+            str(module.get("endpoint")),
             headers={**headers, **(prepared.headers if prepared else {})},
             tenant_id=module["tenant_id"],
             hosts=module["egress_hosts"],
@@ -623,8 +628,8 @@ class McpExecutor(_Secrets):
 
     async def run(
         self,
-        module: dict[str, Any],
-        op: dict[str, Any],
+        module: Module,
+        op: Operation,
         args: dict[str, Any],
         *,
         actor: str = "gateway",
@@ -634,7 +639,7 @@ class McpExecutor(_Secrets):
     ) -> ToolOutcome:
         if not module.get("endpoint"):
             return _failure("CONNECTION_NOT_SET", NO_ADDRESS)
-        url: str = module["endpoint"]
+        url = module.get("endpoint", "")
         host = urlsplit(url).hostname
         if self.policy is None:
             return _failure("EGRESS_DENIED", "This gateway has no egress policy, so it calls no external system.")
@@ -718,7 +723,7 @@ class Executor:
         # A plugin's Python tools; without it they fail.
         self.plugins = plugins
 
-    async def _mocked(self, module: dict[str, Any], op: dict[str, Any], mock: dict[str, Any]) -> ToolOutcome:
+    async def _mocked(self, module: Module, op: Operation, mock: MockRow) -> ToolOutcome:
         """A test call answered as the system would have, before any egress: the same failures a real answer
         or a real timeout gives, so a workflow's ports behave as they would against the system."""
         assert self.mocks is not None
@@ -761,7 +766,7 @@ class Executor:
         if resolved.executor == "local" or op is None or module is None:
             return await self.local.run(tool, args, key=key, caller=caller)
         if resolved.executor == "stub":
-            return ToolOutcome(True, masked(op["stub"], op.get("masked_output") or []))
+            return ToolOutcome(True, masked(op.get("stub"), op.get("masked_output") or []))
         # Defaults fill reads only. A write runs exactly the input its approval token binds (the hash of what the
         # approver saw), so nothing the approver did not see is added to it.
         if resolved.access == "read":

@@ -223,7 +223,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/knowledge-usage",
         "pathParams": [],
-        "query": [],
+        "query": ["ids"],
         "stream": False,
     },
     "agents_list_agents": {
@@ -232,7 +232,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/agents",
         "pathParams": [],
-        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "templateId"],
+        "query": ["availability", "teamId", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "agents_list_guardrails": {
@@ -241,7 +241,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/guardrails",
         "pathParams": [],
-        "query": ["page", "pageSize", "search"],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "agents_list_model_aliases": {
@@ -268,7 +268,22 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/skills",
         "pathParams": [],
-        "query": ["view", "page", "pageSize", "search", "usableBy", "agentId"],
+        "query": [
+            "view",
+            "usableBy",
+            "agentId",
+            "status",
+            "ownerTeam",
+            "origin",
+            "loading",
+            "knowledgeBases",
+            "page",
+            "pageSize",
+            "search",
+            "sortBy",
+            "sortOrder",
+            "ids",
+        ],
         "stream": False,
     },
     "agents_list_tool_uses": {
@@ -304,7 +319,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/widgets",
         "pathParams": [],
-        "query": ["page", "pageSize", "search"],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "agents_publish_preview": {
@@ -682,7 +697,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/case-types",
         "pathParams": [],
-        "query": [],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "cases_list_cases": {
@@ -691,7 +706,19 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/cases",
         "pathParams": [],
-        "query": ["status", "priority", "assignee", "customerId", "overdue", "search", "page", "pageSize"],
+        "query": [
+            "status",
+            "priority",
+            "assignee",
+            "customerId",
+            "overdue",
+            "page",
+            "pageSize",
+            "search",
+            "sortBy",
+            "sortOrder",
+            "ids",
+        ],
         "stream": False,
     },
     "cases_list_runs": {
@@ -943,7 +970,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/workflows/{workflow_id}/forms",
         "pathParams": ["workflow_id"],
-        "query": [],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "graphs_list_graphs": {
@@ -1222,7 +1249,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/task-types",
         "pathParams": [],
-        "query": [],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "reviews_open_egress_host_request": {
@@ -1312,7 +1339,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/threads",
         "pathParams": [],
-        "query": ["graph"],
+        "query": ["graph", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "threads_migrate": {
@@ -1546,7 +1573,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/workflows/definitions",
         "pathParams": [],
-        "query": ["page", "pageSize", "search", "sortBy", "sortOrder"],
+        "query": ["status", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "workflows_list_document_type_uses": {
@@ -1564,7 +1591,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/runs",
         "pathParams": [],
-        "query": ["workflowId", "workflow_id", "status", "page", "pageSize"],
+        "query": ["workflowId", "status", "page", "pageSize", "search", "sortBy", "sortOrder", "ids"],
         "stream": False,
     },
     "workflows_list_runs": {
@@ -1573,7 +1600,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/workflows/{workflow_id}/runs",
         "pathParams": ["workflow_id"],
-        "query": ["page", "pageSize"],
+        "query": ["page", "pageSize", "status"],
         "stream": False,
     },
     "workflows_list_versions": {
@@ -1591,7 +1618,7 @@ OPERATIONS: dict[str, Operation] = {
         "method": "GET",
         "path": "/v1/workflows",
         "pathParams": [],
-        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "startable", "takesFiles", "engine"],
+        "query": ["page", "pageSize", "search", "sortBy", "sortOrder", "status", "startable", "takesFiles", "engine"],
         "stream": False,
     },
     "workflows_move_pointer": {
@@ -1976,12 +2003,14 @@ class Operations:
     def agents_list_agents(
         self,
         *,
+        availability: list[str] | None = None,
+        team_id: list[str] | None = None,
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
         sort_by: str | None = None,
         sort_order: str | None = None,
-        template_id: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultAgent:
         "List Agents"
         return self._t.call(
@@ -1989,12 +2018,14 @@ class Operations:
             OPERATIONS["agents_list_agents"],
             {},
             {
+                "availability": availability,
+                "teamId": team_id,
                 "page": page,
                 "pageSize": page_size,
                 "search": search,
                 "sortBy": sort_by,
                 "sortOrder": sort_order,
-                "templateId": template_id,
+                "ids": ids,
             },
             {},
             None,
@@ -2192,9 +2223,32 @@ class Operations:
         "Retry Batch"
         return self._t.call(SERVICE, OPERATIONS["batches_retry_batch"], {"batch_id": batch_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def cases_list_case_types(self) -> list[CaseTypeView]:
+    def cases_list_case_types(
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultCaseTypeView:
         "List Case Types"
-        return self._t.call(SERVICE, OPERATIONS["cases_list_case_types"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["cases_list_case_types"],
+            {},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def cases_create_case_type(self, body: OpsAgentsApiRoutersCaseTypesTypeIn) -> CaseTypeDetail:
         "Create Case Type"
@@ -2220,9 +2274,12 @@ class Operations:
         assignee: str | None = None,
         customer_id: str | None = None,
         overdue: bool | None = None,
-        search: str | None = None,
         page: int | None = None,
         page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultCaseRow:
         "List Cases"
         return self._t.call(
@@ -2235,9 +2292,12 @@ class Operations:
                 "assignee": assignee,
                 "customerId": customer_id,
                 "overdue": overdue,
-                "search": search,
                 "page": page,
                 "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
             },
             {},
             None,
@@ -2395,14 +2455,28 @@ class Operations:
         return self._t.call(SERVICE, OPERATIONS["graphs_publish_version"], {"name": name}, {}, {}, body)  # type: ignore[no-any-return]
 
     def agents_list_guardrails(
-        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
-    ) -> Any:
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> GuardrailList:
         "List Guardrails"
         return self._t.call(
             SERVICE,
             OPERATIONS["agents_list_guardrails"],
             {},
-            {"page": page, "pageSize": page_size, "search": search},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -2470,9 +2544,9 @@ class Operations:
             SERVICE, OPERATIONS["agents_set_guardrail_status"], {"guardrail_id": guardrail_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    def agents_knowledge_usage(self) -> list[KnowledgeUsage]:
+    def agents_knowledge_usage(self, *, ids: list[str] | None = None) -> list[KnowledgeUsage]:
         "Knowledge Usage"
-        return self._t.call(SERVICE, OPERATIONS["agents_knowledge_usage"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(SERVICE, OPERATIONS["agents_knowledge_usage"], {}, {"ids": ids}, {}, None)  # type: ignore[no-any-return]
 
     def memory_list_memories(self, *, agent_id: str | None = None) -> list[MemoryView]:
         "List Memories"
@@ -2594,17 +2668,30 @@ class Operations:
     def workflows_list_engine_runs(
         self,
         *,
-        workflow_id: str | None = None,
+        workflow_id: list[str] | None = None,
         status: list[str] | None = None,
         page: int | None = None,
         page_size: int | None = None,
-    ) -> ListResultRunRow:
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> LabelledListResultRunRow:
         "List Engine Runs"
         return self._t.call(
             SERVICE,
             OPERATIONS["workflows_list_engine_runs"],
             {},
-            {"workflowId": workflow_id, "status": status, "page": page, "pageSize": page_size},
+            {
+                "workflowId": workflow_id,
+                "status": status,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -2656,11 +2743,19 @@ class Operations:
         self,
         *,
         view: str | None = None,
+        usable_by: str | None = None,
+        agent_id: str | None = None,
+        status: list[str] | None = None,
+        owner_team: list[str] | None = None,
+        origin: list[str] | None = None,
+        loading: list[str] | None = None,
+        knowledge_bases: list[str] | None = None,
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
-        usable_by: str | None = None,
-        agent_id: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> SkillList:
         "List Skills"
         return self._t.call(
@@ -2669,11 +2764,19 @@ class Operations:
             {},
             {
                 "view": view,
+                "usableBy": usable_by,
+                "agentId": agent_id,
+                "status": status,
+                "ownerTeam": owner_team,
+                "origin": origin,
+                "loading": loading,
+                "knowledgeBases": knowledge_bases,
                 "page": page,
                 "pageSize": page_size,
                 "search": search,
-                "usableBy": usable_by,
-                "agentId": agent_id,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
             },
             {},
             None,
@@ -2719,9 +2822,32 @@ class Operations:
         "Render Skill"
         return self._t.call(SERVICE, OPERATIONS["agents_render_skill"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
 
-    def reviews_list_task_types(self) -> list[TaskTypeView]:
+    def reviews_list_task_types(
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultTaskTypeView:
         "List Task Types"
-        return self._t.call(SERVICE, OPERATIONS["reviews_list_task_types"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["reviews_list_task_types"],
+            {},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def reviews_create_task_type(self, body: OpsAgentsApiRoutersTaskTypesTypeIn) -> TaskTypeDetail:
         "Create Task Type"
@@ -2763,9 +2889,34 @@ class Operations:
             SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind, "source": source}, {}, None
         )  # type: ignore[no-any-return]
 
-    def threads_list_threads(self, *, graph: str | None = None) -> list[ThreadView]:
+    def threads_list_threads(
+        self,
+        *,
+        graph: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultThreadView:
         "List Threads"
-        return self._t.call(SERVICE, OPERATIONS["threads_list_threads"], {}, {"graph": graph}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["threads_list_threads"],
+            {},
+            {
+                "graph": graph,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def threads_create_thread(self, body: ThreadInput) -> ThreadCreated:
         "Create Thread"
@@ -2865,14 +3016,28 @@ class Operations:
         return self._t.call(SERVICE, OPERATIONS["agents_get_tool"], {"tool_id": tool_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     def agents_list_widgets(
-        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
-    ) -> Any:
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> WidgetTemplateList:
         "List Widgets"
         return self._t.call(
             SERVICE,
             OPERATIONS["agents_list_widgets"],
             {},
-            {"page": page, "pageSize": page_size, "search": search},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -2930,6 +3095,7 @@ class Operations:
         search: str | None = None,
         sort_by: str | None = None,
         sort_order: str | None = None,
+        status: list[str] | None = None,
         startable: bool | None = None,
         takes_files: bool | None = None,
         engine: str | None = None,
@@ -2945,6 +3111,7 @@ class Operations:
                 "search": search,
                 "sortBy": sort_by,
                 "sortOrder": sort_order,
+                "status": status,
                 "startable": startable,
                 "takesFiles": takes_files,
                 "engine": engine,
@@ -2960,18 +3127,28 @@ class Operations:
     def workflows_list_definitions(
         self,
         *,
+        status: list[str] | None = None,
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
         sort_by: str | None = None,
         sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultDefinitionRow:
         "List Definitions"
         return self._t.call(
             SERVICE,
             OPERATIONS["workflows_list_definitions"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "sortBy": sort_by, "sortOrder": sort_order},
+            {
+                "status": status,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -3086,9 +3263,33 @@ class Operations:
         "Discard Draft"
         return self._t.call(SERVICE, OPERATIONS["workflows_discard_draft"], {"workflow_id": workflow_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    def forms_workflow_forms(self, workflow_id: str) -> list[FormView]:
+    def forms_workflow_forms(
+        self,
+        workflow_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultFormView:
         "Workflow Forms"
-        return self._t.call(SERVICE, OPERATIONS["forms_workflow_forms"], {"workflow_id": workflow_id}, {}, {}, None)  # type: ignore[no-any-return]
+        return self._t.call(
+            SERVICE,
+            OPERATIONS["forms_workflow_forms"],
+            {"workflow_id": workflow_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     def forms_create_form(self, workflow_id: str, body: FormIn) -> FormView:
         "Create Form"
@@ -3111,14 +3312,19 @@ class Operations:
         )  # type: ignore[no-any-return]
 
     def workflows_list_runs(
-        self, workflow_id: str, *, page: int | None = None, page_size: int | None = None
+        self,
+        workflow_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        status: list[str] | None = None,
     ) -> ListResultWorkflowRun:
         "List Runs"
         return self._t.call(
             SERVICE,
             OPERATIONS["workflows_list_runs"],
             {"workflow_id": workflow_id},
-            {"page": page, "pageSize": page_size},
+            {"page": page, "pageSize": page_size, "status": status},
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -3324,12 +3530,14 @@ class AsyncOperations:
     async def agents_list_agents(
         self,
         *,
+        availability: list[str] | None = None,
+        team_id: list[str] | None = None,
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
         sort_by: str | None = None,
         sort_order: str | None = None,
-        template_id: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultAgent:
         "List Agents"
         return await self._t.call(
@@ -3337,12 +3545,14 @@ class AsyncOperations:
             OPERATIONS["agents_list_agents"],
             {},
             {
+                "availability": availability,
+                "teamId": team_id,
                 "page": page,
                 "pageSize": page_size,
                 "search": search,
                 "sortBy": sort_by,
                 "sortOrder": sort_order,
-                "templateId": template_id,
+                "ids": ids,
             },
             {},
             None,
@@ -3542,9 +3752,32 @@ class AsyncOperations:
         "Retry Batch"
         return await self._t.call(SERVICE, OPERATIONS["batches_retry_batch"], {"batch_id": batch_id}, {}, {}, None)  # type: ignore[no-any-return]
 
-    async def cases_list_case_types(self) -> list[CaseTypeView]:
+    async def cases_list_case_types(
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultCaseTypeView:
         "List Case Types"
-        return await self._t.call(SERVICE, OPERATIONS["cases_list_case_types"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["cases_list_case_types"],
+            {},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def cases_create_case_type(self, body: OpsAgentsApiRoutersCaseTypesTypeIn) -> CaseTypeDetail:
         "Create Case Type"
@@ -3570,9 +3803,12 @@ class AsyncOperations:
         assignee: str | None = None,
         customer_id: str | None = None,
         overdue: bool | None = None,
-        search: str | None = None,
         page: int | None = None,
         page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultCaseRow:
         "List Cases"
         return await self._t.call(
@@ -3585,9 +3821,12 @@ class AsyncOperations:
                 "assignee": assignee,
                 "customerId": customer_id,
                 "overdue": overdue,
-                "search": search,
                 "page": page,
                 "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
             },
             {},
             None,
@@ -3757,14 +3996,28 @@ class AsyncOperations:
         return await self._t.call(SERVICE, OPERATIONS["graphs_publish_version"], {"name": name}, {}, {}, body)  # type: ignore[no-any-return]
 
     async def agents_list_guardrails(
-        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
-    ) -> Any:
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> GuardrailList:
         "List Guardrails"
         return await self._t.call(
             SERVICE,
             OPERATIONS["agents_list_guardrails"],
             {},
-            {"page": page, "pageSize": page_size, "search": search},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -3834,9 +4087,9 @@ class AsyncOperations:
             SERVICE, OPERATIONS["agents_set_guardrail_status"], {"guardrail_id": guardrail_id}, {}, {}, body
         )  # type: ignore[no-any-return]
 
-    async def agents_knowledge_usage(self) -> list[KnowledgeUsage]:
+    async def agents_knowledge_usage(self, *, ids: list[str] | None = None) -> list[KnowledgeUsage]:
         "Knowledge Usage"
-        return await self._t.call(SERVICE, OPERATIONS["agents_knowledge_usage"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(SERVICE, OPERATIONS["agents_knowledge_usage"], {}, {"ids": ids}, {}, None)  # type: ignore[no-any-return]
 
     async def memory_list_memories(self, *, agent_id: str | None = None) -> list[MemoryView]:
         "List Memories"
@@ -3960,17 +4213,30 @@ class AsyncOperations:
     async def workflows_list_engine_runs(
         self,
         *,
-        workflow_id: str | None = None,
+        workflow_id: list[str] | None = None,
         status: list[str] | None = None,
         page: int | None = None,
         page_size: int | None = None,
-    ) -> ListResultRunRow:
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> LabelledListResultRunRow:
         "List Engine Runs"
         return await self._t.call(
             SERVICE,
             OPERATIONS["workflows_list_engine_runs"],
             {},
-            {"workflowId": workflow_id, "status": status, "page": page, "pageSize": page_size},
+            {
+                "workflowId": workflow_id,
+                "status": status,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -4026,11 +4292,19 @@ class AsyncOperations:
         self,
         *,
         view: str | None = None,
+        usable_by: str | None = None,
+        agent_id: str | None = None,
+        status: list[str] | None = None,
+        owner_team: list[str] | None = None,
+        origin: list[str] | None = None,
+        loading: list[str] | None = None,
+        knowledge_bases: list[str] | None = None,
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
-        usable_by: str | None = None,
-        agent_id: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> SkillList:
         "List Skills"
         return await self._t.call(
@@ -4039,11 +4313,19 @@ class AsyncOperations:
             {},
             {
                 "view": view,
+                "usableBy": usable_by,
+                "agentId": agent_id,
+                "status": status,
+                "ownerTeam": owner_team,
+                "origin": origin,
+                "loading": loading,
+                "knowledgeBases": knowledge_bases,
                 "page": page,
                 "pageSize": page_size,
                 "search": search,
-                "usableBy": usable_by,
-                "agentId": agent_id,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
             },
             {},
             None,
@@ -4093,9 +4375,32 @@ class AsyncOperations:
         "Render Skill"
         return await self._t.call(SERVICE, OPERATIONS["agents_render_skill"], {"skill_id": skill_id}, {}, {}, body)  # type: ignore[no-any-return]
 
-    async def reviews_list_task_types(self) -> list[TaskTypeView]:
+    async def reviews_list_task_types(
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultTaskTypeView:
         "List Task Types"
-        return await self._t.call(SERVICE, OPERATIONS["reviews_list_task_types"], {}, {}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["reviews_list_task_types"],
+            {},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def reviews_create_task_type(self, body: OpsAgentsApiRoutersTaskTypesTypeIn) -> TaskTypeDetail:
         "Create Task Type"
@@ -4141,9 +4446,34 @@ class AsyncOperations:
             SERVICE, OPERATIONS["templates_list_templates"], {}, {"kind": kind, "source": source}, {}, None
         )  # type: ignore[no-any-return]
 
-    async def threads_list_threads(self, *, graph: str | None = None) -> list[ThreadView]:
+    async def threads_list_threads(
+        self,
+        *,
+        graph: str | None = None,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultThreadView:
         "List Threads"
-        return await self._t.call(SERVICE, OPERATIONS["threads_list_threads"], {}, {"graph": graph}, {}, None)  # type: ignore[no-any-return]
+        return await self._t.call(
+            SERVICE,
+            OPERATIONS["threads_list_threads"],
+            {},
+            {
+                "graph": graph,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
+        )  # type: ignore[no-any-return]
 
     async def threads_create_thread(self, body: ThreadInput) -> ThreadCreated:
         "Create Thread"
@@ -4243,14 +4573,28 @@ class AsyncOperations:
         return await self._t.call(SERVICE, OPERATIONS["agents_get_tool"], {"tool_id": tool_id}, {}, {}, None)  # type: ignore[no-any-return]
 
     async def agents_list_widgets(
-        self, *, page: int | None = None, page_size: int | None = None, search: str | None = None
-    ) -> Any:
+        self,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> WidgetTemplateList:
         "List Widgets"
         return await self._t.call(
             SERVICE,
             OPERATIONS["agents_list_widgets"],
             {},
-            {"page": page, "pageSize": page_size, "search": search},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -4308,6 +4652,7 @@ class AsyncOperations:
         search: str | None = None,
         sort_by: str | None = None,
         sort_order: str | None = None,
+        status: list[str] | None = None,
         startable: bool | None = None,
         takes_files: bool | None = None,
         engine: str | None = None,
@@ -4323,6 +4668,7 @@ class AsyncOperations:
                 "search": search,
                 "sortBy": sort_by,
                 "sortOrder": sort_order,
+                "status": status,
                 "startable": startable,
                 "takesFiles": takes_files,
                 "engine": engine,
@@ -4338,18 +4684,28 @@ class AsyncOperations:
     async def workflows_list_definitions(
         self,
         *,
+        status: list[str] | None = None,
         page: int | None = None,
         page_size: int | None = None,
         search: str | None = None,
         sort_by: str | None = None,
         sort_order: str | None = None,
+        ids: list[str] | None = None,
     ) -> ListResultDefinitionRow:
         "List Definitions"
         return await self._t.call(
             SERVICE,
             OPERATIONS["workflows_list_definitions"],
             {},
-            {"page": page, "pageSize": page_size, "search": search, "sortBy": sort_by, "sortOrder": sort_order},
+            {
+                "status": status,
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
             {},
             None,
         )  # type: ignore[no-any-return]
@@ -4476,10 +4832,32 @@ class AsyncOperations:
             SERVICE, OPERATIONS["workflows_discard_draft"], {"workflow_id": workflow_id}, {}, {}, None
         )  # type: ignore[no-any-return]
 
-    async def forms_workflow_forms(self, workflow_id: str) -> list[FormView]:
+    async def forms_workflow_forms(
+        self,
+        workflow_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        search: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        ids: list[str] | None = None,
+    ) -> ListResultFormView:
         "Workflow Forms"
         return await self._t.call(
-            SERVICE, OPERATIONS["forms_workflow_forms"], {"workflow_id": workflow_id}, {}, {}, None
+            SERVICE,
+            OPERATIONS["forms_workflow_forms"],
+            {"workflow_id": workflow_id},
+            {
+                "page": page,
+                "pageSize": page_size,
+                "search": search,
+                "sortBy": sort_by,
+                "sortOrder": sort_order,
+                "ids": ids,
+            },
+            {},
+            None,
         )  # type: ignore[no-any-return]
 
     async def forms_create_form(self, workflow_id: str, body: FormIn) -> FormView:
@@ -4507,14 +4885,19 @@ class AsyncOperations:
         )  # type: ignore[no-any-return]
 
     async def workflows_list_runs(
-        self, workflow_id: str, *, page: int | None = None, page_size: int | None = None
+        self,
+        workflow_id: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        status: list[str] | None = None,
     ) -> ListResultWorkflowRun:
         "List Runs"
         return await self._t.call(
             SERVICE,
             OPERATIONS["workflows_list_runs"],
             {"workflow_id": workflow_id},
-            {"page": page, "pageSize": page_size},
+            {"page": page, "pageSize": page_size, "status": status},
             {},
             None,
         )  # type: ignore[no-any-return]

@@ -44,7 +44,7 @@ def call(gw: Any, tool: str, args: dict[str, Any], step: str) -> Any:
     return gw.post("/v1/calls", json=body, headers=service_headers("tools"))
 
 
-with agents(), tools() as gw:
+with agents(), tools(approval_rules=True) as gw:
     read = call(gw, "get_loan_account", {"loanAccountId": "LN-0048213"}, "s1")
     output = data(read).get("output", {}) if read.status_code == 200 else {}
     check(

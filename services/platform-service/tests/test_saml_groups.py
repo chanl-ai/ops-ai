@@ -156,6 +156,17 @@ async def test_two_rules_into_one_team_give_the_higher_role(signin: SignInRig) -
     )
     roles = await _sign_in(signin, f"di@{domain}", "&groups=readers,builders")
     assert roles.get(desk) == "builder", roles
+    # Lowest first: chat_user, viewer, builder, approver (E54); a reviewer rule outranks a builder rule.
+    ranked = f"rank2.{signin.zone}"
+    await _provider(
+        signin,
+        ranked,
+        [
+            {"group": "reviewers", "team": desk, "role": "approver"},
+            {"group": "builders", "team": desk, "role": "builder"},
+        ],
+    )
+    assert (await _sign_in(signin, f"rv@{ranked}", "&groups=reviewers,builders")).get(desk) == "approver"
     async with signin.engine.connect() as c:
         count = (
             await c.execute(sa.select(sa.func.count()).select_from(members).where(members.c.email == f"di@{domain}"))

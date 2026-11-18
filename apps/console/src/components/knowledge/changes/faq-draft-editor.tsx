@@ -17,13 +17,17 @@ type Act = 'save' | 'approve' | 'reject';
  * An FAQ draft opened for review: its question and answer editable, the passage it quotes read only. Approve saves an
  * edit first, so what is approved is what was read here. A draft already decided shows read only.
  */
-export function FaqDraftEditor({ change: c, busy, onAct }: { change: KnowledgeChange; busy: Act | null; onAct: (act: Act, pair: { question: string; answer: string }) => void }) {
+export function FaqDraftEditor({ change: c, busy, onAct, reasonError }: { change: KnowledgeChange; busy: Act | null; onAct: (act: Act, pair: { question: string; answer: string }, reason?: string) => void; reasonError?: string }) {
   const [question, setQuestion] = React.useState(c.faq?.question ?? '');
   const [answer, setAnswer] = React.useState(c.faq?.answer ?? '');
   React.useEffect(() => {
     setQuestion(c.faq?.question ?? '');
     setAnswer(c.faq?.answer ?? '');
   }, [c.id, c.faq?.question, c.faq?.answer]);
+  const [reason, setReason] = React.useState('');
+  React.useEffect(() => {
+    setReason('');
+  }, [c.id]);
   const editable = decidable(c);
   const edited = question.trim() !== (c.faq?.question ?? '') || answer.trim() !== (c.faq?.answer ?? '');
   const missing = !question.trim() ? 'Write the question.' : !answer.trim() ? 'Write the answer.' : undefined;
@@ -48,20 +52,28 @@ export function FaqDraftEditor({ change: c, busy, onAct }: { change: KnowledgeCh
         <p className="text-sm font-medium">Check</p>
         <FaqCheck change={c} />
       </div>
+      {editable && (
+        <FormField id="faq-reason" label="Reason (optional)" hint="Shown with the decision." error={reasonError}>
+          <Textarea id="faq-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500} data-testid="faq-reason" />
+        </FormField>
+      )}
       {editable ? (
         <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
-          <LoadingButton variant="outline" className="text-destructive-text" isLoading={busy === 'reject'} disabled={!!busy} onClick={() => onAct('reject', pair)} data-testid="faq-reject">
+          <LoadingButton variant="outline" className="text-destructive-text" isLoading={busy === 'reject'} disabled={!!busy} onClick={() => onAct('reject', pair, reason.trim() || undefined)} data-testid="faq-reject">
             Reject
           </LoadingButton>
           <LoadingButton variant="outline" isLoading={busy === 'save'} disabled={!!busy || !edited || !!missing} onClick={() => onAct('save', pair)} data-testid="faq-save">
             Save edit
           </LoadingButton>
-          <LoadingButton isLoading={busy === 'approve'} disabled={!!busy || !!missing} onClick={() => onAct('approve', pair)} data-testid="faq-approve">
+          <LoadingButton isLoading={busy === 'approve'} disabled={!!busy || !!missing} onClick={() => onAct('approve', pair, reason.trim() || undefined)} data-testid="faq-approve">
             {edited ? 'Save and approve' : 'Approve'}
           </LoadingButton>
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground">{c.canDecide ? 'This draft is decided.' : `Only the knowledge owner of ${c.sourceName} decides this draft.`}</p>
+        <div className="flex flex-col gap-1">
+          <p className="text-sm text-muted-foreground">{c.canDecide ? 'This draft is decided.' : `Only the knowledge owner of ${c.sourceName} decides this draft.`}</p>
+          {c.decisionReason && <p className="text-sm" data-testid="faq-decision-reason">Reason: “{c.decisionReason}”</p>}
+        </div>
       )}
     </div>
   );

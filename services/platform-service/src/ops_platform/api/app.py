@@ -19,6 +19,7 @@ from ops_access import ACTIONS, ANY_TEAM, AREAS, SECURITY_TEAM_ACTIONS
 from ops_access.catalogue import ADMIN, Grant
 from ops_identity import Principal as Caller
 from ops_identity import ServiceAuth, ServiceClient, service_verifiers
+from ops_identity.fastapi import Tx
 from ops_policy import STEP_UP_TTL_S, CredentialStore, Ed25519Signer
 from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.client_address import client_address
@@ -37,6 +38,7 @@ from ops_service_kit.http import (
     options_window,
 )
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListQuery
 from ops_service_kit.request_timing import note_caller
 from ops_service_kit.settings import Settings
 from ops_signin import PasswordHasher
@@ -57,7 +59,7 @@ from ..oauth.metadata import server_metadata
 from ..oauth.token import Tokens
 from ..passwords import Passwords, email_key_from
 from ..policies import Policies
-from ..roles import Roles
+from ..roles import Roles, permissions_view
 from ..signin_options import SignInOptions
 from ..signin_settings import ProviderMetadata, SignInSettings
 from ..signin_watch import SecurityNotices
@@ -67,7 +69,8 @@ from ..store.holders import HolderStore
 from ..store.identity import IdentityStore, SessionRef
 from ..store.keys import KeyStore
 from ..store.lifecycle import LifecycleStore
-from ..store.members import Actor, TeamStore
+from ..store.me import MeStore
+from ..store.members import Actor, MemberRow, TeamStore
 from ..store.policies import PolicyStore
 from ..store.roles import RoleStore
 from ..store.signin import SignInStore
@@ -294,7 +297,8 @@ def create_public_app(
         auth=auth,
         identity=store,
         store=signin_store,
-        http=httpx.AsyncClient(timeout=15, transport=sign.transport),
+        # Identity providers are outside services, so this client is not a ServiceClient; its timeout is the setting's.
+        http=httpx.AsyncClient(timeout=sign.http_timeout_s, transport=sign.transport),
         public_url=sign.public_url,
         console_url=sign.console_url,
         secrets=signin_secrets,
@@ -331,6 +335,11 @@ def create_public_app(
         response.headers["Cache-Control"] = "public, max-age=300"
         return jwks
 
+    # The sign-in routes (/v1/auth/*, /oauth/*, invites, key introspection) take no `Tx`: each store call commits on
+    # its own, so a failed-attempt count, a refusal's audit row or a reused refresh token's ended session survives the
+    # 401 or 429 that follows it (tests/test_signin_lockout.py goes red under one request transaction). Routes that
+    # call an identity provider, DNS, the credential store, mail or agents-service take none either, so no
+    # transaction is open during the call. Every other route reads and writes in one request transaction.
     @app.post("/v1/auth/sign-in", tags=["auth"], response_model=Envelope[SessionOut], responses=ERRORS)
     async def sign_in(body: SignIn) -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(_issued(await auth.sign_in(body.email, body.password, request_id=new_id("req"))))
@@ -340,7 +349,7 @@ def create_public_app(
 
     @app.get("/v1/auth/session", tags=["auth"], response_model=Envelope[Principal], responses=ERRORS)
     async def session(token: Annotated[str, Depends(_bearer)]) -> Any:  # pyright: ignore[reportUnusedFunction]
-        _, claims = await auth.session_of(token)
+        _, claims = await auth.session_of(token, seen=False)
         return ok(principal_from_claims(claims))
 
     @app.post("/v1/auth/refresh", tags=["auth"], response_model=Envelope[SessionOut], responses=ERRORS)
@@ -478,21 +487,18 @@ def create_public_app(
         team_delete_after_days=settings.team_delete_after_days,
     )
     if usage is None:
-        agents_http = httpx.AsyncClient(base_url=settings.agents_url or f"http://127.0.0.1:{settings.port}", timeout=5)
-        agents = ServiceClient.for_settings(
-            settings, agents_http, service="platform", audience="agents", scopes=["workflows:view"], timeout=5
-        )
+        agents = ServiceClient.for_settings(settings, service="platform", audience="agents", scopes=["workflows:view"])
         usage = AgentsUsage(agents)
     app.state.team_usage = usage
 
-    async def claims_open(token: Annotated[str, Depends(_bearer)]) -> dict[str, Any]:
+    async def claims_open(request: Request, token: Annotated[str, Depends(_bearer)]) -> dict[str, Any]:
         """A live session's claims whatever the workspace's status: `/v1/me` and restore, which a closed workspace's
-        owner still reaches."""
-        return (await auth.session_of(token))[1]
+        owner still reaches. A GET writes no row, so it checks the session without recording it as seen."""
+        return (await auth.session_of(token, seen=request.method != "GET"))[1]
 
-    async def claims_of(token: Annotated[str, Depends(_bearer)]) -> dict[str, Any]:
+    async def claims_of(request: Request, token: Annotated[str, Depends(_bearer)]) -> dict[str, Any]:
         """A live session's claims in an active workspace; a closed one answers 403 `workspace_closed`."""
-        claims = await claims_open(token)
+        claims = await claims_open(request, token)
         await lifecycle.open_or_refuse(str(claims["tenant_id"]))
         return claims
 
@@ -526,65 +532,78 @@ def create_public_app(
         return await acting(claims, x_team_id)
 
     policy_store = PolicyStore(store.db)
+    me_store = MeStore(store.db)
 
     async def everywhere(tenant: str, user: str) -> bool:
         return await RoleStore(store.db).workspace_admin(tenant, user, now=now_iso())
 
     @app.get("/v1/me", tags=["me"], response_model=Envelope[Me], responses=ERRORS)
-    async def me(claims: Annotated[dict[str, Any], Depends(claims_open)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def me(_: Tx, claims: Annotated[dict[str, Any], Depends(claims_open)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         tenant, user = str(claims["tenant_id"]), str(claims["sub"])
-        found = await store.user(tenant, user)
+        found = await me_store.read(tenant, user)
         if found is None:
             raise Unauthorized("Sign in again.")
-        teams = await team_store.teams_of(tenant, user, everywhere=await everywhere(tenant, user))
+        teams = [*found.member_teams, *found.other_teams]
         return ok(
             {
-                "user": {"id": found.id, "email": found.email, "name": found.name},
+                "user": {"id": found.user.id, "email": found.user.email, "name": found.user.name},
+                # What the person may do in each team, as /v1/me/permissions answers it: the shell reads it here.
+                "permissions": permissions_view(
+                    user,
+                    found.holdings,
+                    found.grids,
+                    security=found.security_team,
+                    version=found.permission_version,
+                    # Every team the person belongs to or is assigned in, as /v1/me/permissions answers.
+                    teams=list(found.holdings.teams),
+                ),
                 "tenantId": tenant,
-                "tenantName": await store.tenant_name(tenant) or None,
-                "teams": [{"id": t["id"], "name": t["name"], "role": t["role"]} for t in teams],
-                "policies": await policy_store.values(tenant),
-                "securityTeamId": await team_store.security_team_of(tenant),
-                "workspace": await lifecycle.state(tenant),
+                "tenantName": found.tenant_name or None,
+                # A workspace admin's other teams are theirs as admin, through their workspace role.
+                "teams": [{"id": t.id, "name": t.name, "role": t.role or "admin"} for t in teams],
+                "policies": found.policies,
+                "securityTeamId": found.security_team,
+                "workspace": lifecycle.state_of(found.workspace),
                 "flags": settings.feature_flags.resolved(),
             }
         )
 
     @app.get("/v1/teams", tags=["teams"], response_model=Envelope[list[TeamOut]], responses=ERRORS)
-    async def list_teams(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def list_teams(_: Tx, claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The teams the caller may switch to: their own, and every active team for a workspace admin."""
         tenant, user = str(claims["tenant_id"]), str(claims["sub"])
-        return ok(await team_store.teams_of(tenant, user, everywhere=await everywhere(tenant, user)))
+        teams = await team_store.teams_of(tenant, user, everywhere=await everywhere(tenant, user))
+        return ok([t.model_dump(by_alias=True) for t in teams])
 
     @app.get("/v1/settings/members", tags=["members"], response_model=Envelope[ListResult[MemberOut]], responses=ERRORS)
     async def list_members(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
+        q: ListQuery,
         actor: Annotated[Actor, Depends(acting)],
         role: Annotated[list[str] | None, Query()] = None,
-        status: Annotated[list[str] | None, Query()] = None,
+        status: Annotated[list[Literal["active", "invited"]] | None, Query()] = None,
     ) -> Any:
-        # Every built-in role but Chat user reads the team's people; a chat-only member does not.
+        """The team's people and invites on the shared list contract: `role` and `status` filter and are counted,
+        `search` matches name and email, oldest first (`sortBy` name, role, status, or teamId for the team's name).
+        Every built-in role but Chat user reads the team's people. The filters are declared here so a bad value is
+        refused; ListQuery reads the same keys as its filters."""
+        del role, status
         await people.require_admin(actor, "access", "view")
-        everyone = await team_store.members(actor.tenant_id, actor.team_id, roles=[], statuses=[])
-        rows = [m for m in everyone if (not role or m["role"] in role) and (not status or m["status"] in status)]
-        joined = [str(m["userId"]) for m in rows if m.get("userId")]
+        page = await team_store.member_page(actor.tenant_id, actor.team_id, q)
+        joined = [str(m["user_id"]) for m in page["data"] if m["user_id"]]
         wide = await RoleStore(store.db).workspace_roles(actor.tenant_id, joined, now=now_iso())
-        rows = [m | {"workspaceRoles": wide.get(str(m.get("userId")), [])} for m in rows]
-        facets = {
-            key: {v: sum(1 for m in everyone if m[key] == v) for v in sorted({m[key] for m in everyone})}
-            for key in ("role", "status")
-        }
-        pagination = {
-            "page": 1,
-            "pageSize": len(rows),
-            "total": len(rows),
-            "totalPages": 1,
-            "hasNext": False,
-            "hasPrev": False,
-        }
-        return ok({"data": rows, "pagination": pagination, "facets": facets})
+        shown = [MemberRow.model_validate(m) for m in page["data"]]
+        page["data"] = [
+            m.model_dump(by_alias=True, exclude={"created_at"})
+            | ({"invitedAt": m.created_at} if m.status == "invited" else {})
+            | {"workspaceRoles": wide.get(str(m.user_id), [])}
+            for m in shown
+        ]
+        return ok(page)
 
     @app.get("/v1/settings/members/options", tags=["members"], response_model=Envelope[OptionsPage], responses=ERRORS)
     async def member_options(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         actor: Annotated[Actor, Depends(acting)],
         search: str | None = None,
         cursor: str | None = None,
@@ -597,40 +616,51 @@ def create_public_app(
         rows = await team_store.people_options(
             actor.tenant_id, actor.team_id, search=search, ids=ids or [], offset=offset, limit=window
         )
-        return ok(options_page(rows, offset, limit))
+        return ok(options_page([r.model_dump(by_alias=True) for r in rows], offset, limit))
 
     @app.post("/v1/settings/members/invite", tags=["members"], response_model=Envelope[InviteBulkOut], responses=ERRORS)
-    async def invite_members(body: InviteIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def invite_members(_: Tx, body: InviteIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(await people.invite(actor, body.emails, body.role))
 
     async def users_of(actor: Actor, member_ids: list[str]) -> list[str]:
         rows = await team_store.members(actor.tenant_id, actor.team_id, roles=[], statuses=[])
-        return [str(m["userId"]) for m in rows if m["id"] in member_ids and m.get("userId")]
+        return [m.user_id for m in rows if m.id in member_ids and m.user_id]
 
     @app.post("/v1/settings/members/role", tags=["members"], response_model=Envelope[BulkOut], responses=ERRORS)
-    async def change_roles(body: RoleIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def change_roles(_: Tx, body: RoleIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The owner is never demoted here: 409 `owner_must_transfer`."""
         if body.role != ADMIN.id:
             await lifecycle.refuse_owner(actor.tenant_id, await users_of(actor, body.ids))
         return ok(await people.set_role(actor, body.ids, body.role))
 
     @app.post("/v1/settings/members/delete", tags=["members"], response_model=Envelope[BulkOut], responses=ERRORS)
-    async def remove_members(body: DeleteIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def remove_members(_: Tx, body: DeleteIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The owner is never removed here: 409 `owner_must_transfer`."""
         await lifecycle.refuse_owner(actor.tenant_id, await users_of(actor, body.ids))
         return ok(await people.remove(actor, body.ids))
 
     roles = Roles(RoleStore(store.db))
 
-    @app.get("/v1/roles", tags=["roles"], response_model=Envelope[list[RoleOut]], responses=ERRORS)
-    async def list_roles(actor: Annotated[Actor, Depends(reading)]) -> Any:  # pyright: ignore[reportUnusedFunction]
-        """Every role in the tenant, built-in first, with how many permissions it grants and how many hold it. Needs
-        access.view in the acting team: 403 `admin_required`."""
+    @app.get("/v1/roles", tags=["roles"], response_model=Envelope[ListResult[RoleOut]], responses=ERRORS)
+    async def list_roles(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
+        q: ListQuery,
+        actor: Annotated[Actor, Depends(reading)],
+        builtin: Annotated[Literal["true", "false"] | None, Query()] = None,
+        can_decide_reviews: Annotated[Literal["true", "false"] | None, Query(alias="canDecideReviews")] = None,
+    ) -> Any:
+        """The tenant's roles on the shared list contract, built-in first in their fixed order, then by name, searched
+        on name, with how many permissions each grants and how many hold it. `builtin` keeps built-in or custom roles,
+        `canDecideReviews` the roles that do or do not grant reviews.decide. Needs access.view in the acting team:
+        403 `admin_required`. The filters are declared here so a bad value is refused; ListQuery reads the same keys
+        as its filters."""
+        del builtin, can_decide_reviews
         await people.require_admin(actor, "access", "view")
-        return ok(await roles.list(actor.tenant_id))
+        return ok(await roles.list(actor.tenant_id, q))
 
     @app.get("/v1/roles/{role_id}", tags=["roles"], response_model=Envelope[RoleDetail], responses=ERRORS)
     async def read_role(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         role_id: Annotated[str, Path(pattern=RECORD_ID)],
         claims: Annotated[dict[str, Any], Depends(claims_of)],
         acting_actor: Annotated[Actor, Depends(reading)],
@@ -651,8 +681,25 @@ def create_public_app(
 
     holder_store = HolderStore(store.db)
 
+    async def reads_access(actor: Actor) -> None:
+        """access.view where the request acts; a caller of several teams who names none (`*`) needs it in one of them.
+        A Chat user holds it nowhere: 403 `admin_required`."""
+        if actor.team_id != ANY_TEAM:
+            await people.require_admin(actor, "access", "view")
+            return
+        p, access = await RoleStore(store.db).live(actor.tenant_id, actor.user_id)
+        # `from_any_team`: the token-less caller acts in no team, so each of theirs is asked by name.
+        team = next((t for t in p.team_ids if access.may(p, "access", "view", team=t, from_any_team=True)), ANY_TEAM)
+        access.can(p, "access", "view", team=team, what="this team", code="admin_required", from_any_team=True)
+
+    async def others_access(actor: Actor, person_id: str) -> None:
+        """Another person's roles and grants are read with access.view; one's own need no cell."""
+        if person_id != actor.user_id:
+            await reads_access(actor)
+
     @app.get("/v1/access/holders", tags=["access"], response_model=Envelope[HoldersOut], responses=ERRORS)
     async def access_holders(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         area: Annotated[str, Query(max_length=32)],
         action: Annotated[str, Query(max_length=16)],
         actor: Annotated[Actor, Depends(acting)],
@@ -661,9 +708,11 @@ def create_public_app(
     ) -> Any:
         """Which roles grant `area.action` in a team (the Security team for its actions), and who holds them there:
         what a "View only" notice names. The team is `team`, the record's, when the page shows another team's
-        record, else the one the request acts in; a member of that team, or a workspace admin, may ask."""
+        record, else the one the request acts in; a member of that team, or a workspace admin, may ask, holding
+        access.view where the request acts (a Chat user does not: 403 `admin_required`)."""
         if area not in AREAS or action not in ACTIONS:
             raise ValidationFailed(f"{area}.{action} is not in the catalogue.", code="unknown_cell")
+        await people.require_admin(actor, "access", "view")
         named: list[Any] = claims.get("team_ids") or []
         outside = team is not None and team not in [str(t) for t in named]
         if outside and not await everywhere(actor.tenant_id, actor.user_id):
@@ -674,10 +723,11 @@ def create_public_app(
             raise Conflict(
                 "This workspace names no Security team; a workspace admin names it.", code="no_security_team"
             )
-        return ok({"teamId": team, **await holder_store.holders(actor.tenant_id, team, area, action)})
+        found = await holder_store.holders(actor.tenant_id, team, area, action)
+        return ok({"teamId": team, **found.model_dump(by_alias=True)})
 
     @app.get("/v1/me/permissions", tags=["me"], response_model=Envelope[PermissionsOut], responses=ERRORS)
-    async def my_permissions(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def my_permissions(_: Tx, claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """What the caller may do in each of their teams, and the roles that grant each action."""
         return ok(await roles.of_me(str(claims["tenant_id"]), str(claims["sub"])))
 
@@ -685,6 +735,7 @@ def create_public_app(
 
     @app.get("/v1/me/why", tags=["me"], response_model=Envelope[WhyOut], responses=ERRORS)
     async def why_not(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         area: Annotated[str, Query(max_length=32)],
         action: Annotated[str, Query(max_length=16)],
         actor: Annotated[Actor, Depends(acting)],
@@ -697,7 +748,7 @@ def create_public_app(
 
     @app.post("/v1/access/check", tags=["access"], response_model=Envelope[AccessCheckOut], responses=ERRORS)
     async def check_access(  # pyright: ignore[reportUnusedFunction]
-        body: AccessCheckIn, actor: Annotated[Actor, Depends(acting)]
+        _: Tx, body: AccessCheckIn, actor: Annotated[Actor, Depends(acting)]
     ) -> Any:
         """Whether a person may take `area.action` in the team the request acts in, by the same `can()` the
         services run with the workspace's policies: allowed with the granting roles, or refused with the reason. The
@@ -717,10 +768,14 @@ def create_public_app(
         responses=ERRORS,
     )
     async def person_permissions(  # pyright: ignore[reportUnusedFunction]
-        person_id: Annotated[str, Path(pattern=RECORD_ID)], claims: Annotated[dict[str, Any], Depends(claims_of)]
+        _: Tx,
+        person_id: Annotated[str, Path(pattern=RECORD_ID)],
+        claims: Annotated[dict[str, Any], Depends(claims_of)],
+        actor: Annotated[Actor, Depends(reading)],
     ) -> Any:
         """What a person may do in the teams they share with the caller, with their name and address; 404 when they
-        share none."""
+        share none. Another person's needs access.view where the request acts (a Chat user reads only their own)."""
+        await others_access(actor, person_id)
         tenant = str(claims["tenant_id"])
         view = await roles.of_person(tenant, str(claims["sub"]), person_id)
         who = await store.user(tenant, person_id)
@@ -753,7 +808,7 @@ def create_public_app(
         response_model=Envelope[list[ProviderOut]],
         responses=ERRORS,
     )
-    async def list_signin_providers(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def list_signin_providers(_: Tx, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The workspace's sign-in providers; Security team admins only."""
         return ok(await signin_settings.list(actor))
 
@@ -802,7 +857,7 @@ def create_public_app(
         response_model=Envelope[list[str]],
         responses=ERRORS,
     )
-    async def list_signin_secret_names(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def list_signin_secret_names(_: Tx, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The names an OIDC provider may give as `clientSecretRef`: the workspace's saved secrets, never the values."""
         return ok(await signin_settings.secret_names(actor))
 
@@ -812,7 +867,7 @@ def create_public_app(
         response_model=Envelope[list[SignInSecretOut]],
         responses=ERRORS,
     )
-    async def list_signin_secrets(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def list_signin_secrets(_: Tx, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The workspace's sign-in secrets with who saved each and when, never a value; Security team admins read."""
         return ok(await signin_settings.secrets_listed(actor))
 
@@ -906,7 +961,7 @@ def create_public_app(
 
     @app.get("/v1/oauth/consent", tags=["oauth"], response_model=Envelope[ConsentOut], responses=oauth_errors)
     async def oauth_consent(  # pyright: ignore[reportUnusedFunction]
-        request: Request, claims: Annotated[dict[str, Any], Depends(claims_of)]
+        _: Tx, request: Request, claims: Annotated[dict[str, Any], Depends(claims_of)]
     ) -> Any:
         """What the consent page shows for an assistant's request: the assistant, the team its address names, the
         host the browser returns to and how long the connection lasts. 403 `team_forbidden` for a person outside the
@@ -923,9 +978,10 @@ def create_public_app(
         return ok(await authorizer.decide(claims, q, allow=body.decision == "allow", request_id=new_id("req")))
 
     @app.get("/v1/oauth/grants", tags=["oauth"], response_model=Envelope[list[GrantOut]], responses=ERRORS)
-    async def oauth_grants(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def oauth_grants(_: Tx, claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The assistants the signed-in person has connected, newest first."""
-        return ok(await store.grants_of(str(claims["tenant_id"]), str(claims["sub"]), now=iso()))
+        found = await store.grants_of(str(claims["tenant_id"]), str(claims["sub"]), now=iso())
+        return ok([g.model_dump(by_alias=True) for g in found])
 
     @app.delete("/v1/oauth/grants/{grant_id}", tags=["oauth"], status_code=204, responses=ERRORS)
     async def oauth_disconnect(  # pyright: ignore[reportUnusedFunction]
@@ -941,8 +997,10 @@ def create_public_app(
     policies = Policies(policy_store, people, guards={REQUIRED: break_glass.guard_policy})
 
     @app.get("/v1/policies", tags=["policies"], response_model=Envelope[list[PolicyOut]], responses=ERRORS)
-    async def list_policies(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
-        """Every policy with its value and open default; any member of the workspace reads them."""
+    async def list_policies(_: Tx, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+        """Every policy with its value and open default; whoever holds access.view where the request acts reads them
+        (every membership role but Chat user: 403 `admin_required`)."""
+        await people.require_admin(actor, "access", "view")
         return ok(await policies.list(actor))
 
     readers = services or ServiceAuth(
@@ -957,11 +1015,13 @@ def create_public_app(
 
     @app.get("/v1/policies/{key}", tags=["policies"], response_model=Envelope[PolicyOut], responses=ERRORS)
     async def get_policy(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
+        request: Request,
         key: Annotated[str, Path(max_length=64)],
         token: Annotated[str, Depends(_bearer)],
         x_team_id: Annotated[str | None, Header()] = None,
     ) -> Any:
-        """One policy of the workspace. Any member reads it; a service token needs the
+        """One policy of the workspace. A person needs access.view where the request acts; a service token needs the
         `settings:view` scope and reads its own tenant's value, as a background job with no person does (the
         memory sweep). 400 `policy_value` for a key the catalogue does not hold."""
         if readers.signs(token):
@@ -970,7 +1030,9 @@ def create_public_app(
                 raise Forbidden("This service token does not hold the settings:view scope.", code="scope_required")
             rows = await policies.for_tenant(svc.tenant_id)
         else:
-            rows = await policies.list(await acting(await claims_of(token), x_team_id))
+            actor = await acting(await claims_of(request, token), x_team_id)
+            await people.require_admin(actor, "access", "view")
+            rows = await policies.list(actor)
         row = next((r for r in rows if r["key"] == key), None)
         if row is None:
             raise ValidationFailed(f"{key} is not a policy", code="policy_value")
@@ -978,37 +1040,49 @@ def create_public_app(
 
     @app.get("/v1/team-names", tags=["teams"], response_model=Envelope[list[TeamName]], responses=ERRORS)
     async def team_names(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
+        request: Request,
         token: Annotated[str, Depends(_bearer)],
+        x_team_id: Annotated[str | None, Header()] = None,
     ) -> Any:
-        """Every team's display name in the workspace, so a page showing another team's record names its team.
-        Any member reads them; a service token needs the `settings:view` scope and reads its own tenant's."""
+        """Every team's display name in the workspace, so a page showing another team's record names its team. A
+        person needs access.view where the request acts (no console screen calls it, a Chat user's none); a service
+        token needs the `settings:view` scope and reads its own tenant's."""
         if readers.signs(token):
             svc = await service_of(token)
             if "settings:view" not in svc.scopes:
                 raise Forbidden("This service token does not hold the settings:view scope.", code="scope_required")
             tenant = svc.tenant_id
         else:
-            tenant = str((await claims_of(token))["tenant_id"])
-        return ok(await team_store.names(tenant))
+            actor = await reading(await claims_of(request, token), x_team_id)
+            await reads_access(actor)
+            tenant = actor.tenant_id
+        return ok([t.model_dump(by_alias=True) for t in await team_store.names(tenant)])
 
     @app.get("/v1/people-names", tags=["people"], response_model=Envelope[list[PersonName]], responses=ERRORS)
     async def people_names(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
+        request: Request,
         token: Annotated[str, Depends(_bearer)],
+        x_team_id: Annotated[str | None, Header()] = None,
     ) -> Any:
-        """Every person's display name in the workspace by email, so a list naming who did something shows a
-        name rather than an address. Any member reads them; a service token needs the `settings:view` scope."""
+        """Every person's display name in the workspace by email, so a list naming who did something shows a name
+        rather than an address. A person needs access.view where the request acts (no console screen calls it, a Chat
+        user's none); a service token needs the `settings:view` scope."""
         if readers.signs(token):
             svc = await service_of(token)
             if "settings:view" not in svc.scopes:
                 raise Forbidden("This service token does not hold the settings:view scope.", code="scope_required")
             tenant = svc.tenant_id
         else:
-            tenant = str((await claims_of(token))["tenant_id"])
-        return ok(await team_store.people_names(tenant))
+            actor = await reading(await claims_of(request, token), x_team_id)
+            await reads_access(actor)
+            tenant = actor.tenant_id
+        return ok([p.model_dump(by_alias=True) for p in await team_store.people_names(tenant)])
 
     @app.put("/v1/policies/{key}", tags=["policies"], response_model=Envelope[PolicyOut], responses=ERRORS)
     async def set_policy(  # pyright: ignore[reportUnusedFunction]
-        key: Annotated[str, Path(max_length=64)], body: PolicyIn, actor: Annotated[Actor, Depends(acting)]
+        _: Tx, key: Annotated[str, Path(max_length=64)], body: PolicyIn, actor: Annotated[Actor, Depends(acting)]
     ) -> Any:
         """Sets one policy for the workspace, audited, and moves the permission version so tokens refresh; who holds
         settings.manage in the acting team. 400 `policy_value` for a key or value the catalogue does not take."""
@@ -1045,7 +1119,7 @@ def create_public_app(
         responses=ERRORS,
     )
     async def signin_test_result(  # pyright: ignore[reportUnusedFunction]
-        flow_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(acting)]
+        _: Tx, flow_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(acting)]
     ) -> Any:
         """What a test sign-in got back: email, name and groups, or the check that failed. 404 to anyone but the admin
         who started it."""
@@ -1061,9 +1135,9 @@ def create_public_app(
         response_model=Envelope[list[BreakGlassOut]],
         responses=ERRORS,
     )
-    async def list_break_glass(actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def list_break_glass(_: Tx, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The Security admins who may sign in by password while company sign-in is required."""
-        return ok(await break_glass.list(actor))
+        return ok([p.model_dump(by_alias=True) for p in await break_glass.list(actor)])
 
     @app.put(
         "/v1/settings/sign-in/break-glass/{user_id}",
@@ -1076,7 +1150,7 @@ def create_public_app(
     ) -> Any:
         """Adds a Security admin to the list (at most three); 422 `break_glass_not_security_admin`,
         `break_glass_full`. Returns the list."""
-        return ok(await break_glass.add(actor, user_id))
+        return ok([p.model_dump(by_alias=True) for p in await break_glass.add(actor, user_id)])
 
     @app.delete(
         "/v1/settings/sign-in/break-glass/{user_id}",
@@ -1088,7 +1162,7 @@ def create_public_app(
         user_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(acting)]
     ) -> Any:
         """Takes a person off the list; 409 `break_glass_last` while company sign-in is required. Returns the list."""
-        return ok(await break_glass.remove(actor, user_id))
+        return ok([p.model_dump(by_alias=True) for p in await break_glass.remove(actor, user_id)])
 
     team_admin = TeamAdmin(
         TeamAdminStore(store.db),
@@ -1102,6 +1176,7 @@ def create_public_app(
 
     @app.put("/v1/roles/{role_id}/permissions", tags=["roles"], response_model=Envelope[RoleDetail], responses=ERRORS)
     async def edit_role(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         role_id: Annotated[str, Path(pattern=RECORD_ID)],
         body: RoleCellsIn,
         actor: Annotated[Actor, Depends(on_workspace)],
@@ -1115,7 +1190,7 @@ def create_public_app(
         return ok(edited | {"canEdit": True})
 
     @app.post("/v1/roles", tags=["roles"], status_code=201, response_model=Envelope[RoleCreatedOut], responses=ERRORS)
-    async def create_role(body: RoleCreateIn, actor: Annotated[Actor, Depends(on_workspace)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def create_role(_: Tx, body: RoleCreateIn, actor: Annotated[Actor, Depends(on_workspace)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """A custom role, from scratch (`permissions`) or as a copy of another (`copyOf`), less the cells a custom role
         may not hold: secrets, egress and Security-team ones (400 `not_for_custom_roles` when given; named in
         `leftOut` when copied). A workspace admin's (access.manage); audited; 409 `name_taken`."""
@@ -1136,6 +1211,7 @@ def create_public_app(
 
     @app.patch("/v1/roles/{role_id}", tags=["roles"], response_model=Envelope[RoleDetail], responses=ERRORS)
     async def rename_role(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         role_id: Annotated[str, Path(pattern=RECORD_ID)],
         body: RolePatchIn,
         actor: Annotated[Actor, Depends(on_workspace)],
@@ -1154,29 +1230,42 @@ def create_public_app(
         return ok(renamed | {"canEdit": True})
 
     @app.get(
-        "/v1/roles/{role_id}/holders", tags=["roles"], response_model=Envelope[list[RoleHolderOut]], responses=ERRORS
+        "/v1/roles/{role_id}/holders",
+        tags=["roles"],
+        response_model=Envelope[ListResult[RoleHolderOut]],
+        responses=ERRORS,
     )
     async def role_holders(  # pyright: ignore[reportUnusedFunction]
-        role_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
+        _: Tx,
+        q: ListQuery,
+        role_id: Annotated[str, Path(pattern=RECORD_ID)],
+        actor: Annotated[Actor, Depends(on_workspace)],
     ) -> Any:
-        """Who holds the role and in which team: what deleting it would take from them. A workspace admin's."""
+        """Who holds the role and in which team, on the shared list contract by name, searched on name and email:
+        what deleting it would take from them. A workspace admin's."""
         await people.require_admin(actor, "access", "view")
-        return ok(await roles.store.holders(actor.tenant_id, role_id))
+        return ok(await roles.store.holders(actor.tenant_id, role_id, q))
 
     @app.get(
         "/v1/people/{person_id}/role-grants",
         tags=["people"],
-        response_model=Envelope[list[RoleGrantOut]],
+        response_model=Envelope[ListResult[RoleGrantOut]],
         responses=ERRORS,
     )
     async def person_role_grants(  # pyright: ignore[reportUnusedFunction]
-        person_id: Annotated[str, Path(pattern=RECORD_ID)], claims: Annotated[dict[str, Any], Depends(claims_of)]
+        _: Tx,
+        q: ListQuery,
+        person_id: Annotated[str, Path(pattern=RECORD_ID)],
+        claims: Annotated[dict[str, Any], Depends(claims_of)],
+        actor: Annotated[Actor, Depends(reading)],
     ) -> Any:
-        """The custom roles given to a person on their own, each with its team; read by whoever shares a team with
-        them, as their permissions are (404 otherwise)."""
+        """The custom roles given to a person on their own, each with its team, on the shared list contract by role
+        name, searched on it; read by whoever shares a team with them, as their permissions are (404 otherwise), and
+        holds access.view where the request acts when it is another person (a Chat user reads only their own)."""
+        await others_access(actor, person_id)
         tenant = str(claims["tenant_id"])
         await roles.of_person(tenant, str(claims["sub"]), person_id)
-        return ok(await roles.store.grants_of(tenant, person_id))
+        return ok(await roles.store.grants_of(tenant, person_id, q))
 
     @app.post(
         "/v1/people/{person_id}/role-grants",
@@ -1186,6 +1275,7 @@ def create_public_app(
         responses=ERRORS,
     )
     async def give_role(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         person_id: Annotated[str, Path(pattern=RECORD_ID)],
         body: RoleGrantIn,
         actor: Annotated[Actor, Depends(acting)],
@@ -1200,6 +1290,7 @@ def create_public_app(
 
     @app.delete("/v1/people/{person_id}/role-grants/{grant_id}", tags=["people"], status_code=204, responses=ERRORS)
     async def take_role(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         person_id: Annotated[str, Path(pattern=RECORD_ID)],
         grant_id: Annotated[str, Path(pattern=RECORD_ID)],
         claims: Annotated[dict[str, Any], Depends(claims_of)],
@@ -1207,15 +1298,16 @@ def create_public_app(
         """Takes a given role away: an admin of its team or a workspace admin. Audited."""
         tenant = str(claims["tenant_id"])
         row = await roles.store.grant_row(tenant, grant_id)
-        if row is None or row["subjectId"] != person_id:
+        if row is None or row.subject_id != person_id:
             raise NotFound("No such role given to this person.")
-        actor = Actor(tenant, str(row["teamId"]), str(claims["sub"]), new_id("req"))
+        actor = Actor(tenant, row.team_id, str(claims["sub"]), new_id("req"))
         await people.require_admin(actor, "access", "manage")
         await roles.store.ungrant(tenant, grant_id, by=actor.user_id, request_id=actor.request_id)
         return Response(status_code=204)
 
     @app.delete("/v1/roles/{role_id}", tags=["roles"], status_code=204, responses=ERRORS)
     async def delete_role(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         role_id: Annotated[str, Path(pattern=RECORD_ID)],
         actor: Annotated[Actor, Depends(on_workspace)],
         move_to: Annotated[str | None, Query(alias="moveTo", pattern=RECORD_ID)] = None,
@@ -1228,7 +1320,7 @@ def create_public_app(
 
     @app.post("/v1/roles/{role_id}/reset", tags=["roles"], response_model=Envelope[RoleDetail], responses=ERRORS)
     async def reset_role(  # pyright: ignore[reportUnusedFunction]
-        role_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
+        _: Tx, role_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
     ) -> Any:
         """Reset to default: a built-in role's cells back to the ones it ships with. Audited; 400 `not_builtin`."""
         await people.require_admin(actor, "access", "manage")
@@ -1244,17 +1336,14 @@ def create_public_app(
         responses=ERRORS,
     )
     async def list_workspace_teams(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
+        q: ListQuery,
         actor: Annotated[Actor, Depends(on_workspace)],
         status: Annotated[list[Literal["active", "archived"]] | None, Query()] = None,
-        search: Annotated[str, Query(max_length=80)] = "",
-        page: Annotated[int, Query(ge=1)] = 1,
-        page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 50,
     ) -> Any:
-        """Every team of the workspace with its member and admin counts; workspace admins (`access.view` in every
-        team) only."""
-        return ok(
-            await team_admin.every(actor, statuses=list(status or []), search=search, page=page, page_size=page_size)
-        )
+        """Every team of the workspace with its member and admin counts on the shared list contract, by name, searched
+        on name; `status` keeps active or archived teams. Workspace admins (`access.view` in every team) only."""
+        return ok(await team_admin.every(actor, q, statuses=list(status or [])))
 
     @app.post(
         "/v1/settings/teams",
@@ -1263,7 +1352,7 @@ def create_public_app(
         response_model=Envelope[WorkspaceTeamOut],
         responses=ERRORS,
     )
-    async def create_team(body: TeamIn, actor: Annotated[Actor, Depends(on_workspace)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def create_team(_: Tx, body: TeamIn, actor: Annotated[Actor, Depends(on_workspace)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """A new team with its first admin; workspace admins (`access.manage` in every team) only. A name the
         workspace already uses, in any case, is 409, so a retried create never makes a second team."""
         return ok(await team_admin.create(actor, body.name, body.admin), status=201)
@@ -1274,7 +1363,7 @@ def create_public_app(
         response_model=Envelope[WorkspaceTeamsOut],
         responses=ERRORS,
     )
-    async def read_workspace_teams(token: Annotated[str, Depends(_bearer)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def read_workspace_teams(_: Tx, request: Request, token: Annotated[str, Depends(_bearer)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The workspace's security team and the team new people join when nothing else names one. A workspace
         admin reads them; a service token needs the `settings:view` scope and reads its own tenant's."""
         if readers.signs(token):
@@ -1282,7 +1371,7 @@ def create_public_app(
             if "settings:view" not in svc.scopes:
                 raise Forbidden("This service token does not hold the settings:view scope.", code="scope_required")
             return ok(await team_admin.workspace_teams_of(svc.tenant_id))
-        return ok(await team_admin.workspace_teams(await on_workspace(await claims_of(token))))
+        return ok(await team_admin.workspace_teams(await on_workspace(await claims_of(request, token))))
 
     @app.put(
         "/v1/settings/workspace-teams",
@@ -1291,7 +1380,7 @@ def create_public_app(
         responses=ERRORS,
     )
     async def set_workspace_teams(  # pyright: ignore[reportUnusedFunction]
-        body: WorkspaceTeamsIn, actor: Annotated[Actor, Depends(on_workspace)]
+        _: Tx, body: WorkspaceTeamsIn, actor: Annotated[Actor, Depends(on_workspace)]
     ) -> Any:
         """Workspace admins only. Moving the security team moves Security admin with it, at once."""
         return ok(await team_admin.set_workspace_teams(actor, body.security_team, body.default_team))
@@ -1303,7 +1392,7 @@ def create_public_app(
         responses=ERRORS,
     )
     async def rename_workspace(  # pyright: ignore[reportUnusedFunction]
-        body: WorkspaceRenameIn, actor: Annotated[Actor, Depends(on_workspace)]
+        _: Tx, body: WorkspaceRenameIn, actor: Annotated[Actor, Depends(on_workspace)]
     ) -> Any:
         """Names the workspace (the console's header and switcher read it from `/v1/me`); workspace admins only."""
         return ok(await team_admin.rename_workspace(actor, body.name))
@@ -1315,6 +1404,7 @@ def create_public_app(
         responses=ERRORS,
     )
     async def rename_team(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         team_id: Annotated[str, Path(pattern=RECORD_ID)],
         body: TeamRenameIn,
         actor: Annotated[Actor, Depends(on_workspace)],
@@ -1328,7 +1418,7 @@ def create_public_app(
         responses=ERRORS,
     )
     async def archive_team(  # pyright: ignore[reportUnusedFunction]
-        team_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
+        _: Tx, team_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
     ) -> Any:
         """The team leaves its members' next tokens and takes no new members; what it owns stays its own."""
         return ok(await team_admin.set_status(actor, team_id, archived=True))
@@ -1340,7 +1430,7 @@ def create_public_app(
         responses=ERRORS,
     )
     async def restore_team(  # pyright: ignore[reportUnusedFunction]
-        team_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
+        _: Tx, team_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
     ) -> Any:
         return ok(await team_admin.set_status(actor, team_id, archived=False))
 
@@ -1351,7 +1441,7 @@ def create_public_app(
         "/v1/workspace/transfer", tags=["workspace"], response_model=Envelope[WorkspaceStateOut], responses=ERRORS
     )
     async def transfer_workspace(  # pyright: ignore[reportUnusedFunction]
-        body: TransferIn, actor: Annotated[Actor, Depends(on_workspace)]
+        _: Tx, body: TransferIn, actor: Annotated[Actor, Depends(on_workspace)]
     ) -> Any:
         """The owner hands the workspace to an account admin, at once and audited; the old owner stays an
         admin. Only the owner (`workspace.manage`); 409 `not_an_account_admin` for a target without access.manage in
@@ -1359,7 +1449,7 @@ def create_public_app(
         return ok(await lifecycle.transfer(actor, body.user_id))
 
     @app.post("/v1/workspace/leave", tags=["workspace"], status_code=204, responses=ERRORS)
-    async def leave_workspace(actor: Annotated[Actor, Depends(on_workspace)]) -> Response:  # pyright: ignore[reportUnusedFunction]
+    async def leave_workspace(_: Tx, actor: Annotated[Actor, Depends(on_workspace)]) -> Response:  # pyright: ignore[reportUnusedFunction]
         """The caller leaves every team of the workspace and their sessions end; the owner is refused with 409
         `owner_must_transfer` until they transfer."""
         await lifecycle.leave(actor)
@@ -1377,13 +1467,13 @@ def create_public_app(
         return ok(await lifecycle.close(actor, body.name, reader))
 
     @app.post("/v1/workspace/restore", tags=["workspace"], response_model=Envelope[WorkspaceStateOut], responses=ERRORS)
-    async def restore_workspace(actor: Annotated[Actor, Depends(on_workspace_open)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def restore_workspace(_: Tx, actor: Annotated[Actor, Depends(on_workspace_open)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """Reopens a closed workspace and the keys its close stopped; 409 `purged` once the purge has started."""
         return ok(await lifecycle.restore(actor))
 
     @app.post("/v1/settings/teams/{team_id}/leave", tags=["teams"], status_code=204, responses=ERRORS)
     async def leave_team(  # pyright: ignore[reportUnusedFunction]
-        team_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
+        _: Tx, team_id: Annotated[str, Path(pattern=RECORD_ID)], actor: Annotated[Actor, Depends(on_workspace)]
     ) -> Response:
         """The caller leaves one team; its last admin is refused with 409 `last_admin`."""
         await lifecycle.leave_team(actor, team_id)
@@ -1417,32 +1507,38 @@ def create_public_app(
 
     keys = ApiKeys(KeyStore(store.db), people)
 
-    @app.get("/v1/api-keys", tags=["api-keys"], response_model=Envelope[list[ApiKeyOut]], responses=ERRORS)
+    @app.get("/v1/api-keys", tags=["api-keys"], response_model=Envelope[ListResult[ApiKeyOut]], responses=ERRORS)
     async def list_api_keys(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
+        q: ListQuery,
         actor: Annotated[Actor, Depends(acting)],
         target_kind: Annotated[Literal["agent", "workflow", "mcp_link"] | None, Query(alias="targetKind")] = None,
         target_id: Annotated[str | None, Query(alias="targetId", max_length=64)] = None,
     ) -> Any:
-        """The team's keys; `targetKind` and `targetId` keep the keys made for one target, as an MCP link's Keys tab
-        lists them."""
-        return ok(await keys.list(actor, target_kind, target_id))
+        """The team's keys on the shared list contract, newest first, searched on name;
+        `targetKind` and `targetId` keep the keys made for one target, as an MCP link's Keys tab lists them. The
+        filters are declared here so a bad value is refused; ListQuery reads the same keys as its filters."""
+        del target_kind, target_id
+        return ok(await keys.list(actor, q))
 
     @app.post(
         "/v1/api-keys", tags=["api-keys"], status_code=201, response_model=Envelope[ApiKeyCreated], responses=ERRORS
     )
-    async def create_api_key(body: ApiKeyIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def create_api_key(_: Tx, body: ApiKeyIn, actor: Annotated[Actor, Depends(acting)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         target = body.target.model_dump() if body.target else None
         return ok(await keys.create(actor, body.name, list(body.scopes), body.expires_in_days, target), status=201)
 
     @app.get("/v1/api-key-summaries", tags=["api-keys"], response_model=Envelope[list[ApiKeySummary]], responses=ERRORS)
     async def api_key_summaries(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
+        request: Request,
         token: Annotated[str, Depends(_bearer)],
     ) -> Any:
         """Every team's keys in the workspace with what each serves: for agents-service's list of API channels
         (a service token with the `settings:view` scope), or for a person who manages access across the workspace
         (`can('access', 'manage')` in every team), as an admin may do everything."""
         if not readers.signs(token):
-            claims = await claims_of(token)
+            claims = await claims_of(request, token)
             actor = Actor(str(claims["tenant_id"]), ANY_TEAM, str(claims["sub"]), new_id("req"))
             await people.require_admin(actor, "access", "manage")
             return ok(await keys.summaries(actor.tenant_id))
@@ -1453,7 +1549,7 @@ def create_public_app(
 
     @app.post("/v1/api-keys/{key_id}/revoke", tags=["api-keys"], response_model=Envelope[ApiKeyOut], responses=ERRORS)
     async def revoke_api_key(  # pyright: ignore[reportUnusedFunction]
-        key_id: Annotated[str, Path(pattern=KEY_ID)], actor: Annotated[Actor, Depends(acting)]
+        _: Tx, key_id: Annotated[str, Path(pattern=KEY_ID)], actor: Annotated[Actor, Depends(acting)]
     ) -> Any:
         return ok(await keys.revoke(actor, key_id))
 
@@ -1461,6 +1557,7 @@ def create_public_app(
 
     @app.get("/v1/audit", tags=["audit"], response_model=Envelope[AuditPage], responses=ERRORS)
     async def read_audit(  # pyright: ignore[reportUnusedFunction]
+        _: Tx,
         *,
         actor: Annotated[Actor, Depends(acting)],
         action: Annotated[str | None, Query(max_length=80)] = None,
@@ -1470,15 +1567,16 @@ def create_public_app(
         target_kind: Annotated[str | None, Query(alias="targetKind", max_length=40)] = None,
         since: Annotated[str | None, Query(alias="from", pattern=ISO_TIME)] = None,
         until: Annotated[str | None, Query(alias="to", pattern=ISO_TIME)] = None,
-        page: Annotated[int, Query(ge=1)] = 1,
-        page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 50,
+        q: ListQuery,
     ) -> Any:
+        """The team's entries on the shared list contract, newest first then by id; `ids` names entries. The filters
+        narrow the page; `facets` and `viewCounts` count every entry the reader may see."""
         filters = {"action": action, "kind": kind, "view": view, "actor": actor_id, "target_kind": target_kind}
         filters |= {"from": since, "to": until}
-        return ok(await reader.page(actor, filters, page, page_size))
+        return ok(await reader.page(actor, filters, q))
 
     @app.get("/v1/invites/{token}", tags=["invites"], response_model=Envelope[InvitePreview], responses=ERRORS)
-    async def read_invite(token: Annotated[str, Path(pattern=INVITE_TOKEN)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def read_invite(_: Tx, token: Annotated[str, Path(pattern=INVITE_TOKEN)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         return ok(await people.preview(token))
 
     @app.post("/v1/invites/{token}/accept", tags=["invites"], response_model=Envelope[SessionOut], responses=ERRORS)
@@ -1529,7 +1627,7 @@ def create_internal_app(store: IdentityStore, *, services: ServiceAuth, signer: 
         response_model=Envelope[PermissionVersionOut],
         responses=ERRORS,
     )
-    async def permission_version(caller: Annotated[Caller, Depends(services.principal)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def permission_version(_: Tx, caller: Annotated[Caller, Depends(services.principal)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The tenant's permission version, which each service compares a person's token with so a role change decides
         on the next request. The service token names the tenant, never the request (I1)."""
         if not caller.tenant_id:
@@ -1543,7 +1641,7 @@ def create_internal_app(store: IdentityStore, *, services: ServiceAuth, signer: 
         responses=ERRORS,
     )
     async def receive_audit_event(  # pyright: ignore[reportUnusedFunction]
-        body: AuditEventIn, caller: Annotated[Caller, Depends(services.principal)]
+        _: Tx, body: AuditEventIn, caller: Annotated[Caller, Depends(services.principal)]
     ) -> Any:
         """An audit entry another service recorded with the change it describes (ops_store.audit), delivered by that
         service's relay, so the Audit page reads one log for the whole account. The token holds `audit:create` and
@@ -1572,7 +1670,7 @@ def create_internal_app(store: IdentityStore, *, services: ServiceAuth, signer: 
             responses=ERRORS,
         )
         async def acting_for_token(  # pyright: ignore[reportUnusedFunction]
-            body: ActingForIn, caller: Annotated[Caller, Depends(services.principal)]
+            _: Tx, body: ActingForIn, caller: Annotated[Caller, Depends(services.principal)]
         ) -> Any:
             """A 60-second token naming the person a tool call acts for; the service token names the tenant and
             the team, never the body (I1)."""

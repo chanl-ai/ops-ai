@@ -21,6 +21,7 @@ import sqlalchemy as sa
 from sqlalchemy.engine.default import DefaultExecutionContext
 
 from ops_access import OWNER
+from ops_store.listing import LISTED
 from ops_store.outbox import outbox_table
 from ops_store.schema import TENANT_SCOPED, system
 
@@ -67,7 +68,8 @@ teams = sa.Table(
     sa.Column("status", sa.String(16), nullable=False, server_default="active"),
     sa.Column("archived_at", sa.String(40)),
     # The lower-case name: two teams of one workspace never share a name in any case, on every database.
-    sa.Column("name_key", sa.String(200), nullable=False, default=_name_key),
+    # The members list sorts by it (`sortBy=teamId`); uq_teams_tenant_name leads with it after the tenant.
+    sa.Column("name_key", sa.String(200), nullable=False, default=_name_key, info=LISTED),
     sa.Column("template_id", sa.String(64)),  # the provisioning template's id for a team it made
     sa.Column("protection", sa.String(16), nullable=False, server_default="none"),  # none | managed | system
     sa.UniqueConstraint("tenant_id", "id", name="uq_teams_tenant_id"),
@@ -89,6 +91,9 @@ users = sa.Table(
     info=TENANT_SCOPED,
 )
 
+# Tenant-scoped, not team-owned: a membership is the account's record of who is in which team ("The tenant holds
+# people, not work", docs/architecture/identity-and-tenancy.md), read across teams by the account's access pages
+# (TENANT_HELD in scripts/tests/test_team_boundary.py, which fails on a team column that is neither).
 members = sa.Table(
     "members",
     metadata,
@@ -97,13 +102,16 @@ members = sa.Table(
     sa.Column("team_id", sa.String(64), nullable=False, index=True),
     sa.Column("user_id", sa.String(64)),  # null while invited
     sa.Column("email", sa.String(320), nullable=False),
-    sa.Column("role", sa.String(16), nullable=False),  # admin | builder | approver | viewer
-    sa.Column("status", sa.String(16), nullable=False),  # active | invited | removed
+    sa.Column("role", sa.String(16), nullable=False, info=LISTED),  # a key of ops_access MEMBER_ROLE_TO_BUILTIN
+    sa.Column("status", sa.String(16), nullable=False, info=LISTED),  # active | invited | removed
     sa.Column("invite_token_hash", sa.String(64), unique=True),
     sa.Column("invite_expires_at", sa.String(40)),
     sa.Column("created_at", sa.String(40), nullable=False),
     sa.Column("updated_at", sa.String(40), nullable=False),
     sa.UniqueConstraint("team_id", "email", name="uq_members_team_email"),
+    # The members list filters a team's people by role and by status.
+    sa.Index("ix_members_team_role", "team_id", "role"),
+    sa.Index("ix_members_team_status", "team_id", "status"),
     sa.ForeignKeyConstraint(["tenant_id", "team_id"], ["teams.tenant_id", "teams.id"], name="fk_members_team"),
     sa.ForeignKeyConstraint(["tenant_id", "user_id"], ["users.tenant_id", "users.id"], name="fk_members_user"),
     info=TENANT_SCOPED,
@@ -128,11 +136,16 @@ api_keys = sa.Table(
     sa.Column("expires_at", sa.String(40)),  # null: the key does not expire
     # What the key may start: agent or workflow, its id, and a pinned workflow version (null: the live one). No
     # target: any live workflow of the key's team.
-    sa.Column("target_kind", sa.String(16)),
-    sa.Column("target_id", sa.String(64)),
+    sa.Column("target_kind", sa.String(16), info=LISTED),
+    sa.Column("target_id", sa.String(64), info=LISTED),
     sa.Column("target_version", sa.Integer),
+    # Raised by every write (store/key_events.py), so a copy of the key keeps its newest state in any delivery order.
+    sa.Column("revision", sa.Integer, nullable=False, server_default=sa.text("1")),
     sa.ForeignKeyConstraint(["tenant_id", "team_id"], ["teams.tenant_id", "teams.id"], name="fk_api_keys_team"),
     sa.ForeignKeyConstraint(["tenant_id", "created_by"], ["users.tenant_id", "users.id"], name="fk_api_keys_creator"),
+    # The keys list keeps the keys made for one target (an MCP link's Keys tab).
+    sa.Index("ix_api_keys_team_target_kind", "team_id", "target_kind"),
+    sa.Index("ix_api_keys_team_target_id", "team_id", "target_id"),
     info=TENANT_SCOPED,
 )
 
@@ -190,9 +203,11 @@ roles = sa.Table(
     sa.Column("tenant_id", sa.String(64), sa.ForeignKey("tenants.id"), primary_key=True),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("name", sa.String(200), nullable=False),
-    sa.Column("builtin", sa.Boolean, nullable=False),
+    sa.Column("builtin", sa.Boolean, nullable=False, info=LISTED),
     sa.Column("description", sa.String(500), nullable=False),
     sa.Column("created_at", sa.String(40), nullable=False),
+    # The roles list filters on built-in or custom (`builtin`).
+    sa.Index("ix_roles_builtin", "tenant_id", "builtin"),
     info=TENANT_SCOPED,
 )
 
@@ -226,6 +241,8 @@ role_assignments = sa.Table(
     # One assignment per subject, role and team: a repeat grant extends or replaces it, never stacks.
     sa.UniqueConstraint("tenant_id", "subject_kind", "subject_id", "role_id", "team_id", name="uq_role_assignments"),
     sa.Index("ix_role_assignments_subject", "tenant_id", "subject_id"),
+    # Who holds a role: a role's holders, a team's admins, and the foreign key to roles.
+    sa.Index("ix_role_assignments_role", "tenant_id", "role_id"),
     sa.ForeignKeyConstraint(["tenant_id", "role_id"], ["roles.tenant_id", "roles.id"], name="fk_role_assignments_role"),
     info=TENANT_SCOPED,
 )
@@ -507,6 +524,7 @@ signin_email_failures = sa.Table(
     sa.Column("failures", sa.Integer, nullable=False),
     sa.Column("first_failed_at", sa.String(40), nullable=False),
     sa.Column("locked_until", sa.String(40)),
+    info=system("sign-in names no workspace, so wrong passwords are counted per address for the whole install"),
 )
 
 # Assistants that registered themselves at /oauth/register (migration 0035). Registration happens before anyone signs
@@ -573,7 +591,7 @@ TENANT_TABLES = (
 )
 
 # What platform-service tells other services (on the outbox): written in the transaction that makes the
-# change, delivered by its relay (event_relay.py) to each service that acts on the event. platform-service never
+# change, delivered by its relay (relay.py) to each service that acts on the event. platform-service never
 # touches another service's tables. Read by the relay across tenants.
 platform_outbox = outbox_table(
     metadata, "platform_outbox", info=system("platform event outbox, read by its relay across tenants")

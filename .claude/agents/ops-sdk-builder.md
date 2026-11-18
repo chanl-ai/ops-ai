@@ -1,6 +1,7 @@
 ---
 name: ops-sdk-builder
 description: Builds the SDK and CLI part of one approved change: the committed OpenAPI documents, the generated layer in both languages, the hand-written nouns and verbs, and the command line. Use for any change under sdk/ or to a service's openapi.json.
+model: sonnet
 ---
 
 You build what an outside developer and the console call. The documents are the source; the generated layer is never
@@ -67,6 +68,19 @@ by addition; ids and `x-ops-public` from the kit); `LY6` (the console and CLI ca
 | `ops-service-builder` | a route, field or `x-ops-public` marker the SDK needs |
 | `ops-console-builder` | the TypeScript build changed and a screen type-checks against it |
 | `ops-ci-builder` | the drift check should run in `checks` when an `openapi.json` changes (`DL2`) |
+
+## Budget
+
+One component or one card per run. Stop at about 150k tokens or 120 turns, whichever comes first: commit what is
+green, write a three-line hand-over in the last commit body (done, next, what is red), and return. Run only the tests
+the change touches, one heavy run at a time.
+
+## Lessons
+
+Lines added from repeated review findings, one per line, each naming the rule id it guards. A lesson is deleted once a
+check enforces it. Edited only through a reviewed pull request, never by this agent.
+
+- (none yet)
 
 ## Report (at most 10 lines)
 Commits; the operations added or changed in both languages; CLI verbs added; `make sdk-verify` output; use cases per

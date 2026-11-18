@@ -1,7 +1,9 @@
-"""R9 routes: route a thread, or every open thread of one workflow version, to people.
+"""Route a thread, or every open thread of one workflow version, to people: a reviewer or admin of the team decides,
+and the requester is recorded on the thread.
 
-Spec runtime-service names the publisher as the caller. Dev auth has no roles, so any signed-in user may call
-these routes and the requester is recorded on the thread; the publisher-role check comes with real roles.
+No route here takes the request transaction (`Tx`): routing takes the thread's lease and runs the workflow to its next
+step, which may call a model or a tool, so each store call takes and returns its own connection and none is held while
+the run goes on.
 """
 
 from __future__ import annotations
@@ -12,8 +14,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import Field
 
-from ops_contracts.chat import WireModel
-from ops_service_kit.http import Envelope
+from ops_service_kit.http import Envelope, In
 
 from ..auth import Principal, principal, require_reviews_decide, review_teams
 from ..deps import Runtime, runtime
@@ -27,11 +28,11 @@ Rt: TypeAlias = Annotated[Runtime, Depends(runtime)]  # noqa: UP040 - FastAPI re
 Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 
 
-class RouteThread(WireModel):
+class RouteThread(In):
     reason: str = Field(min_length=1)
 
 
-class RouteWorkflow(WireModel):
+class RouteWorkflow(In):
     workflow_id: str
     version_number: int
     reason: str = Field(min_length=1)

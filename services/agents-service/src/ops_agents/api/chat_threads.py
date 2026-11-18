@@ -14,7 +14,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, cast
+from typing import Any, Literal, cast
+
+from pydantic import TypeAdapter
 
 from ops_access import can
 from ops_agent_kernel.plan import NAME as PLAN_TOOL
@@ -22,6 +24,7 @@ from ops_agent_kernel.search import NAME as SEARCH_TOOL
 from ops_agents.activities.catalog import Catalog
 from ops_agents.activities.tools import fill
 from ops_contracts.chat import (
+    ApprovalState,
     ApprovalWidget,
     BudgetPause,
     ChatMessage,
@@ -55,9 +58,10 @@ from ops_service_kit.ids import now_iso
 
 from ..store.chat_list import ChatListQuery, unsummarised_rows
 from ..store.chat_search import index_thread, indexed_ids, matching_threads
-from ..store.events import EventLog
-from ..store.reviews import ReviewStore
+from ..store.events import EventLog, EventOut
+from ..store.reviews import DecisionOut, ReviewStore
 from ..store.tenancy import current_team
+from ..store.thread_list import ThreadReader
 from .auth import Principal, caller_of, graph_target, key_scope
 from .chat_history import PLAN_PART
 from .deps import Runtime
@@ -107,7 +111,7 @@ class AssistantBuilder:
 
     catalog: Catalog
     message: ChatMessage
-    decisions: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
+    decisions: dict[str, DecisionOut] = field(default_factory=dict[str, DecisionOut])
     # Approvers so far per call step, for a money call that needs two before it is decided.
     approvals: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
     # Collect what a guardrail kept or took back (guardrail_audit): only for a reader allowed to view the audit, and
@@ -154,7 +158,14 @@ class AssistantBuilder:
         values = {k: str(v) for k, v in args.items()}
         decision = self.decisions.get(str(interrupt.get("id")))
         step = str(_d(p.get("call")).get("step"))
-        state = decision["decision"] if decision else "awaiting_second" if self.approvals.get(step) else "pending"
+        # The recorded decision is checked against the card's states, as the card's own validation did.
+        state: ApprovalState = (
+            _APPROVAL_STATE.validate_python(decision.decision)
+            if decision
+            else "awaiting_second"
+            if self.approvals.get(step)
+            else "pending"
+        )
         return ApprovalWidget(
             id=approval_widget_id(str(interrupt.get("id"))),
             title=fill(tpl.title, values) if tpl else self.titles.get(str(p.get("tool"))) or str(p.get("tool")),
@@ -178,8 +189,8 @@ class AssistantBuilder:
             step_up=bool(p.get("step_up")) or None,
             ask_first=bool(p.get("ask_first")),
             state=state,
-            decided_by=decision["decided_by"] if decision else None,
-            reason=decision["reason"] if decision else None,
+            decided_by=decision.decided_by if decision else None,
+            reason=decision.reason if decision else None,
             waiting_on=None
             if decision
             else "your answer"
@@ -354,7 +365,10 @@ def approval_widget_id(interrupt_id: str) -> str:
     return f"wg_{interrupt_id[:24]}"
 
 
-async def decisions_of(rt: Runtime, thread_id: str) -> dict[str, dict[str, Any]]:
+_APPROVAL_STATE: TypeAdapter[ApprovalState] = TypeAdapter(ApprovalState)
+
+
+async def decisions_of(rt: Runtime, thread_id: str) -> dict[str, DecisionOut]:
     return await ReviewStore(graph_store(rt).engine).decisions_of(thread_id)
 
 
@@ -373,7 +387,7 @@ async def messages_of(
     if not thread_ids:
         return out
     rows = await EventLog(store.engine).for_threads(thread_ids)
-    by_thread: dict[str, list[Any]] = {t: [] for t in thread_ids}
+    by_thread: dict[str, list[EventOut]] = {t: [] for t in thread_ids}
     for r in rows:
         by_thread[r.thread_id].append(r)
     for tid in thread_ids:
@@ -383,7 +397,9 @@ async def messages_of(
     return out
 
 
-async def _thread_messages(rt: Runtime, thread_id: str, events: list[Any], *, audit: bool = False) -> list[ChatMessage]:
+async def _thread_messages(
+    rt: Runtime, thread_id: str, events: list[EventOut], *, audit: bool = False
+) -> list[ChatMessage]:
     runs = [r for r in await graph_store(rt).runs(thread_id) if r["kind"] in ("input", "resume", "recovery")]
     decisions = await decisions_of(rt, thread_id) if runs else {}
     approvals = await approvals_of(rt, thread_id) if runs else {}
@@ -555,6 +571,24 @@ def may_read_thread(row: dict[str, Any], me: Principal) -> bool:
     if person is None or not (person.email or meta.get("chat") or meta.get("owner")):
         return True
     return may_read({**meta, "ownerEmail": person.email} if person.email else meta, me)
+
+
+def thread_reader(me: Principal) -> ThreadReader:
+    """`may_read_thread`'s caller half, worked out once for a list (`store.thread_list.readable` is its row half): a
+    scoped key's one graph, and chat.view for anyone's thread (`all`) or the caller's own (`own`), each probed through
+    `can` as a row would ask it, so the dev caller, a key and a custom role answer as they do there."""
+    scope = key_scope(me)
+    graphs: tuple[str, ...] | None = None
+    if scope is not None:
+        kind, target = scope
+        graph = f"agent:{target}" if kind == "agent" else target
+        graphs = (graph,) if graph_target(graph) == scope else ()
+    chat: Literal["none", "own", "all"] = "none"
+    if may_read({"ownerEmail": "-"}, me):
+        chat = "all"
+    elif may_read({"ownerEmail": me.email}, me):
+        chat = "own"
+    return ThreadReader(graphs=graphs, chat=chat, email=me.email.strip().lower(), name=me.name)
 
 
 async def chat_rows(rt: Runtime, me: Principal) -> list[dict[str, Any]]:

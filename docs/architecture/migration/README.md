@@ -64,11 +64,12 @@ retyped. In the small services it is `app.py` and the client modules.
 | Rule | Detail |
 |---|---|
 | Freeze | Until phase 3 merges, no pull request into `develop` touches `services/`, `packages/` or `apps/console/` unless it is a component, the pilot or a lane. A production fix lands on `develop` first and every open lane rebases on it the same day |
-| One lane, one branch, one pull request | Branch names are on each page. A lane rebases once, on a known tree, in the merge order: pilot, platform, kb, tools, agents, console |
+| One branch, one pull request | Every component and every service lands on the single branch `refactor/services-onto-shared-components`, in one pull request, in this order: the components, the small services, platform, kb, tools, agents, console. Each step is its own commits, by path |
 | Tests first, per failure mode | Before a lane rewrites, it lists the routes and store functions a use case or test does not reach and writes one api-layer test per uncovered route a screen uses (`TS1`, `TS3`); the pilot page gives the method |
 | Baselines shrink in the lane | Each check has a file per service (`portable-baseline.txt` today; the raw-site, savepoint, config-literal and typed-boundary lists the components add). A lane takes its own file to zero and edits no other lane's file |
 | No new breach anywhere | Each component's check is red on a new site from the day it merges, so the freeze is enforced by the gate, not by asking |
 | Access decisions | Every site on `access-exceptions-allowlist.txt` is converted onto `can()` or `policy()`, kept with its register reason, or deleted with its code, as the register says (`AC1`, `AC2`) |
+| Contract test before a conversion | Before a service converts a body or reply to `In` or `Out`, it adds a contract test that the route's accepted bodies and reply keys are unchanged |
 | Hard git rules | Commit subject at most 72 characters, body at most 3 lines; no `--no-verify`, no stash, no force push, never push `main` or `develop` directly |
 | Public repository | No tracker ids, no private paths, no customer names in code, commits or docs |
 
@@ -81,16 +82,16 @@ retyped. In the small services it is `app.py` and the client modules.
 | The lane's use cases, in parallel | `make usecase-batch UCS="uc-013:api uc-607"` with the service's ids from `make usecase-coverage SERVICE=<x>-service` | Before the pull request opens and after each rebase |
 | The use cases a change touches, plus the core console ones | `make uc-impacted BASE=origin/develop` | Before the pull request opens |
 | Everything a commit must pass | `make verify` | Before the pull request opens |
-| The ratchet checks | `uv run python scripts/check_portable_store.py --strict`, `uv run python scripts/check_access_exceptions.py`, `uv run lint-imports --no-logo`, `uv run pytest -q deploy/database/tests/test_isolation_markings.py`; the components add the raw-site, config-literal and typed-boundary checks beside them | Every commit; a lane leaves each at zero for its service |
+| The ratchet checks | `make checks` runs the one list in `make/checks.mk` (`make checks-list` prints it): the access, portable-store, config-literal and typed-boundary checks and their history, the isolation markings and indexes, the isolation, relay and loop-health sites, import contracts and the SDK drift check | Every commit (pre-commit runs `make checks STAGED=1`); a lane leaves each at zero for its service |
 | Staging | `make stg-deploy REF=<merge commit>` runs every step including the console walk; `make stg-health` shows every process up | After the merge, before the lane is called done |
 | Guides and standards references | `make docs-guides-check` | When a guide or this folder changes |
 
 A lane is done when its service's baseline files are at zero, `make -s test PKG=services/<x>` is green on PostgreSQL
 and SQL Server, its use cases are green on the merge commit, a reviewer who did not write it has approved (`DL3`), the
 merge has deployed to staging with every process up and the console walk green, and the service's screens have been
-opened by hand on staging. The use-case harness starts its own stack on free ports and cannot point at the staging
-host today; a `base URL` option for the api layer is listed in the components page under C6 so the staging run can
-be the same scripts.
+opened by hand on staging. The use-case harness starts its own stack on free ports; with
+`OPS_USECASE_BASE_URL=https://<staging host>` the api scripts call that host instead, so the staging run is the same
+scripts.
 
 ## Standards cited here
 

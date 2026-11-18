@@ -8,10 +8,12 @@ reader ever sees a role in `members` that the assignments disagree with. Every s
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import ClassVar, Literal
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_access import (
@@ -27,10 +29,15 @@ from ops_access import (
     builtin_roles_for,
 )
 from ops_access.catalogue import ADMIN
+from ops_access.check import FetchGrids
 from ops_identity import Principal
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
 from ops_store.dialect import lock_key
+from ops_store.listing import ListPage, list_page
+from ops_store.rows import one, rows
 
 from .audit import record
 from .tables import members, role_assignments, role_permissions, roles, teams, tenants, users
@@ -47,10 +54,73 @@ class AlreadyGrantedError(Exception):
     """The person holds that role in that team already."""
 
 
+class RoleSummary(Out):
+    id: str
+    name: str
+    builtin: bool
+    description: str
+    permission_count: int
+    assignment_count: int
+
+
+class _RoleHead(Out):
+    id: str
+    name: str
+    builtin: bool
+    description: str
+    assignment_count: int
+
+
+class RoleRow(Out):
+    """A role with its cells and how many assignments hold it."""
+
+    id: str
+    name: str
+    builtin: bool
+    description: str
+    assignment_count: int
+    grants: list[Grant]
+
+
+class RoleHolderRow(Out):
+    kind: Literal["person", "team"]
+    id: str
+    team_id: str
+    # The person's name, or the id when the holder is a team or a person with no name.
+    name: str
+    email: str | None
+
+
+class RoleGrantRow(Out):
+    """A role given to a person on their own, with its team and who gave it."""
+
+    id: str
+    role_id: str
+    role_name: str
+    team_id: str
+    expires_at: str | None
+    granted_by: str
+    created_at: str
+
+
+class GrantRef(Out):
+    subject_id: str
+    role_id: str
+    team_id: str
+
+
+class _Held(Out):
+    subject_kind: Literal["person", "team"]
+    subject_id: str
+    team_id: str
+    name: str | None
+    email: str | None
+
+
 class RoleInUseError(Exception):
     """People or teams hold the role; `holders` names them."""
 
-    def __init__(self, holders: list[dict[str, Any]]) -> None:
+    def __init__(self, holders: list[RoleHolderRow]) -> None:
         super().__init__("role in use")
         self.holders = holders
 
@@ -63,14 +133,13 @@ class Holdings:
     assignments: list[Assignment]
 
 
-class RoleStore:
+class RoleStore(TenantDb):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.RLS})
 
-    def __init__(self, db: TenantDb) -> None:
-        self.db = db
-
-    async def roles(self, tenant_id: str) -> list[dict[str, Any]]:
-        """Every role with its permission and assignment counts, built-in roles first in their fixed order."""
+    async def roles(self, tenant_id: str, params: ListParams) -> ListPage:
+        """The roles on the shared list contract, with their permission and assignment counts: built-in roles first in
+        their fixed order, then custom roles by name, then by id; searched on name; `builtin` and `canDecideReviews`
+        ("true" or "false") keep built-in or custom roles and roles that do or do not grant reviews.decide."""
         perms = (
             sa.select(role_permissions.c.role_id, sa.func.count().label("n"))
             .group_by(role_permissions.c.role_id)
@@ -81,56 +150,63 @@ class RoleStore:
             .group_by(role_assignments.c.role_id)
             .subquery()
         )
-        q = (
-            sa.select(
-                roles.c.id,
-                roles.c.name,
-                roles.c.builtin,
-                roles.c.description,
-                sa.func.coalesce(perms.c.n, 0),
-                sa.func.coalesce(held.c.n, 0),
-            )
-            .outerjoin(perms, perms.c.role_id == roles.c.id)
-            .outerjoin(held, held.c.role_id == roles.c.id)
-            .order_by(roles.c.builtin.desc(), sa.func.lower(roles.c.name), roles.c.id)
+        q = sa.select(
+            roles.c.id,
+            roles.c.name,
+            roles.c.builtin,
+            roles.c.description,
+            sa.func.coalesce(perms.c.n, 0).label("permission_count"),
+            sa.func.coalesce(held.c.n, 0).label("assignment_count"),
+        ).select_from(
+            roles.outerjoin(perms, perms.c.role_id == roles.c.id).outerjoin(held, held.c.role_id == roles.c.id)
         )
-        async with self.db.tenant_tx(tenant_id) as c:
-            rows = (await c.execute(q)).all()
-        order = {r.id: i for i, r in enumerate(BUILTIN_ROLES)}
-        out = [
-            {
-                "id": r[0],
-                "name": r[1],
-                "builtin": bool(r[2]),
-                "description": r[3],
-                "permissionCount": int(r[4]),
-                "assignmentCount": int(r[5]),
-            }
-            for r in rows
-        ]
-        return sorted(out, key=lambda r: (not r["builtin"], order.get(r["id"], 0)))
-
-    async def role(self, tenant_id: str, role_id: str) -> dict[str, Any] | None:
-        async with self.db.tenant_tx(tenant_id) as c:
-            row = (await c.execute(sa.select(roles).where(roles.c.id == role_id))).mappings().first()
-            if row is None:
-                return None
-            held = await c.execute(
-                sa.select(sa.func.count()).select_from(role_assignments).where(role_assignments.c.role_id == role_id)
+        # One sort key: a built-in role's place in BUILTIN_ROLES ("0" and two digits), else "1" and the lower-case name.
+        place = sa.case(
+            {b.id: f"0{n:02d}" for n, b in enumerate(BUILTIN_ROLES)},
+            value=roles.c.id,
+            else_=sa.literal("1") + sa.func.lower(roles.c.name),
+        )
+        # The filters compare query text, so each is the "true" or "false" its condition reads as. A role decides
+        # reviews when it holds the reviews.decide cell at any scope; the cells' primary key serves the lookup.
+        decides = (
+            sa.select(role_permissions.c.role_id)
+            .where(
+                role_permissions.c.tenant_id == roles.c.tenant_id,
+                role_permissions.c.role_id == roles.c.id,
+                role_permissions.c.area == "reviews",
+                role_permissions.c.action == "decide",
             )
-            grants = await _grids(c, [role_id])
-        return {
-            "id": row["id"],
-            "name": row["name"],
-            "builtin": bool(row["builtin"]),
-            "description": row["description"],
-            "assignmentCount": int(held.scalar_one()),
-            "grants": grants.get(role_id, []),
+            .exists()
+        )
+        flags = {
+            "builtin": sa.case((roles.c.builtin == sa.true(), "true"), else_="false"),
+            "canDecideReviews": sa.case((decides, "true"), else_="false"),
         }
+        async with self.tenant_tx(tenant_id) as c:
+            page = await list_page(c, q, params, search=[roles.c.name], default_sort=place.asc(), filters=flags)
+        page["data"] = [RoleSummary.model_validate(r).model_dump(by_alias=True) for r in page["data"]]
+        return page
+
+    async def role_by_id(self, tenant_id: str, role_id: str) -> RoleRow | None:
+        held = (
+            sa.select(sa.func.count())
+            .select_from(role_assignments)
+            .where(role_assignments.c.role_id == role_id)
+            .scalar_subquery()
+        )
+        q = sa.select(
+            roles.c.id, roles.c.name, roles.c.builtin, roles.c.description, held.label("assignment_count")
+        ).where(roles.c.id == role_id)
+        async with self.tenant_tx(tenant_id) as c:
+            head = await one(c, q, _RoleHead)
+            if head is None:
+                return None
+            grants = await grids_in(c, [role_id])
+        return RoleRow(**head.model_dump(), grants=grants.get(role_id, []))
 
     async def holdings(self, tenant_id: str, user_id: str) -> Holdings:
         """The person's active teams and the assignments made to them or to one of those teams."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return await holdings_in(c, user_id)
 
     async def live(
@@ -141,16 +217,14 @@ class RoleStore:
         token's roles (a demoted admin). `conn` reads on the caller's own transaction."""
         if conn is not None:
             return await live_in(conn, tenant_id, user_id, team=team)
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return await live_in(c, tenant_id, user_id, team=team)
 
     async def workspace_admin(self, tenant_id: str, user_id: str, *, now: str) -> bool:
         """Whether the person holds `access.manage` through a role assigned in every team (`*`): a workspace admin,
         who acts in any team of the workspace whether or not they belong to it."""
         del now  # `live` reads the clock itself
-        p, access = await self.live(tenant_id, user_id)
-        # `from_any_team`: the token-less caller acts in no team, and `roles_in(p, "*")` reads only `*` assignments.
-        return access.may(p, "access", "manage", team=ANY_TEAM, from_any_team=True)
+        return is_workspace_admin(*await self.live(tenant_id, user_id))
 
     async def workspace_roles(self, tenant_id: str, user_ids: list[str], *, now: str) -> dict[str, list[str]]:
         """Each person's roles assigned in every team (`*`), by name, so a team's member list says where access beyond
@@ -169,16 +243,16 @@ class RoleStore:
             .order_by(roles.c.name)
         )
         out: dict[str, list[str]] = {}
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             for subject, name in (await c.execute(q)).all():
                 out.setdefault(str(subject), []).append(str(name))
         return out
 
     async def record_check(
-        self, tenant_id: str, team_id: str, *, by: str, request_id: str, detail: dict[str, Any]
+        self, tenant_id: str, team_id: str, *, by: str, request_id: str, detail: Mapping[str, JsonValue]
     ) -> None:
         """An access check an admin ran: who checked whom for what, and the answer, in the audit log."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             await record(
                 c,
                 tenant_id=tenant_id,
@@ -198,7 +272,7 @@ class RoleStore:
             .where(teams.c.status == "active")
             .order_by(teams.c.created_at, teams.c.id)
         )
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return {str(r[0]): str(r[1]) for r in (await c.execute(q)).all()}
 
     async def set_grid(
@@ -206,10 +280,10 @@ class RoleStore:
     ) -> bool:
         """Replaces the role's cells with `grants`, audited as `action` (`role.edit`, `role.reset`) with what changed,
         and raises the permission version so every token issued after carries the new grid. False for no such role."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             if (await c.execute(sa.select(roles.c.id).where(roles.c.id == role_id))).first() is None:
                 return False
-            before = {(a, x): s for a, x, s in (await _grids(c, [role_id])).get(role_id, [])}
+            before = {(a, x): s for a, x, s in (await grids_in(c, [role_id])).get(role_id, [])}
             after = {(a, x): s for a, x, s in grants}
             await c.execute(role_permissions.delete().where(role_permissions.c.role_id == role_id))
             if grants:
@@ -242,15 +316,15 @@ class RoleStore:
         return True
 
     async def grids(self, tenant_id: str, role_ids: list[str]) -> dict[str, list[Grant]]:
-        async with self.db.tenant_tx(tenant_id) as c:
-            return await _grids(c, role_ids)
+        async with self.tenant_tx(tenant_id) as c:
+            return await grids_in(c, role_ids)
 
     async def create(
         self, tenant_id: str, *, name: str, description: str, grants: list[Grant], by: str, request_id: str
     ) -> str:
         """A custom role with `grants`, audited as `role.create`; RoleNameTakenError when the name is used."""
         role_id = new_id("role")
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             await _name_free(c, tenant_id, name, None)
             await c.execute(
                 roles.insert().values(
@@ -287,12 +361,12 @@ class RoleStore:
         self, tenant_id: str, role_id: str, *, name: str, description: str | None, by: str, request_id: str
     ) -> None:
         """A custom role's name and description, audited as `role.rename`; RoleNameTakenError when the name is used."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             before = (
                 await c.execute(sa.select(roles.c.name, roles.c.description).where(roles.c.id == role_id))
             ).first()
             await _name_free(c, tenant_id, name, role_id)
-            values: dict[str, Any] = {"name": name} | ({"description": description} if description is not None else {})
+            values: dict[str, str] = {"name": name} | ({"description": description} if description is not None else {})
             await c.execute(roles.update().where(roles.c.id == role_id).values(**values))
             await record(
                 c,
@@ -306,16 +380,31 @@ class RoleStore:
                 detail={"from": before.name if before else None, "to": name},
             )
 
-    async def holders(self, tenant_id: str, role_id: str) -> list[dict[str, Any]]:
-        """Who holds the role and in which team, each person by name and address."""
-        async with self.db.tenant_tx(tenant_id) as c:
-            return await self._holders_in(c, role_id)
+    async def holders(self, tenant_id: str, role_id: str, params: ListParams) -> ListPage:
+        """Who holds the role and in which team on the shared list contract, each person by name and address: by name
+        (a team's id standing in for its name, on both databases alike), then by assignment id; searched on name and
+        email. `ids` names the row's `id`, the person's or team's, not the assignment's."""
+        name = sa.func.coalesce(users.c.name, role_assignments.c.subject_id)
+        q = (
+            sa.select(role_assignments.c.subject_kind.label("kind"), role_assignments.c.subject_id.label("id"),
+                      role_assignments.c.team_id, name.label("name"), users.c.email)
+            .select_from(role_assignments.outerjoin(users, sa.and_(users.c.id == role_assignments.c.subject_id,
+                                                                   role_assignments.c.subject_kind == "person")))
+            .where(role_assignments.c.role_id == role_id)
+        )  # fmt: skip
+        if params.ids is not None:
+            q = q.where(role_assignments.c.subject_id.in_(params.ids))
+            params = params.model_copy(update={"ids": None, "search": None})
+        async with self.tenant_tx(tenant_id) as c:
+            page = await list_page(c, q, params, search=[users.c.name, users.c.email], default_sort=name.asc())
+        page["data"] = [RoleHolderRow.model_validate(r).model_dump(by_alias=True) for r in page["data"]]
+        return page
 
     async def delete(self, tenant_id: str, role_id: str, *, move_to: str | None, by: str, request_id: str) -> int:
         """Deletes a custom role. While people or teams hold it, RoleInUseError names them, unless `move_to` names the
         role their assignments move to (one that a holder already has in that team is kept once). Audited as
         `role.delete`; returns how many assignments moved."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             held = (
                 await c.execute(
                     sa.select(role_assignments.c.id, role_assignments.c.subject_kind, role_assignments.c.subject_id,
@@ -359,46 +448,36 @@ class RoleStore:
             )
         return moved
 
-    async def grants_of(self, tenant_id: str, user_id: str) -> list[dict[str, Any]]:
-        """The roles given to the person on their own (not their team role), each with its team and who gave it."""
+    async def grants_of(self, tenant_id: str, user_id: str, params: ListParams) -> ListPage:
+        """The roles given to the person on their own (not their team role), each with its team and who gave it, on
+        the shared list contract: by role name, then by assignment id; searched on the role's name."""
         q = (
             sa.select(
                 role_assignments.c.id,
                 role_assignments.c.role_id,
-                roles.c.name,
+                roles.c.name.label("role_name"),
                 role_assignments.c.team_id,
                 role_assignments.c.expires_at,
                 role_assignments.c.granted_by,
                 role_assignments.c.created_at,
             )
-            .join(roles, roles.c.id == role_assignments.c.role_id)
+            .select_from(role_assignments.join(roles, roles.c.id == role_assignments.c.role_id))
             .where(
                 role_assignments.c.subject_kind == "person",
                 role_assignments.c.subject_id == user_id,
                 role_assignments.c.source == "grant",
-                roles.c.builtin.is_(False),
+                roles.c.builtin == sa.false(),
             )
-            .order_by(roles.c.name, role_assignments.c.team_id)
         )
-        async with self.db.tenant_tx(tenant_id) as c:
-            rows = (await c.execute(q)).all()
-        return [
-            {
-                "id": r[0],
-                "roleId": r[1],
-                "roleName": r[2],
-                "teamId": r[3],
-                "expiresAt": r[4],
-                "grantedBy": r[5],
-                "createdAt": r[6],
-            }
-            for r in rows
-        ]
+        async with self.tenant_tx(tenant_id) as c:
+            page = await list_page(c, q, params, search=[roles.c.name], default_sort=roles.c.name.asc())
+        page["data"] = [RoleGrantRow.model_validate(r).model_dump(by_alias=True) for r in page["data"]]
+        return page
 
     async def grant(self, tenant_id: str, user_id: str, role_id: str, team_id: str, *, by: str, request_id: str) -> str:
         """Gives the person a role in a team, audited as `role.grant`; AlreadyGrantedError when they hold it there."""
         grant_id = new_id("ras")
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             held = await c.execute(
                 sa.select(role_assignments.c.id).where(
                     role_assignments.c.subject_kind == "person",
@@ -437,20 +516,16 @@ class RoleStore:
             )
         return grant_id
 
-    async def grant_row(self, tenant_id: str, grant_id: str) -> dict[str, Any] | None:
-        async with self.db.tenant_tx(tenant_id) as c:
-            row = (
-                await c.execute(
-                    sa.select(
-                        role_assignments.c.subject_id, role_assignments.c.role_id, role_assignments.c.team_id
-                    ).where(role_assignments.c.id == grant_id, role_assignments.c.source == "grant")
-                )
-            ).first()
-        return {"subjectId": row[0], "roleId": row[1], "teamId": row[2]} if row else None
+    async def grant_row(self, tenant_id: str, grant_id: str) -> GrantRef | None:
+        q = sa.select(role_assignments.c.subject_id, role_assignments.c.role_id, role_assignments.c.team_id).where(
+            role_assignments.c.id == grant_id, role_assignments.c.source == "grant"
+        )
+        async with self.tenant_tx(tenant_id) as c:
+            return await one(c, q, GrantRef)
 
     async def ungrant(self, tenant_id: str, grant_id: str, *, by: str, request_id: str) -> bool:
         """Takes a given role away, audited as `role.ungrant`; False when no such grant."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             row = (
                 await c.execute(
                     role_assignments.delete()
@@ -474,7 +549,7 @@ class RoleStore:
             )
         return True
 
-    async def _holders_in(self, c: AsyncConnection, role_id: str) -> list[dict[str, Any]]:
+    async def _holders_in(self, c: AsyncConnection, role_id: str) -> list[RoleHolderRow]:
         q = (
             sa.select(role_assignments.c.subject_kind, role_assignments.c.subject_id, role_assignments.c.team_id,
                       users.c.name, users.c.email)
@@ -484,21 +559,22 @@ class RoleStore:
             .order_by(users.c.name, role_assignments.c.team_id)
         )  # fmt: skip
         return [
-            {"kind": r[0], "id": r[1], "teamId": r[2], "name": r[3] or r[1], "email": r[4]}
-            for r in (await c.execute(q)).all()
-        ]
+            RoleHolderRow(kind=h.subject_kind, id=h.subject_id, team_id=h.team_id, name=h.name or h.subject_id,
+                          email=h.email)
+            for h in await rows(c, q, _Held)
+        ]  # fmt: skip
 
     async def version(self, tenant_id: str) -> int:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return await version_in(c, tenant_id)
 
     async def security_team(self, tenant_id: str) -> str | None:
         """The workspace's Security team, from its record; None when it names none."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return (await c.execute(sa.select(tenants.c.security_team_id).where(tenants.c.id == tenant_id))).scalar()
 
 
-async def _grids(c: AsyncConnection, role_ids: list[str]) -> dict[str, list[Grant]]:
+async def grids_in(c: AsyncConnection, role_ids: list[str]) -> dict[str, list[Grant]]:
     q = (
         sa.select(
             role_permissions.c.role_id, role_permissions.c.area, role_permissions.c.action, role_permissions.c.scope
@@ -528,8 +604,33 @@ async def live_in(
 ) -> tuple[Principal, Access]:
     """`RoleStore.live` on the caller's transaction."""
     held = await holdings_in(c, user_id)
-    live = active(held.assignments, now_iso())
     version = await version_in(c, tenant_id)
+    security = (await c.execute(sa.select(tenants.c.security_team_id).where(tenants.c.id == tenant_id))).scalar()
+
+    async def fetch(_t: str, _v: int, ids: list[str]) -> dict[str, list[Grant]]:
+        return await grids_in(c, ids)
+
+    # The built-in roles too, so a refusal names who holds the cell in this workspace.
+    builtins = [r.id for r in BUILTIN_ROLES]
+    return await access_from(
+        tenant_id, user_id, held, version=version, security=security, fetch=fetch, also=builtins, team=team
+    )
+
+
+async def access_from(
+    tenant_id: str,
+    user_id: str,
+    held: Holdings,
+    *,
+    version: int,
+    security: str | None,
+    fetch: FetchGrids,
+    also: list[str] | None = None,
+    team: str | None = None,
+) -> tuple[Principal, Access]:
+    """The person as `can` sees them, from rows already read: their holdings, the permission version, the Security
+    team and the grids `fetch` answers for the roles they hold (and `also`), loaded once."""
+    live = active(held.assignments, now_iso())
     p = Principal(
         kind="person",
         sub=user_id,
@@ -544,23 +645,35 @@ async def live_in(
         permission_version=version,
         auth_method="session",
     )
-    security = (await c.execute(sa.select(tenants.c.security_team_id).where(tenants.c.id == tenant_id))).scalar()
-    access = Access(security_team=security, grids=Grids(fetch=lambda _t, _v, ids: _grids(c, ids)))
-    # The built-in roles too, so a refusal names who holds the cell in this workspace.
-    await access.grids.load(tenant_id, version, [*{a.role_id for a in live}, *(r.id for r in BUILTIN_ROLES)])
-    # Loaded once on `c`; a later load would read on a transaction that has ended.
+    access = Access(security_team=security, grids=Grids(fetch=fetch))
+    await access.grids.load(tenant_id, version, [*{a.role_id for a in live}, *(also or [])])
+    # Loaded once; a later load would read on a transaction that has ended.
     access.grids.fetch = None
     return p, access
 
 
+def is_workspace_admin(p: Principal, access: Access) -> bool:
+    """The one decision of who is a workspace admin: `access.manage` through a role assigned in every team (`*`), so
+    they act in any team whether or not they belong to it. `RoleStore.workspace_admin` and `/v1/me` both ask it."""
+    # `from_any_team`: the token-less caller acts in no team, and `roles_in(p, "*")` reads only `*` assignments.
+    return access.may(p, "access", "manage", team=ANY_TEAM, from_any_team=True)
+
+
 async def holdings_in(c: AsyncConnection, user_id: str) -> Holdings:
-    """`RoleStore.holdings` on the caller's transaction."""
+    """`RoleStore.holdings` on the caller's transaction: the person's active member teams, then `holdings_with`."""
     mine = (
         sa.select(teams.c.id, teams.c.name)
         .join(members, members.c.team_id == teams.c.id)
         .where(members.c.user_id == user_id, members.c.status == "active", teams.c.status == "active")
     )
-    names = {str(r[0]): str(r[1]) for r in (await c.execute(mine)).all()}
+    return await holdings_with(c, user_id, {str(r[0]): str(r[1]) for r in (await c.execute(mine)).all()})
+
+
+async def holdings_with(c: AsyncConnection, user_id: str, names: dict[str, str]) -> Holdings:
+    """The one holdings read, in one statement, given the person's active member teams (id to name): the assignments
+    made to them or to one of those teams, and the names of teams only an assignment names. An assignment counts only
+    in every team (`*`) or in an active team: an archived team's, or one whose row is gone, grants nothing, since
+    acting there answers 403. `/v1/me` and `/v1/me/permissions` both read it."""
     subject = sa.or_(
         sa.and_(role_assignments.c.subject_kind == "person", role_assignments.c.subject_id == user_id),
         sa.and_(role_assignments.c.subject_kind == "team", role_assignments.c.subject_id.in_(list(names))),
@@ -572,20 +685,16 @@ async def holdings_in(c: AsyncConnection, user_id: str) -> Holdings:
             role_assignments.c.team_id,
             role_assignments.c.subject_kind,
             role_assignments.c.expires_at,
+            teams.c.name,
         )
         .join(roles, roles.c.id == role_assignments.c.role_id)
-        .where(subject)
+        .outerjoin(teams, teams.c.id == role_assignments.c.team_id)
+        .where(subject, sa.or_(role_assignments.c.team_id == ANY_TEAM, teams.c.status == "active"))
         .order_by(role_assignments.c.created_at, role_assignments.c.id)
     )
     rows = (await c.execute(q)).all()
-    # An assignment in an archived team grants nothing there.
-    archived = {str(t) for t in (await c.execute(sa.select(teams.c.id).where(teams.c.status != "active"))).scalars()}
-    rows = [r for r in rows if str(r[2]) not in archived]
     # A team named by an assignment but not a membership still needs its name.
-    extra = {str(r[2]) for r in rows} - set(names) - {"*"}
-    if extra:
-        more = await c.execute(sa.select(teams.c.id, teams.c.name).where(teams.c.id.in_(sorted(extra))))
-        names |= {str(r[0]): str(r[1]) for r in more.all()}
+    names = {**names, **{str(r[2]): str(r[5]) for r in rows if r[5] is not None and str(r[2]) not in names}}
     assignments = [Assignment(str(r[0]), str(r[1]), str(r[2]), r[3], r[4]) for r in rows]
     return Holdings(teams=names, assignments=assignments)
 
@@ -663,6 +772,28 @@ async def ensure_owner(c: AsyncConnection, tenant_id: str, *, at: str) -> str | 
     )  # fmt: skip
     await bump_version(c, tenant_id)
     return str(first)
+
+
+def membership_admins() -> sa.Select[str, str]:
+    """Each (team, person) whose membership in that team gives the built-in Admin role. Admin given on its own, by a
+    grant, is not a team admin here: a team's admin count and the Security mirror follow memberships (E17)."""
+    return sa.select(role_assignments.c.team_id, role_assignments.c.subject_id.label("user_id")).where(
+        role_assignments.c.subject_kind == "person",
+        role_assignments.c.source == MEMBERSHIP,
+        role_assignments.c.role_id == ADMIN.id,
+    )
+
+
+def team_admins(team_id: str) -> sa.ColumnElement[bool]:
+    """Which `members` rows are the team's admins: its active members whose membership gives the built-in Admin, read
+    from the role assignments through `membership_admins`, as the team's admin count and the Security mirror read them.
+    The last-admin guards lock these rows. A grant of Admin, an invite as admin and a removed admin are not counted."""
+    held = membership_admins().with_only_columns(role_assignments.c.subject_id)
+    return sa.and_(
+        members.c.team_id == team_id,
+        members.c.status == "active",
+        members.c.user_id.in_(held.where(role_assignments.c.team_id == team_id)),
+    )
 
 
 async def mirror_membership(

@@ -61,6 +61,8 @@ jobs:
     env:
       FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
       STG_APP: ${{ vars.STG_APP }}
+      # The one host a use case or walk may sign in to and write on (docs/usecases/README.md); exact, never a pattern.
+      OPS_USECASE_STAGING_HOST: ${{ vars.STG_APP }}.fly.dev
       STG_DB_APP: ${{ vars.STG_DB_APP }}
       STG_APP_PREFIX: ${{ vars.STG_APP_PREFIX }}
       STAGING_DB_URL: ${{ secrets.STAGING_DB_URL }}

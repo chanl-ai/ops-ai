@@ -34,6 +34,7 @@ from ..activities.catalog import AgentDefinition
 from ..graphs.common import MEMORY_TOOL
 from ..store.events import EventLog
 from ..store.memories import ACTIVE, ASKED_FOR, CONFLICT, EVERY_AGENT, FORGOTTEN, SUGGESTED, Memories
+from .agent_registry import in_flight_agent
 from .auth import Principal
 from .child_runs import TURN_PERSON
 from .deps import Runtime
@@ -521,8 +522,8 @@ class MemoryReads:
     def __init__(self, rt: Runtime) -> None:
         self.rt = rt
 
-    def _agent(self, agent_id: str) -> AgentDefinition | None:
-        a = self.rt.catalog.agent_in_flight(agent_id) or self.rt.catalog.agent(agent_id)
+    async def _agent(self, agent_id: str) -> AgentDefinition | None:
+        a = await in_flight_agent(self.rt, agent_id)
         return a if a is not None and a.memory_enabled else None
 
     async def profile(self, agent_id: str) -> PromptFragment | None:
@@ -565,7 +566,7 @@ class MemoryReads:
         times confidence times recency, with a boost for preferences and procedures, until RECALL_MEMORIES memories or
         RECALL_TOKENS tokens. Each line carries the memory's id; with `message_id` the ids used and why are recorded
         for that reply and their use counted."""
-        if self._agent(agent_id) is None:
+        if await self._agent(agent_id) is None:
             return None
         store = Memories(graph_store(self.rt).engine)
         standing = await store.in_use(person, team_id, agent_id, kinds=PINNED_KINDS, limit=POOL)
@@ -601,7 +602,7 @@ class MemoryReads:
         )
 
     async def offers(self, agent_id: str) -> list[ToolGrant]:
-        if TURN_PERSON.get() is None or self._agent(agent_id) is None:
+        if TURN_PERSON.get() is None or await self._agent(agent_id) is None:
             return []
         return [
             ToolGrant(
@@ -619,7 +620,7 @@ class MemoryReads:
         thread_id = str((get_config().get("configurable") or {}).get("thread_id") or "")
         thread = await graph_store(self.rt).thread(thread_id) if thread_id else None
         agent_id = str(cast(dict[str, Any], (thread or {}).get("meta") or {}).get("agentId") or "")
-        if person is None or not agent_id or self._agent(agent_id) is None:
+        if person is None or not agent_id or await self._agent(agent_id) is None:
             return ToolOutcome(ok=False, output={"error": "There is no memory to search on this turn."})
         words = [w.lower() for w in str(arguments.get("query") or "").split() if len(w) > 2][:6]
         rows = await Memories(graph_store(self.rt).engine).matches(

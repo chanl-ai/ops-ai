@@ -25,6 +25,7 @@ from ops_agents.graphs import definition as graphs_definition
 from ops_agents.graphs.definition import record_matches
 from ops_agents.store.base import metadata
 from ops_agents.store.graphs import graph_threads, graph_versions
+from ops_engine.store import metadata as engine_metadata
 from ops_ingest.parsers import parse
 from ops_policy import input_hash
 from ops_policy.approval import binding_of
@@ -115,6 +116,7 @@ async def stack() -> AsyncIterator[Stack]:
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     app = create_app(
         Settings(database_url="sqlite+aiosqlite://", seed_dir=SEED),
         model=scripted_model(),

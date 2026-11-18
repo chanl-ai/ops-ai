@@ -7,7 +7,6 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
@@ -15,7 +14,7 @@ from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
 from .base import metadata
-from .tenancy import current_tenant, tenant_tx
+from .tenancy import RuntimeStore, current_tenant
 
 eval_cases = sa.Table(
     "eval_cases",
@@ -65,11 +64,8 @@ eval_runs = sa.Table(
 )
 
 
-class EvalStore:
+class EvalStore(RuntimeStore):
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION})
-
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
 
     async def replace_cases(
         self, kind: str, asset_id: str, team_id: str, cases: list[dict[str, Any]], *, by: str
@@ -77,7 +73,7 @@ class EvalStore:
         """Makes `cases` the asset's active set in one transaction; its draft cases are left."""
         t = eval_cases
         now = now_iso()
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(
                 t.delete().where(t.c.kind == kind, t.c.asset_id == asset_id, t.c.status == "active", team_visible(t))
             )
@@ -110,11 +106,11 @@ class EvalStore:
             q = q.where(t.c.kind == kind)
         if asset_id:
             q = q.where(t.c.asset_id == asset_id)
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def add_run(self, row: dict[str, Any]) -> None:
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(eval_runs.insert().values(**row))
 
     async def runs(self, kind: str | None = None, asset_id: str | None = None) -> list[dict[str, Any]]:
@@ -125,5 +121,5 @@ class EvalStore:
             q = q.where(t.c.kind == kind)
         if asset_id:
             q = q.where(t.c.asset_id == asset_id)
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]

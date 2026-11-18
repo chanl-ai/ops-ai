@@ -6,11 +6,6 @@ import type { WorkspaceTeamsApi } from './workspace-teams-contract';
 type Get = <T>(path: string) => Promise<T>;
 type Send = <T>(method: string, path: string, body?: unknown) => Promise<T>;
 
-interface Permission {
-  area: string;
-  action: string;
-}
-
 /** platform-service's team routes for workspace admins (GET, POST, PATCH /v1/settings/teams). */
 export function createWorkspaceTeamsHttp(get: Get, send: Send): WorkspaceTeamsApi {
   return {
@@ -24,11 +19,5 @@ export function createWorkspaceTeamsHttp(get: Get, send: Send): WorkspaceTeamsAp
     rename: (id, name) => send('PATCH', `/settings/teams/${encodeURIComponent(id)}`, { name: name.trim() }),
     archive: (id) => send('POST', `/settings/teams/${encodeURIComponent(id)}/archive`),
     restore: (id) => send('POST', `/settings/teams/${encodeURIComponent(id)}/restore`),
-    // A workspace admin holds the right in every team (`*`), which /me/permissions reports as `workspace`.
-    editor: async () => {
-      const me = await get<{ workspace: Permission[] }>('/me/permissions');
-      const has = (action: string) => me.workspace.some((p) => p.area === 'access' && p.action === action);
-      return { canView: has('view'), canManage: has('manage') };
-    },
   };
 }

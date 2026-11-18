@@ -95,7 +95,8 @@ export interface FilesApi {
   };
   /** files-service `/v1/document-types`: the team's document types, their versions, samples and tests. */
   documentTypes: {
-    list(): Promise<DocumentTypeList>;
+    /** One page, by name; `sortBy` `name` with `sortOrder`, `search` on the name, `ids` for exact types. */
+    list(p: ListParams): Promise<DocumentTypeList>;
     get(id: string): Promise<DocumentType>;
     /** 403 when the caller's role cannot change document types; 409 when the id or name is taken. */
     create(input: DocumentTypeInput): Promise<DocumentType>;

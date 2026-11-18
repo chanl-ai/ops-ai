@@ -2,9 +2,9 @@
 // reaches its end, and every Settings page. The click walk (stg_click_walk.mjs) proves pages open; this proves
 // the three things people do most still work. Reports OK or FAIL per check with the 4xx/5xx and page errors seen.
 // STG_ORIGIN, STG_EMAIL and STG_PASSWORD come from the environment.
-import { chromium } from '@ops-ai/usecase-runner/harness';
+import { chromium, requireStagingOrigin } from '@ops-ai/usecase-runner/harness';
 
-const origin = process.env.STG_ORIGIN;
+const origin = requireStagingOrigin(process.env.STG_ORIGIN);
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 let bad = [];

@@ -9,6 +9,7 @@ import shutil
 from typing import Any
 
 import httpx
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity.fastapi import DEV_TEAM
@@ -255,3 +256,21 @@ async def test_a_draft_source_becomes_active_on_its_first_sync_that_indexes(engi
         row = data(await client.get(f"/v1/sources/{src['id']}"))
         assert row["status"] == "active"
         assert row["lastRunDurationSec"] == run["durationSec"], "the Last sync tile says how long the run took"
+
+
+async def test_a_run_an_older_build_stored_with_odd_counts_still_lists(
+    client: httpx.AsyncClient, engine: AsyncEngine, tenant: str
+) -> None:
+    """Run rows are typed with whole-number counts; a row an older build wrote with a decimal, a string or a null
+    count must not turn the source's run list into a 500."""
+    src = await file_source(client)
+    await upload(client, src["id"], "rates.pdf", RATES)
+    data(await client.post(f"/v1/sources/{src['id']}/sync"))
+    odd = '{"listed": 2.0, "upserted": "1", "failed": null, "note": "old"}'
+    async with engine.begin() as c:
+        await c.execute(
+            sa.text("UPDATE kb_runs SET counts = :odd WHERE tenant_id = :t AND source_id = :s"),
+            {"odd": odd, "t": tenant, "s": src["id"]},
+        )
+    runs = data(await client.get(f"/v1/sources/{src['id']}/runs"))["data"]
+    assert runs and runs[0]["counts"] == {"listed": 2, "upserted": 1}, runs

@@ -18,14 +18,17 @@ from typing import Any, cast
 from ops_access import can
 from ops_agent_kernel.layout import required_tools
 from ops_agents.activities.agent_limits import limits_of
+from ops_agents.activities.agent_limits import wire as wire_limits
 from ops_agents.activities.catalog import AgentDefinition, Catalog, Fragment, GuardrailRule, SkillPinRule, WidgetPinRule
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable
 from ops_service_kit.logging import get_logger
+from ops_store import isolation
 
 from ..store.agent_registry import (
     AgentRegistry,
 )
 from ..store.graphs import GraphStore
+from ..store.tenancy import SERVE_PUBLISHED
 from .auth import Principal, caller_of
 from .deps import Runtime
 from .review_text import requester
@@ -166,7 +169,7 @@ def agent_review_body(
         "blockers": [],
         "changes": v["changes"],
         # The reviewer approves what callers may change along with the agent itself.
-        "limits": limits_of(spec).wire(),
+        "limits": wire_limits(limits_of(spec)),
         # And sees each pinned guardrail with its switch: one off is not checked once this version is live.
         "guardrailPins": [
             {
@@ -246,9 +249,27 @@ def take_down(rt: Runtime, agent_id: str) -> None:
     rt.catalog.drop_agent(agent_id)
 
 
+async def live_agent(rt: Runtime, agent_id: str) -> AgentDefinition | None:
+    """The live agent `agent_id` when the caller's tenant holds it; None when it is not live or the tenant holds none,
+    for a route that takes the id from the caller's own records (a thread, the team's default)."""
+    if agent_id not in await registry(rt).tenant_owners({agent_id}):
+        return None
+    return rt.catalog.agent(agent_id)
+
+
+async def in_flight_agent(rt: Runtime, agent_id: str) -> AgentDefinition | None:
+    """`live_agent`, or the definition a turn under way started on after the agent was paused (it may finish)."""
+    if agent_id not in await registry(rt).tenant_owners({agent_id}):
+        return None
+    return rt.catalog.agent_in_flight(agent_id)
+
+
 async def pinned_definition(rt: Runtime, agent_id: str, version: int) -> AgentDefinition | None:
     """The agent at a published version a deployment pins, from the registry store, kept in the catalogue so the
-    chat graph serves it; None when that version was never published."""
+    chat graph serves it; None when that version was never published or the caller's tenant holds no such agent (the
+    catalogue holds every tenant's)."""
+    if agent_id not in await registry(rt).tenant_owners({agent_id}):
+        return None
     if (known := rt.catalog.agent_at(agent_id, version)) is not None:
         return known
     spec = await registry(rt).published_spec(agent_id, version)
@@ -261,6 +282,8 @@ async def pinned_definition(rt: Runtime, agent_id: str, version: int) -> AgentDe
 
 async def refuse_new_turns(rt: Runtime, agent_id: str) -> None:
     """Raises 409 `agent_paused` when the agent is paused; new conversations, messages and turns wait for a resume."""
+    if agent_id not in await registry(rt).tenant_owners({agent_id}):
+        return  # another tenant's agent: the caller's route answers NotFound, never its name or state
     if rt.catalog.agent(agent_id) is not None:
         return
     try:
@@ -319,33 +342,54 @@ async def follow_seed(rt: Runtime, a: AgentDefinition, row: dict[str, Any]) -> N
 
 
 async def load(rt: Runtime, seed: Catalog) -> None:
-    """At start: seeds a row for each catalogue agent that has none, brings a seeded agent the seed still owns up to
-    its seed file (`follow_seed`; one a person has published is left alone), then serves exactly the published,
-    unpaused versions, so a seeded agent that was paused or deleted stays that way across a restart."""
+    """At start, inside the seed's tenant: seeds a row for each catalogue agent that has none and brings a seeded agent
+    the seed still owns up to its seed file (`follow_seed`; one a person has published is left alone). A seed id or
+    slug already held outside the seed's tenant is skipped with a warning, and the service starts without it. Serving
+    is `serve_published`, for every tenant."""
     reg = registry(rt)
     have = {r["id"]: r for r in await reg.rows()}
     for a in list(seed.agents):
         if a.id not in have:
             spec = spec_from_seed(a, rt.settings.model_alias)
-            await reg.create(spec, by="seed", team_id=SEED_TEAM, agent_id=a.id, version=a.version, published=True)
+            if not await reg.create_if_absent(spec, by=SEED_BY, team_id=SEED_TEAM, agent_id=a.id, version=a.version):
+                log.warning("seed_agent_held_elsewhere", agent=a.id)
         else:
             await follow_seed(rt, a, have[a.id])
-    rows = {r["id"]: r for r in await reg.rows()}
+
+
+async def serve_published(rt: Runtime) -> None:
+    """At start: serves exactly every tenant's published, unpaused versions, so an agent that was paused or deleted
+    stays that way across a restart. One read past the tenant finds the pointers, then each tenant's specs are read
+    under its own; a failure in one tenant is logged and the others are served."""
+    reg = registry(rt)
+    wanted: dict[str, set[tuple[str, int]]] = {}
+    for tenant_id, aid, published, paused in await reg.published_pointers():
+        if published is not None and not paused:
+            wanted.setdefault(tenant_id, set()).add((aid, published))
+    served = {aid for keys in wanted.values() for aid, _ in keys}
     for a in list(rt.catalog.agents):
-        if a.id not in rows:
+        if a.id not in served:
             take_down(rt, a.id)
-    for aid, r in rows.items():
-        if r["published_version"] is None or r["paused"]:
-            take_down(rt, aid)
+    for tenant_id, keys in wanted.items():
+        try:
+            with isolation.tenant_wide(SERVE_PUBLISHED, tenant_id=tenant_id):
+                specs = await reg.published_specs(keys)
+        except Exception as e:  # one tenant's failure must not stop the others, nor the service's start
+            log.warning("serve_published_failed", tenant=tenant_id, error=type(e).__name__)
             continue
-        v = await reg.version(aid, int(r["published_version"]))
-        go_live(rt, aid, int(r["published_version"]), v["spec"])
+        for (aid, n), spec in specs.items():
+            go_live(rt, aid, n, spec)
+
+
+def a_day_ago() -> str:
+    """The start of an agent's `tasks24h` window, as thread times are written."""
+    return (datetime.now(UTC) - timedelta(days=1)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 async def tasks_24h(rt: Runtime) -> dict[str, int]:
     """Threads started in the last day, by agent id: chats (`agent_wrapper` threads naming the agent in their meta) and
     threads on the agent's own graph."""
-    since = (datetime.now(UTC) - timedelta(days=1)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    since = a_day_ago()
     out: dict[str, int] = {}
     for graph, meta in await GraphStore(rt.db).agent_threads_since(since):
         if meta.get("test"):
@@ -408,7 +452,7 @@ def agent_view(row: dict[str, Any], spec: dict[str, Any], tasks: int) -> dict[st
             for p in cast(list[dict[str, Any]], spec.get("guardrailPins") or [])
         ],
         **({"wrapperWorkflowId": f"agent:{row['id']}"} if published is not None else {}),
-        "limits": limits_of(spec).wire(),
+        "limits": wire_limits(limits_of(spec)),
         "widgetPins": [
             {
                 "widgetId": p["widgetId"],

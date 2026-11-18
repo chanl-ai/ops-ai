@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from usecase_harness import PLATFORM_INTERNAL_PORT, PLATFORM_PORT, agents, check, data, finish, kb, platform
+from usecase_harness import PLATFORM_INTERNAL_PORT, PLATFORM_PORT, agents, check, data, every_page, finish, kb, platform
 
 PASSWORD = "northfield-demo"
 JAMES = "j.richardson@harborpine.example"
@@ -81,12 +81,12 @@ with platform() as (api, _), tempfile.TemporaryDirectory(prefix="usecase-kb-") a
             )
             got = {name: svc.get(url, headers=headers).status_code for name, url in reads.items()}
             check(f"{who}, gets 404 on James's chat state, runs and run events", set(got.values()) == {404}, got)
-            listed = {t["threadId"] for t in data(svc.get("/v1/threads", headers=headers)) or []}
+            listed = {t["threadId"] for t in every_page(svc, "/v1/threads", headers=headers)}
             check(f"{who}, does not see James's chat in the thread list", thread not in listed, sorted(listed)[:5])
             events = streamed(svc.get("/v1/events?follow=false", headers=headers))
             check(f"{who}, does not see James's chat in the team's event stream", thread not in events, sorted(events))
         # Non-vacuous pair: the same list and stream for James name the chat, so its absence above is about who asks.
-        mine = {t["threadId"] for t in data(svc.get("/v1/threads", headers=james)) or []}
+        mine = {t["threadId"] for t in every_page(svc, "/v1/threads", headers=james)}
         check("James's own thread list and event stream name the chat", thread in mine and thread in streamed(
             svc.get("/v1/events?follow=false", headers=james)
         ), sorted(mine)[:5])

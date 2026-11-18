@@ -1,0 +1,2950 @@
+{
+  "agents.create": {
+    "body": {
+      "data": {
+        "accounts": {},
+        "allTeamKnowledgeBases": false,
+        "autoResolvedRate": 0,
+        "availability": "not_published",
+        "channels": [
+          "chat"
+        ],
+        "collections": [],
+        "controls": {
+          "channels": [
+            "chat"
+          ],
+          "evals": true,
+          "guardrails": [
+            "redactPii",
+            "maxToolCallsPerTurn",
+            "maxModelCallsPerTurn",
+            "maxModelCallsPerConversation",
+            "maxCostPerConversation"
+          ]
+        },
+        "guardrailPins": [],
+        "guardrails": {
+          "blockedTopics": [],
+          "maxCostPerConversation": null,
+          "maxModelCallsPerConversation": null,
+          "maxModelCallsPerTurn": 50,
+          "maxToolCallsPerTurn": null,
+          "redactPii": true,
+          "whenUnsure": "handoff"
+        },
+        "id": "<ag>",
+        "instructions": "You are Branch Desk. Answers branch questions",
+        "limits": {
+          "allowedKnowledgeBaseIds": [],
+          "allowedModels": [
+            ""
+          ],
+          "callersMayAddInstructions": false,
+          "defaultModel": "",
+          "publicKeyMay": [
+            "tools",
+            "knowledge",
+            "budget",
+            "outputSchema",
+            "variables"
+          ],
+          "switchableToolIds": [],
+          "switchableWidgetIds": []
+        },
+        "memory": {
+          "enabled": true,
+          "kinds": [
+            "fact",
+            "preference",
+            "episode"
+          ]
+        },
+        "model": "",
+        "name": "Branch Desk",
+        "paused": false,
+        "protection": null,
+        "publishedVersion": null,
+        "role": "Answers branch questions",
+        "skillMenu": "team",
+        "slug": "branch-desk",
+        "staleToolIds": [],
+        "tasks24h": 0,
+        "teamId": "team_ops",
+        "templateId": null,
+        "toolIds": [],
+        "updatedAt": "<timeZ>",
+        "usedIn": [],
+        "version": 1,
+        "widgetPins": [],
+        "widgets": {
+          "compose": false,
+          "perTurn": null
+        },
+        "workflowIds": []
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "agents.createRefused": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "name"
+            ],
+            "msg": "Field required"
+          }
+        ],
+        "message": "name: Field required",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "agents.list": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "accounts": {},
+            "allTeamKnowledgeBases": false,
+            "autoResolvedRate": 0,
+            "availability": "published",
+            "channels": [
+              "chat"
+            ],
+            "collections": [
+              "kb_support"
+            ],
+            "controls": {
+              "channels": [
+                "chat"
+              ],
+              "evals": true,
+              "guardrails": [
+                "redactPii",
+                "maxToolCallsPerTurn",
+                "maxModelCallsPerTurn",
+                "maxModelCallsPerConversation",
+                "maxCostPerConversation"
+              ]
+            },
+            "guardrailPins": [],
+            "guardrails": {
+              "blockedTopics": [],
+              "maxCostPerConversation": null,
+              "maxModelCallsPerConversation": null,
+              "maxModelCallsPerTurn": 8,
+              "maxToolCallsPerTurn": 4,
+              "redactPii": true,
+              "whenUnsure": "handoff"
+            },
+            "id": "ag_branch",
+            "instructions": "You are Branch Concierge, an assistant for Harbor & Pine Bank branch staff. You answer product and service questions and request documents customers need to bring or send.\n\nUse lookup_customer to read a customer's record before discussing it. To ask a customer for a document, call request_document; it is reviewed before it is sent. Do not discuss investments. If request_document returns a reference, the request was approved and sent: say so and give the reference.\n\nAnswer from the knowledge provided and cite it. Be brief and friendly; staff read your answers out to customers.",
+            "limits": {
+              "allowedKnowledgeBaseIds": [
+                "kb_support"
+              ],
+              "allowedModels": [
+                "default"
+              ],
+              "callersMayAddInstructions": false,
+              "defaultModel": "default",
+              "publicKeyMay": [
+                "tools",
+                "knowledge",
+                "budget",
+                "outputSchema",
+                "variables"
+              ],
+              "switchableToolIds": [
+                "lookup_customer",
+                "request_document"
+              ],
+              "switchableWidgetIds": []
+            },
+            "memory": {
+              "enabled": true,
+              "kinds": [
+                "fact",
+                "preference",
+                "episode"
+              ]
+            },
+            "model": "default",
+            "name": "Branch Concierge",
+            "paused": false,
+            "protection": null,
+            "publishedVersion": 3,
+            "role": "Books appointments and answers product questions",
+            "skillMenu": "team",
+            "slug": "branch-concierge",
+            "staleToolIds": [],
+            "tasks24h": 0,
+            "teamId": "team_ops",
+            "templateId": null,
+            "toolIds": [
+              "lookup_customer",
+              "request_document"
+            ],
+            "updatedAt": "<timeZ>",
+            "usedIn": [
+              {
+                "own": true,
+                "pinnedVersion": 3,
+                "status": "live",
+                "workflowId": "agent:ag_branch",
+                "workflowName": "Its own one-step workflow"
+              }
+            ],
+            "version": 3,
+            "widgetPins": [],
+            "widgets": {
+              "compose": false,
+              "perTurn": null
+            },
+            "workflowIds": [],
+            "wrapperWorkflowId": "agent:ag_branch"
+          },
+          {
+            "accounts": {},
+            "allTeamKnowledgeBases": false,
+            "autoResolvedRate": 0,
+            "availability": "published",
+            "channels": [
+              "chat"
+            ],
+            "collections": [
+              "kb_legal"
+            ],
+            "controls": {
+              "channels": [
+                "chat"
+              ],
+              "evals": true,
+              "guardrails": [
+                "redactPii",
+                "maxToolCallsPerTurn",
+                "maxModelCallsPerTurn",
+                "maxModelCallsPerConversation",
+                "maxCostPerConversation"
+              ]
+            },
+            "guardrailPins": [],
+            "guardrails": {
+              "blockedTopics": [],
+              "maxCostPerConversation": null,
+              "maxModelCallsPerConversation": null,
+              "maxModelCallsPerTurn": 8,
+              "maxToolCallsPerTurn": 6,
+              "redactPii": true,
+              "whenUnsure": "handoff"
+            },
+            "id": "ag_dispute",
+            "instructions": "You are Card Dispute Resolver, an assistant for Harbor & Pine Bank's Card Services team. You help agents investigate card disputes, explain the dispute rules, and request supporting documents from cardholders.\n\nUse lookup_customer to read the cardholder before discussing them. When evidence is missing, call request_document with the customer id, the document needed and why; the request is reviewed before it is sent to the customer, so say it is waiting for review. If request_document returns a reference, the request was approved and sent: say so and give the reference.\n\nAnswer rule questions from the knowledge provided and cite it. Lead with the answer; keep it under 120 words unless asked for more.",
+            "limits": {
+              "allowedKnowledgeBaseIds": [
+                "kb_legal"
+              ],
+              "allowedModels": [
+                "default"
+              ],
+              "callersMayAddInstructions": false,
+              "defaultModel": "default",
+              "publicKeyMay": [
+                "tools",
+                "knowledge",
+                "budget",
+                "outputSchema",
+                "variables"
+              ],
+              "switchableToolIds": [
+                "lookup_customer",
+                "request_document",
+                "workflow:dispute_email"
+              ],
+              "switchableWidgetIds": []
+            },
+            "memory": {
+              "enabled": true,
+              "kinds": [
+                "fact",
+                "preference",
+                "episode"
+              ]
+            },
+            "model": "default",
+            "name": "Card Dispute Resolver",
+            "paused": false,
+            "protection": null,
+            "publishedVersion": 4,
+            "role": "Investigates and drafts card dispute outcomes",
+            "skillMenu": "team",
+            "slug": "card-dispute-resolver",
+            "staleToolIds": [],
+            "tasks24h": 0,
+            "teamId": "team_ops",
+            "templateId": null,
+            "toolIds": [
+              "lookup_customer",
+              "request_document",
+              "workflow:dispute_email"
+            ],
+            "updatedAt": "<timeZ>",
+            "usedIn": [
+              {
+                "own": true,
+                "pinnedVersion": 4,
+                "status": "live",
+                "workflowId": "agent:ag_dispute",
+                "workflowName": "Its own one-step workflow"
+              }
+            ],
+            "version": 4,
+            "widgetPins": [],
+            "widgets": {
+              "compose": false,
+              "perTurn": null
+            },
+            "workflowIds": [],
+            "wrapperWorkflowId": "agent:ag_dispute"
+          },
+          {
+            "accounts": {},
+            "allTeamKnowledgeBases": false,
+            "autoResolvedRate": 0,
+            "availability": "published",
+            "channels": [
+              "chat"
+            ],
+            "collections": [
+              "kb_people",
+              "kb_eng"
+            ],
+            "controls": {
+              "channels": [
+                "chat"
+              ],
+              "evals": true,
+              "guardrails": [
+                "redactPii",
+                "maxToolCallsPerTurn",
+                "maxModelCallsPerTurn",
+                "maxModelCallsPerConversation",
+                "maxCostPerConversation"
+              ]
+            },
+            "guardrailPins": [],
+            "guardrails": {
+              "blockedTopics": [],
+              "maxCostPerConversation": null,
+              "maxModelCallsPerConversation": null,
+              "maxModelCallsPerTurn": 8,
+              "maxToolCallsPerTurn": 6,
+              "redactPii": true,
+              "whenUnsure": "handoff"
+            },
+            "id": "ag_fraud",
+            "instructions": "You are Wire Fraud Sentinel, an assistant for Harbor & Pine Bank's Fraud Operations team. You help analysts check outbound wires, answer questions about wire policy, and place holds on suspicious wires.\n\nUse lookup_account to read an account before discussing it; never state a balance, limit or status you did not read. When an analyst asks you to hold a wire, call place_wire_hold with the wire id, the number of hours and a one-sentence reason. Holding a wire moves money, so the call goes to Fraud Operations for approval before it runs. If the turn ends at that approval, say the hold is waiting for approval. If place_wire_hold returns a result with a reference, a reviewer has approved it and the hold is in place: say so and give the reference.\n\nAnswer policy questions from the knowledge provided and cite it. Keep replies short: lead with the answer, then the detail. Do not give investment advice.",
+            "limits": {
+              "allowedKnowledgeBaseIds": [
+                "kb_people",
+                "kb_eng"
+              ],
+              "allowedModels": [
+                "default"
+              ],
+              "callersMayAddInstructions": false,
+              "defaultModel": "default",
+              "publicKeyMay": [
+                "tools",
+                "knowledge",
+                "budget",
+                "outputSchema",
+                "variables"
+              ],
+              "switchableToolIds": [
+                "lookup_account",
+                "place_wire_hold"
+              ],
+              "switchableWidgetIds": []
+            },
+            "memory": {
+              "enabled": true,
+              "kinds": [
+                "fact",
+                "preference",
+                "episode"
+              ]
+            },
+            "model": "default",
+            "name": "Wire Fraud Sentinel",
+            "paused": false,
+            "protection": null,
+            "publishedVersion": 7,
+            "role": "Scores outbound wires and places holds",
+            "skillMenu": "team",
+            "slug": "wire-fraud-sentinel",
+            "staleToolIds": [],
+            "tasks24h": 0,
+            "teamId": "team_ops",
+            "templateId": null,
+            "toolIds": [
+              "lookup_account",
+              "place_wire_hold"
+            ],
+            "updatedAt": "<timeZ>",
+            "usedIn": [
+              {
+                "own": true,
+                "pinnedVersion": 7,
+                "status": "live",
+                "workflowId": "agent:ag_fraud",
+                "workflowName": "Its own one-step workflow"
+              },
+              {
+                "pinnedVersion": 7,
+                "status": "live",
+                "workflowId": "wire_hold_review",
+                "workflowName": "Wire hold review"
+              }
+            ],
+            "version": 7,
+            "widgetPins": [],
+            "widgets": {
+              "compose": false,
+              "perTurn": null
+            },
+            "workflowIds": [
+              "wire_hold_review"
+            ],
+            "wrapperWorkflowId": "agent:ag_fraud"
+          }
+        ],
+        "facets": {
+          "availability": {
+            "published": 3
+          },
+          "teamId": {
+            "team_ops": 3
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 3,
+          "total": 3,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "agents.live": {
+    "body": {
+      "data": {
+        "latestVersion": 1,
+        "rows": [],
+        "versions": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "agents.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Agent ag_missing was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "agents.publish": {
+    "body": {
+      "data": {
+        "actionTool": "publish_agent",
+        "agentName": "Branch Desk",
+        "agentPublish": {
+          "agentId": "<ag>",
+          "agentName": "Branch Desk",
+          "approvalsNeeded": 1,
+          "blockers": [],
+          "candidate": null,
+          "changes": [
+            "Created",
+            "Changed role"
+          ],
+          "failing": 0,
+          "fromVersion": null,
+          "guardrailPins": [],
+          "limits": {
+            "allowedKnowledgeBaseIds": [],
+            "allowedModels": [
+              ""
+            ],
+            "callersMayAddInstructions": false,
+            "defaultModel": "",
+            "publicKeyMay": [
+              "tools",
+              "knowledge",
+              "budget",
+              "outputSchema",
+              "variables"
+            ],
+            "switchableToolIds": [],
+            "switchableWidgetIds": []
+          },
+          "majorChange": true,
+          "note": "first",
+          "policy": "major",
+          "published": null,
+          "requestedBy": "j.richardson@harborpine.example",
+          "reviewReason": "dev_auto_approve",
+          "reviewRequired": false,
+          "savedBy": "j.richardson@harborpine.example",
+          "tier": "low",
+          "tierReason": "No live workflow pins it",
+          "version": 1
+        },
+        "agentSlug": "branch-desk",
+        "approvals": [
+          "auto-approve (dev)"
+        ],
+        "confidence": 1,
+        "createdAt": "<timeZ>",
+        "currency": "CAD",
+        "customer": "Requested by j.richardson@harborpine.example",
+        "decidedAt": "<timeZ>",
+        "decidedBy": "auto-approve (dev)",
+        "evidence": [],
+        "id": "<AGP>",
+        "kind": "agent_publish",
+        "policy": {
+          "condition": "every version before it serves",
+          "fourEyes": false,
+          "id": "gp_agent_publish",
+          "name": "Agent publish",
+          "onTimeout": "Stays pending; the requester is notified",
+          "reviewers": "publishers",
+          "sla": "1 business day"
+        },
+        "proposal": "first",
+        "reasoning": [
+          "Created",
+          "Changed role"
+        ],
+        "risk": "low",
+        "slaMinutes": null,
+        "status": "approved",
+        "title": "Publish Branch Desk v1",
+        "workflowId": "",
+        "workflowName": "Branch Desk"
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "agents.publishAgain": {
+    "body": {
+      "error": {
+        "code": "already_published",
+        "message": "v1 is already published.",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
+  "agents.read": {
+    "body": {
+      "data": {
+        "accounts": {},
+        "allTeamKnowledgeBases": false,
+        "autoResolvedRate": 0,
+        "availability": "published",
+        "canDelete": true,
+        "canEdit": true,
+        "canPublish": true,
+        "channels": [
+          "chat"
+        ],
+        "collections": [
+          "kb_people",
+          "kb_eng"
+        ],
+        "controls": {
+          "channels": [
+            "chat"
+          ],
+          "evals": true,
+          "guardrails": [
+            "redactPii",
+            "maxToolCallsPerTurn",
+            "maxModelCallsPerTurn",
+            "maxModelCallsPerConversation",
+            "maxCostPerConversation"
+          ]
+        },
+        "guardrailPins": [],
+        "guardrails": {
+          "blockedTopics": [],
+          "maxCostPerConversation": null,
+          "maxModelCallsPerConversation": null,
+          "maxModelCallsPerTurn": 8,
+          "maxToolCallsPerTurn": 6,
+          "redactPii": true,
+          "whenUnsure": "handoff"
+        },
+        "id": "ag_fraud",
+        "instructions": "You are Wire Fraud Sentinel, an assistant for Harbor & Pine Bank's Fraud Operations team. You help analysts check outbound wires, answer questions about wire policy, and place holds on suspicious wires.\n\nUse lookup_account to read an account before discussing it; never state a balance, limit or status you did not read. When an analyst asks you to hold a wire, call place_wire_hold with the wire id, the number of hours and a one-sentence reason. Holding a wire moves money, so the call goes to Fraud Operations for approval before it runs. If the turn ends at that approval, say the hold is waiting for approval. If place_wire_hold returns a result with a reference, a reviewer has approved it and the hold is in place: say so and give the reference.\n\nAnswer policy questions from the knowledge provided and cite it. Keep replies short: lead with the answer, then the detail. Do not give investment advice.",
+        "limits": {
+          "allowedKnowledgeBaseIds": [
+            "kb_people",
+            "kb_eng"
+          ],
+          "allowedModels": [
+            "default"
+          ],
+          "callersMayAddInstructions": false,
+          "defaultModel": "default",
+          "publicKeyMay": [
+            "tools",
+            "knowledge",
+            "budget",
+            "outputSchema",
+            "variables"
+          ],
+          "switchableToolIds": [
+            "lookup_account",
+            "place_wire_hold"
+          ],
+          "switchableWidgetIds": []
+        },
+        "memory": {
+          "enabled": true,
+          "kinds": [
+            "fact",
+            "preference",
+            "episode"
+          ]
+        },
+        "model": "default",
+        "name": "Wire Fraud Sentinel",
+        "paused": false,
+        "protection": null,
+        "publishedVersion": 7,
+        "role": "Scores outbound wires and places holds",
+        "skillMenu": "team",
+        "slug": "wire-fraud-sentinel",
+        "staleToolIds": [],
+        "tasks24h": 0,
+        "teamId": "team_ops",
+        "teamName": null,
+        "templateId": null,
+        "toolIds": [
+          "lookup_account",
+          "place_wire_hold"
+        ],
+        "updatedAt": "<timeZ>",
+        "usedIn": [
+          {
+            "own": true,
+            "pinnedVersion": 7,
+            "status": "live",
+            "workflowId": "agent:ag_fraud",
+            "workflowName": "Its own one-step workflow"
+          },
+          {
+            "pinnedVersion": 7,
+            "status": "live",
+            "workflowId": "wire_hold_review",
+            "workflowName": "Wire hold review"
+          }
+        ],
+        "version": 7,
+        "widgetPins": [],
+        "widgets": {
+          "compose": false,
+          "perTurn": null
+        },
+        "workflowIds": [
+          "wire_hold_review"
+        ],
+        "wrapperWorkflowId": "agent:ag_fraud"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "agents.readAfter": {
+    "body": {
+      "data": {
+        "accounts": {},
+        "allTeamKnowledgeBases": false,
+        "autoResolvedRate": 0,
+        "availability": "published",
+        "canDelete": true,
+        "canEdit": true,
+        "canPublish": true,
+        "channels": [
+          "chat"
+        ],
+        "collections": [],
+        "controls": {
+          "channels": [
+            "chat"
+          ],
+          "evals": true,
+          "guardrails": [
+            "redactPii",
+            "maxToolCallsPerTurn",
+            "maxModelCallsPerTurn",
+            "maxModelCallsPerConversation",
+            "maxCostPerConversation"
+          ]
+        },
+        "guardrailPins": [],
+        "guardrails": {
+          "blockedTopics": [],
+          "maxCostPerConversation": null,
+          "maxModelCallsPerConversation": null,
+          "maxModelCallsPerTurn": 50,
+          "maxToolCallsPerTurn": null,
+          "redactPii": true,
+          "whenUnsure": "handoff"
+        },
+        "id": "<ag>",
+        "instructions": "You are Branch Desk. Answers branch questions",
+        "limits": {
+          "allowedKnowledgeBaseIds": [],
+          "allowedModels": [
+            ""
+          ],
+          "callersMayAddInstructions": false,
+          "defaultModel": "",
+          "publicKeyMay": [
+            "tools",
+            "knowledge",
+            "budget",
+            "outputSchema",
+            "variables"
+          ],
+          "switchableToolIds": [],
+          "switchableWidgetIds": []
+        },
+        "memory": {
+          "enabled": true,
+          "kinds": [
+            "fact",
+            "preference",
+            "episode"
+          ]
+        },
+        "model": "",
+        "name": "Branch Desk",
+        "paused": false,
+        "protection": null,
+        "publishedVersion": 1,
+        "role": "Answers branch hours",
+        "skillMenu": "team",
+        "slug": "branch-desk",
+        "staleToolIds": [],
+        "tasks24h": 0,
+        "teamId": "team_ops",
+        "teamName": null,
+        "templateId": null,
+        "toolIds": [],
+        "updatedAt": "<timeZ>",
+        "usedIn": [
+          {
+            "own": true,
+            "pinnedVersion": 1,
+            "status": "live",
+            "workflowId": "agent:<ag>",
+            "workflowName": "Its own one-step workflow"
+          }
+        ],
+        "version": 1,
+        "widgetPins": [],
+        "widgets": {
+          "compose": false,
+          "perTurn": null
+        },
+        "workflowIds": [],
+        "wrapperWorkflowId": "agent:<ag>"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "agents.update": {
+    "body": {
+      "data": {
+        "accounts": {},
+        "allTeamKnowledgeBases": false,
+        "autoResolvedRate": 0,
+        "availability": "not_published",
+        "channels": [
+          "chat"
+        ],
+        "collections": [],
+        "controls": {
+          "channels": [
+            "chat"
+          ],
+          "evals": true,
+          "guardrails": [
+            "redactPii",
+            "maxToolCallsPerTurn",
+            "maxModelCallsPerTurn",
+            "maxModelCallsPerConversation",
+            "maxCostPerConversation"
+          ]
+        },
+        "guardrailPins": [],
+        "guardrails": {
+          "blockedTopics": [],
+          "maxCostPerConversation": null,
+          "maxModelCallsPerConversation": null,
+          "maxModelCallsPerTurn": 50,
+          "maxToolCallsPerTurn": null,
+          "redactPii": true,
+          "whenUnsure": "handoff"
+        },
+        "id": "<ag>",
+        "instructions": "You are Branch Desk. Answers branch questions",
+        "limits": {
+          "allowedKnowledgeBaseIds": [],
+          "allowedModels": [
+            ""
+          ],
+          "callersMayAddInstructions": false,
+          "defaultModel": "",
+          "publicKeyMay": [
+            "tools",
+            "knowledge",
+            "budget",
+            "outputSchema",
+            "variables"
+          ],
+          "switchableToolIds": [],
+          "switchableWidgetIds": []
+        },
+        "memory": {
+          "enabled": true,
+          "kinds": [
+            "fact",
+            "preference",
+            "episode"
+          ]
+        },
+        "model": "",
+        "name": "Branch Desk",
+        "paused": false,
+        "protection": null,
+        "publishedVersion": null,
+        "role": "Answers branch hours",
+        "skillMenu": "team",
+        "slug": "branch-desk",
+        "staleToolIds": [],
+        "tasks24h": 0,
+        "teamId": "team_ops",
+        "templateId": null,
+        "toolIds": [],
+        "updatedAt": "<timeZ>",
+        "usedIn": [],
+        "version": 1,
+        "widgetPins": [],
+        "widgets": {
+          "compose": false,
+          "perTurn": null
+        },
+        "workflowIds": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "agents.versions": {
+    "body": {
+      "data": [
+        {
+          "changes": [
+            "Created",
+            "Changed role"
+          ],
+          "current": false,
+          "note": "",
+          "savedAt": "<timeZ>",
+          "savedBy": "j.richardson@harborpine.example",
+          "state": "draft",
+          "version": 1
+        }
+      ],
+      "success": true
+    },
+    "status": 200
+  },
+  "channels.list": {
+    "body": {
+      "data": {
+        "data": [],
+        "facets": {
+          "health": {},
+          "type": {}
+        },
+        "kinds": [
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "api"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "chat"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "email"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": true,
+            "health": null,
+            "total": 0,
+            "type": "mcp"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "slack"
+          },
+          {
+            "active": 0,
+            "attention": 0,
+            "built": false,
+            "health": null,
+            "total": 0,
+            "type": "teams"
+          }
+        ],
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 50,
+          "total": 0,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "channels.mailboxes": {
+    "body": {
+      "data": [],
+      "success": true
+    },
+    "status": 200
+  },
+  "deployments.create": {
+    "body": {
+      "data": {
+        "channel": "api",
+        "graph": "complex_workflow",
+        "id": "dep_pinned",
+        "multitask": "enqueue",
+        "paused": false
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "deployments.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Deployment dep_missing was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "deployments.update": {
+    "body": {
+      "data": {
+        "id": "dep_pinned",
+        "paused": true
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "guardrails.create": {
+    "body": {
+      "data": {
+        "config": {
+          "message": "I can't give investment advice.",
+          "topics": [
+            "investment advice"
+          ]
+        },
+        "id": "<gr>",
+        "kind": "blocked_topics",
+        "name": "No investment advice",
+        "owner": "Operations",
+        "pendingRequestId": null,
+        "publishedVersion": null,
+        "slug": "no-investment-advice",
+        "status": "live",
+        "updatedAt": "<timeZ>",
+        "usedBy": [],
+        "version": 1,
+        "versions": [
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "investment advice"
+              ]
+            },
+            "note": "",
+            "publishedAt": null,
+            "publishedBy": null,
+            "savedAt": "<timeZ>",
+            "savedBy": "j.richardson@harborpine.example",
+            "state": "draft",
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "guardrails.list": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "investment advice"
+              ]
+            },
+            "id": "<gr>",
+            "kind": "blocked_topics",
+            "name": "No investment advice",
+            "owner": "Operations",
+            "pendingRequestId": null,
+            "publishedVersion": null,
+            "slug": "no-investment-advice",
+            "status": "live",
+            "updatedAt": "<timeZ>",
+            "usedBy": [],
+            "version": 1,
+            "versions": [
+              {
+                "config": {
+                  "message": "I can't give investment advice.",
+                  "topics": [
+                    "investment advice"
+                  ]
+                },
+                "note": "",
+                "publishedAt": null,
+                "publishedBy": null,
+                "savedAt": "<timeZ>",
+                "savedBy": "j.richardson@harborpine.example",
+                "state": "draft",
+                "version": 1
+              }
+            ]
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 3,
+          "total": 1,
+          "totalPages": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "guardrails.nameTaken": {
+    "body": {
+      "error": {
+        "code": "name_taken",
+        "message": "A guardrail named No investment advice exists; give this one another name.",
+        "requestId": "<req>",
+        "status": 409
+      },
+      "success": false
+    },
+    "status": 409
+  },
+  "guardrails.read": {
+    "body": {
+      "data": {
+        "config": {
+          "message": "I can't give investment advice.",
+          "topics": [
+            "investment advice"
+          ]
+        },
+        "id": "<gr>",
+        "kind": "blocked_topics",
+        "name": "No investment advice",
+        "owner": "Operations",
+        "pendingRequestId": null,
+        "publishedVersion": null,
+        "slug": "no-investment-advice",
+        "status": "live",
+        "updatedAt": "<timeZ>",
+        "usedBy": [],
+        "version": 1,
+        "versions": [
+          {
+            "config": {
+              "message": "I can't give investment advice.",
+              "topics": [
+                "investment advice"
+              ]
+            },
+            "note": "",
+            "publishedAt": null,
+            "publishedBy": null,
+            "savedAt": "<timeZ>",
+            "savedBy": "j.richardson@harborpine.example",
+            "state": "draft",
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "guardrails.update": {
+    "body": {
+      "data": {
+        "config": {
+          "message": "Not advice.",
+          "topics": [
+            "investment advice"
+          ]
+        },
+        "id": "<gr>",
+        "kind": "blocked_topics",
+        "name": "No investment advice",
+        "owner": "Operations",
+        "pendingRequestId": null,
+        "publishedVersion": null,
+        "slug": "no-investment-advice",
+        "status": "live",
+        "updatedAt": "<timeZ>",
+        "usedBy": [],
+        "version": 1,
+        "versions": [
+          {
+            "config": {
+              "message": "Not advice.",
+              "topics": [
+                "investment advice"
+              ]
+            },
+            "note": "",
+            "publishedAt": null,
+            "publishedBy": null,
+            "savedAt": "<timeZ>",
+            "savedBy": "j.richardson@harborpine.example",
+            "state": "draft",
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "skills.create": {
+    "body": {
+      "data": {
+        "activity": {
+          "agents": [],
+          "loads30d": 0,
+          "loadsPerDay": [],
+          "samples": [],
+          "successRate": null
+        },
+        "content": {
+          "guardrails": [
+            "Never promise a payment deferral before the hardship team approves it"
+          ],
+          "instructions": "Steps: confirm the customer, record the reason, offer the hardship form.",
+          "knowledgeBases": [
+            "kb_support"
+          ],
+          "loading": "on_match",
+          "name": "Hardship request triage",
+          "resources": [],
+          "slug": "hardship-request-triage",
+          "tools": [
+            {
+              "access": "read",
+              "module": "Customer Hub",
+              "name": "lookup_customer",
+              "system": "Customer Hub",
+              "toolId": "lookup_customer"
+            }
+          ],
+          "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
+        },
+        "draftVersion": 1,
+        "id": "<sk>",
+        "inputs": [],
+        "kbCount": 1,
+        "lastEvalPassRate": null,
+        "liveAgents": 0,
+        "loading": "on_match",
+        "name": "Hardship request triage",
+        "origin": "blank",
+        "ownerTeam": "Retail",
+        "parts": [],
+        "provenance": {
+          "citations": [],
+          "detail": "",
+          "origin": "blank"
+        },
+        "publishCheck": {
+          "approversNeeded": 1,
+          "blockers": [],
+          "canRequest": true,
+          "editClass": "re_test"
+        },
+        "publishedVersion": null,
+        "runs": [],
+        "slug": "hardship-request-triage",
+        "status": "draft",
+        "tests": [],
+        "tokens": 36,
+        "toolCount": 1,
+        "updatedAt": "<timeZ>",
+        "updatedBy": "j.richardson@harborpine.example",
+        "usage": [],
+        "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship.",
+        "usedBy": 0,
+        "version": 1,
+        "versions": [
+          {
+            "changes": [
+              "Created"
+            ],
+            "content": {
+              "guardrails": [
+                "Never promise a payment deferral before the hardship team approves it"
+              ],
+              "instructions": "Steps: confirm the customer, record the reason, offer the hardship form.",
+              "knowledgeBases": [
+                "kb_support"
+              ],
+              "loading": "on_match",
+              "name": "Hardship request triage",
+              "resources": [],
+              "slug": "hardship-request-triage",
+              "tools": [
+                {
+                  "access": "read",
+                  "module": "Customer Hub",
+                  "name": "lookup_customer",
+                  "system": "Customer Hub",
+                  "toolId": "lookup_customer"
+                }
+              ],
+              "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
+            },
+            "editClass": "re_test",
+            "note": "",
+            "savedAt": "<timeZ>",
+            "savedBy": "j.richardson@harborpine.example",
+            "state": "draft",
+            "testRun": null,
+            "tokens": 36,
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "skills.createRefused": {
+    "body": {
+      "error": {
+        "code": "no_use_when",
+        "message": "An on-match skill needs a use-when line: it is what the model reads to load it.",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "skills.list": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "draftVersion": 1,
+            "id": "<sk>",
+            "inputs": [],
+            "kbCount": 1,
+            "lastEvalPassRate": null,
+            "liveAgents": 0,
+            "loading": "on_match",
+            "name": "Hardship request triage",
+            "origin": "blank",
+            "ownerTeam": "Retail",
+            "parts": [],
+            "publishedVersion": null,
+            "slug": "hardship-request-triage",
+            "status": "draft",
+            "tokens": 36,
+            "toolCount": 1,
+            "updatedAt": "<timeZ>",
+            "updatedBy": "j.richardson@harborpine.example",
+            "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship.",
+            "usedBy": 0,
+            "version": 1
+          }
+        ],
+        "facets": {
+          "loading": {
+            "on_match": 1
+          },
+          "origin": {
+            "blank": 1
+          },
+          "ownerTeam": {
+            "Retail": 1
+          },
+          "status": {
+            "draft": 1
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 3,
+          "total": 1,
+          "totalPages": 1
+        },
+        "viewCounts": {
+          "all": 1,
+          "always": 0,
+          "deprecated": 0,
+          "drafts": 1,
+          "in_review": 0,
+          "published": 0,
+          "unused": 1
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "skills.options": {
+    "body": {
+      "data": {
+        "knowledgeBases": [
+          "kb_eng",
+          "kb_legal",
+          "kb_people",
+          "kb_support"
+        ],
+        "limits": {
+          "maxAttached": 12,
+          "maxPerTurn": 2,
+          "tokenBudget": 6000,
+          "useWhenMaxChars": 1024
+        },
+        "teams": [
+          "Retail"
+        ],
+        "tools": [
+          {
+            "access": "read",
+            "module": "Core Banking",
+            "name": "lookup_account",
+            "system": "Core Banking",
+            "toolId": "lookup_account"
+          },
+          {
+            "access": "write",
+            "module": "Payments Hub",
+            "name": "place_wire_hold",
+            "system": "Payments Hub",
+            "toolId": "place_wire_hold"
+          },
+          {
+            "access": "read",
+            "module": "Customer Hub",
+            "name": "lookup_customer",
+            "system": "Customer Hub",
+            "toolId": "lookup_customer"
+          },
+          {
+            "access": "write",
+            "module": "Customer Hub",
+            "name": "request_document",
+            "system": "Customer Hub",
+            "toolId": "request_document"
+          },
+          {
+            "access": "read",
+            "module": "Harbor & Pine Core Banking",
+            "name": "search_customers",
+            "system": "Harbor & Pine Core Banking",
+            "toolId": "search_customers"
+          },
+          {
+            "access": "read",
+            "module": "Harbor & Pine Core Banking",
+            "name": "get_customer",
+            "system": "Harbor & Pine Core Banking",
+            "toolId": "get_customer"
+          },
+          {
+            "access": "read",
+            "module": "Harbor & Pine Core Banking",
+            "name": "get_account",
+            "system": "Harbor & Pine Core Banking",
+            "toolId": "get_account"
+          },
+          {
+            "access": "write",
+            "module": "Harbor & Pine Core Banking",
+            "name": "place_hold",
+            "system": "Harbor & Pine Core Banking",
+            "toolId": "place_hold"
+          },
+          {
+            "access": "write",
+            "module": "Harbor & Pine Core Banking",
+            "name": "add_customer_note",
+            "system": "Harbor & Pine Core Banking",
+            "toolId": "add_customer_note"
+          },
+          {
+            "access": "workflow",
+            "module": "Workflows",
+            "name": "Dispute email",
+            "system": "Workflows",
+            "toolId": "workflow:dispute_email"
+          },
+          {
+            "access": "workflow",
+            "module": "Workflows",
+            "name": "Levy-case",
+            "system": "Workflows",
+            "toolId": "workflow:levy-case"
+          },
+          {
+            "access": "workflow",
+            "module": "Workflows",
+            "name": "Levy-intake",
+            "system": "Workflows",
+            "toolId": "workflow:levy-intake"
+          },
+          {
+            "access": "workflow",
+            "module": "Workflows",
+            "name": "Wire hold review",
+            "system": "Workflows",
+            "toolId": "workflow:wire_hold_review"
+          },
+          {
+            "access": "read",
+            "module": "Agents",
+            "name": "Wire Fraud Sentinel",
+            "system": "Agents",
+            "toolId": "agent:ag_fraud"
+          },
+          {
+            "access": "read",
+            "module": "Agents",
+            "name": "Card Dispute Resolver",
+            "system": "Agents",
+            "toolId": "agent:ag_dispute"
+          },
+          {
+            "access": "read",
+            "module": "Agents",
+            "name": "Branch Concierge",
+            "system": "Agents",
+            "toolId": "agent:ag_branch"
+          },
+          {
+            "access": "read",
+            "module": "Agents",
+            "name": "Branch Desk",
+            "system": "Agents",
+            "toolId": "agent:<ag>"
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "skills.publish": {
+    "body": {
+      "data": {
+        "activity": {
+          "agents": [],
+          "loads30d": 0,
+          "loadsPerDay": [],
+          "samples": [],
+          "successRate": null
+        },
+        "content": {
+          "guardrails": [
+            "Never promise a payment deferral before the hardship team approves it"
+          ],
+          "instructions": "Steps: confirm the customer, record the reason, offer the hardship form.",
+          "knowledgeBases": [
+            "kb_support"
+          ],
+          "loading": "on_match",
+          "name": "Hardship request triage",
+          "resources": [],
+          "slug": "hardship-request-triage",
+          "tools": [
+            {
+              "access": "read",
+              "module": "Customer Hub",
+              "name": "lookup_customer",
+              "system": "Customer Hub",
+              "toolId": "lookup_customer"
+            }
+          ],
+          "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
+        },
+        "draftVersion": null,
+        "id": "<sk>",
+        "inputs": [],
+        "kbCount": 1,
+        "lastEvalPassRate": null,
+        "liveAgents": 0,
+        "loading": "on_match",
+        "name": "Hardship request triage",
+        "origin": "blank",
+        "ownerTeam": "Retail",
+        "parts": [],
+        "provenance": {
+          "citations": [],
+          "detail": "",
+          "origin": "blank"
+        },
+        "publishCheck": {
+          "approversNeeded": 1,
+          "blockers": [
+            "v1 is already published; save a change to open a draft."
+          ],
+          "canRequest": false,
+          "editClass": "re_test"
+        },
+        "publishedVersion": 1,
+        "runs": [],
+        "slug": "hardship-request-triage",
+        "status": "published",
+        "tests": [],
+        "tokens": 36,
+        "toolCount": 1,
+        "updatedAt": "<timeZ>",
+        "updatedBy": "auto-approve (dev)",
+        "usage": [],
+        "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship.",
+        "usedBy": 0,
+        "version": 1,
+        "versions": [
+          {
+            "changes": [
+              "Created"
+            ],
+            "content": {
+              "guardrails": [
+                "Never promise a payment deferral before the hardship team approves it"
+              ],
+              "instructions": "Steps: confirm the customer, record the reason, offer the hardship form.",
+              "knowledgeBases": [
+                "kb_support"
+              ],
+              "loading": "on_match",
+              "name": "Hardship request triage",
+              "resources": [],
+              "slug": "hardship-request-triage",
+              "tools": [
+                {
+                  "access": "read",
+                  "module": "Customer Hub",
+                  "name": "lookup_customer",
+                  "system": "Customer Hub",
+                  "toolId": "lookup_customer"
+                }
+              ],
+              "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
+            },
+            "editClass": "re_test",
+            "note": "",
+            "publishedAt": "<timeZ>",
+            "publishedBy": "auto-approve (dev)",
+            "reviewId": "<SKP>",
+            "savedAt": "<timeZ>",
+            "savedBy": "j.richardson@harborpine.example",
+            "state": "published",
+            "testRun": null,
+            "tokens": 36,
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "skills.read": {
+    "body": {
+      "data": {
+        "activity": {
+          "agents": [],
+          "loads30d": 0,
+          "loadsPerDay": [],
+          "samples": [],
+          "successRate": null
+        },
+        "content": {
+          "guardrails": [
+            "Never promise a payment deferral before the hardship team approves it"
+          ],
+          "instructions": "Steps: confirm the customer, record the reason, offer the hardship form.",
+          "knowledgeBases": [
+            "kb_support"
+          ],
+          "loading": "on_match",
+          "name": "Hardship request triage",
+          "resources": [],
+          "slug": "hardship-request-triage",
+          "tools": [
+            {
+              "access": "read",
+              "module": "Customer Hub",
+              "name": "lookup_customer",
+              "system": "Customer Hub",
+              "toolId": "lookup_customer"
+            }
+          ],
+          "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
+        },
+        "draftVersion": 1,
+        "id": "<sk>",
+        "inputs": [],
+        "kbCount": 1,
+        "lastEvalPassRate": null,
+        "liveAgents": 0,
+        "loading": "on_match",
+        "name": "Hardship request triage",
+        "origin": "blank",
+        "ownerTeam": "Retail",
+        "parts": [],
+        "provenance": {
+          "citations": [],
+          "detail": "",
+          "origin": "blank"
+        },
+        "publishCheck": {
+          "approversNeeded": 1,
+          "blockers": [],
+          "canRequest": true,
+          "editClass": "re_test"
+        },
+        "publishedVersion": null,
+        "runs": [],
+        "slug": "hardship-request-triage",
+        "status": "draft",
+        "tests": [],
+        "tokens": 36,
+        "toolCount": 1,
+        "updatedAt": "<timeZ>",
+        "updatedBy": "j.richardson@harborpine.example",
+        "usage": [],
+        "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship.",
+        "usedBy": 0,
+        "version": 1,
+        "versions": [
+          {
+            "changes": [
+              "Created"
+            ],
+            "content": {
+              "guardrails": [
+                "Never promise a payment deferral before the hardship team approves it"
+              ],
+              "instructions": "Steps: confirm the customer, record the reason, offer the hardship form.",
+              "knowledgeBases": [
+                "kb_support"
+              ],
+              "loading": "on_match",
+              "name": "Hardship request triage",
+              "resources": [],
+              "slug": "hardship-request-triage",
+              "tools": [
+                {
+                  "access": "read",
+                  "module": "Customer Hub",
+                  "name": "lookup_customer",
+                  "system": "Customer Hub",
+                  "toolId": "lookup_customer"
+                }
+              ],
+              "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
+            },
+            "editClass": "re_test",
+            "note": "",
+            "savedAt": "<timeZ>",
+            "savedBy": "j.richardson@harborpine.example",
+            "state": "draft",
+            "testRun": null,
+            "tokens": 36,
+            "version": 1
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "tools.list": {
+    "body": {
+      "data": {
+        "appNames": {},
+        "data": [
+          {
+            "access": "write",
+            "app": null,
+            "approval": "Note on customer {customerId}",
+            "description": "Write a note on a customer's record.",
+            "id": "add_customer_note",
+            "inputSchema": {
+              "properties": {
+                "customerId": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "customerId",
+                "text"
+              ],
+              "type": "object"
+            },
+            "kind": "custom",
+            "moduleId": null,
+            "name": "add_customer_note",
+            "requiresApproval": true,
+            "server": "Harbor & Pine Core Banking",
+            "status": "needs_approval",
+            "title": "add_customer_note",
+            "usedBy": {
+              "agents": [],
+              "workflows": [
+                {
+                  "id": "levy-case",
+                  "name": "Levy-case"
+                }
+              ]
+            }
+          },
+          {
+            "access": "read",
+            "app": null,
+            "approval": null,
+            "description": "Ask Branch Concierge, the Books appointments and answers product questions.",
+            "id": "agent:ag_branch",
+            "inputSchema": {
+              "properties": {
+                "question": {
+                  "description": "The whole question, with what the person said",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "question"
+              ],
+              "type": "object"
+            },
+            "kind": "agent",
+            "moduleId": null,
+            "name": "Branch Concierge",
+            "requiresApproval": false,
+            "server": "Agents",
+            "status": "ready",
+            "title": "Branch Concierge",
+            "usedBy": {
+              "agents": [],
+              "workflows": []
+            }
+          },
+          {
+            "access": "read",
+            "app": null,
+            "approval": null,
+            "description": "Ask Branch Desk, the Answers branch hours.",
+            "id": "agent:<ag>",
+            "inputSchema": {
+              "properties": {
+                "question": {
+                  "description": "The whole question, with what the person said",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "question"
+              ],
+              "type": "object"
+            },
+            "kind": "agent",
+            "moduleId": null,
+            "name": "Branch Desk",
+            "requiresApproval": false,
+            "server": "Agents",
+            "status": "ready",
+            "title": "Branch Desk",
+            "usedBy": {
+              "agents": [],
+              "workflows": []
+            }
+          }
+        ],
+        "facets": {
+          "app": {},
+          "kind": {
+            "agent": 4,
+            "custom": 9,
+            "workflow": 4
+          },
+          "status": {
+            "needs_approval": 4,
+            "ready": 13
+          }
+        },
+        "pagination": {
+          "hasNext": true,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 3,
+          "total": 17,
+          "totalPages": 6
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "tools.options": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "disabled": null,
+            "hint": "Core Banking",
+            "id": "lookup_account",
+            "label": "lookup_account"
+          },
+          {
+            "disabled": null,
+            "hint": "Payments Hub",
+            "id": "place_wire_hold",
+            "label": "place_wire_hold"
+          },
+          {
+            "disabled": null,
+            "hint": "Customer Hub",
+            "id": "lookup_customer",
+            "label": "lookup_customer"
+          },
+          {
+            "disabled": null,
+            "hint": "Customer Hub",
+            "id": "request_document",
+            "label": "request_document"
+          },
+          {
+            "disabled": null,
+            "hint": "Harbor & Pine Core Banking",
+            "id": "search_customers",
+            "label": "search_customers"
+          },
+          {
+            "disabled": null,
+            "hint": "Harbor & Pine Core Banking",
+            "id": "get_customer",
+            "label": "get_customer"
+          },
+          {
+            "disabled": null,
+            "hint": "Harbor & Pine Core Banking",
+            "id": "get_account",
+            "label": "get_account"
+          },
+          {
+            "disabled": null,
+            "hint": "Harbor & Pine Core Banking",
+            "id": "place_hold",
+            "label": "place_hold"
+          },
+          {
+            "disabled": null,
+            "hint": "Harbor & Pine Core Banking",
+            "id": "add_customer_note",
+            "label": "add_customer_note"
+          },
+          {
+            "disabled": null,
+            "hint": "Workflows",
+            "id": "workflow:dispute_email",
+            "label": "Dispute email"
+          },
+          {
+            "disabled": null,
+            "hint": "Workflows",
+            "id": "workflow:levy-case",
+            "label": "Levy-case"
+          },
+          {
+            "disabled": null,
+            "hint": "Workflows",
+            "id": "workflow:levy-intake",
+            "label": "Levy-intake"
+          },
+          {
+            "disabled": null,
+            "hint": "Workflows",
+            "id": "workflow:wire_hold_review",
+            "label": "Wire hold review"
+          },
+          {
+            "disabled": null,
+            "hint": "Agents",
+            "id": "agent:ag_fraud",
+            "label": "Wire Fraud Sentinel"
+          },
+          {
+            "disabled": null,
+            "hint": "Agents",
+            "id": "agent:ag_dispute",
+            "label": "Card Dispute Resolver"
+          },
+          {
+            "disabled": null,
+            "hint": "Agents",
+            "id": "agent:ag_branch",
+            "label": "Branch Concierge"
+          },
+          {
+            "disabled": null,
+            "hint": "Agents",
+            "id": "agent:<ag>",
+            "label": "Branch Desk"
+          }
+        ],
+        "nextCursor": null,
+        "notAdded": []
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "widgets.create": {
+    "body": {
+      "data": {
+        "dataSchema": {
+          "properties": {
+            "account": {
+              "type": "string"
+            },
+            "daily": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "account",
+            "daily"
+          ],
+          "type": "object"
+        },
+        "name": "Wire limit card",
+        "requiresTools": [
+          "lookup_account"
+        ],
+        "sample": {
+          "account": "<CHQ>",
+          "daily": 25000
+        },
+        "status": "draft",
+        "teamId": "team_ops",
+        "tree": {
+          "children": [
+            {
+              "label": "Daily",
+              "type": "metric",
+              "unit": "USD",
+              "value": {
+                "$bind": "/daily"
+              }
+            },
+            {
+              "label": "Look it up",
+              "reply": {
+                "text": "Look up this account.",
+                "values": {
+                  "query": {
+                    "$bind": "/account"
+                  }
+                }
+              },
+              "requires": "lookup_account",
+              "type": "button"
+            }
+          ],
+          "title": {
+            "$bind": "/account"
+          },
+          "type": "card"
+        },
+        "updatedAt": "<timeZ>",
+        "updatedBy": "j.richardson@harborpine.example",
+        "useWhen": "The person asks for an account's wire limits.",
+        "version": 1,
+        "widgetId": "wire-limit-card"
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "widgets.list": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "dataSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "accountId": {
+                  "maxLength": 34,
+                  "type": "string"
+                },
+                "available": {
+                  "type": "number"
+                },
+                "balance": {
+                  "type": "number"
+                },
+                "currency": {
+                  "pattern": "^[A-Z]{3}$",
+                  "type": "string"
+                },
+                "name": {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                "status": {
+                  "maxLength": 40,
+                  "type": "string"
+                },
+                "transactions": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "amount": {
+                        "type": "number"
+                      },
+                      "date": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "maxLength": 200,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "maxItems": 10,
+                  "type": "array"
+                },
+                "type": {
+                  "maxLength": 40,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "accountId",
+                "name",
+                "balance",
+                "currency"
+              ],
+              "type": "object"
+            },
+            "name": "Account snapshot",
+            "requiresTools": [],
+            "sample": {
+              "accountId": "<CHQ>",
+              "available": 4320.55,
+              "balance": 4820.55,
+              "currency": "USD",
+              "name": "Maria Lopez, everyday checking",
+              "status": "Open",
+              "transactions": [
+                {
+                  "amount": -500,
+                  "date": "2026-10-16",
+                  "description": "Transfer to savings"
+                },
+                {
+                  "amount": -42.1,
+                  "date": "2026-10-15",
+                  "description": "Card payment, Fresh Market"
+                },
+                {
+                  "amount": 3150,
+                  "date": "2026-10-14",
+                  "description": "Payroll"
+                }
+              ],
+              "type": "Checking"
+            },
+            "status": "published",
+            "tree": {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "label": "Balance",
+                      "type": "metric",
+                      "unit": {
+                        "$bind": "/currency"
+                      },
+                      "value": {
+                        "$bind": "/balance"
+                      }
+                    },
+                    {
+                      "label": "Available",
+                      "type": "metric",
+                      "unit": {
+                        "$bind": "/currency"
+                      },
+                      "value": {
+                        "$bind": "/available"
+                      }
+                    }
+                  ],
+                  "gap": "lg",
+                  "type": "row"
+                },
+                {
+                  "items": [
+                    {
+                      "label": "Account",
+                      "value": {
+                        "$bind": "/accountId"
+                      }
+                    },
+                    {
+                      "label": "Type",
+                      "value": {
+                        "$bind": "/type"
+                      }
+                    },
+                    {
+                      "label": "Status",
+                      "value": {
+                        "$bind": "/status"
+                      }
+                    }
+                  ],
+                  "type": "keyValue"
+                },
+                {
+                  "type": "divider"
+                },
+                {
+                  "text": "Recent transactions",
+                  "type": "caption"
+                },
+                {
+                  "columns": [
+                    {
+                      "format": "date",
+                      "key": "date",
+                      "label": "Date"
+                    },
+                    {
+                      "key": "description",
+                      "label": "Description"
+                    },
+                    {
+                      "format": "money",
+                      "key": "amount",
+                      "label": "Amount"
+                    }
+                  ],
+                  "rows": {
+                    "$bind": "/transactions"
+                  },
+                  "type": "table"
+                }
+              ],
+              "title": {
+                "$bind": "/name"
+              },
+              "type": "card"
+            },
+            "useWhen": "The person asks about one account: its balance, its status or its recent transactions.",
+            "version": 1,
+            "widgetId": "account-snapshot"
+          },
+          {
+            "dataSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "caseId": {
+                  "maxLength": 40,
+                  "type": "string"
+                },
+                "due": {
+                  "maxLength": 40,
+                  "type": "string"
+                },
+                "nextSteps": {
+                  "items": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "maxItems": 10,
+                  "type": "array"
+                },
+                "owner": {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                "priority": {
+                  "maxLength": 20,
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "open",
+                    "waiting",
+                    "overdue",
+                    "closed"
+                  ],
+                  "type": "string"
+                },
+                "title": {
+                  "maxLength": 160,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "caseId",
+                "title",
+                "status"
+              ],
+              "type": "object"
+            },
+            "name": "Case summary",
+            "requiresTools": [
+              "request_document"
+            ],
+            "sample": {
+              "caseId": "<CASE>",
+              "due": "2026-10-20",
+              "nextSteps": [
+                "Ask the merchant for the receipt",
+                "Issue a provisional credit if no answer by Oct 19"
+              ],
+              "owner": "Dispute desk",
+              "priority": "High",
+              "status": "waiting",
+              "title": "Disputed card charge, Fresh Market"
+            },
+            "status": "published",
+            "tree": {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "text": {
+                        "$bind": "/status"
+                      },
+                      "tones": {
+                        "closed": "success",
+                        "open": "info",
+                        "overdue": "danger",
+                        "waiting": "warning"
+                      },
+                      "type": "badge"
+                    },
+                    {
+                      "text": {
+                        "$bind": "/caseId"
+                      },
+                      "type": "caption"
+                    }
+                  ],
+                  "gap": "sm",
+                  "type": "row"
+                },
+                {
+                  "items": [
+                    {
+                      "label": "Owner",
+                      "value": {
+                        "$bind": "/owner"
+                      }
+                    },
+                    {
+                      "label": "Priority",
+                      "value": {
+                        "$bind": "/priority"
+                      }
+                    },
+                    {
+                      "label": "Due",
+                      "value": {
+                        "$bind": "/due"
+                      }
+                    }
+                  ],
+                  "type": "keyValue"
+                },
+                {
+                  "text": "Next steps",
+                  "type": "caption"
+                },
+                {
+                  "items": {
+                    "$bind": "/nextSteps"
+                  },
+                  "type": "list"
+                },
+                {
+                  "label": "Show the case history",
+                  "reply": {
+                    "text": "Show the history of this case.",
+                    "values": {
+                      "caseId": {
+                        "$bind": "/caseId"
+                      }
+                    }
+                  },
+                  "requires": "request_document",
+                  "type": "button"
+                }
+              ],
+              "title": {
+                "$bind": "/title"
+              },
+              "type": "card"
+            },
+            "useWhen": "The person asks where a case stands: its status, owner, deadline and next steps.",
+            "version": 1,
+            "widgetId": "case-summary"
+          },
+          {
+            "dataSchema": {
+              "additionalProperties": false,
+              "properties": {
+                "account": {
+                  "maxLength": 34,
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "currency": {
+                  "pattern": "^[A-Z]{3}$",
+                  "type": "string"
+                },
+                "holdId": {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                "payee": {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                "reason": {
+                  "maxLength": 400,
+                  "type": "string"
+                },
+                "recent": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "amount": {
+                        "type": "number"
+                      },
+                      "date": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "maxLength": 200,
+                        "type": "string"
+                      }
+                    },
+                    "type": "object"
+                  },
+                  "maxItems": 10,
+                  "type": "array"
+                },
+                "status": {
+                  "enum": [
+                    "held",
+                    "released"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "holdId",
+                "payee",
+                "amount",
+                "currency",
+                "status",
+                "reason",
+                "account"
+              ],
+              "type": "object"
+            },
+            "name": "Hold review",
+            "requiresTools": [
+              "lookup_account"
+            ],
+            "sample": {
+              "account": "<CHQ>",
+              "amount": 12500,
+              "currency": "USD",
+              "holdId": "hold_204",
+              "payee": "Acme Supplies Ltd",
+              "reason": "New payee over the daily limit",
+              "recent": [
+                {
+                  "amount": -42.1,
+                  "date": "2026-10-15",
+                  "description": "Card payment, Fresh Market"
+                },
+                {
+                  "amount": 3150,
+                  "date": "2026-10-14",
+                  "description": "Payroll"
+                }
+              ],
+              "status": "held"
+            },
+            "status": "published",
+            "tree": {
+              "children": [
+                {
+                  "children": [
+                    {
+                      "label": "Held",
+                      "type": "metric",
+                      "unit": {
+                        "$bind": "/currency"
+                      },
+                      "value": {
+                        "$bind": "/amount"
+                      }
+                    },
+                    {
+                      "text": {
+                        "$bind": "/status"
+                      },
+                      "tones": {
+                        "held": "warning",
+                        "released": "success"
+                      },
+                      "type": "badge"
+                    }
+                  ],
+                  "gap": "md",
+                  "type": "row"
+                },
+                {
+                  "items": [
+                    {
+                      "label": "Reason",
+                      "value": {
+                        "$bind": "/reason"
+                      }
+                    },
+                    {
+                      "label": "Account",
+                      "value": {
+                        "$bind": "/account"
+                      }
+                    }
+                  ],
+                  "type": "keyValue"
+                },
+                {
+                  "columns": [
+                    {
+                      "format": "date",
+                      "key": "date",
+                      "label": "Date"
+                    },
+                    {
+                      "key": "description",
+                      "label": "Description"
+                    },
+                    {
+                      "format": "money",
+                      "key": "amount",
+                      "label": "Amount"
+                    }
+                  ],
+                  "rows": {
+                    "$bind": "/recent"
+                  },
+                  "type": "table"
+                },
+                {
+                  "children": [
+                    {
+                      "label": "Look up the account",
+                      "reply": {
+                        "text": "Look up this account.",
+                        "values": {
+                          "query": {
+                            "$bind": "/account"
+                          }
+                        }
+                      },
+                      "requires": "lookup_account",
+                      "type": "button"
+                    },
+                    {
+                      "label": "Keep it held",
+                      "reply": {
+                        "text": "Keep this hold in place.",
+                        "values": {
+                          "holdId": {
+                            "$bind": "/holdId"
+                          }
+                        }
+                      },
+                      "type": "button"
+                    }
+                  ],
+                  "gap": "sm",
+                  "type": "row"
+                }
+              ],
+              "title": {
+                "$bind": "/payee"
+              },
+              "type": "card"
+            },
+            "useWhen": "A payment hold is being discussed and the person needs its payee, amount, reason and recent account activity.",
+            "version": 1,
+            "widgetId": "hold-review"
+          }
+        ],
+        "facets": {},
+        "pagination": {
+          "hasNext": true,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 3,
+          "total": 4,
+          "totalPages": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "widgets.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Widget wd_missing was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "widgets.read": {
+    "body": {
+      "data": {
+        "canDelete": true,
+        "canEdit": true,
+        "canPublish": true,
+        "dataSchema": {
+          "properties": {
+            "account": {
+              "type": "string"
+            },
+            "daily": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "account",
+            "daily"
+          ],
+          "type": "object"
+        },
+        "name": "Wire limit card",
+        "requiresTools": [
+          "lookup_account"
+        ],
+        "sample": {
+          "account": "<CHQ>",
+          "daily": 25000
+        },
+        "status": "draft",
+        "teamId": "team_ops",
+        "teamName": null,
+        "tree": {
+          "children": [
+            {
+              "label": "Daily",
+              "type": "metric",
+              "unit": "USD",
+              "value": {
+                "$bind": "/daily"
+              }
+            },
+            {
+              "label": "Look it up",
+              "reply": {
+                "text": "Look up this account.",
+                "values": {
+                  "query": {
+                    "$bind": "/account"
+                  }
+                }
+              },
+              "requires": "lookup_account",
+              "type": "button"
+            }
+          ],
+          "title": {
+            "$bind": "/account"
+          },
+          "type": "card"
+        },
+        "updatedAt": "<timeZ>",
+        "updatedBy": "j.richardson@harborpine.example",
+        "useWhen": "The person asks for an account's wire limits.",
+        "version": 1,
+        "widgetId": "wire-limit-card"
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "workflows.create": {
+    "body": {
+      "data": {
+        "agentSlugs": [],
+        "deploymentCount": 0,
+        "description": "",
+        "engine": "v1",
+        "gateCount": 0,
+        "id": "<wf>",
+        "kind": "standard",
+        "name": "Triage",
+        "openReviews": 0,
+        "reviewed24h": 0,
+        "runs24h": 0,
+        "status": "draft",
+        "stepCount": 0,
+        "teamId": "team_ops",
+        "trigger": "email",
+        "updatedAt": "<timeZ>",
+        "version": 0
+      },
+      "success": true
+    },
+    "status": 201
+  },
+  "workflows.list": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "agentSlugs": [],
+            "deploymentCount": 0,
+            "description": "Seeded definition",
+            "engine": "v1",
+            "gateCount": 1,
+            "id": "dispute_email",
+            "kind": "standard",
+            "name": "Dispute email",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 9,
+            "teamId": "team_ops",
+            "trigger": "Email",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          },
+          {
+            "agentSlugs": [],
+            "deploymentCount": 0,
+            "description": "Seeded definition",
+            "engine": "v1",
+            "gateCount": 1,
+            "id": "levy-case",
+            "kind": "standard",
+            "name": "Levy-case",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 6,
+            "teamId": "team_ops",
+            "trigger": "Email",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          },
+          {
+            "agentSlugs": [],
+            "deploymentCount": 0,
+            "description": "Seeded definition",
+            "engine": "v1",
+            "gateCount": 0,
+            "id": "levy-intake",
+            "kind": "standard",
+            "name": "Levy-intake",
+            "openReviews": 0,
+            "reviewed24h": 0,
+            "runs24h": 0,
+            "start": {
+              "byHand": true,
+              "kind": "form",
+              "takesFiles": false
+            },
+            "status": "live",
+            "stepCount": 5,
+            "teamId": "team_ops",
+            "trigger": "Email",
+            "updatedAt": "<timeZ>",
+            "version": 1
+          }
+        ],
+        "facets": {
+          "status": {
+            "draft": 1,
+            "live": 4
+          }
+        },
+        "pagination": {
+          "hasNext": true,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 3,
+          "total": 5,
+          "totalPages": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "workflows.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Workflow wf_missing was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "workflows.read": {
+    "body": {
+      "data": {
+        "agentSlugs": [],
+        "canDelete": true,
+        "canEdit": true,
+        "canPublish": true,
+        "deploymentCount": 0,
+        "description": "",
+        "draft": {
+          "graph": {
+            "edges": [
+              {
+                "id": "t-out-done",
+                "source": "t",
+                "target": "done"
+              }
+            ],
+            "nodes": [
+              {
+                "data": {
+                  "category": "trigger",
+                  "description": "",
+                  "icon": "globe",
+                  "label": "email"
+                },
+                "id": "t",
+                "position": {
+                  "x": 0,
+                  "y": 200
+                },
+                "type": "trigger"
+              },
+              {
+                "data": {
+                  "category": "control",
+                  "description": "",
+                  "icon": "check",
+                  "label": "Done"
+                },
+                "id": "done",
+                "position": {
+                  "x": 270,
+                  "y": 200
+                },
+                "type": "end"
+              }
+            ],
+            "workflowId": "<wf>"
+          },
+          "savedAt": "<timeZ>",
+          "savedBy": "j.richardson@harborpine.example"
+        },
+        "engine": "v1",
+        "gateCount": 0,
+        "graph": {
+          "edges": [
+            {
+              "id": "t-out-done",
+              "source": "t",
+              "target": "done"
+            }
+          ],
+          "nodes": [
+            {
+              "data": {
+                "category": "trigger",
+                "description": "",
+                "icon": "globe",
+                "label": "email"
+              },
+              "id": "t",
+              "position": {
+                "x": 0,
+                "y": 200
+              },
+              "type": "trigger"
+            },
+            {
+              "data": {
+                "category": "control",
+                "description": "",
+                "icon": "check",
+                "label": "Done"
+              },
+              "id": "done",
+              "position": {
+                "x": 270,
+                "y": 200
+              },
+              "type": "end"
+            }
+          ],
+          "workflowId": "<wf>"
+        },
+        "id": "<wf>",
+        "kind": "standard",
+        "name": "Triage",
+        "openReviews": 0,
+        "reviewed24h": 0,
+        "runs24h": 0,
+        "status": "draft",
+        "stepCount": 0,
+        "teamId": "team_ops",
+        "teamName": null,
+        "trigger": "email",
+        "updatedAt": "<timeZ>",
+        "version": 0
+      },
+      "success": true
+    },
+    "status": 200
+  }
+}

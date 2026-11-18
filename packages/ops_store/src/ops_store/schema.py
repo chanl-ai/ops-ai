@@ -148,11 +148,102 @@ SYSTEM_KEY = "system_reason"
 IsolationKind = Literal["team", "tenant", "system"]
 # The schema SQL Server's predicate functions and policies live in.
 MSSQL_SECURITY = "ops_security"
+# A SQL Server database's collation: VARCHAR holds UTF-8 and comparisons are binary, as on PostgreSQL.
+MSSQL_COLLATION = "Latin1_General_100_BIN2_UTF8"
+# The batches the SQL Server bundle starts with: it refuses a database without the collation, read-committed snapshot
+# (readers never block writers) or compatibility level 160. A service's test database runs them too.
+MSSQL_PRECONDITIONS = [
+    "SET XACT_ABORT ON;",
+    # Literal, as MSSQL_COLLATION (tests/test_sql_server_schema.py holds them equal).
+    "IF CONVERT(nvarchar(128), DATABASEPROPERTYEX(DB_NAME(), 'Collation')) <> N'Latin1_General_100_BIN2_UTF8'\n"
+    "    THROW 50001, N'Ops AI needs the database collation Latin1_General_100_BIN2_UTF8', 1;\n"
+    "IF NOT EXISTS (SELECT 1 FROM sys.databases WHERE name = DB_NAME() AND is_read_committed_snapshot_on = 1)\n"
+    "    THROW 50002, N'Ops AI needs READ_COMMITTED_SNAPSHOT ON', 1;\n"
+    "IF (SELECT compatibility_level FROM sys.databases WHERE name = DB_NAME()) < 160\n"
+    "    THROW 50003, N'Ops AI needs compatibility level 160 or higher', 1;",
+]
+
+
+def offline_dialect_opts(url: str) -> dict[str, bool]:
+    """Dialect options for a migration rendered as SQL with no server (`alembic --sql`). SQL Server's dialect learns
+    from the server it connects to that TEXT is deprecated; with none it renders `sa.Text` as TEXT, which the UTF-8
+    collation refuses (Msg 4188). Every supported SQL Server is past 2012, so offline SQL takes VARCHAR(max), as an
+    online run and the golden DDL do."""
+    return {"deprecate_large_types": True} if str(url).startswith("mssql") else {}
+
+
+def mssql_drop_constraint_ddl(table: str, find: str) -> str:
+    """SQL Server: drops the constraint on `table` that the scalar query `find` names, if it names one, as one batch.
+    A constraint made without a name has a generated one, known only at run time. EXEC takes a variable or literals,
+    not a function call, so the statement is built in a variable first. No trailing semicolon: Alembic adds one."""
+    return (
+        f"DECLARE @n sysname = ({find}); "
+        f"IF @n IS NOT NULL BEGIN DECLARE @s nvarchar(max) = N'ALTER TABLE {table} DROP CONSTRAINT ' "
+        "+ QUOTENAME(@n); EXEC (@s); END"
+    )
+
+
+def _mssql_query(query: sa.Select[Any]) -> str:
+    """`query` as SQL Server text, its values rendered as literals by the dialect, for a batch that holds it."""
+    return str(query.compile(dialect=mssql_dialect.dialect(), compile_kwargs={"literal_binds": True}))
+
+
+def mssql_quiet_batch(script: str) -> str:
+    """SQL Server: `script`, a batch of several statements (a migration's batched backfill loop), run to its end.
+    Each statement's row count is a result, and the ODBC driver reads only the first, which cancels the rest of the
+    batch: the later batches, the policies put back and the COMMIT never run. NOCOUNT is set back at the end since it
+    outlives the batch on the connection, and Alembic's version update reads a row count of -1 otherwise."""
+    return f"SET NOCOUNT ON;\n{script}\nSET NOCOUNT OFF;"
+
+
+def mssql_drop_default_ddl(table: str, column: str) -> str:
+    """SQL Server: drops the default constraint on `table`.`column`, if one is there; SQL Server refuses to drop or
+    retype a column that holds one."""
+    # A Column's name is a quoted_name, which has no literal renderer; the plain string renders.
+    table, column = str(table), str(column)
+    d = sa.table(
+        "default_constraints",
+        sa.column("name"),
+        sa.column("parent_object_id"),
+        sa.column("parent_column_id"),
+        schema="sys",
+    ).alias("d")
+    found = sa.select(d.c.name).where(
+        d.c.parent_object_id == sa.func.object_id(table),
+        sa.func.col_name(d.c.parent_object_id, d.c.parent_column_id) == column,
+    )
+    return mssql_drop_constraint_ddl(table, _mssql_query(found))
+
+
+def mssql_drop_key_ddl(table: str, kind: Literal["PK", "UQ"], column: str | None = None) -> str:
+    """SQL Server: drops `table`'s primary key (`PK`) or the unique key (`UQ`) that holds `column`, if one is there."""
+    k = sa.table(
+        "key_constraints",
+        sa.column("name"),
+        sa.column("type"),
+        sa.column("parent_object_id"),
+        sa.column("unique_index_id"),
+        schema="sys",
+    ).alias("k")
+    found = sa.select(k.c.name).where(k.c.type == kind, k.c.parent_object_id == sa.func.object_id(table))
+    if column:
+        ic = sa.table(
+            "index_columns", sa.column("object_id"), sa.column("index_id"), sa.column("column_id"), schema="sys"
+        ).alias("ic")
+        c = sa.table("columns", sa.column("object_id"), sa.column("column_id"), sa.column("name"), schema="sys").alias(
+            "c"
+        )
+        joined = k.join(ic, (ic.c.object_id == k.c.parent_object_id) & (ic.c.index_id == k.c.unique_index_id)).join(
+            c, (c.c.object_id == ic.c.object_id) & (c.c.column_id == ic.c.column_id)
+        )
+        found = found.select_from(joined).where(c.c.name == column)
+    return mssql_drop_constraint_ddl(table, _mssql_query(found))
 
 
 def system(reason: str) -> dict[str, Any]:
-    """The marker for a table with no tenant column, reached only through `ops_store.isolation.system_tx` (leases,
-    timers, inbox, fences): no policy and no grant to the request role. `reason` says why it holds no tenant."""
+    """The marker for a table with no tenant column (leases, timers, inbox, fences, an install's own settings): no
+    policy. Reached through `Store.install_tx`, with no tenant, or `ops_store.isolation.system_tx`, past it, never as
+    the request role. `reason` says why it holds no tenant."""
     if not reason.strip():
         raise ValueError("system() needs a reason")
     return {SYSTEM_KEY: reason}
@@ -257,7 +348,7 @@ def member_ddl(role: str, login: str) -> str:
     it runs as the migrator wherever roles.sql granted the role. A migration that adds such a role grants it with this:
     roles.sql runs once per server, so a login made before the role existed is otherwise never a member."""
     return (
-        f"DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{login}') "
+        f"DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{login}') "  # noqa: S608 - role and login names come from the module's own spec
         f"AND NOT pg_has_role('{login}', '{role}', 'MEMBER') THEN GRANT {role} TO {login}; END IF; END $$"
     )
 
@@ -283,18 +374,33 @@ def backfill_ddl(
     tables: Iterable[sa.Table], dialect: str, *, chain: str, kind: IsolationKind = "team"
 ) -> tuple[list[str], list[str]]:
     """(before, after) a migration's backfill over every tenant's rows of `tables`, which already carry `kind`'s
-    isolation. PostgreSQL: row security off for the transaction, which is refused for a login without BYPASSRLS, so a
-    migration run under the wrong role fails instead of moving only the rows it sees. SQL Server: a security policy
-    filters every login but a chain's system user, and the migrator is none, so each table's policy is dropped before
-    and created again after; the predicate functions stay."""
+    isolation, read or written as the tables' owner (the migrator). Each table's policy is set aside before and back
+    after, inside one transaction, so no other session ever sees it apart; every policed table the backfill reads or
+    writes is listed, or the backfill sees none of that table's rows. PostgreSQL: the owner bypasses a policy that is
+    not FORCEd, so FORCE is lifted and put back; ALTER TABLE is refused for a login that does not own the table, so a
+    migration run under the wrong role fails instead of moving only the rows it sees, and no role needs BYPASSRLS.
+    SQL Server: a security policy filters every login but a chain's system user, and the migrator is none, so each
+    table's policy is dropped before and created again after; the predicate functions stay."""
     marked = list(tables)
     if dialect == "postgresql":
-        return ["SET LOCAL row_security = off"], []
+        before = [f"ALTER TABLE {t.name} NO FORCE ROW LEVEL SECURITY" for t in marked]
+        return before, [f"ALTER TABLE {t.name} FORCE ROW LEVEL SECURITY" for t in marked]
     if dialect == "mssql":
         before = [s for t in marked for s in isolation_drop_ddl(t, "mssql")]
         after = [isolation_ddl(t, "mssql", kind=kind, chain=chain)[-1] for t in marked]
         return before, after
     return [], []
+
+
+def session_table_ddl(name: str, dialect: str, columns: Iterable[tuple[str, int]]) -> str:
+    """CREATE for a migration's session table of NOT NULL text columns, the first its primary key. On SQL Server a
+    #table lives in tempdb and takes tempdb's collation, and comparing it with a real table's column fails with a
+    collation conflict, so each column carries the database's."""
+    collate = " COLLATE DATABASE_DEFAULT" if dialect == "mssql" else ""
+    create = "CREATE TABLE" if dialect == "mssql" else "CREATE TEMPORARY TABLE"
+    cols = [f"{c} VARCHAR({n}){collate} NOT NULL" for c, n in columns]
+    cols[0] += " PRIMARY KEY"
+    return f"{create} {name} ({', '.join(cols)})"
 
 
 def security_ddl(
@@ -477,7 +583,7 @@ def mssql_full_text_ddl(table: sa.Table) -> list[str]:
     quote = mssql_dialect.dialect().identifier_preparer.quote
     catalog, columns = spec["catalog"], ", ".join(quote(c) for c in spec["columns"])
     return [
-        "IF FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') = 1 BEGIN "
+        "IF FULLTEXTSERVICEPROPERTY('IsFullTextInstalled') = 1 BEGIN "  # noqa: S608 - catalog, table and column names come from the module's own spec
         f"IF NOT EXISTS (SELECT 1 FROM sys.fulltext_catalogs WHERE name = '{catalog}') "
         f"EXEC('CREATE FULLTEXT CATALOG {catalog}'); "
         f"IF NOT EXISTS (SELECT 1 FROM sys.fulltext_indexes WHERE object_id = OBJECT_ID('{table.name}')) "

@@ -168,3 +168,21 @@ async def test_old_windows_are_pruned_when_an_operation_is_counted(engine: Async
     async with engine.connect() as c:
         starts = (await c.execute(sa.select(t.c.window_start).where(t.c.tenant_id == tenant))).scalars().all()
     assert all(s > stale for s in starts) and len(starts) == 1
+
+
+async def test_each_call_counts_in_its_minute_and_resets_at_the_next_one(engine: AsyncEngine, tenant: str) -> None:
+    """The window is the current calendar minute: each call adds one, `reset_at` is that minute's end, and a full
+    window from the minute before does not count against this one."""
+    await clear_of_the_minute_edge()
+    t = operation_rate_windows
+    start = datetime.now(UTC).replace(second=0, microsecond=0)
+    async with engine.begin() as c:
+        await c.execute(
+            t.insert().values(
+                tenant_id=tenant, operation="op_reset", window_start=start - timedelta(minutes=1), calls=2
+            )
+        )
+    rates = RateWindows(engine)
+    spent = [await rates.spend(tenant, "op_reset", 2) for _ in range(3)]
+    assert [(s.calls, s.allowed) for s in spent] == [(1, True), (2, True), (3, False)]
+    assert {datetime.fromisoformat(s.reset_at) for s in spent} == {start + timedelta(minutes=1)}

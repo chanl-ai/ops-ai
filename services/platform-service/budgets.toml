@@ -1,0 +1,139 @@
+# The statement budget of every GET route (data-access standard DA1 and DA6), held by tests/test_statement_budget.py at
+# 5 and 50 rows per list. Each value is what the route runs today. A row falls when a route reads less; one that rises
+# says why beside it. A row's `query` is sent as the query string, `{name}` taking a seeded id.
+
+["GET /.well-known/jwks.json"]
+queries = 0
+
+["GET /.well-known/oauth-authorization-server"]
+queries = 0
+
+["GET /health/background"]
+queries = 0
+
+["GET /oauth/authorize"]
+queries = 6
+transactions = 3   # listed: the assistant and its address's team are found before the tenant is known, each through system_tx on its own connection
+connections = 3
+status = 303       # listed: it redirects the browser to the consent page
+query = { response_type = "code", client_id = "{client_id}", redirect_uri = "https://claude.example/callback", code_challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", code_challenge_method = "S256", resource = "{resource}", state = "st-1" }
+
+["GET /v1/access/holders"]
+queries = 10
+query = { area = "agents", action = "edit" }
+
+["GET /v1/api-key-summaries"]
+queries = 8
+
+["GET /v1/api-keys"]
+queries = 9
+
+["GET /v1/audit"]
+queries = 15
+
+["GET /v1/auth/oidc/callback"]
+queries = 0
+status = 303   # listed: it answers the browser with a redirect by design
+
+["GET /v1/auth/saml/metadata"]
+queries = 0
+
+["GET /v1/auth/saml/metadata/{sp_id}"]
+queries = 1
+
+["GET /v1/auth/session"]
+queries = 1
+
+["GET /v1/health"]
+queries = 0
+
+["GET /v1/invites/{token}"]
+queries = 3
+transactions = 2   # listed: the invite is found by its token before its tenant is known, on system_tx's own connection; the tenant's reads then share one
+connections = 2
+
+["GET /v1/me"]
+queries = 7   # one more than for anyone else: a workspace admin, as here, also reads every other active team to list it
+
+["GET /v1/me/permissions"]
+queries = 7
+
+["GET /v1/me/why"]
+queries = 14
+query = { area = "agents", action = "edit" }
+
+["GET /v1/oauth/consent"]
+queries = 6
+transactions = 3   # listed: the assistant and its address's team are found before the tenant is known, each through system_tx on its own connection; the tenant's reads share one
+connections = 3
+query = { response_type = "code", client_id = "{client_id}", redirect_uri = "https://claude.example/callback", code_challenge = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM", code_challenge_method = "S256", resource = "{resource}", state = "st-1" }
+
+["GET /v1/oauth/grants"]
+queries = 4
+transactions = 2   # listed: the assistants' names are the install's own rows (oauth_clients, system), read through system_tx on its own connection; install_tx would need a reason listed in ops_store's isolation sites
+connections = 2
+
+["GET /v1/people-names"]
+queries = 8   # the access.view decision a Chat user fails reads the caller's roles
+
+["GET /v1/people/{person_id}/permissions"]
+queries = 15   # the access.view decision a Chat user fails reads the caller's roles
+
+["GET /v1/people/{person_id}/role-grants"]
+queries = 16   # the access.view decision a Chat user fails reads the caller's roles
+
+["GET /v1/permission-version"]
+queries = 1
+
+["GET /v1/policies"]
+queries = 8   # the access.view decision a Chat user fails reads the caller's roles
+
+["GET /v1/policies/{key}"]
+queries = 8   # the access.view decision a Chat user fails reads the caller's roles
+
+["GET /v1/roles"]
+queries = 9
+
+["GET /v1/roles/{role_id}"]
+queries = 14
+
+["GET /v1/roles/{role_id}/holders"]
+queries = 9
+
+["GET /v1/settings/members"]
+queries = 12
+
+["GET /v1/settings/members/options"]
+queries = 8
+
+["GET /v1/settings/sign-in/break-glass"]
+queries = 11
+
+["GET /v1/settings/sign-in/providers"]
+queries = 11
+
+["GET /v1/settings/sign-in/secret-names"]
+queries = 8
+
+["GET /v1/settings/sign-in/secrets"]
+queries = 8
+
+["GET /v1/settings/sign-in/test-results/{flow_id}"]
+queries = 8
+
+["GET /v1/settings/teams"]
+queries = 10
+
+["GET /v1/settings/teams/{team_id}/delete-check"]
+queries = 9
+transactions = 3   # listed: agents-service is asked with no transaction open, so the route takes no Tx; its reads share one that ends before the call, and the session and workspace-open checks resolved before it run in their own
+connections = 3
+
+["GET /v1/settings/workspace-teams"]
+queries = 9
+
+["GET /v1/team-names"]
+queries = 8   # the access.view decision a Chat user fails reads the caller's roles
+
+["GET /v1/teams"]
+queries = 10

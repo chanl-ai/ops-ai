@@ -24,7 +24,7 @@ import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { AgentAvailabilityBadge, AVAILABILITY_LABEL } from '@/components/status-badges';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { agentsBulkSupported, useAgents, useBulkDeleteAgents, useBulkUpdateAgents, useCreateAgent, useDeleteAgent, useModelAliases } from '@/hooks/queries';
+import { type AgentRow, agentsBulkSupported, useAgents, useBulkDeleteAgents, useBulkUpdateAgents, useCreateAgent, useDeleteAgent, useModelAliases } from '@/hooks/queries';
 import { useCreateParam } from '@/hooks/use-create-param';
 import { useCanSetDefaultAgent, useDefaultAgent } from '@/hooks/chat-queries';
 import { useCanBuild } from '@/hooks/me-queries';
@@ -32,18 +32,17 @@ import { useTeam } from '@/hooks/use-team';
 import { useSticky } from '@/hooks/use-sticky';
 import { facetFilterFn, useListParams } from '@/hooks/use-list-params';
 import { count, pct, plural, relativeTime } from '@/lib/format';
-import type { Agent } from '@/lib/types/domain';
 import type { AgentFilters } from '@/lib/types/query';
 import { serverPagination } from '@/components/shared/server-pagination';
 import { TemplatesGallery } from '@/components/templates/templates-gallery';
 
-type Row = Agent & { onRowClick: (a: Agent) => void };
+type Row = AgentRow & { onRowClick: (a: AgentRow) => void };
 
 
 const AVAILABILITY_OPTIONS = (['published', 'not_published', 'paused'] as const).map((value) => ({ value, label: AVAILABILITY_LABEL[value] }));
 
 /** `onMakeDefault` is set for team admins only; `defaultId` marks the agent new chats start on. */
-function columns(open: (a: Agent) => void, onDelete: (a: Agent) => void, canBuild: boolean, defaultId?: string, onMakeDefault?: (a: Agent) => void): ColumnDef<Row>[] {
+function columns(open: (a: AgentRow) => void, onDelete: (a: AgentRow) => void, canBuild: boolean, defaultId?: string, onMakeDefault?: (a: AgentRow) => void): ColumnDef<Row>[] {
   return [
     selectColumn<Row>((a) => a.name),
     idColumn<Row>((a) => a.id),
@@ -61,7 +60,7 @@ function columns(open: (a: Agent) => void, onDelete: (a: Agent) => void, canBuil
               {row.original.name}
               {row.original.id === defaultId && <Badge variant="secondary">Default</Badge>}
             </div>
-            <div className="text-xs text-muted-foreground break-words whitespace-normal">{row.original.role}</div>
+            <div className="text-xs text-muted-foreground">{row.original.role}</div>
           </div>
         </div>
       ),
@@ -146,10 +145,10 @@ export default function AgentsPage() {
     next.set('create', '1');
     router.replace(`/build/agents?${next.toString()}`, { scroll: false });
   };
-  const [deleting, setDeleting] = React.useState<Agent | null>(null);
+  const [deleting, setDeleting] = React.useState<AgentRow | null>(null);
   const bulkUpdate = useBulkUpdateAgents();
   const bulkDelete = useBulkDeleteAgents();
-  const [bulk, setBulk] = React.useState<{ kind: 'pause' | 'resume' | 'delete'; rows: Agent[] } | null>(null);
+  const [bulk, setBulk] = React.useState<{ kind: 'pause' | 'resume' | 'delete'; rows: AgentRow[] } | null>(null);
   const shown = useSticky(bulk);
   const [resetKey, setResetKey] = React.useState(0);
   const eligible = (shown?.rows ?? []).filter((x) => x.availability !== 'not_published');
@@ -160,10 +159,10 @@ export default function AgentsPage() {
     setResetKey((k) => k + 1);
   };
 
-  const open = React.useCallback((a: Agent) => router.push(`/build/agents/${a.id}`), [router]);
+  const open = React.useCallback((a: AgentRow) => router.push(`/build/agents/${a.id}`), [router]);
   const isAdmin = useCanSetDefaultAgent();
   const defaultId = useDefaultAgent().data?.agentId;
-  const [makingDefault, setMakingDefault] = React.useState<Agent>();
+  const [makingDefault, setMakingDefault] = React.useState<AgentRow>();
   const cols = React.useMemo(() => columns(open, setDeleting, canBuild, defaultId, isAdmin ? setMakingDefault : undefined), [open, canBuild, defaultId, isAdmin]);
   const rows: Row[] = React.useMemo(() => (query.data?.data ?? []).map((a) => ({ ...a, onRowClick: open, href: `/build/agents/${a.id}` })), [query.data, open]);
   const facets = query.data?.facets ?? {};

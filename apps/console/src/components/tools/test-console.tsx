@@ -158,6 +158,7 @@ export function TestConsole({
   error,
   stacked,
   fixedOperation,
+  canEdit,
 }: {
   operations: ModuleOperation[];
   contexts: RunContextOption[];
@@ -169,6 +170,8 @@ export function TestConsole({
   running: boolean;
   result?: ModuleTestResult;
   error?: string;
+  /** False for a team that only holds a workflow grant on the module: its owner's team alone runs it from here. */
+  canEdit?: boolean;
   /** Request above response, for the side panel beside the module's tabs. */
   stacked?: boolean;
   /** The workbench runs one operation (`initialOperation`), so it shows no operation picker. */
@@ -177,7 +180,9 @@ export function TestConsole({
   const [opName, setOpName] = React.useState(initialOperation ?? operations[0]?.name ?? '');
   const [contextId, setContextId] = React.useState(contexts[0]?.id ?? NO_CONTEXT);
   const [target, setTarget] = React.useState<ModuleTestInput['target']>('stub');
-  const cannotRun = useCan('tools', 'run') === false;
+  // canEdit is also false for a role that may not edit, so the role's own reason is named first.
+  const roleCannotRun = useCan('tools', 'run') === false;
+  const cannotRun = roleCannotRun || canEdit === false;
   React.useEffect(() => {
     if (initialOperation) setOpName(initialOperation);
   }, [initialOperation]);
@@ -276,7 +281,7 @@ export function TestConsole({
               <LoadingButton isLoading={running} loadingText="Calling…" onClick={() => run()} disabled={cannotRun} className="self-start" data-testid="workbench-run">
                 <Play className="size-4" /> Run
               </LoadingButton>
-              {cannotRun && <p className="text-xs text-muted-foreground" data-testid="workbench-run-why">Your role can’t run tools; a builder or an admin can.</p>}
+              {cannotRun && <p className="text-xs text-muted-foreground" data-testid="workbench-run-why">{!roleCannotRun ? 'Only the team that owns these tools can run them here.' : 'Your role can’t run tools; a builder or an admin can.'}</p>}
             </div>
           )}
         </div>

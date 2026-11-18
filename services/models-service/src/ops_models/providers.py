@@ -202,10 +202,11 @@ def _chunk(delta: dict[str, Any], finish_reason: str | None = None) -> dict[str,
 class OpenAICompatibleProvider:
     """OpenAI's chat completions at `{base_url}/chat/completions`, the key as a bearer token."""
 
-    def __init__(self, base_url: str, api_key: str | None, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(self, base_url: str, api_key: str | None, client: httpx.AsyncClient) -> None:
+        # The app's one provider client (`create_models_app`), opened and closed with the app.
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
-        self.client = client or httpx.AsyncClient(timeout=60)
+        self.client = client
 
     @property
     def _headers(self) -> dict[str, str]:
@@ -318,7 +319,7 @@ class AzureOpenAIProvider(OpenAICompatibleProvider):
         api_version: str,
         region: str | None,
         api_key: str | None,
-        client: httpx.AsyncClient | None = None,
+        client: httpx.AsyncClient,
     ) -> None:
         super().__init__(endpoint, api_key, client)
         self.api_version = api_version
@@ -359,7 +360,7 @@ class AzureOpenAIProvider(OpenAICompatibleProvider):
 
 
 def provider_for(
-    connection: Mapping[str, Any] | Any, secrets: Mapping[str, str], client: httpx.AsyncClient | None = None
+    connection: Mapping[str, Any] | Any, secrets: Mapping[str, str], client: httpx.AsyncClient
 ) -> Provider:
     kind = connection["type"]
     if kind == "scripted":

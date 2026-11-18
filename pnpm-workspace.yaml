@@ -11,8 +11,8 @@ minimumReleaseAge: 43200
 minimumReleaseAgeExclude:
   - streamdown@2.7.0
   - remend@1.4.0
-  # Security: next 16.4.1 fixes GHSA-2464-fhr4-w9xw and GHSA-673q-mjm6-r5xr; dompurify 3.4.17 fixes GHSA-cg2g-xh64-v4q7.
-  - next@16.4.1
+  # Security: next 16.4.1 fixes GHSA-2464-fhr4-w9xw and GHSA-673q-mjm6-r5xr; next 16.4.5 fixes GHSA-mfr8-8qww-v76h; dompurify 3.4.17 fixes GHSA-cg2g-xh64-v4q7.
+  - next@16.4.1 || 16.4.5
   - dompurify@3.4.17
   - '@next/*'
 # Transitive versions younger than the age gate are held back to the newest older release.

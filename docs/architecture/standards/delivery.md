@@ -16,6 +16,8 @@ Why: every change is reviewed and attributable (SOC 2 CC8.1).
 Pattern (`scripts/git-rules.py`): refuses stash, hard reset, clean, skipped hooks, force push and a push to the trunk,
 as a Claude Code hook; `make git-rules` self-tests it.
 
+The installed launcher refuses a commit or push when the checkout has no `.githooks/<hook>`. A local hook can still be edited or bypassed, so CI is the backstop for every check a hook runs.
+
 Check: `scripts/git-rules.py`; `.githooks/` installed by `scripts/install-hooks.sh`; branch protection on the trunk.
 
 ## DL2 One gate, the same locally and in CI
@@ -25,15 +27,17 @@ and format, strict types, import contracts, every standards check on these pages
 drift check, `pnpm verify`, the docs checks and the leak scan.
 Why: a check that runs only nightly finds the breach a day after it merged.
 
-Today (`make/python.mk:55`, `make/python.mk:61` against `.github/workflows/ci.yml:53`): `check_access_exceptions.py`,
-`check_standards.py`, `test_isolation_markings.py`, `test_isolation_sites.py` and `sdk/generate.py --check` run in
-pre-commit, on a full plan and nightly, and the pull-request `checks` job does not run them. The leak scan and CodeQL
-run and are not required on the development trunk.
+Today (`make/checks.mk`): `CHECKS` is the one list of standards checks (the access, portable-store, config-literal
+and typed-boundary ratchets and their history, the isolation markings and indexes, the isolation, relay and loop-health
+sites, the files written from code, import contracts, the SDK drift check, the changelog entries, the console's
+standards). The pull-request `checks` job, `make verify` (through `python-verify`), `scripts/verify-changed.sh` and
+pre-commit (`make checks STAGED=1`, which runs a check when a staged path can change it) all run `make checks`. The
+leak scan and CodeQL run and are not required on the development trunk.
 
-Pattern (`.github/workflows/ci.yml:213`): `ci-ok` is the one required job; `scripts/ci-plan.sh` picks what runs.
+Pattern (`.github/workflows/ci.yml`): `ci-ok` is the one required job; `scripts/ci-plan.sh` picks what runs.
 
-Check: `.github/workflows/ci.yml` job `ci-ok`; `scripts/verify-staged.sh` in pre-commit. Needed: move the five checks
-above into `checks`; make `scan` and CodeQL required.
+Check: `.github/workflows/ci.yml` job `ci-ok`; `make checks`; `scripts/tests/test_checks_list.py` (every check named
+in it runs from `make checks`, and every place that checks calls it). Needed: make `scan` and CodeQL required.
 
 ## DL3 A reviewer who did not write it
 
@@ -59,8 +63,9 @@ release before. Not yet run on GitHub.
 Pattern (`deploy/fly/stg_deploy.sh:1`): build from `git archive`, migrate as the release command, apply grants, check
 processes, OCR, plugins, a signed-in request, then the click walk.
 
-Check: `.github/workflows/deploy-staging.yml` running `make stg-deploy`; `make stg-health`. Needed: the first run after
-merge, which proves the `staging` environment's secrets and the rollback.
+Check: `.github/workflows/deploy-staging.yml` running `make stg-deploy`; `make stg-health`; the use cases' api scripts
+run against the deployed host with `OPS_USECASE_BASE_URL=https://<host>` (`docs/usecases/README.md`). Needed: the first
+run after merge, which proves the `staging` environment's secrets and the rollback.
 
 ## DL5 Production gets a tagged commit staging ran
 
@@ -68,12 +73,14 @@ Rule: production deploys only a tag `vYYYY-MM-DD.N` on a commit staging ran; mig
 start; rollback redeploys the previous image; migrations only add (`DA10`).
 Why: promotion is repeatable and reversible.
 
-Today: `.github/workflows/release-tag.yml` tags on merge to `main`; no production deploy workflow exists, and
-`release-images.yml` has never built from a merged commit.
+Today: `.github/workflows/release-tag.yml` tags on merge to `main`; no workflow deploys the tag. A workflow returns once
+the owner has made the `production` environment (`docs/deploy/fly-staging.md`, "Production on GitHub"). `release-images.yml`
+has never built from a merged commit.
 
 Pattern (`make stg-rollback`, `deploy/fly/stg_deploy.sh`): the staging path is the production path with another target.
 
-Check: `.github/workflows/release-tag.yml`; `make stg-rollback`. Needed: a production deploy workflow that takes the tag.
+Check: `.github/workflows/release-tag.yml`; `make stg-rollback`. Needed: the production deploy workflow, after the
+owner's set-up in `docs/deploy/fly-staging.md` ("Production on GitHub").
 
 ## DL6 An upgrade from the previous release is proven
 
@@ -82,14 +89,13 @@ databases' DDL generated and checked.
 Why: a migration that only works on a database with history fails the first install, and one that only works from empty
 fails every customer.
 
-Today: the upgrade from the previous schema runs only inside `make stg-deploy`, which CI has never run; the from-scratch
-install (`scripts/box-setup.sh`, `deploy/compose/proof.sh`) runs in no workflow.
+Today: the upgrade from the previous schema runs inside `make stg-deploy` and, on a pull request into `main`, in the
+`release-proof` job (`make db-scripts-proof FROM=<last tag>`, then `make install-proof` on the released images).
 
 Pattern (`make db-scripts-proof`): a release's baseline and the upgrade from `FROM=<tag>`, in `dist/db/<tag>`.
 
 Check: `deploy/database/tests/test_runtime_logins.py` (down and up per chain from empty), `test_mssql_ddl.py`,
-`test_model_parity.py`. Needed: a CI job running `make db-scripts-proof FROM=<last tag>` on every release pull request,
-and one running `deploy/release/install_proof.sh`.
+`test_model_parity.py`; `.github/workflows/ci.yml` job `release-proof`, required through `ci-ok`.
 
 ## DL7 Commits and What's new explain themselves
 

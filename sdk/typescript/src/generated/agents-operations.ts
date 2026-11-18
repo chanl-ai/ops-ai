@@ -269,7 +269,9 @@ export const agentsOperations = {
     "method": "GET",
     "path": "/v1/knowledge-usage",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "ids"
+    ],
     "stream": false
   },
   "agents_list_agents": {
@@ -279,12 +281,14 @@ export const agentsOperations = {
     "path": "/v1/agents",
     "pathParams": [],
     "query": [
+      "availability",
+      "teamId",
       "page",
       "pageSize",
       "search",
       "sortBy",
       "sortOrder",
-      "templateId"
+      "ids"
     ],
     "stream": false
   },
@@ -297,7 +301,10 @@ export const agentsOperations = {
     "query": [
       "page",
       "pageSize",
-      "search"
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -327,11 +334,19 @@ export const agentsOperations = {
     "pathParams": [],
     "query": [
       "view",
+      "usableBy",
+      "agentId",
+      "status",
+      "ownerTeam",
+      "origin",
+      "loading",
+      "knowledgeBases",
       "page",
       "pageSize",
       "search",
-      "usableBy",
-      "agentId"
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -379,7 +394,10 @@ export const agentsOperations = {
     "query": [
       "page",
       "pageSize",
-      "search"
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -854,7 +872,14 @@ export const agentsOperations = {
     "method": "GET",
     "path": "/v1/case-types",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "cases_list_cases": {
@@ -869,9 +894,12 @@ export const agentsOperations = {
       "assignee",
       "customerId",
       "overdue",
-      "search",
       "page",
-      "pageSize"
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -1190,7 +1218,14 @@ export const agentsOperations = {
     "pathParams": [
       "workflow_id"
     ],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "graphs_list_graphs": {
@@ -1532,7 +1567,14 @@ export const agentsOperations = {
     "method": "GET",
     "path": "/v1/task-types",
     "pathParams": [],
-    "query": [],
+    "query": [
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
+    ],
     "stream": false
   },
   "reviews_open_egress_host_request": {
@@ -1640,7 +1682,13 @@ export const agentsOperations = {
     "path": "/v1/threads",
     "pathParams": [],
     "query": [
-      "graph"
+      "graph",
+      "page",
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -1933,11 +1981,13 @@ export const agentsOperations = {
     "path": "/v1/workflows/definitions",
     "pathParams": [],
     "query": [
+      "status",
       "page",
       "pageSize",
       "search",
       "sortBy",
-      "sortOrder"
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -1960,10 +2010,13 @@ export const agentsOperations = {
     "pathParams": [],
     "query": [
       "workflowId",
-      "workflow_id",
       "status",
       "page",
-      "pageSize"
+      "pageSize",
+      "search",
+      "sortBy",
+      "sortOrder",
+      "ids"
     ],
     "stream": false
   },
@@ -1977,7 +2030,8 @@ export const agentsOperations = {
     ],
     "query": [
       "page",
-      "pageSize"
+      "pageSize",
+      "status"
     ],
     "stream": false
   },
@@ -2004,6 +2058,7 @@ export const agentsOperations = {
       "search",
       "sortBy",
       "sortOrder",
+      "status",
       "startable",
       "takesFiles",
       "engine"

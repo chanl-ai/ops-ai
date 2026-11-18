@@ -21,6 +21,7 @@ from ops_agents.api.sweeper import recover
 from ops_agents.api.usage import Refusal
 from ops_agents.graphs.models import Facts
 from ops_agents.store.base import metadata
+from ops_engine.store import metadata as engine_metadata
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events
 
@@ -91,6 +92,7 @@ async def app_client(
     engine = create_async_engine("sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
     async with engine.begin() as c:
         await c.run_sync(metadata.create_all)
+        await c.run_sync(engine_metadata.create_all)
     app = create_app(
         settings,
         model=scripted_model(),
@@ -120,7 +122,7 @@ async def test_a_key_at_its_cap_cannot_open_a_thread() -> None:
         assert res.status_code == 429
         assert res.json()["error"]["code"] == "key_budget_exhausted"
         assert "5.00" in res.json()["error"]["message"]
-        assert (await c.get("/v1/threads")).json()["data"] == []
+        assert (await c.get("/v1/threads")).json()["data"]["data"] == []
 
 
 async def agent_turn_cost(prices: dict[str, dict[str, str]]) -> dict[str, Any]:

@@ -17,15 +17,22 @@ import sqlalchemy as sa
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_service_kit.settings import Settings
+from ops_store import isolation
 from ops_store.team_scope import acting_as
 from ops_tools.modules.seed import aggregates, blank, load
 from ops_tools.store.modules import ModuleStore, RetiredAccessError, StaleModuleError
 
 SERVICE = Path(__file__).parents[1]
 REGISTRY = {"tool_modules", "module_operations", "module_versions", "module_approvals"}
+
+
+@pytest.fixture
+def engine(both_engine: AsyncEngine) -> AsyncEngine:
+    """This file's tests run on PostgreSQL and SQL Server (conftest.database_url)."""
+    return both_engine
 
 
 async def _tables(url: str) -> set[str]:
@@ -186,7 +193,8 @@ async def test_a_retired_access_class_is_refused_when_read_and_its_database_rebu
         _alembic(target, "upgrade", "head")
         engine = create_async_engine(target)
         agg: dict[str, Any] = {**aggregates(seed, tenant_id="t", now=datetime.now(UTC))[0], "egress_hosts": []}
-        await ModuleStore(engine).put(agg, expected_revision=None)
+        with isolation.tenant_wide("TESTS", tenant_id="t"):
+            await ModuleStore(engine).put(agg, expected_revision=None)
         async with engine.begin() as c:
             await c.execute(sa.text("ALTER TABLE module_operations DROP CONSTRAINT ck_module_operations_access"))
             await c.execute(
@@ -195,7 +203,7 @@ async def test_a_retired_access_class_is_refused_when_read_and_its_database_rebu
             )
             await c.execute(sa.text("UPDATE alembic_version_tools SET version_num = 'tools_0011_approval_policy'"))
         # Read, the row is refused, never treated as a read.
-        with pytest.raises(RetiredAccessError, match="money_movement"):
+        with isolation.tenant_wide("TESTS", tenant_id="t"), pytest.raises(RetiredAccessError, match="money_movement"):
             await ModuleStore(engine).get("t", agg["id"])
         await engine.dispose()
 
@@ -209,3 +217,15 @@ async def test_a_retired_access_class_is_refused_when_read_and_its_database_rebu
         with pytest.raises(subprocess.CalledProcessError) as kept:
             _alembic(target, "upgrade", "head")
         assert b"ck_module_operations_access" in kept.value.stderr
+
+
+async def test_modules_made_at_the_same_moment_list_in_id_order(store: ModuleStore, tenant: str) -> None:
+    """The list is newest first, then by id: two modules with one creation time keep one order, so a page never
+    repeats or skips one of them."""
+    at = datetime(2026, 1, 1, tzinfo=UTC)
+    for module_id in ("mod_a_same", "mod_z_same"):
+        draft = {"displayName": module_id, "name": module_id.replace("_", "-")}
+        mod = blank(module_id=module_id, tenant_id=tenant, team_id=None, owner="Ops", me="t", at=at, input=draft)
+        assert await store.insert_if_missing(mod)
+    ids = [m["id"] for m in await store.all(tenant) if m["id"].endswith("_same")]
+    assert ids == ["mod_z_same", "mod_a_same"]

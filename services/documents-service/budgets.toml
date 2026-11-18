@@ -1,0 +1,62 @@
+# The statement budget of each documents-service GET route at 5 and 50 rows (ops_service_kit.testing.budget_check,
+# data-access standard DA1 and DA6), measured on PostgreSQL by tests/test_statement_budget.py. A route is one
+# transaction on one connection, with no other service or the model called while it is open, unless its row lists more
+# and says why. Routes that ask files-service first (readings, layout, extractions of a file) read their rows after it
+# answers, inside the one transaction.
+
+["GET /health"]
+queries = 0
+
+["GET /health/background"]
+queries = 0
+
+["GET /v1/documents/extractions"]
+queries = 2
+
+["GET /v1/documents/extractions/{extraction_id}"]
+queries = 2
+
+["GET /v1/documents/readings/{file_id}"]
+queries = 1
+
+# Reads the file's bytes from files-service and draws the page; no row.
+["GET /v1/documents/readings/{file_id}/pages/{number}/image"]
+queries = 0
+
+["GET /v1/documents/layout/{file_id}"]
+queries = 1
+
+# The shared list contract: the count, then the page.
+["GET /v1/document-types"]
+queries = 2
+
+["GET /v1/document-types/{type_id}"]
+queries = 3
+
+["GET /v1/document-types/{type_id}/versions/{version}"]
+queries = 2
+
+["GET /v1/document-types/{type_id}/test-runs/{test_id}"]
+queries = 2
+
+# The type and its examples in one transaction, closed before platform-service says whether the team masks them.
+["GET /v1/document-types/{type_id}/examples"]
+queries = 2
+
+# Listed: the type, its version and its reads in one transaction, closed before each offered group's layout is read,
+# which reads files-service when the layout is not stored; a stored one is a second transaction of its own.
+["GET /v1/document-types/{type_id}/template-offers"]
+queries = 6
+transactions = 2
+connections = 2
+
+# Every row in one transaction, closed before models-service prices the alias.
+["GET /v1/document-types/{type_id}/versions/{version}/test-estimate"]
+queries = 4
+
+# The team's copies in one transaction, closed before tools-service is asked for the team's templates.
+["GET /v1/templates"]
+queries = 1
+
+["GET /v1/resources/{resource}/copies/{copy}/update"]
+queries = 4

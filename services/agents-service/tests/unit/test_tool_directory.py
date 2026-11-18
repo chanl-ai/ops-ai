@@ -14,7 +14,7 @@ import httpx
 import pytest
 
 from ops_access.platform_events import POLICY_CHANGED
-from ops_agents.activities.tool_directory import ToolsOperations, ToolsUnavailable, grants_for
+from ops_agents.activities.tool_directory import ToolsApps, ToolsOperations, ToolsUnavailable, grants_for
 from ops_agents.api.ops_tools import team_created_handlers
 from ops_agents.store.tenancy import current_tenant, tenant_scope
 from ops_identity import ServiceClient, dev_service_signer
@@ -113,8 +113,11 @@ async def test_tools_service_down_is_refused_not_guessed() -> None:
 async def test_a_run_gets_only_granted_names_the_registry_still_offers_with_their_schema() -> None:
     tools = Tools({"acme": [op("get_account"), op("update_address", "write")]})
     with tenant_scope("acme"):
+        # A name an agent holds twice (saved from a list that repeated it) is one tool of the turn: the model's
+        # toolset refuses two tools of one name and the whole turn fails.
         grants = await grants_for(
-            directory(tools, Clock()), ["get_account", "hidden_since", "workflow:dispute_email", "update_address"]
+            directory(tools, Clock()),
+            ["get_account", "hidden_since", "workflow:dispute_email", "update_address", "get_account"],
         )
     assert [(g.name, g.server, g.access) for g in grants] == [
         ("get_account", "Harbor & Pine Core Banking", "read"),
@@ -134,3 +137,23 @@ async def test_a_tool_the_team_turned_off_reaches_the_run_and_is_never_offered()
         offered = [o.name for o in await d.operations()]
     assert [g.name for g in grants] == ["get_account", "update_address"], grants
     assert offered == ["get_account"], offered
+
+
+async def test_the_tools_apps_follow_every_page_of_the_apps_list() -> None:
+    # The Tools page matches each tool set to its app, so a card past the first page must still be read.
+    cards = [{"id": f"app_{n}", "name": f"App {n}"} for n in range(7)]
+    asked: list[dict[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        asked.append(dict(request.url.params))
+        page, size = int(request.url.params["page"]), 3
+        rows = cards[(page - 1) * size : page * size]
+        pagination = {"page": page, "pageSize": size, "total": len(cards), "hasNext": page * size < len(cards)}
+        return httpx.Response(200, json={"success": True, "data": {"data": rows, "pagination": pagination}})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://tools")
+    apps = ToolsApps(ServiceClient(client, dev_service_signer(), "agents", "tools", tenant=current_tenant), None)
+    with tenant_scope("acme"):
+        got = await apps.cards(None, "team_ops")
+    assert [c["id"] for c in got] == [c["id"] for c in cards]
+    assert [(a["page"], a["include"]) for a in asked] == [("1", "builtin"), ("2", "builtin"), ("3", "builtin")]

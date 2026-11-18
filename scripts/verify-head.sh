@@ -27,6 +27,9 @@ done
 tmp="$(mktemp -d "$base/ops-ai-head.XXXXXX")"
 echo $$ > "$tmp.pid"
 db_name="ops_test_head_$$"
+# A killed run skips its trap; drop what earlier ones left (idle over 3 hours).
+(cd "$root" && uv run --quiet python scripts/scratch_db_sweep.py --prune --prefix ops_test_head_ \
+  --url "postgresql://ops:ops@localhost:${OPS_PG_PORT:-5477}/postgres" >/dev/null 2>&1 || true)
 pg_port="${OPS_PG_PORT:-5477}"
 cleanup() {
   (cd "$root" && uv run --quiet python -c "import asyncio, asyncpg

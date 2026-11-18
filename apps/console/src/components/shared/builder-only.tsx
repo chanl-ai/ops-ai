@@ -17,7 +17,7 @@ export function BuilderOnly({ children, area }: { children: React.ReactNode; are
  * Disables every control inside it for a person who may not change the team's records, so a record page stays
  * readable but cannot be edited. `display: contents` keeps the layout of what it wraps.
  */
-export function BuilderFieldset({ children, area, canEdit }: { children: React.ReactNode; area?: string; canEdit?: boolean }) {
+export function BuilderFieldset({ children, area, canEdit }: { children: React.ReactNode; area?: string; canEdit?: boolean | null }) {
   const team = useCanBuild(area);
   // A record's own flag (its detail response) when the page has one; the team's permission otherwise.
   const can = canEdit ?? team;

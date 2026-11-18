@@ -20,6 +20,8 @@ from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.store import RunStore
 from ops_engine.store.tables import engine_runs
+from ops_service_kit.listing import ListParams
+from ops_store.team_scope import acting_as
 from tests.engine.test_worker import engine  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 FULL_SORT = re.compile(r"(?<!Incremental )Sort  \(")
@@ -108,8 +110,9 @@ async def test_one_teams_page_of_runs_reads_an_index_in_order_with_or_without_a_
     with tenant_scope(f"t_{uuid4().hex[:8]}"):
         await crowded(tx, parent)
         recorded.clear()
-        await RunStore(tx).page(team_id="team_a")
-        await RunStore(tx).page(team_id="team_a", statuses=["waiting"])
+        with acting_as("team_a"):
+            await RunStore(tx).listed(ListParams())
+            await RunStore(tx).listed(ListParams(filters={"status": ["waiting"]}))
         listed = [s for s in recorded if "ORDER BY" in s[0]]
         unfiltered, filtered = await plans(tx, listed)
     assert "ix_engine_runs_team_created" in unfiltered and not FULL_SORT.search(unfiltered), unfiltered

@@ -1,0 +1,2 @@
+# platform-service: 0 raw, 0 caught, 3 install blocks with no tenant (packages/ops_store/tests/test_isolation_sites.py). A row may only fall.
+3 install services/platform-service/src/ops_platform/store/signin.py

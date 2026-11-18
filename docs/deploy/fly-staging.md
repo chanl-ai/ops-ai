@@ -174,6 +174,24 @@ Not yet run on GitHub: the call from `ci.yml` with the environment's secrets, a 
 token, `fly ssh console` and `fly releases` with a deploy token, the pin check and the rollback are proven on the first
 runs after merge.
 
+### Production on GitHub: not built yet
+
+No workflow deploys production. A tag `vYYYY-MM-DD.N` is made by `release-tag.yml` on a merge to `main`; nothing deploys
+it. A workflow that read a repository variable could not prove that a person approves each deploy, since the
+environment's reviewers and the place the deploy token lives are invisible to it. Before one returns, the owner sets up:
+
+| Item | Setting |
+|---|---|
+| Environment | A `production` environment (Settings, Environments) with required reviewers, and deployment tags limited to `v20*` |
+| Deploy token | `FLY_API_TOKEN` for the production app as a secret of that environment only, never a repository secret |
+| Other values | The production app's names as environment variables, and its database address and first-admin file as environment secrets |
+| Token for the tag push | A tag pushed with the repository's own token starts no workflow; a token that does, or a hand-started run with the tag |
+
+The workflow's first job, before the job that names the environment, reads the environment's protection rules through the
+API and stops unless required reviewers are set and the tag pattern is `v20*`. It then checks that the tag is on `main`
+and that a staging release ran the same tree. The deploy job is `.github/actions/stg-deploy` aimed at the production
+apps, so it runs migrations, grants, the process checks and the click walk as staging does.
+
 ## Idle, cold boot and memory
 
 | Measure | Value | How |

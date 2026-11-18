@@ -781,6 +781,7 @@ class ApiKeySummary(TypedDict, closed=True):
     lastUsedAt: str | None
     name: str
     prefix: str
+    revision: int
     status: Literal["active", "revoked", "disabled"]
     target: KeyTarget | None
     teamId: str
@@ -951,11 +952,6 @@ class EnvelopeWorkspaceTeamsOut(TypedDict, closed=True):
     success: Literal[True]
 
 
-class EnvelopeListApiKeyOut(TypedDict, closed=True):
-    data: list[ApiKeyOut]
-    success: Literal[True]
-
-
 class EnvelopeListApiKeySummary(TypedDict, closed=True):
     data: list[ApiKeySummary]
     success: Literal[True]
@@ -973,21 +969,6 @@ class EnvelopeListPersonName(TypedDict, closed=True):
 
 class EnvelopeListPolicyOut(TypedDict, closed=True):
     data: list[PolicyOut]
-    success: Literal[True]
-
-
-class EnvelopeListRoleGrantOut(TypedDict, closed=True):
-    data: list[RoleGrantOut]
-    success: Literal[True]
-
-
-class EnvelopeListRoleHolderOut(TypedDict, closed=True):
-    data: list[RoleHolderOut]
-    success: Literal[True]
-
-
-class EnvelopeListRoleOut(TypedDict, closed=True):
-    data: list[RoleOut]
     success: Literal[True]
 
 
@@ -1023,8 +1004,32 @@ class KeyRef(TypedDict, closed=True):
     target: KeyTarget | None
 
 
+class ListResultApiKeyOut(TypedDict, closed=True):
+    data: list[ApiKeyOut]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
 class ListResultMemberOut(TypedDict, closed=True):
     data: list[MemberOut]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultRoleGrantOut(TypedDict, closed=True):
+    data: list[RoleGrantOut]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultRoleHolderOut(TypedDict, closed=True):
+    data: list[RoleHolderOut]
+    facets: dict[str, dict[str, int]]
+    pagination: Pagination
+
+
+class ListResultRoleOut(TypedDict, closed=True):
+    data: list[RoleOut]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
 
@@ -1033,17 +1038,6 @@ class ListResultWorkspaceTeamOut(TypedDict, closed=True):
     data: list[WorkspaceTeamOut]
     facets: dict[str, dict[str, int]]
     pagination: Pagination
-
-
-class Me(TypedDict, closed=True):
-    flags: list[FlagOut]
-    policies: dict[str, Any]
-    securityTeamId: str | None
-    teams: list[MeTeam]
-    tenantId: str
-    tenantName: str | None
-    user: MeUser
-    workspace: WorkspaceStateOut
 
 
 class OptionsOut(TypedDict, closed=True):
@@ -1123,18 +1117,33 @@ class EnvelopeInviteBulkOut(TypedDict, closed=True):
     success: Literal[True]
 
 
+class EnvelopeListResultApiKeyOut(TypedDict, closed=True):
+    data: ListResultApiKeyOut
+    success: Literal[True]
+
+
 class EnvelopeListResultMemberOut(TypedDict, closed=True):
     data: ListResultMemberOut
     success: Literal[True]
 
 
-class EnvelopeListResultWorkspaceTeamOut(TypedDict, closed=True):
-    data: ListResultWorkspaceTeamOut
+class EnvelopeListResultRoleGrantOut(TypedDict, closed=True):
+    data: ListResultRoleGrantOut
     success: Literal[True]
 
 
-class EnvelopeMe(TypedDict, closed=True):
-    data: Me
+class EnvelopeListResultRoleHolderOut(TypedDict, closed=True):
+    data: ListResultRoleHolderOut
+    success: Literal[True]
+
+
+class EnvelopeListResultRoleOut(TypedDict, closed=True):
+    data: ListResultRoleOut
+    success: Literal[True]
+
+
+class EnvelopeListResultWorkspaceTeamOut(TypedDict, closed=True):
+    data: ListResultWorkspaceTeamOut
     success: Literal[True]
 
 
@@ -1174,4 +1183,21 @@ class PermissionsOut(TypedDict, closed=True):
 
 class EnvelopePermissionsOut(TypedDict, closed=True):
     data: PermissionsOut
+    success: Literal[True]
+
+
+class Me(TypedDict, closed=True):
+    flags: list[FlagOut]
+    permissions: PermissionsOut
+    policies: dict[str, Any]
+    securityTeamId: str | None
+    teams: list[MeTeam]
+    tenantId: str
+    tenantName: str | None
+    user: MeUser
+    workspace: WorkspaceStateOut
+
+
+class EnvelopeMe(TypedDict, closed=True):
+    data: Me
     success: Literal[True]

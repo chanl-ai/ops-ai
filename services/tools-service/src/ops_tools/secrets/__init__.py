@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
@@ -86,6 +87,16 @@ class SecretResolver:
             await self.store.keep_ends(tenant_id, team_id, name, ref, ends)
         return ends
 
+    async def ends_named(self, tenant_id: str, team_id: str, names: Sequence[str]) -> dict[str, str | None]:
+        """`ends_of` for several secrets of one team, their references read in one statement: a list of app credentials
+        costs the same however many it shows. Only a secret still without its ends is named in the answer."""
+        out: dict[str, str | None] = {}
+        for name, ref in (await self.store.missing_ends_named(tenant_id, team_id, names)).items():
+            out[name] = ending(await self.credentials.get(ref, context=context_of(tenant_id, name)))
+            if (ends := out[name]) is not None:
+                await self.store.keep_ends(tenant_id, team_id, name, ref, ends)
+        return out
+
     async def rotate(
         self, tenant_id: str, team_id: str, name: str, value: str, *, actor: str, at: datetime
     ) -> int | None:
@@ -140,14 +151,16 @@ class SecretResolver:
         return values
 
     async def lookup(
-        self, tenant_id: str, team_id: str | None, names: list[str], *, tool: str, actor: str
+        self, tenant_id: str, team_id: str | None, names: list[str], *, tool: str, actor: str, audit: bool = True
     ) -> dict[str, str]:
         """Each named secret's value from `team_id`'s own secrets (the calling module's, mailbox's or connection's
         team), its use audited; SecretMissing names any the team lacks or cannot decrypt. A caller with no team has
         no secrets: every secret belongs to a team."""
         if team_id is None:
             raise SecretMissing(names)
-        found = await self.store.use(tenant_id, team_id, names, actor=actor, tool=tool, at=datetime.now(UTC))
+        found = await self.store.use(
+            tenant_id, team_id, names, actor=actor, tool=tool, at=datetime.now(UTC), audit=audit
+        )
         missing = [n for n in names if n not in found]
         if missing:
             raise SecretMissing(missing)

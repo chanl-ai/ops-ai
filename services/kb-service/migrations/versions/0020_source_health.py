@@ -14,6 +14,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import mssql_drop_default_ddl
+
 revision = "kb_0020"
 down_revision = "kb_0019"
 branch_labels = None
@@ -28,6 +30,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # SQL Server refuses to drop a column that holds a default; the helper drops one only if it is there.
+    if op.get_context().dialect.name == "mssql":
+        for table, column in (
+            ("kb_items", "gone_count"),
+            ("kb_sources", "failures_in_row"),
+        ):
+            op.execute(mssql_drop_default_ddl(table, column))
     with op.batch_alter_table("kb_items") as b:
         b.drop_column("gone_count")
     with op.batch_alter_table("kb_sources") as b:

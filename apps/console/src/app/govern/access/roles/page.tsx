@@ -11,10 +11,12 @@ import { DataTableColumnHeader } from '@/components/data-table-column-header';
 import { DataTableWithViews } from '@/components/data-table-with-views';
 import { PageLayout } from '@/components/page-layout';
 import { PageSkeleton } from '@/components/shared/page-skeleton';
+import { serverPagination } from '@/components/shared/server-pagination';
 import { ListEmpty, QueryError } from '@/components/shared/query-states';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useCreateRole, useManagesRoles, useRoles } from '@/hooks/me-queries';
+import { useListParams } from '@/hooks/use-list-params';
 import type { RoleSummary } from '@/lib/types/settings';
 
 type Row = RoleSummary & { onRowClick: () => void; rowTestId: string };
@@ -43,11 +45,12 @@ const COLUMNS: ColumnDef<Row>[] = [
  */
 export default function RolesPage() {
   const router = useRouter();
-  const roles = useRoles();
+  const list = useListParams('name');
+  const roles = useRoles(list.params);
   const manages = useManagesRoles();
   const create = useCreateRole();
   const [creating, setCreating] = React.useState(false);
-  const rows = React.useMemo(() => (roles.data ?? []).map((r) => ({ ...r, onRowClick: () => router.push(`/govern/access/roles/${encodeURIComponent(r.id)}`), rowTestId: `role-row-${r.id}` })), [roles.data, router]);
+  const rows = React.useMemo(() => (roles.data?.data ?? []).map((r) => ({ ...r, onRowClick: () => router.push(`/govern/access/roles/${encodeURIComponent(r.id)}`), rowTestId: `role-row-${r.id}` })), [roles.data, router]);
   return (
     <PageLayout
       icon={ShieldCheck}
@@ -65,7 +68,7 @@ export default function RolesPage() {
     >
       {roles.isPending ? (
         <PageSkeleton statCards={0} tableRows={6} />
-      ) : roles.isError ? (
+      ) : roles.isError && !roles.data ? (
         <QueryError what="roles" error={roles.error} onRetry={() => roles.refetch()} retrying={roles.isFetching} />
       ) : (
         <DataTableWithViews
@@ -74,18 +77,19 @@ export default function RolesPage() {
           getRowId={(r) => r.id}
           searchColumn="name"
           searchPlaceholder="Search roles…"
+          onColumnFiltersChange={list.onColumnFiltersChange}
+          serverPagination={serverPagination(list, roles)}
           hideViewSwitcher
-          emptyState={<ListEmpty icon={ShieldCheck} noun="roles" filtered={false} description="Roles come with the workspace; none were found." />}
+          emptyState={<ListEmpty icon={ShieldCheck} noun="roles" filtered={list.isFiltered} description="Roles come with the workspace; none were found." />}
         />
       )}
       <RoleDialog
         open={creating}
         onOpenChange={setCreating}
-        roles={roles.data ?? []}
         pending={create.isPending}
         onSubmit={(input) =>
           create.mutateAsync(input).then((made) => {
-            toast.success(`Created ${made.name}`, made.leftOut.length ? { description: `Left out ${made.leftOut.length} secrets, egress and Security-team permissions: only a built-in role holds them.` } : undefined);
+            toast.success(`Created ${made.name}`, (made.leftOut ?? []).length ? { description: `Left out ${(made.leftOut ?? []).length} secrets, egress and Security-team permissions: only a built-in role holds them.` } : undefined);
             router.push(`/govern/access/roles/${encodeURIComponent(made.id)}`);
           })
         }

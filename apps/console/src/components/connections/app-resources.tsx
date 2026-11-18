@@ -35,7 +35,8 @@ import {
   useUpdateReview,
   usersOf,
 } from '@/hooks/app-resources-queries';
-import { useKnowledgeBases } from '@/hooks/knowledge-queries';
+import { knowledgeBaseOptions } from '@/hooks/options-queries';
+import { EntityPicker } from '@/components/shared/entity-picker';
 import { useModelAliases } from '@/hooks/queries';
 import { plural } from '@/lib/format';
 
@@ -44,7 +45,7 @@ const COPY_HREF: Record<ResourceKind, string> = {
   skill: '/build/skills',
   workflow: '/build/workflows',
   document_type: '/data/document-types',
-  knowledge_source: '/data/knowledge/sources',
+  knowledge_source: '/data/knowledge',
   guardrail: '/build/guardrails',
   // Case and task types have no page of their own; the cases page is where a team meets them.
   case_type: '/work/cases',
@@ -323,7 +324,6 @@ function AddPreviewDialog({
   onAdd: (bindings: AddBindings) => void;
 }) {
   const aliases = useModelAliases();
-  const bases = useKnowledgeBases({ page: 1, pageSize: 100 });
   const [knowledgeBase, setKnowledgeBase] = React.useState<string>('');
   const [modelAlias, setModelAlias] = React.useState<string>('');
   const [names, setNames] = React.useState<Record<string, string>>({});
@@ -415,18 +415,16 @@ function AddPreviewDialog({
           </ul>
           {(needsBase || needsBasePick) && (
             <FormField id="resources-kb" label="Knowledge base" optional={!needsBasePick} hint={needsBasePick ? undefined : 'Left empty, each copy asks for one before it is published.'}>
-              <Select value={knowledgeBase} onValueChange={setKnowledgeBase}>
-                <SelectTrigger id="resources-kb" data-testid="resources-kb">
-                  <SelectValue placeholder={bases.isPending ? 'Loading knowledge bases' : 'Choose a knowledge base'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {(bases.data?.data ?? []).map((k) => (
-                    <SelectItem key={k.id} value={k.id}>
-                      {k.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <EntityPicker
+                source={knowledgeBaseOptions}
+                value={knowledgeBase ? [knowledgeBase] : []}
+                onChange={(ids) => setKnowledgeBase(ids[ids.length - 1] ?? '')}
+                multiple={false}
+                addLabel={knowledgeBase ? 'Change knowledge base' : 'Choose a knowledge base'}
+                searchPlaceholder="Search knowledge bases…"
+                emptyText="No knowledge base matches."
+                testId="resources-kb"
+              />
             </FormField>
           )}
           {needsAlias && (

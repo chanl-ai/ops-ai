@@ -8,6 +8,12 @@ the secret against its hash. Before sign-in the page shows the form's title, des
 Submissions are limited twice: 10 a minute per client address, the address read from the raw X-Forwarded-For header
 past the deploy's trusted proxies (never from `request.client`, which uvicorn already rewrites for a 127.0.0.1 peer),
 and the form's daily cap, counted with the form's row locked (`FormLinks.reserve`).
+
+The builder routes (share, list, rotate, change) answer in one request transaction (`Tx`). The public and members reads
+open one themselves once the link or team is entered. The rest take none: a submission records its `rate_limited` or
+`daily_cap` activity row before answering 429, and one transaction would roll that row back with the refusal; a file
+upload calls files-service with no connection held; and the members-only page enters each of the person's teams in
+turn, each with a transaction of its own, until a test shows one request connection re-scoped to each team.
 """
 
 from __future__ import annotations
@@ -21,12 +27,13 @@ from typing import Annotated, Any, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from ops_engine import default_registry
 from ops_engine.node_types import start_form
 from ops_engine.store import DefinitionStore, RunStore
 from ops_files_client import FilesClient, FilesRefused
+from ops_identity.fastapi import Tx
 from ops_service_kit.client_address import client_address
 from ops_service_kit.errors import (
     Conflict,
@@ -37,7 +44,8 @@ from ops_service_kit.errors import (
     Unauthorized,
     Unprocessable,
 )
-from ops_service_kit.http import Envelope, Out
+from ops_service_kit.http import Envelope, In, JsonValue, ListResult, Out
+from ops_service_kit.listing import ListQuery
 from ops_store import isolation
 
 from ...store.engine import EngineTransactions
@@ -68,22 +76,22 @@ EXPIRED = "This link has expired or was replaced. Ask whoever sent it to you for
 limits = RateLimit()
 
 
-class FormIn(BaseModel):
+class FormIn(In):
     mode: Literal["link", "members"] = "link"
-    expires_in_days: int = Field(default=DEFAULT_DAYS, ge=1, le=90, alias="expiresInDays")
-    daily_cap: int = Field(default=DEFAULT_CAP, ge=1, le=10_000, alias="dailyCap")
+    expires_in_days: int = Field(default=DEFAULT_DAYS, ge=1, le=90)
+    daily_cap: int = Field(default=DEFAULT_CAP, ge=1, le=10_000)
     title: str | None = Field(default=None, max_length=200)
     description: str = Field(default="", max_length=1000)
-    after_text: str = Field(default="", max_length=1000, alias="afterText")
+    after_text: str = Field(default="", max_length=1000)
 
 
-class FormPatch(BaseModel):
+class FormPatch(In):
     paused: bool | None = None
-    daily_cap: int | None = Field(default=None, ge=1, le=10_000, alias="dailyCap")
-    after_text: str | None = Field(default=None, max_length=1000, alias="afterText")
+    daily_cap: int | None = Field(default=None, ge=1, le=10_000)
+    after_text: str | None = Field(default=None, max_length=1000)
 
 
-class SubmitIn(BaseModel):
+class SubmitIn(In):
     values: dict[str, Any] = Field(default_factory=dict[str, Any])
 
 
@@ -101,10 +109,12 @@ class FormView(Out):
     # The page's path; with the link's token only when it was just made (create or Rotate).
     url: str
     token: str | None = None
+    # Whether the caller may rotate, pause or change the form: the check those routes run.
+    can_edit: bool
 
 
 class FormFields(Out):
-    schema_: dict[str, Any] = Field(alias="schema")
+    schema_: dict[str, JsonValue] = Field(alias="schema")
     takes_files: bool | None = None
 
 
@@ -146,7 +156,16 @@ def _slug(title: str) -> str:
     return f"{words}-{secrets.token_hex(3)}"
 
 
-def _view(row: dict[str, Any], token: str | None = None) -> dict[str, Any]:
+def _may_edit(me: Principal, team_id: str, form_id: str) -> bool:
+    """`_own`'s check (`can(workflows, edit)` in the form's team) as a flag, so the page and the routes agree."""
+    try:
+        require_builder(me, area="workflows", team_id=team_id, action="edit", what=f"form {form_id}")
+    except Forbidden:
+        return False
+    return True
+
+
+def _view(row: dict[str, Any], me: Principal, token: str | None = None) -> dict[str, Any]:
     out = {
         "id": row["id"],
         "workflowId": row["workflow_id"],
@@ -159,6 +178,7 @@ def _view(row: dict[str, Any], token: str | None = None) -> dict[str, Any]:
         "dailyCap": row["daily_cap"],
         "paused": bool(row["paused"]),
         "url": f"/f/{row['slug']}" + (f"?t={token}" if token else ""),
+        "canEdit": _may_edit(me, str(row["team_id"]), str(row["id"])),
     }
     return out | ({"token": token} if token else {})
 
@@ -179,7 +199,7 @@ def _store(rt: Runtime) -> DefinitionStore:
 
 
 @router.post("/v1/workflows/{workflow_id}/forms", status_code=201, response_model=Envelope[FormView])
-async def create_form(rt: Rt, me: Me, workflow_id: str, body: FormIn) -> JSONResponse:
+async def create_form(rt: Rt, me: Me, _: Tx, workflow_id: str, body: FormIn) -> JSONResponse:
     """Shares the workflow's live start form as a page: a signed link that expires, or a members-only page. The token
     is shown once, here and on Rotate."""
     stored = await live_version(_store(rt), workflow_id, None, team=me.team_id)
@@ -203,12 +223,15 @@ async def create_form(rt: Rt, me: Me, workflow_id: str, body: FormIn) -> JSONRes
     )
     token, hashed = _token(current_tenant(), me.team_id, str(row["id"]))
     row = await links.update(str(row["id"]), token_hash=hashed) or row
-    return ok(_view(row, token if body.mode == "link" else None), 201)
+    return ok(_view(row, me, token if body.mode == "link" else None), 201)
 
 
-@router.get("/v1/workflows/{workflow_id}/forms", response_model=Envelope[list[FormView]])
-async def workflow_forms(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
-    return ok([_view(r) for r in await _links(rt).of_workflow(workflow_id)])
+@router.get("/v1/workflows/{workflow_id}/forms", response_model=Envelope[ListResult[FormView]])
+async def workflow_forms(rt: Rt, me: Me, _: Tx, workflow_id: str, q: ListQuery) -> JSONResponse:
+    """The workflow's forms in the caller's team on the shared list contract: newest first, then by id; `search`
+    matches the title and slug, `ids` names forms."""
+    listed = await _links(rt).page(workflow_id, q)
+    return ok({**listed, "data": [_view(r, me) for r in listed["data"]]})
 
 
 async def _own(rt: Runtime, me: Principal, form_id: str) -> dict[str, Any]:
@@ -220,22 +243,26 @@ async def _own(rt: Runtime, me: Principal, form_id: str) -> dict[str, Any]:
 
 
 @router.post("/v1/forms/{form_id}/rotate", response_model=Envelope[FormView])
-async def rotate_form(rt: Rt, me: Me, form_id: str) -> JSONResponse:
+async def rotate_form(rt: Rt, me: Me, _: Tx, form_id: str) -> JSONResponse:
     """A new link for the form; the old one stops working at once."""
     row = await _own(rt, me, form_id)
     token, hashed = _token(current_tenant(), str(row["team_id"]), form_id)
     now = datetime.now(UTC).isoformat()
     row = await _links(rt).update(form_id, token_hash=hashed, rotated_at=now) or row
-    return ok(_view(row, token))
+    return ok(_view(row, me, token))
 
 
 @router.patch("/v1/forms/{form_id}", response_model=Envelope[FormView])
-async def update_form(rt: Rt, me: Me, form_id: str, body: FormPatch) -> JSONResponse:
+async def update_form(rt: Rt, me: Me, _: Tx, form_id: str, body: FormPatch) -> JSONResponse:
     await _own(rt, me, form_id)
     changes = body.model_dump(exclude_none=True)
     row = await _links(rt).update(form_id, **changes) if changes else await _links(rt).get(form_id)
     assert row is not None
-    return ok(_view(row))
+    return ok(_view(row, me))
+
+
+# A stored row or form document, as the stores and `_inputs` hand them over.
+Row = dict[str, Any]
 
 
 def _opened(token: str, slug: str) -> tuple[str, str, str, str]:
@@ -246,11 +273,15 @@ def _opened(token: str, slug: str) -> tuple[str, str, str, str]:
     return m["tenant"], m["team"], m["form"], m["secret"]
 
 
-async def _linked(rt: Runtime, slug: str, token: str) -> dict[str, Any]:
+async def _linked(rt: Runtime, slug: str, token: str) -> Row:
     """The form a link opens, inside the tenant and team its token names: 404 for a token made for another form, 401
     for an expired, rotated or paused one."""
     tenant, team, form_id, secret = _opened(token, slug)
     isolation.enter(tenant, team, kind=FORM)
+    return await _link_row(rt, slug, form_id, secret)
+
+
+async def _link_row(rt: Runtime, slug: str, form_id: str, secret: str) -> Row:
     row = await _links(rt).get(form_id)
     if row is None or row["slug"] != slug:
         raise NotFound("Form")
@@ -260,7 +291,7 @@ async def _linked(rt: Runtime, slug: str, token: str) -> dict[str, Any]:
     return row
 
 
-def _public(row: dict[str, Any], form: dict[str, Any]) -> dict[str, Any]:
+def _public(row: Row, form: Row) -> Row:
     """What a person sees before sign-in: the form's title, description and fields, and what is said after."""
     shown = {k: form[k] for k in ("schema", "takesFiles") if k in form}
     return {"title": row["title"], "description": row["description"], "form": shown, "afterText": row["after_text"]}
@@ -268,8 +299,11 @@ def _public(row: dict[str, Any], form: dict[str, Any]) -> dict[str, Any]:
 
 @router.get("/v1/forms/public/{slug}", response_model=Envelope[PublicForm])
 async def public_form(rt: Rt, slug: str, t: Annotated[str, Query()] = "") -> JSONResponse:
-    row = await _linked(rt, slug, t)
-    stored = await live_version(_store(rt), str(row["workflow_id"]), None, team=str(row["team_id"]))
+    tenant, team, form_id, secret = _opened(t, slug)
+    isolation.enter(tenant, team, kind=FORM)
+    async with isolation.request_transaction():  # the link and the live version are one read
+        row = await _link_row(rt, slug, form_id, secret)
+        stored = await live_version(_store(rt), str(row["workflow_id"]), None, team=str(row["team_id"]))
     return ok(_public(row, _inputs(stored)))
 
 
@@ -377,22 +411,33 @@ async def upload_public(
     return ok({"fileId": stored.file.id, "name": stored.file.name}, 201)
 
 
-async def _member_form(rt: Runtime, me: Principal, slug: str) -> dict[str, Any]:
+async def _member_form(rt: Runtime, me: Principal, slug: str) -> Row:
     """The members-only form at `slug` in one of the person's own teams; anyone else is refused, the same way whether
     the form is another team's or does not exist."""
+    return (await _member_form_in(rt, me, slug, with_version=False))[0]
+
+
+async def _member_form_in(rt: Runtime, me: Principal, slug: str, *, with_version: bool) -> tuple[Row, Row | None]:
+    """The form and, when asked, its live version: read in one transaction in the team that has the form. Each team is
+    entered before its transaction opens, so a team that has none ends its own."""
     for team in dict.fromkeys((me.team_id, *me.team_ids)):
         isolation.enter(current_tenant(), team, kind=FORM)
-        row = await _links(rt).by_slug(slug)
-        if row is not None and row["mode"] == "members" and not row["paused"]:
-            return row
+        async with isolation.request_transaction():
+            row = await _links(rt).by_slug(slug)
+            if row is not None and row["mode"] == "members" and not row["paused"]:
+                stored = (
+                    await live_version(_store(rt), str(row["workflow_id"]), None, team=str(row["team_id"]))
+                    if with_version
+                    else None
+                )
+                return row, stored
     raise Forbidden("Only members of the team that shares this form can send it.", code="form_members_only")
 
 
 @router.get("/v1/forms/{slug}/members", response_model=Envelope[PublicForm])
 async def member_form(rt: Rt, me: Me, slug: str) -> JSONResponse:
-    row = await _member_form(rt, me, slug)
-    stored = await live_version(_store(rt), str(row["workflow_id"]), None, team=str(row["team_id"]))
-    return ok(_public(row, _inputs(stored)))
+    row, stored = await _member_form_in(rt, me, slug, with_version=True)
+    return ok(_public(row, _inputs(cast(Row, stored))))
 
 
 @router.post("/v1/forms/{slug}/members", status_code=202, response_model=Envelope[Received])

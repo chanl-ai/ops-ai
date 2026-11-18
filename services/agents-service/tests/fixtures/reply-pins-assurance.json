@@ -1,0 +1,569 @@
+{
+  "agent.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Agent ag_missing1 was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "agent.read": {
+    "body": {
+      "data": {
+        "cases": [
+          {
+            "checks": [
+              {
+                "text": "could not find",
+                "tool": null,
+                "type": "reply_contains"
+              }
+            ],
+            "context": null,
+            "createdAt": "<timeZ>",
+            "createdBy": "usr_ops@harborpine.example",
+            "id": "<evc>",
+            "input": "Hello",
+            "name": "greets",
+            "reason": "",
+            "source": "manual",
+            "status": "active"
+          },
+          {
+            "checks": [
+              {
+                "text": null,
+                "tool": "lookup_account",
+                "type": "calls_tool"
+              }
+            ],
+            "context": null,
+            "createdAt": "<timeZ>",
+            "createdBy": "usr_ops@harborpine.example",
+            "id": "<evc>",
+            "input": "Hello",
+            "name": "calls lookup",
+            "reason": "",
+            "source": "manual",
+            "status": "active"
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "agent.save": {
+    "body": {
+      "data": {
+        "cases": [
+          {
+            "checks": [
+              {
+                "text": "could not find",
+                "tool": null,
+                "type": "reply_contains"
+              }
+            ],
+            "context": null,
+            "createdAt": "<timeZ>",
+            "createdBy": "usr_ops@harborpine.example",
+            "id": "<evc>",
+            "input": "Hello",
+            "name": "greets",
+            "reason": "",
+            "source": "manual",
+            "status": "active"
+          },
+          {
+            "checks": [
+              {
+                "text": null,
+                "tool": "lookup_account",
+                "type": "calls_tool"
+              }
+            ],
+            "context": null,
+            "createdAt": "<timeZ>",
+            "createdBy": "usr_ops@harborpine.example",
+            "id": "<evc>",
+            "input": "Hello",
+            "name": "calls lookup",
+            "reason": "",
+            "source": "manual",
+            "status": "active"
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "agent.stray": {
+    "body": {
+      "error": {
+        "code": "validation_failed",
+        "details": [
+          {
+            "loc": [
+              "body",
+              "colour"
+            ],
+            "msg": "Extra inputs are not permitted"
+          }
+        ],
+        "message": "colour: Extra inputs are not permitted",
+        "requestId": "<req>",
+        "status": 400
+      },
+      "success": false
+    },
+    "status": 400
+  },
+  "agent.unknownCheck": {
+    "body": {
+      "error": {
+        "code": "unknown_check_type",
+        "details": {
+          "type": "rubric"
+        },
+        "message": "Unknown check type: rubric. Allowed: calls_tool, refuses, reply_contains.",
+        "requestId": "<req>",
+        "status": 422
+      },
+      "success": false
+    },
+    "status": 422
+  },
+  "agent.viewerSaves": {
+    "body": {
+      "error": {
+        "code": "role_required",
+        "details": {
+          "action": "run",
+          "area": "evals",
+          "grantedBy": [
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "viewer"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot run the eval cases of agent <ag>; a Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "gates": {
+    "body": {
+      "data": {
+        "data": [],
+        "facets": {
+          "result": {},
+          "tier": {}
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 5,
+          "total": 0,
+          "totalPages": 1
+        },
+        "stats": {
+          "failingSuites": 1,
+          "gatesBlocked": 0,
+          "liveUntested": 0,
+          "notRun": 1
+        },
+        "tabCounts": {
+          "gates": 0,
+          "runs": 1,
+          "suites": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "runs": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "asset": {
+              "href": "/build/agents/<ag>",
+              "id": "<ag>",
+              "kind": "agent",
+              "name": "Payee Checker"
+            },
+            "costUsd": 0.0,
+            "durationMs": "<durationMs>",
+            "id": "<evr>",
+            "passRate": 0.5,
+            "passed": 1,
+            "ranAt": "<timeZ>",
+            "regressions": 0,
+            "reviewId": null,
+            "total": 2,
+            "trigger": "manual",
+            "version": 1
+          }
+        ],
+        "facets": {
+          "kind": {
+            "agent": 1
+          },
+          "trigger": {
+            "manual": 1
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 5,
+          "total": 1,
+          "totalPages": 1
+        },
+        "stats": {
+          "failingSuites": 1,
+          "gatesBlocked": 0,
+          "liveUntested": 0,
+          "notRun": 1
+        },
+        "tabCounts": {
+          "gates": 0,
+          "runs": 1,
+          "suites": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "runs.pastEnd": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "asset": {
+              "href": "/build/agents/<ag>",
+              "id": "<ag>",
+              "kind": "agent",
+              "name": "Payee Checker"
+            },
+            "costUsd": 0.0,
+            "durationMs": "<durationMs>",
+            "id": "<evr>",
+            "passRate": 0.5,
+            "passed": 1,
+            "ranAt": "<timeZ>",
+            "regressions": 0,
+            "reviewId": null,
+            "total": 2,
+            "trigger": "manual",
+            "version": 1
+          }
+        ],
+        "facets": {
+          "kind": {
+            "agent": 1
+          },
+          "trigger": {
+            "manual": 1
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 5,
+          "total": 1,
+          "totalPages": 1
+        },
+        "stats": {
+          "failingSuites": 1,
+          "gatesBlocked": 0,
+          "liveUntested": 0,
+          "notRun": 1
+        },
+        "tabCounts": {
+          "gates": 0,
+          "runs": 1,
+          "suites": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "skill.missing": {
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "Skill sk_missing1 was not found.",
+        "requestId": "<req>",
+        "status": 404
+      },
+      "success": false
+    },
+    "status": 404
+  },
+  "skill.read": {
+    "body": {
+      "data": {
+        "cases": [
+          {
+            "checks": [
+              {
+                "text": "could not find",
+                "tool": null,
+                "type": "reply_contains"
+              }
+            ],
+            "context": null,
+            "createdAt": "<timeZ>",
+            "createdBy": "usr_ops@harborpine.example",
+            "id": "<evc>",
+            "input": "Hello",
+            "name": "greets",
+            "reason": "",
+            "source": "manual",
+            "status": "active"
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "skill.save": {
+    "body": {
+      "data": {
+        "cases": [
+          {
+            "checks": [
+              {
+                "text": "could not find",
+                "tool": null,
+                "type": "reply_contains"
+              }
+            ],
+            "context": null,
+            "createdAt": "<timeZ>",
+            "createdBy": "usr_ops@harborpine.example",
+            "id": "<evc>",
+            "input": "Hello",
+            "name": "greets",
+            "reason": "",
+            "source": "manual",
+            "status": "active"
+          }
+        ]
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "suites": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "asset": {
+              "href": "/build/skills/<sk>",
+              "id": "<sk>",
+              "kind": "skill",
+              "name": "Hardship request triage"
+            },
+            "candidateVersion": null,
+            "cases": 1,
+            "draftCases": 0,
+            "drafts": [],
+            "failing": false,
+            "id": "skill:<sk>",
+            "lastRunAt": null,
+            "livePassRate": null,
+            "liveVersion": null,
+            "owner": "Operations",
+            "passRate": null,
+            "regressions": null,
+            "results": [],
+            "tier": "medium"
+          },
+          {
+            "asset": {
+              "href": "/build/agents/<ag>",
+              "id": "<ag>",
+              "kind": "agent",
+              "name": "Payee Checker"
+            },
+            "candidateVersion": 1,
+            "cases": 2,
+            "draftCases": 0,
+            "drafts": [],
+            "failing": true,
+            "id": "agent:<ag>",
+            "lastRunAt": "<timeZ>",
+            "livePassRate": null,
+            "liveVersion": null,
+            "owner": "Operations",
+            "passRate": 0.5,
+            "regressions": 0,
+            "results": [
+              {
+                "candidate": "pass",
+                "caseId": "0",
+                "humanVerdict": null,
+                "live": null,
+                "name": "greets",
+                "regression": false
+              },
+              {
+                "candidate": "fail",
+                "caseId": "1",
+                "humanVerdict": null,
+                "live": null,
+                "name": "calls lookup",
+                "regression": false
+              }
+            ],
+            "tier": "medium"
+          }
+        ],
+        "facets": {
+          "kind": {
+            "agent": 1,
+            "skill": 1
+          },
+          "result": {
+            "failing": 1,
+            "not_run": 1
+          },
+          "tier": {
+            "medium": 2
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 5,
+          "total": 2,
+          "totalPages": 1
+        },
+        "stats": {
+          "failingSuites": 1,
+          "gatesBlocked": 0,
+          "liveUntested": 0,
+          "notRun": 1
+        },
+        "tabCounts": {
+          "gates": 0,
+          "runs": 1,
+          "suites": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  },
+  "suites.chatUser": {
+    "body": {
+      "error": {
+        "code": "forbidden",
+        "details": {
+          "action": "view",
+          "area": "evals",
+          "grantedBy": [
+            "viewer",
+            "reviewer",
+            "builder",
+            "admin"
+          ],
+          "roles": [
+            "chat_user"
+          ],
+          "teamId": "team_ops"
+        },
+        "message": "Your role cannot view the team's evals; a Viewer, Reviewer, Builder or Admin can.",
+        "requestId": "<req>",
+        "status": 403
+      },
+      "success": false
+    },
+    "status": 403
+  },
+  "suites.filtered": {
+    "body": {
+      "data": {
+        "data": [
+          {
+            "asset": {
+              "href": "/build/skills/<sk>",
+              "id": "<sk>",
+              "kind": "skill",
+              "name": "Hardship request triage"
+            },
+            "candidateVersion": null,
+            "cases": 1,
+            "draftCases": 0,
+            "drafts": [],
+            "failing": false,
+            "id": "skill:<sk>",
+            "lastRunAt": null,
+            "livePassRate": null,
+            "liveVersion": null,
+            "owner": "Operations",
+            "passRate": null,
+            "regressions": null,
+            "results": [],
+            "tier": "medium"
+          }
+        ],
+        "facets": {
+          "kind": {
+            "skill": 1
+          },
+          "result": {
+            "not_run": 1
+          },
+          "tier": {
+            "medium": 1
+          }
+        },
+        "pagination": {
+          "hasNext": false,
+          "hasPrev": false,
+          "page": 1,
+          "pageSize": 25,
+          "total": 1,
+          "totalPages": 1
+        },
+        "stats": {
+          "failingSuites": 1,
+          "gatesBlocked": 0,
+          "liveUntested": 0,
+          "notRun": 1
+        },
+        "tabCounts": {
+          "gates": 0,
+          "runs": 1,
+          "suites": 2
+        }
+      },
+      "success": true
+    },
+    "status": 200
+  }
+}

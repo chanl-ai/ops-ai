@@ -14,6 +14,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import mssql_drop_default_ddl
+
 revision = "tools_0076_account_owner_key"
 down_revision = "tools_0075_call_client_id"
 branch_labels = None
@@ -56,6 +58,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index(INDEX, table_name="connections")
+    # SQL Server refuses to drop a column that holds a default; the helper drops one only if it is there.
+    if op.get_context().dialect.name == "mssql":
+        op.execute(mssql_drop_default_ddl("connections", "owner_key"))
     with op.batch_alter_table("connections") as b:
         b.drop_column("owner_key")
     op.create_index(

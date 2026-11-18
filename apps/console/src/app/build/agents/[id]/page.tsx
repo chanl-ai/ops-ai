@@ -26,7 +26,6 @@ import {
 import { MemorySection } from '@/components/agents/memory-section';
 import { RequestAgentPublishDialog } from '@/components/agents/request-agent-publish-dialog';
 import { useSendMessage } from '@/hooks/chat-queries';
-import { useKnowledgeBases } from '@/hooks/knowledge-queries';
 import { AgentTestPanel, TEST_TABS, type TestTab } from '@/components/agents/agent-test-panel';
 import { LivePlacesPanel } from '@/components/channels/hub/live-places';
 import { AgentChatChannel } from '@/components/agents/agent-channels';
@@ -36,7 +35,6 @@ import { AgentSkillsSection, type AttachFilter } from '@/components/skills/agent
 import { useAgentSkills, useAttachSkill, useDetachSkill } from '@/hooks/skill-queries';
 import { TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTabParam } from '@/hooks/use-tab-param';
-import { useWidgetTemplates } from '@/hooks/widget-queries';
 import { EvalsTab } from './_parts/evals-tab';
 import { useInstructionsAssist } from './_parts/instructions-assist';
 import { WidgetEmbeds } from '@/components/deployments/widget-embed';
@@ -166,7 +164,6 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   const errors = { name: draft.name.trim() ? undefined : 'The agent needs a name.', role: draft.role.trim() ? undefined : 'Describe the job in one line.' };
   const valid = !errors.name && !errors.role;
 
-  const widgetTemplates = useWidgetTemplates();
   // The one draft saves itself: a second after the last valid change, with no dialog and no note per save.
   const [saveError, setSaveError] = React.useState<string | null>(null);
   // The draft a save failed on: autosave does not send it again until it changes or Retry is pressed.
@@ -185,8 +182,6 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
     };
   }, [testThreadId, chat]);
   const panelRef = React.useRef<HTMLDivElement>(null);
-  const kbList = useKnowledgeBases({ page: 1, pageSize: 100 });
-  const kbNames = React.useMemo(() => Object.fromEntries((kbList.data?.data ?? []).map((k) => [k.id, k.name])), [kbList.data]);
 
   // Pausing only means something once a version is published; before that no run can use the agent.
   const pausable = agent.publishedVersion !== null;
@@ -444,7 +439,6 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
               <AgentTestPanel
                 agentId={agent.id}
                 agentName={agent.name}
-                kbNames={kbNames}
                 held={(tools.data ?? []).filter((t) => draft.toolIds.includes(t.id)).map((t) => ({ name: t.name, approval: t.requiresApproval ? (t.approval ?? 'a review') : null }))}
                 tab={testTab}
                 onTabChange={setTestTab}

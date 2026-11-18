@@ -3,8 +3,17 @@
  * Shapes follow the Docs AI model so the two products can share a backend.
  */
 
+import type { OpsAI } from '@chanl-ai/ops-ai';
+
 import type { HeldReason, IngestSettings, ItemVersionRow, VersionStatus } from './knowledge-ingest';
 import type { AnswerShape, FilterGroup, QueryMode, RetrievalTrace, RewriteMode, RuntimeValues, TableRowHit } from './knowledge-retrieval';
+
+import type { Narrow } from './served';
+
+// Entity types come from the generated SDK (kb-service's OpenAPI document), so a field renamed there fails the console's typecheck.
+type Kb = OpsAI['raw']['kb'];
+type Reply<K extends keyof Kb> = Awaited<ReturnType<Kb[K]>>;
+type Body<K extends keyof Kb> = NonNullable<NonNullable<Parameters<Kb[K]>[0]>['body']>;
 
 export type Sensitivity = 'internal' | 'confidential' | 'restricted';
 
@@ -50,8 +59,8 @@ export type SourceKind = 'file' | 'text' | 'push' | 'web' | 'tool';
 /** A source's sync health, kept by kb-service as each run settles. */
 export interface SourceHealth {
   state: 'never' | 'healthy' | 'failing' | 'needs_reconnect';
-  lastGoodSyncAt?: string;
-  failingSince?: string;
+  lastGoodSyncAt?: string | null;
+  failingSince?: string | null;
   daysFailing: number;
   /** Failed runs in a row. */
   failedRuns: number;
@@ -74,68 +83,45 @@ export interface MetadataMapping {
 
 export type Permissions = { mode: 'inherit' } | { mode: 'workspace' } | { mode: 'selected'; principals: string[] };
 
-export interface Source {
-  /** What the caller may do with it, from the same check its write routes run; on the detail only. */
-  canEdit?: boolean;
-  canDelete?: boolean;
-  canPublish?: boolean;
-  id: string;
+/** What the generator types loosely on a source, as the console reads it. */
+type SourceNarrow = {
   type: SourceType;
   kind: SourceKind;
-  /** What the source is, as kb-service names it: Files, or its plugin's own title for the source. */
-  kindLabel: string;
-  name: string;
-  /** The integration this source reads through; its status shows read-only on the source. */
-  connectionId?: string;
-  connectionLabel?: string;
-  connection?: import('./integrations').ConnectionRef;
-  /** What it takes in, in a few words: a site's start address, an app source's name, or its files. */
-  scopeSummary: string;
-  config: Record<string, unknown>;
   parsing: ParsingSettings;
   cleaning: CleaningSettings;
   ingest: IngestSettings;
-  /** AI ingest steps chosen and still waiting for the knowledge owner's approval; syncs run without them. */
-  aiStepsWaiting: string[];
   /** Hosts of the source's own site an admin has yet to approve, with the Security task each waits on; nothing is fetched until then. */
   waitingHosts: { host: string; runKey?: string | null }[];
-  /** Digest of the ingestion settings the current chunks were built with; differs from the settings when a re-index is needed. */
-  indexedSettingsDigest?: string;
   rules: Rule[];
   metadataMapping: MetadataMapping[];
-  tags: string[];
   titleFrom: 'source' | 'heading' | 'filename';
   permissions: Permissions;
   schedule: Schedule;
   deletedAtSource: 'remove' | 'keep_stale';
-  staleAfterDays: number;
-  notifyOnFailure: boolean;
   sensitivity: Sensitivity;
-  /** Department boundary a knowledge base can be limited to. */
-  collection: string;
-  owner: string;
   status: SourceStatus;
-  itemsIndexed: number;
-  itemsFailed: number;
-  itemsPending: number;
-  lastSyncAt?: string;
-  lastRunStatus?: RunStatus;
-  lastRunDurationSec?: number;
-  /** When the schedule syncs it next, from the service. */
-  nextSyncAt?: string;
-  cursor?: string;
+  lastRunStatus?: RunStatus | null;
   health?: SourceHealth;
   /** The settings rebuild running in the background, when a save started one. */
   rebuild?: SyncRun | null;
-  usedByKbIds: string[];
-  createdAt: string;
-}
+};
+
+/** Fields the console shows that kb-service does not return on a source yet. */
+type SourceViewOnly = {
+  /** The integration this source reads through; its status shows read-only on the source. */
+  connectionId?: string;
+  connectionLabel?: string;
+  connection?: import('./integrations').ConnectionRef;
+  /** Digest of the ingestion settings the current chunks were built with; differs from the settings when a re-index is needed. */
+  indexedSettingsDigest?: string;
+  lastRunDurationSec?: number | null;
+  cursor?: string;
+};
+
+export type Source = Narrow<Reply<'sources_create_source'>, SourceNarrow> & SourceViewOnly;
 
 /** A source row as lists show it: knowledge base names and the running flag come joined from the API. */
-export interface SourceRow extends Source {
-  usedBy: { id: string; name: string }[];
-  running: boolean;
-}
+export type SourceRow = Narrow<Reply<'sources_list_sources'>['data'][number], SourceNarrow> & SourceViewOnly;
 
 /** `held`: missing metadata a reading knowledge base requires, so it is stored but not searchable. */
 export type ItemStatus = 'indexed' | 'pending' | 'processing' | 'failed' | 'partial' | 'excluded' | 'deleted' | 'held';
@@ -178,63 +164,33 @@ export interface Revision {
   note?: string;
 }
 
-export interface Item {
-  id: string;
-  sourceId: string;
-  externalId: string;
-  title: string;
-  mimeType: string;
-  path: string;
-  url?: string;
-  modifiedAt: string;
-  processedAt?: string;
-  sizeBytes: number;
+type ItemNarrow = {
   status: ItemStatus;
-  errorClass?: ErrorClass;
-  error?: string;
-  /** Indexed with pages left unread, and why. */
-  warning?: string;
-  chunkCount: number;
-  tags: string[];
-  metadata: Record<string, string>;
-  acl: string[];
-  owner: string;
-  version: string;
-  effectiveDate: string;
-  supersedes?: string;
-  reviewBy: string;
-  /** From the source's last good sync against its schedule; absent on older payloads. */
-  freshness?: 'fresh' | 'stale' | 'no_schedule';
+  errorClass?: ErrorClass | null;
+  freshness: 'fresh' | 'stale' | 'no_schedule';
   sensitivity: Sensitivity;
-  collection: string;
-  verified: boolean;
-  queries30d: number;
-  pageCount?: number;
-  fileId?: string;
-  /** Content digest; identical content across sources is indexed once. */
-  digest: string;
-  /** Items with the same family are versions of one document. */
-  family: string;
   versionStatus: VersionStatus;
+};
+
+/** Fields the console shows that kb-service does not return on an item yet. */
+type ItemViewOnly = {
+  supersedes?: string;
   supersededBy?: string;
-  /** Set when this item's content is already indexed from another item; it adds no chunks. */
-  duplicateOf?: { itemId: string; title: string; sourceName: string };
   /** Other sources holding the same content, on the item that is indexed. */
   alsoIn?: { itemId: string; title: string; sourceName: string }[];
   /** The source rule that excluded it, in words. */
   excludedBy?: string;
   held?: HeldReason;
-}
+};
+
+/** kb-service answers `duplicateOf` as the id of the item whose content this one repeats. */
+export type Item = Narrow<Reply<'sources_put_item'>['item'], ItemNarrow> & ItemViewOnly;
 
 /** A document as the knowledge base's Documents tab lists it. */
 /** What a document is, as kb-service names it for the Documents table's Type column and filter. */
 export type DocType = 'pdf' | 'word' | 'spreadsheet' | 'slides' | 'web' | 'text' | 'typed' | 'app' | 'other';
 
-export interface DocumentRow extends Item {
-  sourceName: string;
-  freshness: 'fresh' | 'stale' | 'no_schedule';
-  docType: DocType;
-}
+export type DocumentRow = Narrow<Reply<'knowledge_bases_list_documents'>['data'][number], ItemNarrow> & ItemViewOnly;
 
 /** Heavy per-item content, fetched only when a document is opened. */
 export interface ItemDetail {
@@ -245,13 +201,7 @@ export interface ItemDetail {
   versions: ItemVersionRow[];
 }
 
-export interface ItemWithDetail extends Item {
-  sourceName: string;
-  sourceType: SourceType;
-  detail: ItemDetail;
-  reading?: ItemReading | null;
-  settingsUsed?: ItemSettingsUsed | null;
-}
+export type ItemWithDetail = Narrow<Reply<'items_get_item'>, ItemNarrow & { sourceType: SourceType; detail: ItemDetail; reading?: ItemReading | null; settingsUsed?: ItemSettingsUsed | null }> & ItemViewOnly;
 
 /** One item or listing a run could not take in, with the step it failed at and why. */
 export interface RunError {
@@ -284,28 +234,10 @@ export interface RunCounts {
   outputTokens?: number;
 }
 
-export interface SyncRun {
-  id: string;
-  sourceId: string;
-  trigger: RunTrigger;
-  startedAt: string;
-  finishedAt?: string;
-  durationSec: number;
-  status: RunStatus;
-  counts: RunCounts;
-  phases: unknown[];
-  errors: RunError[];
-  log: string[];
-  /** Who stopped it, when it was cancelled. */
-  cancelledBy?: string;
-}
+export type SyncRun = Narrow<Reply<'sources_get_run'>, { trigger: RunTrigger; status: RunStatus; counts: RunCounts; errors: RunError[] }>;
 
 /** An address removed after answering gone twice; a sync leaves it out until it is lifted. */
-export interface Tombstone {
-  id: string;
-  at?: string;
-  reason?: string;
-}
+export type Tombstone = Reply<'sources_list_tombstones'>[number];
 
 export type SearchMode = QueryMode;
 export type CitationStyle = 'inline' | 'footnotes' | 'links' | 'none';
@@ -376,11 +308,7 @@ export interface BaseSourceDefaults {
 
 export type KbHealth = 'healthy' | 'indexing' | 'degraded' | 'failed' | 'never';
 
-export interface KbSourceLink {
-  sourceId: string;
-  itemsContributed: number;
-  rules: Rule[];
-}
+export type KbSourceLink = Narrow<NonNullable<Reply<'knowledge_bases_create_knowledge_base'>['sources']>[number], { rules: Rule[] }>;
 
 /**
  * When two returned chunks cover the same topic, the first matching rule decides which one is used. `class`
@@ -417,28 +345,14 @@ export interface IndexJob {
   trigger: string;
 }
 
-export interface KnowledgeBase {
-  /** What the caller may do with it, from the same check its write routes run; on the detail only. */
-  canEdit?: boolean;
-  canDelete?: boolean;
-  canPublish?: boolean;
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-  color: string;
+type KbNarrow = {
   sources: KbSourceLink[];
-  /** Department boundaries this knowledge base may read; empty means all. */
-  collections: string[];
   precedence: PrecedenceRule[];
   metadataProfile: MetadataProfile;
   retrieval: RetrievalSettings;
-  /** Served by kb-service; absent in the preview data. */
-  answer?: AnswerSettings;
-  sync?: SyncSettings;
-  sourceDefaults?: BaseSourceDefaults;
-  /** The person who answers for what it serves, by email. */
-  owner?: string;
+  answer: AnswerSettings;
+  sync: SyncSettings;
+  sourceDefaults: BaseSourceDefaults;
   access: KbAccess;
   automation: 'act' | 'suggest';
   stats: {
@@ -452,51 +366,22 @@ export interface KnowledgeBase {
     medianLatencyMs: number;
   };
   health: KbHealth;
-  healthReasons: string[];
-  /** When an index last changed what the base holds. */
-  lastRefreshedAt?: string;
-  /** When its sources were last read: the newest of their syncs, the time each source row shows. */
-  lastSyncAt?: string;
-  indexing?: { done: number; total: number; taskId: string };
+  indexing?: { done: number; total: number; taskId: string } | null;
   jobs: IndexJob[];
-  createdAt: string;
-}
+};
+
+export type KnowledgeBase = Narrow<Reply<'knowledge_bases_create_knowledge_base'>, KbNarrow>;
 
 /** A knowledge base row: source names and the agents that cite it come joined from the API. */
-export interface KnowledgeBaseRow extends KnowledgeBase {
-  sourceNames: string[];
-  /** Agents of the signed-in person's team that cite it. */
-  agentNames: string[];
-  /** @deprecated Always 0: a base is its team's alone; the field leaves the API next release. */
-  agentsElsewhere?: number;
-  /** False when agents-service could not say who cites it; treat the base as in use. */
-  agentsKnown?: boolean;
-}
+export type KnowledgeBaseRow = Narrow<Reply<'knowledge_bases_list_knowledge_bases'>['data'][number], KbNarrow>;
 
-/** One attached source as the knowledge base page shows it. */
-export interface KbSourceView extends KbSourceLink {
-  source: Source;
-  /** A sync or rebuild holds the source now; the base's detail polls while any does. */
-  running?: boolean;
-}
+/** One attached source as the knowledge base page shows it; a sync or rebuild holds `running`, and the base's detail polls while any does. */
+export type KbSourceView = Narrow<NonNullable<Reply<'knowledge_bases_get_knowledge_base'>['attached']>[number], { rules: Rule[]; source: Source }>;
 
 /** How many of a base's search units have a vector in the base's embedding model; null with no embedding model. */
-export interface EmbeddingCoverage {
-  model: string;
-  width: number;
-  units: number;
-  embedded: number;
-}
+export type EmbeddingCoverage = NonNullable<Reply<'knowledge_bases_get_knowledge_base'>['embedding']>;
 
-export interface KnowledgeBaseDetail extends KnowledgeBaseRow {
-  attached: KbSourceView[];
-  embedding?: EmbeddingCoverage | null;
-  /** Metadata keys present on this knowledge base's documents, for filter editors. */
-  metadataKeys: string[];
-  suggestedQuestions: string[];
-  /** Documents held for missing required metadata. */
-  heldCount: number;
-}
+export type KnowledgeBaseDetail = Narrow<Reply<'knowledge_bases_get_knowledge_base'>, KbNarrow & { attached: KbSourceView[] }>;
 
 export interface Citation {
   n: number;
@@ -538,56 +423,19 @@ export interface StructuredValue {
   from: string;
 }
 
-export interface PlaygroundAnswer {
-  id: string;
-  question: string;
-  /** Substrings of the question that select this canned answer in the mock. */
-  matchers: string[];
-  answer: string;
-  citations: Citation[];
-  chunks: ScoredChunk[];
+/** What a search of a base answers, as `POST /v1/knowledge-bases/{id}/query` returns it, plus what only the mock fills in. */
+export type PlaygroundAnswer = Narrow<Reply<'knowledge_bases_query_knowledge_base'>, { shape: AnswerShape; citations: Citation[]; chunks: ScoredChunk[] }> & {
   structured?: StructuredValue[];
   /** Which document precedence chose, said in the answer. */
   followed?: string;
-  noAnswer?: boolean;
-  retrievalMs: number;
-  synthesisMs: number;
   /** Present when the question ran as someone else: what their permissions hid. */
   permissions?: import('./run-as').PermissionScope;
-  shape?: AnswerShape;
   /** Rows matched by `table_lookup`. */
   rows?: TableRowHit[];
   trace?: RetrievalTrace;
-  /** The search lanes the base asked for, the ones that ran, and each skipped one with its reason. */
-  lanes?: { asked: string[]; ran: string[]; skipped: { lane: string; reason: string }[] };
-  /** Each passage found, best first: its fused score and its score in each lane that found it. */
-  passages?: SearchPassage[];
-  /** What the question cost to search: the tokens embedding it took. */
-  cost?: { embeddingTokens: number };
-  /** Present when the base rewrites questions: as asked, as searched (null when the rewrite was skipped, with why). */
-  rewrite?: { asked: string; rewritten: string | null; skipped?: string | null; ms: number };
-  /** Present when the base reranks: whether it ran, on which alias, how many pieces it scored, or why it was skipped. */
-  rerank?: { ran: boolean; model: string; scored: number; skipped?: string | null; ms: number };
-}
+};
 
-export interface SearchPassage {
-  itemId: string;
-  kbId: string;
-  title: string;
-  section: string;
-  version: string;
-  text: string;
-  snippet: string;
-  score: number;
-  lanes?: Record<string, number>;
-  /** The unit it matched by: the piece's own text (`self`), a question, or an approved FAQ pair. */
-  matched?: string;
-  /** The reranker's score from 0 to 10, when a rerank ran. */
-  reranked?: number;
-  verified?: boolean;
-  page?: number | null;
-  url?: string | null;
-}
+export type SearchPassage = NonNullable<Reply<'knowledge_bases_query_knowledge_base'>['passages']>[number];
 
 /** What a new source's previewed items would look like to the knowledge bases chosen for attachment (spec 5.15.10). */
 export interface HeldPreviewInput extends Pick<SourceInput, 'type' | 'config' | 'metadataMapping'> {
@@ -601,21 +449,21 @@ export interface HeldPreview {
 }
 
 /** A source read for its page: knowledge bases that read it, recent runs and error groups come joined. */
-export interface SourceDetail extends Source {
-  readers: Pick<KnowledgeBase, 'id' | 'name' | 'slug' | 'color' | 'health'>[];
-  running?: SyncRun | null;
-  recentRuns: SyncRun[];
-  errorGroups: { message: string; count: number }[];
-  itemCount: number;
-  /** The ingestion settings changed since the chunks were built. */
-  reindexNeeded: boolean;
-  /** Metadata keys the knowledge bases reading this source require. */
-  requiredMetadata: string[];
-  /** Items excluded by a rule, held for metadata, or indexed once elsewhere. */
-  governance: { excluded: number; held: number; duplicates: number; superseded: number };
-  /** Whether the current user may approve the waiting steps, and what approving starts. */
-  approval?: { canApprove: boolean; blockedReason?: string; modelCalls: number; estimatedCost: string; items: number };
-}
+export type SourceDetail = Narrow<
+  Reply<'sources_get_source'>,
+  SourceNarrow & {
+    readers: Pick<KnowledgeBase, 'id' | 'name' | 'slug' | 'color' | 'health'>[];
+    running?: SyncRun | null;
+    recentRuns: SyncRun[];
+    errorGroups: { message: string; count: number }[];
+    /** Items excluded by a rule, held for metadata, or indexed once elsewhere. */
+    governance: { excluded: number; held: number; duplicates: number; superseded: number };
+  }
+> &
+  SourceViewOnly & {
+    /** Whether the current user may approve the waiting steps, and what approving starts; kb-service does not return it yet. */
+    approval?: { canApprove: boolean; blockedReason?: string; modelCalls: number; estimatedCost: string; items: number };
+  };
 
 export interface KnowledgeBaseInput {
   name: string;
@@ -640,7 +488,9 @@ export type KnowledgeBasePatch = Partial<Pick<KnowledgeBase, 'name' | 'descripti
 
 /** A new source, as `POST /v1/sources` takes it; settings left out start from its kind's defaults. */
 export type SourceInput = Pick<Source, 'type' | 'name'> &
-  Partial<Pick<Source, 'config' | 'parsing' | 'cleaning' | 'rules' | 'metadataMapping' | 'schedule' | 'sensitivity' | 'collection' | 'tags' | 'owner'>> & {
+  Partial<Pick<Source, 'parsing' | 'cleaning' | 'rules' | 'metadataMapping' | 'schedule' | 'sensitivity' | 'collection' | 'tags' | 'owner'>> & {
+    /** What a plugin source is set up with (`plugin`, `source`, `values`); kb-service answers it back as the source's `config`. */
+    config?: Record<string, unknown>;
     status?: 'active' | 'draft';
     /** Merged over the kind's defaults, so Add source sends only the steps it switches. */
     ingest?: Partial<IngestSettings>;
@@ -694,50 +544,22 @@ export interface SourceDefaults {
 }
 
 /** A kind of source the team may add: Files, or a knowledge source of one of its apps. */
-export interface SourceKindOption {
-  type: 'file' | 'text' | 'push' | 'tool';
-  kind: SourceKind;
-  group: 'built_in' | 'apps';
-  title: string;
-  plugin?: string | null;
-  source?: string | null;
-  /** The items are one website's pages. */
-  site?: boolean;
-  needsConnection?: boolean;
-  connected?: boolean;
-  /** A source of this kind can be made for this team, by the check create applies; `cannotCreateBecause` says why not. */
-  canCreate?: boolean;
-  cannotCreateBecause?: string | null;
-  /** `connection_missing` (sign in on the app page fixes it) or `sign_in_not_team` (it does not). */
-  cannotCreateCode?: 'connection_missing' | 'sign_in_not_team' | null;
-  /** `POST /v1/sources/preview` can say what a source of this kind would take in. */
-  previews?: boolean;
-  pickers?: boolean;
-  inputs?: Record<string, SourceInputField>;
-  defaults: SourceDefaults;
-}
+export type SourceKindOption = Narrow<
+  Reply<'sources_source_kinds'>[number],
+  {
+    type: 'file' | 'text' | 'push' | 'tool';
+    kind: SourceKind;
+    cannotCreateCode?: 'connection_missing' | 'sign_in_not_team' | null;
+    inputs?: Record<string, SourceInputField>;
+    defaults: SourceDefaults;
+  }
+>;
 
 /** What a website or app source with these settings would take in, before anything is stored. */
-export interface SourceKindPreview {
-  found: number;
-  willFetch: number;
-  pages: { id: string; outcome: string; willFetch: boolean }[];
-  /** The listing stopped at its page limit. */
-  capped: boolean;
-}
+export type SourceKindPreview = Reply<'sources_preview_source'>;
 
 /** What the AI steps of a source would cost, from a split of up to 20 of its items with no model called. */
-export interface AiEstimate {
-  steps: string[];
-  model: string;
-  sampledItems: number;
-  totalItems: number;
-  calls: number;
-  inputTokens: number;
-  outputTokens: { low: number; high: number };
-  /** How the numbers were reached, in words. */
-  basis: string;
-}
+export type AiEstimate = Reply<'sources_estimate_ai_steps'>;
 
 export interface SyncOptions {
   full?: boolean;
@@ -784,7 +606,4 @@ export interface WrittenItemInput {
   mime?: string;
 }
 
-export interface WrittenItem {
-  outcome: 'created' | 'updated' | 'unchanged';
-  item: Item;
-}
+export type WrittenItem = Narrow<Reply<'sources_put_item'>, { item: Item }>;

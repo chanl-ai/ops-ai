@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Health */
+        /**
+         * Health
+         * @description Off the request transaction: it asks the database and OPA whether they answer.
+         */
         get: operations["gateway_health"];
         put?: never;
         post?: never;
@@ -131,16 +134,24 @@ export interface paths {
         };
         /**
          * List Apps
-         * @description The team's apps for the Apps grid: its plugins and the apps a person added. `include=builtin` adds
-         *     the built-in apps, for the approval policy's app picker. A service asking for a person (X-Acting-For) reads
-         *     each card's state as that person's.
+         * @description One page of the team's apps for the Apps grid on the shared list contract, by name ignoring case, then id:
+         *     its plugins and the apps a person added. `search` matches the name and category, `ids` names cards exactly.
+         *     `view` picks a tab (connected: appState connected, test_failed or removed; available: the rest), `appState`,
+         *     `category` and `kind` filter, each repeatable; `facets` counts each, and `viewCounts` each tab, over the
+         *     searched and filtered cards; `accountId` (repeatable) keeps the cards those accounts belong to; `hasAccount`
+         *     keeps the cards with (true) or without (false) a default account.
+         *     `sortBy=connected` puts the connected cards first, then by name. The view and filters are read from the shared
+         *     list query; they are named here for the document.
+         *     `include=builtin` adds the built-in apps, for the approval policy's app picker. A service asking for a person
+         *     (X-Acting-For) reads each card's state as that person's. The page and its count are queried, not sliced.
          */
         get: operations["apps_list_apps"];
         put?: never;
         /**
          * Add App
          * @description A custom app, as its first account, which the answer is (its id is the app's): by name with a sign-in kind,
-         *     or an MCP server by its address, whose sign-in is found from the server.
+         *     or an MCP server by its address, whose sign-in is found from the server. No request transaction: the server is
+         *     asked how it signs in.
          */
         post: operations["apps_add_app"];
         delete?: never;
@@ -158,7 +169,8 @@ export interface paths {
         };
         /**
          * Get App
-         * @description One app's page: its card, accounts, the caller's own sign-in, tools, skills and latest runs.
+         * @description One app's page: its card, accounts, the caller's own sign-in, tools, skills and latest runs. No request
+         *     transaction: the page is read in one, then agents-service is asked who uses each tool with none open.
          */
         get: operations["apps_get_app"];
         put?: never;
@@ -166,7 +178,8 @@ export interface paths {
         /**
          * Delete App
          * @description Deletes a custom app with its accounts and their secrets; 409 app_in_use naming the tools and accounts
-         *     while a tool still uses it.
+         *     while a tool still uses it. No request transaction: agents-service is asked whether a workflow or agent names
+         *     each account.
          */
         delete: operations["apps_delete_app"];
         options?: never;
@@ -220,7 +233,8 @@ export interface paths {
         post?: never;
         /**
          * Delete Account
-         * @description 409 connection_in_use while a module points at it.
+         * @description 409 connection_in_use while a module points at it. No request transaction: agents-service is asked
+         *     whether a workflow or agent names the account.
          */
         delete: operations["apps_delete_account"];
         options?: never;
@@ -368,7 +382,8 @@ export interface paths {
          * List App Resources
          * @description The app's Resources tab: every agent, skill, workflow, document type and knowledge source the app brings,
          *     and every copy the team holds of one it no longer ships or of an app turned off, each with its state, the
-         *     team's copy, and whether the caller may add it (with who can, when they cannot).
+         *     team's copy, and whether the caller may add it (with who can, when they cannot). The copies are asked before
+         *     any read, so the request's transaction opens only after both services answer.
          */
         get: operations["plugins_list_app_resources"];
         put?: never;
@@ -475,7 +490,8 @@ export interface paths {
         /**
          * App Users
          * @description The team's agents and workflows that use the app's tools, each with the tools it uses: what turning the app
-         *     off stops. A team admin's, as turning it off is.
+         *     off stops. A team admin's, as turning it off is. No request transaction: the binding is read and its
+         *     transaction ends before agents-service is asked, so nothing is held while it answers.
          */
         get: operations["apps_app_users"];
         put?: never;
@@ -552,8 +568,8 @@ export interface paths {
         };
         /**
          * List Hosts
-         * @description The hosts, by name, a page at a time; `search` matches the host or its note, `templateId` the template slot
-         *     a provisioned host fills. The page and its count are queried, not sliced.
+         * @description The hosts, by name, a page at a time on the shared list contract; `search` matches the host or its note,
+         *     `ids` names hosts, and the filter `templateId` keeps the hosts filling those template slots.
          */
         get: operations["egress_list_hosts"];
         put?: never;
@@ -623,7 +639,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Executions */
+        /**
+         * List Executions
+         * @description The log on the shared list contract: `search` matches the tool's name, `result` and `assistant` narrow and
+         *     are counted in `facets`, and the order is newest first, then by id. Off the request transaction: the
+         *     service reads in one and asks agents-service to name the agents and workflows after it.
+         */
         get: operations["executions_list_executions"];
         put?: never;
         post?: never;
@@ -705,7 +726,8 @@ export interface paths {
          * @description The hosts a source's values would have its sync reach, each decided as any new outside address is: a
          *     person's request (adding the source) lists it where the account lets them, asks the Security team, or is
          *     refused under `block`; a service's (kb-service's beat) only reads whether each passes now. A source's hosts
-         *     are never exempt from the account's list.
+         *     are never exempt from the account's list. No request transaction: each host's reads and writes take their
+         *     own, so none is held while the platform's policy is read or the Security team is asked.
          */
         post: operations["apps_knowledge_source_hosts"];
         delete?: never;
@@ -723,9 +745,10 @@ export interface paths {
         };
         /**
          * List Mcp Links
-         * @description The links of every team the person belongs to and may see channels in, by name, each with its newest
-         *     call: an admin of several teams sees them on one page, as the Team filter needs. A key or service token reads
-         *     its own team's only.
+         * @description The links of every team the caller may see channels in, by name ignoring case, a page at a time on the
+         *     shared list contract (`search` on the name), each with its newest call; `teamId` (repeatable) keeps those
+         *     teams' links and is counted in `facets`. A person reads the team they act in; the dev caller and a service
+         *     token every team they may see, and a `teamId` outside those answers no rows.
          */
         get: operations["mcp_links_list_mcp_links"];
         put?: never;
@@ -866,7 +889,8 @@ export interface paths {
          * My Connections
          * @description The caller's connectors, Connectors (Mine): one row per app that acts as them, with what it can do, who it
          *     signs in as, its appState and appGroup, and where it is used; an app the team has off is listed when each
-         *     person signs in to it.
+         *     person signs in to it. No request transaction: the team's write approval policies and who uses each tool are
+         *     asked of the platform and agents-service.
          */
         get: operations["apps_my_connections"];
         put?: never;
@@ -908,8 +932,10 @@ export interface paths {
         };
         /**
          * List Secrets
-         * @description The team's secrets' metadata, as scripts and earlier callers read it; with `page`, one page of those whose
-         *     name matches `search`, as the Secrets list reads it. The page and its count are queried, not sliced.
+         * @description One page of the team's secrets' metadata on the shared list contract, by name: `search` matches the name,
+         *     `ids` names secrets, the filter `templateId` keeps those filling a template slot and `readOnly` (true or false)
+         *     those an account or auth config holds. Pickers search or name
+         *     what they need rather than loading every secret. The page and its count are queried, not sliced.
          */
         get: operations["secrets_list_secrets"];
         put?: never;
@@ -1030,10 +1056,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Modules */
+        /**
+         * List Modules
+         * @description The team's modules, one page of a view. The view and the filters are read from the shared list query; they
+         *     are named here for the document. `sortBy` is displayName, name, calls24h, errorRate, updatedAt, operationCount
+         *     or ownerTeam.
+         */
         get: operations["tool_modules_list_modules"];
         put?: never;
-        /** Create Module */
+        /**
+         * Create Module
+         * @description Off the request transaction: it may fetch the source and send a new host to Security.
+         */
         post: operations["tool_modules_create_module"];
         delete?: never;
         options?: never;
@@ -1050,7 +1084,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create Blank Module */
+        /**
+         * Create Blank Module
+         * @description Off the request transaction: a host not yet listed is sent to Security in agents-service.
+         */
         post: operations["tool_modules_create_blank_module"];
         delete?: never;
         options?: never;
@@ -1084,7 +1121,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Discover */
+        /**
+         * Discover
+         * @description Off the request transaction: it fetches the source, so no connection is held while it answers.
+         */
         post: operations["tool_modules_discover"];
         delete?: never;
         options?: never;
@@ -1101,7 +1141,8 @@ export interface paths {
         };
         /**
          * List Grants
-         * @description Every workflow's access to the modules the team sees: a page of one view, with each view's count.
+         * @description Every workflow's access to the modules the team sees: a page of one view, with each view's count. `view`
+         *     is read from the shared list query's filters; it is named here for the document.
          */
         get: operations["tool_modules_list_grants"];
         put?: never;
@@ -1157,7 +1198,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Request Approval */
+        /**
+         * Request Approval
+         * @description Off the request transaction: the workflow is read from agents-service.
+         */
         post: operations["tool_modules_request_approval"];
         delete?: never;
         options?: never;
@@ -1191,7 +1235,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Decide Approval */
+        /**
+         * Decide Approval
+         * @description Off the request transaction: platform-service says whether the requester may decide and which writes wait.
+         */
         post: operations["tool_modules_decide_approval"];
         delete?: never;
         options?: never;
@@ -1245,7 +1292,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Add Operation */
+        /**
+         * Add Operation
+         * @description Off the request transaction: a host not yet listed is sent to Security in agents-service.
+         */
         post: operations["tool_modules_add_operation"];
         delete?: never;
         options?: never;
@@ -1262,7 +1312,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Import Operations */
+        /**
+         * Import Operations
+         * @description Off the request transaction: it fetches the source again before it adds the operations.
+         */
         post: operations["tool_modules_import_operations"];
         delete?: never;
         options?: never;
@@ -1279,8 +1332,8 @@ export interface paths {
         };
         /**
          * List Mocks
-         * @description The operation's mock answers in the order a test call checks them, or (`environment=example`) its example
-         *     answer.
+         * @description The operation's mock answers in the order a test call checks them, a page at a time on the shared list
+         *     contract (`search` on the name), or (`environment=example`) its example answer.
          */
         get: operations["tool_modules_list_mocks"];
         put?: never;
@@ -1342,7 +1395,8 @@ export interface paths {
         put?: never;
         /**
          * Run Tool
-         * @description The tool page's Run, in the screen's words: the test console's owner try, Mock on the stub's answer and
+         * @description Off the request transaction: a Real run goes through the gateway to the system. The tool page's Run, in the
+         *     screen's words: the test console's owner try, Mock on the stub's answer and
          *     Real as the gateway's call, so the two never decide differently.
          */
         post: operations["tool_modules_run_tool"];
@@ -1378,7 +1432,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Request Review */
+        /**
+         * Request Review
+         * @description Off the request transaction: the review opens in agents-service.
+         */
         post: operations["tool_modules_request_review"];
         delete?: never;
         options?: never;
@@ -1395,7 +1452,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Test Operation */
+        /**
+         * Test Operation
+         * @description Off the request transaction: a real run calls the system, and a mock waits its delay.
+         */
         post: operations["tool_modules_test_operation"];
         delete?: never;
         options?: never;
@@ -1412,7 +1472,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Publish Version */
+        /**
+         * Publish Version
+         * @description Off the request transaction: platform-service gives the publish-review mode and a review opens in agents-
+         *     service.
+         */
         post: operations["tool_modules_publish_version"];
         delete?: never;
         options?: never;
@@ -1447,14 +1511,13 @@ export interface components {
             effect: boolean;
             /** Error */
             error?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Id */
             id: string;
             /** Outcome */
             outcome: string;
-            /** Output */
-            output?: unknown;
+            output?: components["schemas"]["JsonValue"];
         };
         /**
          * AccountChoice
@@ -1527,7 +1590,7 @@ export interface components {
             } | null;
             /** Pluginsettings */
             pluginSettings?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Redirecturi */
             redirectUri?: string | null;
@@ -1579,7 +1642,7 @@ export interface components {
             at?: string | null;
             /** Detail */
             detail: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /**
@@ -1608,7 +1671,7 @@ export interface components {
             sandbox: boolean;
             /** Settings */
             settings?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Signin */
             signIn?: string | null;
@@ -1649,7 +1712,7 @@ export interface components {
             };
             /** Settings */
             settings?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Signin */
             signIn?: ("team" | "person" | "person_or_team") | null;
@@ -1705,7 +1768,7 @@ export interface components {
             name: string;
             /** Settings */
             settings?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /**
@@ -1857,7 +1920,7 @@ export interface components {
             secretEnds?: string | null;
             /** Settings */
             settings?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Signinagain */
             signInAgain: number;
@@ -1915,7 +1978,7 @@ export interface components {
             secretEnds?: string | null;
             /** Settings */
             settings?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /**
              * Status
@@ -2116,6 +2179,18 @@ export interface components {
             /** Workflows */
             workflows: components["schemas"]["AppUser"][];
         };
+        /**
+         * AppViewCounts
+         * @description How many of the searched and filtered cards each Apps tab holds.
+         */
+        AppViewCounts: {
+            /** All */
+            all: number;
+            /** Available */
+            available: number;
+            /** Connected */
+            connected: number;
+        };
         /** ApprovalRequestIn */
         ApprovalRequestIn: {
             /**
@@ -2303,12 +2378,10 @@ export interface components {
             decision: string;
             /** Ok */
             ok: boolean;
-            /** Output */
-            output: unknown;
+            output: components["schemas"]["JsonValue"];
             /** Replayof */
             replayOf?: string | null;
-            /** View */
-            view?: unknown;
+            view?: components["schemas"]["JsonValue"];
         };
         /**
          * CallRunAs
@@ -2334,6 +2407,30 @@ export interface components {
              * @enum {string}
              */
             type: "ops_ai" | "own";
+        };
+        /**
+         * CatalogEvent
+         * @description One event of the catalogue as the outbox would carry it; a consumer reads it as an `ops_store.outbox.Event`.
+         *     The team is null for a workspace-level module.
+         */
+        CatalogEvent: {
+            /** Name */
+            name: string;
+            /** Payload */
+            payload: components["schemas"]["ToolPublished"] | components["schemas"]["ToolTeamStateChanged"];
+            /** Revision */
+            revision: number;
+            /** Teamid */
+            teamId: string | null;
+            /** Tenantid */
+            tenantId: string;
+        };
+        /** CatalogPage */
+        CatalogPage: {
+            /** Items */
+            items: components["schemas"]["CatalogEvent"][];
+            /** Nextcursor */
+            nextCursor: string | null;
         };
         /** Change */
         Change: {
@@ -2936,6 +3033,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[CatalogPage] */
+        Envelope_CatalogPage_: {
+            data: components["schemas"]["CatalogPage"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[Change] */
         Envelope_Change_: {
             data: components["schemas"]["Change"];
@@ -2990,6 +3096,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[FenceResult] */
+        Envelope_FenceResult_: {
+            data: components["schemas"]["FenceResult"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[HeldHost] */
         Envelope_HeldHost_: {
             data: components["schemas"]["HeldHost"];
@@ -3002,6 +3117,15 @@ export interface components {
         /** Envelope[HostList] */
         Envelope_HostList_: {
             data: components["schemas"]["HostList"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ListResult[McpLinkView]] */
+        Envelope_ListResult_McpLinkView__: {
+            data: components["schemas"]["ListResult_McpLinkView_"];
             /**
              * Success
              * @constant
@@ -3107,6 +3231,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[SecretList] */
+        Envelope_SecretList_: {
+            data: components["schemas"]["SecretList"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[SecretMeta] */
         Envelope_SecretMeta_: {
             data: components["schemas"]["SecretMeta"];
@@ -3143,6 +3276,15 @@ export interface components {
              */
             success: true;
         };
+        /** Envelope[SystemCardList] */
+        Envelope_SystemCardList_: {
+            data: components["schemas"]["SystemCardList"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
         /** Envelope[SystemCard] */
         Envelope_SystemCard_: {
             data: components["schemas"]["SystemCard"];
@@ -3155,6 +3297,15 @@ export interface components {
         /** Envelope[TestOut] */
         Envelope_TestOut_: {
             data: components["schemas"]["TestOut"];
+            /**
+             * Success
+             * @constant
+             */
+            success: true;
+        };
+        /** Envelope[ToolAccess] */
+        Envelope_ToolAccess_: {
+            data: components["schemas"]["ToolAccess"];
             /**
              * Success
              * @constant
@@ -3200,16 +3351,6 @@ export interface components {
         /** Envelope[Union[SendPolicyView, NoneType]] */
         Envelope_Union_SendPolicyView__NoneType__: {
             data: components["schemas"]["SendPolicyView"] | null;
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
-        /** Envelope[Union[list[SecretMeta], SecretList]] */
-        Envelope_Union_list_SecretMeta___SecretList__: {
-            /** Data */
-            data: components["schemas"]["SecretMeta"][] | components["schemas"]["SecretList"];
             /**
              * Success
              * @constant
@@ -3285,16 +3426,6 @@ export interface components {
              */
             success: true;
         };
-        /** Envelope[list[McpLinkView]] */
-        Envelope_list_McpLinkView__: {
-            /** Data */
-            data: components["schemas"]["McpLinkView"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
         /** Envelope[list[MyAccount]] */
         Envelope_list_MyAccount__: {
             /** Data */
@@ -3335,16 +3466,6 @@ export interface components {
              */
             success: true;
         };
-        /** Envelope[list[SystemCard]] */
-        Envelope_list_SystemCard__: {
-            /** Data */
-            data: components["schemas"]["SystemCard"][];
-            /**
-             * Success
-             * @constant
-             */
-            success: true;
-        };
         /** ErrorBody */
         ErrorBody: {
             /** Code */
@@ -3375,14 +3496,14 @@ export interface components {
             };
             /** Values */
             values?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /** EvaluateOut */
         EvaluateOut: {
             /** Out */
             out: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /** ExecutionList */
@@ -3399,6 +3520,13 @@ export interface components {
         };
         /** FenceIn */
         FenceIn: {
+            /** Generation */
+            generation: number;
+            /** Thread */
+            thread: string;
+        };
+        /** FenceResult */
+        FenceResult: {
             /** Generation */
             generation: number;
             /** Thread */
@@ -3427,7 +3555,7 @@ export interface components {
             description: string;
             /** Inputschema */
             inputSchema: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Moduleid */
             moduleId: string | null;
@@ -3477,6 +3605,19 @@ export interface components {
             key: string;
             /** Value */
             value: string;
+        };
+        /**
+         * Health
+         * @description ok; or 503 degraded when the database is out of reach, or policy_drift when OPA holds another policy.
+         */
+        Health: {
+            /** Reason */
+            reason?: "database" | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "degraded" | "policy_drift";
         };
         /** HeldHost */
         HeldHost: {
@@ -3586,6 +3727,7 @@ export interface components {
             /** Message */
             message: string;
         };
+        JsonValue: unknown;
         /** KindField */
         KindField: {
             /** Advanced */
@@ -3644,7 +3786,7 @@ export interface components {
             getTool: string;
             /** Inputs */
             inputs?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Listtool */
             listTool: string;
@@ -3664,7 +3806,7 @@ export interface components {
             previewTool?: string | null;
             /** Schedule */
             schedule: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Scopestool */
             scopesTool?: string | null;
@@ -3707,6 +3849,18 @@ export interface components {
             name: string;
             /** Title */
             title: string;
+        };
+        /** ListResult[McpLinkView] */
+        ListResult_McpLinkView_: {
+            /** Data */
+            data: components["schemas"]["McpLinkView"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
         };
         /** ListedHost */
         ListedHost: {
@@ -3789,8 +3943,7 @@ export interface components {
         };
         /** MockAnswer */
         MockAnswer: {
-            /** Body */
-            body?: unknown;
+            body?: components["schemas"]["JsonValue"];
             /** Createdby */
             createdBy: string;
             /** Default */
@@ -3809,7 +3962,7 @@ export interface components {
             id: string;
             /** Match */
             match: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Name */
             name: string;
@@ -3824,8 +3977,7 @@ export interface components {
         };
         /** MockIn */
         MockIn: {
-            /** Body */
-            body?: unknown;
+            body?: components["schemas"]["JsonValue"];
             /**
              * Default
              * @default false
@@ -3848,7 +4000,7 @@ export interface components {
             };
             /** Match */
             match?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Name */
             name: string;
@@ -3863,17 +4015,26 @@ export interface components {
              */
             timeout: boolean;
         };
-        /** MockList */
+        /**
+         * MockList
+         * @description One page of an operation's mocks, with the operation's name.
+         */
         MockList: {
             /** Data */
             data: components["schemas"]["MockAnswer"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
             /** Operation */
             operation: string;
+            pagination: components["schemas"]["Pagination"];
         };
         /** MockPatchIn */
         MockPatchIn: {
-            /** Body */
-            body?: unknown;
+            body?: components["schemas"]["JsonValue"];
             /** Default */
             default?: boolean | null;
             /** Delayms */
@@ -3884,7 +4045,7 @@ export interface components {
             } | null;
             /** Match */
             match?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Name */
             name?: string | null;
@@ -4103,8 +4264,7 @@ export interface components {
             signInHeader?: string | null;
             /** Stepup */
             stepUp: boolean;
-            /** Stub */
-            stub?: unknown;
+            stub?: components["schemas"]["JsonValue"];
             /** Timeoutms */
             timeoutMs?: number | null;
             /** Toolid */
@@ -4173,7 +4333,7 @@ export interface components {
             environment: "test" | "live";
             /** Input */
             input: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Operation */
             operation: string;
@@ -4217,10 +4377,8 @@ export interface components {
             masked: string[];
             /** Mockid */
             mockId?: string | null;
-            /** Output */
-            output: unknown;
-            /** Rawresponse */
-            rawResponse?: unknown;
+            output: components["schemas"]["JsonValue"];
+            rawResponse?: components["schemas"]["JsonValue"];
             /** Reachedhost */
             reachedHost?: string | null;
             request?: components["schemas"]["TestRequestOut"] | null;
@@ -4523,8 +4681,7 @@ export interface components {
             scopes?: string[] | null;
             /** Stepup */
             stepUp?: boolean | null;
-            /** Stub */
-            stub?: unknown;
+            stub?: components["schemas"]["JsonValue"];
             /** Timeoutms */
             timeoutMs?: number | null;
         };
@@ -4544,7 +4701,7 @@ export interface components {
             deltaLink: string | null;
             /** Items */
             items: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             }[];
             /** Nextlink */
             nextLink: string | null;
@@ -4626,7 +4783,7 @@ export interface components {
             id: string;
             /** Inputschema */
             inputSchema?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             } | null;
             /** Label */
             label: string;
@@ -4703,7 +4860,7 @@ export interface components {
         PluginTemplate: {
             /** Body */
             body?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Digest */
             digest: string;
@@ -4941,7 +5098,7 @@ export interface components {
         };
         /**
          * SecretList
-         * @description GET /v1/secrets?page=: one page of the secrets' metadata.
+         * @description GET /v1/secrets: one page of the secrets' metadata.
          */
         SecretList: {
             /** Data */
@@ -5216,7 +5373,7 @@ export interface components {
             source: string;
             /** Values */
             values?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /** SubjectBinding */
@@ -5325,6 +5482,22 @@ export interface components {
             /** Toolscount */
             toolsCount: number;
         };
+        /**
+         * SystemCardList
+         * @description A page of the team's app cards, with each tab's count.
+         */
+        SystemCardList: {
+            /** Data */
+            data: components["schemas"]["SystemCard"][];
+            /** Facets */
+            facets: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            pagination: components["schemas"]["Pagination"];
+            viewCounts: components["schemas"]["AppViewCounts"];
+        };
         /** SystemPlugin */
         SystemPlugin: {
             /** Fixed */
@@ -5352,7 +5525,7 @@ export interface components {
             updateAvailable: boolean;
             /** Values */
             values?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
         };
         /** TakeUpdateIn */
@@ -5381,7 +5554,7 @@ export interface components {
             sandbox: boolean;
             /** Settings */
             settings?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /** Signin */
             signIn?: string | null;
@@ -5405,8 +5578,7 @@ export interface components {
         TestDraftIn: {
             /** Responsetransform */
             responseTransform?: string | null;
-            /** Stub */
-            stub?: unknown;
+            stub?: components["schemas"]["JsonValue"];
         };
         /** TestIn */
         TestIn: {
@@ -5457,6 +5629,32 @@ export interface components {
             state: "done" | "failed" | "skipped";
             /** Title */
             title: string;
+        };
+        /**
+         * ToolAccess
+         * @description A tool's access class, the one the policy decides on, and what a step reading it needs.
+         */
+        ToolAccess: {
+            /** Access */
+            access: string;
+            approval: components["schemas"]["ToolApproval"];
+            /** Deadlineseconds */
+            deadlineSeconds: number | null;
+            /** Name */
+            name: string;
+            /** Outputschema */
+            outputSchema: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+        };
+        /** ToolApproval */
+        ToolApproval: {
+            /** Approverteam */
+            approverTeam: string | null;
+            /** Approvers */
+            approvers: number;
+            /** Stepup */
+            stepUp: boolean;
         };
         /**
          * ToolCallRow
@@ -5649,6 +5847,8 @@ export interface components {
             approvalState: "draft" | "approved" | "needs_approval" | "expiring" | "expired";
             /** Calls24H */
             calls24h: number;
+            /** Canedit */
+            canEdit?: boolean | null;
             connection: components["schemas"]["ConnectionRef"] | null;
             /** Connectionid */
             connectionId?: string | null;
@@ -5821,6 +6021,74 @@ export interface components {
             workflows: components["schemas"]["ModuleRef"][];
         };
         /**
+         * ToolOperation
+         * @description One operation a module serves, as a tools list shows it. Its input schema is read from tools-service by the
+         *     module and this `id` when a screen opens the tool, which keeps an event under the receiver's payload limit.
+         */
+        ToolOperation: {
+            /** Access */
+            access: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Requiresapproval
+             * @default false
+             */
+            requiresApproval: boolean;
+            /** Title */
+            title?: string | null;
+        };
+        /**
+         * ToolPublished
+         * @description A tool module created, or a new version of it published, in tools-service.
+         */
+        ToolPublished: {
+            /** App */
+            app?: string | null;
+            /** Appcardid */
+            appCardId?: string | null;
+            /**
+             * Deleted
+             * @default false
+             */
+            deleted: boolean;
+            /** Id */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "tool.module.published";
+            /** Name */
+            name: string;
+            /** Operations */
+            operations?: components["schemas"]["ToolOperation"][];
+            /** Ownerteam */
+            ownerTeam?: string | null;
+            /** Status */
+            status?: string | null;
+            /** Templatekind */
+            templateKind?: ("builtin" | "plugin" | "custom") | null;
+            /** Title */
+            title?: string | null;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated: boolean;
+            /** Version */
+            version?: string | null;
+        };
+        /**
          * ToolRunIn
          * @description One run of one tool from its page: Mock answers from its mock and reaches nothing, Real is the gateway
          *     call, with every check, in the environment picked.
@@ -5835,7 +6103,7 @@ export interface components {
             environment?: ("test" | "live") | null;
             /** Input */
             input?: {
-                [key: string]: unknown;
+                [key: string]: components["schemas"]["JsonValue"];
             };
             /**
              * Mode
@@ -5870,10 +6138,8 @@ export interface components {
             mockId?: string | null;
             /** Mocked */
             mocked: boolean;
-            /** Output */
-            output: unknown;
-            /** Rawresponse */
-            rawResponse?: unknown;
+            output: components["schemas"]["JsonValue"];
+            rawResponse?: components["schemas"]["JsonValue"];
             /** Reachedhost */
             reachedHost?: string | null;
             request?: components["schemas"]["TestRequestOut"] | null;
@@ -5887,6 +6153,42 @@ export interface components {
             transformError?: string | null;
             /** Wouldpause */
             wouldPause: boolean;
+        };
+        /**
+         * ToolTeamStateChanged
+         * @description One team's state of a module, keyed by `id` (`<via>:<module id>`), so each kind orders its own events.
+         *
+         *     `approval`: the team's grant of a module it does not own, at the module's revision; `deleted` when it ends.
+         *     `added`: what the team turned on of the module and which of those wait for an answer, at the team state's own
+         *     revision (a team turning a tool on changes no module); `deleted` when the app is off for the team. No sender
+         *     writes `added` yet.
+         */
+        ToolTeamStateChanged: {
+            /**
+             * Deleted
+             * @default false
+             */
+            deleted: boolean;
+            /** Expiresat */
+            expiresAt?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "tool.team_state.changed";
+            /** Moduleid */
+            moduleId: string;
+            /** Operations */
+            operations?: string[];
+            /**
+             * Via
+             * @enum {string}
+             */
+            via: "approval" | "added";
+            /** Waits */
+            waits?: string[];
         };
         /** ToolUsedBy */
         ToolUsedBy: {
@@ -5972,7 +6274,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Health"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Health"];
                 };
             };
         };
@@ -6740,6 +7051,23 @@ export interface operations {
         parameters: {
             query?: {
                 include?: "builtin" | null;
+                /** @description all, connected or available: the Apps page's tabs */
+                view?: string;
+                /** @description the cards' appState */
+                appState?: string[] | null;
+                category?: string[] | null;
+                /** @description plugin, connection or builtin */
+                kind?: string[] | null;
+                /** @description the card each named account belongs to */
+                accountId?: string[] | null;
+                /** @description true keeps the cards with a default account, false those without */
+                hasAccount?: ("true" | "false")[] | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: {
                 "x-acting-for"?: string | null;
@@ -6755,7 +7083,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_SystemCard__"];
+                    "application/json": components["schemas"]["Envelope_SystemCardList_"];
                 };
             };
             /** @description Invalid request */
@@ -9734,9 +10062,11 @@ export interface operations {
         parameters: {
             query?: {
                 page?: number;
-                pageSize?: number;
-                search?: string;
-                templateId?: string | null;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -10277,8 +10607,6 @@ export interface operations {
     executions_list_executions: {
         parameters: {
             query?: {
-                page?: number;
-                pageSize?: number;
                 tool?: string | null;
                 moduleId?: string[] | null;
                 thread?: string | null;
@@ -10288,6 +10616,16 @@ export interface operations {
                 link?: string | null;
                 since?: string | null;
                 until?: string | null;
+                /** @description Keeps the calls with these results; counted in `facets.result` */
+                result?: ("Ran" | "Running" | "Refused" | "Failed")[] | null;
+                /** @description Keeps the calls made by these assistants; counted in `facets.assistant` */
+                assistant?: string[] | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -10875,7 +11213,16 @@ export interface operations {
     };
     mcp_links_list_mcp_links: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description the links' team */
+                teamId?: string[] | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -10888,7 +11235,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_list_McpLinkView__"];
+                    "application/json": components["schemas"]["Envelope_ListResult_McpLinkView__"];
                 };
             };
             /** @description Invalid request */
@@ -12141,11 +12488,15 @@ export interface operations {
     secrets_list_secrets: {
         parameters: {
             query?: {
-                page?: number | null;
-                pageSize?: number;
-                search?: string;
-                templateId?: string | null;
                 teamId?: string | null;
+                /** @description false keeps the secrets a header may name */
+                readOnly?: ("true" | "false")[] | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -12159,7 +12510,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_Union_list_SecretMeta___SecretList__"];
+                    "application/json": components["schemas"]["Envelope_SecretList_"];
                 };
             };
             /** @description Invalid request */
@@ -13021,16 +13372,20 @@ export interface operations {
     tool_modules_list_modules: {
         parameters: {
             query?: {
-                page?: number;
-                pageSize?: number;
+                /** @description all, needs_approval, expiring, expired, failing or security_review */
                 view?: string;
-                search?: string | null;
-                sortBy?: string | null;
-                sortOrder?: string | null;
+                /** @description http, code or mcp */
                 type?: string[] | null;
+                /** @description read or write */
                 access?: string[] | null;
                 approvalState?: string[] | null;
-                templateId?: string | null;
+                templateId?: string[] | null;
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -13661,10 +14016,14 @@ export interface operations {
     tool_modules_list_grants: {
         parameters: {
             query?: {
+                /** @description active, expiring, requested, expired, ended or all */
                 view?: string;
-                search?: string | null;
                 page?: number;
-                pageSize?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path?: never;
@@ -15157,6 +15516,12 @@ export interface operations {
         parameters: {
             query?: {
                 environment?: "test" | "example";
+                page?: number;
+                pageSize?: number | null;
+                search?: string | null;
+                sortBy?: string | null;
+                sortOrder?: "asc" | "desc";
+                ids?: string[] | null;
             };
             header?: never;
             path: {

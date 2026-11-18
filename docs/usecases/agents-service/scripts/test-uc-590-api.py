@@ -37,6 +37,7 @@ from usecase_harness import (
     bearer,
     check,
     data,
+    every_page,
     finish,
     kb,
     platform,
@@ -77,6 +78,11 @@ def install(c: httpx.Client, tid: str, who: dict[str, str] = OPS, **body: Any) -
 def listed(c: httpx.Client, who: dict[str, str], kind: str | None = None) -> list[dict[str, Any]]:
     r = c.get("/v1/templates", params={"kind": kind} if kind else None, headers=who)
     return list(data(r) or []) if r.status_code == 200 else [{"error": said(r)}]
+
+
+def agent_total(c: httpx.Client) -> int:
+    """How many agents the team has, from the list's total rather than one page of rows."""
+    return int(((data(c.get("/v1/agents", params={"pageSize": 1}, headers=OPS)) or {}).get("pagination") or {})["total"])
 
 
 def plugins(*folders: Path) -> dict[str, str]:
@@ -226,9 +232,9 @@ def main() -> None:
 
         # 11. A model alias nobody serves is refused as on create, and no agent is made.
         api.delete(f"/v1/agents/{fresh_id}", headers=OPS)
-        before = len((data(api.get("/v1/agents", params={"pageSize": 100}, headers=OPS)) or {}).get("data") or [])
+        before = agent_total(api)
         bad = install(api, "case-helper", modelAlias="nobody-serves-this")
-        after = len((data(api.get("/v1/agents", params={"pageSize": 100}, headers=OPS)) or {}).get("data") or [])
+        after = agent_total(api)
         check(
             "11 a model alias nobody serves is refused as on create, and nothing is made",
             bad.status_code == 422 and code(bad) == "unknown_model_alias" and after == before,
@@ -575,8 +581,8 @@ def resource_stories(
     )
     sid = str((data(source) or {}).get("id")) if source.status_code == 201 else None
     synced = knowledge.post(f"/v1/sources/{sid}/sync", headers=kb_ops) if sid else None
-    items = data(knowledge.get(f"/v1/sources/{sid}/items", headers=kb_ops)) or {} if sid else {}
-    titles = sorted(str(i.get("title")) for i in (items.get("data") if isinstance(items, dict) else items) or [])
+    items = every_page(knowledge, f"/v1/sources/{sid}/items", headers=kb_ops) if sid else []
+    titles = sorted(str(i.get("title")) for i in items)
     check(
         "57 the app's knowledge source is added to the team's knowledge base and its sync reads both articles",
         source.status_code == 201

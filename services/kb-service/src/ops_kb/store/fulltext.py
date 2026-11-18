@@ -3,15 +3,42 @@ full-text index on the units yet (kb_0016), so there the lane is not ready and e
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any, Protocol
+from collections.abc import Callable, Mapping, Sequence
+from typing import Protocol, TypedDict
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy import RowMapping
 
-from ops_store import isolation
+from ops_store.store import Store
 
 from .knowledge import ROLE
+
+
+class NarrowedScope(Protocol):
+    """What the lanes read of one base's scope (retrieval.Scope)."""
+
+    @property
+    def collections(self) -> Sequence[str]: ...
+
+    @property
+    def source_ids(self) -> Sequence[str]: ...
+
+    @property
+    def tags_include(self) -> Sequence[str]: ...
+
+    @property
+    def tags_exclude(self) -> Sequence[str]: ...
+
+    @property
+    def include_untagged(self) -> bool: ...
+
+    @property
+    def match(self) -> str: ...
+
+    @property
+    def conditions(self) -> Sequence[tuple[str, str, str]]: ...
+
+    def narrows(self) -> bool: ...
 
 
 class Narrowing(Protocol):
@@ -19,7 +46,7 @@ class Narrowing(Protocol):
     protocol, so the store never imports the retrieval layer above it."""
 
     @property
-    def scopes(self) -> dict[str, Any]: ...
+    def scopes(self) -> Mapping[str, NarrowedScope]: ...
 
     @property
     def collection(self) -> str | None: ...
@@ -34,18 +61,18 @@ MIN_SHARED_TERMS = 2
 TERM_CAP = 6
 
 
-def scope_sql(kb_ids: list[str], how: Narrowing | None) -> tuple[str, dict[str, Any]]:
+def scope_sql(kb_ids: list[str], how: Narrowing | None) -> tuple[str, dict[str, str]]:
     """The SQL each lane adds to keep a base's pieces within its own scope (`Search.scopes`) and the request's
     collection, with its parameters. It reads the aliases both lanes use: `l` the base's link to a source, `s` the
     source, `i` the item and `c` the piece. Tags are the source's; metadata is the piece's, compared as text."""
-    params: dict[str, Any] = {}
+    params: dict[str, str] = {}
 
     def bind(value: str) -> str:
         name = f"sc{len(params)}"
         params[name] = value
         return f":{name}"
 
-    def listed(values: tuple[str, ...] | list[str]) -> str:
+    def listed(values: Sequence[str]) -> str:
         return ", ".join(bind(v) for v in values)
 
     tags, meta = "CAST(s.tags AS jsonb)", "CAST(c.metadata AS jsonb)"
@@ -125,12 +152,58 @@ _SEARCH = """
 OVERFETCH = 4
 
 
-class KeywordLane:
-    """The keyword lane: units holding at least `threshold` of the question's terms, best first, each with its share as
-    `lane_score`."""
+class PieceHit(TypedDict):
+    """The columns both lanes read for a matching unit: its base, its piece and the item and file it comes from."""
 
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+    kb_id: str
+    chunk_id: str
+    item_id: str
+    version: int
+    title: str
+    section: str
+    page: int | None
+    text: str
+    unit_kind: str
+    unit_text: str
+    file_id: str | None
+    url: str | None
+    verified: bool
+
+
+class KeywordHit(PieceHit):
+    """A unit the keyword lane matched: the terms it shares of the question's `total`, its rank, and `lane_score`, the
+    share of the terms it holds."""
+
+    shared: int
+    total: int
+    rank: float
+    lane_score: float
+
+
+def piece_of(r: RowMapping) -> PieceHit:
+    """The piece columns of a result row."""
+    return PieceHit(
+        kb_id=r["kb_id"],
+        chunk_id=r["chunk_id"],
+        item_id=r["item_id"],
+        version=r["version"],
+        title=r["title"],
+        section=r["section"],
+        page=r["page"],
+        text=r["text"],
+        unit_kind=r["unit_kind"],
+        unit_text=r["unit_text"],
+        file_id=r["file_id"],
+        url=r["url"],
+        verified=r["verified"],
+    )
+
+
+class KeywordLane(Store):
+    """The keyword lane: units holding at least `threshold` of the question's terms, best first, each with its share as
+    `lane_score`. As the tenant role, so the team policy keeps another team's chunks out of the search."""
+
+    role = ROLE
 
     def ready(self) -> bool:
         """Whether this database searches the units' text: PostgreSQL alone carries their tsv column."""
@@ -145,7 +218,7 @@ class KeywordLane:
         threshold: float,
         limit: int,
         how: Narrowing | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[KeywordHit]:
         if not kb_ids or not question.strip():
             return []
         scope, scoped = scope_sql(kb_ids, how)
@@ -160,7 +233,15 @@ class KeywordLane:
             "min_shared": MIN_SHARED_TERMS,
             "term_cap": TERM_CAP,
         }
-        # As the tenant role, so the team policy keeps another team's chunks out of the search.
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             rows = (await c.execute(search, params)).mappings().all()
-        return [{**r, "lane_score": float(r["shared"]) / float(min(r["total"], TERM_CAP))} for r in rows]
+        return [
+            KeywordHit(
+                **piece_of(r),
+                shared=r["shared"],
+                total=r["total"],
+                rank=r["rank"],
+                lane_score=float(r["shared"]) / float(min(r["total"], TERM_CAP)),
+            )
+            for r in rows
+        ]

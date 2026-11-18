@@ -193,3 +193,72 @@ forbidden_modules =
 unmatched_ignore_imports_alerting = error
 
 
+
+[importlinter:contract:http-clients-in-their-owners]
+name = httpx only in tools-service, models-service, ops_identity.client and the service client packages
+type = forbidden
+source_modules =
+    ops_access
+    ops_agent_kernel
+    ops_agents
+    ops_checkpointer
+    ops_contracts
+    ops_documents
+    ops_email
+    ops_engine
+    ops_extract
+    ops_files
+    ops_identity
+    ops_ingest
+    ops_kb
+    ops_metering
+    ops_platform
+    ops_policy
+    ops_service_kit
+    ops_signin
+    ops_storage
+    ops_store
+forbidden_modules =
+    httpx
+allow_indirect_imports = True
+unmatched_ignore_imports_alerting = error
+ignore_imports =
+    # The one module that builds the client a service call uses (ServiceClient.for_settings).
+    ops_identity.client -> httpx
+    # The waiting list: every other module that imports httpx today. It only shrinks: a line whose import is gone
+    # fails the run (unmatched_ignore_imports_alerting), and no line is added. Each group is emptied by the step named.
+    # ops_agents: emptied by the agents lane (docs/architecture/migration/lane-agents.md).
+    ops_agents.activities.gateway -> httpx
+    ops_agents.api.acting_for -> httpx
+    ops_agents.api.app -> httpx
+    ops_agents.api.email_trigger -> httpx
+    ops_agents.api.mailbox_gateway -> httpx
+    ops_agents.api.routers.background -> httpx
+    ops_agents.api.step_shapes -> httpx
+    ops_agents.api.worker -> httpx
+    # ops_kb: emptied by the kb lane.
+    ops_kb.__main__ -> httpx
+    ops_kb.ai -> httpx
+    ops_kb.app -> httpx
+    ops_kb.files -> httpx
+    # ops_platform: emptied by the platform lane.
+    ops_platform.__main__ -> httpx
+    ops_platform.api.app -> httpx
+    ops_platform.signin_options -> httpx
+    ops_platform.sso -> httpx
+    # ops_documents: emptied by the pilot.
+    ops_documents.extraction -> httpx
+    # ops_identity: emptied by the components (request transaction and typed boundaries).
+    ops_identity.fastapi -> httpx
+    ops_identity.http -> httpx
+    # ops_service_kit: emptied by the components.
+    ops_service_kit.contract -> httpx
+    ops_service_kit.model_calls -> httpx
+    ops_service_kit.opa_server -> httpx
+    ops_service_kit.public_address -> httpx
+    # ops_email: emptied by the agents lane, which owns mail in and out.
+    ops_email.graph -> httpx
+    ops_email.outbound -> httpx
+    ops_email.providers -> httpx
+    # ops_signin: emptied by the platform lane.
+    ops_signin.oidc -> httpx

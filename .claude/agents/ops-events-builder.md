@@ -1,6 +1,7 @@
 ---
 name: ops-events-builder
 description: Builds one approved change to events, the outbox relay, workers and background loops: outbox rows, subscribers, claims and leases, heartbeats and the workflow runner. Use for any change in ops_store's outbox or background, ops_engine, a service's event_relay or worker entry point.
+model: opus
 ---
 
 You build the part of a change that happens after the request returns: the event that announces a change, the relay
@@ -69,6 +70,19 @@ tables); `LY7` (one owner: extend `Relay`, never copy it); `CF2` (poll intervals
 | `ops-service-builder` | the route that receives the event, or a setting for an interval |
 | `ops-console-builder` | the Background page shows the new loop |
 | `ops-ci-builder` | a per-loop health test that the standards page marks "no check yet" |
+
+## Budget
+
+One component or one card per run. Stop at about 150k tokens or 120 turns, whichever comes first: commit what is
+green, write a three-line hand-over in the last commit body (done, next, what is red), and return. Run only the tests
+the change touches, one heavy run at a time.
+
+## Lessons
+
+Lines added from repeated review findings, one per line, each naming the rule id it guards. A lesson is deleted once a
+check enforces it. Edited only through a reviewed pull request, never by this agent.
+
+- (none yet)
 
 ## Report (at most 10 lines)
 Commits; the events, loops or workers added with their heartbeat keys; the reason for any wider read; tests seen failing

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from ops_access.platform_events import platform_events_router
@@ -20,10 +21,11 @@ from ops_agents.activities.catalog import load_catalog
 from ops_email import UnconfiguredSender
 from ops_service_kit import openapi
 from ops_service_kit.credentials import credential_store
-from ops_service_kit.settings import Settings
+from ops_service_kit.settings import Settings, isolate_from_stack
 from ops_tools.app import create_gateway_app
 from ops_tools.apps import Apps, apps_router
 from ops_tools.auth import Tokens
+from ops_tools.catalog_routes import catalog_router
 from ops_tools.connections.routes import accounts_router
 from ops_tools.connections.service import ConnectionService
 from ops_tools.egress_routes import egress_router
@@ -44,6 +46,7 @@ from ops_tools.secrets import SecretResolver
 from ops_tools.secrets.routes import secrets_router
 from ops_tools.send_policy_routes import send_policy_router
 from ops_tools.store import CallLog
+from ops_tools.store.catalog import ToolCatalog
 from ops_tools.store.connections import ConnectionStore
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.mcp_links import McpLinks
@@ -60,8 +63,12 @@ ALLOWLIST = ROOT / "openapi-untyped.txt"
 REPO_ALLOWLIST = "services/tools-service/openapi-untyped.txt"
 
 
-def document() -> dict[str, Any]:
-    """The app's document; building the app opens no connection, so nothing here needs a database or OPA."""
+# The app is built to read its routes: the fixed dev user, and none of a running stack's addresses.
+isolate_from_stack()
+
+
+def build_app() -> FastAPI:
+    """The app; building it opens no connection, so nothing here needs a database or OPA."""
     settings = Settings()
     engine = create_async_engine(settings.database_url)
     catalog = load_catalog(settings.seed_dir)
@@ -91,10 +98,11 @@ def document() -> dict[str, Any]:
             executions_router(service, directory),
             mailboxes_router(settings, None, None),
             egress_router(EgressStore(engine)),
+            catalog_router(ToolCatalog(engine)),
             expressions_router(),
             secrets_router(secrets),
             send_policy_router(SendPolicies(engine), directory),
-            mcp_links_router(McpLinks(engine), CallLog(engine), ToolRegistry(catalog), directory, None),
+            mcp_links_router(McpLinks(engine), ToolRegistry(catalog), directory, None),
             mocks_router(MockStore(engine), ModuleStore(engine), directory),
             accounts_router(connection_service, directory),
             plugins_router(PluginAccounts(host, connection_service), directory),
@@ -103,7 +111,12 @@ def document() -> dict[str, Any]:
             platform_events_router(member_removed_handlers(connection_service.store, credentials)),
         ),
     )
-    return app.openapi()
+    return app
+
+
+def document() -> dict[str, Any]:
+    """The app's document."""
+    return build_app().openapi()
 
 
 def main() -> int:

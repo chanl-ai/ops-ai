@@ -92,7 +92,7 @@ async def listed(svc: Service, headers: dict[str, str] = OPS) -> list[dict[str, 
 
 
 async def types_of(svc: Service, headers: dict[str, str] = OPS) -> list[str]:
-    return [t["name"] for t in data(await svc.client.get("/v1/document-types", headers=headers))["items"]]
+    return [t["name"] for t in data(await svc.client.get("/v1/document-types", headers=headers))["data"]]
 
 
 async def test_the_list_shows_the_teams_templates_and_which_it_holds(make: Make) -> None:

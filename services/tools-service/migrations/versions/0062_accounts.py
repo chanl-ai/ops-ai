@@ -27,7 +27,14 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import mssql
 
-from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, isolation_ddl, isolation_drop_ddl, mssql_predicates_ddl
+from ops_store.schema import (
+    TEAM_OWNED,
+    TENANT_SCOPED,
+    isolation_ddl,
+    isolation_drop_ddl,
+    mssql_drop_default_ddl,
+    mssql_predicates_ddl,
+)
 
 revision = "tools_0062_accounts"
 down_revision = "tools_0061_app_credentials"
@@ -144,6 +151,10 @@ def upgrade() -> None:
     for table in ("connection_tokens", "oauth_states", "connect_links"):
         op.execute(f"DELETE FROM {table}")
     op.drop_constraint("connection_tokens_pkey", "connection_tokens", type_="primary")
+    # SQL Server refuses to drop a column that holds a default; the helper drops one only if it is there.
+    if dialect == "mssql":
+        for table in ("connection_tokens", "oauth_states", "connect_links"):
+            op.execute(mssql_drop_default_ddl(table, "environment"))
     op.drop_column("connection_tokens", "environment")
     op.create_primary_key("connection_tokens_pkey", "connection_tokens", ["tenant_id", "connection_id", "person_id"])
     op.drop_column("oauth_states", "environment")

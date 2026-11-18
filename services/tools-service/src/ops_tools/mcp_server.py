@@ -42,10 +42,9 @@ from ops_store import isolation
 from .environments import TEST
 from .gateway_calls import MCP, WRITES, Allowed, CallRequest, GatewayCalls, Outcome, Run
 from .mcp_tools import PLATFORM, PlatformTools
-from .modules.directory import Directory, Team
-from .registry import Resolved, ToolRegistry
-from .store.mcp_links import McpLinks
-from .store.modules import Aggregate
+from .modules.directory import Directory, Sees, Team
+from .registry import Resolved, ToolRegistry, platform_operation
+from .store.mcp_links import McpLink, McpLinks
 
 # `/mcp/<team>` is the team's whole address; `/mcp/<team>/<link>` one of its MCP links (store/mcp_links.py).
 _PATH = re.compile(r"^(?:/mcp)?/(?P<team>[^/]+)(?:/(?P<link>[^/]+))?/?$")
@@ -55,9 +54,7 @@ WORKFLOW_PREFIX = "workflow__"
 # Starting a picked workflow's live version: it makes a run, and the workflow's own review steps are its gate, as
 # agents-service decides for a workflow an agent calls (tool_catalog.py, requiresApproval False), so it does not wait
 # as other MCP writes do.
-WORKFLOW_RUN = Resolved(
-    "write", PLATFORM, operation={"name": "start_workflow", "access": "write", "rate_limit_per_min": 30, "draft": True}
-)
+WORKFLOW_RUN = Resolved("write", PLATFORM, operation=platform_operation("start_workflow", "write", 30, draft=True))
 
 
 @dataclass(frozen=True)
@@ -67,7 +64,7 @@ class McpCaller:
     principal: Principal
     team: Team
     # The MCP link the address names: its tools are the only ones listed and run. None on the team's whole address.
-    link: dict[str, Any] | None = None
+    link: McpLink | None = None
 
 
 class McpAdapter:
@@ -162,21 +159,21 @@ class McpAdapter:
         link = f"/{found['link']}" if found["link"] else ""
         return f"{self.public_url}/.well-known/oauth-protected-resource/mcp/{found['team']}{link}"
 
-    async def _link(self, principal: Principal, team_id: str, slug: str) -> dict[str, Any]:
+    async def _link(self, principal: Principal, team_id: str, slug: str) -> McpLink:
         """The link the address names, in the caller's own team (the bearer check above already held them to it)."""
         found = await self.links.by_slug(principal.tenant_id, team_id, slug) if self.links is not None else None
         if found is None:
             raise NotFound(f"This team has no MCP link at {slug}.")
-        if found["paused"]:
+        if found.paused:
             # A paused link is out of service for everyone, as a paused deployment is; not a refusal of this caller.
             raise ServiceUnavailable(
-                f"The MCP link {found['name']} is paused. A team admin can resume it.", code="link_paused"
+                f"The MCP link {found.name} is paused. A team admin can resume it.", code="link_paused"
             )
         return found
 
-    def _sees(self, team: Team) -> Any:
-        def sees(module: Aggregate) -> bool:
-            return self.directory.sees_module(team, module)
+    def _sees(self, team: Team) -> Sees:
+        def sees(m: Any, operation: str | None = None) -> bool:
+            return self.directory.sees_module(team, m, operation)
 
         return sees
 
@@ -211,7 +208,7 @@ class McpAdapter:
             channel=MCP,
             client_name=_assistant(who.principal, ctx),
             operation=(resolved or self.platform.resolved(name), run),
-            link_id=who.link["id"] if who.link else None,
+            link_id=who.link.id if who.link else None,
         )
 
     async def _list_prompts(self, ctx: Any, _params: Any) -> types.ListPromptsResult:
@@ -254,10 +251,10 @@ class McpAdapter:
             )
         name = str(params.name)
         if who.link is not None:
-            picked = {str(t["name"]): t for t in who.link["tools"]}
+            picked = {t.name: t for t in who.link.tools}
             if name not in picked:
                 return _refused_tool(f"{name} is not one of this link's tools.", "not_on_link")
-            if picked[name].get("kind") == "workflow":
+            if picked[name].kind == "workflow":
                 workflow_id = name.removeprefix(WORKFLOW_PREFIX)
                 args = dict(params.arguments or {})
 
@@ -287,40 +284,40 @@ class McpAdapter:
             # A signed-in assistant is named by its client id; what it says about itself is not kept beside it.
             client_name=_assistant(who.principal, ctx),
             sees=self._sees(who.team),
-            link_id=who.link["id"] if who.link else None,
+            link_id=who.link.id if who.link else None,
         )
         return _tool_result(outcome)
 
 
-def _key_reaches(principal: Principal, link: dict[str, Any] | None) -> None:
+def _key_reaches(principal: Principal, link: McpLink | None) -> None:
     """A key a link's Keys tab made (platform-service target `mcp_link`) opens that link only: on the team's whole
     address or another link it is refused as a token for another address is, 401, so a leaked script key reaches one
     link's tools and nothing else."""
     target = principal.key_target or {}
     if target.get("kind") != "mcp_link":
         return
-    if link is None or link["id"] != target.get("id"):
+    if link is None or link.id != target.get("id"):
         raise Unauthorized("This key opens only the MCP link it was made for.", code="key_target")
 
 
-def _link_tools(link: dict[str, Any], rows: list[dict[str, Any]], *, workflows: bool) -> list[types.Tool]:
+def _link_tools(link: McpLink, rows: list[dict[str, Any]], *, workflows: bool) -> list[types.Tool]:
     """The link's picked tools that the team may still run, in the order picked, and its picked workflows when the
     caller may start them (`workflows`). A tool the team can no longer run (its module unpublished or drifted) is left
     out, as the gateway would refuse it; a workflow is left out for a caller agents-service would refuse."""
     by_name = {str(r["name"]): r for r in rows}
     out: list[types.Tool] = []
-    for t in cast(list[dict[str, Any]], link["tools"]):
-        name = str(t["name"])
-        if t.get("kind") == "workflow":
+    for t in link.tools:
+        name = t.name
+        if t.kind == "workflow":
             if not workflows:
                 continue
-            title = str(t.get("title") or name.removeprefix(WORKFLOW_PREFIX))
+            title = t.title or name.removeprefix(WORKFLOW_PREFIX)
             out.append(
                 types.Tool(
                     name=name,
                     # As agents-service's catalog describes the workflow to agents, read when the link was made.
-                    description=str(t.get("description") or f"Start the {title} workflow; returns its run id."),
-                    input_schema=cast(dict[str, Any], t.get("input_schema") or {"type": "object"}),
+                    description=t.description or f"Start the {title} workflow; returns its run id.",
+                    input_schema=dict(t.input_schema or {"type": "object"}),
                     annotations=types.ToolAnnotations(title=title, read_only_hint=False, open_world_hint=True),
                 )
             )
@@ -394,7 +391,7 @@ def _acting_for(settings: Settings, signer: Any) -> ActingForTokens | None:
         return None
     if settings.auth_mode != "platform":
         return ActingForTokens.for_dev(signer, service="tools", audience="agents")
-    internal = settings.platform_internal_url or f"http://127.0.0.1:{settings.platform_internal_port}"
+    internal = settings.endpoint("platform_internal").base
     platform = httpx.AsyncClient(base_url=internal, timeout=10)
     return ActingForTokens.from_platform(
         ServiceClient.for_settings(settings, platform, service="tools", audience="platform")

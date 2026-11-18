@@ -11,6 +11,8 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Any, cast
 
+from pydantic import JsonValue
+
 from ..environments import LIVE
 
 Row = dict[str, Any]
@@ -166,7 +168,7 @@ def ref_of(conn: dict[str, Any], now: datetime) -> dict[str, Any]:
     return out
 
 
-def module_auth(conn: dict[str, Any] | None) -> dict[str, str]:
+def module_auth(conn: dict[str, Any] | None) -> dict[str, JsonValue]:
     return {"kind": str(conn["auth_kind"]) if conn else "none"}
 
 

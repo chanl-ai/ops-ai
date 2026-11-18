@@ -13,7 +13,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, TypedDict, cast
 
 from ops_access import tool_waits
 from ops_agent_kernel.types import Access, ToolGrant
@@ -81,7 +81,8 @@ class ToolDirectory(Protocol):
 async def grants_for(directory: ToolDirectory, names: list[str]) -> list[ToolGrant]:
     """Grants for the tool names an agent holds that the registry still offers; `workflow:` names are offered by the
     workflow runner, and a name the registry no longer has (hidden, unpublished, drifted) is not handed to the model."""
-    wanted = [n for n in names if not n.startswith(("workflow:", "agent:"))]
+    # One grant per name: the model's toolset refuses two tools of one name, so a repeated grant fails the turn.
+    wanted = [n for n in dict.fromkeys(names) if not n.startswith(("workflow:", "agent:"))]
     if not wanted:
         return []
     by_name = {o.name: o for o in await directory.operations()}
@@ -201,6 +202,17 @@ class AppStates(Protocol):
         ...
 
 
+# The largest page tools-service's lists answer (OPS_PAGE_SIZE_MAX).
+APP_PAGE = 50
+# One card of tools-service's Apps list, as `GET /v1/apps` answers it.
+AppCard = dict[str, Any]
+
+
+class _CardPage(TypedDict):
+    data: list[AppCard]
+    pagination: dict[str, int | bool]
+
+
 class ToolsApps:
     """The team's apps from tools-service's `GET /v1/apps`, built-in ones included, for the Tools page: which app a
     tool set belongs to and whether it is connected. Asked for the person who lists the tools (acting for them), so an
@@ -210,18 +222,27 @@ class ToolsApps:
         self.tools = tools
         self.people = people
 
-    async def cards(self, person: str | None, team: str | None) -> list[dict[str, Any]]:
+    async def cards(self, person: str | None, team: str | None) -> list[AppCard]:
         team = team or current_team()
         if not team:
             return []
         headers: dict[str, str] = {}
         if person and self.people is not None:
             headers[ACTING_FOR_HEADER] = await self.people.token(tenant_id=current_tenant(), email=person, team_id=team)
+        rows: list[AppCard] = []
+        page = 1
         try:
-            rows = await self.tools.get("/v1/apps", params={"include": "builtin"}, headers=headers, team=team)
+            # Every page: each tool set is matched to its app, and the list holds a page of the cards at a time.
+            while True:
+                params = {"include": "builtin", "page": page, "pageSize": APP_PAGE}
+                body = cast(_CardPage, await self.tools.get("/v1/apps", params=params, headers=headers, team=team))
+                rows += body["data"]
+                if not body["pagination"]["hasNext"]:
+                    break
+                page += 1
         except (ServiceCallError, ServiceUnreachable) as e:
             raise ToolsUnavailable("The tools service cannot be reached, so the tools' apps are unknown.") from e
-        return cast(list[dict[str, Any]], rows)
+        return rows
 
     async def accounts(
         self, person: str | None, team: str | None, app_id: str, *, usable: bool = False, name: str | None = None

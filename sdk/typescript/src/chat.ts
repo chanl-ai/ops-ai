@@ -7,7 +7,7 @@
  * whole text so far), `tool_end`, `widget`, `error` and `done` (the stored message). `say` waits for the whole reply
  * and returns its events; `stream` yields them as they arrive.
  */
-import { type CallArgs, type Operation, pageItems, type Transport } from './transport.js';
+import { type CallArgs, type Operation, PAGE_MAX, eachRow, pageItems, type Transport } from './transport.js';
 
 type Obj = Record<string, any>;
 
@@ -103,6 +103,13 @@ export class Chat {
   /** One page of the person's conversations, newest first (`test: true` lists the agent Test panel's). */
   async threads(query: Record<string, unknown> = {}): Promise<Obj[]> {
     return pageItems(await this.call('threads', { query }))[0] as Obj[];
+  }
+
+  /** Every conversation `threads` would list, page after page (50 rows a page). */
+  async everyThread(query: Record<string, unknown> = {}): Promise<Obj[]> {
+    const rows: Obj[] = [];
+    for await (const row of eachRow((q) => this.call('threads', { query: q }), { pageSize: PAGE_MAX, ...query })) rows.push(row);
+    return rows;
   }
 
   start(agent?: string, options: { kbIds?: string[]; test?: boolean; title?: string } = {}): Promise<Obj> {

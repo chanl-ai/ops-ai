@@ -23,6 +23,7 @@ from usecase_harness import (
     agents,
     check,
     data,
+    every_page,
     fake_openai,
     finish,
     kb,
@@ -57,7 +58,7 @@ RULES = {
 
 
 def items(k: Any, source_id: str) -> dict[str, dict[str, Any]]:
-    return {i["path"]: i for i in data(k.get(f"/v1/sources/{source_id}/items", params={"pageSize": 100}))["data"]}
+    return {i["path"]: i for i in every_page(k, f"/v1/sources/{source_id}/items")}
 
 
 def ask(k: Any, kb_id: str, question: str) -> dict[str, Any]:
@@ -106,7 +107,7 @@ def main() -> None:
             k.post("/v1/sources", json={"type": "tool", "name": f"New site {RUN}", "sync": True, "config": config})
         )
         refused = k.post(f"/v1/sources/{waiting['id']}/sync")
-        early = k.post("/v1/sources/preview", json={"type": "tool", "config": config})
+        early = k.post("/v1/sources/preview", json={"config": config})
         time.sleep(1)
         check(
             "0a a new site waits for an admin: the source names its host, sync and preview say why, nothing is fetched",
@@ -139,7 +140,7 @@ def main() -> None:
 
         # Story 1: preview, nothing stored.
         before = data(k.get("/v1/sources"))["pagination"]["total"]
-        asked = k.post("/v1/sources/preview", json={"type": "tool", "config": config})
+        asked = k.post("/v1/sources/preview", json={"config": config})
         if asked.status_code != 200:
             raise SystemExit(f"FAIL 1 the preview answered {asked.status_code}: {asked.text[:600]}")
         preview = data(asked)

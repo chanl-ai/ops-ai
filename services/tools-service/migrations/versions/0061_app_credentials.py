@@ -41,6 +41,11 @@ def _marked() -> sa.Table:
     )
 
 
+def _keys() -> sa.Table:
+    """plugin_app_keys as 0055 isolated it: by tenant, since a key is the account's and no team's."""
+    return sa.Table("plugin_app_keys", sa.MetaData(), sa.Column("tenant_id", sa.String(64)), info=TENANT_SCOPED)
+
+
 def _column_type(column: sa.Column[Any]) -> str:
     return column.type.compile(dialect=mssql.dialect())
 
@@ -107,6 +112,10 @@ def upgrade() -> None:
             "secrets = (secrets::jsonb - 'clientSecret')::json "
             "WHERE json_extract_path_text(settings, 'clientId') IS NOT NULL"
         )
+    # SQL Server refuses to drop a table its security policy (0055's) still names.
+    if dialect == "mssql":
+        for statement in isolation_drop_ddl(_keys(), dialect):
+            op.execute(statement)
     op.drop_table("plugin_app_keys")
     table = _marked()
     if dialect == "postgresql":
@@ -142,5 +151,11 @@ def downgrade() -> None:
         sa.Column("updated_by", sa.String(320), nullable=False),
         sa.Column("updated_at", sa.String(32), nullable=False),
     )
+    # The table comes back isolated by tenant, as 0055 left it.
+    if dialect == "postgresql":
+        op.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON plugin_app_keys TO {ROLE}")
+    if dialect in ("postgresql", "mssql"):
+        for statement in isolation_ddl(_keys(), dialect, kind="tenant", chain=CHAIN):
+            op.execute(statement)
     op.drop_column("connection_environments", "credential_id")
     op.drop_table("app_credentials")

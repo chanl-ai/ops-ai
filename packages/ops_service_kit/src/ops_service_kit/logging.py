@@ -15,11 +15,13 @@ imports nothing above it. An OTLP exporter can later attach to the same root log
 
 from __future__ import annotations
 
+import io
 import json
 import logging as _logging
 import re
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Generator, Mapping
+from contextlib import contextmanager
 from typing import Any, TextIO
 
 import structlog
@@ -187,3 +189,18 @@ def configure_logging(service: str, *, level: int = _logging.INFO, stream: TextI
     root.setLevel(level)
     _logging.captureWarnings(True)
     quiet_request_logs()
+
+
+@contextmanager
+def captured_logging(service: str) -> Generator[io.StringIO]:
+    """For a test that reads log lines: every record as a JSON line in the stream, then the root logger as it was."""
+    stream = io.StringIO()
+    root = _logging.getLogger()
+    level = root.level
+    configure_logging(service=service, stream=stream)
+    try:
+        yield stream
+    finally:
+        root.setLevel(level)
+        for handler in [h for h in root.handlers if getattr(h, "stream", None) is stream]:
+            root.removeHandler(handler)

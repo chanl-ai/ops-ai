@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from ops_agents.api.app import create_app
 from ops_agents.api.model_aliases import HttpModelAliases, ModelsUnavailable, chat_aliases
 from ops_agents.store.base import metadata
+from ops_agents.store.template_copies import TemplateCopies
 from ops_engine.store import metadata as engine_metadata
 from ops_identity import ServiceClient, dev_service_signer
 from ops_service_kit.settings import Settings
@@ -185,6 +186,24 @@ async def test_restore_copies_into_a_new_draft_and_delete_waits_for_its_workflow
     assert "agent:ag_fraud" not in {g["name"] for g in (await client.get("/v1/graphs")).json()["data"]}
 
 
+async def test_a_delete_that_fails_part_way_keeps_the_agent(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The delete removes the agent and stops its copies counting in one transaction: when the second write fails the
+    agent is still there to delete again, never half gone."""
+    created = await _create(client)
+
+    async def fails(*_: Any) -> None:
+        raise RuntimeError("the copies table is unavailable")
+
+    monkeypatch.setattr(TemplateCopies, "removed_record", fails)
+    failed = await client.delete(f"/v1/agents/{created['id']}")
+    assert failed.status_code == 500, failed.text
+    monkeypatch.undo()
+    assert (await _agent(client, created["id"]))["id"] == created["id"]
+    assert (await client.delete(f"/v1/agents/{created['id']}")).status_code == 204
+
+
 async def test_test_turn_stops_at_the_gate_on_a_write_tool(client: AsyncClient) -> None:
     r = await client.post(f"/v1/agents/{FRAUD}/test", json={"message": "Hold wire W-88213 for 24 hours"})
     assert r.status_code == 200, r.text
@@ -221,7 +240,8 @@ def _models_service() -> httpx.AsyncClient:
 
     def answer(request: httpx.Request) -> httpx.Response:
         rows = [{"name": "bank-standard", "kind": "chat"}, {"name": "bank-embed", "kind": "embedding"}]
-        return httpx.Response(200, json={"success": True, "data": rows})
+        paging = {"page": 1, "pageSize": 20, "total": 2, "totalPages": 1, "hasNext": False, "hasPrev": False}
+        return httpx.Response(200, json={"success": True, "data": {"data": rows, "pagination": paging, "facets": {}}})
 
     return httpx.AsyncClient(transport=httpx.MockTransport(answer), base_url="http://models")
 
@@ -291,10 +311,18 @@ async def test_the_alias_picker_lists_exactly_what_publish_accepts(client: Async
 
 
 async def test_models_service_aliases_are_its_chat_aliases_and_an_outage_is_503() -> None:
+    pages = {
+        "1": [{"name": "bank-embed", "kind": "embedding"}],
+        "2": [{"name": "bank-standard", "kind": "chat"}],
+    }
+
     def answer(request: httpx.Request) -> httpx.Response:
         assert request.headers["Authorization"].startswith("Bearer ")
-        rows = [{"name": "bank-standard", "kind": "chat"}, {"name": "bank-embed", "kind": "embedding"}]
-        return httpx.Response(200, json={"success": True, "data": rows})
+        page = request.url.params.get("page", "1")
+        paging = {"page": int(page), "pageSize": 1, "total": 2, "totalPages": 2}
+        paging |= {"hasNext": page == "1", "hasPrev": page == "2"}
+        listed = {"data": pages[page], "pagination": paging, "facets": {}}
+        return httpx.Response(200, json={"success": True, "data": listed})
 
     def models(handler: Any) -> ServiceClient:
         http = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://m")
@@ -314,3 +342,43 @@ async def test_models_service_aliases_are_its_chat_aliases_and_an_outage_is_503(
 async def test_the_instructions_editor_offers_only_placeholders_a_run_fills(client: AsyncClient) -> None:
     """A placeholder no turn fills fails the turn (ops_agent_kernel/context.py), so the editor lists none."""
     assert _ok(await client.get("/v1/prompts/variables")) == []
+
+
+# (method, path, body, the outside calls the route makes): tools-service's directory for stale grants (`_directory`),
+# platform-service for the team's name and its publish policy (`team_document`), and the model.
+ASKS: list[tuple[str, str, Any, set[str]]] = [
+    ("get", "/v1/agents", None, {"_directory"}),
+    ("post", "/v1/agents", {"name": "Held check", "role": "Checks"}, {"_directory"}),
+    ("get", f"/v1/agents/{FRAUD}", None, {"_directory", "team_name"}),
+    ("get", "/v1/agents/{new}/publish-preview?version=1", None, {"team_document"}),
+    ("post", f"/v1/agents/{FRAUD}/test", {"message": "What is the payee rule?"}, {"one_test_turn"}),
+]
+
+
+async def test_no_connection_is_held_while_an_agent_route_asks_another_party(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The routes left off the request transaction ask another service or the model between their reads: none holds a
+    connection while it answers."""
+    from ops_agents.api.routers import agents  # noqa: PLC0415 - the module whose seams are watched
+
+    from .test_workflow_routes import _held_by_request  # pyright: ignore[reportPrivateUsage]  # noqa: PLC0415
+
+    new = (await _create(client, "Preview check"))["id"]
+    seen: list[tuple[str, int, dict[str, set[int]]]] = []
+    with _held_by_request() as held:
+        asked: dict[str, set[int]] = {}
+        for name in ("_directory", "team_name", "team_document", "one_test_turn"):
+            real = getattr(agents, name)
+
+            async def watched(*args: Any, _name: str = name, _real: Any = real, **kwargs: Any) -> Any:
+                asked.setdefault(_name, set()).add(held())
+                return await _real(*args, **kwargs)
+
+            monkeypatch.setattr(agents, name, watched)
+        for method, path, body, _ in ASKS:
+            asked.clear()
+            url = path.replace("{new}", new)
+            r = await client.request(method, url, **({} if body is None else {"json": body}))
+            seen.append((path, r.status_code // 100, dict(asked)))
+    assert seen == [(p, 2, {n: {0} for n in names}) for _, p, _, names in ASKS], seen

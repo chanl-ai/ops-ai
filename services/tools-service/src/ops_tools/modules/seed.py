@@ -10,8 +10,8 @@ agents-service's Reviews.
 
 from __future__ import annotations
 
+import json
 import re
-from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta
 from typing import Any, Literal, cast
 
@@ -22,7 +22,23 @@ from ops_store.team_scope import acting_as
 from ..connections.records import auth_of, connection_base, seed_rows
 from ..store.connections import ConnectionStore
 from ..store.egress import EgressStore
-from ..store.modules import Aggregate, ModuleStore, StaleModuleError
+from ..store.modules import (
+    Aggregate,
+    Approval,
+    InputField,
+    Module,
+    ModuleColumns,
+    ModuleStore,
+    Operation,
+    StaleModuleError,
+    StoredOperation,
+    TitleOf,
+    Version,
+    approval_defaults,
+    operation_defaults,
+    restored_operation,
+    version_defaults,
+)
 
 # The dev seed writes every team's connections into one tenant, each in its own team.
 SEED = "seed"
@@ -149,7 +165,7 @@ KNOWLEDGE_TOOL_NAMES = tuple(str(t["name"]) for t in KNOWLEDGE_TOOLS)
 # The platform's own reads run in process: files, documents and knowledge.
 READ_TOOLS = [*FILE_TOOLS, *KNOWLEDGE_TOOLS]
 # What the Runtime sends for send_reply (ops_agents.activities.gateway); the gateway validates against it.
-SEND_REPLY_INPUT = [
+SEND_REPLY_INPUT: list[InputField] = [
     {"name": "to", "type": "string", "required": True},
     {"name": "subject", "type": "string", "required": True},
     {"name": "body", "type": "string", "required": True},
@@ -166,13 +182,13 @@ SAMPLE_ACTOR = "Sample data"
 SAMPLE_NOTE = "Called by the sample tool sets"
 
 
-def fields_of(schema: dict[str, Any]) -> list[dict[str, Any]]:
+def fields_of(schema: dict[str, Any]) -> list[InputField]:
     """A JSON Schema object's top-level properties as the console's SchemaField list."""
     required: set[str] = set(schema.get("required") or [])
     props: dict[str, dict[str, Any]] = schema.get("properties") or {}
-    out: list[dict[str, Any]] = []
+    out: list[InputField] = []
     for name, p in props.items():
-        field: dict[str, Any] = {"name": name, "type": p.get("type", "string"), "required": name in required}
+        field: InputField = {"name": name, "type": p.get("type", "string"), "required": name in required}
         if p.get("description"):
             field["description"] = p["description"]
         if p.get("enum"):
@@ -193,7 +209,7 @@ def team_of(owner_group: str | None, teams: list[dict[str, Any]]) -> str:
     return next(t["id"] for t in teams if t["scope"] == "all")
 
 
-def kind_of(module: dict[str, Any]) -> str:
+def kind_of(module: Module) -> str:
     """What a module calls, read from its tools: `mcp` an MCP server, `code` functions on runner-service or the
     platform's own tools, `http` an app's address (also a module with no tools yet). Only http and mcp have an address,
     which lives on their connection."""
@@ -238,6 +254,8 @@ def blank(
         "owner_contacts": [me],
         "auth": {"kind": "none"},
         "timeout_ms": 8000,
+        # The column's default, which a module that never chose one reads as (`sign_in_of`).
+        "sign_in": "person_or_team",
         "egress_hosts": [],
         "data_classification": "confidential",
         "catalog_id": None,
@@ -249,6 +267,8 @@ def blank(
         "version": "0.1.0",
         "pending": [],
         "baseline": None,
+        # `put` sets the revision it writes.
+        "revision": 0,
         "created_at": at,
         "updated_at": at,
         "operations": [],
@@ -264,6 +284,7 @@ def blank(
                 "changes": [],
                 "pinned_by": [],
                 "reachability": [],
+                **version_defaults(),
             }
         ],
         "approvals": [],
@@ -284,8 +305,9 @@ def runtime_module(
         at=at,
         input={"displayName": "Runtime demo tools", "name": "runtime-demo-tools", "type": "code"},
     )
-    ops = [
+    ops: list[Operation] = [
         {
+            **operation_defaults(),
             "id": f"{RUNTIME_MODULE}_op{i + 1}",
             "tool_id": f"tl_{t['name']}",
             "name": t["name"],
@@ -303,15 +325,22 @@ def runtime_module(
             "rate_limit_per_min": 60,
             # A declared wait answers a reviewer; otherwise the app and team decide.
             "requires_approval": t.get("requires_approval"),
-            **waits_mode(t.get("requires_approval"), t["access"]),
+            "approval_mode": waits_mode(t.get("requires_approval"), t["access"]),
             "approvers": 1,
             "amount_max": None,
             "stub": {"ok": True},
         }
         for i, t in enumerate(catalog)
     ]
-    version = {**m["versions"][0], "id": f"{RUNTIME_MODULE}_v1.0.0", "version": "1.0.0", "major": 1}
-    version.update(status="published", published_at=at, note="The Runtime's demo tools")
+    version: Version = {
+        **m["versions"][0],
+        "id": f"{RUNTIME_MODULE}_v1.0.0",
+        "version": "1.0.0",
+        "major": 1,
+        "status": "published",
+        "published_at": at,
+        "note": "The Runtime's demo tools",
+    }
     return {
         **m,
         "status": "published",
@@ -370,9 +399,7 @@ _BUILT_IN_TITLES: dict[str, str] = {op: t for app in BUILT_IN for op, t in app["
 _BUILT_IN_MODULES = {str(app["module"]) for app in BUILT_IN}
 
 
-def tool_title(
-    module: Mapping[str, Any], operation: str, plugin_title: Callable[[Mapping[str, Any], str], str | None] | None
-) -> str | None:
+def tool_title(module: ModuleColumns, operation: str, plugin_title: TitleOf | None) -> str | None:
     """What people see in place of a tool's name: a built-in app's title from BUILT_IN, a plugin tool's from its
     manifest (`plugin_title`, the plugin host's), and for a team's own tool its name in words (`open_case` is "Open
     case"), so no list shows a bare code name where the rest show titles."""
@@ -381,6 +408,11 @@ def tool_title(
         return title
     named = plugin_title(module, operation) if plugin_title is not None else None
     return named or name_in_words(operation)
+
+
+def catalog_titles(plugin_title: TitleOf | None) -> TitleOf:
+    """`tool_title` with the plugin host's manifest titles, for the store's catalogue events (`ModuleStore.titles`)."""
+    return lambda module, operation: tool_title(module, operation, plugin_title)
 
 
 def name_in_words(name: str) -> str:
@@ -394,20 +426,21 @@ def template_of(app: dict[str, Any]) -> str:
     return f"builtin:{app['id']}"
 
 
-def declared_mode(declared: bool | None) -> dict[str, str]:
+def declared_mode(declared: bool | None) -> str | None:
     """The operation's own approval answer for a seed that says whether the tool waits (true: a reviewer; false: runs
-    at once); nothing for a seed that says neither, so its app and team decide."""
-    return {} if declared is None else {"approval_mode": "reviewer" if declared else "none"}
+    at once); none for a seed that says neither, so its app and team decide."""
+    return None if declared is None else "reviewer" if declared else "none"
 
 
-def waits_mode(declared: bool | None, access: str) -> dict[str, str]:
+def waits_mode(declared: bool | None, access: str) -> str | None:
     """A seeded write that declares a wait answers a reviewer, as migration 0074 gave a stored one; a write that
     declares it runs at once, or nothing, is not set, so its app and team decide. A read has no answer."""
-    return {"approval_mode": "reviewer"} if access == "write" and declared is True else {}
+    return "reviewer" if access == "write" and declared is True else None
 
 
-def _local_op(module_id: str, n: int, name: str) -> dict[str, Any]:
-    """Operation `name` of the platform's tools, run in process (`local`), at position n of a module."""
+def _local_fields(module_id: str, n: int, name: str) -> StoredOperation:
+    """The fields the seed gives operation `name` of the platform's tools, run in process (`local`), at position n of
+    a module, in the order a published copy of it holds them; `_local_op` fills the rest with the defaults."""
     declared = {str(t["name"]): t for t in [*PLATFORM_TOOLS, *READ_TOOLS]}
     if name in SENDS:
         (description, approval), access, fields = SENDS[name], "write", SEND_REPLY_INPUT
@@ -415,7 +448,7 @@ def _local_op(module_id: str, n: int, name: str) -> dict[str, Any]:
         t = declared[name]
         description, access = str(t["description"]), str(t["access"])
         approval, fields = bool(t["requires_approval"]), fields_of(t["input_schema"])
-    return {
+    out: StoredOperation = {
         "id": f"{module_id}_op{n}",
         "tool_id": f"tl_{name}",
         "name": name,
@@ -432,14 +465,22 @@ def _local_op(module_id: str, n: int, name: str) -> dict[str, Any]:
         "binding": None,
         "rate_limit_per_min": 60,
         "requires_approval": approval,
+    }
+    if name in SENDS:
         # Spelled out so the tool's own answer holds whatever the team's default: the acknowledgement always leaves at
         # once and a reply always waits for a reviewer.
-        **(declared_mode(approval) if name in SENDS else {}),
-        "approvers": 1,
-        "amount_max": None,
-        "stub": {"ok": True},
-        **({"timeout_ms": declared[name]["timeout_ms"]} if declared.get(name, {}).get("timeout_ms") else {}),
-    }
+        out["approval_mode"] = declared_mode(approval)
+    out["approvers"] = 1
+    out["amount_max"] = None
+    out["stub"] = {"ok": True}
+    if timeout := declared.get(name, {}).get("timeout_ms"):
+        out["timeout_ms"] = timeout
+    return out
+
+
+def _local_op(fields: StoredOperation) -> Operation:
+    """An operation of the platform's tools from the fields the seed gives it, checked as a stored one is."""
+    return restored_operation(fields)
 
 
 def built_in_module(app: dict[str, Any], names: list[str], *, tenant_id: str, team_id: str, at: datetime) -> Aggregate:
@@ -455,8 +496,15 @@ def built_in_module(app: dict[str, Any], names: list[str], *, tenant_id: str, te
         at=at,
         input={"displayName": app["name"], "name": f"builtin-{app['id']}", "type": "code"},
     )
-    version = {**m["versions"][0], "id": f"{module_id}_v1.0.0", "version": "1.0.0", "major": 1}
-    version.update(status="published", published_at=at, note="The platform's built-in tools")
+    version: Version = {
+        **m["versions"][0],
+        "id": f"{module_id}_v1.0.0",
+        "version": "1.0.0",
+        "major": 1,
+        "status": "published",
+        "published_at": at,
+        "note": "The platform's built-in tools",
+    }
     return {
         **m,
         "status": "published",
@@ -465,7 +513,7 @@ def built_in_module(app: dict[str, Any], names: list[str], *, tenant_id: str, te
         "version": "1.0.0",
         "template_id": template_of(app),
         "protection": "system",
-        "operations": [_local_op(module_id, i + 1, n) for i, n in enumerate(names)],
+        "operations": [_local_op(_local_fields(module_id, i + 1, n)) for i, n in enumerate(names)],
         "versions": [version],
     }
 
@@ -482,9 +530,16 @@ def platform_module(names: list[str], *, tenant_id: str, at: datetime) -> Aggreg
         at=at,
         input={"displayName": "Platform tools", "name": "platform-tools", "type": "code"},
     )
-    ops = [_local_op(PLATFORM_MODULE, i + 1, name) for i, name in enumerate(names)]
-    version = {**m["versions"][0], "id": f"{PLATFORM_MODULE}_v1.0.0", "version": "1.0.0", "major": 1}
-    version.update(status="published", published_at=at, note="The platform's workflow tools")
+    ops = [_local_op(_local_fields(PLATFORM_MODULE, i + 1, name)) for i, name in enumerate(names)]
+    version: Version = {
+        **m["versions"][0],
+        "id": f"{PLATFORM_MODULE}_v1.0.0",
+        "version": "1.0.0",
+        "major": 1,
+        "status": "published",
+        "published_at": at,
+        "note": "The platform's workflow tools",
+    }
     return {
         **m,
         "status": "published",
@@ -512,17 +567,18 @@ async def ensure_platform_tools(
     if existing is None:
         module = platform_module(missing, tenant_id=tenant_id, at=at)
         return "written" if await store.insert_if_missing(module) else "present"
-    added = [
-        {**o, "id": f"{existing['id']}_{o['name']}"}
-        for o in platform_module(missing, tenant_id=tenant_id, at=at)["operations"]
+    fields: list[StoredOperation] = [
+        {**_local_fields(PLATFORM_MODULE, i + 1, n), "id": f"{existing['id']}_{n}"} for i, n in enumerate(missing)
     ]
+    added = [_local_op(f) for f in fields]
     baseline = existing.get("baseline")
     try:
         await store.put(
             {
                 **existing,
                 "operations": [*existing["operations"], *added],
-                "baseline": None if baseline is None else [*baseline, *added],
+                # The published copy holds the seed's fields, as JSON.
+                "baseline": None if baseline is None else [*baseline, *json.loads(json.dumps(fields))],
             },
             expected_revision=existing["revision"],
             seeded=existing["revision"] == 0,
@@ -572,12 +628,13 @@ def aggregates(
     for s in seed["modules"]:
         status = s.get("status") or "published"
         last = s["versions"][-1]
-        ops: list[dict[str, Any]] = []
+        ops: list[Operation] = []
         for i, o in enumerate(s["operations"]):
-            base = tools.get(o["name"]) or o.get("tool") or {"description": o["name"], "access": "read"}
+            base: dict[str, Any] = tools.get(o["name"]) or o.get("tool") or {"description": o["name"], "access": "read"}
             access = base["access"]
             ops.append(
                 {
+                    **operation_defaults(),
                     "id": f"{s['id']}_op{i + 1}",
                     "tool_id": f"tl_{o['name']}",
                     "name": o["name"],
@@ -596,21 +653,22 @@ def aggregates(
                     "rate_limit_per_min": o.get("rate") or 60,
                     # A declared wait answers a reviewer; otherwise the app and team decide.
                     "requires_approval": o.get("requiresApproval"),
-                    **waits_mode(o.get("requiresApproval"), access),
+                    "approval_mode": waits_mode(o.get("requiresApproval"), access),
                     "approvers": int(base.get("approvers") or 1),
                     # Who approves a write when not the module's own team (Fraud Operations decides a wire hold).
-                    **({"approver_team": base["approverTeam"]} if base.get("approverTeam") else {}),
+                    "approver_team": base.get("approverTeam") or None,
                     "amount_max": o.get("amountMax"),
                     "stub": o.get("stub") or {"ok": True},
                 }
             )
-        versions: list[dict[str, Any]] = []
+        versions: list[Version] = []
         for i, v in enumerate(s["versions"]):
             is_last = i == len(s["versions"]) - 1
             in_review = is_last and status == "in_review"
             pinned: list[str] = v.get("pinnedBy") or []
             versions.append(
                 {
+                    **version_defaults(),
                     "id": f"{s['id']}_v{v['version']}",
                     "version": v["version"],
                     "major": major_of(v["version"]),
@@ -636,15 +694,18 @@ def aggregates(
         # there on the publisher's behalf and the version takes the id Reviews names.
         if versions[-1]["status"] == "in_review":
             mj = major_of(last["version"])
-            versions[-1].update(review_id=f"TMP-{s['id']}_rev{mj}", requested_at=ago(last["daysAgo"] + 3))
+            versions[-1]["review_id"] = f"TMP-{s['id']}_rev{mj}"
+            versions[-1]["requested_at"] = ago(last["daysAgo"] + 3)
         elif s.get("findings"):
-            versions[-1].update(reviewer=s.get("reviewer"), finding="; ".join(s["findings"]))
-        approvals: list[dict[str, Any]] = []
+            versions[-1]["reviewer"] = s.get("reviewer")
+            versions[-1]["finding"] = "; ".join(s["findings"])
+        approvals: list[Approval] = []
         for i, a in enumerate(s["approvals"]):
             requested = a.get("status") == "requested"
             age = a.get("ageDays") if a.get("ageDays") is not None else 30 + ((i * 37) % 120)
             approvals.append(
                 {
+                    **approval_defaults(),
                     "id": f"{s['id']}_apr{i + 1}",
                     "workflow_id": a["workflowId"],
                     "workflow_name": a.get("workflowName") or workflows.get(a["workflowId"], a["workflowId"]),
@@ -683,11 +744,15 @@ def aggregates(
                 "data_classification": s["dataClassification"],
                 "catalog_id": s.get("catalogId"),
                 "connection_id": seed["moduleConnection"].get(s["id"]),
+                "sign_in": "person_or_team",
+                "template_id": None,
+                "protection": None,
                 "reachable": s.get("reachable") is not False,
                 "drift": bool(s.get("drift")),
                 "version": last["version"],
                 "pending": [],
                 "baseline": None,
+                "revision": 0,
                 "created_at": ago(s["versions"][0]["daysAgo"]),
                 "updated_at": ago(last["daysAgo"]),
                 "operations": ops,
@@ -750,7 +815,9 @@ async def load(
             held = await connections.get(tenant_id, str(made["id"]))
             if agg.get("endpoint") and held is not None and not connection_base(held):
                 # The demo's integrations hold no keys; the account holds the module's address.
-                await connections.set_base(tenant_id, str(made["id"]), str(agg["endpoint"]), actor="dev seed", at=now)
+                await connections.set_base(
+                    tenant_id, str(made["id"]), str(agg.get("endpoint")), actor="dev seed", at=now
+                )
         built_in = {str(app["module"]) for app in BUILT_IN}
         for agg in mods:
             if agg.get("connection_id") or agg["team_id"] is None or not agg.get("endpoint"):
@@ -761,30 +828,35 @@ async def load(
             # Its id is the one tools_0056 gives an existing module's, so a dev database it already ran on keeps one.
             made = open_connection(
                 tenant_id=tenant_id, team_id=agg["team_id"], connection_id=f"con_{agg['id']}",
-                name=agg["display_name"], base=str(agg["endpoint"]), me="dev seed", at=now,
+                name=agg["display_name"], base=str(agg.get("endpoint")), me="dev seed", at=now,
             )  # fmt: skip
             await connections.create(made, actor="dev seed", at=now)
             agg["connection_id"] = made["id"]
-    # A module may only name listed hosts, so the seed lists the hosts its modules call first.
-    egress = EgressStore(store.engine)
-    # The allow-list's Added by and Note columns are read by people, so the seed's rows say what they are in words
-    # a person uses; a database seeded with the older wording is reworded in place.
-    for host in dict.fromkeys(h for m in mods for h in m["egress_hosts"]):
-        await egress.add(tenant_id, "host", host, actor=SAMPLE_ACTOR, note=SAMPLE_NOTE, at=now)
-    await egress.reword(tenant_id, was=("dev seed", "called by a seeded module"), now=(SAMPLE_ACTOR, SAMPLE_NOTE))
-    for agg in mods:
-        # Each module is written in its own team so a leftover acting team cannot hide it or raise NoTenantError.
-        with acting_as(agg["team_id"]):
-            stored = await store.get(tenant_id, agg["id"])
-            if stored is None:
-                await store.put(agg, expected_revision=None, seeded=True)
-                added += 1
-            elif stored["revision"] == 0:
-                await store.put(agg, expected_revision=0, seeded=True)
-    # A seed without the agents catalogue holds no Runtime module; one an earlier seed wrote and nobody edited goes.
-    if RUNTIME_MODULE not in {m["id"] for m in mods}:
-        with acting_as(None):
-            stale = await store.get(tenant_id, RUNTIME_MODULE)
-            if stale is not None and stale["revision"] == 0:
-                await store.delete(tenant_id, RUNTIME_MODULE)
+    # Every statement from here names the seeded tenant, whichever tenant the caller acts for.
+    with isolation.tenant_wide(SEED, tenant_id=tenant_id):
+        # A module may only name listed hosts, so the seed lists the hosts its modules call first.
+        egress = EgressStore(store.engine)
+        # The allow-list's Added by and Note columns are read by people, so the seed's rows say what they are in words
+        # a person uses; a database seeded with the older wording is reworded in place.
+        for host in dict.fromkeys(h for m in mods for h in m["egress_hosts"]):
+            await egress.add(tenant_id, "host", host, actor=SAMPLE_ACTOR, note=SAMPLE_NOTE, at=now)
+        await egress.reword(tenant_id, was=("dev seed", "called by a seeded module"), now=(SAMPLE_ACTOR, SAMPLE_NOTE))
+        for agg in mods:
+            # Each module is written in its own team so a leftover acting team cannot hide it or raise NoTenantError.
+            with acting_as(agg["team_id"]):
+                stored = await store.get(tenant_id, agg["id"])
+                if stored is None:
+                    await store.put(agg, expected_revision=None, seeded=True)
+                    added += 1
+                elif stored["revision"] == 0:
+                    # The seed names no sign-in, template or protection: a refresh keeps the stored ones.
+                    agg["sign_in"], agg["template_id"] = stored["sign_in"], stored["template_id"]
+                    agg["protection"] = stored["protection"]
+                    await store.put(agg, expected_revision=0, seeded=True)
+        # A seed without the agents catalogue holds no Runtime module; one an earlier seed wrote and nobody edited goes.
+        if RUNTIME_MODULE not in {m["id"] for m in mods}:
+            with acting_as(None):
+                stale = await store.get(tenant_id, RUNTIME_MODULE)
+                if stale is not None and stale["revision"] == 0:
+                    await store.delete(tenant_id, RUNTIME_MODULE)
     return added

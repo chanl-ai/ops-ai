@@ -64,7 +64,8 @@ async def test_another_teams_review_cannot_be_read_or_decided(engine: AsyncEngin
         payload = {"node": "review", "step_id": f"{rid}:review:1", "iteration": 1}
         waiting = {"node": "review", "iteration": 1, "interruptId": "i", "payload": payload}
         await RunStore(tx).update(rid, status="waiting", waiting=waiting)
-        rt: Any = SimpleNamespace(db=engine, settings=SimpleNamespace(lease_ttl_seconds=6.0))
+        settings = SimpleNamespace(lease_ttl_seconds=6.0, review_list_rows_per_source=1000)
+        rt: Any = SimpleNamespace(db=engine, settings=settings)
         with isolation.scope(current_tenant(), "team_lending"):
             with pytest.raises(NotFound):
                 await engine_reviews.get(rt, rid)

@@ -37,6 +37,7 @@ from usecase_harness import (
     check,
     core_bank,
     data,
+    every_page,
     finish,
     pg_url,
     tools,
@@ -173,7 +174,7 @@ def start(api: httpx.Client, which: str, payload: dict[str, Any], *, mode: str =
 
 
 def calls(gw: httpx.Client, run_id: str, target: str) -> list[dict[str, Any]]:
-    rows = data(gw.get("/v1/executions", params={"thread": run_id, "pageSize": 200}))["data"]
+    rows = every_page(gw, "/v1/executions", thread=run_id)
     return [r for r in rows if r["target"] == target]
 
 
@@ -244,7 +245,7 @@ def main() -> None:
         # Run again stores the email as the listener does, so the API needs Files too.
         api = stack.enter_context(agents(gateway_url=gateway, env={"OPS_FILES_URL": files_url}))
         tools_on = ExitStack()
-        gw = tools_on.enter_context(tools(settings))
+        gw = tools_on.enter_context(tools(settings, approval_rules=True))
         for host in (bank["host"], IMAP_HOST):
             gw.post("/v1/egress/hosts", json={"value": host, "note": "uc-567"})
         gw.post("/v1/egress/ranges", json={"value": bank["range"], "note": "uc-567"})
@@ -278,7 +279,7 @@ def main() -> None:
             outage = start(api, "outage", {"customerId": "CUS-1001"})
             time.sleep(3)
             down = run_of(api, outage).get("status")
-            gw = stack.enter_context(tools(settings))
+            gw = stack.enter_context(tools(settings, approval_rules=True))
             done = until(ended(api, outage), 120) or {}
         tries = [s for s in run_of(api, outage).get("steps", []) if s.get("nodeId") == "lookup"]
         check(

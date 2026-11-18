@@ -11,19 +11,18 @@ from __future__ import annotations
 from typing import Any
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_service_kit.ids import new_id
 from ops_store.schema import TENANT_SCOPED
 
 from .base import metadata
-from .tenancy import current_tenant, tenant_tx
+from .tenancy import RuntimeStore, current_tenant
 
 widget_mint_keys = sa.Table(
     "widget_mint_keys",
     metadata,
     sa.Column("id", sa.String(64), primary_key=True),
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local", index=True),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, index=True),
     sa.Column("deployment_id", sa.String(64), nullable=False, index=True),
     sa.Column("name", sa.String(200), nullable=False),
     sa.Column("secret_hash", sa.String(64), nullable=False),
@@ -39,7 +38,7 @@ widget_mint_key_audit = sa.Table(
     "widget_mint_key_audit",
     metadata,
     sa.Column("id", sa.String(64), primary_key=True),
-    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, server_default="local", index=True),
+    sa.Column("tenant_id", sa.String(64), nullable=False, default=current_tenant, index=True),
     sa.Column("deployment_id", sa.String(64), nullable=False, index=True),
     sa.Column("key_id", sa.String(64), nullable=False),
     sa.Column("action", sa.String(16), nullable=False),
@@ -55,12 +54,9 @@ def _audit(deployment_id: str, key_id: str, action: str, actor: str, at: str) ->
     )
 
 
-class WidgetKeys:
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
-
+class WidgetKeys(RuntimeStore):
     async def add(self, row: dict[str, Any]) -> None:
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(widget_mint_keys.insert().values(**row))
             await c.execute(_audit(row["deployment_id"], row["id"], "created", row["created_by"], row["created_at"]))
 
@@ -68,7 +64,7 @@ class WidgetKeys:
         q = widget_mint_keys.select().where(
             widget_mint_keys.c.id == key_id, widget_mint_keys.c.tenant_id == current_tenant()
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             r = (await c.execute(q)).mappings().first()
         return dict(r) if r is not None else None
 
@@ -78,7 +74,7 @@ class WidgetKeys:
             .where(widget_mint_keys.c.deployment_id == deployment_id, widget_mint_keys.c.tenant_id == current_tenant())
             .order_by(widget_mint_keys.c.created_at.desc())
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def active_counts(self, deployment_ids: list[str]) -> dict[str, int]:
@@ -94,7 +90,7 @@ class WidgetKeys:
             )
             .group_by(widget_mint_keys.c.deployment_id)
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return {str(d): int(n) for d, n in (await c.execute(q)).all()}
 
     async def revoke(self, deployment_id: str, key_id: str, at: str, actor: str) -> bool:
@@ -109,7 +105,7 @@ class WidgetKeys:
             )
             .values(revoked_at=at)
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             if (await c.execute(q)).rowcount != 1:
                 return False
             await c.execute(_audit(deployment_id, key_id, "revoked", actor, at))
@@ -121,12 +117,12 @@ class WidgetKeys:
             .where(widget_mint_keys.c.id == key_id, widget_mint_keys.c.tenant_id == current_tenant())
             .values(last_used_at=at)
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(q)
 
     async def previewed(self, deployment_id: str, actor: str, at: str) -> None:
         """A console preview of the deployment: in the same audit as the keys, since it also mints a session."""
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             await c.execute(_audit(deployment_id, "preview", "preview", actor, at))
 
     async def audit(self, deployment_id: str) -> list[dict[str, Any]]:
@@ -138,5 +134,5 @@ class WidgetKeys:
             )
             .order_by(widget_mint_key_audit.c.at.desc())
         )
-        async with tenant_tx(self.engine) as c:
+        async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]

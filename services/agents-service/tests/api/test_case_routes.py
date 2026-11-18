@@ -1,5 +1,5 @@
-"""`/v1/cases` through the routes with tokens minted as platform-service mints them, by failure mode: a
-producer's retry opens a second case; another team reads, changes or links this team's case; an agent or workflow
+"""`/v1/cases` through the routes with tokens minted as platform-service mints them, by failure mode (a producer's
+retry and another team's reads, changes and links are pinned in `test_case_record_route_pins.py`): an agent or workflow
 closes a case; a member closes a case someone else opened; a field is cleared that the case cannot lack; a status
 change leaves no timeline entry; a service with no cases scope opens one."""
 
@@ -87,25 +87,6 @@ async def opened(c: AsyncClient, who: dict[str, str] = VIEWER, **body: Any) -> d
     return r.json()["data"]
 
 
-async def test_a_producer_retry_finds_the_case_it_opened(c: AsyncClient) -> None:
-    first = await opened(c, WORKER, producerKey="run_1")
-    again = await c.post("/v1/cases", json={**DISPUTE, "producerKey": "run_1"}, headers=WORKER)
-    assert again.status_code == 200 and again.json()["data"]["id"] == first["id"]
-    listed = (await c.get("/v1/cases", headers=VIEWER)).json()["data"]
-    assert [x["id"] for x in listed["data"]] == [first["id"]] and listed["pagination"]["total"] == 1
-
-
-async def test_another_team_cannot_read_change_or_link_the_case(c: AsyncClient) -> None:
-    case = await opened(c)
-    theirs = await opened(c, OTHER_TEAM)
-    assert (await c.get(f"/v1/cases/{case['id']}", headers=OTHER_TEAM)).status_code == 404
-    patched = await c.patch(f"/v1/cases/{case['id']}", json={"priority": "low"}, headers=OTHER_TEAM)
-    assert patched.status_code == 404
-    linked = await c.post(f"/v1/cases/{case['id']}/links", json={"caseId": theirs["id"]}, headers=BUILDER)
-    assert linked.status_code == 404
-    assert (await c.get("/v1/cases", headers=OTHER_TEAM)).json()["data"]["pagination"]["total"] == 1
-
-
 async def test_only_a_person_closes_a_case(c: AsyncClient) -> None:
     case = await opened(c, WORKER)
     resolved = await c.patch(f"/v1/cases/{case['id']}", json={"status": "resolved"}, headers=WORKER)
@@ -190,6 +171,20 @@ async def test_a_case_names_only_runs_and_decisions_of_its_own_team(c: AsyncClie
     assert own.status_code == 201, own.text
 
 
+async def two_loans(c: AsyncClient) -> tuple[str, str]:
+    loan = await opened(
+        c, subject="Loan application: waiting on documents: tax return", customerName="Brightside Bakery"
+    )
+    other = await opened(c, subject="Loan application: credit review", customerName="Redwood Print")
+    return loan["id"], other["id"]
+
+
+async def searched(c: AsyncClient, text: str) -> set[str]:
+    r = await c.get("/v1/cases", params={"search": text, "pageSize": 100}, headers=VIEWER)
+    assert r.status_code == 200, r.text
+    return {x["id"] for x in r.json()["data"]["data"]}
+
+
 async def test_a_search_finds_cases_by_subject_customer_name_or_customer_id(c: AsyncClient) -> None:
     # Cases is paged on the server, so a search the console cannot do in the browser must happen here.
     levy = await opened(c, subject="Levy notice: Marcus Bell (NS-2026-GN-01187)", customerId="CUS-1001")
@@ -205,40 +200,12 @@ async def test_a_search_finds_cases_by_subject_customer_name_or_customer_id(c: A
     assert other["id"] in by_name and levy["id"] not in by_name
     assert levy["id"] in await found("CUS-1001") and other["id"] not in await found("CUS-1001")
     assert await found("nothing like this") == []
-
-
-async def two_loans(c: AsyncClient) -> tuple[str, str]:
-    loan = await opened(
-        c, subject="Loan application: waiting on documents: tax return", customerName="Brightside Bakery"
-    )
-    other = await opened(c, subject="Loan application: credit review", customerName="Redwood Print")
-    return loan["id"], other["id"]
-
-
-async def searched(c: AsyncClient, text: str) -> set[str]:
-    r = await c.get("/v1/cases", params={"search": text, "pageSize": 100}, headers=VIEWER)
-    assert r.status_code == 200, r.text
-    return {x["id"] for x in r.json()["data"]["data"]}
-
-
-async def test_a_search_of_several_words_finds_cases_holding_each(c: AsyncClient) -> None:
-    # "application documents" found nothing: the words were matched as one phrase.
-    loan, _ = await two_loans(c)
+    # Each word is matched on its own, in any order and case, in the subject or the customer; a word no case holds
+    # finds none ("application documents" found nothing when the words were matched as one phrase).
+    loan, other_loan = await two_loans(c)
     assert await searched(c, "application documents") == {loan}
-    assert await searched(c, "brightside documents") == {loan}, "a word in the customer, a word in the subject"
-
-
-async def test_a_search_matches_words_in_any_order_and_case(c: AsyncClient) -> None:
-    loan, _ = await two_loans(c)
+    assert await searched(c, "brightside documents") == {loan}
     assert await searched(c, "DOCUMENTS application") == {loan}
-
-
-async def test_a_one_word_search_finds_what_it_did(c: AsyncClient) -> None:
-    loan, other = await two_loans(c)
-    assert await searched(c, "application") == {loan, other}
-    assert await searched(c, "redwood") == {other}
-
-
-async def test_a_search_with_a_word_no_case_holds_finds_none(c: AsyncClient) -> None:
-    await two_loans(c)
+    assert await searched(c, "application") == {loan, other_loan}
+    assert await searched(c, "redwood") == {other_loan}
     assert await searched(c, "application mortgage") == set()

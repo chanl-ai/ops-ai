@@ -4,10 +4,31 @@ agent names an alias outside the same set."""
 
 from __future__ import annotations
 
-from typing import Any, Protocol, cast
+from typing import Any, NotRequired, Protocol, TypedDict, cast
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import ApiError
+
+
+class ServingAlias(TypedDict):
+    """The fields of models-service's alias row this reads."""
+
+    name: str
+    kind: str
+    clearedSensitivity: NotRequired[str | None]
+    inputPerMillion: NotRequired[str | None]
+    outputPerMillion: NotRequired[str | None]
+
+
+class Paging(TypedDict):
+    hasNext: bool
+
+
+class AliasPage(TypedDict):
+    """One page of `GET /v1/models/aliases` (the shared list contract), as far as this reads it."""
+
+    data: list[ServingAlias]
+    pagination: Paging
 
 
 class ModelsUnavailable(ApiError):
@@ -43,8 +64,16 @@ class HttpModelAliases:
     async def chat_models(self) -> list[dict[str, Any]]:
         if self.models is None:
             raise ModelsUnavailable("models-service cannot be called: no service signing key")
+        rows: list[ServingAlias] = []
+        page = 1
         try:
-            rows = cast(list[dict[str, Any]], await self.models.get("/v1/models/aliases"))
+            # Every page: the picker offers every chat alias, and the list holds a page of them at a time.
+            while True:
+                body = cast(AliasPage, await self.models.get("/v1/models/aliases", params={"page": page}))
+                rows += body["data"]
+                if not body["pagination"]["hasNext"]:
+                    break
+                page += 1
         except (ServiceCallError, ServiceUnreachable) as e:
             raise ModelsUnavailable(f"models-service did not answer the alias list: {e}") from e
         return [
@@ -56,5 +85,5 @@ class HttpModelAliases:
                 "outputPerMillion": a.get("outputPerMillion"),
             }
             for a in rows
-            if a.get("kind") == "chat"
+            if a["kind"] == "chat"
         ]

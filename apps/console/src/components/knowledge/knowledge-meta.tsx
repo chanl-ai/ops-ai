@@ -256,7 +256,10 @@ export const RULE_PLACEHOLDER: Record<(typeof RULE_FIELDS)[number]['value'], str
 export function itemReason(i: Item): string | undefined {
   if (i.status === 'excluded') return i.excludedBy ?? 'Excluded by hand';
   if (i.status === 'held' && i.held) return `Missing ${i.held.missing.join(', ')} · required by ${i.held.kbNames.join(', ')}`;
-  if (i.duplicateOf) return `Same content as ${i.duplicateOf.title} in ${i.duplicateOf.sourceName}; indexed once there`;
+  if (i.duplicateOf) {
+    const copy = i.duplicateCopy;
+    return copy ? `Same content as ${copy.title} in ${copy.sourceName}; indexed once there` : 'Same content as another document; indexed once there';
+  }
   if (i.versionStatus === 'superseded') return `Superseded by ${i.supersededBy}; kept for as-of questions`;
   if (i.versionStatus === 'scheduled') return `Takes effect ${i.effectiveDate}`;
   if (i.alsoIn?.length) return `Also in ${i.alsoIn.map((a) => a.sourceName).join(', ')}; indexed once`;

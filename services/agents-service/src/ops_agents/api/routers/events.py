@@ -39,8 +39,8 @@ async def run_frames(
     while True:
         batch = await EventLog(store.engine).run_events(thread_id, run_id, cursor)
         for e in batch:
-            cursor = e["seq"]
-            yield {"id": str(e["seq"]), "event": e["type"], "data": json.dumps(e, ensure_ascii=False)}
+            cursor = e.seq
+            yield {"id": str(e.seq), "event": e.type, "data": json.dumps(e.wire(), ensure_ascii=False)}
         if not follow:
             return
         # Ends when the run has, not at the first terminal type: the paused node's own end event follows `waiting`.
@@ -61,15 +61,16 @@ async def team_frames(
     readable: dict[str, bool] = {}
     while True:
         batch = await EventLog(store.engine).team_events(team_id, cursor)
-        for position, e in batch:
-            cursor = position
-            thread_id = str(e["threadId"])
-            if thread_id not in readable:
-                row = await store.thread(thread_id)
-                readable[thread_id] = row is not None and may_read_thread(row, me)
+        # The batch's threads not yet seen, read in one statement; a thread the store does not return is not readable.
+        unseen = sorted({e.thread_id for e in batch} - readable.keys())
+        found = {t.id: t.model_dump() for t in await store.threads_named(unseen)}
+        readable |= {tid: tid in found and may_read_thread(found[tid], me) for tid in unseen}
+        for e in batch:
+            cursor = position = e.position
+            thread_id = e.thread_id
             if not readable[thread_id]:
                 continue
-            yield {"id": str(position), "event": f"thread.{e['type']}", "data": json.dumps(e, ensure_ascii=False)}
+            yield {"id": str(position), "event": f"thread.{e.type}", "data": json.dumps(e.wire(), ensure_ascii=False)}
         if not follow:
             return
         if not batch:
@@ -81,7 +82,8 @@ async def reattach(
     rt: Rt, me: Me, thread_id: str, run_id: str, *, after: int = 0, follow: bool = True
 ) -> EventSourceResponse:
     """The run's events with `seq` above `after`, in the designed shape; the SSE `id` is the seq to resume from. Not
-    found for a run of a thread the caller may not read (`may_read_thread`)."""
+    found for a run of a thread the caller may not read (`may_read_thread`). No request transaction: a run's stream
+    holds none while it streams, and each poll reads the log afresh as the worker writes it."""
     store = graph_store(rt)
     thread = await store.thread(thread_id)
     run = await store.run(run_id)
@@ -93,5 +95,6 @@ async def reattach(
 @router.get("/v1/events", response_model=None, responses=SSE_RESPONSE)
 async def team_stream(rt: Rt, me: Me, after: int = 0, follow: bool = True) -> EventSourceResponse:
     """Thread lifecycle events for the caller's team: started, waiting, waiting_review, decided, finished, failed.
-    The SSE `id` is the stream position to pass back as `after`."""
+    The SSE `id` is the stream position to pass back as `after`. No request transaction: a stream holds none while it
+    streams."""
     return EventSourceResponse(team_frames(rt, me, me.team_id, after, follow=follow), sep="\n", ping=15)

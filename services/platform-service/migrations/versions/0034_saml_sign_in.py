@@ -41,6 +41,8 @@ from alembic import op
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 
+from ops_store.schema import TENANT_SCOPED, isolation_drop_ddl
+
 revision = "0034_saml_sign_in"
 down_revision = "0033_agent_changes_approvals"
 branch_labels = None
@@ -159,9 +161,35 @@ def _backfill_groups() -> None:
         )  # fmt: skip
 
 
+def _provider_key(name: str) -> sa.ForeignKeyConstraint:
+    """A row's provider of its own tenant. SQL Server needs the referenced columns in the order of a key it holds
+    (signin_providers' is (id, tenant_id) there, as the golden DDL makes it); PostgreSQL takes the original order."""
+    if op.get_bind().dialect.name == "mssql":
+        cols, refs = ["provider_id", "tenant_id"], ["signin_providers.id", "signin_providers.tenant_id"]
+    else:
+        cols, refs = ["tenant_id", "provider_id"], ["signin_providers.tenant_id", "signin_providers.id"]
+    return sa.ForeignKeyConstraint(cols, refs, name=name, ondelete="CASCADE")
+
+
+def _rule_key() -> sa.ForeignKey:
+    """SET NULL on PostgreSQL. SQL Server refuses it (error 1785): a provider's delete reaches signin_grants by its own
+    key and through signin_group_rules, so the key is NO ACTION there, named as the golden DDL names it
+    (`NO_SECOND_CASCADE` in deploy/database/mssql.py); the store clears a grant's rule before deleting the rule."""
+    if op.get_bind().dialect.name == "mssql":
+        return sa.ForeignKey("signin_group_rules.id", name="signin_grants_rule_id_fkey", ondelete="NO ACTION")
+    return sa.ForeignKey("signin_group_rules.id", ondelete="SET NULL")
+
+
 def upgrade() -> None:
     op.add_column("signin_providers", sa.Column("sp_id", sa.String(40)))
-    op.create_index("ux_signin_providers_sp_id", "signin_providers", ["sp_id"], unique=True)
+    # SQL Server's unique index holds one NULL only, so it is filtered there, as the golden DDL makes it.
+    op.create_index(
+        "ux_signin_providers_sp_id",
+        "signin_providers",
+        ["sp_id"],
+        unique=True,
+        mssql_where=sa.text("sp_id IS NOT NULL"),
+    )
     op.create_table(
         "signin_certificates",
         sa.Column("tenant_id", sa.String(64), primary_key=True),
@@ -175,12 +203,7 @@ def upgrade() -> None:
         sa.Column("added_by", sa.String(64), nullable=False),
         sa.Column("removed_at", sa.String(40)),
         sa.Column("warned", sa.String(16)),
-        sa.ForeignKeyConstraint(
-            ["tenant_id", "provider_id"],
-            ["signin_providers.tenant_id", "signin_providers.id"],
-            name="fk_signin_certificates_provider",
-            ondelete="CASCADE",
-        ),
+        _provider_key("fk_signin_certificates_provider"),
     )
     op.create_index("ix_signin_certificates_not_after", "signin_certificates", ["not_after"])
     op.create_table(
@@ -194,12 +217,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.String(40), nullable=False),
         sa.Column("created_by", sa.String(64), nullable=False),
         sa.UniqueConstraint("provider_id", "group_value", "team_id", name="uq_signin_group_rules"),
-        sa.ForeignKeyConstraint(
-            ["tenant_id", "provider_id"],
-            ["signin_providers.tenant_id", "signin_providers.id"],
-            name="fk_signin_group_rules_provider",
-            ondelete="CASCADE",
-        ),
+        _provider_key("fk_signin_group_rules_provider"),
         sa.ForeignKeyConstraint(
             ["tenant_id", "team_id"], ["teams.tenant_id", "teams.id"], name="fk_signin_group_rules_team"
         ),
@@ -212,15 +230,10 @@ def upgrade() -> None:
             "member_id", sa.String(64), sa.ForeignKey("members.id", ondelete="CASCADE"), nullable=False, index=True
         ),
         sa.Column("provider_id", sa.String(64), nullable=False),
-        sa.Column("rule_id", sa.String(64), sa.ForeignKey("signin_group_rules.id", ondelete="SET NULL")),
+        sa.Column("rule_id", sa.String(64), _rule_key()),
         sa.Column("why", sa.String(8), nullable=False),
         sa.Column("granted_at", sa.String(40), nullable=False),
-        sa.ForeignKeyConstraint(
-            ["tenant_id", "provider_id"],
-            ["signin_providers.tenant_id", "signin_providers.id"],
-            name="fk_signin_grants_provider",
-            ondelete="CASCADE",
-        ),
+        _provider_key("fk_signin_grants_provider"),
     )
     op.create_table(
         "signin_break_glass",
@@ -263,6 +276,13 @@ def downgrade() -> None:
     if op.get_bind().dialect.name == "postgresql":
         for signature in FUNCTIONS:
             op.execute(f"DROP FUNCTION {signature}")
+    if op.get_bind().dialect.name == "mssql":
+        # 0042 makes the tables' SQL Server security policies, which are schema-bound to them: DROP TABLE is refused
+        # while they stand.
+        for name in TABLES:
+            table = sa.Table(name, sa.MetaData(), sa.Column("tenant_id", sa.String(64)), info=TENANT_SCOPED)
+            for statement in isolation_drop_ddl(table, "mssql"):
+                op.execute(statement)
     op.drop_column("signin_flows", "test_result")
     op.drop_table("signin_break_glass")
     op.drop_table("signin_grants")

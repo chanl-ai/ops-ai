@@ -12,6 +12,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
+from ops_store.schema import mssql_drop_default_ddl
+
 revision = "models_0006"
 down_revision = "models_0005"
 branch_labels = None
@@ -21,3 +23,11 @@ depends_on = None
 def upgrade() -> None:
     op.add_column("model_aliases", sa.Column("images", sa.Boolean, nullable=False, server_default=sa.false()))
     op.add_column("model_call_log", sa.Column("images", sa.Integer, nullable=False, server_default="0"))
+
+
+def downgrade() -> None:
+    for table in ("model_call_log", "model_aliases"):
+        # SQL Server refuses to drop a column that holds a default constraint.
+        if op.get_context().dialect.name == "mssql":
+            op.execute(mssql_drop_default_ddl(table, "images"))
+        op.drop_column(table, "images")

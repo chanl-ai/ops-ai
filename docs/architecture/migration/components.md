@@ -10,7 +10,7 @@ the lanes run. Nothing in a service changes in this phase except where a compone
 |---|---|
 | The rules each component serves | [engineering-standards.md](../engineering-standards.md) and the pages under [standards/](../standards/) |
 | What a service does today at each seam | `packages/ops_store/src/ops_store/isolation.py`, `packages/ops_service_kit/src/ops_service_kit/settings.py`, `packages/ops_store/src/ops_store/outbox.py`, the five `store/event_relay.py` files, `access-exceptions-allowlist.txt` |
-| The counts the checks start from | Raw `engine.begin()` or `engine.connect()` sites 172; caught database errors that carry on 27; list slices in `api/` or `app/` 10; literal `timeout=` 58; `httpx.AsyncClient(` outside `ops_identity` 47; loopback fallbacks 13; `Relay(` constructions 5; store functions returning `dict[str, Any]` 194; `asyncio.gather(` 13 and `asyncio.create_task(` 32; `extra="allow"` 4; access decisions on the allowlist 75 |
+| The counts the checks start from | Raw `engine.begin()` or `engine.connect()` sites 197; caught database errors that carry on 28; list slices in `api/` or `app/` 10; literal `timeout=` 58; `httpx.AsyncClient(` outside `ops_identity` 47; loopback fallbacks 13; `Relay(` constructions 5; store functions returning `dict[str, Any]` 194; `asyncio.gather(` 13 and `asyncio.create_task(` 32; `extra="allow"` 4; access decisions on the allowlist 78 |
 
 ## The components
 
@@ -53,6 +53,11 @@ class Store:
     def attempt(self, conn: AsyncConnection) -> AbstractAsyncContextManager[None]:
         """A savepoint around a statement that may fail and be caught, so the request's connection stays usable."""
 
+    def install_tx(self, reason: str) -> AbstractAsyncContextManager[AsyncConnection]:
+        """tx() with no tenant (isolation.install_wide), for tables marked system(...): the request's connection with
+        its scope set for the block and restored, or its own outside a request. Tenant tables show it no row and refuse
+        its writes (NULL tenant on SQL Server, a tenant no column can hold on PostgreSQL)."""
+
     async def owner_teams(self, conn: AsyncConnection, table: sa.Table, ids: set[str], reason: str) -> dict[str, str]:
         """The owning team of each id in one query, for deciding a refusal; never for showing the rows."""
 
@@ -63,13 +68,14 @@ CurrentPrincipal = Annotated[Principal, Depends(current_principal)]
 # packages/ops_store/src/ops_store/database.py
 def open_database(url: str, *, pool: PoolSettings) -> Database: ...   # OPS_DB__POOL_SIZE, __POOL_OVERFLOW, __POOL_WAIT_S
 
-# packages/ops_service_kit/src/ops_service_kit/testing.py
-@pytest.fixture
-def statement_budget(app, seed_team):
+# packages/ops_service_kit/src/ops_service_kit/testing.py (no pytest import: a service's conftest makes the fixture,
+# statement_budget = pytest.fixture(budget_check))
+def budget_check(app, client, seed_team):
     """Seeds a team at 5 and 50 rows per list, calls every GET through the real middleware, reads db.query_count,
-    db.tx_count and db.tx_open_ms from the request line, and fails on a count that grows with rows, exceeds the
-    budget in budgets.toml, opens more than one transaction (unless listed), holds it across a service hop, or keeps
-    it open longer than 2 s. Runs on both databases."""
+    db.tx_count, db.connection_count, http.client.calls_in_tx and db.tx_open_ms from the request line, and fails on a
+    count that grows with rows, exceeds the budget in budgets.toml, opens more than one transaction or checks out more
+    than one connection (unless listed), holds a transaction across a service hop (unless listed), or keeps it open
+    longer than 2 s. Runs on both databases."""
 ```
 
 Design points: a caught database error runs its statement inside `attempt()`, because PostgreSQL aborts the whole
@@ -82,9 +88,12 @@ savepoint, so they commit or roll back with the change (`SC2`). `system_tx` and 
 
 ```python
 # packages/ops_service_kit/src/ops_service_kit/listing.py
+@cache
+def page_sizes() -> tuple[int, int]: ...   # Settings read once, when install_error_handlers builds the app
+
 class ListParams(BaseModel):
     page: int = Field(1, ge=1)
-    page_size: int = Field(default_factory=lambda: Settings().page_size_default, ge=1)   # capped at page_size_max
+    page_size: int = Field(default_factory=lambda: page_sizes()[0], ge=1)   # capped at page_sizes()[1]
     search: str | None = None
     sort_by: str | None = None
     sort_order: Literal["asc", "desc"] = "desc"
@@ -108,6 +117,8 @@ async def list_runs(p: CurrentPrincipal, _: Tx, q: ListQuery, rt: Rt) -> JSONRes
 The response is `{data, pagination, facets}`; `apps/console/src/lib/api/contract.ts` already carries `facets` on
 `ListResult`, and `ids` joins its `ListParams`. A label another service owns comes from a local copy (C8), never from
 a hop while the transaction is open.
+Every list's ORDER BY ends with the primary key of the query's first table, in the main sort's direction, so rows that
+share a sort value never repeat or vanish between pages; `list_page` appends it.
 
 ### C3: every other service is a setting
 
@@ -171,17 +182,27 @@ async def loop_reports_failure(client: AsyncClient, key: str, trip: Callable[[],
 
 ### C5: a model at every boundary
 
+`In` is not `strict`: FastAPI validates the parsed JSON in Python mode, where strict refuses an ISO date string, an
+enum's value and a UUID string. `Out` does have `extra="forbid"`: its schema says `additionalProperties: false`, and a
+row with a column the model lacks fails in `ops_store.rows`. Dropping it changed every API document.
+
 ```python
 # packages/ops_service_kit/src/ops_service_kit/http.py
 class In(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid", strict=True)
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
 
 class Out(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, frozen=True, from_attributes=True)
+    model_config = ConfigDict(
+        alias_generator=to_camel, populate_by_name=True, extra="forbid", frozen=True, from_attributes=True
+    )
 
 class Passthrough(In):
     """A body forwarded whole to an outside system: the one reviewed exception to extra="forbid"."""
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="allow")
+
+class ExternalIn(In):   # ExternalOut(Out) likewise
+    """A body in an outside system's wire format: field names as declared, no camelCase alias, extras refused."""
+    model_config = ConfigDict(alias_generator=None)
 
 # packages/ops_store/src/ops_store/rows.py
 async def rows(conn: AsyncConnection, stmt: sa.Select[Any], model: type[M]) -> list[M]:
@@ -214,39 +235,43 @@ async with asyncio.TaskGroup() as tg:
 A frozen dataclass stays the right tool for a value that lives inside one layer; a dataclass that reaches a route or
 an outbox becomes a model.
 
+Which base: `In` and `Out` for every platform body and reply (camelCase); `ExternalIn` and `ExternalOut` when the wire
+format is another system's (models-service's OpenAI-compatible completions and embeddings keep `finish_reason`,
+`prompt_tokens`); `Passthrough` only for a body forwarded whole. A plain `extra="forbid"` model moves onto
+`ExternalOut` with its document unchanged. A plain model with no `extra` setting gains `"additionalProperties": false`
+on its schema when it moves onto either reply base (models' `Health`); `Out` keeps that key, so such a move is a
+document change for the owner to accept.
+
 ### C6: one list of checks
 
 ```makefile
-# make/checks.mk: ci.yml's checks job and make verify both run `make checks`; pre-commit runs `make checks STAGED=1`
+# make/checks.mk: ci.yml's checks job and make verify both run `make checks`; pre-commit runs `make checks STAGED=1`.
+# A check is a name in CHECKS with its command (check-run.<name>) and the staged paths that can change it
+# (check-paths.<name>); `make checks-list` prints each name with its command.
 CHECKS = \
-  scripts/check_access_exceptions.py --strict \
-  scripts/check_portable_store.py --strict \
-  scripts/check_config_literals.py --strict \
-  scripts/check_typed_boundaries.py --strict \
-  deploy/database/tests/test_isolation_markings.py deploy/database/tests/test_indexes.py \
-  packages/ops_store/tests/test_isolation_sites.py packages/ops_store/tests/test_relay_sites.py \
-  sdk/generate.py --check \
-  lint-imports  roles_matrix.py --check  changelog-check.mjs --entries  check-standards.mjs
+  access-exceptions access-exceptions-commits access-exceptions-self-test \
+  portable-store portable-store-commits config-literals config-literals-commits typed-boundaries \
+  isolation-markings isolation-sites store-inventory roles-matrix sbom k8s-base \
+  lint-imports sdk-drift changelog-entries console-standards
 ```
 
 ```yaml
 # .github/workflows/ci.yml
 staging:        if: ${{ !cancelled() && github.ref == 'refs/heads/develop' && needs.ci-ok.result == 'success' }}
-store-mssql:    # pull requests into main, and nightly: the store suites, the isolation tests and the budget fixture on SQL Server
-release-proof:  # pull requests into main: make db-scripts-proof FROM=<last tag> against a seeded database; make install-proof
-deploy-prod:    # on: push tags v20*; deploys the tagged commit staging ran, after approval on the production environment
+store-mssql:    # every pull request: the store, kit and identity suites against a SQL Server container, required by ci-ok
+release-proof:  # pull requests into main: make db-scripts-proof FROM=<last tag>; make install-proof
 ```
 
 Also in C6: the api-layer use-case harness takes a base URL (`OPS_USECASE_BASE_URL`) so the same scripts can run
-against a deployed stack instead of starting one; today they start their own services on free ports. This is what lets
+against a deployed stack instead of starting one; unset, they start their own services on free ports. This is what lets
 "green on staging" be the use cases rather than the console walk alone.
 
 ### C7: every decision through `can()`
 
 `scripts/check_access_exceptions.py` exits 1 on an allowlist line whose register row reads "no decision" (two today);
 `is_admin`, `role in (...)` and owner compares become shapes with a ceiling of zero; the role-name kind gets a
-shrink-only baseline file per lane; `--self-test` plants one of each shape and expects exit 1. Each of the 75 lines on
-`access-exceptions-allowlist.txt` gains its outcome and lane as a comment: 58 kept with a reason, 15 converted onto
+shrink-only baseline file per lane; `--self-test` plants one of each shape and expects exit 1. Each of the 78 lines on
+`access-exceptions-allowlist.txt` gains its outcome and lane as a comment: 60 kept with a reason, 16 converted onto
 `can()` or `policy()`, 2 deleted with their code. `policy(p, key)` in `packages/ops_access/src/ops_access/policies.py`
 becomes the one reader of a policy value. The two undecided register rows are decided on the page the register lives
 on: team roles are no longer mapped to a three-valued session role in the console, and the Chat user role is given like
@@ -257,12 +282,15 @@ any other role, through an invite or a role change.
 ```python
 # packages/ops_store/src/ops_store/copies.py
 def copy_table(metadata: sa.MetaData, name: str, *columns: sa.Column, marking: Marking = TENANT_SCOPED) -> sa.Table:
-    """A local copy of another service's records: the owner's id, its revision, and the columns a screen lists or
-    filters on. Policed like any tenant table. Never the source of truth for a decision."""
+    """A local copy of another service's records: the owner's id, its revision, a deleted flag, and the columns a
+    screen lists or filters on. Policed like any tenant table. Never the source of truth for a decision."""
+def live(table: sa.Table) -> sa.ColumnElement[bool]:
+    """The where-clause of every read for a screen: a deleted record keeps its row, flagged, as its tombstone."""
 async def apply(conn: AsyncConnection, table: sa.Table, event: Event) -> None:
-    """Upsert or delete by id and revision; an older revision is ignored, so a replayed event is harmless."""
+    """Upsert or mark deleted over a lower (revision, deleted) pair only, so a replayed or late event is harmless."""
 def resync(table: sa.Table, source: Callable[[], Awaitable[list[Out]]], *, key: str, every_s: float) -> Process:
-    """Reads the owner's full list at start and every every_s and reconciles the copy."""
+    """Reads the owner's full list at start and every every_s and sets the copy to it at any revision, so an edit at
+    the same revision or a counter that restarts is repaired by the next pass."""
 
 # agents-service, after
 @router.get("/v1/tools", response_model=Envelope[ListResult[ToolOut]])
@@ -294,7 +322,7 @@ check green; open the pull request.
 |---|---|
 | Package tests on a throwaway database | `make -s test PKG=packages/ops_store`, `make -s test PKG=packages/ops_service_kit`, `make -s test PKG=packages/ops_identity`, `make -s test PKG=packages/ops_access` |
 | The isolation markings and the new index test | `uv run pytest -q deploy/database/tests` |
-| The ratchets, before and after | `uv run python scripts/check_portable_store.py --strict`; `uv run python scripts/check_access_exceptions.py`; `uv run lint-imports --no-logo`; the new `check_config_literals.py --strict` and `check_typed_boundaries.py --strict` once C3 and C5 add them |
+| The ratchets, before and after | `make checks` (the list in `make/checks.mk`; `make checks-list` prints each command) |
 | The gate | `make verify` |
 | C6's own proof | A script test that the plan for a one-file service change runs every line of `CHECKS`; `make stg-deploy` from a develop merge once the staging job is fixed |
 | Both SDKs still match the documents | `make sdk-verify` |
@@ -303,29 +331,20 @@ check green; open the pull request.
 
 | Component | Green when |
 |---|---|
-| C1 | `test_isolation_sites.py` fails on a new `engine.begin(` or `engine.connect(` under `services/*/src` outside a per-service list starting at 172, and on a caught database error with no savepoint outside a list starting at 27; the six tests pass on both databases; the request line carries `db.tx_count`, `db.tx_open_ms` and the pool numbers; pool settings are read from `OPS_DB__*` |
-| C2 | `check_portable_store.py` fails on a list slice in `api/` or `app/` (red at 10 today); `test_indexes.py` fails on an unindexed foreign key or filter column outside a waiting list starting at the eight known; the console's `check-standards.mjs` gains three rules: `pageSize` above 50 outside `options-queries.ts`, `.reduce(` or `.filter(...).length` in components and app, `fetch(` outside `lib/api` |
+| C1 | `test_isolation_sites.py` fails on a new `engine.begin(` or `engine.connect(` under `services/*/src` outside a per-service list starting at 197, and on a caught database error with no savepoint outside a list starting at 28; the six tests pass on both databases; the request line carries `db.tx_count`, `db.tx_open_ms` and the pool numbers; pool settings are read from `OPS_DB__*` |
+| C2 | `check_portable_store.py` fails on a list slice in `api/` or `app/` (red at 10 today); `test_indexes.py` fails on an unindexed foreign key or filter column outside a waiting list starting at the 17 known; the console's `check-standards.mjs` gains three rules: `pageSize` above 50 outside `options-queries.ts`, `.reduce(` or `.filter(...).length` in components and app, `fetch(` outside `lib/api` |
 | C3 | `check_config_literals.py` is at zero for loopback fallbacks and on per-service baselines starting at 58 and 47 for timeouts and clients; the import-linter contract allows `httpx` only in tools-service, models-service, `ops_identity.client` and the listed client packages; one boot test per service that an unset required endpoint exits naming it; `make verify` green with `auth_mode` defaulting to `platform` |
 | C4 | A test that `Relay(` is constructed only in `ops_store.outbox` (red at 5 today); a test that every key on `PROCESSES` has a `loop_reports_failure` test |
 | C5 | `check_typed_boundaries.py --strict` with a baseline file per service: `dict[str, Any]` per layer starting at 4,308; dict-returning store functions at 194; bare tasks at 13 and 32; `logging.getLogger(` and `print(` outside the kit at zero; the contract walk asserts every body is an `In` and every reply an `Out`; ruff `S608` and `ASYNC` and pyright `reportDeprecated` on |
-| C6 | The checks job runs `make checks`; the staging job's `if:` carries `!cancelled()`; `store-mssql` and `release-proof` exist with the right triggers; `deploy-prod` exists; `ops_service_kit.standards.check(app, settings_module=...)` replaces rules 4 to 6 of `services/agents-service/scripts/check_standards.py`; the api harness accepts `OPS_USECASE_BASE_URL` |
+| C6 | The checks job runs `make checks`; the staging job's `if:` carries `!cancelled()`; `store-mssql` and `release-proof` exist with the right triggers; no production deploy workflow exists until the owner's set-up (`docs/deploy/fly-staging.md`); `ops_service_kit.standards.check(app, settings_module=...)` replaces rules 4 to 6 of `services/agents-service/scripts/check_standards.py`; the api harness accepts `OPS_USECASE_BASE_URL` |
 | C7 | The checker exits 1 on a "no decision" row and on each planted shape; the allowlist carries an outcome per line; the two register rows are decided; a per-lane baseline file exists for role names |
 | C8 | A published module appears in the copy after one relay pass and in `/v1/tools` with its facets; `resync` repairs a deleted copy row; the budget fixture's row for `/v1/tools` is one transaction and no hop; both SDKs regenerated on `develop` afterwards |
 
 ## Branches and pull requests
 
-One branch and one pull request per component, from `origin/develop` into `develop`:
-
-| Component | Branch |
-|---|---|
-| C1 | `feat/store-request-transaction` |
-| C2 | `feat/kit-list-contract` |
-| C3 | `feat/kit-endpoint-settings-and-clients` |
-| C4 | `feat/store-relay-and-loop-health` |
-| C5 | `feat/kit-typed-boundaries` |
-| C6 | `feat/ci-one-gate` |
-| C7 | `feat/access-decisions-register` |
-| C8 | `feat/store-local-copies` |
+Every component and every service lands on the single branch `refactor/services-onto-shared-components`, in one pull
+request, in this order: the components, the small services (documents, files, models, runner), platform, kb, tools,
+agents, console. Each component is one or more commits on that branch, committed by path.
 
 Commit subject at most 72 characters, body at most three lines: what was wrong and what ran to prove the fix. A
 reviewer who did not write the component approves it against this page and the standards before merge.

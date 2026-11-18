@@ -11,6 +11,9 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any, cast
 
+from ._transport import every_page as _every
+from ._transport import every_page_async as _every_async
+
 PLUGIN = "plugin:"
 # Where a resource's copy is made: document types in documents-service, everything else (agents, skills, workflows)
 # in agents-service.
@@ -113,8 +116,9 @@ class Secrets:
     def __init__(self, raw: Any) -> None:
         self._raw = raw
 
-    def list(self) -> list[dict[str, Any]]:
-        return _rows(self._raw.tools.secrets_list_secrets())
+    def list(self, *, search: str | None = None, ids: list[str] | None = None) -> list[dict[str, Any]]:
+        """Every secret, page after page; `search` keeps those whose name has the text, `ids` names the ones wanted."""
+        return _every(self._raw.tools.secrets_list_secrets, search=search, ids=ids)
 
     def create(self, name: str, value: str, *, teams: list[str] | None = None) -> dict[str, Any]:
         """Stores a secret as the team's; `teams` also shares it with other teams of the caller."""
@@ -157,9 +161,12 @@ class Apps:
     def __init__(self, raw: Any) -> None:
         self._raw = raw
 
-    def list(self, *, connected: bool | None = None) -> list[dict[str, Any]]:
-        """The Apps page's cards; `connected` keeps only the connected ones (True) or only the rest (False)."""
-        cards = cast(list[dict[str, Any]], self._raw.tools.apps_list_apps())
+    def list(
+        self, *, connected: bool | None = None, search: str | None = None, ids: list[str] | None = None
+    ) -> list[dict[str, Any]]:
+        """The Apps page's cards, page after page; `connected` keeps only the connected ones (True) or only the rest
+        (False), `search` matches the name and category, `ids` names the cards wanted."""
+        cards = _every(self._raw.tools.apps_list_apps, search=search, ids=ids)
         return [c for c in cards if connected is None or _connected(c) == connected]
 
     def get(self, app: str) -> dict[str, Any]:
@@ -490,13 +497,19 @@ class Usage:
         """This team's tool calls, newest first, each saying whom it ran as."""
         return _rows(self._raw.tools.executions_list_executions(**query))
 
+    def every(self, **query: Any) -> list[dict[str, Any]]:
+        """Every call `list` would show for the filters, page after page."""
+        return _every(self._raw.tools.executions_list_executions, **query)
+
 
 class AsyncApps:
     def __init__(self, raw: Any) -> None:
         self._raw = raw
 
-    async def list(self, *, connected: bool | None = None) -> list[dict[str, Any]]:
-        cards = cast(list[dict[str, Any]], await self._raw.tools.apps_list_apps())
+    async def list(
+        self, *, connected: bool | None = None, search: str | None = None, ids: list[str] | None = None
+    ) -> list[dict[str, Any]]:
+        cards = await _every_async(self._raw.tools.apps_list_apps, search=search, ids=ids)
         return [c for c in cards if connected is None or _connected(c) == connected]
 
     async def get(self, app: str) -> dict[str, Any]:
@@ -793,8 +806,8 @@ class AsyncSecrets:
     def __init__(self, raw: Any) -> None:
         self._raw = raw
 
-    async def list(self) -> list[dict[str, Any]]:
-        return _rows(await self._raw.tools.secrets_list_secrets())
+    async def list(self, *, search: str | None = None, ids: list[str] | None = None) -> list[dict[str, Any]]:
+        return await _every_async(self._raw.tools.secrets_list_secrets, search=search, ids=ids)
 
     async def create(self, name: str, value: str, *, teams: list[str] | None = None) -> dict[str, Any]:
         """Stores a secret as the team's; `teams` also shares it with other teams of the caller."""

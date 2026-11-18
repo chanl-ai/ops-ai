@@ -1,33 +1,41 @@
 """/v1/workflows: the console's workflows contract (apps/console/src/lib/api/contract.ts, `workflows`) over the
 workflow registry. Rows are the console's `Workflow`; a detail adds the live graph and the draft. Bulk routes are not
-served. A workflow's id is its graph name: `POST /v1/threads {graph: <id>}` starts it on its pointer."""
+served. A workflow's id is its graph name: `POST /v1/threads {graph: <id>}` starts it on its pointer.
+
+A route that only reads and writes this service's database answers in one request transaction (`Tx`). Three take
+none, so no connection is held while another party answers: the read names its team from platform-service, the
+publish request reads the team's publish policy and review deadline there, and the test run runs the model."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal, TypeAlias
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from ops_access import can
 from ops_agents.graphs.definition import ROUTE_OP_LABELS, compile_definition, route_field_types
-from ops_contracts.chat import WireModel
+from ops_engine.store.definitions import HUMAN_REVIEW
 from ops_identity import CurrentTenantCaller
+from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unprocessable, ValidationFailed
-from ops_service_kit.http import Envelope, ListResult
+from ops_service_kit.http import Envelope, In, ListResult, paged
 from ops_service_kit.ids import new_id, now_iso
+from ops_service_kit.listing import ListParams
+from ops_store import isolation
 
+from ...store.tenancy import tenant_tx
+from ...store.workflow_list import SORTS, PageExtra, WorkflowRow, page_details, workflows_page
 from .. import engine_lifecycle
 from ..agent_registry import registry as agent_registry
 from ..agent_registry import review_view
 from ..auth import Principal, principal, require_builder
 from ..deps import Runtime, runtime
 from ..envelope import ok
-from ..hitl_facade import page
 from ..publish_policy import decide
 from ..review_sla import sla_hours
 from ..rights import rights
@@ -67,44 +75,44 @@ Me: TypeAlias = Annotated[Principal, Depends(principal)]  # noqa: UP040
 MAX_TEST_PAUSES = 5
 
 
-class WorkflowInput(WireModel):
+class WorkflowInput(In):
     name: str = Field(min_length=1, max_length=200)
     trigger: str = "Manual"
     template: Literal["blank", "approval", "triage", "chat"] = "blank"
     agent_slug: str | None = None
 
 
-class GraphBody(WireModel):
+class GraphBody(In):
     graph: dict[str, Any]
 
 
-class ValidateInput(WireModel):
+class ValidateInput(In):
     graph: dict[str, Any]
     target: Literal["draft", "live"] = "draft"
 
 
-class PublishInput(WireModel):
+class PublishInput(In):
     graph: dict[str, Any]
     note: str = ""
     validation_run_id: str | None = None
     checks_failing: int = 0
 
 
-class SettingsInput(WireModel):
+class SettingsInput(In):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     trigger: str | None = None
 
 
-class StatusInput(WireModel):
+class StatusInput(In):
     status: Literal["live", "draft", "paused"]
 
 
-class PointerInput(WireModel):
+class PointerInput(In):
     version: int
 
 
-class TestInput(WireModel):
+class TestInput(In):
     """The sample case: the email a definition's nodes read (`WorkflowState.email`)."""
 
     email: dict[str, Any] = Field(
@@ -156,51 +164,100 @@ def _graph(raw: dict[str, Any]) -> dict[str, Any]:
 V1_START: dict[str, Any] = {"kind": "form", "byHand": True, "takesFiles": False}
 
 
+class WorkflowsQuery(BaseModel):
+    page: int = Field(default=1, ge=1)
+    pageSize: int = Field(default=25, ge=1, le=200)  # noqa: N815 - the console's query parameter
+    search: str | None = None
+    sortBy: str | None = None  # noqa: N815
+    sortOrder: Literal["asc", "desc"] = "asc"  # noqa: N815
+    status: list[str] = Field(default_factory=list[str])
+    # What Start run offers: the workflows a person starts by hand.
+    startable: bool = False
+    # What Files offers to start with a file: those whose start form takes one.
+    takesFiles: bool = False  # noqa: N815
+    engine: Literal["all", "current"] = "all"
+
+
 @router.get("", response_model=Envelope[ListResult[Workflow]])
-async def list_workflows(
-    *,
-    request: Request,
-    rt: Rt,
-    page_no: Annotated[int, Query(alias="page", ge=1)] = 1,
-    page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
-    search: str | None = None,
-    sort_by: Annotated[str | None, Query(alias="sortBy")] = None,
-    sort_order: Annotated[Literal["asc", "desc"], Query(alias="sortOrder")] = "asc",
-    startable: bool = False,
-    takes_files: Annotated[bool, Query(alias="takesFiles")] = False,
-    engine_kind: Annotated[Literal["all", "current"], Query(alias="engine")] = "all",
-) -> JSONResponse:
-    """The team's workflows of both engines, a page at a time. `startable` keeps those a person starts by hand (Start
-    run), `takesFiles` those whose start form takes a file (Files' "Start a workflow with this file"); each row's
-    `start` says how it starts. `engine=current` leaves out the earlier engine's workflows before the page,
-    the total and the status counts are taken, since the console no longer shows them."""
-    counts = await counts_24h(rt)
-    # A graph workflow of the earlier engine starts from its input form, with no file field.
-    rows: list[dict[str, Any]] = (
-        []
-        if engine_kind == "current"
-        else [{**await _view(rt, r["id"], counts), "start": V1_START} for r in await registry(rt).rows()]
-    )
-    # v2 runner definitions join here, so the console lists both kinds from one page of one request.
+async def list_workflows(rt: Rt, me: Me, _: Tx, q: Annotated[WorkflowsQuery, Query()]) -> JSONResponse:
+    """The team's workflows of both engines, a page at a time, from one statement over both (store.workflow_list).
+    `startable` keeps those a person starts by hand (Start run), `takesFiles` those whose start form takes a file
+    (Files' "Start a workflow with this file"); each row's `start` says how it starts. `engine=current` leaves out the
+    earlier engine's workflows, since the console no longer shows them. Sorted by the sort column (name unless one of
+    SORTS), then by engine and id; a page past the end answers the last page."""
     since = (datetime.now(UTC) - timedelta(days=1)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
-    rows += await engine.v2_workflow_rows(rt, since)
-    if search:
-        s = search.lower()
-        rows = [w for w in rows if s in w["name"].lower() or s in w["description"].lower()]
-    facets: dict[str, dict[str, int]] = {"status": {}}
-    for w in rows:
-        facets["status"][w["status"]] = facets["status"].get(w["status"], 0) + 1
-    # startable: what Start run offers; takesFiles: what Files offers to start with a file.
-    if startable:
-        rows = [w for w in rows if w["start"]["byHand"]]
-    if takes_files:
-        rows = [w for w in rows if w["start"]["takesFiles"]]
-    wanted = request.query_params.getlist("status")
-    # An archived workflow leaves the list unless asked for; the facet still counts it, so the filter can show it.
-    rows = [w for w in rows if w["status"] in wanted] if wanted else [w for w in rows if w["status"] != "archived"]
-    key = sort_by if sort_by in {"name", "updatedAt", "runs24h", "status", "version"} else "name"
-    rows.sort(key=lambda w: w[key], reverse=sort_order == "desc")
-    return ok({**page(rows, page_no, page_size), "facets": facets})
+    params = ListParams(
+        page=q.page,
+        search=q.search,
+        sort_by=q.sortBy if q.sortBy in SORTS else "name",
+        sort_order=q.sortOrder,
+        filters={"status": q.status} if q.status else {},
+    )
+    # This route's own page size (WorkflowsQuery, up to 200): the console's pickers read 100 and 200 at a time.
+    params = params.model_copy(update={"page_size": q.pageSize})
+    async with tenant_tx(rt.db) as c:
+        listed = await workflows_page(
+            c,
+            params,
+            since=since,
+            current_only=q.engine == "current",
+            startable=q.startable,
+            takes_files=q.takesFiles,
+        )
+        rows = listed["data"]
+        details = await page_details(
+            c,
+            [str(r["id"]) for r in rows if r["source"] == "v1"],
+            [str(r["id"]) for r in rows if r["source"] == "v2"],
+            since=since,
+        )
+    data = [_listed_row(row, details[row.source, row.id]) for row in map(WorkflowRow.model_validate, rows)]
+    return ok({**listed, "data": data})
+
+
+def _listed_row(r: WorkflowRow, more: PageExtra) -> dict[str, Any]:
+    """A page row as schemas.Workflow: a v1 workflow as its detail page shows it, a v2 one with its steps and gates
+    from its latest definition and the fields v2 has no counterpart for (agents, deployments) empty."""
+    pending = more.pending
+    if r.source == "v1":
+        row = {**r.model_dump(), "published_version": r.version, "draft": more.draft}
+        live = {"graph": more.graph} if more.graph else None
+        request = pending.model_dump() if pending else None
+        return {**workflow_view(row, live, request, r.runs24h, more.waiting), "start": V1_START}
+    stored = more.definition if isinstance(more.definition, dict) else {}
+    raw = stored.get("nodes")
+    nodes = [n for n in raw if isinstance(n, dict)] if isinstance(raw, list) else []
+    return {
+        "id": r.id,
+        "name": r.name,
+        "description": r.description,
+        "teamId": r.team_id,
+        "trigger": r.trigger,
+        "agentSlugs": [],
+        "stepCount": len(nodes),
+        "gateCount": sum(1 for n in nodes if n.get("type") == HUMAN_REVIEW),
+        "runs24h": r.runs24h,
+        "reviewed24h": more.reviewed,
+        "openReviews": more.open_reviews,
+        "status": r.status,
+        "version": r.version,
+        "updatedAt": r.updated_at,
+        "deploymentCount": 0,
+        "kind": "standard",
+        "engine": "v2",
+        "start": {"kind": engine.start_of(stored)["kind"], "byHand": r.startable, "takesFiles": r.takes_files},
+        **(
+            {
+                "pendingPublish": {
+                    "reviewId": pending.id,
+                    "toVersion": pending.version,
+                    "requestedBy": pending.requested_by,
+                }
+            }
+            if pending
+            else {}
+        ),
+    }
 
 
 async def changeable(rt: Runtime, me: Principal, workflow_id: str, action: str) -> dict[str, Any]:
@@ -218,7 +275,7 @@ async def changeable(rt: Runtime, me: Principal, workflow_id: str, action: str) 
 
 
 @router.post("", response_model=Envelope[Workflow], status_code=201)
-async def create_workflow(rt: Rt, me: Me, body: WorkflowInput) -> JSONResponse:
+async def create_workflow(rt: Rt, me: Me, _: Tx, body: WorkflowInput) -> JSONResponse:
     """Creates the row with the template's graph as its draft. The id is a new graph name."""
     require_builder(me, area="workflows", team_id=me.team_id, action="create", what="a workflow")
     if body.template == "chat" and not body.agent_slug:
@@ -243,13 +300,15 @@ async def route_fields() -> JSONResponse:
 
 @router.get("/{workflow_id}", response_model=Envelope[WorkflowDetail])
 async def get_workflow(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
-    detail = await _detail(rt, workflow_id)
-    rights_of = await rights(lambda action: changeable(rt, me, workflow_id, action))
+    async with isolation.request_transaction():
+        detail = await _detail(rt, workflow_id)
+        rights_of = await rights(lambda action: changeable(rt, me, workflow_id, action))
+    # platform-service names the team with nothing open.
     return ok({**detail, **await team_name(rt, detail.get("teamId")), **rights_of})
 
 
 @router.patch("/{workflow_id}", response_model=Envelope[Workflow])
-async def update_settings(rt: Rt, me: Me, workflow_id: str, body: SettingsInput) -> JSONResponse:
+async def update_settings(rt: Rt, me: Me, _: Tx, workflow_id: str, body: SettingsInput) -> JSONResponse:
     await changeable(rt, me, workflow_id, "edit")
     values = body.model_dump(exclude_none=True)
     if values:
@@ -258,7 +317,7 @@ async def update_settings(rt: Rt, me: Me, workflow_id: str, body: SettingsInput)
 
 
 @router.delete("/{workflow_id}", status_code=204, response_model=None)
-async def delete_workflow(rt: Rt, me: Me, workflow_id: str) -> Response:
+async def delete_workflow(rt: Rt, me: Me, _: Tx, workflow_id: str) -> Response:
     """Marks the row deleted: it leaves the list and new threads refuse the id; threads already running keep going."""
     await changeable(rt, me, workflow_id, "delete")
     await registry(rt).delete(workflow_id)
@@ -266,7 +325,7 @@ async def delete_workflow(rt: Rt, me: Me, workflow_id: str) -> Response:
 
 
 @router.put("/{workflow_id}/draft", response_model=Envelope[WorkflowDraft])
-async def save_draft(rt: Rt, me: Me, workflow_id: str, body: GraphBody) -> JSONResponse:
+async def save_draft(rt: Rt, me: Me, _: Tx, workflow_id: str, body: GraphBody) -> JSONResponse:
     await changeable(rt, me, workflow_id, "save")
     at = now_iso()
     await registry(rt).update(workflow_id, draft=_graph(body.graph), draft_saved_at=at, draft_saved_by=me.email)
@@ -274,14 +333,14 @@ async def save_draft(rt: Rt, me: Me, workflow_id: str, body: GraphBody) -> JSONR
 
 
 @router.delete("/{workflow_id}/draft", response_model=Envelope[None])
-async def discard_draft(rt: Rt, me: Me, workflow_id: str) -> JSONResponse:
+async def discard_draft(rt: Rt, me: Me, _: Tx, workflow_id: str) -> JSONResponse:
     await changeable(rt, me, workflow_id, "discard the draft of")
     await registry(rt).update(workflow_id, draft=None, draft_saved_at=None, draft_saved_by=None)
     return ok(None)
 
 
 @router.post("/{workflow_id}/validate", response_model=Envelope[ValidationRun])
-async def validate_graph(rt: Rt, me: Me, workflow_id: str, body: ValidateInput) -> JSONResponse:
+async def validate_graph(rt: Rt, me: Me, _: Tx, workflow_id: str, body: ValidateInput) -> JSONResponse:
     """Compiles the graph and records each check as a result: the node catalogue, agent pins (each agent step must
     name a published agent), one trigger, reachability, and the definition's own validation. Advisory: it blocks
     nothing; a publish compiles again."""
@@ -313,7 +372,7 @@ def _validation_view(run: dict[str, Any]) -> dict[str, Any]:
 
 
 @router.get("/{workflow_id}/validations/latest", response_model=Envelope[ValidationRun | None])
-async def last_validation(rt: Rt, workflow_id: str) -> JSONResponse:
+async def last_validation(rt: Rt, _: Tx, workflow_id: str) -> JSONResponse:
     await registry(rt).row(workflow_id)
     run = await registry(rt).last_validation(workflow_id)
     return ok(_validation_view(run) if run else None)
@@ -397,7 +456,7 @@ async def request_publish(rt: Rt, me: Me, workflow_id: str, body: PublishInput) 
 
 
 @router.post("/{workflow_id}/status", response_model=Envelope[Workflow])
-async def set_status(rt: Rt, me: Me, workflow_id: str, body: StatusInput) -> JSONResponse:
+async def set_status(rt: Rt, me: Me, _: Tx, workflow_id: str, body: StatusInput) -> JSONResponse:
     row = await changeable(rt, me, workflow_id, "change the status of")
     if body.status == "live" and row["published_version"] is None:
         raise Conflict("Publish this workflow before setting it live.", code="not_published")
@@ -406,7 +465,7 @@ async def set_status(rt: Rt, me: Me, workflow_id: str, body: StatusInput) -> JSO
 
 
 @router.get("/{workflow_id}/versions", response_model=Envelope[list[Version]])
-async def list_versions(rt: Rt, workflow_id: str) -> JSONResponse:
+async def list_versions(rt: Rt, _: Tx, workflow_id: str) -> JSONResponse:
     row = await registry(rt).row(workflow_id)
     return ok(
         [
@@ -424,7 +483,7 @@ async def list_versions(rt: Rt, workflow_id: str) -> JSONResponse:
 
 
 @router.post("/{workflow_id}/versions/{version}/restore", response_model=Envelope[Workflow])
-async def restore_version(rt: Rt, me: Me, workflow_id: str, version: int) -> JSONResponse:
+async def restore_version(rt: Rt, me: Me, _: Tx, workflow_id: str, version: int) -> JSONResponse:
     """Copies a published version's graph into the draft; nothing publishes."""
     await changeable(rt, me, workflow_id, "restore a version of")
     v = next((v for v in await registry(rt).versions(workflow_id) if v["version"] == version), None)
@@ -435,7 +494,7 @@ async def restore_version(rt: Rt, me: Me, workflow_id: str, version: int) -> JSO
 
 
 @router.post("/{workflow_id}/pointer", response_model=Envelope[Workflow])
-async def move_pointer(rt: Rt, me: Me, workflow_id: str, body: PointerInput) -> JSONResponse:
+async def move_pointer(rt: Rt, me: Me, _: Tx, workflow_id: str, body: PointerInput) -> JSONResponse:
     """Points new threads at an already-published version, for a rollback; running threads keep theirs."""
     await changeable(rt, me, workflow_id, "roll back")
     if not any(v["version"] == body.version for v in await registry(rt).versions(workflow_id)):
@@ -444,27 +503,23 @@ async def move_pointer(rt: Rt, me: Me, workflow_id: str, body: PointerInput) -> 
     return ok(await _view(rt, workflow_id))
 
 
+class RunsQuery(BaseModel):
+    page: int = Field(default=1, ge=1)
+    pageSize: int = Field(default=25, ge=1, le=200)  # noqa: N815 - the console's query parameter
+    status: list[str] = Field(default_factory=list[str])
+
+
 @router.get("/{workflow_id}/runs", response_model=Envelope[ListResult[WorkflowRun]])
-async def list_runs(
-    *,
-    request: Request,
-    rt: Rt,
-    workflow_id: str,
-    page_no: Annotated[int, Query(alias="page", ge=1)] = 1,
-    page_size: Annotated[int, Query(alias="pageSize", ge=1, le=200)] = 25,
-) -> JSONResponse:
+async def list_runs(rt: Rt, _: Tx, workflow_id: str, q: Annotated[RunsQuery, Query()]) -> JSONResponse:
+    """The workflow's runs, most recently changed first then by id, a page at a time; `status` keeps those
+    statuses, and the status counts are over every run."""
     await registry(rt).row(workflow_id)
-    rows = await run_rows(rt, workflow_id)
-    facets: dict[str, dict[str, int]] = {"status": {}}
-    for r in rows:
-        facets["status"][r["status"]] = facets["status"].get(r["status"], 0) + 1
-    if wanted := request.query_params.getlist("status"):
-        rows = [r for r in rows if r["status"] in wanted]
-    return ok({**page(rows, page_no, page_size), "facets": facets})
+    rows, total, counted = await run_rows(rt, workflow_id, q.status, (q.page - 1) * q.pageSize, q.pageSize)
+    return ok(paged(rows, total, q.page, q.pageSize, facets={"status": counted}))
 
 
 @refs_router.get("", response_model=Envelope[list[WorkflowRef]])
-async def workflow_refs(rt: Rt, caller: CurrentTenantCaller) -> JSONResponse:
+async def workflow_refs(rt: Rt, caller: CurrentTenantCaller, _: Tx) -> JSONResponse:
     """Workflows by id, name and owning team: every one for a service holding `workflows:view` that governs calls on
     their behalf, the team's for a person with workflows.view. The registry is not yet partitioned by
     tenant (identity-and-tenancy.md); the route still requires a tenant, so callers key what they keep by it."""
@@ -472,6 +527,8 @@ async def workflow_refs(rt: Rt, caller: CurrentTenantCaller) -> JSONResponse:
     can(caller, "workflows", "view", team=team, what="the workflow list")
     reg = registry(rt)
     rows = await reg.refs_every_team() if team is None else [r for r in await reg.rows() if r["team_id"] == team]
+    # By id: the registry reads are unordered, so a workflow updated a moment ago would otherwise move in the list.
+    rows = sorted(rows, key=lambda r: str(r["id"]))
     refs = [{"id": r["id"], "name": r["name"], "teamId": r["team_id"], "status": r["status"]} for r in rows]
     # Workflow definitions (v2) are grantable too: each one a version has been approved for, with its team; one
     # no team owns is listed with an empty team, and a grant for it is refused.

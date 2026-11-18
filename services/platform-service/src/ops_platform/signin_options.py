@@ -34,6 +34,8 @@ class SignInOptions:
     password_min_length: int
     flow_ttl_s: int
     reset_ttl_s: int
+    # How long one call to an identity provider may take (Settings.signin_http_timeout_seconds).
+    http_timeout_s: float
     public_url: str | None = None
     console_url: str | None = None
     # tools-service's public base: a team's MCP address, the resource an assistant's grant is for, is under it.
@@ -57,6 +59,7 @@ class SignInOptions:
             password_min_length=settings.password_min_length,
             flow_ttl_s=settings.signin_flow_seconds,
             reset_ttl_s=settings.password_reset_seconds,
+            http_timeout_s=settings.signin_http_timeout_seconds,
             public_url=settings.platform_public_url,
             console_url=settings.console_url,
             mcp_url=settings.tools_public_url,

@@ -27,6 +27,7 @@ kill_timeout = 30
   OPS_AUTH_MODE = "platform"
   OPS_ENABLED_SERVICES = "all"
   OPS_PLATFORM_URL = "http://127.0.0.1:8710"
+  OPS_PLATFORM_INTERNAL_URL = "http://127.0.0.1:8711"
   OPS_GATEWAY_URL = "http://127.0.0.1:8720"
   OPS_TOOLS_URL = "http://127.0.0.1:8720"
   OPS_AGENTS_URL = "http://127.0.0.1:8700"

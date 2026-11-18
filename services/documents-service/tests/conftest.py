@@ -5,13 +5,14 @@ from __future__ import annotations
 
 import os
 import uuid
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable, Coroutine, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
 
 import httpx
 import pytest
+import sqlalchemy as sa
 from fastapi import FastAPI, Header, Request
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -27,28 +28,51 @@ from ops_identity.fastapi import current_caller, current_principal
 from ops_service_kit.contract import response_checker
 from ops_service_kit.settings import Settings
 from ops_service_kit.testapps import released_apps
-from ops_service_kit.testdb import isolate_from_stack
-from ops_store import isolation
+from ops_service_kit.testdb import isolate_from_stack, use_worker_database
+from ops_store import background, isolation
+from ops_store.testing import DATABASES, NO_SQL_SERVER, postgresql_only, sql_server_schema
 
 OPS = {"X-Team-Id": "team_ops"}
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    use_worker_database()
     isolate_from_stack()
+    config.addinivalue_line("markers", "postgresql_only(why): runs on PostgreSQL only, for the reason given")
+    config.addinivalue_line("markers", "lifespan_supervisor: the test's own app lifespan must hold the supervisor")
 
 
-@pytest.fixture(scope="session")
-def database_url() -> str:
-    from alembic import command  # noqa: PLC0415
-    from alembic.config import Config  # noqa: PLC0415
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    keep, dropped = postgresql_only(items)
+    if dropped:
+        config.hook.pytest_deselected(items=[i for i in items if i not in keep])
+        items[:] = keep
+        terminal = config.pluginmanager.get_plugin("terminalreporter")
+        for nodeid, why in dropped:
+            if terminal is not None:
+                terminal.write_line(f"postgresql only: {nodeid}: {why}")
 
-    from ops_service_kit.testdb import refusal  # noqa: PLC0415
 
-    url = Settings().database_url
-    if (why := refusal(url, os.environ.get("OPS_TEST_DATABASE_URL"))) is not None:
-        pytest.fail(why)
-    command.upgrade(Config(str(Path(__file__).parents[1] / "alembic.ini")), "head")
-    return url
+@pytest.fixture(scope="session", params=DATABASES)
+def database_url(request: pytest.FixtureRequest) -> Iterator[str]:
+    if request.param == "postgresql":
+        from alembic import command  # noqa: PLC0415
+        from alembic.config import Config  # noqa: PLC0415
+
+        from ops_service_kit.testdb import refusal  # noqa: PLC0415
+
+        url = Settings().database_url
+        if (why := refusal(url, os.environ.get("OPS_TEST_DATABASE_URL"))) is not None:
+            pytest.fail(why)
+        command.upgrade(Config(str(Path(__file__).parents[1] / "alembic.ini")), "head")
+        yield url
+        return
+    with sql_server_schema(
+        "documents", os.environ.get("OPS_MSSQL_SERVER"), os.environ.get("MSSQL_SA_PASSWORD")
+    ) as mssql_url:
+        if mssql_url is None:
+            pytest.skip(NO_SQL_SERVER)
+        yield mssql_url
 
 
 @pytest.fixture
@@ -140,6 +164,14 @@ class Service:
 Make = Callable[..., Service]
 
 
+async def tenant_outbox(engine: AsyncEngine, tenant: str, q: sa.Executable) -> list[dict[str, Any]]:
+    """The tenant's outbox rows, read in the tenant's scope: SQL Server applies its row policies to every user, so a
+    read outside the tenant's session context finds none."""
+    with isolation.tenant_wide("test: the tenant's outbox rows", tenant_id=tenant):
+        async with isolation.isolated_tx(engine) as conn:
+            return [dict(r) for r in (await conn.execute(q)).mappings()]
+
+
 @pytest.fixture
 def make(engine: AsyncEngine, tenant: str) -> Make:
     def build(
@@ -148,6 +180,8 @@ def make(engine: AsyncEngine, tenant: str) -> Make:
         prices: Prices | None = None,
         role: str = "builder",
         type_uses: Any = None,
+        *,
+        background: Sequence[Callable[[], Coroutine[Any, Any, None]]] = (),
     ) -> Service:
         fake = FakeFilesService()
         files = Files(fake.client(service="documents", scopes=["files:view", "files:edit"]))
@@ -157,7 +191,13 @@ def make(engine: AsyncEngine, tenant: str) -> Make:
         extractor.types = types
         auth = Auth.for_dev(Settings(), audience="documents", name="james", email="j@x", tenant_id=tenant)
         app = create_documents_app(
-            engine=engine, extractor=extractor, document_types=types, auth=auth, readings=readings, type_uses=type_uses
+            engine=engine,
+            extractor=extractor,
+            document_types=types,
+            auth=auth,
+            readings=readings,
+            type_uses=type_uses,
+            background=background,
         )
         sign_in(app, tenant, role)
         hooks: dict[str, Any] = {"response": [response_checker(app)]}
@@ -172,3 +212,15 @@ def make(engine: AsyncEngine, tenant: str) -> Make:
 @pytest.fixture(autouse=True)
 def _release_apps() -> Iterator[None]:
     yield from released_apps()
+
+
+@pytest.fixture(autouse=True)
+async def _supervisor(request: pytest.FixtureRequest) -> AsyncIterator[None]:
+    """The supervisor a lifespan holds, around each test: requests queue readings, extractions and type tests onto it
+    without the lifespan running. Leaving it cancels whatever a test left running. A test marked
+    `lifespan_supervisor` gets none, so it fails unless the app's own lifespan holds one."""
+    if "lifespan_supervisor" in request.keywords:
+        yield
+        return
+    async with background.supervisor():
+        yield

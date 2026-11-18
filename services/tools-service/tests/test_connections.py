@@ -82,8 +82,8 @@ async def test_only_someone_who_manages_connections_changes_one(client: httpx.As
     # Every member reads them, and is told whether they may manage them.
     read = await client.get(_at(conn), headers=builder)
     assert read.status_code == 200 and read.json()["data"]["mayManage"] is False
-    listed = await client.get("/v1/apps", headers=builder)
-    assert conn["id"] in {c["id"] for c in listed.json()["data"]}, listed.text
+    listed = await client.get("/v1/apps", params={"ids": conn["id"]}, headers=builder)
+    assert conn["id"] in {c["id"] for c in listed.json()["data"]["data"]}, listed.text
 
 
 async def test_a_secret_part_is_written_once_and_never_read_back(client: httpx.AsyncClient, tenant: str) -> None:
@@ -99,7 +99,8 @@ async def test_a_secret_part_is_written_once_and_never_read_back(client: httpx.A
     detail = put.json()["data"]
     assert detail["secrets"]["key"]["set"] is True
     assert "k-secret-1" not in put.text
-    secrets = (await client.get("/v1/secrets", headers=who)).json()["data"]
+    named = {"ids": secret_name(conn["id"], "key")}
+    secrets = (await client.get("/v1/secrets", params=named, headers=who)).json()["data"]["data"]
     part = next(s for s in secrets if s["name"] == secret_name(conn["id"], "key"))
     assert part["connectionId"] == conn["id"] and "k-secret-1" not in str(secrets)
     for method, path, payload in (
@@ -119,8 +120,9 @@ async def test_a_stale_write_stores_no_value(client: httpx.AsyncClient, tenant: 
         "secretValues": {"password": "p-1"},
     }
     assert (await client.patch(_at(conn), json=first, headers=who)).status_code == 200
-    held = await client.get("/v1/secrets", headers=who)
-    version = next(s["version"] for s in held.json()["data"] if s["name"] == secret_name(conn["id"], "password"))
+    named = {"ids": secret_name(conn["id"], "password")}
+    held = await client.get("/v1/secrets", params=named, headers=who)
+    version = next(s["version"] for s in held.json()["data"]["data"] if s["name"] == named["ids"])
     stale = {
         "revision": conn["revision"],
         "settings": {"username": "ops", "baseUrl": BASE},
@@ -128,8 +130,8 @@ async def test_a_stale_write_stores_no_value(client: httpx.AsyncClient, tenant: 
     }
     lost = await client.patch(_at(conn), json=stale, headers=who)
     assert lost.status_code == 409 and lost.json()["error"]["code"] == "stale_version", lost.text
-    after = (await client.get("/v1/secrets", headers=who)).json()["data"]
-    assert next(s["version"] for s in after if s["name"] == secret_name(conn["id"], "password")) == version
+    after = (await client.get("/v1/secrets", params=named, headers=who)).json()["data"]["data"]
+    assert next(s["version"] for s in after if s["name"] == named["ids"]) == version
 
 
 async def test_settings_are_checked_against_the_kind(client: httpx.AsyncClient, tenant: str) -> None:
@@ -260,7 +262,7 @@ async def test_a_team_reads_only_its_own_connections_an_all_scope_team_included(
     cards = person(tenant, "Carla Cards", {"team_cards": "admin"})
     theirs = await _made(client, cards)
     platform = admin(tenant)
-    listed = (await client.get("/v1/apps", headers=platform)).json()["data"]
+    listed = (await client.get("/v1/apps", params={"ids": theirs["id"]}, headers=platform)).json()["data"]["data"]
     assert theirs["id"] not in {c["id"] for c in listed}, listed
     read = await client.get(_at(theirs), headers=platform)
     assert read.status_code == 404 and "team_cards" not in read.text, read.text

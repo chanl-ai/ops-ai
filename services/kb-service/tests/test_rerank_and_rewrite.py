@@ -5,14 +5,17 @@ not built being saved."""
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
 import httpx
+import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_kb.files import KnowledgeFiles
 from ops_kb.query_steps import QueryStepFailed
+from ops_service_kit.settings import Endpoint, Settings
 
 from .conftest import kb_client
 from .test_bases_and_sources import data
@@ -118,3 +121,38 @@ async def test_a_rewrite_mode_that_is_not_built_is_refused(client: httpx.AsyncCl
     kb_id = await base_with_pages(client)
     refused = await client.patch(f"/v1/knowledge-bases/{kb_id}", json={"retrieval": {"rewrite": "expand"}})
     assert refused.status_code == 400 and refused.json()["error"]["code"] == "invalid_retrieval", refused.text
+
+
+class SlowQuery(FakeQuery):
+    """A model that never answers in time."""
+
+    async def rewrite(self, question: str, instruction: str, *, alias: str, tenant: str) -> str:
+        await asyncio.sleep(60)
+        return question
+
+    async def scores(self, question: str, pieces: list[str], *, alias: str, tenant: str) -> list[float]:
+        await asyncio.sleep(60)
+        return []
+
+
+async def test_a_slow_model_is_cut_at_the_search_wait_and_the_search_still_answers(
+    engine: AsyncEngine, tenant: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Rewrite and rerank share `kb_search_wait_s`: past it each is skipped as it is when the model fails, and the
+    fused search answers before its caller stops waiting."""
+    monkeypatch.setenv("OPS_KB_SEARCH_WAIT_S", "0.5")
+    retrieval = {"rerank": True, "rewrite": "rewrite"}
+    async with kb_client(engine, tenant, files=KnowledgeFiles(tmp_path), query_model=SlowQuery()) as client:
+        kb_id = await base_with_pages(client, retrieval)
+        found = await asyncio.wait_for(search(client, kb_id, "domestic wire"), 5)
+    assert (found["rewrite"]["rewritten"], found["rewrite"]["skipped"]) == (None, "timeout"), found["rewrite"]
+    assert (found["rerank"]["ran"], found["rerank"]["skipped"]) == (False, "timeout"), found["rerank"]
+    assert len(found["passages"]) == 2, found["passages"]
+
+
+def test_the_search_wait_ends_before_any_caller_of_the_search_stops_waiting() -> None:
+    # tools-service waits 5 s for kb-service (services/tools-service/src/ops_tools/__main__.py, `client`), and
+    # agents-service an endpoint's default timeout.
+    tools_wait_s = 5.0
+    default = Settings.model_fields["kb_search_wait_s"].default
+    assert default < min(tools_wait_s, Endpoint.model_fields["timeout_s"].default), default

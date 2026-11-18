@@ -6,7 +6,7 @@ people only once verified (0017). Another workspace's pending claim blocks nobod
 verified domains decides between two workspaces verifying the same one.
 
 The lookups that come before the tenant is known (an email domain, a flow by its state or handoff hash, a reset by
-its token hash) call the SECURITY DEFINER functions of 0010 in `system_tx`; everything after runs in `tenant_tx`. Each
+its token hash) call the lookup functions (`lookups.py`) in `system_tx`; everything after runs in `tenant_tx`. Each
 single-use thing (a flow's answer, its handoff, a reset token) is spent by a conditional update, so two requests racing
 on one cannot both win. A first SSO sign-in finds or makes the person inside one transaction, and the unique index on
 (provider, subject) decides a race between two first sign-ins.
@@ -20,15 +20,29 @@ from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy import Row
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from ops_access import MEMBER_ROLES_BY_RANK
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
+from ops_store.dialect import insert_ignore
+from ops_store.rows import one, rows
 
 from .audit import record, record_grants_ending
+from .lookups import (
+    PASSWORD_RESET,
+    SIGNIN_DOMAIN,
+    SIGNIN_FLOW,
+    SIGNIN_HANDOFF,
+    SIGNIN_SP,
+    WATCHED_PROVIDERS,
+    Lookup,
+    lookup,
+)
 from .members import Actor, end_membership
 from .roles import live_in, mirror_membership
 from .tables import (
@@ -53,9 +67,9 @@ from .tenancy import RESET_LOOKUP, SIGNIN_LOCKOUT, SIGNIN_LOOKUP, SIGNIN_WATCH, 
 from .workspace import default_team_in, security_team_in
 
 PASSWORD = "password"
-# The membership roles a provider may give, lowest first; when two group rules give one team, the later one wins.
-# Admin is never one (decision D5).
-SIGNIN_ROLES = ("chat_user", "viewer", "builder", "approver")
+# The membership roles a provider may give, lowest first: the catalogue's rank without its top, admin, which a provider
+# never gives (decision D5). When two group rules give one team, the higher role wins.
+SIGNIN_ROLES = MEMBER_ROLES_BY_RANK[:-1]
 
 
 @dataclass(frozen=True)
@@ -81,10 +95,25 @@ class TrustedCertificate:
     warned: str | None = None
 
 
-def group_settings(config: dict[str, Any]) -> dict[str, Any]:
+def group_settings(config: dict[str, Any]) -> dict[str, JsonValue]:
     """A provider's group settings: `source` (the claim or attribute read) and `onMissing` (keep | remove)."""
-    found: dict[str, Any] = config.get("groups") or {}
-    return found
+    found: JsonValue = config.get("groups")
+    return found if isinstance(found, dict) else {}
+
+
+class BreakGlassRow(Out):
+    """A person on the break-glass list; `last_used_at` is None until they sign in with it."""
+
+    user_id: str
+    email: str
+    added_by: str
+    added_at: str
+    last_used_at: str | None
+
+
+class _TestResult(Out):
+    test_result: dict[str, JsonValue] | None
+    answered_at: str | None
 
 
 @dataclass(frozen=True)
@@ -177,37 +206,60 @@ class DomainListedError(Exception):
     """The domain is on another provider of this workspace."""
 
 
-class SignInStore:
-    requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION, Guarantee.RLS})
+async def _count_one(
+    c: AsyncConnection, t: sa.Table, start: dict[str, str | int], *, keys: list[str], window_start: str
+) -> int:
+    """Adds one wrong password to the row `keys` name and returns the count; a count from before `window_start` starts
+    again at one. The row is made first if there is none (`start`, at zero); one UPDATE counts, so two at once wait on
+    the row's lock and both count. A right password or a reset may delete the row between the two statements: the
+    count then starts again, as it would have after that delete."""
+    at = start["first_failed_at"]
+    stale = t.c.first_failed_at < window_start
+    counted = (
+        t.update()
+        .where(*[t.c[k] == start[k] for k in keys])
+        .values(
+            failures=sa.case((stale, 1), else_=t.c.failures + 1),
+            first_failed_at=sa.case((stale, at), else_=t.c.first_failed_at),
+        )
+        .returning(t.c.failures)
+    )
+    for _ in range(3):
+        await c.execute(insert_ignore(c, t, start, keys=keys))
+        failures = (await c.execute(counted)).scalar_one_or_none()
+        if failures is not None:
+            return int(failures)
+    raise RuntimeError(f"{t.name}: the count's row was deleted three times while counting")
 
-    def __init__(self, db: TenantDb) -> None:
-        self.db = db
+
+class SignInStore(TenantDb):
+    requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION, Guarantee.RLS})
 
     # ── Providers and domains ──
 
     async def domain(self, domain: str) -> DomainHit | None:
-        q = sa.text(
-            "SELECT tenant_id, provider_id, kind, label, enabled, password_enabled FROM platform_signin_domain(:d)"
-        )
-        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
-            row = (await c.execute(q, {"d": domain.strip().lower()})).first()
-        return (
-            DomainHit(str(row[0]), str(row[1]), str(row[2]), str(row[3]), bool(row[4]), bool(row[5])) if row else None
-        )
+        async with self.system_tx(SIGNIN_LOOKUP) as c:
+            found = await lookup(c, SIGNIN_DOMAIN, domain.strip().lower())
+        if not found:
+            return None
+        row = found[0]
+        return DomainHit(str(row[0]), str(row[1]), str(row[2]), str(row[3]), bool(row[4]), bool(row[5]))
 
     async def sp(self, sp_id: str) -> SpHit | None:
         """The provider whose own SAML addresses carry `sp_id`, through the pre-tenant lookup."""
-        q = sa.text("SELECT tenant_id, provider_id, kind, enabled, tiles FROM platform_signin_sp(:s)")
-        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
-            row = (await c.execute(q, {"s": sp_id})).first()
-        return SpHit(str(row[0]), str(row[1]), str(row[2]), bool(row[3]), bool(row[4])) if row else None
+        async with self.system_tx(SIGNIN_LOOKUP) as c:
+            found = await lookup(c, SIGNIN_SP, sp_id)
+        if not found:
+            return None
+        row = found[0]
+        return SpHit(str(row[0]), str(row[1]), str(row[2]), bool(row[3]), bool(row[4]))
 
     async def providers(self, tenant_id: str) -> list[Provider]:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return await _providers(c)
 
     async def provider(self, tenant_id: str, provider_id: str) -> Provider | None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             found = await _providers(c, provider_id)
         return found[0] if found else None
 
@@ -215,7 +267,7 @@ class SignInStore:
         """A workspace with no enabled provider signs in by password, so turning its only SSO provider off never locks
         everyone out; once any provider is enabled, only an enabled password row allows it. Read inside the caller's
         own check, never cached."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             kinds = (await c.execute(sa.select(signin_providers.c.kind, signin_providers.c.enabled))).all()
         return _password_on(kinds)
 
@@ -243,7 +295,7 @@ class SignInStore:
             "updated_at": at,
         }
         try:
-            async with self.db.tenant_tx(p.tenant_id) as c:
+            async with self.tenant_tx(p.tenant_id) as c:
                 done = await c.execute(signin_providers.update().where(signin_providers.c.id == p.id).values(**values))
                 if done.rowcount == 0:
                     await c.execute(
@@ -265,7 +317,7 @@ class SignInStore:
                     target_kind="signin_provider",
                     target_id=p.id,
                     request_id=request_id,
-                    detail={"kind": p.kind, "enabled": p.enabled, "domains": sorted(p.domains)},
+                    detail={"kind": p.kind, "enabled": p.enabled, "domains": [*sorted(p.domains)]},
                 )
         except IntegrityError as e:
             if "ux_signin_domains_verified" in str(e.orig):
@@ -277,13 +329,13 @@ class SignInStore:
     ) -> list[TrustedCertificate]:
         """Adds the certificates the provider is not yet trusted with (a metadata refresh), each audited; returns
         the ones added."""
-        async with self.db.tenant_tx(p.tenant_id) as c:
+        async with self.tenant_tx(p.tenant_id) as c:
             return await _add_certificates(c, p, certificates, actor="system", at=at, request_id=request_id)
 
     async def metadata_read(self, p: Provider, *, at: str, error: str | None) -> None:
         """Records when the provider's metadata URL was last read and what was wrong with it, if anything."""
         config = {**p.config, "metadataReadAt": at, "metadataError": error}
-        async with self.db.tenant_tx(p.tenant_id) as c:
+        async with self.tenant_tx(p.tenant_id) as c:
             await c.execute(
                 signin_providers.update().where(signin_providers.c.id == p.id).values(config=config, updated_at=at)
             )
@@ -294,13 +346,13 @@ class SignInStore:
             .where(signin_certificates.c.provider_id == provider_id, signin_certificates.c.fingerprint == fingerprint)
             .values(warned=level)
         )
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             await c.execute(q)
 
     async def watched(self) -> list[tuple[str, str]]:
         """(tenant, provider) of every SAML provider of an open workspace, for the daily certificate watch."""
-        async with self.db.system_tx(SIGNIN_WATCH) as c:
-            rows = (await c.execute(sa.text("SELECT tenant_id, provider_id FROM platform_signin_watch()"))).all()
+        async with self.system_tx(SIGNIN_WATCH) as c:
+            rows = await lookup(c, WATCHED_PROVIDERS)
         return [(str(r[0]), str(r[1])) for r in rows]
 
     async def verified_elsewhere(self, tenant_id: str, domains: Sequence[str]) -> bool:
@@ -312,7 +364,7 @@ class SignInStore:
         return False
 
     async def claim(self, tenant_id: str, domain: str) -> DomainClaim | None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             row = (
                 await c.execute(
                     sa.select(
@@ -329,7 +381,7 @@ class SignInStore:
         """Marks this workspace's claim verified, audited. DomainTakenError when another workspace verified it first;
         the DNS answer is read before, outside the transaction."""
         try:
-            async with self.db.tenant_tx(tenant_id) as c:
+            async with self.tenant_tx(tenant_id) as c:
                 await c.execute(
                     signin_domains.update()
                     .where(signin_domains.c.domain == domain, signin_domains.c.verified_at.is_(None))
@@ -352,7 +404,7 @@ class SignInStore:
             raise
 
     async def delete_provider(self, tenant_id: str, provider_id: str, *, actor: str, at: str, request_id: str) -> bool:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             await c.execute(signin_certificates.delete().where(signin_certificates.c.provider_id == provider_id))
             await c.execute(signin_flows.delete().where(signin_flows.c.provider_id == provider_id))
             await c.execute(signin_identities.delete().where(signin_identities.c.provider_id == provider_id))
@@ -375,7 +427,7 @@ class SignInStore:
 
     # ── Break-glass ──
 
-    async def break_glass(self, tenant_id: str) -> list[dict[str, Any]]:
+    async def break_glass(self, tenant_id: str) -> list[BreakGlassRow]:
         """The people on the break-glass list, with their email; whether each still counts is the caller's check."""
         b = signin_break_glass.c
         q = (
@@ -383,13 +435,11 @@ class SignInStore:
             .join(users, sa.and_(users.c.id == b.user_id, users.c.status == "active"))
             .order_by(b.added_at)
         )
-        async with self.db.tenant_tx(tenant_id) as c:
-            rows = (await c.execute(q)).all()
-        keys = ("userId", "email", "addedBy", "addedAt", "lastUsedAt")
-        return [dict(zip(keys, (str(r[0]), str(r[1]), str(r[2]), str(r[3]), r[4]), strict=True)) for r in rows]
+        async with self.tenant_tx(tenant_id) as c:
+            return await rows(c, q, BreakGlassRow)
 
     async def add_break_glass(self, tenant_id: str, user_id: str, *, actor: str, at: str, request_id: str) -> None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             held = await c.execute(
                 sa.select(signin_break_glass.c.user_id).where(signin_break_glass.c.user_id == user_id)
             )
@@ -404,7 +454,7 @@ class SignInStore:
             )
 
     async def remove_break_glass(self, tenant_id: str, user_id: str, *, actor: str, request_id: str) -> bool:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             done = await c.execute(signin_break_glass.delete().where(signin_break_glass.c.user_id == user_id))
             if done.rowcount:
                 await _record_break_glass(
@@ -413,7 +463,7 @@ class SignInStore:
         return bool(done.rowcount)
 
     async def break_glass_used(self, tenant_id: str, user_id: str, *, at: str, request_id: str) -> None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             await c.execute(
                 signin_break_glass.update().where(signin_break_glass.c.user_id == user_id).values(last_used_at=at)
             )
@@ -422,25 +472,25 @@ class SignInStore:
             )
 
     async def team_exists(self, tenant_id: str, team_id: str) -> bool:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return (await c.execute(sa.select(teams.c.id).where(teams.c.id == team_id))).first() is not None
 
     # ── Passwords ──
 
     async def password_hash(self, tenant_id: str, user_id: str) -> str | None:
         q = sa.select(password_credentials.c.hash).where(password_credentials.c.user_id == user_id)
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return (await c.execute(q)).scalar()
 
     async def set_password(self, tenant_id: str, user_id: str, encoded: str, *, at: str) -> None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             await _set_password(c, tenant_id, user_id, encoded, at)
 
     # ── Wrong passwords ──
 
     async def locked_until(self, tenant_id: str, user_id: str, *, now: str) -> str | None:
         """When the person's lock ends, while it lasts; None when they are not locked."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             until = (
                 await c.execute(sa.select(signin_lockouts.c.locked_until).where(signin_lockouts.c.user_id == user_id))
             ).scalar()
@@ -461,22 +511,14 @@ class SignInStore:
         `window_start` starts again at one. Reaching `max_failures` locks the person until `lock_until`, audited, and
         starts the count again. Returns whether this wrong password locked them."""
         t = signin_lockouts
-        stale = t.c.first_failed_at < window_start
-        async with self.db.tenant_tx(tenant_id) as c:
-            row = (
-                await c.execute(
-                    insert(t)
-                    .values(tenant_id=tenant_id, user_id=user_id, failures=1, first_failed_at=at)
-                    .on_conflict_do_update(
-                        index_elements=[t.c.tenant_id, t.c.user_id],
-                        set_={
-                            "failures": sa.case((stale, 1), else_=t.c.failures + 1),
-                            "first_failed_at": sa.case((stale, at), else_=t.c.first_failed_at),
-                        },
-                    )
-                    .returning(t.c.failures)
-                )
-            ).scalar_one()
+        async with self.tenant_tx(tenant_id) as c:
+            start: dict[str, str | int] = {
+                "tenant_id": tenant_id,
+                "user_id": user_id,
+                "failures": 0,
+                "first_failed_at": at,
+            }
+            row = await _count_one(c, t, start, keys=["tenant_id", "user_id"], window_start=window_start)
             if row < max_failures:
                 return False
             await c.execute(
@@ -498,7 +540,7 @@ class SignInStore:
     async def email_locked_until(self, email_hash: str, *, now: str) -> str | None:
         """When sign-in for this address stops refusing, while it is locked; None when it is not."""
         t = signin_email_failures
-        async with self.db.system_tx(SIGNIN_LOCKOUT) as c:
+        async with self.install_tx(SIGNIN_LOCKOUT, tables=(signin_email_failures,)) as c:
             until = (await c.execute(sa.select(t.c.locked_until).where(t.c.email_hash == email_hash))).scalar()
         return str(until) if until and str(until) > now else None
 
@@ -508,22 +550,9 @@ class SignInStore:
         """Counts one wrong password for an address in one upsert, as `count_failure` does for a person, whether or
         not the address has an account. Returns whether this one locked it."""
         t = signin_email_failures
-        stale = t.c.first_failed_at < window_start
-        async with self.db.system_tx(SIGNIN_LOCKOUT) as c:
-            failures = (
-                await c.execute(
-                    insert(t)
-                    .values(email_hash=email_hash, failures=1, first_failed_at=at)
-                    .on_conflict_do_update(
-                        index_elements=[t.c.email_hash],
-                        set_={
-                            "failures": sa.case((stale, 1), else_=t.c.failures + 1),
-                            "first_failed_at": sa.case((stale, at), else_=t.c.first_failed_at),
-                        },
-                    )
-                    .returning(t.c.failures)
-                )
-            ).scalar_one()
+        async with self.install_tx(SIGNIN_LOCKOUT, tables=(signin_email_failures,)) as c:
+            start: dict[str, str | int] = {"email_hash": email_hash, "failures": 0, "first_failed_at": at}
+            failures = await _count_one(c, t, start, keys=["email_hash"], window_start=window_start)
             if failures < max_failures:
                 return False
             await c.execute(
@@ -534,23 +563,23 @@ class SignInStore:
         return True
 
     async def clear_email_failures(self, email_hash: str) -> None:
-        async with self.db.system_tx(SIGNIN_LOCKOUT) as c:
+        async with self.install_tx(SIGNIN_LOCKOUT, tables=(signin_email_failures,)) as c:
             await c.execute(signin_email_failures.delete().where(signin_email_failures.c.email_hash == email_hash))
 
     async def clear_failures(self, tenant_id: str, user_id: str) -> None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             await c.execute(signin_lockouts.delete().where(signin_lockouts.c.user_id == user_id))
 
     async def resets_since(self, tenant_id: str, user_id: str, since: str) -> int:
         """Reset links sent to the person since `since`."""
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             q = sa.select(sa.func.count()).where(
                 password_resets.c.user_id == user_id, password_resets.c.created_at >= since
             )
             return int((await c.execute(q)).scalar_one())
 
     async def open_reset(self, tenant_id: str, user_id: str, *, token_hash: str, at: str, expires_at: str) -> None:
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             await c.execute(
                 password_resets.insert().values(
                     id=new_id("prs"),
@@ -565,14 +594,12 @@ class SignInStore:
     async def use_reset(self, token_hash: str, encoded: str, *, at: str, request_id: str) -> tuple[str, str] | None:
         """Spends the reset token, sets the new password and ends every session of the person, in one transaction.
         Returns (tenant, user), or None when the token is unknown, used or expired."""
-        async with self.db.system_tx(RESET_LOOKUP) as c:
-            row = (
-                await c.execute(sa.text("SELECT id, tenant_id FROM platform_password_reset(:h)"), {"h": token_hash})
-            ).first()
-        if row is None:
+        async with self.system_tx(RESET_LOOKUP) as c:
+            found = await lookup(c, PASSWORD_RESET, token_hash)
+        if not found:
             return None
-        reset_id, tenant_id = str(row[0]), str(row[1])
-        async with self.db.tenant_tx(tenant_id) as c:
+        reset_id, tenant_id = str(found[0][0]), str(found[0][1])
+        async with self.tenant_tx(tenant_id) as c:
             # The workspace may have turned passwords off since the link was sent.
             kinds = (await c.execute(sa.select(signin_providers.c.kind, signin_providers.c.enabled))).all()
             if not _password_on(kinds):
@@ -637,7 +664,7 @@ class SignInStore:
         user_id: str | None = None,
     ) -> str:
         flow_id = new_id("flw")
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             await c.execute(
                 signin_flows.insert().values(
                     id=flow_id,
@@ -659,16 +686,17 @@ class SignInStore:
         return flow_id
 
     async def flow_by_state(self, state_hash: str) -> Flow | None:
-        return await self._flow("platform_signin_flow", state_hash)
+        return await self._flow(SIGNIN_FLOW, state_hash)
 
     async def flow_by_handoff(self, handoff_hash: str) -> Flow | None:
-        return await self._flow("platform_signin_handoff", handoff_hash)
+        return await self._flow(SIGNIN_HANDOFF, handoff_hash)
 
-    async def _flow(self, function: str, value: str) -> Flow | None:
-        async with self.db.system_tx(SIGNIN_LOOKUP) as c:
-            row = (await c.execute(sa.text(f"SELECT id, tenant_id FROM {function}(:v)"), {"v": value})).first()
-        if row is None:
+    async def _flow(self, by: Lookup, value: str) -> Flow | None:
+        async with self.system_tx(SIGNIN_LOOKUP) as c:
+            found = await lookup(c, by, value)
+        if not found:
             return None
+        row = found[0]
         cols = signin_flows.c
         q = sa.select(
             cols.id,
@@ -685,7 +713,7 @@ class SignInStore:
             cols.created_at,
             cols.expires_at,
         ).where(cols.id == str(row[0]))
-        async with self.db.tenant_tx(str(row[1])) as c:
+        async with self.tenant_tx(str(row[1])) as c:
             found = (await c.execute(q)).first()
         return Flow(*found) if found else None
 
@@ -696,12 +724,12 @@ class SignInStore:
             .where(signin_flows.c.id == flow.id, signin_flows.c.answered_at.is_(None), signin_flows.c.expires_at > at)
             .values(user_id=user_id, handoff_hash=handoff_hash, answered_at=at)
         )
-        async with self.db.tenant_tx(flow.tenant_id) as c:
+        async with self.tenant_tx(flow.tenant_id) as c:
             return (await c.execute(q)).rowcount == 1
 
-    async def record_test(self, flow: Flow, result: dict[str, Any], *, at: str) -> bool:
+    async def record_test(self, flow: Flow, result: dict[str, JsonValue], *, at: str) -> bool:
         """Keeps a test flow's result, once and before it expires. Sets no handoff, so no session can follow."""
-        async with self.db.tenant_tx(flow.tenant_id) as c:
+        async with self.tenant_tx(flow.tenant_id) as c:
             done = await c.execute(
                 signin_flows.update()
                 .where(
@@ -714,15 +742,15 @@ class SignInStore:
             )
         return bool(done.rowcount)
 
-    async def test_result(self, tenant_id: str, flow_id: str, user_id: str) -> dict[str, Any] | None:
+    async def test_result(self, tenant_id: str, flow_id: str, user_id: str) -> dict[str, JsonValue] | None:
         """A test flow's result for the admin who started it: `waiting` until the provider answers."""
         f = signin_flows.c
         q = sa.select(f.test_result, f.answered_at).where(f.id == flow_id, f.purpose == "test", f.user_id == user_id)
-        async with self.db.tenant_tx(tenant_id) as c:
-            row = (await c.execute(q)).first()
+        async with self.tenant_tx(tenant_id) as c:
+            row = await one(c, q, _TestResult)
         if row is None:
             return None
-        return dict(row[0]) if row[0] else {"state": "waiting"}
+        return row.test_result or {"state": "waiting"}
 
     async def take(self, flow: Flow, *, browser_hash: str, at: str) -> bool:
         """Spends the handoff, once, for the browser that started the flow, while the flow lives."""
@@ -737,7 +765,7 @@ class SignInStore:
             )
             .values(used_at=at)
         )
-        async with self.db.tenant_tx(flow.tenant_id) as c:
+        async with self.tenant_tx(flow.tenant_id) as c:
             return (await c.execute(q)).rowcount == 1
 
     # ── People behind an SSO answer ──
@@ -753,7 +781,7 @@ class SignInStore:
                 users.c.status == "active",
             )
         )
-        async with self.db.tenant_tx(tenant_id) as c:
+        async with self.tenant_tx(tenant_id) as c:
             return (await c.execute(q)).scalar()
 
     async def resolve(
@@ -772,31 +800,21 @@ class SignInStore:
         default team) with that role. A person is linked or made only for an email on one of the provider's
         domains. Then the provider's group rules are applied (`_join_groups`). None: nobody may sign in as this
         answer."""
-        try:
-            return await self._resolve(
-                p, subject=subject, email=email, name=name, at=at, request_id=request_id, groups=groups
-            )
-        except IntegrityError:
-            # Another first sign-in for this subject or email committed between our read and our insert.
-            found = await self.linked(p.tenant_id, p.id, subject)
-            return SsoPerson(found, False) if found else None
-
-    async def _resolve(
-        self,
-        p: Provider,
-        *,
-        subject: str,
-        email: str,
-        name: str,
-        at: str,
-        request_id: str,
-        groups: tuple[str, ...] | None,
-    ) -> SsoPerson | None:
-        async with self.db.tenant_tx(p.tenant_id) as c:
-            person = await self._person(c, p, subject=subject, email=email, name=name, at=at, request_id=request_id)
-            if person is not None:
-                await self._join_groups(c, p, person.user_id, email, groups, at=at, request_id=request_id)
-        return person
+        async with self.tenant_tx(p.tenant_id) as c:
+            try:
+                async with self.attempt(c):
+                    person = await self._person(
+                        c, p, subject=subject, email=email, name=name, at=at, request_id=request_id
+                    )
+                    if person is not None:
+                        await self._join_groups(c, p, person.user_id, email, groups, at=at, request_id=request_id)
+                    return person
+            except IntegrityError:
+                # Another first sign-in for this subject or email committed between our read and our insert; this
+                # one's writes are rolled back to the savepoint and the person is read as that one made them.
+                pass
+        found = await self.linked(p.tenant_id, p.id, subject)
+        return SsoPerson(found, False) if found else None
 
     async def _person(
         self, c: AsyncConnection, p: Provider, *, subject: str, email: str, name: str, at: str, request_id: str

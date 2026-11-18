@@ -7,9 +7,12 @@ afterwards does not change what was asked."""
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime
+from typing import TypedDict
 
 from ops_access.platform_events import POLICY_CHANGED
+
+from ..store.modules import Module, Operation, ServiceEvent
 
 ACCESS_REQUESTED = "tool_access.requested"
 # The platform tool the access request's system workflow applies its decision with, run in this gateway (tools.py).
@@ -19,7 +22,28 @@ APPLY_ACCESS = "apply_tool_access"
 SYSTEM_TOOLS: dict[str, str] = {APPLY_ACCESS: "tool_access_request"}
 
 
-def access_event(m: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
+class AccessModule(TypedDict):
+    id: str
+    tenant_id: str
+    display_name: str
+
+
+class AccessRequest(TypedDict):
+    """The columns of an approval an access request event reads."""
+
+    id: str
+    workflow_id: str
+    workflow_name: str
+    operations: list[str]
+    environment: str
+    expires_at: datetime | None
+    justification: str
+    decider_team: str | None
+    requested_by: str
+    requested_by_email: str | None
+
+
+def access_event(m: AccessModule, a: AccessRequest) -> ServiceEvent:
     """A workflow's request for the module's operations, for the team that decides it, started by the person asking."""
     expires = a.get("expires_at")
     return {
@@ -46,7 +70,7 @@ def access_event(m: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def policy_changed_event(m: dict[str, Any], o: dict[str, Any], team_id: str, actor: str | None) -> dict[str, Any]:
+def policy_changed_event(m: Module, o: Operation, team_id: str, actor: str | None) -> ServiceEvent:
     """A tool's own approval answer changed, for the team that edited it. agents-service keeps each team's tool list
     for up to 30 s and the list carries every write's answer, so it drops the list when it hears this, as it does for
     a team's appChanges (platform-service sends that one). The key repeats for a retry of the same save only."""

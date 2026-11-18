@@ -11,17 +11,19 @@ commands: [../CLAUDE.md](../CLAUDE.md); repo-wide rules: [../../CLAUDE.md](../..
 
 | Module | What it is | Used by |
 |---|---|---|
-| `settings` | `Settings` (pydantic-settings, prefix `OPS_`, secrets as files from `/run/secrets` or `OPS_SECRETS_DIR`, empty values unset) | every service and most packages |
-| `http` | `Envelope`, `ErrorEnvelope`, `ListResult`, `Pagination`, `ok()`, `paged()`, `page_window()`, `options_page()`, `install_error_handlers()`, `mark_public()`, `operation_id()` | every service's routes |
+| `settings` | `Settings` (pydantic-settings, prefix `OPS_`, secrets as files from `/run/secrets` or `OPS_SECRETS_DIR`, empty values unset); `Endpoint` (another service's address, timeout and retries), `PoolSettings` (`OPS_DB__*`), `Settings.require(...)` and `Settings.endpoint(name)` | every service and most packages |
+| `http` | `In` (every request body: refuses unknown fields), `Out` (every reply and store row: frozen, refuses unknown fields), `ExternalIn` and `ExternalOut` (another system's wire format: names as declared, no camelCase), `Passthrough` (a body forwarded whole), `JsonValue` (a reply field holding any JSON value, typed without `Any`), `Envelope`, `ErrorEnvelope`, `ListResult`, `LabelledListResult`, `Pagination`, `ok()`, `paged()`, `pagination()`, `page_window()`, `options_page()`, `install_error_handlers()`, `mark_public()`, `operation_id()` | every service's routes |
+| `listing` | `ListQuery` (`ListParams`, `list_params`): the query every list route takes; page size capped at `OPS_PAGE_SIZE_MAX`, every other query key a filter | every list route, with `ops_store.listing.list_page` |
 | `errors` | `ApiError` and its subclasses (`ValidationFailed`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `Unprocessable`, `TooManyRequests`, `ServiceUnavailable`, `StepUpRequired`), turned into `{success: false, error: {code, message, status}}` | services and packages |
 | `ids` | `new_id`, `now_iso`, `canonical_json`, `input_hash`, `action_id` | kernel and services |
 | `logging` | `get_logger`, `configure_logging(service=)`, `add_context`, `json_formatter`, `redact`: one JSON line per event on stdout ([docs/packages/ops_service_kit/logging.md](../../docs/packages/ops_service_kit/logging.md)) | services |
-| `request_timing` | The request id that follows a call across services, one `http.request` line per request, `note_caller` for its tenant and team; with `OPS_REQUEST_TIMING` also `Server-Timing` | installed by `install_error_handlers` |
+| `request_timing` | The request id that follows a call across services, one `http.request` line per request (with `db.query_count` (the route's own statements; the isolation layer's entry and exit statements are counted apart in `db.isolation_query_count`), `db.tx_count`, `db.tx_open_ms`, `db.connection_count`, the pool's `db.pool.wait_ms`, `in_use` and `limit`, and `http.client.call_count` and `http.client.calls_in_tx` from `ServiceClient`), `note_caller` for its tenant and team; with `OPS_REQUEST_TIMING` also `Server-Timing` | installed by `install_error_handlers` |
+| `testing` | `budget_check`: the statement budget fixture, undecorated (a service's conftest wraps it with `pytest.fixture`, since the kit does not depend on pytest); it calls every GET (also one left out of the OpenAPI document) at 5 and 50 rows and names the routes over their `budgets.toml` row, or with a row set higher than they use (more than `QUERY_SLACK` statements, or any listed transaction, connection or call), (statements, transactions, connections, service calls inside a transaction, the `status` a GET answers when not 200; a row's `query` table is sent as the query string, `{name}` taking a seeded id; a row with `first_queries` is called twice, its first call after the seed's writes held to that and the second to `queries`; a row with `caller = "service"` is called with the seed's `Seeded.service_headers` and named when a person's token is not refused there), or a row marked `not_budgeted = "<reason>"`, which is not called; `logging.captured_logging` reads the lines | a service's tests |
 | `flags` | Feature flags: off unless `OPS_FLAGS` names them; read through `Settings.feature_flags` | services |
 | `credentials` | `credential_store(settings)`: picks the `ops_policy` credential store from settings | services that keep secrets |
 | `model_calls` | `ModelCalls`: one structured model call through models-service for a service that is not an agent | documents-service |
 | `background` | The `/health/background` answer shape | services |
-| `contract` | `response_checker(app)`: an httpx hook that checks every test response against the app's own OpenAPI document | service tests (`testing` extra) |
+| `contract` | `response_checker(app)`: an httpx hook that checks every test response against the app's own OpenAPI document; `boundaries(app)`: each route whose body is not an `In` or reply not an `Out` (`scripts/check_typed_boundaries.py`) | service tests (`testing` extra) |
 | `openapi` | `report(...)`: the OpenAPI gate each `services/<x>/scripts/check_openapi.py` runs | service scripts (`testing` extra) |
 | `testdb` | `refusal` and `isolate_from_stack`: a test refuses any PostgreSQL database except `OPS_TEST_DATABASE_URL` | service conftests |
 | `opa_server`, `harness_containers` | A private OPA container per test session, and container cleanup for killed runs | tests and use cases only |
@@ -33,7 +35,14 @@ commands: [../CLAUDE.md](../CLAUDE.md); repo-wide rules: [../../CLAUDE.md](../..
 - Read configuration only through `Settings`; add a new setting there with a default and a validator, never an
   `os.environ` read elsewhere. `grep -rln "os.environ" packages/*/src` lists only `settings.py`.
 - `Settings` refuses unsafe combinations at start: `auth_mode` `dev` outside `environment=dev`, and the in-memory
-  credential store outside dev and test (`src/ops_service_kit/settings.py:454`).
+  credential store outside dev and test (`_refuse_dev_auth_outside_dev` in `src/ops_service_kit/settings.py`).
+- `auth_mode` defaults to `platform`. The fixed dev user is asked for by name: `scripts/stack.sh` and the use-case
+  harnesses set `OPS_AUTH_MODE=dev`, and a test run gets it from `isolate_from_stack()` in its conftest.
+- Another service is an `Endpoint` on `Settings` (`agents`, `tools`, `kb`, `files`, `documents`, `models` (default
+  timeout 120 s, a model's answer), `platform` (the public port), `platform_internal`), set by its address alone (`OPS_AGENTS_URL`) or whole (`OPS_AGENTS__URL`,
+  `OPS_AGENTS__TIMEOUT_S`, `OPS_AGENTS__RETRIES`). A process names the ones it cannot run without in
+  `settings.require(...)`, first in its `__main__`, and exits naming each unset one; `settings.endpoint(name)` raises
+  the same name later. No address falls back to this machine (`scripts/check_config_literals.py`).
 - Routes return hand-built JSON through `ok()`, which FastAPI does not validate. `contract.response_checker` closes the
   gap in each service's tests, and `openapi.report` keeps every operation typed, named `<tag>_<handler>` and marked
   `x-ops-public`.
@@ -47,7 +56,8 @@ packages depend on it, so a change here runs nearly every suite under `make test
 
 | Task | Command |
 |---|---|
-| Its own tests (flags, embedding settings, logging) | `make test PKG=packages/ops_service_kit` |
+| Its own tests (flags, embedding and endpoint settings, logging) | `make test PKG=packages/ops_service_kit` |
+| The configuration ratchet and the boot test of every service process | `uv run python scripts/check_config_literals.py --strict`, `uv run pytest -q scripts/tests/test_boot_requires_endpoints.py` |
 | One file | `make test PKG=packages/ops_service_kit T=tests/test_flags.py` |
 | Lint, format, types | `uv run ruff check packages/ops_service_kit`, `uv run ruff format --check packages/ops_service_kit`, `uv run pyright packages/ops_service_kit` |
 | The OpenAPI gate on one service | `make -C services/files-service openapi-check` (each service with a committed `openapi.json` has the target) |

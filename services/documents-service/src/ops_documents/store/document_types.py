@@ -11,17 +11,23 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from typing import Any, Literal
+from datetime import datetime
+from typing import Annotated, Any, Literal
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_contracts.field_values import DEFAULT_DATE_ORDER
+from ops_documents.store.columns import JSON_TEXT
 from ops_documents.store.metadata import RECOVER_PENDING, ROLE, SYSTEM_ROLE, metadata
+from ops_service_kit.http import Out
+from ops_service_kit.listing import ListParams
 from ops_store import isolation
 from ops_store.dialect import locked
+from ops_store.listing import LISTED, ListPage, list_page
+from ops_store.rows import one, rows
 from ops_store.schema import TENANT_SCOPED, team_owned
+from ops_store.store import Store
 from ops_store.team_scope import any_team, team_visible
 
 TestStatus = Literal["queued", "running", "done", "failed"]
@@ -32,13 +38,16 @@ document_types = sa.Table(
     sa.Column("tenant_id", sa.String(64), primary_key=True),
     sa.Column("id", sa.String(64), primary_key=True),
     sa.Column("team", sa.String(64), nullable=False),
-    sa.Column("name", sa.String(200), nullable=False),
+    # The list sorts on it; uq_document_types_name (tenant, team, name) is its index.
+    sa.Column("name", sa.String(200), nullable=False, info=LISTED),
     sa.Column("description", sa.String(1000)),
-    sa.Column("latest_version", sa.Integer, nullable=False),
+    # The list sorts on it (sortBy=latestVersion); ix_document_types_latest_version is its index.
+    sa.Column("latest_version", sa.Integer, nullable=False, info=LISTED),
     sa.Column("created_by", sa.String(320), nullable=False),
     sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     # A name names one type in its team, so a picker never shows two "Levy notice".
     sa.UniqueConstraint("tenant_id", "team", "name", name="uq_document_types_name"),
+    sa.Index("ix_document_types_latest_version", "tenant_id", "team", "latest_version"),
     info={**TENANT_SCOPED, **team_owned("team")},
 )
 
@@ -134,35 +143,92 @@ SINGLE = -1
 EXAMPLES_KEPT_PER_FIELD = 10
 
 
-def example_view(m: Any) -> dict[str, Any]:
-    return {
-        "id": m["id"],
-        "field": m["field"],
-        "line": m["line"],
-        "value": json.loads(m["value"]),
-        "extractionId": m["extraction_id"],
-        "record": None if m["record"] == SINGLE else m["record"],
-        "correctedBy": m["corrected_by"],
-        "createdAt": m["created_at"].isoformat(),
-    }
-
-
 class NameTakenError(Exception):
     """Another type in the team has this name, or the id is taken."""
 
 
-def _parsed(m: Any) -> dict[str, Any]:
-    """A version row with its JSON columns read."""
-    return {
-        **dict(m),
-        "fields": _json(m["fields"]),
-        "templates": _json(m["templates"] or "[]"),
-        "checks": _json(m["checks"] or "[]"),
-    }
+class TypeRow(Out):
+    """A team's document type."""
+
+    tenant_id: str
+    id: str
+    team: str
+    name: str
+    description: str | None
+    latest_version: int
+    created_by: str
+    created_at: datetime
 
 
-def _json(raw: str | None) -> Any:
-    return json.loads(raw) if raw else None
+class VersionRow(Out):
+    """One version of a type, its JSON read. A version saved before an option was a column holds null in it."""
+
+    tenant_id: str
+    type_id: str
+    version: int
+    fields: Annotated[list[dict[str, Any]], JSON_TEXT]
+    many: bool
+    review_below: float | None
+    date_order: str | None
+    templates: Annotated[list[dict[str, Any]] | None, JSON_TEXT]
+    checks: Annotated[list[dict[str, Any]] | None, JSON_TEXT]
+    page_images: bool | None
+    offer_at: int | None
+    note: str | None
+    created_by: str
+    created_at: datetime
+    team: str
+
+
+class SampleRow(Out):
+    """A file of the team's and the values it should read: {key: value}, or a list of them for a type reading
+    several records."""
+
+    id: str
+    type_id: str
+    file_id: str
+    name: str
+    expected: Annotated[Any, JSON_TEXT]
+    added_by: str
+    added_at: datetime
+
+
+class ExampleRow(Out):
+    """A correction a type's reads are given: the field, the line its value was printed on and the corrected value.
+    `record` is SINGLE for a read of one record."""
+
+    id: str
+    field: str
+    line: str | None
+    value: Annotated[Any, JSON_TEXT]
+    extraction_id: str
+    record: int
+    corrected_by: str
+    created_at: datetime
+
+
+class TestRow(Out):
+    """One test run of a version over the type's samples, its result read once it is done."""
+
+    __test__ = False  # not a pytest test class, though its name starts with Test
+
+    tenant_id: str
+    id: str
+    type_id: str
+    version: int
+    team: str
+    status: TestStatus
+    samples: int
+    result: Annotated[dict[str, Any] | None, JSON_TEXT]
+    error: str | None
+    asked_by: str
+    asked_at: datetime
+    finished_at: datetime | None
+
+
+def _named(table: sa.Table, model: type[Out]) -> tuple[sa.Column[Any], ...]:
+    """The table's columns the row model names, in the model's order."""
+    return tuple(table.c[name] for name in model.model_fields if name in table.c)
 
 
 def _type_team(type_id: str) -> Any:
@@ -171,23 +237,28 @@ def _type_team(type_id: str) -> Any:
     return sa.select(t.c.team).where(t.c.id == type_id, team_visible(t)).scalar_subquery()
 
 
-class DocumentTypesStore:
-    def __init__(self, engine: AsyncEngine) -> None:
-        self.engine = engine
+SAMPLE = _named(document_type_samples, SampleRow)
+EXAMPLE = _named(document_type_examples, ExampleRow)
+
+
+class DocumentTypesStore(Store):
+    role = ROLE
+    system_role = SYSTEM_ROLE
 
     async def create(self, values: Mapping[str, Any], version: Mapping[str, Any]) -> None:
         """The type and its version 1, in one transaction."""
-        try:
-            async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-                await c.execute(sa.insert(document_types).values(**values, latest_version=1))
-                await c.execute(sa.insert(document_type_versions).values(**self._version(values, version, 1)))
-        except IntegrityError as e:
-            raise NameTakenError(str(values["name"])) from e
+        async with self.tx() as c:
+            try:
+                async with self.attempt(c):
+                    await c.execute(sa.insert(document_types).values(**values, latest_version=1))
+                    await c.execute(sa.insert(document_type_versions).values(**self._version(values, version, 1)))
+            except IntegrityError as e:
+                raise NameTakenError(str(values["name"])) from e
 
     async def add_version(self, type_id: str, version: Mapping[str, Any]) -> int:
         """Inserts version latest+1 and moves the type to it; a concurrent save fails on the version key."""
         tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             head = sa.select(document_types.c.latest_version).where(
                 document_types.c.tenant_id == tenant, document_types.c.id == type_id, team_visible(document_types)
             )
@@ -222,154 +293,114 @@ class DocumentTypesStore:
             "created_at": version["created_at"],
         }
 
-    async def get(self, type_id: str) -> dict[str, Any] | None:
-        tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            m = (
-                (
-                    await c.execute(
-                        sa.select(document_types).where(
-                            document_types.c.tenant_id == tenant,
-                            document_types.c.id == type_id,
-                            team_visible(document_types),
-                        )
-                    )
-                )
-                .mappings()
-                .first()
-            )
-        return dict(m) if m is not None else None
+    async def get(self, type_id: str) -> TypeRow | None:
+        t = document_types.c
+        q = sa.select(document_types).where(
+            t.tenant_id == isolation.tenant(), t.id == type_id, team_visible(document_types)
+        )
+        async with self.tx() as c:
+            return await one(c, q, TypeRow)
 
-    async def list(self, team: str) -> list[dict[str, Any]]:
-        tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            rows = (
-                (
-                    await c.execute(
-                        sa.select(document_types)
-                        .where(
-                            document_types.c.tenant_id == tenant,
-                            document_types.c.team == team,
-                            team_visible(document_types),
-                        )
-                        .order_by(document_types.c.name)
-                    )
-                )
-                .mappings()
-                .all()
-            )
-        return [dict(m) for m in rows]
+    async def every(self, team: str) -> list[TypeRow]:
+        """Every type of the team, by name: what classification chooses among."""
+        t = document_types.c
+        q = (
+            sa.select(document_types)
+            .where(t.tenant_id == isolation.tenant(), t.team == team, team_visible(document_types))
+            .order_by(t.name, t.id)
+        )
+        async with self.tx() as c:
+            return await rows(c, q, TypeRow)
 
-    async def version(self, type_id: str, n: int) -> dict[str, Any] | None:
-        tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            m = (
-                (
-                    await c.execute(
-                        sa.select(document_type_versions).where(
-                            document_type_versions.c.tenant_id == tenant,
-                            document_type_versions.c.type_id == type_id,
-                            document_type_versions.c.version == n,
-                            team_visible(document_type_versions),
-                        )
-                    )
-                )
-                .mappings()
-                .first()
+    async def list(self, team: str, params: ListParams) -> tuple[list[TypeRow], ListPage]:
+        """One page of the team's types on the shared list contract, by name, searched on the name. sortBy=name turns
+        it, sortBy=latestVersion orders by the newest version with equal versions by name; uq_document_types_name and
+        ix_document_types_latest_version serve the orders."""
+        t = document_types.c
+        query = sa.select(document_types).where(
+            t.tenant_id == isolation.tenant(), t.team == team, team_visible(document_types)
+        )
+        async with self.tx() as c:
+            page = await list_page(
+                c,
+                query,
+                params,
+                search=[t.name],
+                sortable={"name": t.name, "latestVersion": t.latest_version},
+                default_sort=t.name.asc(),
             )
-        if m is None:
-            return None
-        return _parsed(m)
+        return [TypeRow.model_validate(r) for r in page["data"]], page
 
-    async def versions(self, type_id: str) -> list[dict[str, Any]]:
-        tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            rows = (
-                (
-                    await c.execute(
-                        sa.select(document_type_versions)
-                        .where(
-                            document_type_versions.c.tenant_id == tenant,
-                            document_type_versions.c.type_id == type_id,
-                            team_visible(document_type_versions),
-                        )
-                        .order_by(document_type_versions.c.version.desc())
-                    )
-                )
-                .mappings()
-                .all()
-            )
-        return [_parsed(m) for m in rows]
+    async def version(self, type_id: str, n: int) -> VersionRow | None:
+        v = document_type_versions.c
+        q = sa.select(document_type_versions).where(
+            v.tenant_id == isolation.tenant(),
+            v.type_id == type_id,
+            v.version == n,
+            team_visible(document_type_versions),
+        )
+        async with self.tx() as c:
+            return await one(c, q, VersionRow)
+
+    async def versions(self, type_id: str) -> list[VersionRow]:
+        v = document_type_versions.c
+        q = (
+            sa.select(document_type_versions)
+            .where(v.tenant_id == isolation.tenant(), v.type_id == type_id, team_visible(document_type_versions))
+            .order_by(v.version.desc())
+        )
+        async with self.tx() as c:
+            return await rows(c, q, VersionRow)
 
     async def add_sample(self, values: Mapping[str, Any]) -> None:
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.insert(document_type_samples).values(
                     **{**values, "expected": json.dumps(values["expected"]), "team": _type_team(str(values["type_id"]))}
                 )
             )
 
-    async def samples(self, type_id: str) -> list[dict[str, Any]]:
-        tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            rows = (
-                (
-                    await c.execute(
-                        sa.select(document_type_samples)
-                        .where(
-                            document_type_samples.c.tenant_id == tenant,
-                            document_type_samples.c.type_id == type_id,
-                            team_visible(document_type_samples),
-                        )
-                        .order_by(document_type_samples.c.added_at, document_type_samples.c.id)
-                    )
-                )
-                .mappings()
-                .all()
-            )
-        return [{**dict(m), "expected": _json(m["expected"])} for m in rows]
+    async def samples(self, type_id: str) -> list[SampleRow]:
+        sm = document_type_samples.c
+        q = (
+            sa.select(*SAMPLE)
+            .where(sm.tenant_id == isolation.tenant(), sm.type_id == type_id, team_visible(document_type_samples))
+            .order_by(sm.added_at, sm.id)
+        )
+        async with self.tx() as c:
+            return await rows(c, q, SampleRow)
 
-    async def remove_sample(self, type_id: str, sample_id: str) -> dict[str, Any] | None:
-        tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            m = (
-                (
-                    await c.execute(
-                        sa.delete(document_type_samples)
-                        .where(
-                            document_type_samples.c.tenant_id == tenant,
-                            document_type_samples.c.type_id == type_id,
-                            document_type_samples.c.id == sample_id,
-                        )
-                        .returning(document_type_samples)
-                    )
-                )
-                .mappings()
-                .first()
-            )
-        return dict(m) if m is not None else None
+    async def remove_sample(self, type_id: str, sample_id: str) -> SampleRow | None:
+        sm = document_type_samples.c
+        q = (
+            sa.delete(document_type_samples)
+            .where(sm.tenant_id == isolation.tenant(), sm.type_id == type_id, sm.id == sample_id)
+            .returning(*SAMPLE)
+        )
+        async with self.tx() as c:
+            return await one(c, q, SampleRow)
 
-    async def examples(self, team: str, type_id: str) -> list[dict[str, Any]]:
+    async def examples(self, team: str, type_id: str) -> list[ExampleRow]:
         """The type's examples in the team, newest first."""
         tenant = isolation.tenant()
         e = document_type_examples.c
         q = (
-            sa.select(document_type_examples)
+            sa.select(*EXAMPLE)
             .where(e.tenant_id == tenant, e.team == team, e.type_id == type_id, team_visible(document_type_examples))
             .order_by(e.created_at.desc(), e.id.desc())
         )
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            return [example_view(m) for m in (await c.execute(q)).mappings()]
+        async with self.tx() as c:
+            return await rows(c, q, ExampleRow)
 
     async def recent_examples(
         self, team: str, type_id: str, fields: list[str], *, per_field: int, total: int
-    ) -> list[dict[str, Any]]:
+    ) -> list[ExampleRow]:
         """What a read of the type is given: for the fields it asks, the newest `per_field` examples of each, newest
         first, at most `total` in all."""
         tenant = isolation.tenant()
         e = document_type_examples.c
         q = (
-            sa.select(document_type_examples)
+            sa.select(*EXAMPLE)
             .where(
                 e.tenant_id == tenant,
                 e.team == team,
@@ -379,22 +410,23 @@ class DocumentTypesStore:
             )
             .order_by(e.created_at.desc(), e.id.desc())
         )
-        kept: list[dict[str, Any]] = []
+        async with self.tx() as c:
+            newest = await rows(c, q, ExampleRow)
+        kept: list[ExampleRow] = []
         counts: dict[str, int] = {}
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            for m in (await c.execute(q)).mappings():
-                if counts.get(m["field"], 0) >= per_field:
-                    continue
-                counts[m["field"]] = counts.get(m["field"], 0) + 1
-                kept.append(example_view(m))
-                if len(kept) >= total:
-                    break
+        for example in newest:
+            if counts.get(example.field, 0) >= per_field:
+                continue
+            counts[example.field] = counts.get(example.field, 0) + 1
+            kept.append(example)
+            if len(kept) >= total:
+                break
         return kept
 
     async def remove_example(self, team: str, type_id: str, example_id: str) -> bool:
         tenant = isolation.tenant()
         e = document_type_examples.c
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             gone = await c.execute(
                 sa.delete(document_type_examples).where(
                     e.tenant_id == tenant, e.team == team, e.type_id == type_id, e.id == example_id
@@ -407,7 +439,7 @@ class DocumentTypesStore:
         fields. False when the team holds no such type."""
         tenant = isolation.tenant()
         t = document_types.c
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             gone = await c.execute(
                 sa.delete(document_types).where(
                     t.tenant_id == tenant, t.team == team, t.id == type_id, team_visible(document_types)
@@ -419,8 +451,10 @@ class DocumentTypesStore:
                 await c.execute(sa.delete(table).where(table.c.tenant_id == tenant, table.c.type_id == type_id))
         return True
 
-    async def insert_test(self, values: Mapping[str, Any]) -> None:
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+    async def insert_test(self, test: TestRow) -> None:
+        values = test.model_dump()
+        values["result"] = json.dumps(test.result) if test.result is not None else None
+        async with self.tx() as c:
             await c.execute(sa.insert(document_type_tests).values(**values))
 
     async def set_test(self, test_id: str, values: Mapping[str, Any]) -> None:
@@ -428,48 +462,32 @@ class DocumentTypesStore:
         row = dict(values)
         if "result" in row and row["result"] is not None:
             row["result"] = json.dumps(row["result"])
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             await c.execute(
                 sa.update(document_type_tests)
                 .where(document_type_tests.c.tenant_id == tenant, document_type_tests.c.id == test_id)
                 .values(**row)
             )
 
-    async def test(self, test_id: str) -> dict[str, Any] | None:
-        tenant = isolation.tenant()
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
-            m = (
-                (
-                    await c.execute(
-                        sa.select(document_type_tests).where(
-                            document_type_tests.c.tenant_id == tenant,
-                            document_type_tests.c.id == test_id,
-                            team_visible(document_type_tests),
-                        )
-                    )
-                )
-                .mappings()
-                .first()
-            )
-        return {**dict(m), "result": _json(m["result"])} if m is not None else None
+    async def test(self, test_id: str) -> TestRow | None:
+        k = document_type_tests.c
+        q = sa.select(document_type_tests).where(
+            k.tenant_id == isolation.tenant(), k.id == test_id, team_visible(document_type_tests)
+        )
+        async with self.tx() as c:
+            return await one(c, q, TestRow)
 
-    async def pending_tests(self) -> list[dict[str, Any]]:
+    async def pending_tests(self) -> list[TestRow]:
         """Every queued or running test run, across tenants: what a restart picks up again, each then run as its own
         tenant and team."""
         t = document_type_tests
-        async with isolation.system_tx(self.engine, RECOVER_PENDING, role=SYSTEM_ROLE) as c:
-            rows = (
-                (
-                    await c.execute(
-                        sa.select(t)
-                        .where(t.c.status.in_(("queued", "running")), any_team(t, "a restart picks up every team's"))
-                        .order_by(document_type_tests.c.asked_at)
-                    )
-                )
-                .mappings()
-                .all()
-            )
-        return [dict(m) for m in rows]
+        q = (
+            sa.select(t)
+            .where(t.c.status.in_(("queued", "running")), any_team(t, RECOVER_PENDING))
+            .order_by(t.c.asked_at)
+        )
+        async with self.system_tx(RECOVER_PENDING) as c:
+            return await rows(c, q, TestRow)
 
     async def purge_samples(self, team: str, file_id: str) -> int:
         """Removes the samples naming a deleted file on the team's document types; the number removed."""
@@ -477,7 +495,7 @@ class DocumentTypesStore:
         teams_types = sa.select(document_types.c.id).where(
             document_types.c.tenant_id == tenant, document_types.c.team == team, team_visible(document_types)
         )
-        async with isolation.isolated_tx(self.engine, role=ROLE) as c:
+        async with self.tx() as c:
             gone = await c.execute(
                 sa.delete(document_type_samples).where(
                     document_type_samples.c.tenant_id == tenant,

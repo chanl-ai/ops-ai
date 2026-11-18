@@ -3,9 +3,11 @@ superseded), which only the transitions below change."""
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from collections.abc import Callable
+from typing import Any, ClassVar, TypedDict
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 
 from ops_store import Guarantee
 
@@ -29,12 +31,58 @@ def _seen_by(team: str | None) -> sa.ColumnElement[bool]:
     return sa.true() if team is None else sa.or_(t.c.team_id == team, t.c.team_id.is_(None))
 
 
+class ListColumns(TypedDict):
+    """What the Workflows list reads of a definition, stored on each version (`node_types.list_columns`)."""
+
+    description: str
+    trigger: str
+    startable: bool
+    takes_files: bool
+    # The mailbox its Email received trigger names, if it has one: the Channels list joins its mailboxes on it.
+    mailbox: str | None
+
+
+# A definition's list columns: `node_types.list_columns` with the host's type registry, which this package's store may
+# not import.
+Describe = Callable[[JsonValue], ListColumns]
+
+
+def unlisted(definition: JsonValue) -> ListColumns:
+    """The list columns of a store given no `describe` (tests that store a definition with no type registry): the
+    description and, as the trigger text, the description; started by hand by nobody."""
+    description = str(definition.get("description") or "") if isinstance(definition, dict) else ""
+    return {
+        "description": description,
+        "trigger": description,
+        "startable": False,
+        "takes_files": False,
+        "mailbox": watched_mailbox(definition),
+    }
+
+
+EMAIL_TRIGGER = "ops.trigger.email"
+MAILBOX_MAX = 320
+
+
+def watched_mailbox(definition: JsonValue) -> str | None:
+    """The address its Email received trigger names, if it has one; needs no type registry."""
+    raw = definition.get("nodes") if isinstance(definition, dict) else None
+    for node in raw if isinstance(raw, list) else []:
+        if isinstance(node, dict) and node.get("type") == EMAIL_TRIGGER:
+            params = node.get("parameters")
+            found = params.get("mailbox") if isinstance(params, dict) else None
+            # engine_definitions.mailbox holds an address; anything else names no mailbox that could exist.
+            return found if isinstance(found, str) and 0 < len(found) <= MAILBOX_MAX else None
+    return None
+
+
 class DefinitionStore:
     # A version is the next number for its workflow unless its digest is stored already (CAS on the unique digest).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.CAS})
 
-    def __init__(self, tx: Transactions) -> None:
+    def __init__(self, tx: Transactions, describe: Describe = unlisted) -> None:
         self.tx = tx
+        self.describe = describe
 
     async def publish(
         self,
@@ -49,8 +97,10 @@ class DefinitionStore:
         stage: str = "draft",
     ) -> tuple[int, bool]:
         """Stores the next version at `stage` (a save is a draft; only the dev seed stores one live, through
-        `go_live`); the same definition again returns its version. Returns (version, created)."""
+        `go_live`) with its list columns (`describe`) in the same statement; the same definition again returns its
+        version. Returns (version, created)."""
         t = engine_definitions
+        listed = self.describe(definition)
         async with self.tx.tenant_tx() as c:
             # The id's existing versions, locked: a workflow id belongs to the team that first published it.
             rows = (
@@ -80,6 +130,7 @@ class DefinitionStore:
                     created_by=by,
                     team_id=team,
                     stage=stage,
+                    **listed,
                 )
             )
             return version, True

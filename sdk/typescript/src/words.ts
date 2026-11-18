@@ -8,6 +8,7 @@
  * account method left without `account` acts on the app's default account.
  */
 import type { Raw, Resource } from './client.js';
+import { everyPage } from './transport.js';
 
 type Obj = Record<string, any>;
 const PLUGIN = 'plugin:';
@@ -46,14 +47,13 @@ function picked(found: Obj, names?: string[]): Obj[] {
 
 const sourceOf = (specUrl: string, connectionId?: string) => ({ kind: 'openapi', specUrl, ...(connectionId ? { connectionId } : {}) });
 
-const rowsOf = (found: any): Obj[] => (Array.isArray(found) ? found : (found?.data ?? []));
-
 /** The team's secrets (Settings > Secrets). A value goes in and is never read back: no answer carries it. */
 export class Secrets {
   constructor(private readonly raw: Raw) {}
 
-  async list(): Promise<Obj[]> {
-    return rowsOf(await call(this.raw, 'tools', 'secrets_list_secrets'));
+  /** Every secret, page after page; `search` keeps those whose name has the text, `ids` names the ones wanted. */
+  list({ search, ids }: { search?: string; ids?: string[] } = {}): Promise<Obj[]> {
+    return everyPage((query) => call(this.raw, 'tools', 'secrets_list_secrets', { query }), { search, ids });
   }
 
   /** Stores a secret as the team's; `teams` also shares it with other teams of the caller. */
@@ -115,9 +115,12 @@ export class Policies {
 export class Apps {
   constructor(private readonly raw: Raw) {}
 
-  /** The Apps page's cards; `connected` keeps only the connected ones (true) or only the rest (false). */
-  async list({ connected: only }: { connected?: boolean } = {}): Promise<Obj[]> {
-    const cards = (await call(this.raw, 'tools', 'apps_list_apps')) as Obj[];
+  /**
+   * The Apps page's cards, page after page; `connected` keeps only the connected ones (true) or only the rest (false),
+   * `search` matches the name and category, `ids` names the cards wanted.
+   */
+  async list({ connected: only, search, ids }: { connected?: boolean; search?: string; ids?: string[] } = {}): Promise<Obj[]> {
+    const cards = await everyPage((query) => call(this.raw, 'tools', 'apps_list_apps', { query }), { search, ids });
     return cards.filter((c) => only === undefined || connected(c) === only);
   }
 

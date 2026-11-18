@@ -15,7 +15,10 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
-from .starts import ONLY_FROM_WORKFLOWS, StartSpec, trigger_node
+from pydantic import JsonValue
+
+from .starts import ONLY_FROM_WORKFLOWS, StartSpec, only_from_workflows, trigger_node
+from .store.definitions import ListColumns, watched_mailbox
 
 Effects = Literal["none", "model", "read", "write", "human"]
 Group = Literal["trigger", "data", "ai", "action", "flow", "human"]
@@ -1820,3 +1823,30 @@ def start_form(definition: Mapping[str, Any] | None, registry: TypeRegistry) -> 
         if not isinstance(props, Mapping) or not props:
             return None
     return t.start.view(parameters)
+
+
+def list_columns(definition: JsonValue, registry: TypeRegistry) -> ListColumns:
+    """What the Workflows list reads of a definition, stored on each version (engine_definitions' description,
+    trigger, startable and takes_files) so the list searches, filters and pages in SQL: its description; its trigger
+    text (the description, which says what starts it as a v1 workflow's trigger does, else the trigger node's type
+    label); whether a person starts it by hand (a start form, and not only from other workflows); and whether that
+    form takes a file."""
+    d = definition if isinstance(definition, dict) else {}
+    description = str(d.get("description") or "")
+    raw = d.get("nodes")
+    nodes = [n for n in raw if isinstance(n, dict)] if isinstance(raw, list) else []
+    versions = [n.get("typeVersion") for n in nodes]
+    types = [
+        registry.find(str(n.get("type")), int(v) if isinstance(v, int | float | str) and v else 0)
+        for n, v in zip(nodes, versions, strict=True)
+    ]
+    label = next((t.label for t in types if t and t.group == "trigger"), "")
+    form = start_form(d, registry)
+    by_hand = form is not None and not only_from_workflows(d)
+    return {
+        "description": description,
+        "trigger": description or label,
+        "startable": by_hand,
+        "takes_files": by_hand and bool(form and form["takesFiles"]),
+        "mailbox": watched_mailbox(d),
+    }

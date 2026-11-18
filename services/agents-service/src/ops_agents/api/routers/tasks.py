@@ -5,7 +5,11 @@ lists, times out, is assigned and is audited as every other task, with no second
 Posting one starts a run (`workflows.run` in the acting team); the caller reads the decision back from the task.
 
 A missing required value is accepted with a warning and the screen shows its fallback; a value of the wrong kind is
-refused with 422 naming the field, since no fallback can show it."""
+refused with 422 naming the field, since no fallback can show it.
+
+Neither route takes the request transaction (`Tx`): a post waits up to OPEN_WAIT_SECONDS for the worker to open the
+task, reading the run as the worker commits it, which one transaction held across the wait would not see on every
+database; a read names the deciding team through platform-service."""
 
 from __future__ import annotations
 
@@ -17,11 +21,10 @@ from fastapi.responses import JSONResponse
 from pydantic import Field
 
 from ops_access import can
-from ops_contracts.chat import WireModel
 from ops_engine.compiler import DEFAULT_OPTIONS
 from ops_engine.store import RunStore
 from ops_service_kit.errors import Unprocessable
-from ops_service_kit.http import Envelope, Out
+from ops_service_kit.http import Envelope, In, JsonValue, Out
 from ops_service_kit.ids import new_id
 
 from ... import task_types as tt
@@ -44,7 +47,7 @@ OPEN_WAIT_SECONDS = 5.0
 SOURCE = "agents"
 
 
-class TaskIn(WireModel):
+class TaskIn(In):
     type: str = Field(min_length=1, max_length=64)
     # The version to open; the newest published one when empty, kept on the task either way.
     version: int | None = Field(default=None, ge=1)
@@ -71,7 +74,7 @@ class TaskState(Out):
     decided_by: str | None
     decided_at: str | None
     # Values the decision carried: a reviewer's corrections or an action's inputs.
-    values: dict[str, Any] | None
+    values: dict[str, JsonValue] | None
 
 
 async def _opened(rt: Runtime, run_id: str) -> Literal["waiting", "starting"]:

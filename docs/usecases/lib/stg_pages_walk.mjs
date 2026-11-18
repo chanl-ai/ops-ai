@@ -1,8 +1,8 @@
 // Signs in to a deployed console and opens every nav page, reporting page errors, failed API calls and error text.
 // STG_ORIGIN, STG_EMAIL and STG_PASSWORD come from the environment; nothing secret is printed.
-import { chromium } from '@ops-ai/usecase-runner/harness';
+import { chromium, requireStagingOrigin } from '@ops-ai/usecase-runner/harness';
 
-const origin = process.env.STG_ORIGIN;
+const origin = requireStagingOrigin(process.env.STG_ORIGIN);
 const pages = (process.env.STG_PAGES || '/').split(' ');
 
 const browser = await chromium.launch();

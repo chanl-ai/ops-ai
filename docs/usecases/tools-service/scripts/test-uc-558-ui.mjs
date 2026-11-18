@@ -131,7 +131,7 @@ try {
       // The team's publish policy may hold a new agent for a review; Maya, an approver in Operations, approves it.
       const maya = as(await tokenFor('m.okafor@harborpine.example'), 'team_ops');
       const live = asked.data?.status === 'pending' ? await call(agents, 'POST', `/v1/publish-requests/${asked.data.id}/decision`, maya, { decision: 'approved' }) : asked;
-      const offered = ((await call(agents, 'GET', '/v1/agents?pageSize=100', james)).data?.data ?? []).some((a) => a.id === agent.id && a.publishedVersion != null);
+      const offered = ((await call(agents, 'GET', `/v1/agents?ids=${encodeURIComponent(agent.id)}`, james)).data?.data ?? []).some((a) => a.id === agent.id && a.publishedVersion != null);
       check(
         'setup: the connection asks each person, its module is published and the agent holds it',
         made.status === 201 && put.status === 200 && published?.status === 'published' && live.status < 300 && offered,

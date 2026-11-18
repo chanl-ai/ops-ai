@@ -29,7 +29,7 @@ def hold(tid: str, release: bool = False) -> None:
     asyncio.run(go())
 
 
-with tools() as gateway, agents(gateway_url=str(gateway.base_url)) as api:
+with tools(approval_rules=True) as gateway, agents(gateway_url=str(gateway.base_url)) as api:
     tid = new_thread(api, "complex_workflow")
     code, events = run(api, tid, {"input": {"email": EMAILS[0]}})
     check("1 dispute paused for review", code == 200 and events[-1]["data"]["status"] == "interrupted", events[-1:])
@@ -53,7 +53,7 @@ with tools() as gateway, agents(gateway_url=str(gateway.base_url)) as api:
     check(
         "3 the gateway refused the expired token once, and the renewed one sent the reply once",
         bool(values.get("sent")) and sorted(r.get("status") for r in rows) == ["denied", "ok"],
-        {"sent": values.get("sent"), "rows": [(r.get("status"), r.get("runId")) for r in rows]},
+        {"sent": values.get("sent"), "rows": [(r.get("status"), r.get("runId"), r.get("reasons") or r.get("error")) for r in rows]},
     )
 
 finish()
