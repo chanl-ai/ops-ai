@@ -92,7 +92,7 @@ class Cases:
         w = worker(db, CountingTools(), InMemorySaver())
         w.host.ports.cases = self.port
         await drain(w)
-        return str(run["id"])
+        return run.id
 
     async def all(self, team: str = TEAM) -> list[CaseRecord]:
         with tenant_scope(self.t.id):

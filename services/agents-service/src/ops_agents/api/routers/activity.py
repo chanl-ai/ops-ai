@@ -6,7 +6,7 @@ tool calls (tools-service) with none open."""
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, TypeAlias
+from typing import Annotated, Literal, TypeAlias
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -15,16 +15,16 @@ from pydantic import BaseModel, Field
 from ops_access import can
 from ops_engine.store import RunStore
 from ops_service_kit.errors import Forbidden, NotFound, Unprocessable
-from ops_service_kit.http import Envelope, ListResult, Out, paged
+from ops_service_kit.http import Envelope, Json, ListResult, Out, paged
 from ops_store import isolation
 
 from ...case_wording import entry
-from ...store.activity import KINDS, Activity, Filters, Scope
+from ...store.activity import KINDS, Activity, ActivityEntry, Filters, Scope
 from ...store.cases import CaseNotFound, CaseStore
 from ...store.engine import EngineTransactions
 from ...store.tenancy import current_team
 from ...store.trigger_events import SET_ASIDE_AFTER
-from ..actors import ActorView, actor_reads, named_actors
+from ..actors import ActorView, NamedActors, actor_reads, named_actors
 from ..auth import Principal, caller_in, caller_of
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -158,16 +158,16 @@ def _sources(raw: list[str]) -> tuple[tuple[str, str], ...]:
     return tuple(out)
 
 
-def _actor(r: dict[str, Any], who: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    if r["kind"] in ("email", "form"):
-        return {"kind": "sender", "id": r["actor"], "name": r["actor"]}
-    if r["kind"] == "background":
+def _actor(r: ActivityEntry, who: NamedActors) -> Json:
+    if r.kind in ("email", "form"):
+        return {"kind": "sender", "id": r.actor, "name": r.actor}
+    if r.kind == "background":
         # The process did it; named as the Background page names it.
-        return {"kind": "event", "id": r["actor"], "name": r["source_name"] or ""}
-    return who.get(str(r["actor"] or "")) or {"kind": "person", "id": "", "name": ""}
+        return {"kind": "event", "id": r.actor, "name": r.source_name or ""}
+    return who.get(r.actor or "") or {"kind": "person", "id": "", "name": ""}
 
 
-def email_detail(outcome: str, d: dict[str, Any]) -> str | None:
+def email_detail(outcome: str, d: Json) -> str | None:
     """An email's or a form submission's reason, from the detail its trigger event recorded (api/email_trigger.py,
     routers/forms.py)."""
     reason = str(d.get("reason") or "")
@@ -182,41 +182,37 @@ def email_detail(outcome: str, d: dict[str, Any]) -> str | None:
 
 
 def row_view(
-    r: dict[str, Any],
-    who: dict[str, dict[str, Any]],
+    r: ActivityEntry,
+    who: NamedActors,
     titles: dict[str, str] | None = None,
-    details: dict[str, dict[str, Any]] | None = None,
+    details: dict[str, Json] | None = None,
     ended: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    detail = (
-        email_detail(str(r["outcome"] or ""), (details or {}).get(str(r["row_id"])) or {})
-        if r["kind"] in ("email", "form")
-        else None
-    )
+) -> Json:
+    detail = email_detail(r.outcome or "", (details or {}).get(r.row_id) or {}) if r.kind in ("email", "form") else None
     return {
-        "id": f"{r['kind']}:{r['row_id']}",
-        "kind": r["kind"],
-        "title": (titles or {}).get(f"{r['kind']}:{r['row_id']}") or r["title"],
-        "status": r["status"],
-        "outcome": r["outcome"],
+        "id": f"{r.kind}:{r.row_id}",
+        "kind": r.kind,
+        "title": (titles or {}).get(f"{r.kind}:{r.row_id}") or r.title,
+        "status": r.status,
+        "outcome": r.outcome,
         # A workflow run says which End it reached, as the Runs list does ("Finished at the Not found end.").
-        "outcomeText": (ended or {}).get(str(r["row_id"]))
-        if r["kind"] == "workflow_run" and (ended or {}).get(str(r["row_id"]))
-        else words(str(r["outcome"]))
-        if r["outcome"]
+        "outcomeText": (ended or {}).get(r.row_id)
+        if r.kind == "workflow_run" and (ended or {}).get(r.row_id)
+        else words(r.outcome)
+        if r.outcome
         else None,
         "detail": detail,
-        "teamId": r["team_id"],
-        "source": {"type": r["source_type"], "id": r["source_id"] or "", "name": r["source_name"] or ""},
+        "teamId": r.team_id,
+        "source": {"type": r.source_type, "id": r.source_id or "", "name": r.source_name or ""},
         "actor": _actor(r, who),
-        "at": r["at"],
-        "ref": {"kind": r["ref_kind"], "id": r["ref_id"]},
+        "at": r.at,
+        "ref": {"kind": r.ref_kind, "id": r.ref_id},
     }
 
 
-async def case_titles(rt: Runtime, rows: list[dict[str, Any]]) -> dict[str, str]:
+async def case_titles(rt: Runtime, rows: list[ActivityEntry]) -> dict[str, str]:
     """Each case row's title in the words the case page's feed uses (case_wording), its events read in one query."""
-    ids = [str(r["row_id"]) for r in rows if r["kind"] == "case"]
+    ids = [r.row_id for r in rows if r.kind == "case"]
     events = await CaseStore(rt.db).events_by_id(ids)
     out: dict[str, str] = {}
     for event_id, e in events.items():
@@ -259,11 +255,12 @@ async def list_activity(rt: Rt, me: Me, q: Annotated[ActivityQuery, Query()]) ->
             case=case,
         )
         found = await Activity(rt.db).page(scope, filters, page=q.page, page_size=q.pageSize)
-        reads = await actor_reads(rt, [str(r["actor"] or "") for r in found.rows if r["kind"] not in ("email", "form")])
+        reads = await actor_reads(rt, [r.actor or "" for r in found.rows if r.kind not in ("email", "form")])
         case_said = await case_titles(rt, found.rows)
-        calls = await Activity(rt.db).calls(found.rows)
+        # calls() still reads rows as dicts: tests/api/test_step_wording.py hands it a partial row.
+        calls = await Activity(rt.db).calls([r.model_dump() for r in found.rows])
         details = await Activity(rt.db).email_details(found.rows)
-        runs = [str(r["row_id"]) for r in found.rows if r["kind"] == "workflow_run" and r["outcome"]]
+        runs = [r.row_id for r in found.rows if r.kind == "workflow_run" and r.outcome]
         ended = (
             await outcome_texts(rt, [r.model_dump() for r in await RunStore(EngineTransactions(rt.db)).many(runs)])
             if runs

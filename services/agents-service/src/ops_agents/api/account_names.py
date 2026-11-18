@@ -81,12 +81,12 @@ async def account_uses_in(rt: Runtime, team: str, app: str, name: str) -> dict[s
     drafts = published = 0
     workflows: list[str] = []
     for row in await store.summaries(team=team):
-        wid = str(row["workflow_id"])
-        latest = uses_of([(wid, cast(dict[str, Any], row.get("definition") or {}))], app, name)
-        live_version = row.get("current_version")
-        live = await store.get(wid, int(live_version), team=team) if live_version else None
-        named_live = bool(live and uses_of([(wid, cast(dict[str, Any], live["definition"]))], app, name))
-        drafts += int(bool(latest) and row.get("stage") == "draft")
+        wid = row.workflow_id
+        latest = uses_of([(wid, cast(dict[str, Any], row.definition or {}))], app, name)
+        live_version = row.current_version
+        live = await store.row(wid, live_version, team=team) if live_version else None
+        named_live = bool(live and uses_of([(wid, cast(dict[str, Any], live.definition))], app, name))
+        drafts += int(bool(latest) and row.stage == "draft")
         published += int(named_live)
         if latest or named_live:
             workflows.append(wid)

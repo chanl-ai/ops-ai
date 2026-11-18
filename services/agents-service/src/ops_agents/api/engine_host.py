@@ -85,13 +85,13 @@ async def run_workflow(db: AsyncEngine, run_id: str) -> tuple[str, bool]:
     claim): the no-team workflow under a shipped event workflow's id. tools-service lets only the access
     request's handler apply a tool access decision."""
     tx = EngineTransactions(db)
-    run = await RunStore(tx).get(run_id)
+    run = await RunStore(tx).row(run_id)
     if run is None:
         return "", False
-    workflow = str(run["workflow_id"])
-    stored = await DefinitionStore(tx).get(workflow, int(run["version"]))
+    workflow = run.workflow_id
+    stored = await DefinitionStore(tx).row(workflow, run.version)
     handler = workflow in set(handlers(EVENT_WORKFLOWS).values())
-    return workflow, bool(handler and stored is not None and stored.get("team_id") is None)
+    return workflow, bool(handler and stored is not None and stored.team_id is None)
 
 
 class GatewayTools:
@@ -216,8 +216,8 @@ class StarterApprovals:
         self.policies = policies
 
     async def decision(self, run_id: str, node_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
-        run = await RunStore(EngineTransactions(self.db)).get(run_id)
-        if run is None or not run.get("started_by_approver") or self.gateway is None:
+        run = await RunStore(EngineTransactions(self.db)).row(run_id)
+        if run is None or not run.started_by_approver or self.gateway is None:
             return None
         call = dict(payload["call"])
         tool = str(call["tool"])
@@ -228,15 +228,15 @@ class StarterApprovals:
             return None
         if stepped or approval.get("stepUp") or int(approval.get("approvers") or 1) > 1:
             return None
-        starter, digest = str(run["created_by"]), input_hash(call["input"])
+        starter, digest = run.created_by, input_hash(call["input"])
         found = await ReviewStore(self.db).approve(
-            run_id, str(call["step"]), starter, digest, distinct=False, team_id=str(run["team_id"])
+            run_id, str(call["step"]), starter, digest, distinct=False, team_id=run.team_id
         )
         if not found:
             return None
         await EventLog(self.db).append(
             thread_id=run_id,
-            team_id=str(run["team_id"]),
+            team_id=run.team_id,
             run_id=run_id,
             type_="decided",
             node=node_id,
@@ -271,9 +271,9 @@ class RunReviews:
 
     async def open(self, run_id: str, node_id: str, iteration: int, payload: dict[str, Any]) -> str:
         if self.assist is not None and self.tx is not None and payload.get("taskType"):
-            run = await RunStore(self.tx).get(run_id)
+            run = await RunStore(self.tx).row(run_id)
             if run is not None:
-                request = await self.assist.start(str(run["team_id"]), payload)
+                request = await self.assist.start(run.team_id, payload)
                 if request is not None:
                     task = asyncio.create_task(self.assist.finish(str(payload["step_id"]), request))
                     self._writing.add(task)

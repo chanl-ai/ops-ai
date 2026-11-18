@@ -22,10 +22,10 @@ class DocumentsExtractions:
     tx: EngineTransactions
 
     async def extract(self, run_id: str, file_id: str, request: dict[str, Any], *, key: str) -> dict[str, Any]:
-        run = await RunStore(self.tx).get(run_id)
+        run = await RunStore(self.tx).row(run_id)
         if run is None:
             raise LookupError(f"run {run_id} is gone")
-        return await self.client.extract(current_tenant(), str(run["team_id"]), file_id, request, idempotency_key=key)
+        return await self.client.extract(current_tenant(), run.team_id, file_id, request, idempotency_key=key)
 
     async def purge(self, run_id: str, file_id: str) -> dict[str, Any]:
         return await self.client.purge(current_tenant(), await _team(self.tx, run_id), file_id)
@@ -61,7 +61,7 @@ async def type_fields(client: DocumentsClient, team: str, type_id: str, version:
 
 
 async def _team(tx: EngineTransactions, run_id: str) -> str:
-    run = await RunStore(tx).get(run_id)
+    run = await RunStore(tx).row(run_id)
     if run is None:
         raise LookupError(f"run {run_id} is gone")
-    return str(run["team_id"])
+    return run.team_id

@@ -107,3 +107,20 @@ async def test_an_older_row_reads_and_the_mapping_is_the_stored_row(engine: Asyn
     assert [(s.node_id, s.node_type, s.port) for s in steps] == [("start", None, None)], steps
     assert mapping is not None and stored["started_via"] is None
     assert mapping == stored and list(mapping) == list(stored)
+
+
+async def test_a_definition_stored_as_null_or_a_list_still_lists_as_an_empty_definition(engine: AsyncEngine) -> None:
+    tx = EngineTransactions(engine)
+    store = DefinitionStore(tx)
+    odd = {f"rows_null_{uuid4().hex[:6]}": None, f"rows_list_{uuid4().hex[:6]}": [1, 2]}
+    with tenant_scope(f"t-{uuid4().hex[:8]}"), acting_as("t1"):
+        for wid, stored in odd.items():
+            await store.publish(
+                wid, name=wid, definition=cast(Any, stored), digest=wid.ljust(64, "0"), now="n", by="a@x",
+                stage="live", team="t1",
+            )  # fmt: skip
+        listed = {s.workflow_id: s.definition for s in await store.summaries(team="t1")}
+        live = {d.workflow_id: d.definition for d in await store.live_everywhere() if d.workflow_id in odd}
+    empty: dict[str, object] = {w: {} for w in odd}
+    assert {w: listed.get(w) for w in odd} == empty, listed
+    assert live == empty, live

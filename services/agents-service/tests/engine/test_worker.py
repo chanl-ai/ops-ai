@@ -102,7 +102,7 @@ async def start(engine: AsyncEngine, tenant: str, payload: dict[str, Any], key: 
                 "created_by": "a@x",
             }
         )
-        return str(run["id"])
+        return run.id
 
 
 async def drain(w: Worker) -> int:

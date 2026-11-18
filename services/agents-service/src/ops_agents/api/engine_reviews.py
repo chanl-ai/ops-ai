@@ -39,7 +39,7 @@ from .auth import (
 )
 from .deps import Runtime
 from .engine_resume import enqueue_resume, resumed
-from .engine_runs import first_run
+from .engine_runs import starters_of
 from .legacy_tasks import NOT_READ, legacy_task
 from .option_inputs import held_calls
 from .review_sla import sla_hours
@@ -81,8 +81,8 @@ async def _connect_view(rt: Runtime, run: dict[str, Any], payload: dict[str, Any
     wait = connect_wait(payload)
     if wait is None:
         return None
-    first = await first_run(_runs(rt), run)
-    return wait | {"person": person_of(first.get("created_by"))}
+    above = await starters_of(_runs(rt), str(run.get("created_by") or ""), run.get("team_id"))
+    return wait | {"person": person_of(above[-1].created_by if above else run.get("created_by"))}
 
 
 def is_engine_id(review_id: str) -> bool:
@@ -98,7 +98,8 @@ async def _visible(rt: Runtime, run_id: str) -> dict[str, Any]:
     from .routers.engine import visible_run  # noqa: PLC0415 - the router imports the Reviews facade's neighbours
 
     try:
-        return await visible_run(rt, run_id)
+        # The Reviews views below still read the run as its stored mapping.
+        return (await visible_run(rt, run_id)).model_dump()
     except NotFound as e:
         raise NotFound("Review") from e
 
@@ -612,9 +613,10 @@ async def team_runs(rt: Runtime) -> list[dict[str, Any]]:
     waiting = await store.list(team_id=current_team(), status="waiting", limit=cap)
     if len(waiting) >= cap:
         log.warning("review_source_capped", source="waiting_runs", cap=cap)
-    seen = {str(r["id"]) for r in recent}
-    rows = recent + [r for r in waiting if str(r["id"]) not in seen]
-    return sorted(rows, key=lambda r: str(r["created_at"]), reverse=True)
+    seen = {r.id for r in recent}
+    rows = recent + [r for r in waiting if r.id not in seen]
+    # The Reviews views read each run as its stored mapping.
+    return [r.model_dump() for r in sorted(rows, key=lambda r: r.created_at, reverse=True)]
 
 
 # One run, or one decision of it, as the runner's store returns it.
@@ -1073,5 +1075,6 @@ async def run_as_team_account(rt: Runtime, me: Principal, review_id: str) -> dic
     require_team_account_use(me, team_id=str(run["team_id"]), what=f"{app}'s team account")
     if not wait["teamAccount"]:
         raise Conflict(f"{app} has no team account to run as; its person connects their own.", code="no_team_account")
-    await resumed(rt.db, run, waiting, {"teamAccount": {"by": me.email}}, source="team_account")
+    resume = {"teamAccount": {"by": me.email}}
+    await resumed(rt.db, str(run["id"]), str(run["team_id"]), waiting, resume, source="team_account")
     return await view(rt, await _visible(rt, str(run["id"])))

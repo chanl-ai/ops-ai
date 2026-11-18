@@ -20,7 +20,7 @@ from ops_email import InboundAttachment, InboundMessage
 from ops_engine import default_registry
 from ops_engine.node_types import start_form
 from ops_engine.starts import form_values
-from ops_engine.store import RunStore
+from ops_engine.store import DefinitionRow, RunRow, RunStore
 from ops_files_client import FileNotFound, FileNotReady, FilesClient, FilesRefused
 from ops_service_kit.errors import Conflict, ServiceUnavailable, Unprocessable
 from ops_service_kit.ids import now_iso
@@ -41,18 +41,18 @@ class HandStart:
     """One start by hand: who, on which definition row, the form's values, the mode, and `started_via`."""
 
     me: Principal
-    stored: dict[str, Any]
+    stored: DefinitionRow
     values: dict[str, Any]
     mode: Mode
     via: str
 
 
-Adapter = Callable[[Runtime, HandStart], Awaitable[dict[str, Any]]]
+Adapter = Callable[[Runtime, HandStart], Awaitable[RunRow]]
 # The prefix of `started_via` for a run started by hand; the kind follows, and actors read it as the form's `via`.
 VIA_PREFIX = "start:"
 
 
-async def by_form(rt: Runtime, h: HandStart) -> dict[str, Any]:
+async def by_form(rt: Runtime, h: HandStart) -> RunRow:
     run, _ = await start_run(
         RunStore(EngineTransactions(rt.db)),
         h.stored,
@@ -92,7 +92,7 @@ async def _attachment(files: FilesClient, tenant: str, team: str, ref: Any) -> I
     return InboundAttachment(name=info.name, mime=info.mime, content=base64.b64encode(data).decode())
 
 
-async def by_email(rt: Runtime, h: HandStart) -> dict[str, Any]:
+async def by_email(rt: Runtime, h: HandStart) -> RunRow:
     me, stored, values = h.me, h.stored, h.values
     files = cast(FilesClient | None, rt.start_files)
     if files is None:
@@ -111,7 +111,7 @@ async def by_email(rt: Runtime, h: HandStart) -> dict[str, Any]:
         received_at=now_iso(),
         attachments=tuple([await _attachment(files, tenant, team, r) for r in refs]),
     )
-    binding = binding_of(stored["definition"])
+    binding = binding_of(stored.definition)
     assert binding is not None  # the start form said email
     if (failed := binding.filter.failed(msg)) is not None:
         raise Unprocessable(
@@ -150,11 +150,9 @@ def filled(form: dict[str, Any], values: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-async def start(
-    rt: Runtime, me: Principal, stored: dict[str, Any], values: dict[str, Any], mode: Mode
-) -> dict[str, Any]:
+async def start(rt: Runtime, me: Principal, stored: DefinitionRow, values: dict[str, Any], mode: Mode) -> RunRow:
     """Starts the run on `stored` from the start form's `values` with the adapter for its trigger's kind."""
-    form = start_form(stored["definition"], REGISTRY)
+    form = start_form(stored.definition, REGISTRY)
     adapter = ADAPTERS.get(str(form["kind"])) if form else None
     if form is None or adapter is None:
         raise Unprocessable("This workflow's trigger is started only by its source, not by hand.", code="no_start_form")

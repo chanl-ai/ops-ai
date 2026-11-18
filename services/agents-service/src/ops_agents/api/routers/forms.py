@@ -31,7 +31,7 @@ from pydantic import Field
 
 from ops_engine import default_registry
 from ops_engine.node_types import start_form
-from ops_engine.store import DefinitionStore, RunStore
+from ops_engine.store import DefinitionRow, DefinitionStore, RunStore
 from ops_files_client import FilesClient, FilesRefused
 from ops_identity.fastapi import Tx
 from ops_service_kit.client_address import client_address
@@ -183,9 +183,9 @@ def _view(row: dict[str, Any], me: Principal, token: str | None = None) -> dict[
     return out | ({"token": token} if token else {})
 
 
-def _inputs(stored: dict[str, Any]) -> dict[str, Any]:
+def _inputs(stored: DefinitionRow) -> dict[str, Any]:
     """The live version's start form, when its trigger declares inputs a person can fill."""
-    form = start_form(stored["definition"], default_registry())
+    form = start_form(stored.definition, default_registry())
     if form is None or form.get("kind") != "form" or not cast(dict[str, Any], form["schema"]).get("properties"):
         raise Conflict(
             "This workflow's Request trigger has no input form. Add the fields people fill in to the trigger first.",
@@ -203,10 +203,10 @@ async def create_form(rt: Rt, me: Me, _: Tx, workflow_id: str, body: FormIn) -> 
     """Shares the workflow's live start form as a page: a signed link that expires, or a members-only page. The token
     is shown once, here and on Rotate."""
     stored = await live_version(_store(rt), workflow_id, None, team=me.team_id)
-    team = str(stored.get("team_id") or me.team_id)
+    team = stored.team_id or me.team_id
     require_builder(me, area="workflows", team_id=team, action="edit", what=f"workflow {workflow_id}")
     _inputs(stored)
-    title = body.title or str(stored.get("name") or workflow_id)
+    title = body.title or stored.name or workflow_id
     expires = (datetime.now(UTC) + timedelta(days=body.expires_in_days)).isoformat()
     links = _links(rt)
     row = await links.create(
@@ -364,8 +364,8 @@ async def _submit(
     except Exception as e:
         await links.settle(reserved, run_id=None, failed=f"{type(e).__name__}: {str(e)[:300]}")
         raise
-    await links.settle(reserved, run_id=str(run["id"]))
-    return {"received": True, "runId": str(run["id"])}
+    await links.settle(reserved, run_id=run.id)
+    return {"received": True, "runId": run.id}
 
 
 @router.post("/v1/forms/public/{slug}/submit", status_code=202, response_model=Envelope[Received])
@@ -417,7 +417,9 @@ async def _member_form(rt: Runtime, me: Principal, slug: str) -> Row:
     return (await _member_form_in(rt, me, slug, with_version=False))[0]
 
 
-async def _member_form_in(rt: Runtime, me: Principal, slug: str, *, with_version: bool) -> tuple[Row, Row | None]:
+async def _member_form_in(
+    rt: Runtime, me: Principal, slug: str, *, with_version: bool
+) -> tuple[Row, DefinitionRow | None]:
     """The form and, when asked, its live version: read in one transaction in the team that has the form. Each team is
     entered before its transaction opens, so a team that has none ends its own."""
     for team in dict.fromkeys((me.team_id, *me.team_ids)):
@@ -437,7 +439,7 @@ async def _member_form_in(rt: Runtime, me: Principal, slug: str, *, with_version
 @router.get("/v1/forms/{slug}/members", response_model=Envelope[PublicForm])
 async def member_form(rt: Rt, me: Me, slug: str) -> JSONResponse:
     row, stored = await _member_form_in(rt, me, slug, with_version=True)
-    return ok(_public(row, _inputs(cast(Row, stored))))
+    return ok(_public(row, _inputs(cast(DefinitionRow, stored))))
 
 
 @router.post("/v1/forms/{slug}/members", status_code=202, response_model=Envelope[Received])

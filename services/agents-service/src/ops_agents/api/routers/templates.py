@@ -337,8 +337,8 @@ async def _record_name(rt: Runtime, kind: str, record_id: str) -> str | None:
         return None
     if kind in tt.TYPE_KINDS:
         return await tt.name(rt, kind, record_id)
-    found = await definitions(rt).get(record_id, team=current_team())
-    return str(found["name"]) if found else None
+    found = await definitions(rt).row(record_id, team=current_team())
+    return found.name if found else None
 
 
 async def _record_digest(rt: Runtime, kind: str, record_id: str) -> str | None:
@@ -359,8 +359,8 @@ async def _record_digest(rt: Runtime, kind: str, record_id: str) -> str | None:
         return None
     if kind in tt.TYPE_KINDS:
         return await tt.digest(rt, kind, record_id)
-    found = await definitions(rt).get(record_id, team=current_team())
-    return str(found["digest"]) if found else None
+    found = await definitions(rt).row(record_id, team=current_team())
+    return found.digest if found else None
 
 
 @router.get("", response_model=Envelope[list[TemplateView]])
@@ -1159,12 +1159,12 @@ async def take_update(rt: Rt, me: Me, resource: str, copy: str, body: UpdateInpu
             version = await tt.save(rt, me, kind, copy, tt.unflat(kind, merged, keys, str(yours["name"])))
         base = {k: v for k, v in template_body.items() if k != "name"}
     elif taken or chosen:
-        held = await definitions(rt).get(copy, team=current_team())
+        held = await definitions(rt).row(copy, team=current_team())
         assert held is not None
         offered = {f"{x['source']}:{x['id']}": x for x in await _offered(rt, team)}
         records = await _dependencies(rt, me, team, t, offered=offered, given={})
         definition = _pointed(dict(cast(dict[str, Any], t.get("body") or {})), records)
-        definition["id"], definition["name"] = copy, held["name"]
+        definition["id"], definition["name"] = copy, held.name
         answer = await create_definition(rt, me, DefinitionInput(definition=definition))
         version = cast(int | None, json.loads(bytes(answer.body))["data"].get("version"))
     # A workflow conflict kept as the team's moves the link to the new version and leaves its record digest, so the

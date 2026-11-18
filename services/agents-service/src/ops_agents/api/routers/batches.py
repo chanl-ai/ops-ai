@@ -18,6 +18,7 @@ from pydantic import Field
 
 from ops_engine import default_registry
 from ops_engine.node_types import start_form
+from ops_engine.store import DefinitionRow
 from ops_files_client import FileNotFound, FilesClient
 from ops_identity.fastapi import Tx
 from ops_ingest.parsers.spreadsheet import spreadsheet_rows
@@ -92,8 +93,8 @@ class Retried(Out):
     retried: int
 
 
-def _inputs(stored: dict[str, Any]) -> dict[str, Any]:
-    form = start_form(stored["definition"], default_registry())
+def _inputs(stored: DefinitionRow) -> dict[str, Any]:
+    form = start_form(stored.definition, default_registry())
     props = cast(dict[str, Any], (form or {}).get("schema") or {}).get("properties") if form else None
     if form is None or form.get("kind") != "form" or not props:
         raise Unprocessable(
@@ -151,7 +152,7 @@ async def start_batch(rt: Rt, me: Me, workflow_id: str, body: BatchIn) -> JSONRe
     made = await Batches(rt.db).create(
         team_id=me.team_id,
         workflow_id=workflow_id,
-        version=int(stored["version"]),
+        version=stored.version,
         mode=body.mode,
         file_id=body.file_id,
         file_name=info.name,

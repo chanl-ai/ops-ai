@@ -62,8 +62,8 @@ class CallPeople:
         if ctx.run_id is None or not ctx.run_id.startswith(RUN_PREFIX) or self.runs is None:
             return None
         runs = self.runs()
-        run = await runs.get(ctx.run_id)
-        return person_of((await first_run(runs, run)).get("created_by")) if run is not None else None
+        run = await runs.row(ctx.run_id)
+        return person_of((await first_run(runs, run)).created_by) if run is not None else None
 
     async def headers(self, ctx: RunContext, *, tenant_id: str | None, team_id: str | None) -> dict[str, str]:
         if ctx.team_account:

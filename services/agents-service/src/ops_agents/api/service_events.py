@@ -77,7 +77,7 @@ async def ensure_event_workflows(rt: Runtime) -> None:
                 log.warning("event_workflow_id_taken", workflow=d.id, error=str(e))
                 continue
             await store.go_live(d.id, version)
-        elif d.digest() not in {v["digest"] for v in versions}:
+        elif d.digest() not in {v.digest for v in versions}:
             await _follow_seed(rt, store, d)
         rt.event_workflows_seen.add((tenant, d.id))
 
@@ -87,16 +87,16 @@ async def _follow_seed(rt: Runtime, store: DefinitionStore, d: WorkflowDefinitio
     the new one as a publish request its publishReview decides, live at once only where no review is needed; one whose
     live version a person published keeps it and is told an update exists. Either is recorded once per shipped digest
     as a service event."""
-    live = await store.current(d.id)
+    live = await store.serving(d.id)
     events = ServiceEvents(rt.db)
     key = f"{d.id}:{d.digest()[:16]}"
-    if live is not None and live["created_by"] in SEED_AUTHORS:
+    if live is not None and live.created_by in SEED_AUTHORS:
         # Saved as a draft and published through the same request a person's publish opens, so the workspace's
         # publishReview decides it now: live at once where no review is needed, otherwise waiting in Reviews.
         version, _ = await store.publish(
             d.id, name=d.name or d.id, definition=d.wire(), digest=d.digest(), now=now_iso(), by=SEED
         )
-        row = await store.get(d.id, version)
+        row = await store.row(d.id, version)
         if row is None:
             return
         req = await open_publish(rt, d.id, row, live, by=SEED, team="", note="An update to a shipped workflow")
@@ -116,7 +116,7 @@ async def _follow_seed(rt: Runtime, store: DefinitionStore, d: WorkflowDefinitio
         team_id="",
         source=SOURCE,
         actor=None,
-        payload={"workflowId": d.id, "liveVersion": live["version"] if live else None},
+        payload={"workflowId": d.id, "liveVersion": live.version if live else None},
     )
 
 
@@ -250,7 +250,7 @@ async def _deliver(
     run_ids: list[str] = []
     attempts = 0
     for stored in await listeners(db, name, handler) if handler else []:
-        tried = await attempts_of(db, stored["workflow_id"], run_key)
+        tried = await attempts_of(db, stored.workflow_id, run_key)
         if tried and tried[-1]["status"] not in FAILED:
             run_ids.append(str(tried[-1]["id"]))
             attempts = max(attempts, len(tried))
@@ -267,9 +267,9 @@ async def _deliver(
             created_by=created_by,
             started_via=via,
         )
-        run_ids.append(str(run["id"]))
+        run_ids.append(run.id)
         attempts = max(attempts, n)
-        title = str(stored.get("name") or stored["workflow_id"])
+        title = stored.name or stored.workflow_id
         # An account-level notice has no team, so no team's Activity shows it; the Background page counts it.
         if event["team_id"]:
             await jobs.record(

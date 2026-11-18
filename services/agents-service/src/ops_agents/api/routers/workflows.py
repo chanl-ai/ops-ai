@@ -533,8 +533,8 @@ async def workflow_refs(rt: Rt, caller: CurrentTenantCaller, _: Tx) -> JSONRespo
     # Workflow definitions (v2) are grantable too: each one a version has been approved for, with its team; one
     # no team owns is listed with an empty team, and a grant for it is refused.
     for d in await engine_lifecycle.definitions(rt).summaries(team=team):
-        if d["current_stage"] is None or (team is not None and d["team_id"] != team):
+        if d.current_stage is None or (team is not None and d.team_id != team):
             continue
-        owner = d["team_id"] or ""
-        refs.append({"id": d["workflow_id"], "name": d["name"], "teamId": owner, "status": d["current_stage"]})
+        owner = d.team_id or ""
+        refs.append({"id": d.workflow_id, "name": d.name, "teamId": owner, "status": d.current_stage})
     return ok(refs)

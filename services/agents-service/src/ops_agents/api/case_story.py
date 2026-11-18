@@ -62,19 +62,19 @@ async def origin_reads(rt: Runtime, row: CaseRecord) -> OriginReads:
         return OriginReads(None, by, "person")
     tx = EngineTransactions(rt.db)
     runs = RunStore(tx)
-    opener = await runs.get(by[len(CHILD_PREFIX) :])
-    if opener is None or opener.get("team_id") != row.team_id:
+    opener = await runs.row(by[len(CHILD_PREFIX) :])
+    if opener is None or opener.team_id != row.team_id:
         return OriginReads(_origin("other", "Opened by a workflow"), by, "other")
     first = await first_run(runs, opener)
-    stored = await DefinitionStore(tx).row(str(first["workflow_id"]), first.get("version"))
+    stored = await DefinitionStore(tx).row(first.workflow_id, first.version)
     nodes = nodes_of(stored)
-    workflow = (stored.name if stored else "") or str(first["workflow_id"])
+    workflow = (stored.name if stored else "") or first.workflow_id
     trigger = next((str(n.get("type")) for n in nodes.values() if str(n.get("type")).startswith("ops.trigger.")), "")
-    run_id = str(first["id"])
-    if trigger == EMAIL and (email := email_of(first, nodes)) is not None:
+    run_id = first.id
+    if trigger == EMAIL and (email := email_of(first.model_dump(), nodes)) is not None:
         told = _origin("email", f"From an email from {email['from']}: {email['subject'] or '(no subject)'}", run_id)
         return OriginReads(told, by, "email")
-    return OriginReads(None, started_by_of(first), "run", workflow, trigger, run_id)
+    return OriginReads(None, started_by_of(first.model_dump()), "run", workflow, trigger, run_id)
 
 
 async def origin(rt: Runtime, row: CaseRecord) -> Row:
@@ -148,10 +148,10 @@ async def feed_reads(rt: Runtime, row: CaseRecord, runs: list[Row], *, scope: An
     # The runs that led to the case's own run (an email intake above a read), in its team: their lines are how the
     # matter began, which no link records on the case.
     by = str(row.created_by or "")
-    opener = await store.get(by[len(CHILD_PREFIX) :]) if by.startswith(CHILD_PREFIX) else None
-    if opener is not None and opener.get("team_id") == team:
+    opener = await store.row(by[len(CHILD_PREFIX) :]) if by.startswith(CHILD_PREFIX) else None
+    if opener is not None and opener.team_id == team:
         linked = {str(r["id"]) for r in runs}
-        runs = [*runs, *(r for r in await runs_above(store, opener) if str(r["id"]) not in linked)]
+        runs = [*runs, *(r.model_dump() for r in await runs_above(store, opener) if r.id not in linked)]
     if scope is not None and scope[0] == "workflow":
         runs = [r for r in runs if r["workflow_id"] == scope[1]]
     by_run = await store.steps_of([str(r["id"]) for r in runs])

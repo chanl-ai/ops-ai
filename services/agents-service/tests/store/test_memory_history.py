@@ -12,7 +12,6 @@ import importlib.util
 import os
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from pathlib import Path
-from typing import Any
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -22,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from ops_agents.store import memories as memories_module
 from ops_agents.store.base import metadata
-from ops_agents.store.memories import ACTIVE, Memories, agent_memories, memory_audit
+from ops_agents.store.memories import ACTIVE, Memories, MemoryMatch, agent_memories, memory_audit
 from ops_agents.store.tenancy import current_tenant, tenant_scope, tenant_tx
 from ops_service_kit.ids import new_id, now_iso
 
@@ -97,7 +96,7 @@ async def engine(db_url: str | sa.URL) -> AsyncIterator[AsyncEngine]:
     await e.dispose()
 
 
-async def eventually(find: Callable[[], Awaitable[list[dict[str, Any]]]]) -> list[dict[str, Any]]:
+async def eventually(find: Callable[[], Awaitable[list[MemoryMatch]]]) -> list[MemoryMatch]:
     """What `find` returns once it finds anything, within 30 s: SQL Server fills a full-text index in the background."""
     for _ in range(60):
         if found := await find():
@@ -146,7 +145,7 @@ async def keep(store: Memories, key: str, value: str, *, created_at: str | None 
     if created_at:
         async with tenant_tx(store.engine) as c:
             m = agent_memories.c
-            await c.execute(agent_memories.update().where(m.id == row["id"]).values(created_at=created_at))
+            await c.execute(agent_memories.update().where(m.id == row.id).values(created_at=created_at))
 
 
 async def seed_notes(store: Memories, count: int) -> None:
@@ -192,7 +191,7 @@ async def the_oldest_is_found(engine: AsyncEngine) -> None:
         await seed_notes(store, 250)
         await keep(store, "note saved last", "Routine branch note saved last about the weekly rota")
         found = await eventually(lambda: store.matches("p@x", "team_ops", "ag_x", ["leeds", "branch"], limit=10))
-    assert [r["value"] for r in found][:1] == ["Leeds Central opens at nine"], [r["value"] for r in found]
+    assert [r.value for r in found][:1] == ["Leeds Central opens at nine"], [r.value for r in found]
 
 
 async def test_a_word_does_not_match_inside_another_word(engine: AsyncEngine) -> None:
@@ -201,7 +200,7 @@ async def test_a_word_does_not_match_inside_another_word(engine: AsyncEngine) ->
         await keep(store, "travel", "Books an airplane seat by the aisle")
         await keep(store, "plan", "Sends the weekly plan on Mondays")
         found = await eventually(lambda: store.matches("p@x", "team_ops", "ag_x", ["plan"], limit=10))
-    assert [r["key"] for r in found] == ["plan"], [r["key"] for r in found]
+    assert [r.key for r in found] == ["plan"], [r.key for r in found]
 
 
 def test_a_search_word_holding_a_quote_never_reaches_sql_server_full_text_search() -> None:

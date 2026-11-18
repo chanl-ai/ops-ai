@@ -164,8 +164,8 @@ async def test_a_reminder_repeats_while_the_review_waits_and_stops_once_it_is_de
         rows = await Activity(engine).page(
             Scope(teams={"reminder": ("team_a",)}, owner="m@x"), Filters(), page=1, page_size=10
         )
-    assert [(r["kind"], r["status"], r["ref_id"]) for r in rows.rows] == [("reminder", "waiting", run_id)] * 2
-    assert rows.rows[0]["title"].startswith("Reminder: Check the levy, waiting "), rows.rows[0]["title"]
+    assert [(r.kind, r.status, r.ref_id) for r in rows.rows] == [("reminder", "waiting", run_id)] * 2
+    assert (rows.rows[0].title or "").startswith("Reminder: Check the levy, waiting "), rows.rows[0].title
     rt: Any = SimpleNamespace(db=engine, settings=SimpleNamespace(lease_ttl_seconds=6.0))
     with tenant_scope(tenant):
         await engine_reviews.decide(rt, M, run_id, decision="approved", reason=None)

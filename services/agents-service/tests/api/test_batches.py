@@ -117,7 +117,7 @@ async def test_a_row_another_worker_started_is_adopted_and_retry_starts_only_the
     assert started.status_code == 202, started.text
     bid = started.json()["data"]["id"]
     with tenant_scope(TENANT):
-        stored = await DefinitionStore(EngineTransactions(rt.db)).get(WID, 1)
+        stored = await DefinitionStore(EngineTransactions(rt.db)).row(WID, 1)
         assert stored is not None
         other, _ = await start_run(
             RunStore(EngineTransactions(rt.db)), stored, team_id="team_ops", mode="live", input={},
@@ -128,7 +128,7 @@ async def test_a_row_another_worker_started_is_adopted_and_retry_starts_only_the
     runs = await runs_of(c, WID)
     assert len(runs) == 7, "the row another worker started is adopted, and a second tick starts nothing again"
     rows = (await c.get(f"/v1/batches/{bid}", headers=BUILDER)).json()["data"]["rows"]
-    assert next(r for r in rows if r["row"] == 1)["runId"] == other["id"], rows
+    assert next(r for r in rows if r["row"] == 1)["runId"] == other.id, rows
     one = (await c.get(f"/v1/runs/{runs[0].get('runId') or runs[0]['id']}", headers=BUILDER)).json()["data"]
     assert one["startedBy"]["via"] == {"kind": "start", "id": "batch", "name": "batch"}, one["startedBy"]
     failed_ids = [r.get("runId") or r["id"] for r in runs[:2]]

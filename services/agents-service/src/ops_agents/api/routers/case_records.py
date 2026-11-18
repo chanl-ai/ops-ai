@@ -454,9 +454,9 @@ async def _ref_team(rt: Runtime, kind: str, ref: str) -> str | None:
 
     run_id = ref.split(":", 1)[0] if kind == "decision" else ref
     if kind in ("run", "decision"):
-        run = await RunStore(EngineTransactions(rt.db)).get(run_id)
+        run = await RunStore(EngineTransactions(rt.db)).row(run_id)
         if run is not None:
-            return str(run.get("team_id") or "") or None
+            return run.team_id or None
     thread = await graph_store(rt).thread(run_id)
     return str(thread["team_id"]) if thread is not None and thread.get("team_id") else None
 

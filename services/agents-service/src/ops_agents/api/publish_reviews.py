@@ -196,8 +196,8 @@ async def subject_team(rt: Runtime, req: dict[str, Any]) -> str | None:
     if kind == egress_host_reviews.KIND:
         return await egress_host_reviews.team(rt)
     if kind == engine_lifecycle.KIND:
-        row = await engine_lifecycle.definitions(rt).current(subject) or {}
-        return str(row.get("team_id") or "") or None
+        row = await engine_lifecycle.definitions(rt).serving(subject)
+        return (row.team_id if row is not None else None) or None
     return await workflow_registry(rt).owner_team(subject)
 
 

@@ -95,14 +95,14 @@ async def test_origin_stops_at_the_bound_and_at_a_missing_parent(engine: AsyncEn
         chain.append(await w.run(DEBTOR, {}, created_by=f"run:{chain[-1]}"))
     with tenant_scope(w.tenant):
         store = RunStore(w.tx)
-        last = await store.get(chain[-1])
+        last = await store.row(chain[-1])
         assert last is not None
         above = await runs_above(store, last)
-        top = await store.get(chain[0])
+        top = await store.row(chain[0])
         assert top is not None
         # The first run's parent is gone: the walk stops at it rather than failing.
         assert await runs_above(store, top) == []
-    assert [r["id"] for r in above] == list(reversed(chain[-1 - MAX_CHILD_DEPTH : -1])), [r["id"] for r in above]
+    assert [r.id for r in above] == list(reversed(chain[-1 - MAX_CHILD_DEPTH : -1])), [r.id for r in above]
     told = await _origin(w, f"run:{chain[1]}")
     assert told["runId"] == chain[0], told
 

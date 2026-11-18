@@ -25,10 +25,13 @@ from ops_engine.starts import only_from_workflows
 from ops_engine.store import (
     TERMINAL,
     DefinitionStore,
+    DefinitionSummary,
+    ListedRun,
     RunStore,
     WorkflowOwnedError,
 )
 from ops_engine.store import DefinitionRow as StoredDefinition
+from ops_engine.store import RunRow as StoredRun
 from ops_engine.store.definitions import HUMAN_REVIEW
 from ops_files_client import FilesClient, FilesRefused
 from ops_identity.fastapi import ActingPerson, Tx
@@ -353,7 +356,7 @@ async def create_definition(rt: Rt, me: Me, body: DefinitionInput) -> JSONRespon
     No request transaction: the AI-steps policy (platform-service) and document types (documents-service) are asked
     between its reads and its write, with none open."""
     d = _parsed(body)
-    held = await definitions(rt).get(d.id, team=current_team())
+    held = await definitions(rt).row(d.id, team=current_team())
     # A new workflow belongs to the team the caller names, or its own; a dev session acts across teams, so with neither
     # it is refused rather than saved as no team's, which every team would see.
     new_team = current_team() or me.team_id or None
@@ -370,16 +373,16 @@ async def create_definition(rt: Rt, me: Me, body: DefinitionInput) -> JSONRespon
         raise Unprocessable(
             f"The definition has {len(checks)} failing checks.", code="definition_checks", details={"checks": checks}
         )
-    owner = held["team_id"] if held is not None else current_team() or me.team_id or None
+    owner = held.team_id if held is not None else current_team() or me.team_id or None
     if (uses := ai_steps_gate.ai_nodes(d, REGISTRY)) and not await ai_steps_gate.allowed(rt, owner):
         raise Unprocessable(ai_steps_gate.OFF, code="ai_steps_off", details={"nodes": uses})
     if wanted := unpinned(d.wire()):
-        acting = current_team() or (held["team_id"] if held is not None else None) or me.team_id
+        acting = current_team() or (held.team_id if held is not None else None) or me.team_id
         d = parse(pinned(d.wire(), await _newest_versions(rt, wanted, team=acting)))
     digest = d.digest()
     # An existing workflow keeps its owner, a shared one (no team) included, so a team's builder edits a shared
     # workflow through review instead of being told it is another team's.
-    team = held["team_id"] if held is not None else new_team
+    team = held.team_id if held is not None else new_team
     try:
         version, created = await definitions(rt).publish(
             d.id,
@@ -480,13 +483,13 @@ async def pending_requests(rt: Runtime) -> dict[str, dict[str, Any]]:
     return {r["subject_id"]: r for r in rows if r["kind"] == engine_lifecycle.KIND and r["status"] == "pending"}
 
 
-def workflow_status(summary: dict[str, Any], request: dict[str, Any] | None) -> str:
+def workflow_status(summary: DefinitionSummary, request: dict[str, Any] | None) -> str:
     """The workflow's stage on a list row: archived once archived, the serving version's (live or paused) once one is
     approved, else in_review while a request is open, else draft."""
-    if summary.get("archived_at"):
+    if summary.archived_at:
         return "archived"
-    if summary["current_stage"]:
-        return str(summary["current_stage"])
+    if summary.current_stage:
+        return summary.current_stage
     return "in_review" if request is not None else "draft"
 
 
@@ -515,8 +518,8 @@ async def v2_workflow_rows(rt: Runtime, since: str) -> list[dict[str, Any]]:
         return []
     open_requests = await pending_requests(rt)
     for d in found:
-        request = open_requests.get(d["workflow_id"])
-        stored: dict[str, Any] = d["definition"] or {}
+        request = open_requests.get(d.workflow_id)
+        stored: dict[str, Any] = d.definition
         nodes: list[dict[str, Any]] = list(stored.get("nodes") or [])
         types = [REGISTRY.find(str(n.get("type")), int(n.get("typeVersion") or 0)) for n in nodes]
         # The description says what starts it, as a v1 workflow's trigger text does; else the trigger node's type.
@@ -525,20 +528,20 @@ async def v2_workflow_rows(rt: Runtime, since: str) -> list[dict[str, Any]]:
         )
         out.append(
             {
-                "id": d["workflow_id"],
-                "name": d["name"],
+                "id": d.workflow_id,
+                "name": d.name,
                 "description": str(stored.get("description") or ""),
-                "teamId": d["team_id"],
+                "teamId": d.team_id,
                 "trigger": trigger,
                 "agentSlugs": [],
                 "stepCount": len(nodes),
                 "gateCount": sum(1 for n in nodes if n.get("type") == HUMAN_REVIEW),
-                "runs24h": d["recent"],
-                "reviewed24h": d["reviewed"],
-                "openReviews": d["open_reviews"],
+                "runs24h": d.recent,
+                "reviewed24h": d.reviewed,
+                "openReviews": d.open_reviews,
                 "status": workflow_status(d, request),
-                "version": d["current_version"] or 0,
-                "updatedAt": d["created_at"],
+                "version": d.current_version or 0,
+                "updatedAt": d.created_at,
                 "deploymentCount": 0,
                 "kind": "standard",
                 "engine": "v2",
@@ -563,7 +566,7 @@ async def v2_workflow_rows(rt: Runtime, since: str) -> list[dict[str, Any]]:
 async def delete_definition(rt: Rt, me: Me, _: Tx, workflow_id: str) -> Response:
     """Deletes a draft (every version); a workflow that has run is kept, since its runs are pinned to its versions.
     403 unless the caller is a builder or admin of the owning team."""
-    row = await definitions(rt).get(workflow_id, team=current_team())
+    row = await definitions(rt).row(workflow_id, team=current_team())
     if row is None:
         raise NotFound(f"Workflow definition {workflow_id}")
     engine_lifecycle.require_rights(me, row, "delete")
@@ -593,7 +596,7 @@ async def restore_definition(rt: Rt, me: Me, _: Tx, workflow_id: str) -> JSONRes
 
 
 async def _archived(rt: Runtime, me: Principal, workflow_id: str, archived: bool) -> dict[str, Any]:
-    row = await definitions(rt).get(workflow_id, team=current_team())
+    row = await definitions(rt).row(workflow_id, team=current_team())
     if row is None:
         raise NotFound(f"Workflow definition {workflow_id}")
     engine_lifecycle.require_rights(me, row, "delete")
@@ -613,10 +616,10 @@ async def definition_shapes(rt: Rt, workflow_id: str, version: int) -> JSONRespo
     """What each step of a saved version outputs, by port, before it has run: fixed by its type, built from
     its settings, or read from its document type or operation. A mapping picker reads it.
     No request transaction: the version is read, then documents-service is asked with none open."""
-    row = await definitions(rt).get(workflow_id, version, team=current_team())
+    row = await definitions(rt).row(workflow_id, version, team=current_team())
     if row is None:
         raise NotFound(f"Workflow definition {workflow_id} version {version}")
-    steps = await step_shapes.version_shapes(rt, current_team() or "", cast(dict[str, Any], row["definition"]))
+    steps = await step_shapes.version_shapes(rt, current_team() or "", row.definition)
     return ok({"workflowId": workflow_id, "version": version, "steps": steps})
 
 
@@ -628,17 +631,17 @@ async def get_definition(rt: Rt, _: Tx, workflow_id: str, version: int | None = 
 
 async def definition_view(rt: Runtime, workflow_id: str, version: int | None = None) -> dict[str, Any]:
     store = definitions(rt)
-    row = await store.get(workflow_id, version, team=current_team())
+    row = await store.row(workflow_id, version, team=current_team())
     if row is None:
         raise NotFound(f"Workflow definition {workflow_id}")
     request = await engine_lifecycle.pending(rt, workflow_id)
-    current = await store.current(workflow_id, team=current_team())
+    current = await store.serving(workflow_id, team=current_team())
     versions = [
         {
-            "version": v["version"],
-            "digest": v["digest"],
-            "createdAt": v["created_at"],
-            "createdBy": v["created_by"],
+            "version": v.version,
+            "digest": v.digest,
+            "createdAt": v.created_at,
+            "createdBy": v.created_by,
             "stage": engine_lifecycle.stage_of(v, request),
         }
         for v in await store.versions(workflow_id)
@@ -651,17 +654,17 @@ async def definition_view(rt: Runtime, workflow_id: str, version: int | None = N
     }
     return {
         "workflowId": workflow_id,
-        "name": row["name"],
-        "version": row["version"],
-        "digest": row["digest"],
+        "name": row.name,
+        "version": row.version,
+        "digest": row.digest,
         "stage": engine_lifecycle.stage_of(row, request),
-        "definition": row["definition"],
+        "definition": row.definition,
         "versions": versions,
-        "liveVersion": current["version"] if current else None,
-        "paused": bool(current and current["stage"] == "paused"),
+        "liveVersion": current.version if current else None,
+        "paused": bool(current and current.stage == "paused"),
         "review": review,
-        "archivedAt": row.get("archived_at"),
-        "startForm": start_form(row["definition"], REGISTRY),
+        "archivedAt": row.archived_at,
+        "startForm": start_form(row.definition, REGISTRY),
     }
 
 
@@ -683,7 +686,7 @@ async def request_definition_publish(rt: Rt, me: Me, workflow_id: str, body: Def
 
 
 async def set_paused(rt: Runtime, me: Principal, workflow_id: str, paused: bool) -> dict[str, Any]:
-    row = await definitions(rt).get(workflow_id, team=current_team())
+    row = await definitions(rt).row(workflow_id, team=current_team())
     if row is None:
         raise NotFound(f"Workflow definition {workflow_id}")
     engine_lifecycle.require_rights(me, row, "pause" if paused else "resume")
@@ -747,11 +750,8 @@ async def option_sources(rt: Rt, me: Me, source: OptionSource) -> JSONResponse:
             {"value": t["id"], "label": t["name"], "description": str(t.get("description") or "")} for t in tools
         ]
     else:
-        live = [d for d in await definitions(rt).summaries(team=current_team()) if d["current_stage"] == "live"]
-        options = [
-            {"value": d["workflow_id"], "label": d["name"], "description": f"Live v{d['current_version']}"}
-            for d in live
-        ]
+        live = [d for d in await definitions(rt).summaries(team=current_team()) if d.current_stage == "live"]
+        options = [{"value": d.workflow_id, "label": d.name, "description": f"Live v{d.current_version}"} for d in live]
     return ok(sorted(options, key=lambda o: o["label"].lower()))
 
 
@@ -1024,38 +1024,38 @@ def runs(rt: Runtime) -> RunStore:
     return RunStore(EngineTransactions(rt.db))
 
 
-async def visible_run(rt: Runtime, run_id: str, me: Principal | None = None) -> dict[str, Any]:
+async def visible_run(rt: Runtime, run_id: str, me: Principal | None = None) -> StoredRun:
     """The run, if the selected team may see it: the same team scoping as the run list, and for a scoped API key its
     own workflow's runs only. Another team's run is not found rather than forbidden, so its id reveals
     nothing."""
-    run = await runs(rt).get(run_id)
+    run = await runs(rt).row(run_id)
     team = current_team()
-    if run is None or (team is not None and run["team_id"] != team):
+    if run is None or (team is not None and run.team_id != team):
         raise NotFound("Run")
-    if me is not None and (scope := key_scope(me)) is not None and scope != ("workflow", run["workflow_id"]):
+    if me is not None and (scope := key_scope(me)) is not None and scope != ("workflow", run.workflow_id):
         raise NotFound("Run")
     return run
 
 
-def can_retry(me: Principal, run: dict[str, Any]) -> bool:
+def can_retry(me: Principal, run: StoredRun) -> bool:
     """Retry for the caller: a Stuck run, by whoever may cancel it."""
-    return run["status"] == "stuck" and can_cancel(me, run)
+    return run.status == "stuck" and can_cancel(me, run)
 
 
-def can_cancel(me: Principal, run: dict[str, Any]) -> bool:
+def can_cancel(me: Principal, run: StoredRun) -> bool:
     """runs/cancel for the caller on an unfinished run, by the rule the cancel route applies."""
-    if run["status"] in ("succeeded", "failed", "cancelled"):
+    if run.status in ("succeeded", "failed", "cancelled"):
         return False
     try:
-        require_runs_cancel(me, team_id=str(run["team_id"]), started_by=str(run["created_by"]), what="this run")
+        require_runs_cancel(me, team_id=run.team_id, started_by=run.created_by, what="this run")
     except ApiError:
         return False
     return True
 
 
-def run_failure(run: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any] | None:
+def run_failure(run: StoredRun, steps: list[dict[str, Any]]) -> dict[str, Any] | None:
     """The stored error sentence plus the last step that failed, so a builder does not parse `error` themselves."""
-    message = run.get("error")
+    message = run.error
     if not message:
         return None
     failed = next((s for s in reversed(steps) if s.get("error")), None)
@@ -1067,45 +1067,45 @@ def run_failure(run: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, A
         "nodeName": None,
         "field": None,
         "attempt": attempts[-1]["attempt"] if attempts else None,
-        "retryable": run.get("status") == "stuck",
+        "retryable": run.status == "stuck",
         "suggestion": (
             "Retry this stuck run from its last recorded step."
-            if run.get("status") == "stuck"
+            if run.status == "stuck"
             else "Inspect the failing step, fix its input or resource, then start a test run."
         ),
     }
 
 
-async def ended_view(rt: Runtime, r: dict[str, Any]) -> dict[str, Any]:
+async def ended_view(rt: Runtime, r: StoredRun) -> dict[str, Any]:
     """run_view with how the run ended as a sentence (run_story.outcome_texts), for a route that returns one run."""
-    return run_view(r) | {"outcomeText": (await run_story.outcome_texts(rt, [r])).get(str(r["id"]))}
+    return run_view(r) | {"outcomeText": (await run_story.outcome_texts(rt, [r.model_dump()])).get(r.id)}
 
 
-def run_view(r: dict[str, Any]) -> dict[str, Any]:
-    waiting: dict[str, Any] | None = r.get("waiting")
+def run_view(r: StoredRun) -> dict[str, Any]:
+    waiting = r.waiting
     return {
-        "id": r["id"],
-        "workflowId": r["workflow_id"],
-        "version": r["version"],
-        "digest": r["digest"],
-        "mode": r["mode"],
-        "status": r["status"],
-        "outcome": r["outcome"],
-        "outcomeText": run_story.words(str(r["outcome"])) if r["outcome"] else None,
-        "error": r["error"],
-        "input": r["input"],
-        "output": r["output"],
+        "id": r.id,
+        "workflowId": r.workflow_id,
+        "version": r.version,
+        "digest": r.digest,
+        "mode": r.mode,
+        "status": r.status,
+        "outcome": r.outcome,
+        "outcomeText": run_story.words(r.outcome) if r.outcome else None,
+        "error": r.error,
+        "input": r.input,
+        "output": r.output,
         "waiting": {k: waiting[k] for k in ("node", "iteration", "payload")} if waiting else None,
-        "createdBy": r["created_by"],
-        "createdAt": r["created_at"],
-        "updatedAt": r["updated_at"],
-        "finishedAt": r["finished_at"],
+        "createdBy": r.created_by,
+        "createdAt": r.created_at,
+        "updatedAt": r.updated_at,
+        "finishedAt": r.finished_at,
     }
 
 
 async def startable(
     rt: Runtime, me: Principal, workflow_id: str, version: int | None, mode: Literal["live", "test"]
-) -> dict[str, Any]:
+) -> StoredDefinition:
     """The definition row a run of `mode` starts on, once the caller may start it: any version for a test run (a
     builder's step), the live one for a live run (a builder, an admin or an API key of the team). Every way to start a
     run asks here, so they refuse the same callers."""
@@ -1113,7 +1113,7 @@ async def startable(
     if pinned is not None and version not in (None, pinned):
         raise Forbidden(f"This API key starts version {pinned} of {workflow_id} only.", code="key_target")
     version = version if pinned is None else pinned
-    stored = await definitions(rt).get(workflow_id, version, team=current_team())
+    stored = await definitions(rt).row(workflow_id, version, team=current_team())
     if stored is None:
         what = f"version {version} of " if version is not None else ""
         raise NotFound(f"{what}workflow definition {workflow_id}")
@@ -1124,24 +1124,24 @@ async def startable(
         require_builder(
             me,
             area="workflows",
-            team_id=stored.get("team_id") or me.team_id,
+            team_id=stored.team_id or me.team_id,
             action="start a test run of",
             what=f"workflow {workflow_id}",
         )
     if mode == "live":
         # A builder or admin, or an API key of the team.
-        require_runs_start(me, team_id=stored.get("team_id"), what=f"workflow {workflow_id}")
+        require_runs_start(me, team_id=stored.team_id, what=f"workflow {workflow_id}")
         stored = await live_version(definitions(rt), workflow_id, version, team=current_team())
     return stored
 
 
-def started_view(run: dict[str, Any], created: bool) -> dict[str, Any]:
+def started_view(run: StoredRun, created: bool) -> dict[str, Any]:
     return {
-        "runId": run["id"],
-        "workflowId": run["workflow_id"],
-        "version": run["version"],
-        "digest": run["digest"],
-        "status": run["status"],
+        "runId": run.id,
+        "workflowId": run.workflow_id,
+        "version": run.version,
+        "digest": run.digest,
+        "status": run.status,
         "created": created,
     }
 
@@ -1182,7 +1182,7 @@ async def start_engine_run(rt: Rt, me: Starter, body: EngineRunInput) -> JSONRes
     one workflow starts that one only, on the version it pins when it pins one.
     No request transaction: the run and its work row keep start_run's own transaction, which a worker claims from."""
     stored = await startable(rt, me, body.workflow_id, body.version, body.mode)
-    form = start_form(stored["definition"], REGISTRY)
+    form = start_form(stored.definition, REGISTRY)
     # A Schedule trigger's input schema is held to the same check as Fire now (POST /v1/runs/start).
     payload = run_starts.filled(form, body.input) if form and form.get("kind") in ("form", "schedule") else body.input
     run, created = await start_run(
@@ -1235,13 +1235,13 @@ async def list_engine_runs(
     views = [
         await for_people(rt, r, run_view(r))
         | {
-            "outcomeText": ended.get(str(r["id"])),
+            "outcomeText": ended.get(r.id),
             "canCancel": can_cancel(me, r),
             "canRetry": can_retry(me, r),
-            "workflowName": r.get("workflow_name") or UNNAMED_WORKFLOW,
-            "startedBy": who.get(started_by_of(r)),
+            "workflowName": r.workflow_name or UNNAMED_WORKFLOW,
+            "startedBy": who.get(started_by_of(raw)),
         }
-        for r in rows
+        for r, raw in ((ListedRun.model_validate(raw), raw) for raw in rows)
     ]
     return ok({**listed, "data": views})
 
@@ -1256,33 +1256,35 @@ async def get_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     with names_asked_once():
         async with isolation.request_transaction():
             run = await visible_run(rt, run_id, me)
+            # run_story and actors still read the run as its stored mapping.
+            raw = run.model_dump()
             steps = steps_view(await store.step_rows(run_id))
             decided = decisions_in(run_id, steps)
-            reads = await run_story.story_reads(rt, run, steps)
-            ends, versions = await run_story.outcome_reads(rt, [run])
+            reads = await run_story.story_reads(rt, raw, steps)
+            ends, versions = await run_story.outcome_reads(rt, [raw])
             children = await started_runs(store, steps)
-            known = await actor_reads(rt, [*reads.raws(run, steps), started_by_of(run)])
+            known = await actor_reads(rt, [*reads.raws(raw, steps), started_by_of(raw)])
         who = await named_actors(rt, known)
-        masking = await ai_steps_gate.people_see_masked(rt, run.get("team_id") or None)
+        masking = await ai_steps_gate.people_see_masked(rt, run.team_id or None)
         names = getattr(rt, "team_names", None)
-        team = (await names.name(str(run["team_id"])) if names is not None else None) or str(run["team_id"])
-        await run_story.ask_story(rt, run, steps, reads)
-        files = await named(rt, str(run["team_id"]), files_in(run["input"]))
+        team = (await names.name(run.team_id) if names is not None else None) or run.team_id
+        await run_story.ask_story(rt, raw, steps, reads)
+        files = await named(rt, run.team_id, files_in(run.input))
         told = await run_story.story_view(
-            rt, run, steps, reads, who=who, team_name=team, scope=key_scope(me), masking=False
+            rt, raw, steps, reads, who=who, team_name=team, scope=key_scope(me), masking=False
         )
     body = run_view(run) | {
-        "outcomeText": run_story.outcome_sentences([run], ends, versions).get(str(run["id"])),
+        "outcomeText": run_story.outcome_sentences([raw], ends, versions).get(run.id),
         "workflowName": told.pop("workflowName"),
         "failure": run_failure(run, steps),
         "steps": steps,
         "children": children,
         "files": files,
         "decisions": [d | {"by": who.get(d["by"]) if d["by"] else None} for d in decided],
-        "result": run_result(run, steps, reads.stored, decided=decided, names=who),
+        "result": run_result(raw, steps, reads.stored, decided=decided, names=who),
         "canCancel": can_cancel(me, run),
         "canRetry": can_retry(me, run),
-        "startedBy": who.get(started_by_of(run)),
+        "startedBy": who.get(started_by_of(raw)),
         "story": told,
     }
     if not masking:
@@ -1304,10 +1306,10 @@ async def get_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
 _VALUE_KEYS = frozenset({"input", "output", "error", "values", "payload"})
 
 
-async def for_people(rt: Runtime, run: dict[str, Any], body: Any) -> Any:
+async def for_people(rt: Runtime, run: StoredRun, body: Any) -> Any:
     """`body`, read from `run`, as people see it: masked when the run's team has aiStepsMaskPersonalData on, the
     default. Every route that returns a run's or a step's values to a person answers through here."""
-    return _values_masked(body) if await ai_steps_gate.people_see_masked(rt, run.get("team_id") or None) else body
+    return _values_masked(body) if await ai_steps_gate.people_see_masked(rt, run.team_id or None) else body
 
 
 def _values_masked(body: Any) -> Any:
@@ -1384,17 +1386,15 @@ async def cancel_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     that succeeded or failed is refused (409).
     No request transaction: the masking policy (platform-service) is asked after the writes, with none open."""
     run = await visible_run(rt, run_id, me)
-    require_runs_cancel(me, team_id=str(run["team_id"]), started_by=str(run["created_by"]), what=f"run {run_id}")
-    if run["status"] == "cancelled":
+    require_runs_cancel(me, team_id=run.team_id, started_by=run.created_by, what=f"run {run_id}")
+    if run.status == "cancelled":
         return ok(await for_people(rt, run, await ended_view(rt, run)))
-    stored, changed = await runs(rt).cancel(run_id, reason="by_user")
-    if not changed or stored is None:
-        raise Conflict(f"Run {run_id} has already {run['status']}.", code="run_finished")
-    await runs(rt).settle_parents(run_id, stored.created_by)
-    # The reply is built from the stored row's fields, as every run read builds it.
-    cancelled = stored.model_dump()
+    cancelled, changed = await runs(rt).cancel(run_id, reason="by_user")
+    if not changed or cancelled is None:
+        raise Conflict(f"Run {run_id} has already {run.status}.", code="run_finished")
+    await runs(rt).settle_parents(run_id, cancelled.created_by)
     await EventLog(rt.db).append(
-        thread_id=run_id, team_id=run["team_id"], run_id=run_id, type_="cancelled", node=None, data={"by": me.email}
+        thread_id=run_id, team_id=run.team_id, run_id=run_id, type_="cancelled", node=None, data={"by": me.email}
     )
     return ok(await for_people(rt, cancelled, await ended_view(rt, cancelled)))
 
@@ -1406,13 +1406,12 @@ async def retry_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     refused (409 run_not_stuck).
     No request transaction: the masking policy (platform-service) is asked after the write, with none open."""
     run = await visible_run(rt, run_id, me)
-    require_runs_cancel(me, team_id=str(run["team_id"]), started_by=str(run["created_by"]), what=f"run {run_id}")
-    stored, changed = await runs(rt).retry(run_id)
-    if not changed or stored is None:
+    require_runs_cancel(me, team_id=run.team_id, started_by=run.created_by, what=f"run {run_id}")
+    retried, changed = await runs(rt).retry(run_id)
+    if not changed or retried is None:
         raise Conflict("This run is no longer stuck, so there is nothing to retry.", code="run_not_stuck")
-    retried = stored.model_dump()
     await EventLog(rt.db).append(
-        thread_id=run_id, team_id=run["team_id"], run_id=run_id, type_="retried", node=None, data={"by": me.email}
+        thread_id=run_id, team_id=run.team_id, run_id=run_id, type_="retried", node=None, data={"by": me.email}
     )
     return ok(
         await for_people(rt, retried, run_view(retried) | {"canCancel": can_cancel(me, retried), "canRetry": False})
@@ -1459,8 +1458,8 @@ async def event_frames(
             yield {"id": str(e.seq), "event": e.type, "data": json.dumps(shown, ensure_ascii=False)}
         if not follow:
             return
-        run = await store.get(run_id)
-        if not batch and (run is None or run["status"] in (*TERMINAL, "waiting")):
+        run = await store.row(run_id)
+        if not batch and (run is None or run.status in (*TERMINAL, "waiting")):
             return
         await asyncio.sleep(POLL_SECONDS)
 
@@ -1471,5 +1470,5 @@ async def engine_run_events(rt: Rt, me: Me, run_id: str, after: int = 0, follow:
     polling until the run ends or waits for a person.
     No request transaction: the masking policy comes from platform-service, and each frame's read opens its own."""
     run = await visible_run(rt, run_id, me)
-    mask = await ai_steps_gate.people_see_masked(rt, run.get("team_id") or None)
+    mask = await ai_steps_gate.people_see_masked(rt, run.team_id or None)
     return EventSourceResponse(event_frames(rt, run_id, after, follow=follow, mask=mask), sep="\n", ping=15)

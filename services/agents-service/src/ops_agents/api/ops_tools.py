@@ -452,7 +452,7 @@ class OpsReads:
 
         run_id = str(args["runId"])
         run = await visible_run(self.rt, run_id)
-        return _answer([{"type": "run", "id": run_id}], f"Run {run_id} of {run['workflow_id']}: {run['status']}")
+        return _answer([{"type": "run", "id": run_id}], f"Run {run_id} of {run.workflow_id}: {run.status}")
 
 
 def _data(response: Any) -> dict[str, Any]:

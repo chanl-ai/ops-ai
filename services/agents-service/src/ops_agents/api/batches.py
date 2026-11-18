@@ -44,7 +44,7 @@ async def start_pending(db: AsyncEngine, *, limit: int = PER_TICK) -> int:
             definitions = DefinitionStore(EngineTransactions(db))
             runs = RunStore(EngineTransactions(db))
             for row in rows:
-                stored = await definitions.get(row.workflow_id, row.version, team=team)
+                stored = await definitions.row(row.workflow_id, row.version, team=team)
                 if stored is None:
                     await store.stop(batch_id, "Stopped: the workflow version this batch runs is gone.")
                     break
@@ -58,7 +58,7 @@ async def start_pending(db: AsyncEngine, *, limit: int = PER_TICK) -> int:
                     created_by=row.created_by,
                     started_via=BATCH_VIA,
                 )
-                await store.started(batch_id, row.row, row.attempt, str(run["id"]))
+                await store.started(batch_id, row.row, row.attempt, run.id)
                 started += 1
     return started
 

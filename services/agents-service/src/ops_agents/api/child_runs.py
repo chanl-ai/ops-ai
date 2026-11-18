@@ -19,7 +19,7 @@ from ops_access import can
 from ops_agent_kernel.ports import ToolOutcome
 from ops_agent_kernel.types import ToolGrant
 from ops_agents.graphs.common import WORKFLOW_TOOL_PREFIX
-from ops_engine.store import TERMINAL, DefinitionStore, RunStore
+from ops_engine.store import TERMINAL, DefinitionRow, DefinitionStore, RunStore
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ValidationFailed
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
@@ -177,7 +177,8 @@ async def engine_workflows(rt: Runtime) -> list[dict[str, Any]]:
     latest version; none on a database without the runner's tables."""
     try:
         found = await DefinitionStore(EngineTransactions(rt.db)).summaries(team=current_team())
-        return [d for d in found if d["current_stage"] == "live"]
+        # The tool and catalog readers still read each summary as its stored mapping.
+        return [d.model_dump() for d in found if d.current_stage == "live"]
     except (DatabaseError, NoTenantError):
         # v2 workflows are tenant rows; a caller with no tenant (a v1 path outside a request) offers v1 ones alone.
         return []
@@ -187,12 +188,12 @@ async def team_workflows(rt: Runtime) -> list[dict[str, Any]]:
     """Every v2 workflow the selected team holds, each described by its newest version, whatever its stage; none on a
     database without the runner's tables."""
     try:
-        return await DefinitionStore(EngineTransactions(rt.db)).summaries(team=current_team())
+        return [d.model_dump() for d in await DefinitionStore(EngineTransactions(rt.db)).summaries(team=current_team())]
     except (DatabaseError, NoTenantError):
         return []
 
 
-async def engine_workflow(rt: Runtime, workflow: str) -> dict[str, Any] | None:
+async def engine_workflow(rt: Runtime, workflow: str) -> DefinitionRow | None:
     try:
         return await DefinitionStore(EngineTransactions(rt.db)).live(workflow, team=current_team())
     except (DatabaseError, NoTenantError):
@@ -338,7 +339,7 @@ class ChildRuns:
             if stored is not None
             else next((r for r in await published_workflows(self.rt) if r["id"] == workflow), None)
         )
-        owner = (stored or registry_row or {}).get("team_id")
+        owner = stored.team_id if stored is not None else (registry_row or {}).get("team_id")
         # Checked again at the start, not only when offered: a model may name a tool it was never given.
         if (why := await self._refused_for_person(workflow, owner, parent_thread_id)) is not None:
             return ToolOutcome(ok=False, output={"error": why.message, "code": why.code})
@@ -380,7 +381,7 @@ class ChildRuns:
         return await self._outcome(workflow, thread_id)
 
     async def _run_engine(
-        self, stored: dict[str, Any], arguments: dict[str, Any], *, key: str, parent_thread_id: str
+        self, stored: DefinitionRow, arguments: dict[str, Any], *, key: str, parent_thread_id: str
     ) -> ToolOutcome:
         """Starts a v2 workflow through the runner's queue, keyed by the tool call so a retried turn meets the same
         run, and waits for a worker to end or pause it. The output carries the run id, so the chat links the run."""
@@ -403,21 +404,21 @@ class ChildRuns:
         except Forbidden as e:
             return ToolOutcome(ok=False, output={"error": e.message, "code": e.code})
         waited = 0.0
-        while run["status"] not in (*TERMINAL, "waiting") and waited < ENGINE_WAIT_SECONDS:
+        while run.status not in (*TERMINAL, "waiting") and waited < ENGINE_WAIT_SECONDS:
             await asyncio.sleep(ENGINE_POLL_SECONDS)
             waited += ENGINE_POLL_SECONDS
-            run = await runs.get(run["id"]) or run
-        status = {"succeeded": "finished", "waiting": "waiting_review"}.get(str(run["status"]), str(run["status"]))
-        out: dict[str, Any] = {"runId": run["id"], "workflow": stored["workflow_id"], "status": status}
-        if run["status"] == "succeeded":
-            out["outcome"] = run["output"]
-        if run["status"] == "failed":
-            out["error"] = run["error"]
-        if run["status"] not in (*TERMINAL, "waiting"):
+            run = await runs.row(run.id) or run
+        status = {"succeeded": "finished", "waiting": "waiting_review"}.get(run.status, run.status)
+        out: dict[str, Any] = {"runId": run.id, "workflow": stored.workflow_id, "status": status}
+        if run.status == "succeeded":
+            out["outcome"] = run.output
+        if run.status == "failed":
+            out["error"] = run.error
+        if run.status not in (*TERMINAL, "waiting"):
             # Not done within the wait: the run goes on (Cases and the run page show it), but the call did not finish,
             # so the model must not read it as a success.
             out["error"] = f"the workflow did not finish within {ENGINE_WAIT_SECONDS:.0f} seconds; it is still {status}"
-        return ToolOutcome(ok=run["status"] in ("succeeded", "waiting"), output=out)
+        return ToolOutcome(ok=run.status in ("succeeded", "waiting"), output=out)
 
     async def _run(self, thread_id: str, graph_input: dict[str, Any], *, run_id: str) -> None:
         await run_child(self.rt, thread_id, graph_input, run_id=run_id)

@@ -52,6 +52,12 @@ class RunRow(Out):
     finished_at: str | None = None
 
 
+class ListedRun(RunRow):
+    """A run on a list page, with its workflow version's display name (None when that version is gone)."""
+
+    workflow_name: str | None = None
+
+
 class RunStep(Out):
     """One stored attempt of one node, as `engine_steps` holds it."""
 
@@ -93,7 +99,7 @@ class RunStore:
     def __init__(self, tx: Transactions) -> None:
         self.tx = tx
 
-    async def create(self, run: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    async def create(self, run: dict[str, Any]) -> tuple[RunRow, bool]:
         """Writes the run (status queued) and its start work row; a run with the same key is returned instead.
         A live run is refused (NotLiveError) unless the version it pins is live, read under the same lock a pause
         takes, so a pause and a start cannot both pass. Returns (run, created)."""
@@ -141,8 +147,8 @@ class RunStore:
             found = await self.by_key(str(run["workflow_id"]), str(run["run_key"]))
             if found is None:
                 raise
-            return found.model_dump(), False
-        return await self.get(str(run["id"])) or values, True
+            return found, False
+        return await self.row(str(run["id"])) or RunRow.model_validate(values), True
 
     async def by_key(self, workflow_id: str, run_key: str) -> RunRow | None:
         q = engine_runs.select().where(
@@ -163,7 +169,7 @@ class RunStore:
             return await one(c, q, RunRow)
 
     async def get(self, run_id: str) -> dict[str, Any] | None:
-        """row() as the mapping agents-service's callers still read, key for key the stored row."""
+        """row() as a mapping, key for key the stored row; only tests still read it, until they read row()."""
         found = await self.row(run_id)
         return found.model_dump() if found else None
 
@@ -184,7 +190,7 @@ class RunStore:
         status: str | None = None,
         team_id: str | None = None,
         limit: int | None = 200,
-    ) -> list[dict[str, Any]]:
+    ) -> list[RunRow]:
         """The newest runs first, at most `limit` of them; None reads every one (Human Tasks' waiting runs)."""
         q = engine_runs.select().where(engine_runs.c.tenant_id == self.tx.tenant(), team_visible(engine_runs))
         if workflow_id:
@@ -197,7 +203,7 @@ class RunStore:
         if limit is not None:
             q = q.limit(limit)
         async with self.tx.tenant_tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, RunRow)
 
     async def page(
         self,
@@ -207,7 +213,7 @@ class RunStore:
         team_id: str | None = None,
         offset: int = 0,
         limit: int = 25,
-    ) -> tuple[list[dict[str, Any]], int, dict[str, int]]:
+    ) -> tuple[list[ListedRun], int, dict[str, int]]:
         """One page of runs, newest first, each with `workflow_name`, plus the total that matches and the count per
         status. The status counts leave the status filter out, so a filter chip shows how many runs choosing it would
         list."""
@@ -228,10 +234,10 @@ class RunStore:
         total_q = sa.select(sa.func.count()).select_from(engine_runs).where(*where)
         by_status_q = sa.select(engine_runs.c.status, sa.func.count()).where(*base).group_by(engine_runs.c.status)
         async with self.tx.tenant_tx() as c:
-            rows = [dict(r) for r in (await c.execute(rows_q.offset(offset).limit(limit))).mappings()]
+            listed = await rows(c, rows_q.offset(offset).limit(limit), ListedRun)
             total = int((await c.execute(total_q)).scalar_one())
             by_status = {str(k): int(n) for k, n in (await c.execute(by_status_q)).all()}
-        return rows, total, by_status
+        return listed, total, by_status
 
     async def listed(self, params: ListParams, *, workflow_id: str | None = None) -> ListPage:
         """The runs list on the shared contract: the acting team's runs (only `workflow_id`'s when given, for a key
@@ -531,7 +537,7 @@ class RunStore:
             return await rows(c, q, RunStep)
 
     async def steps(self, run_id: str) -> list[dict[str, Any]]:
-        """step_rows() as the mappings agents-service's callers still read, key for key the stored rows."""
+        """step_rows() as mappings; only tests still read it, and it goes once they read step_rows()."""
         return [s.model_dump() for s in await self.step_rows(run_id)]
 
     async def steps_of(self, run_ids: list[str]) -> dict[str, list[RunStep]]:

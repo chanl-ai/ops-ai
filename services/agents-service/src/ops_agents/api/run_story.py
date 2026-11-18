@@ -29,7 +29,7 @@ from . import engine_reviews
 from .actors import actors, started_by_of
 from .deps import Runtime
 from .engine_reviews import Row
-from .engine_runs import runs_above
+from .engine_runs import starters_of
 from .file_names import named
 from .review_text import describe_calls, humanize, operations
 
@@ -525,7 +525,8 @@ CHANNEL_FIELDS = ("from", "mailbox")
 async def channel_addresses(rt: Runtime, run: dict[str, Any]) -> set[str]:
     """The sender and mailbox of the email that started this run or, for a run another run started, its family's."""
     store, defs = RunStore(EngineTransactions(rt.db)), DefinitionStore(EngineTransactions(rt.db))
-    for here in [run, *await runs_above(store, run)]:
+    above = [r.model_dump() for r in await starters_of(store, str(run.get("created_by") or ""), run.get("team_id"))]
+    for here in [run, *above]:
         email = email_of(here, nodes_of(await defs.row(str(here["workflow_id"]), here.get("version"))))
         if email is not None:
             return {str(email[k]) for k in CHANNEL_FIELDS if email.get(k)}

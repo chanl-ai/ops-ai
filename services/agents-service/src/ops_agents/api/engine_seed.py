@@ -52,7 +52,7 @@ async def load_seed(rt: Runtime, path: Path) -> None:
                 )
                 # A shipped seed is live, as a v1 seed is published by "seed"; a restart never takes back a version a
                 # person approved since, so an unchanged seed goes live only when nothing serves the workflow.
-                if created or await store.current(d.id) is None:
+                if created or await store.serving(d.id) is None:
                     await store.go_live(d.id, version)
             except DatabaseError as e:  # a database not yet migrated to the runner's tables seeds v1 alone
                 log.warning("engine_seed_skipped", workflow=d.id, error=type(e).__name__)

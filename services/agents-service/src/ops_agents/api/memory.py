@@ -20,7 +20,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, TypedDict, cast
 
 from langgraph.config import get_config
 
@@ -29,11 +29,22 @@ from ops_agent_kernel.ports import ToolOutcome
 from ops_agent_kernel.types import PromptFragment, ToolGrant
 from ops_contracts.chat import ChatMessage, RememberedItem
 from ops_service_kit.logging import get_logger
+from ops_service_kit.narrow import an_object
 
 from ..activities.catalog import AgentDefinition
 from ..graphs.common import MEMORY_TOOL
 from ..store.events import EventLog
-from ..store.memories import ACTIVE, ASKED_FOR, CONFLICT, EVERY_AGENT, FORGOTTEN, SUGGESTED, Memories
+from ..store.memories import (
+    ACTIVE,
+    ASKED_FOR,
+    CONFLICT,
+    EVERY_AGENT,
+    FORGOTTEN,
+    SUGGESTED,
+    Memories,
+    MemoryMatch,
+    MemoryRecord,
+)
 from .agent_registry import in_flight_agent
 from .auth import Principal
 from .child_runs import TURN_PERSON
@@ -189,7 +200,18 @@ class MemoryMatcher(Protocol):
 
     async def matches(
         self, person: str, team_id: str, agent_id: str, words: list[str], *, limit: int = 10
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[MemoryMatch]: ...
+
+
+class SavedMemory(TypedDict):
+    """A memory one turn kept, as its reply's `memory` frame lists it; the thread's log keeps all but key and value."""
+
+    id: str
+    kind: str
+    key: str
+    value: str
+    status: str
+    decision: str
 
 
 def person_of(me: Principal) -> str:
@@ -310,8 +332,10 @@ async def start_learning(
     theirs = " ".join(_plain(text) for who, text in _window(history, message) if who == "person")
     matcher: MemoryMatcher = Memories(graph_store(rt).engine)
     offered = await matcher.matches(person_of(me), team_id, agent.id, _words(theirs), limit=CANDIDATES)
+    # extract_memories reads its memories as dicts: experiments/memory_decisions.py hands it saved ones by hand.
+    shown = [r.model_dump() for r in offered]
     return await extract_memories(
-        extractor_for(rt), agent, thread_id=thread_id, message=message, history=history, offered=offered
+        extractor_for(rt), agent, thread_id=thread_id, message=message, history=history, offered=shown
     )
 
 
@@ -324,7 +348,7 @@ async def finish_learning(
     team_id: str,
     thread_id: str,
     run_id: str | None = None,
-) -> list[dict[str, Any]]:
+) -> list[SavedMemory]:
     """Saves what the turn's learning found once the reply is written. A reply waits for it at most
     EXTRACTION_DEADLINE_SECONDS: past that the turn ends and nothing is saved."""
     try:
@@ -340,8 +364,8 @@ def _tokens(line: str) -> int:
     return -(-len(line) // CHARS_PER_TOKEN)
 
 
-def _recency(row: dict[str, Any], now: datetime) -> float:
-    at = datetime.fromisoformat(str(row["last_used_at"] or row["created_at"]))
+def _recency(row: MemoryRecord, now: datetime) -> float:
+    at = datetime.fromisoformat(row.last_used_at or row.created_at)
     return max(RECENCY_FLOOR, 1 - (now - at).total_seconds() / 86400 / RECENCY_DAYS)
 
 
@@ -423,23 +447,23 @@ async def save_memories(
     team_id: str,
     thread_id: str,
     run_id: str | None = None,
-) -> list[dict[str, Any]]:
+) -> list[SavedMemory]:
     """Saves what the agent keeps of the extraction, for every agent in the team: what the person asked for or set as a
     standing rule in use at once, everything else, a change to a saved memory included, as a suggestion they answer
     under the reply (POST /v1/me/memories/{id}/confirm keeps it, /undo drops it); the saved ones, also written to the
     thread's log as a `memory` event on the turn's run so its reply says what was kept, live and after a reload."""
     store = Memories(graph_store(rt).engine)
     person = person_of(me)
-    saved: list[dict[str, Any]] = []
+    saved: list[SavedMemory] = []
     for m in keepable(agent, extraction):
         kind, key, value, ref = m["kind"], m["key"], m["value"], m["ref"]
         # A change to a saved memory waits like anything else learned; asked for, it replaces the memory at once.
         if m["decision"] == "same":
             kept = await store.get(person, ref)
-            if kept is not None and _says_the_same(str(kept["value"]), value):
+            if kept is not None and _says_the_same(kept.value, value):
                 await store.confirm(person, team_id, ref)
                 saved.append(
-                    {"id": ref, "kind": kind, "key": key, "value": kept["value"], "status": ACTIVE, "decision": "same"}
+                    {"id": ref, "kind": kind, "key": key, "value": kept.value, "status": ACTIVE, "decision": "same"}
                 )
                 continue
             # The model named a saved memory as the same, but the value differs: a change, which waits unless asked.
@@ -461,17 +485,17 @@ async def save_memories(
         )
         decided = (
             "conflicts"
-            if row["status"] == CONFLICT or m["decision"] == "conflicts"
+            if row.status == CONFLICT or m["decision"] == "conflicts"
             else "replaces"
-            if row["supersedes_id"]
+            if row.supersedes_id
             else "new"
         )
         saved.append(
-            {"id": row["id"], "kind": kind, "key": key, "value": value, "status": row["status"], "decision": decided}
+            {"id": row.id, "kind": kind, "key": key, "value": value, "status": row.status, "decision": decided}
         )
     if saved:
         # The thread keeps ids only, so erasing a memory leaves none of its text in the conversation.
-        logged = [{k: s[k] for k in ("id", "kind", "status", "decision")} for s in saved]
+        logged = [{"id": s["id"], "kind": s["kind"], "status": s["status"], "decision": s["decision"]} for s in saved]
         await EventLog(graph_store(rt).engine).append(
             thread_id=thread_id, team_id=team_id, run_id=run_id, type_="memory", data={"saved": logged}
         )
@@ -490,12 +514,12 @@ async def fill_remembered(rt: Runtime, messages: Sequence[ChatMessage], reader: 
         shown: list[RememberedItem] = []
         for r in msg.remembered:
             row = rows.get(r.id)
-            if row is None or row["status"] == FORGOTTEN:
+            if row is None or row.status == FORGOTTEN:
                 shown.append(r.model_copy(update={"key": None, "value": None, "status": FORGOTTEN}))
-            elif reader is not None and row["person"] == reader:
-                shown.append(r.model_copy(update={"key": row["key"], "value": row["value"], "status": row["status"]}))
+            elif reader is not None and row.person == reader:
+                shown.append(r.model_copy(update={"key": row.key, "value": row.value, "status": row.status}))
             else:
-                shown.append(r.model_copy(update={"key": None, "value": None, "status": row["status"]}))
+                shown.append(r.model_copy(update={"key": None, "value": None, "status": row.status}))
         msg.remembered = shown
 
 
@@ -509,7 +533,7 @@ async def remember_turn(
     thread_id: str,
     message: str,
     run_id: str | None = None,
-) -> list[dict[str, Any]]:
+) -> list[SavedMemory]:
     """Extracts and saves in one step (extract_memories, then save_memories)."""
     found = await extract_memories(extractor, agent, thread_id=thread_id, message=message)
     return await save_memories(rt, me, agent, found, team_id=team_id, thread_id=thread_id, run_id=run_id)
@@ -538,7 +562,7 @@ class MemoryReads:
         run = await store.run(run_id) if run_id else None
         if thread is None or run is None:
             return None
-        given = cast(dict[str, Any], cast(dict[str, Any], run.get("input") or {}).get("input") or {})
+        given = an_object(an_object(run.get("input") or {}, "the run's input").get("input") or {}, "the turn's input")
         # chat_threads reads this module to fill a reply's remembered items, so this import waits until a turn runs.
         from .chat_threads import assistant_id  # noqa: PLC0415
 
@@ -570,24 +594,24 @@ class MemoryReads:
             return None
         store = Memories(graph_store(self.rt).engine)
         standing = await store.in_use(person, team_id, agent_id, kinds=PINNED_KINDS, limit=POOL)
-        pinned = sorted(standing, key=lambda r: str(r["confirmed_at"] or r["created_at"]), reverse=True)[:PINNED]
+        pinned = sorted(standing, key=lambda r: r.confirmed_at or r.created_at, reverse=True)[:PINNED]
         found = await store.matches(person, team_id, agent_id, _words(_plain(question)), limit=POOL)
-        best, now = max((float(r["match"]) for r in found), default=0.0), datetime.now(UTC)
+        best, now = max((r.match for r in found), default=0.0), datetime.now(UTC)
 
-        def score(r: dict[str, Any]) -> float:
-            boost = KIND_BOOST if r["kind"] in PINNED_KINDS else 1.0
-            return float(r["match"]) / best * float(r["confidence"]) * _recency(r, now) * boost
+        def score(r: MemoryMatch) -> float:
+            boost = KIND_BOOST if r.kind in PINNED_KINDS else 1.0
+            return r.match / best * r.confidence * _recency(r, now) * boost
 
-        chosen = {r["id"] for r in pinned}
-        matched = sorted((r for r in found if r["id"] not in chosen), key=score, reverse=True)
+        chosen = {r.id for r in pinned}
+        matched = sorted((r for r in found if r.id not in chosen), key=score, reverse=True)
         picks: list[tuple[str, str]] = []
         lines: list[str] = []
         spent = 0
         for r, reason in [*((r, "pinned") for r in pinned), *((r, "matched") for r in matched)]:
-            line = f"- [{r['id']}] {r['key']}: {r['value']}" if r["key"] else f"- [{r['id']}] {r['value']}"
+            line = f"- [{r.id}] {r.key}: {r.value}" if r.key else f"- [{r.id}] {r.value}"
             if len(picks) == RECALL_MEMORIES or spent + _tokens(line) > RECALL_TOKENS:
                 break
-            picks.append((str(r["id"]), reason))
+            picks.append((r.id, reason))
             lines.append(line)
             spent += _tokens(line)
         if not picks:
@@ -619,7 +643,7 @@ class MemoryReads:
         person = TURN_PERSON.get()
         thread_id = str((get_config().get("configurable") or {}).get("thread_id") or "")
         thread = await graph_store(self.rt).thread(thread_id) if thread_id else None
-        agent_id = str(cast(dict[str, Any], (thread or {}).get("meta") or {}).get("agentId") or "")
+        agent_id = str(an_object((thread or {}).get("meta") or {}, "the thread's meta").get("agentId") or "")
         if person is None or not agent_id or await self._agent(agent_id) is None:
             return ToolOutcome(ok=False, output={"error": "There is no memory to search on this turn."})
         words = [w.lower() for w in str(arguments.get("query") or "").split() if len(w) > 2][:6]
@@ -627,5 +651,5 @@ class MemoryReads:
             person_of(person), str((thread or {}).get("team_id") or ""), agent_id, words, limit=SEARCH_RESULTS
         )
         return ToolOutcome(
-            ok=True, output={"memories": [{"kind": r["kind"], "key": r["key"], "value": r["value"]} for r in rows]}
+            ok=True, output={"memories": [{"kind": r.kind, "key": r.key, "value": r.value} for r in rows]}
         )
