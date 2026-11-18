@@ -55,7 +55,7 @@ await withUiStack(
       const table = widget('rows').first();
       const cols = (await table.getByRole('columnheader').allInnerTexts().catch(() => [])).join('|');
       const rows = await table.locator('tbody tr').count();
-      check('the agent shows the two accounts as a titled table', (await table.getAttribute('aria-label')) === 'Wire limits' && rows === 2 && cols === 'account|daily|per_wire', { cols, rows });
+      check('the agent shows the two accounts as a titled table', (await table.getAttribute('aria-label')) === 'Wire limits' && rows === 2 && cols === 'Account|Daily|Per wire', { cols, rows });
 
       await ask(DISPUTES);
       await widget('metric').first().waitFor({ timeout: 60_000 }).catch(() => undefined);
