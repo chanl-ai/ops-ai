@@ -12,7 +12,6 @@ import asyncio
 import signal
 from contextlib import AbstractContextManager, AsyncExitStack
 from pathlib import Path
-from typing import Any
 
 import httpx
 
@@ -22,7 +21,7 @@ from ops_documents_client import DocumentsClient
 from ops_email import MailSource
 from ops_engine import default_registry
 from ops_engine.ports import EnginePorts, Faults
-from ops_engine.store import DefinitionStore, RunStore
+from ops_engine.store import DefinitionStore, RunRow, RunStore
 from ops_engine.worker import Worker, WorkerHost
 from ops_files_client import FilesClient
 from ops_service_kit.logging import configure_logging, get_logger
@@ -181,9 +180,9 @@ async def serve(settings: Settings, stop: asyncio.Event) -> None:
             remind=reminders(db),
             resume_link=lambda run, waiting, seconds: resume_link(
                 settings.review_key.get_secret_value(),
-                tenant=str(run["tenant_id"]),
-                team=str(run["team_id"]),
-                run_id=str(run["id"]),
+                tenant=run.tenant_id,
+                team=run.team_id,
+                run_id=run.id,
                 waiting=waiting,
                 seconds=seconds,
             ),
@@ -237,11 +236,11 @@ def engine_pass(tenant_id: str) -> AbstractContextManager[Isolation]:
     return isolation.tenant_wide(ENGINE_PASS, tenant_id=tenant_id)
 
 
-def enter_run(run: dict[str, Any]) -> None:
+def enter_run(run: RunRow) -> None:
     """The run's team for its pass, so a tool call's service token names it as a person's request would. Each pass is
     its own task, so the team set here is that run's alone; a run with no team stays tenant-wide."""
-    if team := run.get("team_id"):
-        isolation.enter(isolation.tenant(), str(team), kind="worker")
+    if team := run.team_id:
+        isolation.enter(isolation.tenant(), team, kind="worker")
 
 
 async def keep_mail_listening(listener: EmailTriggers, stop: asyncio.Event, every_s: float) -> None:

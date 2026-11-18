@@ -1388,7 +1388,7 @@ async def cancel_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     cancelled, changed = await runs(rt).cancel(run_id, reason="by_user")
     if not changed or cancelled is None:
         raise Conflict(f"Run {run_id} has already {run['status']}.", code="run_finished")
-    await runs(rt).settle_parents(cancelled)
+    await runs(rt).settle_parents(run_id, str(cancelled["created_by"]))
     await EventLog(rt.db).append(
         thread_id=run_id, team_id=run["team_id"], run_id=run_id, type_="cancelled", node=None, data={"by": me.email}
     )

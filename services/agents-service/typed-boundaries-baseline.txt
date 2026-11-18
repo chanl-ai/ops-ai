@@ -1,4 +1,4 @@
-# 2188 boundaries crossed without a model in services/agents-service (scripts/check_typed_boundaries.py). A row may only fall.
+# 2185 boundaries crossed without a model in services/agents-service (scripts/check_typed_boundaries.py). A row may only fall.
 1 body agents_platform_event
 1 body forms_upload_public
 1 reply health_health
@@ -113,7 +113,7 @@
 1 task services/agents-service/src/ops_agents/api/runs.py
 1 dict-any services/agents-service/src/ops_agents/api/schemas.py
 2 extra-allow services/agents-service/src/ops_agents/api/schemas.py
-13 dict-any services/agents-service/src/ops_agents/api/service_events.py
+11 dict-any services/agents-service/src/ops_agents/api/service_events.py
 65 dict-any services/agents-service/src/ops_agents/api/skills.py
 3 dict-any services/agents-service/src/ops_agents/api/step_shapes.py
 1 dict-any services/agents-service/src/ops_agents/api/sweeper.py
@@ -129,7 +129,6 @@
 2 dict-any services/agents-service/src/ops_agents/api/usage.py
 4 dict-any services/agents-service/src/ops_agents/api/widget_sessions.py
 13 dict-any services/agents-service/src/ops_agents/api/widgets.py
-1 dict-any services/agents-service/src/ops_agents/api/worker.py
 3 task services/agents-service/src/ops_agents/api/worker.py
 44 dict-any services/agents-service/src/ops_agents/api/workflow_registry.py
 6 dict-any services/agents-service/src/ops_agents/app/evals.py

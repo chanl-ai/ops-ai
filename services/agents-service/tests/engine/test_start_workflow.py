@@ -244,11 +244,11 @@ async def test_a_parent_waits_while_a_run_it_started_waits_on_a_person_and_succe
     with tenant_scope(t.id):
         assert len(await t.runs.steps(parent)) == steps
         for child in children[:-1]:
-            cancelled, _ = await t.runs.cancel(str(child["id"]))
-            await t.runs.settle_parents(cancelled or {})
+            await t.runs.cancel(str(child["id"]))
+            await t.runs.settle_parents(str(child["id"]), str(child["created_by"]))
         assert (await t.runs.get(parent) or {})["status"] == "waiting"
-        last, _ = await t.runs.cancel(str(children[-1]["id"]))
-        await t.runs.settle_parents(last or {})
+        await t.runs.cancel(str(children[-1]["id"]))
+        await t.runs.settle_parents(str(children[-1]["id"]), str(children[-1]["created_by"]))
         run = await t.runs.get(parent) or {}
     assert run["status"] == "succeeded" and run["finished_at"] is not None
 

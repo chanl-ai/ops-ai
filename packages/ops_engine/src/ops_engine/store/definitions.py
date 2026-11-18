@@ -9,7 +9,9 @@ from typing import Any, ClassVar, TypedDict
 import sqlalchemy as sa
 from pydantic import JsonValue
 
+from ops_service_kit.http import Out
 from ops_store import Guarantee
+from ops_store.rows import one
 
 from .tables import engine_definitions, engine_runs, engine_steps
 from .tx import LIVE_WORKFLOWS, Transactions
@@ -74,6 +76,29 @@ def watched_mailbox(definition: JsonValue) -> str | None:
             # engine_definitions.mailbox holds an address; anything else names no mailbox that could exist.
             return found if isinstance(found, str) and 0 < len(found) <= MAILBOX_MAX else None
     return None
+
+
+class DefinitionRow(Out):
+    """One stored version of a workflow, as `engine_definitions` holds it. The definition stays the JSON it was
+    stored as: its digest hashes that JSON, so it is never rebuilt from a model here."""
+
+    tenant_id: str
+    workflow_id: str
+    version: int
+    digest: str
+    name: str
+    definition: JsonValue
+    created_at: str
+    created_by: str
+    team_id: str | None = None
+    stage: str
+    archived_at: str | None = None
+    archived_by: str | None = None
+    description: str
+    trigger: str
+    startable: bool
+    takes_files: bool
+    mailbox: str | None = None
 
 
 class DefinitionStore:
@@ -212,16 +237,22 @@ class DefinitionStore:
             await c.execute(t.update().where(where).values(**values))
         return await self.get(workflow_id, team=team)
 
-    async def get(
+    async def row(
         self, workflow_id: str, version: int | None = None, *, team: str | None = None
-    ) -> dict[str, Any] | None:
+    ) -> DefinitionRow | None:
         """One version, the latest when `version` is None; None when `team` may not see it."""
         t = engine_definitions
         q = t.select().where(t.c.workflow_id == workflow_id, t.c.tenant_id == self.tx.tenant(), _seen_by(team))
         q = q.where(t.c.version == version) if version is not None else q.order_by(t.c.version.desc()).limit(1)
         async with self.tx.tenant_tx() as c:
-            row = (await c.execute(q)).mappings().first()
-        return dict(row) if row else None
+            return await one(c, q, DefinitionRow)
+
+    async def get(
+        self, workflow_id: str, version: int | None = None, *, team: str | None = None
+    ) -> dict[str, Any] | None:
+        """row() as the mapping agents-service's callers still read, key for key the stored row."""
+        found = await self.row(workflow_id, version, team=team)
+        return found.model_dump() if found else None
 
     async def pinned(self, keys: set[tuple[str, int]]) -> dict[tuple[str, int], dict[str, Any]]:
         """The versions at these (workflow_id, version) pairs in one query, so a page naming the workflows of many runs

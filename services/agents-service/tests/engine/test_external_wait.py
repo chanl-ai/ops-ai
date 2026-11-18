@@ -106,9 +106,9 @@ def _worker(engine: AsyncEngine, settings: Settings) -> Worker:
     key = settings.review_key.get_secret_value()
     w.host.resume_link = lambda run, waiting, seconds: resume_link(
         key,
-        tenant=str(run["tenant_id"]),
-        team=str(run["team_id"]),
-        run_id=str(run["id"]),
+        tenant=run.tenant_id,
+        team=run.team_id,
+        run_id=run.id,
         waiting=waiting,
         seconds=seconds,
     )

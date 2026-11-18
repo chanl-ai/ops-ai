@@ -15,7 +15,7 @@ from typing import Any, cast
 
 from ops_engine import default_registry
 from ops_engine.definition import WorkflowDefinition, parse, validate
-from ops_engine.store import DefinitionStore, RunStore, WorkflowOwnedError
+from ops_engine.store import DefinitionStore, RunRow, RunStore, WorkflowOwnedError
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 from ops_store import background
@@ -136,22 +136,22 @@ EVENT_OWNERS: dict[str, tuple[str, ...]] = {
 REMINDER = "task.reminder"
 
 
-def reminders(db: AsyncEngine) -> Callable[[dict[str, Any], dict[str, Any]], Awaitable[None]]:
+def reminders(db: AsyncEngine) -> Callable[[RunRow, dict[str, Any]], Awaitable[None]]:
     """The worker's `remind`: a review still waiting is reported as this service's task.reminder event, keyed
     by run, step, iteration and count, so a retried pass records it once. What follows is the handler the tenant runs
     for it; none is shipped, so it is recorded unhandled until a team adds one."""
     handler = handlers(EVENT_WORKFLOWS).get(REMINDER)
 
-    async def remind(run: dict[str, Any], reminder: dict[str, Any]) -> None:
+    async def remind(run: RunRow, reminder: dict[str, Any]) -> None:
         await deliver(
             db,
             handler,
             name=REMINDER,
-            key=f"{run['id']}:{reminder['node']}:{reminder['iteration']}:{reminder['n']}",
-            team_id=str(run.get("team_id") or ""),
+            key=f"{run.id}:{reminder['node']}:{reminder['iteration']}:{reminder['n']}",
+            team_id=run.team_id,
             source=SOURCE,
             actor=None,
-            payload={"runId": run["id"], "workflowId": run["workflow_id"]} | reminder,
+            payload={"runId": run.id, "workflowId": run.workflow_id} | reminder,
         )
 
     return remind
