@@ -11,7 +11,6 @@ import asyncio
 import contextlib
 import json
 import math
-import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -992,7 +991,16 @@ async def _typed_action(rt: Runtime, run: dict[str, Any], paused: dict[str, Any]
 
 # An action input naming a person (a task type's `format: person`), and the shape that names one.
 PERSON = "person"
-_EMAIL = re.compile(r"[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+")
+
+
+def _is_email(text: str) -> bool:
+    """One "@", a local part and a dotted domain with no whitespace. Plain splits, not a regex, so a long
+    hostile string costs linear time."""
+    local, at, domain = text.partition("@")
+    if not at or "@" in domain or not local or any(c.isspace() for c in text):
+        return False
+    labels = domain.split(".")
+    return len(labels) >= 2 and all(labels)
 
 
 def _action_inputs(action: dict[str, Any], inputs: dict[str, Any]) -> dict[str, Any]:
@@ -1007,7 +1015,7 @@ def _action_inputs(action: dict[str, Any], inputs: dict[str, Any]) -> dict[str, 
     if named := sorted(
         n
         for n, i in declared.items()
-        if i.get("format") == PERSON and inputs.get(n) not in (None, "") and not _EMAIL.fullmatch(str(inputs[n]))
+        if i.get("format") == PERSON and inputs.get(n) not in (None, "") and not _is_email(str(inputs[n]))
     ):
         raise ValidationFailed(f"{', '.join(named)} names a person by email.")
     return dict(inputs)

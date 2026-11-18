@@ -31,6 +31,7 @@ WEBHOOK = "notify_webhook"
 FIELD_KEYS = ("name", "type", "required", "description", "format", "enum", "example", "default")
 # Maya Okafor's team in platform-service's directory and the tools seed (services/tools-service/seed/tool_modules.json).
 HOLD_TEAM = "team_ops"
+SECRET_NAMES = ("BANK_API_KEY", "LEVY_WEBHOOK_SECRET")
 
 
 def data(r: httpx.Response) -> Any:
@@ -236,9 +237,9 @@ async def main() -> None:
         httpx.AsyncClient(base_url=args.tools, headers=keeper, timeout=60) as secrets,
     ):
         team = builder.get("X-Team-Id")
-        for name, value in (("BANK_API_KEY", args.bank_key), ("LEVY_WEBHOOK_SECRET", args.webhook_secret)):
+        for name, value in zip(SECRET_NAMES, (args.bank_key, args.webhook_secret), strict=True):
             state = await ensure_secret(secrets, name, value, team)
-            print(f"{name}: {state}")
+            print(f"{name}: {'created' if state == 'created' else 'exists'}")
         if args.module:
             module_id = args.module
         else:
