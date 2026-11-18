@@ -19,6 +19,7 @@ from typing import Any, cast
 from ops_engine.store import RunStore, WorkQueue
 from ops_engine.store.clock import now_iso
 from ops_policy.tokens import HmacSigner
+from ops_service_kit.http import Json
 
 from ..store.engine import AsyncEngine, EngineTransactions
 from ..store.events import EventLog
@@ -112,24 +113,24 @@ def resume_link(
 
 
 async def resumed(
-    db: AsyncEngine, run: dict[str, Any], waiting: dict[str, Any], resume: dict[str, Any], *, source: str
+    db: AsyncEngine, run_id: str, team_id: str, waiting: Json, resume: dict[str, Any], *, source: str
 ) -> bool:
     """Resumes a step parked on outside work (`source`: event or callback): writes the resume row, clears the wait,
     queues the run and records how it resumed; False when something resumed this pause first, which is recorded as
     ignored."""
     runs = RunStore(EngineTransactions(db))
-    _, created = await enqueue_resume(db, str(run["id"]), waiting, resume)
+    _, created = await enqueue_resume(db, run_id, waiting, resume)
     log = EventLog(db)
     if not created:
         await log.append(
-            thread_id=run["id"], team_id=run["team_id"], run_id=run["id"], type_="resume_ignored",
+            thread_id=run_id, team_id=team_id, run_id=run_id, type_="resume_ignored",
             node=str(waiting["node"]), data={"source": source},
         )  # fmt: skip
         return False
-    await runs.unpark(str(run["id"]), str(waiting["node"]), int(waiting["iteration"]))
-    await runs.update(str(run["id"]), status="queued", waiting=None)
+    await runs.unpark(run_id, str(waiting["node"]), int(cast(int, waiting["iteration"])))
+    await runs.update(run_id, status="queued", waiting=None)
     await log.append(
-        thread_id=run["id"], team_id=run["team_id"], run_id=run["id"], type_=f"resumed_by_{source}",
+        thread_id=run_id, team_id=team_id, run_id=run_id, type_=f"resumed_by_{source}",
         node=str(waiting["node"]), data={},
     )  # fmt: skip
     return True
@@ -145,11 +146,11 @@ async def wake_parked(db: AsyncEngine, *, name: str, key: str, team_id: str, pay
     for wait in await runs.waits_for(name, key):
         if wait["team_id"] != team_id:
             continue  # the team is the reporting service's token's, never another team's step
-        run = await runs.get(str(wait["run_id"])) or {}
-        waiting = cast(dict[str, Any], run.get("waiting") or {})
-        if run.get("status") != "waiting" or waiting.get("interruptId") != wait["interrupt_id"]:
+        run = await runs.row(str(wait["run_id"]))
+        waiting = (run.waiting if run is not None else None) or {}
+        if run is None or run.status != "waiting" or waiting.get("interruptId") != wait["interrupt_id"]:
             await runs.unpark(str(wait["run_id"]), str(wait["node_id"]), int(wait["iteration"]))
             continue
-        if await resumed(db, run, waiting, {"event": payload}, source="event"):
-            woken.append(str(run["id"]))
+        if await resumed(db, run.id, run.team_id, waiting, {"event": payload}, source="event"):
+            woken.append(run.id)
     return woken

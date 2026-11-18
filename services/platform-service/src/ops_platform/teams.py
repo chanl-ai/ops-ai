@@ -11,7 +11,7 @@ import hashlib
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TypedDict
 
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, Unauthorized
 
@@ -29,7 +29,31 @@ def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def _bulk(b: Bulk) -> dict[str, Any]:
+class BulkView(TypedDict):
+    updated: list[str]
+    skipped: list[dict[str, str]]
+
+
+class InvitedView(BulkView):
+    """The invites made, each with its token, shown once."""
+
+    invites: list[dict[str, str]]
+
+
+class InvitePreviewView(TypedDict):
+    token: str
+    email: str
+    teamId: str
+    team: str
+    role: str
+    invitedBy: str | None
+    existingAccount: bool
+    invitedAt: str
+    expiresAt: str
+    state: str
+
+
+def _bulk(b: Bulk) -> BulkView:
     return {"updated": b.updated, "skipped": b.skipped}
 
 
@@ -48,7 +72,7 @@ class Members:
         p, access = await roles.live(actor.tenant_id, actor.user_id, team=actor.team_id)
         access.can(p, area, action, team=actor.team_id, what="this team", code="admin_required", in_team=in_team)
 
-    async def invite(self, actor: Actor, emails: list[str], role: str) -> dict[str, Any]:
+    async def invite(self, actor: Actor, emails: list[str], role: str) -> InvitedView:
         await self.require_admin(actor, "access", "create")
         now = datetime.now(UTC)
         tokens = {e.strip().lower(): f"inv_{secrets.token_urlsafe(24)}" for e in emails}
@@ -63,13 +87,14 @@ class Members:
         except TeamArchivedError as e:
             raise Conflict("This team is archived and takes no new members.", code="team_archived") from e
         invites = [{**m, "token": tokens[m["email"]]} for m in made]
-        return {**_bulk(bulk), "invites": invites}
+        done = _bulk(bulk)
+        return {"updated": done["updated"], "skipped": done["skipped"], "invites": invites}
 
-    async def set_role(self, actor: Actor, ids: list[str], role: str) -> dict[str, Any]:
+    async def set_role(self, actor: Actor, ids: list[str], role: str) -> BulkView:
         await self.require_admin(actor, "access", "edit")
         return _bulk(await self.store.set_role(actor, ids, role, at=_iso(datetime.now(UTC))))
 
-    async def remove(self, actor: Actor, ids: list[str]) -> dict[str, Any]:
+    async def remove(self, actor: Actor, ids: list[str]) -> BulkView:
         await self.require_admin(actor, "access", "delete")
         return _bulk(await self.store.remove(actor, ids, at=_iso(datetime.now(UTC))))
 
@@ -79,7 +104,7 @@ class Members:
             raise NotFound("No invitation matches this link.")
         return invite
 
-    async def preview(self, token: str) -> dict[str, Any]:
+    async def preview(self, token: str) -> InvitePreviewView:
         invite = await self.find(token)
         return {
             "token": token,

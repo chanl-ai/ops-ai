@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Any, cast
 
 import regex
 
 # The value types and their canonical forms are shared with case types (ops_contracts.field_values).
 from ops_contracts.field_values import DEFAULT_DATE_ORDER, as_date, as_number, normalise
+from ops_extract.shapes import FieldDefinition
+from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.narrow import Malformed
 
 # Signals (research): quote exact 1.0, found after folding 0.85, not found 0; value valid as given 1.0,
 # normalised 0.9, invalid 0; a page read by OCR multiplies by its words' recognition confidence when the reader kept
@@ -44,6 +46,19 @@ _TRAILING = re.compile(r"[\s,;:]+$")
 _LABEL = re.compile(r"^[A-Za-z][A-Za-z .#/()'-]{0,39}:\s+(?=\S)")
 
 
+def entries(value: JsonValue) -> list[JsonValue]:
+    """`value or []` iterated: a list's items, an object's keys, a string's characters, nothing for an empty or false
+    value; a number or `true` is not iterable and raises. Saved definitions are read this way so a wrongly shaped one
+    is refused (or fails the read) exactly as it was before it was typed."""
+    if not value:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict | str):
+        return [*value]
+    raise Malformed(f"{value!r} is not a list")
+
+
 def fold(text: str) -> str:
     """Text compared loosely: Unicode-normalised, curly quotes and dashes made plain, case and runs of space ignored."""
     return _SPACE.sub(" ", unicodedata.normalize("NFKC", text).translate(_QUOTES)).strip().casefold()
@@ -60,13 +75,15 @@ def ground(quote: str | None, page: int | None, pages: dict[int, str]) -> float:
     return FOLDED if fold(quote) in fold(text) else 0.0
 
 
-def in_quote(field: dict[str, Any], value: Any, quote: str | None) -> bool:
+def in_quote(field: FieldDefinition, value: JsonValue, quote: str | None) -> bool:
     """Whether the value is what the quote says, so a true quote cannot carry an invented value: a number or money
     amount is one of the quote's numbers, a date is one of its dates, text and enum values appear in it."""
     if not quote or value is None:
         return False
     kind = str(field.get("type") or "text")
     if kind in ("number", "money"):
+        if not isinstance(value, int | float | str):
+            raise Malformed(f"{kind} value {value!r} is not a number")
         numbers = [as_number(m)[0] for m in re.findall(r"-?[\d][\d.,\s]*\d|\d", quote)]
         return any(n is not None and abs(n - float(value)) < 0.005 for n in numbers)
     if kind == "date":
@@ -87,9 +104,12 @@ def _date_candidates(text: str) -> list[str]:
     return [m for p in patterns for m in re.findall(p, text)]
 
 
-def threshold(field: dict[str, Any], schema_below: float | None, floor: float) -> float:
+def threshold(field: FieldDefinition, schema_below: float | None, floor: float) -> float:
     """The confidence a field must reach: the highest of its own, the schema's and the workspace floor."""
-    return max(float(field.get("reviewBelow") or 0), float(schema_below or 0), floor)
+    below = field.get("reviewBelow") or 0
+    if not isinstance(below, int | float | str):
+        raise Malformed(f"reviewBelow {below!r} is not a number")
+    return max(float(below), float(schema_below or 0), floor)
 
 
 def quote_confidence(quote: str | None, words: dict[str, float] | None) -> float:
@@ -101,13 +121,13 @@ def quote_confidence(quote: str | None, words: dict[str, float] | None) -> float
     return sum(found) / len(found) if found else OCR_FACTOR
 
 
-def cleaned(field: dict[str, Any], raw: Any) -> tuple[Any, list[str]]:
+def cleaned(field: FieldDefinition, raw: JsonValue) -> tuple[JsonValue, list[str]]:
     """The model's value after the field's cleanup rules, in the order the field lists them, and the rules that changed
     it. Anything but text is left as it is; so is a last four when the value has fewer than four digits."""
     if not isinstance(raw, str):
         return raw, []
     text, changed = raw, list[str]()
-    for rule in cast(list[str], field.get("clean") or []):
+    for rule in entries(field.get("clean")):
         before = text
         if rule == TRIM_PUNCTUATION:
             text = _TRAILING.sub("", text)
@@ -117,16 +137,18 @@ def cleaned(field: dict[str, Any], raw: Any) -> tuple[Any, list[str]]:
             digits = re.sub(r"\D", "", text)
             text = digits[-4:] if len(digits) >= 4 else text
         if text != before:
-            changed.append(rule)
+            changed.append(str(rule))
     return text, changed
 
 
-def broken_rule(field: dict[str, Any], raw: Any) -> str | None:
+def broken_rule(field: FieldDefinition, raw: JsonValue) -> str | None:
     """Which of the field's own rules the model's value breaks: `emptyWhen`, phrases that mean the document
     gives no value ("Not supplied on this form"), or `pattern`, a regular expression the whole value must match (a
     full SSN, so a masked "***-**-4321" is not one). None when it keeps both."""
     text = str(raw).strip()
-    for phrase in cast(list[str], field.get("emptyWhen") or []):
+    for phrase in entries(field.get("emptyWhen")):
+        if not isinstance(phrase, str):
+            raise Malformed(f"emptyWhen holds {phrase!r}, not text")
         if fold(text) == fold(phrase) or fold(text).startswith(fold(phrase)):
             return "emptyWhen"
     pattern = field.get("pattern")
@@ -143,8 +165,8 @@ def broken_rule(field: dict[str, Any], raw: Any) -> str | None:
 
 
 def score(
-    field: dict[str, Any],
-    answer: dict[str, Any] | None,
+    field: FieldDefinition,
+    answer: Json | None,
     pages: dict[int, str],
     ocr_pages: set[int],
     *,
@@ -152,7 +174,7 @@ def score(
     schema_below: float | None,
     floor: float,
     word_confidence: dict[int, dict[str, float]] | None = None,
-) -> dict[str, Any]:
+) -> Json:
     """One field's result: the normalised value, what the model said, the confidence from the signals, whether a person
     must check it, and where it came from."""
     said_value = (answer or {}).get("value")
@@ -182,7 +204,8 @@ def score(
             "needsReview": bool(field.get("required")) or bool(field.get("alwaysReview")),
             "citation": None,
         }
-    value, valid = normalise(field, raw)
+    # `normalise` is shared with case types, which read a field as a plain mapping.
+    value, valid = normalise(dict(field), raw)
     said = str(quote) if quote is not None else None
     # The quote must be on its page and must say the value: either failing means nothing backs the value.
     confidence = ground(said, page, pages) * valid * (1.0 if in_quote(field, value, said) else 0.0)
@@ -190,7 +213,7 @@ def score(
         confidence *= quote_confidence(said, (word_confidence or {}).get(page))
     confidence = round(confidence, 3)
     review = bool(field.get("alwaysReview")) or confidence < threshold(field, schema_below, floor)
-    result: dict[str, Any] = {
+    result: Json = {
         "value": value,
         "extractedValue": said_value,
         "confidence": confidence,
@@ -198,16 +221,16 @@ def score(
         "citation": {"fileId": file_id, "page": page, "quote": quote},
     }
     if tidied:
-        result["cleaned"] = tidied
+        result["cleaned"] = [*tidied]
     if value is None:
         # Said, but not a valid value of the field's type (a date of 41/18/2026): named, so a re-read is asked why.
         result["rejected"] = REJECTED_TYPE
     return result
 
 
-def answer_schema(fields: list[dict[str, Any]]) -> dict[str, Any]:
+def answer_schema(fields: list[FieldDefinition]) -> Json:
     """The JSON Schema the model answers: per field its value as written, the exact quote it came from and the page."""
-    item = {
+    item: Json = {
         "type": "object",
         "additionalProperties": False,
         "required": ["value", "quote", "page"],
@@ -218,10 +241,11 @@ def answer_schema(fields: list[dict[str, Any]]) -> dict[str, Any]:
         },
     }
     keys = [str(f["key"]) for f in fields]
-    return {"type": "object", "additionalProperties": False, "required": keys, "properties": dict.fromkeys(keys, item)}
+    properties: Json = dict.fromkeys(keys, item)
+    return {"type": "object", "additionalProperties": False, "required": [*keys], "properties": properties}
 
 
-def records_schema(fields: list[dict[str, Any]]) -> dict[str, Any]:
+def records_schema(fields: list[FieldDefinition]) -> Json:
     """The answer for a document that names several of the thing (Extract many): one `answer_schema` object per
     record, in the order the document gives them."""
     return {

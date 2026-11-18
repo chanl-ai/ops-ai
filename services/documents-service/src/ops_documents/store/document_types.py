@@ -10,9 +10,8 @@ workflow pinned to version n keeps reading what it was published with."""
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypedDict
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
@@ -20,7 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from ops_contracts.field_values import DEFAULT_DATE_ORDER
 from ops_documents.store.columns import JSON_TEXT
 from ops_documents.store.metadata import RECOVER_PENDING, ROLE, SYSTEM_ROLE, metadata
-from ops_service_kit.http import Out
+from ops_service_kit.http import Json, JsonList, JsonValue, Out
 from ops_service_kit.listing import ListParams
 from ops_store import isolation
 from ops_store.dialect import locked
@@ -166,12 +165,12 @@ class VersionRow(Out):
     tenant_id: str
     type_id: str
     version: int
-    fields: Annotated[list[dict[str, Any]], JSON_TEXT]
+    fields: Annotated[list[Json], JSON_TEXT]
     many: bool
     review_below: float | None
     date_order: str | None
-    templates: Annotated[list[dict[str, Any]] | None, JSON_TEXT]
-    checks: Annotated[list[dict[str, Any]] | None, JSON_TEXT]
+    templates: Annotated[list[Json] | None, JSON_TEXT]
+    checks: Annotated[list[Json] | None, JSON_TEXT]
     page_images: bool | None
     offer_at: int | None
     note: str | None
@@ -219,11 +218,71 @@ class TestRow(Out):
     team: str
     status: TestStatus
     samples: int
-    result: Annotated[dict[str, Any] | None, JSON_TEXT]
+    result: Annotated[Json | None, JSON_TEXT]
     error: str | None
     asked_by: str
     asked_at: datetime
     finished_at: datetime | None
+
+
+class NewType(TypedDict):
+    """A new type's row, before its version 1."""
+
+    tenant_id: str
+    id: str
+    team: str
+    name: str
+    description: JsonValue
+    created_by: str
+    created_at: datetime
+
+
+class VersionOptions(TypedDict):
+    """A version's fields and options, checked as an extraction request checks them."""
+
+    fields: JsonList
+    many: bool
+    review_below: JsonValue
+    date_order: str
+    templates: JsonList
+    checks: JsonList
+    page_images: bool
+    offer_at: int
+    note: JsonValue
+
+
+class NewVersion(VersionOptions):
+    created_by: str
+    created_at: datetime
+
+
+class _VersionValues(TypedDict):
+    """A version's row as it is inserted, its JSON as text."""
+
+    tenant_id: str
+    type_id: str
+    team: object
+    version: int
+    fields: str
+    many: bool
+    review_below: JsonValue
+    date_order: str
+    templates: str
+    checks: str
+    page_images: bool
+    offer_at: int | None
+    note: JsonValue
+    created_by: str
+    created_at: datetime
+
+
+class TestChange(TypedDict, total=False):
+    """What a test run's progress changes on its row."""
+
+    status: TestStatus
+    result: Json
+    error: str
+    finished_at: datetime
 
 
 def _named(table: sa.Table, model: type[Out]) -> tuple[sa.Column[Any], ...]:
@@ -245,17 +304,18 @@ class DocumentTypesStore(Store):
     role = ROLE
     system_role = SYSTEM_ROLE
 
-    async def create(self, values: Mapping[str, Any], version: Mapping[str, Any]) -> None:
+    async def create(self, values: NewType, version: NewVersion) -> None:
         """The type and its version 1, in one transaction."""
         async with self.tx() as c:
             try:
                 async with self.attempt(c):
                     await c.execute(sa.insert(document_types).values(**values, latest_version=1))
-                    await c.execute(sa.insert(document_type_versions).values(**self._version(values, version, 1)))
+                    row = self._version(values["tenant_id"], values["id"], values["team"], version, 1)
+                    await c.execute(sa.insert(document_type_versions).values(**row))
             except IntegrityError as e:
                 raise NameTakenError(str(values["name"])) from e
 
-    async def add_version(self, type_id: str, version: Mapping[str, Any]) -> int:
+    async def add_version(self, type_id: str, version: NewVersion) -> int:
         """Inserts version latest+1 and moves the type to it; a concurrent save fails on the version key."""
         tenant = isolation.tenant()
         async with self.tx() as c:
@@ -264,8 +324,8 @@ class DocumentTypesStore(Store):
             )
             latest = (await c.execute(locked(head, document_types))).scalar_one()
             n = int(latest) + 1
-            owner = {"tenant_id": tenant, "id": type_id, "team": _type_team(type_id)}
-            await c.execute(sa.insert(document_type_versions).values(**self._version(owner, version, n)))
+            row = self._version(tenant, type_id, _type_team(type_id), version, n)
+            await c.execute(sa.insert(document_type_versions).values(**row))
             await c.execute(
                 sa.update(document_types)
                 .where(document_types.c.tenant_id == tenant, document_types.c.id == type_id)
@@ -274,11 +334,11 @@ class DocumentTypesStore(Store):
         return n
 
     @staticmethod
-    def _version(owner: Mapping[str, Any], version: Mapping[str, Any], n: int) -> dict[str, Any]:
+    def _version(tenant_id: str, type_id: str, team: object, version: NewVersion, n: int) -> _VersionValues:
         return {
-            "tenant_id": owner["tenant_id"],
-            "type_id": owner["id"],
-            "team": owner["team"],
+            "tenant_id": tenant_id,
+            "type_id": type_id,
+            "team": team,
             "version": n,
             "fields": json.dumps(version["fields"]),
             "many": bool(version.get("many")),
@@ -352,11 +412,17 @@ class DocumentTypesStore(Store):
         async with self.tx() as c:
             return await rows(c, q, VersionRow)
 
-    async def add_sample(self, values: Mapping[str, Any]) -> None:
+    async def add_sample(self, tenant_id: str, sample: SampleRow) -> None:
+        values = sample.model_dump()
         async with self.tx() as c:
             await c.execute(
                 sa.insert(document_type_samples).values(
-                    **{**values, "expected": json.dumps(values["expected"]), "team": _type_team(str(values["type_id"]))}
+                    **{
+                        "tenant_id": tenant_id,
+                        **values,
+                        "expected": json.dumps(values["expected"]),
+                        "team": _type_team(sample.type_id),
+                    }
                 )
             )
 
@@ -457,9 +523,9 @@ class DocumentTypesStore(Store):
         async with self.tx() as c:
             await c.execute(sa.insert(document_type_tests).values(**values))
 
-    async def set_test(self, test_id: str, values: Mapping[str, Any]) -> None:
+    async def set_test(self, test_id: str, values: TestChange) -> None:
         tenant = isolation.tenant()
-        row = dict(values)
+        row = {**values}
         if "result" in row and row["result"] is not None:
             row["result"] = json.dumps(row["result"])
         async with self.tx() as c:

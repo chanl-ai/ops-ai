@@ -17,7 +17,7 @@ from ops_platform.sso import guarded_get
 from ops_platform.store.holders import HolderStore
 from ops_platform.store.identity import IdentityStore
 from ops_platform.store.signin import SignInStore
-from ops_platform.store.tables import signin_certificates
+from ops_platform.store.tables import signin_certificates, signin_providers
 from ops_platform.store.workspace import WorkspaceStore
 from ops_service_kit.public_address import PublicFetch
 
@@ -148,3 +148,19 @@ async def test_the_daily_watch_adds_a_new_certificate_and_warns_at_30_and_7_days
             )
         ).scalars().all()  # fmt: skip
     assert set(warned) == {"7"}
+
+
+async def test_the_daily_watch_goes_on_past_a_provider_whose_stored_config_has_a_wrong_type(
+    signin: SignInRig, watch: SignInWatch
+) -> None:
+    odd = await signin.saml(f"oddwatch.{signin.zone}")
+    async with signin.engine.begin() as c:
+        row = (await c.execute(sa.select(signin_providers.c.config).where(signin_providers.c.id == odd))).one()
+        await c.execute(
+            signin_providers.update().where(signin_providers.c.id == odd).values(config={**row[0], "tiles": 5})
+        )
+    provider, r = await _metadata_provider(signin, f"after.{signin.zone}", name="after")
+    assert r.status_code == 200, r.text
+    await signin.idp.post("/saml/after/rollover")
+    await watch.once()
+    assert len((await _saml_of(signin, provider))["certificates"]) == 2

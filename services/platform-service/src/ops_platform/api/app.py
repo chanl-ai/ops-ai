@@ -7,7 +7,7 @@ introspection behind the service token and is bound to a port the public host ne
 import json
 import time
 from pathlib import Path as FilePath
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, Literal, TypedDict
 from urllib.parse import parse_qs
 
 import httpx
@@ -21,6 +21,7 @@ from ops_identity import Principal as Caller
 from ops_identity import ServiceAuth, ServiceClient, service_verifiers
 from ops_identity.fastapi import Tx
 from ops_policy import STEP_UP_TTL_S, CredentialStore, Ed25519Signer
+from ops_service_kit import narrow
 from ops_service_kit.background import BackgroundHealthOut
 from ops_service_kit.client_address import client_address
 from ops_service_kit.credentials import credential_store
@@ -50,7 +51,7 @@ from ..access_check import AccessCheck
 from ..acting_for import ActingFor
 from ..api_keys import ApiKeys
 from ..audit_log import AuditReader
-from ..auth import Auth, Issued, Keys, principal_from_claims
+from ..auth import Auth, Claims, Issued, Keys, PrincipalView, principal_from_claims
 from ..break_glass import REQUIRED, BreakGlass
 from ..oauth import OAuthError, iso
 from ..oauth.authorize import Authorizer
@@ -182,7 +183,29 @@ def _bearer(authorization: Annotated[str | None, Header()] = None) -> str:
     return token
 
 
-def _seeded_people(seed: FilePath) -> list[dict[str, Any]]:
+class DevTeamRoleView(TypedDict):
+    team: str
+    role: str
+
+
+class DevPersonView(TypedDict):
+    """A person the dev sign-in page lists, as `DevPerson` sends it."""
+
+    name: str
+    email: str
+    teams: list[DevTeamRoleView]
+
+
+class SessionView(TypedDict):
+    """A new session as `SessionOut` sends it."""
+
+    token: str
+    refreshToken: str
+    expiresAt: str
+    principal: PrincipalView
+
+
+def _seeded_people(seed: FilePath) -> list[DevPersonView]:
     """The seed's people as the dev sign-in page lists them: name, email and each team's name with the role."""
     data = json.loads(seed.read_text())
     names = {t["id"]: t["name"] for t in data.get("teams", [])}
@@ -196,16 +219,16 @@ def _seeded_people(seed: FilePath) -> list[dict[str, Any]]:
     ]
 
 
-def _sample_team_people(folder: FilePath) -> list[dict[str, Any]]:
+def _sample_team_people(folder: FilePath) -> list[DevPersonView]:
     """The people of each sample team manifest (`make sample-teams` installs them with the dev password), listed as
     the seed's are: name, email and the team's name with their role. A manifest that does not parse is skipped."""
-    listed: list[dict[str, Any]] = []
+    listed: list[DevPersonView] = []
     for manifest in sorted(folder.glob("*.json")) if folder.is_dir() else []:
         try:
             data = json.loads(manifest.read_text())
             team = data["team"]["name"]
             listed += [
-                {"name": p["name"], "email": p["email"], "teams": [{"team": team, "role": p["role"]}]}
+                DevPersonView(name=p["name"], email=p["email"], teams=[DevTeamRoleView(team=team, role=p["role"])])
                 for p in data.get("people", [])
             ]
         except (OSError, ValueError, KeyError, TypeError):
@@ -218,7 +241,7 @@ def _dev_sign_in(
     auth: Auth,
     store: IdentityStore,
     demo_password: str,
-    people: list[dict[str, Any]],
+    people: list[DevPersonView],
     *,
     sample_teams: FilePath | None,
 ) -> None:
@@ -227,7 +250,7 @@ def _dev_sign_in(
     sent to the browser, and only a listed email can be signed in this way. A sample team's person is listed once
     their account exists, so the page never offers someone `make sample-teams` has not installed."""
 
-    async def listed() -> list[dict[str, Any]]:
+    async def listed() -> list[DevPersonView]:
         seeded = {p["email"].lower() for p in people}
         sample = _sample_team_people(sample_teams) if sample_teams else []
         extra = [p for p in sample if p["email"].lower() not in seeded]
@@ -245,7 +268,7 @@ def _dev_sign_in(
         return ok(_issued(await auth.sign_in(body.email, demo_password, request_id=new_id("req"))))
 
 
-def _issued(i: Issued) -> dict[str, Any]:
+def _issued(i: Issued) -> SessionView:
     return {"token": i.token, "refreshToken": i.refresh_token, "expiresAt": i.expires_at, "principal": i.principal}
 
 
@@ -319,19 +342,21 @@ def create_public_app(
             allow_headers=["Authorization", "Content-Type", "X-Team-Id"],
             max_age=600,
         )
-    jwks = {"keys": [signer.public_jwk()]}
+    jwks = Jwks.model_validate({"keys": [signer.public_jwk()]})
 
     @app.get("/v1/health", tags=["health"], response_model=Health)
     async def health() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
         return {"status": "ok"}
 
     @app.get("/health/background", tags=["health"], response_model=BackgroundHealthOut)
-    async def health_background() -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+    async def health_background() -> BackgroundHealthOut:  # pyright: ignore[reportUnusedFunction]
         """This service's background processes and their state; counts and error types only, no record's data."""
-        return {"processes": background_report(await LOCAL_BEATS.read(), "platform", time.time())}
+        return BackgroundHealthOut.model_validate(
+            {"processes": background_report(await LOCAL_BEATS.read(), "platform", time.time())}
+        )
 
     @app.get("/.well-known/jwks.json", tags=["auth"], response_model=Jwks)
-    async def jwks_document(response: Response) -> dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+    async def jwks_document(response: Response) -> Jwks:  # pyright: ignore[reportUnusedFunction]
         response.headers["Cache-Control"] = "public, max-age=300"
         return jwks
 
@@ -491,19 +516,19 @@ def create_public_app(
         usage = AgentsUsage(agents)
     app.state.team_usage = usage
 
-    async def claims_open(request: Request, token: Annotated[str, Depends(_bearer)]) -> dict[str, Any]:
+    async def claims_open(request: Request, token: Annotated[str, Depends(_bearer)]) -> Claims:
         """A live session's claims whatever the workspace's status: `/v1/me` and restore, which a closed workspace's
         owner still reaches. A GET writes no row, so it checks the session without recording it as seen."""
         return (await auth.session_of(token, seen=request.method != "GET"))[1]
 
-    async def claims_of(request: Request, token: Annotated[str, Depends(_bearer)]) -> dict[str, Any]:
+    async def claims_of(request: Request, token: Annotated[str, Depends(_bearer)]) -> Claims:
         """A live session's claims in an active workspace; a closed one answers 403 `workspace_closed`."""
         claims = await claims_open(request, token)
         await lifecycle.open_or_refuse(str(claims["tenant_id"]))
         return claims
 
     async def acting(
-        claims: Annotated[dict[str, Any], Depends(claims_of)],
+        claims: Annotated[Claims, Depends(claims_of)],
         x_team_id: Annotated[str | None, Header()] = None,
     ) -> Actor:
         """The one team this request acts in (I1): chosen by X-Team-Id among the token's teams, never named in a
@@ -520,7 +545,7 @@ def create_public_app(
         return Actor(str(claims["tenant_id"]), x_team_id, str(claims["sub"]), new_id("req"))
 
     async def reading(
-        claims: Annotated[dict[str, Any], Depends(claims_of)],
+        claims: Annotated[Claims, Depends(claims_of)],
         x_team_id: Annotated[str | None, Header()] = None,
     ) -> Actor:
         """Where a read of a workspace-wide record (the roles) is decided: the team X-Team-Id names, else the token's
@@ -538,7 +563,7 @@ def create_public_app(
         return await RoleStore(store.db).workspace_admin(tenant, user, now=now_iso())
 
     @app.get("/v1/me", tags=["me"], response_model=Envelope[Me], responses=ERRORS)
-    async def me(_: Tx, claims: Annotated[dict[str, Any], Depends(claims_open)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def me(_: Tx, claims: Annotated[Claims, Depends(claims_open)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         tenant, user = str(claims["tenant_id"]), str(claims["sub"])
         found = await me_store.read(tenant, user)
         if found is None:
@@ -569,7 +594,7 @@ def create_public_app(
         )
 
     @app.get("/v1/teams", tags=["teams"], response_model=Envelope[list[TeamOut]], responses=ERRORS)
-    async def list_teams(_: Tx, claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def list_teams(_: Tx, claims: Annotated[Claims, Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The teams the caller may switch to: their own, and every active team for a workspace admin."""
         tenant, user = str(claims["tenant_id"]), str(claims["sub"])
         teams = await team_store.teams_of(tenant, user, everywhere=await everywhere(tenant, user))
@@ -662,7 +687,7 @@ def create_public_app(
     async def read_role(  # pyright: ignore[reportUnusedFunction]
         _: Tx,
         role_id: Annotated[str, Path(pattern=RECORD_ID)],
-        claims: Annotated[dict[str, Any], Depends(claims_of)],
+        claims: Annotated[Claims, Depends(claims_of)],
         acting_actor: Annotated[Actor, Depends(reading)],
     ) -> Any:
         """One role and its grid: every area and action in the catalogue, with the scope it grants or null, and
@@ -703,7 +728,7 @@ def create_public_app(
         area: Annotated[str, Query(max_length=32)],
         action: Annotated[str, Query(max_length=16)],
         actor: Annotated[Actor, Depends(acting)],
-        claims: Annotated[dict[str, Any], Depends(claims_of)],
+        claims: Annotated[Claims, Depends(claims_of)],
         team: Annotated[str | None, Query(max_length=64)] = None,
     ) -> Any:
         """Which roles grant `area.action` in a team (the Security team for its actions), and who holds them there:
@@ -727,7 +752,7 @@ def create_public_app(
         return ok({"teamId": team, **found.model_dump(by_alias=True)})
 
     @app.get("/v1/me/permissions", tags=["me"], response_model=Envelope[PermissionsOut], responses=ERRORS)
-    async def my_permissions(_: Tx, claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def my_permissions(_: Tx, claims: Annotated[Claims, Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """What the caller may do in each of their teams, and the roles that grant each action."""
         return ok(await roles.of_me(str(claims["tenant_id"]), str(claims["sub"])))
 
@@ -770,7 +795,7 @@ def create_public_app(
     async def person_permissions(  # pyright: ignore[reportUnusedFunction]
         _: Tx,
         person_id: Annotated[str, Path(pattern=RECORD_ID)],
-        claims: Annotated[dict[str, Any], Depends(claims_of)],
+        claims: Annotated[Claims, Depends(claims_of)],
         actor: Annotated[Actor, Depends(reading)],
     ) -> Any:
         """What a person may do in the teams they share with the caller, with their name and address; 404 when they
@@ -933,15 +958,14 @@ def create_public_app(
 
     @app.post("/oauth/register", status_code=201, include_in_schema=False)
     async def oauth_register(request: Request) -> Any:  # pyright: ignore[reportUnusedFunction]
+        # Body that is not JSON and JSON that is not an object are refused alike.
         try:
-            body = await request.json()
+            body = narrow.an_object(await request.json(), "the registration")
         except ValueError:
-            body = None
-        if not isinstance(body, dict):
-            raise OAuthError("invalid_client_metadata", "Send the registration as a JSON object.")
+            raise OAuthError("invalid_client_metadata", "Send the registration as a JSON object.") from None
         address = client_address(request, sign.trusted_proxies)
         return JSONResponse(
-            await clients.register(cast(dict[str, Any], body), address=address),
+            await clients.register(body, address=address),
             status_code=201,
             headers={"Cache-Control": "no-store"},
         )
@@ -961,7 +985,7 @@ def create_public_app(
 
     @app.get("/v1/oauth/consent", tags=["oauth"], response_model=Envelope[ConsentOut], responses=oauth_errors)
     async def oauth_consent(  # pyright: ignore[reportUnusedFunction]
-        _: Tx, request: Request, claims: Annotated[dict[str, Any], Depends(claims_of)]
+        _: Tx, request: Request, claims: Annotated[Claims, Depends(claims_of)]
     ) -> Any:
         """What the consent page shows for an assistant's request: the assistant, the team its address names, the
         host the browser returns to and how long the connection lasts. 403 `team_forbidden` for a person outside the
@@ -970,7 +994,7 @@ def create_public_app(
 
     @app.post("/v1/oauth/consent", tags=["oauth"], response_model=Envelope[ConsentDecided], responses=oauth_errors)
     async def oauth_decide(  # pyright: ignore[reportUnusedFunction]
-        body: ConsentIn, claims: Annotated[dict[str, Any], Depends(claims_of)]
+        body: ConsentIn, claims: Annotated[Claims, Depends(claims_of)]
     ) -> Any:
         """The person's answer. Allow opens a grant and returns where to send the browser, with a single-use code;
         Deny sends it back with `access_denied`."""
@@ -978,14 +1002,14 @@ def create_public_app(
         return ok(await authorizer.decide(claims, q, allow=body.decision == "allow", request_id=new_id("req")))
 
     @app.get("/v1/oauth/grants", tags=["oauth"], response_model=Envelope[list[GrantOut]], responses=ERRORS)
-    async def oauth_grants(_: Tx, claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
+    async def oauth_grants(_: Tx, claims: Annotated[Claims, Depends(claims_of)]) -> Any:  # pyright: ignore[reportUnusedFunction]
         """The assistants the signed-in person has connected, newest first."""
         found = await store.grants_of(str(claims["tenant_id"]), str(claims["sub"]), now=iso())
         return ok([g.model_dump(by_alias=True) for g in found])
 
     @app.delete("/v1/oauth/grants/{grant_id}", tags=["oauth"], status_code=204, responses=ERRORS)
     async def oauth_disconnect(  # pyright: ignore[reportUnusedFunction]
-        grant_id: Annotated[str, Path(pattern=RECORD_ID)], claims: Annotated[dict[str, Any], Depends(claims_of)]
+        grant_id: Annotated[str, Path(pattern=RECORD_ID)], claims: Annotated[Claims, Depends(claims_of)]
     ) -> Response:
         """Ends one of the person's own connections; the assistant cannot renew."""
         grant = await store.grant(SessionRef(str(claims["tenant_id"]), str(claims["sub"]), grant_id))
@@ -1170,7 +1194,7 @@ def create_public_app(
         WorkspaceStore(store.db),
     )
 
-    async def on_workspace(claims: Annotated[dict[str, Any], Depends(claims_of)]) -> Actor:
+    async def on_workspace(claims: Annotated[Claims, Depends(claims_of)]) -> Actor:
         """A workspace route acts on the workspace, not one team: no X-Team-Id, rights read in every team (`*`)."""
         return Actor(str(claims["tenant_id"]), "*", str(claims["sub"]), new_id("req"))
 
@@ -1256,7 +1280,7 @@ def create_public_app(
         _: Tx,
         q: ListQuery,
         person_id: Annotated[str, Path(pattern=RECORD_ID)],
-        claims: Annotated[dict[str, Any], Depends(claims_of)],
+        claims: Annotated[Claims, Depends(claims_of)],
         actor: Annotated[Actor, Depends(reading)],
     ) -> Any:
         """The custom roles given to a person on their own, each with its team, on the shared list contract by role
@@ -1293,7 +1317,7 @@ def create_public_app(
         _: Tx,
         person_id: Annotated[str, Path(pattern=RECORD_ID)],
         grant_id: Annotated[str, Path(pattern=RECORD_ID)],
-        claims: Annotated[dict[str, Any], Depends(claims_of)],
+        claims: Annotated[Claims, Depends(claims_of)],
     ) -> Response:
         """Takes a given role away: an admin of its team or a workspace admin. Audited."""
         tenant = str(claims["tenant_id"])
@@ -1434,7 +1458,7 @@ def create_public_app(
     ) -> Any:
         return ok(await team_admin.set_status(actor, team_id, archived=False))
 
-    async def on_workspace_open(claims: Annotated[dict[str, Any], Depends(claims_open)]) -> Actor:
+    async def on_workspace_open(claims: Annotated[Claims, Depends(claims_open)]) -> Actor:
         return Actor(str(claims["tenant_id"]), "*", str(claims["sub"]), new_id("req"))
 
     @app.post(

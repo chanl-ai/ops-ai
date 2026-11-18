@@ -12,9 +12,10 @@ is what the one targeted re-read asks again."""
 
 from __future__ import annotations
 
-from typing import Any, cast
-
-from ops_extract.checks import REJECTED_TYPE
+from ops_extract.checks import REJECTED_TYPE, entries
+from ops_extract.shapes import Check
+from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.narrow import an_object, json_object
 
 SUM = "sum"
 BEFORE = "before"
@@ -29,10 +30,10 @@ REASONS = {
 }
 
 
-def named(check: dict[str, Any]) -> list[str]:
-    """The fields a check reads."""
+def named(check: Check | Json) -> list[str]:
+    """The fields a check reads, from a saved check or one posted and not yet checked."""
     if check.get("kind") == SUM:
-        return [*cast(list[str], check.get("fields") or []), str(check.get("equals") or "")]
+        return [*(str(k) for k in entries(check.get("fields"))), str(check.get("equals") or "")]
     return [str(check.get("earlier") or ""), str(check.get("later") or "")]
 
 
@@ -40,14 +41,14 @@ def named(check: dict[str, Any]) -> list[str]:
 READS = {SUM: ("number", "money"), BEFORE: ("date",)}
 
 
-def problems(checks: Any, keys: set[str], types: dict[str, str] | None = None) -> list[str]:
+def problems(checks: JsonValue | list[Check], keys: set[str], types: dict[str, str] | None = None) -> list[str]:
     """What is wrong with a version's checks, refused when it is saved: an id each, a known kind, only fields of the
     version, and (with the fields' `types`) fields of a type the kind reads."""
     if not isinstance(checks, list):
         return ["checks is a list"]
     found: list[str] = []
-    for c in cast(list[Any], checks):
-        check = cast(dict[str, Any], c) if isinstance(c, dict) else {}
+    for c in checks:
+        check = json_object(c)
         cid = str(check.get("id") or "")
         if not cid:
             found.append("every check has an id")
@@ -56,45 +57,52 @@ def problems(checks: Any, keys: set[str], types: dict[str, str] | None = None) -
         elif missing := [k for k in named(check) if k not in keys]:
             found.append(f"check {cid} names {', '.join(repr(m) for m in missing)}, not fields of the version")
         elif types is not None and (
-            wrong := [k for k in named(check) if types.get(k, "text") not in READS[check["kind"]]]
+            wrong := [k for k in named(check) if types.get(k, "text") not in READS[str(check["kind"])]]
         ):
-            takes = " or ".join(READS[check["kind"]])
+            takes = " or ".join(READS[str(check["kind"])])
             found.append(
                 f"check {cid}: {', '.join(repr(w) for w in wrong)} must be {takes} fields for a {check['kind']}"
             )
     return found
 
 
-def _fails(check: dict[str, Any], values: dict[str, Any]) -> bool | None:
+def _number(value: JsonValue) -> float:
+    if isinstance(value, int | float | str):
+        return float(value)
+    raise TypeError(f"{type(value).__name__} is not a number")
+
+
+def _fails(check: Check, values: Json) -> bool | None:
     """True when the check fails, False when it holds, None when a field it names has no value."""
-    maybe = [values.get(k) for k in named(check)]
-    if any(v is None for v in maybe):
+    got = [values.get(k) for k in named(check)]
+    if any(v is None for v in got):
         return None
-    got = cast(list[Any], maybe)
     if check["kind"] == SUM:
         try:
-            parts, total = [float(v) for v in got[:-1]], float(got[-1])
+            parts, total = [_number(v) for v in got[:-1]], _number(got[-1])
         except (TypeError, ValueError):
             return None  # a value that is not a number cannot be added; its own type check names it
-        return abs(sum(parts) - total) > float(check.get("tolerance") or DEFAULT_TOLERANCE)
+        return abs(sum(parts) - total) > _number(check.get("tolerance") or DEFAULT_TOLERANCE)
     return str(got[0]) > str(got[1])  # ISO dates compare in order
 
 
-def apply(fields: dict[str, dict[str, Any]], checks: list[dict[str, Any]]) -> None:
+def apply(fields: Json, checks: list[Check]) -> None:
     """Marks the fields each failing check names: sent to review, with the check named unless a rule already was."""
-    values = {k: r.get("value") for k, r in fields.items()}
+    values: Json = {k: an_object(r, f"field {k}").get("value") for k, r in fields.items()}
     for check in checks:
         if _fails(check, values):
             for key in named(check):
                 if key in fields:
-                    fields[key]["needsReview"] = True
-                    fields[key].setdefault("rejected", f"{CHECK_PREFIX}{check['id']}")
+                    result = an_object(fields[key], f"field {key}")
+                    result["needsReview"] = True
+                    result.setdefault("rejected", f"{CHECK_PREFIX}{check['id']}")
 
 
-def failed(fields: dict[str, dict[str, Any]]) -> dict[str, tuple[Any, str]]:
+def failed(fields: Json) -> dict[str, tuple[JsonValue, str]]:
     """Each field a rule rejected, with what was read and why it failed, as a re-read is told."""
-    out: dict[str, tuple[Any, str]] = {}
-    for key, r in fields.items():
+    out: dict[str, tuple[JsonValue, str]] = {}
+    for key, value in fields.items():
+        r = an_object(value, f"field {key}")
         rule = r.get("rejected")
         if not rule:
             continue

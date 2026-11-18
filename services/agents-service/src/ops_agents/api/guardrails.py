@@ -16,7 +16,7 @@ from pydantic import JsonValue
 
 from ops_service_kit.errors import Conflict, Unprocessable, ValidationFailed
 
-from ..store.guardrails import GuardrailRegistry
+from ..store.guardrails import GuardrailRegistry, GuardrailRow
 from ..store.pin_users import PinUsers
 from .agent_registry import SEED_TEAM, seed_agent_version
 from .agent_registry import registry as agent_registry
@@ -113,29 +113,30 @@ async def view(rt: Runtime, guardrail_id: str) -> GuardrailView:
     return (await views(rt, [await guardrails(rt).row(guardrail_id)]))[0]
 
 
-async def views(rt: Runtime, rows: list[dict[str, Any]]) -> list[GuardrailView]:
+async def views(rt: Runtime, rows: list[GuardrailRow]) -> list[GuardrailView]:
     """The console's view of each guardrail row, in order, with a fixed number of reads however many rows there are:
     the versions, pending requests and users of the lot are each read once."""
-    ids = [str(r["id"]) for r in rows]
+    ids = [r.id for r in rows]
     versions = await guardrails(rt).versions_of(ids)
     pending = await PinUsers(rt.db).pending("guardrail", ids)
     used = await users_of(rt, ids)
     out: list[GuardrailView] = []
     for row in rows:
-        gid = str(row["id"])
+        gid = row.id
         by_n = {v.version: v for v in versions[gid]}
-        current = by_n.get(row["published_version"]) or by_n[row["version"]]
+        published = by_n.get(row.published_version) if row.published_version is not None else None
+        current = published or by_n[row.version]
         asked = pending.get(gid)
         out.append(
             {
                 "id": gid,
-                "slug": row["slug"],
-                "name": row["name"],
-                "kind": row["kind"],
-                "owner": row["owner"],
-                "status": row["status"],
-                "version": row["version"],
-                "publishedVersion": row["published_version"],
+                "slug": row.slug,
+                "name": row.name,
+                "kind": row.kind,
+                "owner": row.owner,
+                "status": row.status,
+                "version": row.version,
+                "publishedVersion": row.published_version,
                 "config": current.config,
                 "usedBy": used[gid],
                 "pendingRequestId": asked.id if asked else None,
@@ -152,7 +153,7 @@ async def views(rt: Runtime, rows: list[dict[str, Any]]) -> list[GuardrailView]:
                     }
                     for v in versions[gid]
                 ],
-                "updatedAt": row["updated_at"],
+                "updatedAt": row.updated_at,
             }
         )
     return out
@@ -247,16 +248,16 @@ async def resolve_pins(rt: Runtime, pins: list[dict[str, Any]], held: list[dict[
         row = await reg.find(gid)
         if row is None:
             raise Unprocessable(f"Guardrail {gid} does not exist.", code="unknown_guardrail")
-        if row["status"] == "deprecated":
-            raise Unprocessable(f"{row['name']} is deprecated and takes no new pins.", code="guardrail_deprecated")
+        if row.status == "deprecated":
+            raise Unprocessable(f"{row.name} is deprecated and takes no new pins.", code="guardrail_deprecated")
         # A new pin that names no version (the picker's choice) takes the published one.
-        n = n or int(row["published_version"] or 0)
+        n = n or row.published_version or 0
         v = await reg.version(gid, n)
-        if v is None or v["published_at"] is None:
+        if v is None or v.published_at is None:
             raise Unprocessable(
-                f"{row['name']} v{n} is not published; only published versions can be pinned.", code="not_published"
+                f"{row.name} v{n} is not published; only published versions can be pinned.", code="not_published"
             )
-        rule = {"guardrailId": gid, "version": n, "name": row["name"], "kind": row["kind"], **v["config"]}
+        rule: dict[str, JsonValue] = {"guardrailId": gid, "version": n, "name": row.name, "kind": row.kind, **v.config}
         out.append({**rule, "enabled": enabled})
     if len({p["guardrailId"] for p in out}) != len(out):
         raise Unprocessable("A guardrail can be pinned once per agent.", code="duplicate_pin")

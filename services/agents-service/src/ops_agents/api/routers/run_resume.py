@@ -9,7 +9,7 @@ callback, its event or its time limit).
 
 from __future__ import annotations
 
-from typing import Annotated, Any, cast
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, Header
 from fastapi.responses import JSONResponse
@@ -69,16 +69,18 @@ async def resume_step(
     """Resumes the step parked on outside work with the posted result, which the step goes on with. No request
     transaction: resuming queues the run for the worker, and folding that commit into the request's would change when
     the worker sees it."""
-    run = await RunStore(EngineTransactions(rt.db)).get(run_id)
+    run = await RunStore(EngineTransactions(rt.db)).row(run_id)
     if run is None:
         raise NotFound("The run")
-    waiting = cast(dict[str, Any], run.get("waiting") or {})
+    waiting = run.waiting or {}
     current = (
-        run.get("status") == "waiting"
+        run.status == "waiting"
         and waiting.get("interruptId") == claim.interrupt_id
         and str(waiting.get("node")) == claim.node
-        and int(waiting.get("iteration") or 0) == claim.iteration
+        and int(cast(int, waiting.get("iteration") or 0)) == claim.iteration
     )
-    if not current or not await resumed(rt.db, run, waiting, {"callback": body.model_dump()}, source="callback"):
+    if not current or not await resumed(
+        rt.db, run.id, run.team_id, waiting, {"callback": body.model_dump()}, source="callback"
+    ):
         raise Conflict("This step was already resumed.", code="already_resumed")
     return ok({"runId": run_id, "status": "queued"}, status=202)

@@ -8,9 +8,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import TypedDict, cast
 from urllib.parse import urlsplit
 
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
 
 from ..store.identity import Client, IdentityStore
@@ -85,6 +86,18 @@ class AddressLimit:
         )  # fmt: skip
 
 
+class Registered(TypedDict):
+    """The registration answer (RFC 7591 section 3.2.1), in the order it is sent."""
+
+    client_id: str
+    client_name: str
+    redirect_uris: list[str]
+    token_endpoint_auth_method: str
+    grant_types: list[str]
+    response_types: list[str]
+    client_id_issued_at: int
+
+
 @dataclass
 class Clients:
     store: IdentityStore
@@ -93,7 +106,7 @@ class Clients:
     def __post_init__(self) -> None:
         self.limit = AddressLimit(self.store, "register", PER_MINUTE)
 
-    async def register(self, body: dict[str, Any], *, address: str) -> dict[str, Any]:
+    async def register(self, body: Json, *, address: str) -> Registered:
         given: object = body.get("redirect_uris")
         listed = cast(list[object], given) if isinstance(given, list) else []
         uris = [u for u in listed if isinstance(u, str)]

@@ -8,16 +8,16 @@ Publish requests are the registry's (`registry_publish_requests`, kind `guardrai
 from __future__ import annotations
 
 import re
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import sqlalchemy as sa
 from pydantic import BaseModel, JsonValue
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from ops_service_kit.errors import Conflict, NotFound
+from ops_service_kit.errors import Conflict
+from ops_service_kit.http import Json, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
-from ops_store.dialect import locked
 from ops_store.rows import rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 from ops_store.search import contains
@@ -25,7 +25,8 @@ from ops_store.team_scope import any_team, team_visible
 
 from .agent_registry import digest_of, publish_requested
 from .base import metadata
-from .tenancy import OWNER, RuntimeStore, current_tenant
+from .tenancy import OWNER, current_tenant
+from .versioned import VersionedRegistry
 
 registry_guardrails = sa.Table(
     "registry_guardrails",
@@ -84,27 +85,56 @@ class GuardrailVersionRow(BaseModel):
     published_by: str | None
 
 
+class GuardrailRow(Out):
+    """A guardrail's row: its name, kind, owner, newest and newest published version, and status."""
+
+    tenant_id: str
+    id: str
+    slug: str
+    name: str
+    kind: str
+    team_id: str
+    owner: str
+    version: int
+    published_version: int | None
+    status: str
+    created_at: str
+    updated_at: str
+
+
+class GuardrailVersion(Out):
+    """One saved version of a guardrail; `config` is the rule as its team wrote it."""
+
+    tenant_id: str
+    guardrail_id: str
+    version: int
+    config: Json
+    digest: str
+    note: str
+    saved_at: str
+    saved_by: str
+    published_at: str | None
+    published_by: str | None
+    review_id: str | None
+
+
 def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "guardrail"
 
 
-class GuardrailRegistry(RuntimeStore):
+class GuardrailRegistry(VersionedRegistry[GuardrailRow, GuardrailVersion]):
     # A slug and a version number are unique keys (CAS); a save writes its version row and moves the guardrail in one
     # transaction, as does a publish (TRANSACTION).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION})
+    head = registry_guardrails
+    history = registry_guardrail_versions
+    subject = "guardrail_id"
+    noun = "Guardrail"
+    order = ("name", "id")
+    head_row = GuardrailRow
+    version_row = GuardrailVersion
 
-    async def rows(self) -> list[dict[str, Any]]:
-        async with self.tx() as c:
-            q = (
-                sa.select(registry_guardrails)
-                .where(team_visible(registry_guardrails))
-                .order_by(registry_guardrails.c.name, registry_guardrails.c.id)
-            )
-            return [dict(r) for r in (await c.execute(q)).mappings()]
-
-    async def pinnable(
-        self, search: str, offset: int, limit: int, ids: list[str] | None = None
-    ) -> list[dict[str, Any]]:
+    async def pinnable(self, search: str, offset: int, limit: int, ids: list[str] | None = None) -> list[GuardrailRow]:
         """Guardrails an agent may newly pin (live, with a published version), by name, searched and limited in the
         query; `ids` returns exactly those, whatever their state, so a pin already held keeps its label."""
         t = registry_guardrails.c
@@ -119,9 +149,9 @@ class GuardrailRegistry(RuntimeStore):
             )
         q = q.order_by(sa.func.lower(t.name), t.id).offset(offset).limit(limit)
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, GuardrailRow)
 
-    async def page(self, search: str, offset: int, limit: int) -> list[dict[str, Any]]:
+    async def page(self, search: str, offset: int, limit: int) -> list[GuardrailRow]:
         """One page of the guardrails whose name or owner contains `search`, by name; LIMIT and OFFSET run in the
         query, so a page reads only its own rows."""
         q = (
@@ -130,7 +160,7 @@ class GuardrailRegistry(RuntimeStore):
             .order_by(sa.func.lower(registry_guardrails.c.name), registry_guardrails.c.id)
         )
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q.offset(offset).limit(limit))).mappings()]
+            return await rows(c, q.offset(offset).limit(limit), GuardrailRow)
 
     async def count(self, search: str) -> int:
         q = (
@@ -150,38 +180,6 @@ class GuardrailRegistry(RuntimeStore):
         """The team that owns it, whoever is acting; None when there is none. Only for deciding a refusal by the
         owning team, never for showing the record."""
         return (await self.owner_teams(conn, registry_guardrails, {guardrail_id}, OWNER)).get(guardrail_id)
-
-    async def find(
-        self, guardrail_id: str, c: AsyncConnection | None = None, *, lock: bool = False
-    ) -> dict[str, Any] | None:
-        q = sa.select(registry_guardrails).where(
-            registry_guardrails.c.id == guardrail_id, team_visible(registry_guardrails)
-        )
-        if lock:
-            q = locked(q, registry_guardrails)
-        if c is None:
-            async with self.tx() as conn:
-                r = (await conn.execute(q)).mappings().first()
-        else:
-            r = (await c.execute(q)).mappings().first()
-        return dict(r) if r else None
-
-    async def row(self, guardrail_id: str, c: AsyncConnection | None = None, *, lock: bool = False) -> dict[str, Any]:
-        r = await self.find(guardrail_id, c, lock=lock)
-        if r is None:
-            raise NotFound(f"Guardrail {guardrail_id}")
-        return r
-
-    async def versions(self, guardrail_id: str) -> list[dict[str, Any]]:
-        q = (
-            sa.select(registry_guardrail_versions)
-            .where(
-                registry_guardrail_versions.c.guardrail_id == guardrail_id, team_visible(registry_guardrail_versions)
-            )
-            .order_by(registry_guardrail_versions.c.version.desc())
-        )
-        async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def versions_of(self, guardrail_ids: list[str]) -> dict[str, list[GuardrailVersionRow]]:
         """The versions of each of `guardrail_ids`, newest first, in one query; the tenant is named in it as well as
@@ -205,22 +203,12 @@ class GuardrailRegistry(RuntimeStore):
                 out[r.guardrail_id].append(r)
         return out
 
-    async def version(self, guardrail_id: str, version: int) -> dict[str, Any] | None:
-        q = sa.select(registry_guardrail_versions).where(
-            registry_guardrail_versions.c.guardrail_id == guardrail_id,
-            registry_guardrail_versions.c.version == version,
-            team_visible(registry_guardrail_versions),
-        )
-        async with self.tx() as c:
-            r = (await c.execute(q)).mappings().first()
-        return dict(r) if r else None
-
     async def create(
         self,
         *,
         name: str,
         kind: str,
-        config: dict[str, Any],
+        config: Json,
         owner: str,
         team_id: str,
         by: str,
@@ -272,16 +260,16 @@ class GuardrailRegistry(RuntimeStore):
             )
         return gid
 
-    async def save(self, guardrail_id: str, config: dict[str, Any], *, by: str, note: str = "") -> int:
+    async def save(self, guardrail_id: str, config: Json, *, by: str, note: str = "") -> int:
         """Saves `config` as the next version, a draft; pins and the published pointer do not move."""
         at = now_iso()
         async with self.tx() as c:
             row = await self.row(guardrail_id, c)
-            return await self._append(c, guardrail_id, int(row["version"]) + 1, config, by=by, note=note, at=at)
+            return await self._append(c, guardrail_id, row.version + 1, config, by=by, note=note, at=at)
 
     @staticmethod
     async def _append(
-        c: AsyncConnection, guardrail_id: str, n: int, config: dict[str, Any], *, by: str, note: str, at: str
+        c: AsyncConnection, guardrail_id: str, n: int, config: Json, *, by: str, note: str, at: str
     ) -> int:
         await c.execute(
             registry_guardrail_versions.insert().values(
@@ -301,7 +289,7 @@ class GuardrailRegistry(RuntimeStore):
         )
         return n
 
-    async def save_draft(self, guardrail_id: str, config: dict[str, Any], *, by: str, note: str = "") -> int:
+    async def save_draft(self, guardrail_id: str, config: Json, *, by: str, note: str = "") -> int:
         """The agent store's draft rule: rewrites the newest version while it is unpublished and no publish request
         has named it; otherwise opens the next version as the draft. What a reviewer saw or what runs never changes."""
         at = now_iso()
@@ -309,25 +297,16 @@ class GuardrailRegistry(RuntimeStore):
         async with self.tx() as c:
             # Locked so two saves at once take turns: unlocked, both read the same newest version and the second
             # fails on the version key.
-            row = await self.row(guardrail_id, c, lock=True)
-            n = int(row["version"])
-            newest = (
-                (
-                    await c.execute(
-                        sa.select(v).where(v.c.guardrail_id == guardrail_id, v.c.version == n, team_visible(v))
-                    )
-                )
-                .mappings()
-                .one()
-            )
-            if newest["published_at"] is None and not await publish_requested(c, "guardrail", guardrail_id, n):
+            n = (await self.row(guardrail_id, c, lock=True)).version
+            newest = await self.newest(c, guardrail_id, n)
+            if newest.published_at is None and not await publish_requested(c, "guardrail", guardrail_id, n):
                 await c.execute(
                     v.update()
                     .where(v.c.guardrail_id == guardrail_id, v.c.version == n)
                     .values(
                         config=config,
                         digest=digest_of(config),
-                        note=note or newest["note"],
+                        note=note or newest.note,
                         saved_at=at,
                         saved_by=by,
                     )

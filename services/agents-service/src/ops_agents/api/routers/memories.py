@@ -8,7 +8,7 @@ correction's new value, the old one superseded and the audit line land together 
 
 from __future__ import annotations
 
-from typing import Annotated, Any, TypeAlias
+from typing import Annotated, TypeAlias
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
@@ -17,9 +17,9 @@ from pydantic import Field
 from ops_access import can
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, In, Out
+from ops_service_kit.http import Envelope, In, Json, Out
 
-from ...store.memories import ACTIVE, FORGOTTEN, PERSON, Memories
+from ...store.memories import ACTIVE, FORGOTTEN, PERSON, Memories, MemoryRecord
 from ...store.tenancy import current_team
 from ..auth import Principal, caller_of, principal
 from ..deps import Runtime, runtime
@@ -56,19 +56,20 @@ def _store(rt: Runtime, me: Principal, *, edit: bool = False) -> Memories:
     return Memories(graph_store(rt).engine)
 
 
-def _view(rt: Runtime, r: dict[str, Any]) -> dict[str, Any]:
-    agent = rt.catalog.agent_in_flight(str(r["agent_id"])) or rt.catalog.agent(str(r["agent_id"]))
+def _view(rt: Runtime, r: MemoryRecord) -> Json:
+    # Built by hand, not through MemoryView: its `kind` names three kinds and a memory is saved with any of KINDS.
+    agent = rt.catalog.agent_in_flight(r.agent_id) or rt.catalog.agent(r.agent_id)
     return {
-        "id": r["id"],
-        "agentId": r["agent_id"],
-        "agentName": agent.name if agent else r["agent_id"],
-        "kind": r["kind"],
-        "key": r["key"],
-        "value": r["value"],
-        "confidence": r["confidence"],
-        "source": r["source"],
-        "sourceThreadId": r["source_thread_id"],
-        "createdAt": r["created_at"],
+        "id": r.id,
+        "agentId": r.agent_id,
+        "agentName": agent.name if agent else r.agent_id,
+        "kind": r.kind,
+        "key": r.key,
+        "value": r.value,
+        "confidence": r.confidence,
+        "source": r.source,
+        "sourceThreadId": r.source_thread_id,
+        "createdAt": r.created_at,
     }
 
 
@@ -87,18 +88,18 @@ async def correct_memory(rt: Rt, me: Me, _: Tx, memory_id: str, body: MemoryCorr
     """Replaces a memory's value with the caller's own; the old value is kept as superseded and is no longer loaded."""
     store, person = _store(rt, me, edit=True), person_of(me)
     old = await store.get(person, memory_id)
-    if old is None or old["status"] != ACTIVE:
+    if old is None or old.status != ACTIVE:
         raise NotFound("Memory")
     row = await store.save(
-        team_id=str(old["team_id"]),
-        agent_id=str(old["agent_id"]),
+        team_id=old.team_id,
+        agent_id=old.agent_id,
         person=person,
-        kind=str(old["kind"]),
-        key=old["key"],
+        kind=old.kind,
+        key=old.key,
         value=body.value.strip(),
         confidence=1.0,
         source=PERSON,
-        thread_id=old["source_thread_id"],
+        thread_id=old.source_thread_id,
         supersedes_id=memory_id,
         confirmed=True,
     )
@@ -106,9 +107,9 @@ async def correct_memory(rt: Rt, me: Me, _: Tx, memory_id: str, body: MemoryCorr
         person,
         "correct",
         actor=me.email,
-        agent_id=str(old["agent_id"]),
-        memory_id=row["id"],
-        team_id=str(old["team_id"]),
+        agent_id=old.agent_id,
+        memory_id=row.id,
+        team_id=old.team_id,
     )
     return ok(_view(rt, row))
 
@@ -141,7 +142,7 @@ async def undo_memory(rt: Rt, me: Me, _: Tx, memory_id: str) -> Response:
     row = await store.get(person, memory_id)
     if row is None:
         raise NotFound("Memory")
-    if row["status"] == FORGOTTEN:
+    if row.status == FORGOTTEN:
         undone = await store.restore(person, memory_id, actor=me.email)
     else:
         undone = await store.undo(person, memory_id, actor=me.email)
@@ -174,4 +175,5 @@ async def export_memories(rt: Rt, me: Me, _: Tx) -> JSONResponse:
     store, person = _store(rt, me), person_of(me)
     rows = await store.current(person, None, limit=10_000)
     await store.audit(person, "export", actor=me.email, agent_id="*", team_id=current_team() or me.team_id)
-    return ok({"person": person, "memories": [_view(rt, r) for r in rows], "audit": await store.audit_rows(person)})
+    audit = [a.model_dump() for a in await store.audit_rows(person)]
+    return ok({"person": person, "memories": [_view(rt, r) for r in rows], "audit": audit})

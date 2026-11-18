@@ -10,9 +10,11 @@ import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_engine.store import DefinitionRow
 from ops_engine.store.tables import engine_definitions, engine_runs
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
+from ops_store.rows import rows
 from ops_store.schema import TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
@@ -116,7 +118,7 @@ def _event_of(definition: dict[str, Any] | None) -> str | None:
     return None
 
 
-async def listeners(engine: AsyncEngine, name: str, workflow_id: str) -> list[dict[str, Any]]:
+async def listeners(engine: AsyncEngine, name: str, workflow_id: str) -> list[DefinitionRow]:
     """The live version of the tenant's handler for `name`: its no-team workflow `workflow_id`, while its Service event
     trigger still names the event. A team's workflow under that id or with that trigger is never the handler."""
     d = engine_definitions
@@ -124,8 +126,8 @@ async def listeners(engine: AsyncEngine, name: str, workflow_id: str) -> list[di
         d.c.tenant_id == current_tenant(), d.c.stage == "live", d.c.workflow_id == workflow_id, d.c.team_id.is_(None)
     )
     async with tenant_tx(engine) as c:
-        rows = [dict(r) for r in (await c.execute(q.order_by(d.c.workflow_id))).mappings()]
-    return [r for r in rows if _event_of(cast(dict[str, Any], r["definition"])) == name]
+        found = await rows(c, q.order_by(d.c.workflow_id), DefinitionRow)
+    return [r for r in found if _event_of(r.definition) == name]
 
 
 async def attempts_of(engine: AsyncEngine, workflow_id: str, run_key: str) -> list[dict[str, Any]]:

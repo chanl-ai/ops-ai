@@ -22,6 +22,7 @@ from ops_engine.store import RunStore
 from ops_engine.store.tables import engine_runs, engine_steps
 from ops_files_client.testing import FakeFilesService
 from ops_policy import mint_step_up
+from ops_service_kit.http import Json
 from tests.api.test_action_roles import REVIEWER
 from tests.api.test_activity import FRAUD_BUILDER
 from tests.api.test_case_routes import started_run
@@ -40,7 +41,7 @@ async def typed_case(s: Stack, *, customer: str = "C-1001", team: str = "team_op
     type does not declare."""
     c, rt = s
     await c.get("/v1/case-types", headers=BUILDER)  # seeds the tenant's case types
-    values = {"amount": "1250", "note": "called twice", "complaint": "Charged twice", "category": "fees"}
+    values: Json = {"amount": "1250", "note": "called twice", "complaint": "Charged twice", "category": "fees"}
     with tenant_scope(TENANT):
         opened = await CaseStore(rt.db).open(
             team_id=team,
@@ -54,7 +55,7 @@ async def typed_case(s: Stack, *, customer: str = "C-1001", team: str = "team_op
             type_id="complaint",
             type_version=1,
         )
-    return str(opened.case["id"])
+    return str(opened.case.id)
 
 
 async def test_fields_come_in_the_case_types_order_formatted_then_what_it_does_not_declare(stack: Stack) -> None:  # noqa: F811
@@ -445,7 +446,7 @@ async def _deadline_case(s: Stack, respond_by: Any) -> str:
             team_id="team_ops", subject="Court notice", priority="high", by="james@harborpine.example",
             fields={"respondBy": respond_by}, type_id="court_notice", type_version=1,
         )  # fmt: skip
-    return str(opened.case["id"])
+    return str(opened.case.id)
 
 
 async def test_a_deadline_must_name_a_date_field(stack: Stack) -> None:  # noqa: F811

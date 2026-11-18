@@ -21,7 +21,7 @@ for a person, an event or a timer is not counted toward its limit: only its step
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -65,6 +65,15 @@ def _alive(row: Any, now_s: float) -> bool:
 
 
 @dataclass(frozen=True)
+class ParentStep:
+    """The step and iteration of a parent run that waits for a child."""
+
+    run_id: str
+    node: str
+    iteration: int
+
+
+@dataclass(frozen=True)
 class Finding:
     tenant_id: str
     run_id: str
@@ -73,7 +82,7 @@ class Finding:
     action: str
     reason: str
     # For a child: its parent's run id and the step and iteration it waits at.
-    parent: dict[str, Any] = field(default_factory=lambda: {})
+    parent: ParentStep | None = None
     # Work rows to set aside so no worker claims them before Retry.
     set_aside: bool = False
 
@@ -233,7 +242,7 @@ async def find(
             if not own_limit and ran_s.get(a.id, 0.0) > child_limit_s:
                 node = str(payload.get("node") or waits.get("node") or "")
                 iteration = int(payload.get("iteration") or waits.get("iteration") or 1)
-                where = {"run_id": parent_id, "node": node, "iteration": iteration}
+                where = ParentStep(parent_id, node, iteration)
                 found.append(Finding(a.tenant_id, a.id, "child", TOO_LONG, parent=where))
                 continue
         if rows or not quiet:
@@ -255,12 +264,12 @@ async def settle(tx: Transactions, finding: Finding) -> bool:
     """Gives one finding its state, inside the finding's tenant (the caller enters it). False when the run moved on
     since it was read: a run already finished, cancelled or claimed is left as it is."""
     runs, w = RunStore(tx), engine_work
-    run = await runs.get(finding.run_id)
+    run = await runs.row(finding.run_id)
     if finding.action == "ended":
         return run is not None and await runs.settle_ended(finding.run_id)
-    if run is None or run["status"] not in ("queued", "running", "waiting"):
+    if run is None or run.status not in ("queued", "running", "waiting"):
         return False
-    if finding.action == "child":
+    if finding.action == "child" and finding.parent is not None:
         at = now_iso()
         await runs.update(finding.run_id, status="failed", error=f"It {finding.reason}.", finished_at=at)
         async with tx.tenant_tx() as c:
@@ -272,10 +281,10 @@ async def settle(tx: Transactions, finding: Finding) -> bool:
         parent = finding.parent
         # The same row the step's own timer would queue: its timeout port, with the rest of the children named.
         await WorkQueue(tx, owner="reconciler", ttl=0).enqueue(
-            str(parent["run_id"]),
+            parent.run_id,
             "timeout",
-            f"timeout:{parent['run_id']}:{parent['node']}:{parent['iteration']}",
-            {"resume": {"timeout": True}, "node": parent["node"], "iteration": parent["iteration"]},
+            f"timeout:{parent.run_id}:{parent.node}:{parent.iteration}",
+            {"resume": {"timeout": True}, "node": parent.node, "iteration": parent.iteration},
         )
         return True
     await runs.update(finding.run_id, status="stuck", error=finding.reason)

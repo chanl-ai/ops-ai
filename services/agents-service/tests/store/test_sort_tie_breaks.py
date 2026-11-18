@@ -69,7 +69,7 @@ async def _engine_runs(e: AsyncEngine, tag: str) -> list[str]:
     ]
     async with tx.tenant_tx() as c:
         await c.execute(engine_runs.insert(), rows)
-    return [r["id"] for r in await RunStore(tx).list(workflow_id=f"wf_{tag}")]
+    return [r.id for r in await RunStore(tx).list(workflow_id=f"wf_{tag}")]
 
 
 @pytest.mark.parametrize(

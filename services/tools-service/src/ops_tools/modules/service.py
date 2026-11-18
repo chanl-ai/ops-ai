@@ -52,7 +52,7 @@ from ..mocks import MockAnswers
 from ..registry import approval_policy
 from ..secrets import SecretResolver, scrub
 from ..store.calls import CallLog, CallStats, DayStats, GatewayCall
-from ..store.connections import ConnectionStore
+from ..store.connections import Account, ConnectionStore
 from ..store.mocks import MockStore
 from ..store.module_list import ModuleList, Window
 from ..store.modules import (
@@ -392,16 +392,16 @@ def refuse(problems: list[str]) -> None:
         raise ValidationFailed(f"{len(problems)} problems: " + " ".join(problems), details={"problems": problems})
 
 
-def sign_in_fits(module_sign_in: str, conn: dict[str, Any]) -> None:
+def sign_in_fits(module_sign_in: str, conn: Account) -> None:
     """A module takes only a connection whose sign-in it supports: `team` a team connection, `person` one each
     person signs in to (the team backup included), `person_or_team` any; refused when the connection is chosen."""
     module_sign_in = sign_in_of(module_sign_in)
-    given = str(conn.get("sign_in") or "team")
+    given = str(conn.sign_in or "team")
     if module_sign_in == "person_or_team" or (module_sign_in == "team") == (given == "team"):
         return
     want = "the team's account" if module_sign_in == "team" else "each person's own account"
     raise ValidationFailed(
-        f"This module signs in with {want}, and {conn['name']} does not. Pick another connection.",
+        f"This module signs in with {want}, and {conn.name} does not. Pick another connection.",
         code="sign_in_mismatch",
     )
 
@@ -415,7 +415,7 @@ class ModuleService:
     team_connections: Callable[[str, str, Aggregate], Awaitable[str | None]] | None = None
     # Whether a plugin tool's address waits for its account's sign-in (`PluginHost.awaits_sign_in`), set once the
     # plugin host is up: the account then holds the sign-in host, which is not the tool's address.
-    awaits_sign_in: Callable[[Aggregate, dict[str, Any]], bool] | None = None
+    awaits_sign_in: Callable[[Aggregate, Account], bool] | None = None
     # The installed plugins' ids, whose team bindings sign a plugin's module in for the list's reachable column.
     installed_plugins: Callable[[], list[str]] | None = None
     # A tool page's Real run (`GatewayCalls.console_run`), set by create_gateway_app: Real goes through the gateway's
@@ -531,7 +531,7 @@ class ModuleService:
                 out.append(m)
         return out
 
-    async def _connections_of(self, tenant_id: str, mods: list[Aggregate]) -> dict[str, dict[str, Any]]:
+    async def _connections_of(self, tenant_id: str, mods: list[Aggregate]) -> dict[str, Account]:
         return await self.connections.by_ids(
             tenant_id, sorted({str(m["connection_id"]) for m in mods if m["connection_id"]})
         )
@@ -541,7 +541,7 @@ class ModuleService:
         m: Aggregate,
         traffic: Traffic,
         have: dict[str | None, set[str]] | None = None,
-        conns: dict[str, dict[str, Any]] | None = None,
+        conns: dict[str, Account] | None = None,
     ) -> dict[str, Any]:
         now = self.clock()
         conn = (conns or {}).get(m["connection_id"] or "")
@@ -1290,7 +1290,7 @@ class ModuleService:
             # A custom app's base address and key live on its connection only: one beside it is refused.
             if endpoint:
                 raise ValidationFailed(
-                    f"The base address comes from the {conn['name']} connection; leave the module's endpoint empty."
+                    f"The base address comes from the {conn.name} connection; leave the module's endpoint empty."
                 )
             op, endpoint = self._http_operation(i["http"], connection_base(conn))
             ops_in = [op]
@@ -1300,7 +1300,7 @@ class ModuleService:
         if not ops_in:
             raise ValidationFailed("Choose at least one operation to expose.")
         await self._names_free(who, ops_in)
-        await self.hold_unless_listed(who, urlsplit(endpoint).hostname, conn["name"] if conn else i["display_name"])
+        await self.hold_unless_listed(who, urlsplit(endpoint).hostname, conn.name if conn else i["display_name"])
         if conn is None and kind != "code":
             conn = await self._open_connection(who, i["display_name"], endpoint)
         elif conn is not None and endpoint:
@@ -1325,8 +1325,8 @@ class ModuleService:
             "description": f"{i['system'].strip() or i['display_name'].strip()} operations behind the data gateway.",
             "auth": module_auth(conn),
             "egress_hosts": [host] if host else [],
-            "catalog_id": conn.get("catalog_id") if conn else None,
-            "connection_id": conn["id"] if conn else None,
+            "catalog_id": conn.catalog_id if conn else None,
+            "connection_id": conn.id if conn else None,
             "sign_in": sign_in_of(i.get("sign_in")),
             "version": version,
             "operations": [self._new_op(module_id, n + 1, o) for n, o in enumerate(ops_in)],
@@ -1344,9 +1344,7 @@ class ModuleService:
         _provision(m, template)
         return await self._detail(await self._create(m), who.team, who)
 
-    async def _usable_connection(
-        self, who: Caller, connection_id: str | None, sign_in: str | None
-    ) -> dict[str, Any] | None:
+    async def _usable_connection(self, who: Caller, connection_id: str | None, sign_in: str | None) -> Account | None:
         """The connection a new module signs in through: optional, and when one is named it must exist, be live, be
         the team's and fit the module's sign-in."""
         if connection_id is None:
@@ -1355,9 +1353,9 @@ class ModuleService:
         if conn is None:
             raise ValidationFailed("That connection no longer exists. Pick another one, or none.")
         if status_of(conn, self.clock()) == "revoked":
-            raise Conflict(f"{conn['name']} is revoked. Reconnect it in Connections or pick another connection.")
+            raise Conflict(f"{conn.name} is revoked. Reconnect it in Connections or pick another connection.")
         if not may_use(conn, who.team.id):
-            raise ValidationFailed(f"{conn['name']} is not available to this team. Pick another one, or none.")
+            raise ValidationFailed(f"{conn.name} is not available to this team. Pick another one, or none.")
         sign_in_fits(sign_in_of(sign_in), conn)
         return conn
 
@@ -1404,7 +1402,7 @@ class ModuleService:
             return False
         return True
 
-    async def _open_connection(self, who: Caller, name: str, base: str, team_id: str | None = None) -> dict[str, Any]:
+    async def _open_connection(self, who: Caller, name: str, base: str, team_id: str | None = None) -> Account:
         """The account a custom module with none of its own keeps its address on: no sign-in, so a call reads
         it as it reads any app's. Empty until the first tool names one."""
         now = self.clock()
@@ -1418,15 +1416,15 @@ class ModuleService:
         assert made is not None
         return made
 
-    async def _address_on(self, who: Caller, conn: dict[str, Any], address: str) -> None:
+    async def _address_on(self, who: Caller, conn: Account, address: str) -> None:
         """A discovered address (an imported spec's server, an MCP server) onto the module's chosen connection: set
         where it names none, refused where it names another system."""
         held = connection_base(conn)
         if not held:
-            await self.connections.set_base(who.tenant_id, conn["id"], address, actor=who.name, at=self.clock())
+            await self.connections.set_base(who.tenant_id, conn.id, address, actor=who.name, at=self.clock())
         elif held.rstrip("/") != address.rstrip("/"):
             # One connection holds one address: a second system, or another path on the same host, is its own app.
-            raise ValidationFailed(f"{conn['name']} serves {held}; this source is {address}. Pick its own connection.")
+            raise ValidationFailed(f"{conn.name} serves {held}; this source is {address}. Pick its own connection.")
 
     async def _address(self, tenant_id: str, m: Aggregate) -> str:
         conn = await self.connections.get(tenant_id, cid) if (cid := m["connection_id"]) else None
@@ -1457,11 +1455,11 @@ class ModuleService:
             # A custom app's tools are paths on its connection's base address: it is the module's only one.
             base = connection_base(conn)
             host = urlsplit(base).hostname
-            await self.hold_unless_listed(who, host, conn["name"])
+            await self.hold_unless_listed(who, host, conn.name)
             m.update(
-                connection_id=conn["id"],
+                connection_id=conn.id,
                 auth=module_auth(conn),
-                catalog_id=conn.get("catalog_id"),
+                catalog_id=conn.catalog_id,
                 egress_hosts=[host] if host else [],
             )
         _provision(m, template)
@@ -1533,14 +1531,14 @@ class ModuleService:
         m = await self._changeable(who, module_id)
         conn = await self.connections.get(who.tenant_id, cid) if (cid := m["connection_id"]) else None
         op, origin = self._http_operation(h, connection_base(conn) if conn else "")
-        await self.hold_unless_listed(who, urlsplit(origin).hostname, conn["name"] if conn else m["display_name"])
+        await self.hold_unless_listed(who, urlsplit(origin).hostname, conn.name if conn else m["display_name"])
         if conn is None:
             # A blank module's first tool with an address makes the connection that address lives on, so a
             # code module never gets an empty app.
             conn = await self._open_connection(who, m["display_name"], origin, m["team_id"])
-            m.update(connection_id=conn["id"], auth=module_auth(conn))
+            m.update(connection_id=conn.id, auth=module_auth(conn))
         elif not connection_base(conn):
-            await self.connections.set_base(who.tenant_id, conn["id"], origin, actor=who.name, at=self.clock())
+            await self.connections.set_base(who.tenant_id, conn.id, origin, actor=who.name, at=self.clock())
         host = urlsplit(origin).hostname
         if host and host not in m["egress_hosts"]:
             m["egress_hosts"] = [*m["egress_hosts"], host]
@@ -1562,11 +1560,11 @@ class ModuleService:
             if conn is None:
                 raise ValidationFailed("That connection no longer exists. Pick another one.")
             if status_of(conn, self.clock()) == "revoked":
-                raise Conflict(f"{conn['name']} is revoked. Reconnect it in Connections or pick another one.")
+                raise Conflict(f"{conn.name} is revoked. Reconnect it in Connections or pick another one.")
             if not may_use(conn, m["team_id"]):
-                raise ValidationFailed(f"{conn['name']} is not available to this module's team. Pick another one.")
+                raise ValidationFailed(f"{conn.name} is not available to this module's team. Pick another one.")
             sign_in_fits(sign_in_of(m.get("sign_in")), conn)
-            m.update(connection_id=conn["id"], catalog_id=conn.get("catalog_id"), auth=module_auth(conn))
+            m.update(connection_id=conn.id, catalog_id=conn.catalog_id, auth=module_auth(conn))
         return await self._detail(await self._save(m), who.team, who, levels=levels)
 
     def _holders(self, m: Aggregate) -> list[str]:
@@ -2627,7 +2625,7 @@ class ModuleService:
         if conn is None:
             raise ValidationFailed("That connection no longer exists. Pick another one.")
         if status_of(conn, self.clock()) == "revoked":
-            raise Conflict(f"{conn['name']} is revoked. Reconnect it in Connections first.")
+            raise Conflict(f"{conn.name} is revoked. Reconnect it in Connections first.")
 
     async def _fetch(self, who: Caller, url: str) -> bytes:
         """GETs `url` through the egress policy: https to a listed host, connected only at a checked address."""
@@ -2670,7 +2668,7 @@ class ModuleService:
         if not connection_id or self.auth is None:
             return {}, None
         conn = await self.connections.get(who.tenant_id, connection_id)
-        if conn is not None and conn["auth_kind"] == "none":
+        if conn is not None and conn.auth_kind == "none":
             # A module's own open connection holds only its address: there is nothing to sign in with.
             return {}, None
         probe: ModuleRef = {
@@ -2749,7 +2747,7 @@ class ModuleService:
             raise Conflict(f"This module calls {held}; the source serves {found['endpoint']}.")
         if m["connection_id"] is None:
             conn = await self._open_connection(who, m["display_name"], found["endpoint"], m["team_id"])
-            m.update(connection_id=conn["id"], auth=module_auth(conn))
+            m.update(connection_id=conn.id, auth=module_auth(conn))
         elif not held:
             conn = await self.connections.get(who.tenant_id, m["connection_id"])
             if conn is not None:

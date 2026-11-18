@@ -21,7 +21,7 @@ from ops_service_kit.logging import get_logger
 
 from ..activities.catalog import AgentDefinition, kernel_skills
 from ..store.skill_list import pinning_agents, published_pinning
-from ..store.skills import SkillRegistry, slug_of
+from ..store.skills import SkillRegistry, SkillRow, SkillVersionRow, slug_of
 from .agent_registry import SEED_BY, SEED_TEAM, seed_agent_version
 from .agent_registry import registry as agent_registry
 from .child_runs import published_workflows
@@ -169,7 +169,7 @@ async def _check_overview(rt: Runtime, fields: dict[str, Any], slug: str, parts:
         )
     if fields.get("inputs"):
         raise ValidationFailed("A skill with parts takes its inputs on each part.", code="inputs_on_parts")
-    taken = {str(r["slug"]) for r in await skills(rt).rows()} - {slug}
+    taken = {r.slug for r in await skills(rt).rows()} - {slug}
     if clash := [f"{slug}-{p['slug']}" for p in parts if f"{slug}-{p['slug']}" in taken]:
         raise ValidationFailed(
             f"{', '.join(clash)} is already another skill's name; rename the part.", code="part_name_taken"
@@ -233,20 +233,20 @@ async def render_published(
     """
     reg = skills(rt)
     row = await reg.find(skill_id)
-    if row is None or (team is not None and row["team_id"] != team):
+    if row is None or (team is not None and row.team_id != team):
         raise NotFound(f"Skill {skill_id}")
-    v = await reg.version(skill_id, int(row["published_version"])) if row["published_version"] else None
-    if v is None or row["deprecated_reason"]:
+    v = await reg.version(skill_id, row.published_version) if row.published_version else None
+    if v is None or row.deprecated_reason:
         raise Unprocessable(
-            f"{row['slug']} has no published version in use; only a published skill can be used.",
+            f"{row.slug} has no published version in use; only a published skill can be used.",
             code="skill_not_published",
         )
     return {
         "skillId": skill_id,
-        "name": v["content"]["name"],
-        "slug": row["slug"],
-        "version": v["version"],
-        **render(v["content"], part, given),
+        "name": v.content["name"],
+        "slug": row.slug,
+        "version": v.version,
+        **render(v.content, part, given),
     }
 
 
@@ -325,18 +325,18 @@ async def workflows_pinning_each(rt: Runtime, field: str, key: str) -> dict[str,
     return out
 
 
-def _status(row: dict[str, Any], pending: dict[str, Any] | None) -> str:
-    if row["deprecated_reason"]:
+def _status(row: SkillRow, pending: dict[str, Any] | None) -> str:
+    if row.deprecated_reason:
         return "deprecated"
-    if pending is not None and pending["version"] == row["version"]:
+    if pending is not None and pending["version"] == row.version:
         return "in_review"
-    return "published" if row["published_version"] is not None else "draft"
+    return "published" if row.published_version is not None else "draft"
 
 
-def _version_state(row: dict[str, Any], v: dict[str, Any], requests: list[dict[str, Any]]) -> str:
-    n, pub = v["version"], row["published_version"]
-    if v["published_at"] is not None:
-        if row["deprecated_reason"]:
+def _version_state(row: SkillRow, v: SkillVersionRow, requests: list[dict[str, Any]]) -> str:
+    n, pub = v.version, row.published_version
+    if v.published_at is not None:
+        if row.deprecated_reason:
             return "deprecated"
         return "published" if n == pub else "superseded"
     mine = [r for r in requests if r["version"] == n]
@@ -381,14 +381,14 @@ def list_row(r: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def over_budget(v: dict[str, Any]) -> str | None:
+def over_budget(v: SkillVersionRow) -> str | None:
     """Why a version could never load because of its size, or None: an on-match body (with parts, the shared text and
     its longest part) past the reply's skill budget, an always-on body past the always-on budget."""
-    budget = TOKEN_BUDGET if v["content"]["loading"] == "on_match" else ALWAYS_BUDGET
-    if v["tokens"] <= budget:
+    budget = TOKEN_BUDGET if v.content["loading"] == "on_match" else ALWAYS_BUDGET
+    if v.tokens <= budget:
         return None
     return (
-        f"v{v['version']} is {v['tokens']:,} tokens; a {v['content']['loading']} body over {budget:,} could never "
+        f"v{v.version} is {v.tokens:,} tokens; a {v.content['loading']} body over {budget:,} could never "
         "load. Shorten it."
     )
 
@@ -403,9 +403,9 @@ async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
     newest = versions[0]
     base = list_row(
         {
-            **row,
-            "content": newest["content"],
-            "tokens": newest["tokens"],
+            **row.model_dump(),
+            "content": newest.content,
+            "tokens": newest.tokens,
             "status": _status(row, pending),
             "pending_id": pending["id"] if pending else None,
             "used_by": len(users),
@@ -413,21 +413,21 @@ async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
         }
     )
     blockers: list[str] = []
-    if row["deprecated_reason"]:
+    if row.deprecated_reason:
         blockers.append("The skill is deprecated.")
-    elif newest["published_at"] is not None:
-        blockers.append(f"v{newest['version']} is already published; save a change to open a draft.")
+    elif newest.published_at is not None:
+        blockers.append(f"v{newest.version} is already published; save a change to open a draft.")
     elif pending is not None:
         blockers.append(f"{pending['id']} is already open for v{pending['version']}.")
     if too_long := over_budget(newest):
         blockers.append(too_long)
-    latest = row["published_version"]
-    published = next((v for v in versions if v["version"] == latest), None)
+    latest = row.published_version
+    published = next((v for v in versions if v.version == latest), None)
     usage: list[dict[str, Any]] = []
     for a in users:
         spec: dict[str, Any] = dict(a.spec)
         newer = published if latest and latest > a.pinned_version else None
-        blocked = missing_for(newer["content"], spec) if newer else []
+        blocked = missing_for(newer.content, spec) if newer else []
         held = cast(list[dict[str, Any]], spec.get("skillPins") or [])
         none: dict[str, Any] = {}
         pin = next((p for p in held if p["skillId"] == skill_id), none)
@@ -457,20 +457,20 @@ async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
         )
     return {
         **base,
-        "content": _wire(newest["content"]),
+        "content": _wire(newest.content),
         "versions": [
             {
-                "version": v["version"],
+                "version": v.version,
                 "state": _version_state(row, v, requests),
                 "editClass": "re_test",
-                "note": v["note"],
-                "changes": v["changes"],
-                "savedBy": v["saved_by"],
-                "savedAt": v["saved_at"],
-                "content": _wire(v["content"]),
-                "tokens": v["tokens"],
-                **({"reviewId": v["review_id"]} if v["review_id"] else {}),
-                **({"publishedAt": v["published_at"], "publishedBy": v["published_by"]} if v["published_at"] else {}),
+                "note": v.note,
+                "changes": v.changes,
+                "savedBy": v.saved_by,
+                "savedAt": v.saved_at,
+                "content": _wire(v.content),
+                "tokens": v.tokens,
+                **({"reviewId": v.review_id} if v.review_id else {}),
+                **({"publishedAt": v.published_at, "publishedBy": v.published_by} if v.published_at else {}),
                 "testRun": None,
             }
             for v in versions
@@ -479,7 +479,7 @@ async def detail(rt: Runtime, skill_id: str) -> dict[str, Any]:
         "runs": [],
         "usage": usage,
         "activity": {"agents": [], "loadsPerDay": [], "loads30d": 0, "successRate": None, "samples": []},
-        "provenance": {"origin": row["origin"], "detail": "", "citations": []},
+        "provenance": {"origin": row.origin, "detail": "", "citations": []},
         **(
             {
                 "pendingReview": {
@@ -538,29 +538,29 @@ async def pin(
     if row is None:
         raise NotFound(f"Skill {skill_id}")
     v = await reg.version(skill_id, version)
-    if v is None or v["published_at"] is None:
+    if v is None or v.published_at is None:
         raise Unprocessable(
             f"{skill_id} v{version} is not published; only published versions can be attached.", code="not_published"
         )
-    if row["deprecated_reason"]:
-        raise Unprocessable(f"{v['content']['name']} is deprecated and takes no new attaches.", code="skill_deprecated")
-    if missing := missing_for(v["content"], agent_spec):
+    if row.deprecated_reason:
+        raise Unprocessable(f"{v.content['name']} is deprecated and takes no new attaches.", code="skill_deprecated")
+    if missing := missing_for(v.content, agent_spec):
         raise Unprocessable(
-            f"The agent does not hold {', '.join(missing)}, which {v['content']['name']} v{version} names.",
+            f"The agent does not hold {', '.join(missing)}, which {v.content['name']} v{version} names.",
             code="agent_lacks",
             details={"missing": missing},
         )
     pins = [p for p in cast(list[dict[str, Any]], agent_spec.get("skillPins") or []) if p["skillId"] != skill_id]
     if len(pins) >= MAX_ATTACHED:
         raise Unprocessable(f"An agent holds at most {MAX_ATTACHED} skills.", code="too_many_skills")
-    if v["content"]["loading"] == "always":
-        always = sum(int(p["tokens"]) for p in pins if p["loading"] == "always") + int(v["tokens"])
+    if v.content["loading"] == "always":
+        always = sum(int(p["tokens"]) for p in pins if p["loading"] == "always") + v.tokens
         if always > ALWAYS_BUDGET:
             raise Unprocessable(
                 f"Always-on skills on this agent would be {always:,} tokens; the limit is {ALWAYS_BUDGET:,}.",
                 code="always_budget",
             )
-    return [*pins, snapshot(skill_id, version, v["content"], v["tokens"], by=by, at=at)]
+    return [*pins, snapshot(skill_id, version, v.content, v.tokens, by=by, at=at)]
 
 
 def check_pins_hold(agent_spec: dict[str, Any]) -> None:
@@ -586,13 +586,13 @@ async def agent_skills(rt: Runtime, agent_id: str) -> dict[str, Any]:
     arow = await agents.row(agent_id)
     spec = (await agents.version(agent_id, int(arow["version"])))["spec"]
     pins = cast(list[dict[str, Any]], spec.get("skillPins") or [])
-    rows = {r["id"]: r for r in await reg.rows()}
+    rows = {r.id: r for r in await reg.rows()}
     out_pins: list[dict[str, Any]] = []
     for p in pins:
         row = rows.get(p["skillId"])
-        latest = row["published_version"] if row else None
-        newer = await reg.version(p["skillId"], int(latest)) if row and latest and latest > p["version"] else None
-        blocked = missing_for(newer["content"], spec) if newer else []
+        latest = row.published_version if row else None
+        newer = await reg.version(p["skillId"], latest) if row and latest and latest > p["version"] else None
+        blocked = missing_for(newer.content, spec) if newer else []
         out_pins.append(
             {
                 "skillId": p["skillId"],
@@ -614,19 +614,19 @@ async def agent_skills(rt: Runtime, agent_id: str) -> dict[str, Any]:
     held = {p["skillId"] for p in pins}
     available: list[dict[str, Any]] = []
     for row in rows.values():
-        if row["id"] in held or row["published_version"] is None or row["deprecated_reason"]:
+        if row.id in held or row.published_version is None or row.deprecated_reason:
             continue
-        v = await reg.version(row["id"], int(row["published_version"]))
+        v = await reg.version(row.id, row.published_version)
         assert v is not None
-        missing = missing_for(v["content"], spec)
+        missing = missing_for(v.content, spec)
         available.append(
             {
-                "skillId": row["id"],
-                "name": v["content"]["name"],
-                "useWhen": v["content"]["useWhen"],
-                "loading": v["content"]["loading"],
-                "latestPublished": row["published_version"],
-                "ownerTeam": row["owner_team"],
+                "skillId": row.id,
+                "name": v.content["name"],
+                "useWhen": v.content["useWhen"],
+                "loading": v.content["loading"],
+                "latestPublished": row.published_version,
+                "ownerTeam": row.owner_team,
                 "attachable": not missing,
                 "missing": missing,
             }
@@ -661,7 +661,7 @@ async def load_seed(rt: Runtime, path: Path) -> None:
         assert v is not None
         for aid in cast(list[str], s.get("pinnedBy") or []):
 
-            async def attach(spec: dict[str, Any], sid: str = s["id"], at: str = v["saved_at"]) -> dict[str, Any]:
+            async def attach(spec: dict[str, Any], sid: str = s["id"], at: str = v.saved_at) -> dict[str, Any]:
                 spec["skillPins"] = await pin(rt, spec, sid, 1, by=SEED_BY, at=at)
                 return spec
 
@@ -682,9 +682,7 @@ def require_unpinned(pinning: list[str], name: str) -> None:
         raise Conflict(f"{name} is attached to {', '.join(pinning)}; detach it first.", code="skill_pinned")
 
 
-async def usable(
-    rt: Runtime, *, team: str, menu: str, pinned: list[str]
-) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+async def usable(rt: Runtime, *, team: str, menu: str, pinned: list[str]) -> list[tuple[SkillRow, SkillVersionRow]]:
     """(skill row, published version) of each skill of `team` a chat with an agent may use under its skill menu
     setting: every published, live one for the `team` menu, the agent's own for `attached`, none for `off`. Only the
     conversation's team counts, whatever team the request reads as (a dev caller reads every team)."""
@@ -717,7 +715,7 @@ async def _rendered(rt: Runtime, team: str, skill_id: str, part: str | None, giv
     assert v is not None
     entry = next(
         s
-        for s in kernel_skills(skill_id, int(out["version"]), str(out["slug"]), v["content"])
+        for s in kernel_skills(skill_id, int(out["version"]), str(out["slug"]), v.content)
         if s.part == (out.get("part") or "")
     )
     return replace(entry, instructions=str(out["text"]), tokens=max(1, (len(str(out["text"])) + 3) // 4))
@@ -748,9 +746,9 @@ async def skill_turn(
     extra: list[KernelSkill] = []
     if agent.skill_menu == "team":
         for r, v in await usable(rt, team=team, menu="team", pinned=pinned):
-            if r["id"] in pinned or v["content"].get("loading") != "on_match" or missing_for(v["content"], holds):
+            if r.id in pinned or v.content.get("loading") != "on_match" or missing_for(v.content, holds):
                 continue
-            extra.extend(kernel_skills(r["id"], int(v["version"]), str(r["slug"]), v["content"], int(v["tokens"])))
+            extra.extend(kernel_skills(r.id, v.version, r.slug, v.content, v.tokens))
     # The reply before's on-match skills stay loaded; always-on ones load again from the pins.
     carried = [{**e, "how": "carried"} for e in earlier if e.get("how") != "always" and e.get("matched") != "Always on"]
     carried = [
@@ -764,7 +762,7 @@ async def skill_turn(
             )
         picked = await _rendered(rt, team, pick.skill_id, pick.part, pick.inputs)
         v = await skills(rt).version(pick.skill_id, picked.version)
-        if missing := missing_for(cast(dict[str, Any], (v or {}).get("content") or {}), holds):
+        if missing := missing_for(v.content if v is not None else {}, holds):
             raise Unprocessable(
                 f"{picked.name} needs {', '.join(missing)}, which {agent.name} does not have; grant it on the agent "
                 "first.",

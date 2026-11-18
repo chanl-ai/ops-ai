@@ -12,28 +12,30 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from ..store.connections import Account
+
 NEEDS_RECONNECT = "app_account.needs_reconnect"
 # A person connected their own account of an app, by a sign-in or by giving their key: a run paused for it goes on.
 CONNECTED = "app_account.connected"
 
 
 def needs_reconnect_event(
-    conn: dict[str, Any], *, state: str, reason: str, since: datetime | None, at: datetime
+    conn: Account, *, state: str, reason: str, since: datetime | None, at: datetime
 ) -> dict[str, Any]:
     """The admins' notice for the team account of `conn`; `since` is when the token that broke was issued or ended
     (none when the account never held one)."""
-    connection_id = str(conn["id"])
+    connection_id = str(conn.id)
     broke = since.isoformat() if since is not None else "-"
     return {
-        "tenant_id": str(conn["tenant_id"]),
-        "team_id": str(conn["team_id"]),
+        "tenant_id": str(conn.tenant_id),
+        "team_id": str(conn.team_id),
         "name": NEEDS_RECONNECT,
-        "key": f"{connection_id}:{state}:{conn['revision']}:{broke}",
+        "key": f"{connection_id}:{state}:{conn.revision}:{broke}",
         "payload": {
             "connectionId": connection_id,
-            "app": str(conn["name"]),
-            "appId": conn.get("app_id"),
-            "sandbox": bool(conn.get("sandbox")),
+            "app": str(conn.name),
+            "appId": conn.app_id,
+            "sandbox": bool(conn.sandbox),
             "state": state,
             "reason": reason,
             "at": at.isoformat(),
@@ -51,13 +53,13 @@ def connected_key(connection_id: str, person: str) -> str:
     return f"{connection_id}:{person or TEAM}"
 
 
-def connected_event(conn: dict[str, Any], person: str) -> dict[str, Any]:
+def connected_event(conn: Account, person: str) -> dict[str, Any]:
     """`person` connected their own account of `conn`; names only, never what they gave."""
-    connection_id = str(conn["id"])
+    connection_id = str(conn.id)
     return {
-        "tenant_id": str(conn["tenant_id"]),
-        "team_id": str(conn["team_id"]),
+        "tenant_id": str(conn.tenant_id),
+        "team_id": str(conn.team_id),
         "name": CONNECTED,
         "key": connected_key(connection_id, person),
-        "payload": {"connectionId": connection_id, "app": str(conn["name"])},
+        "payload": {"connectionId": connection_id, "app": str(conn.name)},
     }

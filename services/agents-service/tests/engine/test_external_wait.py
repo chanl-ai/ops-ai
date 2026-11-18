@@ -106,9 +106,9 @@ def _worker(engine: AsyncEngine, settings: Settings) -> Worker:
     key = settings.review_key.get_secret_value()
     w.host.resume_link = lambda run, waiting, seconds: resume_link(
         key,
-        tenant=str(run["tenant_id"]),
-        team=str(run["team_id"]),
-        run_id=str(run["id"]),
+        tenant=run.tenant_id,
+        team=run.team_id,
+        run_id=run.id,
         waiting=waiting,
         seconds=seconds,
     )
@@ -222,8 +222,8 @@ async def test_two_resumes_of_one_pause_run_it_once_and_record_the_second_as_ign
     await drain(_worker(engine, settings))
     run = await _run(engine, tenant, run_id)
     with tenant_scope(tenant):
-        first = await resumed(engine, run, run["waiting"], {"callback": {"n": 1}}, source="callback")
-        second = await resumed(engine, run, run["waiting"], {"event": {"n": 2}}, source="event")
+        first = await resumed(engine, run_id, "team_a", run["waiting"], {"callback": {"n": 1}}, source="callback")
+        second = await resumed(engine, run_id, "team_a", run["waiting"], {"event": {"n": 2}}, source="event")
         types = [e.type for e in await EventLog(engine).run_events(run_id, run_id, 0)]
     assert (first, second) == (True, False)
     assert types.count("resumed_by_callback") == 1 and "resume_ignored" in types, types

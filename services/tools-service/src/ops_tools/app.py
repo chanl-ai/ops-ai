@@ -315,8 +315,8 @@ def create_gateway_app(
                 template = str(m.get("template_id") or "")
                 conn = await store.get(tenant_id, str(m["connection_id"])) if m.get("connection_id") else None
                 app = plugin_app(template.removeprefix("plugin:")) if template.startswith("plugin:") else None
-                app = app or (str(conn["app_id"]) if conn else None)
-                if app and any(a.get("sandbox") for a in await store.accounts(tenant_id, team_id, app)):
+                app = app or (conn.app_id if conn else None)
+                if app and any(a.sandbox for a in await store.accounts(tenant_id, team_id, app)):
                     found.add(mid)
         return found
 

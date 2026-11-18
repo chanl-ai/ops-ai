@@ -8,7 +8,10 @@ tool error and can try again.
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
+
+from ops_service_kit.http import Json, JsonList, JsonValue
+from ops_service_kit.narrow import json_list, json_object
 
 from . import kinds, layout
 from .types import AgentSettings, ToolGrant
@@ -19,14 +22,14 @@ MAX_FOLLOW_UPS = 3
 FOLLOW_UP_CHARS = 120
 
 
-def follow_ups(arguments: dict[str, Any]) -> tuple[list[str] | None, str | None]:
+def follow_ups(arguments: Json) -> tuple[list[str] | None, str | None]:
     """The call's quick replies, or why they are refused; (None, None) when it gives none."""
     raw = arguments.get("followUps")
     if raw is None:
         return None, None
-    if not isinstance(raw, list) or not raw or len(cast(list[Any], raw)) > MAX_FOLLOW_UPS:
+    if not isinstance(raw, list) or not raw or len(raw) > MAX_FOLLOW_UPS:
         return None, f"followUps is a list of one to {MAX_FOLLOW_UPS} short replies."
-    replies = [str(r).strip() for r in cast(list[Any], raw)]
+    replies = [str(r).strip() for r in raw]
     if any(not r or len(r) > FOLLOW_UP_CHARS for r in replies):
         return None, f"Each follow-up is a reply of 1 to {FOLLOW_UP_CHARS} characters."
     return list(dict.fromkeys(replies)), None
@@ -79,22 +82,22 @@ def _flat(value: Any) -> bool:
     return value is None or isinstance(value, str | int | float | bool)
 
 
-def check(shape: str, data: Any) -> str | None:
+def check(shape: str, data: JsonValue) -> str | None:
     """Why `data` is not a valid `shape`, or None when it is."""
     if shape not in SHAPES:
         return f"shape must be one of {', '.join(SHAPES)}."
     if shape in ("rows", "series"):
         if not isinstance(data, list) or not data:
             return f"{shape} data must be a non-empty list of objects."
-        rows = cast(list[Any], data)
-        if not all(isinstance(r, dict) and all(_flat(v) for v in cast(dict[str, Any], r).values()) for r in rows):
+        rows = data
+        if not all(isinstance(r, dict) and all(_flat(v) for v in r.values()) for r in rows):
             return f"{shape} data must be objects whose values are text, numbers, booleans or null."
         if shape == "series" and len(rows) < 2:
             return "series data needs at least two rows."
         return None
     if not isinstance(data, dict) or not data:
         return f"{shape} data must be a non-empty object."
-    record = cast(dict[str, Any], data)
+    record = data
     if not all(_flat(v) for v in record.values()):
         return f"{shape} data must have values that are text, numbers, booleans or null."
     if shape == "metric" and ("label" not in record or not isinstance(record.get("value"), int | float)):
@@ -102,10 +105,10 @@ def check(shape: str, data: Any) -> str | None:
     return None
 
 
-def part(shape: str, data: Any, hint: dict[str, Any] | None) -> dict[str, Any]:
+def part(shape: str, data: JsonValue, hint: Json | None) -> Json:
     """The widget part the chat emits for this call; its id is set by the chat from the call's id."""
-    out: dict[str, Any] = {"type": "widget", "id": "", "shape": shape, "data": data}
-    clean = {k: v for k, v in (hint or {}).items() if k in ("title", "x", "y", "prefer") and v is not None}
+    out: Json = {"type": "widget", "id": "", "shape": shape, "data": data}
+    clean: Json = {k: v for k, v in (hint or {}).items() if k in ("title", "x", "y", "prefer") and v is not None}
     if clean:
         out["hint"] = clean
     return out
@@ -119,7 +122,7 @@ _BUTTON_LINE = (
     " A button's reply text is sent back to you as the person's next message; it does nothing else. Show each thing"
     " once: do not present the same widget again for a reply to it, and do not repeat a widget's contents in your text."
 )
-_NODE: dict[str, Any] = {
+_NODE: Json = {
     "type": "object",
     "required": ["type"],
     "properties": {
@@ -152,8 +155,8 @@ def grant(settings: AgentSettings) -> ToolGrant:
     compose. An agent with neither gets today's tool unchanged."""
     if not settings.widgets and not settings.compose:
         return PRESENT
-    schema: dict[str, Any] = {k: v for k, v in PRESENT.input_schema.items() if k != "required"}
-    props: dict[str, Any] = dict(schema["properties"])
+    schema: Json = {k: v for k, v in PRESENT.input_schema.items() if k != "required"}
+    props: Json = dict(json_object(schema["properties"]))
     props["data"] = {
         "description": "For shape, the rows, record or metric. For widget, an object with that widget's fields."
     }
@@ -171,16 +174,16 @@ def grant(settings: AgentSettings) -> ToolGrant:
     return ToolGrant(NAME, SERVER, desc + _BUTTON_LINE, "read", schema)
 
 
-def _rows_of(part: dict[str, Any]) -> list[dict[str, Any]]:
+def _rows_of(part: Json) -> list[Json]:
     data = part.get("data")
     if part.get("shape") == "rows" and isinstance(data, list):
-        return [cast(dict[str, Any], r) for r in cast(list[Any], data) if isinstance(r, dict)]
+        return [r for r in data if isinstance(r, dict)]
     if part.get("shape") == "record" and isinstance(data, dict):
-        return [cast(dict[str, Any], data)]
+        return [data]
     return []
 
 
-def already_shown(part: dict[str, Any], shown: list[dict[str, Any]]) -> bool:
+def already_shown(part: Json, shown: list[Json]) -> bool:
     """Whether every row of a presented table or record is one a tool's result already drew this turn, field for
     field (a presented row may leave fields out). A chart, a metric, a widget or a layout is never a repeat."""
     rows = _rows_of(part)
@@ -188,24 +191,24 @@ def already_shown(part: dict[str, Any], shown: list[dict[str, Any]]) -> bool:
     if not rows or not drawn:
         return False
 
-    def within(row: dict[str, Any]) -> bool:
+    def within(row: Json) -> bool:
         return any(all(str(d.get(k)) == str(v) for k, v in row.items()) for d in drawn)
 
     return all(within(r) for r in rows)
 
 
-def _ungranted(part: dict[str, Any], granted: set[str]) -> list[str]:
+def _ungranted(part: Json, granted: set[str]) -> list[str]:
     return [t for t in layout.required_tools(part.get("layout")) if t not in granted]
 
 
-def _columns(value: Any) -> Any:
+def _columns(value: JsonValue) -> JsonValue:
     """A table's columns as the catalogue keeps them: a plain key name is the column {key}."""
     if not isinstance(value, list):
         return value
-    return [{"key": c} if isinstance(c, str) else c for c in cast(list[Any], value)]
+    return [{"key": c} if isinstance(c, str) else c for c in value]
 
 
-def _plain(arguments: dict[str, Any]) -> dict[str, Any]:
+def _plain(arguments: Json) -> Json:
     """A call as a model most often writes it, read as it meant: data alone is a table (a list) or a record (an
     object), and a table's columns may be plain key names, in a kind's data or in a composed layout's table nodes."""
     out = dict(arguments)
@@ -213,7 +216,7 @@ def _plain(arguments: dict[str, Any]) -> dict[str, Any]:
         data = out["data"]
         out["shape"] = "rows" if isinstance(data, list) else "record" if isinstance(data, dict) else None
     if out.get("kind") == "table" and isinstance(out.get("data"), dict):
-        data = dict(cast(dict[str, Any], out["data"]))
+        data = dict(json_object(out["data"]))
         if "columns" in data:
             data["columns"] = _columns(data["columns"])
         out["data"] = data
@@ -222,57 +225,55 @@ def _plain(arguments: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _layout_columns(node: Any) -> Any:
+def _layout_columns(node: JsonValue) -> JsonValue:
     if not isinstance(node, dict):
         return node
-    n = dict(cast(dict[str, Any], node))
+    n = dict(node)
     if n.get("type") == "table" and "columns" in n:
         n["columns"] = _columns(n["columns"])
-    if isinstance(n.get("children"), list):
-        n["children"] = [_layout_columns(c) for c in cast(list[Any], n["children"])]
+    if isinstance(kids := n.get("children"), list):
+        n["children"] = [_layout_columns(c) for c in kids]
     return n
 
 
-def _without_empty(data: Any, schema: dict[str, Any]) -> Any:
+def _without_empty(data: JsonValue, schema: Json) -> JsonValue:
     """`data` with each optional field the model sent empty ("" or null) left out, at every depth: an empty optional
     field reads as no value, never as a refusal the model must spend a call fixing. A required field stays, so a
     missing one is still refused."""
-    unchanged: Any = data
+    unchanged = data
     if isinstance(data, list):
-        items = cast(dict[str, Any], schema.get("items") or {})
-        return [_without_empty(x, items) for x in cast(list[Any], data)]
+        items = json_object(schema.get("items"))
+        return [_without_empty(x, items) for x in data]
     if not isinstance(data, dict):
         return unchanged
-    props = cast(dict[str, Any], schema.get("properties") or {})
-    required = set(cast(list[str], schema.get("required") or []))
-    out: dict[str, Any] = {}
-    for key, value in cast(dict[str, Any], data).items():
+    props = json_object(schema.get("properties"))
+    required = set(json_list(schema.get("required")))
+    out: Json = {}
+    for key, value in data.items():
         if key not in required and (value is None or (isinstance(value, str) and not value.strip())):
             continue
-        out[key] = _without_empty(value, cast(dict[str, Any], props.get(key) or {}))
+        out[key] = _without_empty(value, json_object(props.get(key)))
     return out
 
 
-def _changed_only(data: Any) -> Any:
+def _changed_only(data: JsonValue) -> JsonValue:
     """An entity's fields without those reported as changed to the value they already had: a field with `was` equal to
     `value` is not a change, so a saved card shows only what the save changed."""
-    unchanged: Any = data
-    record = cast(dict[str, Any], data) if isinstance(data, dict) else None
+    unchanged = data
+    record = data if isinstance(data, dict) else None
     given = record.get("fields") if record is not None else None
     if record is None or not isinstance(given, list):
         return unchanged
-    fields: list[Any] = []
-    for raw in cast(list[Any], given):
-        f = cast(dict[str, Any], raw) if isinstance(raw, dict) else None
+    fields: JsonList = []
+    for raw in given:
+        f = raw if isinstance(raw, dict) else None
         if f is not None and "was" in f and str(f["was"]) == str(f.get("value")):
             continue
         fields.append(raw)
     return {**record, "fields": fields}
 
 
-def run(
-    arguments: dict[str, Any], settings: AgentSettings, granted: set[str] | None = None
-) -> tuple[dict[str, Any] | None, str]:
+def run(arguments: Json, settings: AgentSettings, granted: set[str] | None = None) -> tuple[Json | None, str]:
     """The part this call shows and what the model is told, or (None, the refusal). Exactly one form is used: a shape,
     one of the agent's widgets filled with data, or a composed layout when the agent may compose. A button whose
     `requires` names a tool this turn was not granted refuses the part, so a widget never offers an action the agent
@@ -297,13 +298,13 @@ def run(
             filled = layout.fill(kinds.template(str(kind)), schema, data)
         except layout.LayoutError as e:
             return None, f"{e} The {kind} kind's fields are: {layout.fields_of(schema)}."
-        part_ = {"type": "widget", "id": "", "kind": kind, "layout": filled}
+        part_: Json = {"type": "widget", "id": "", "kind": kind, "layout": filled}
         if granted is not None and (missing := _ungranted(part_, granted)):
             return None, f"A button requires {', '.join(missing)}, which this agent does not have; drop the button."
         return part_, str(kind)
     if shape is not None:
         raw_hint = arguments.get("hint")
-        hint: dict[str, Any] | None = dict(cast(dict[str, Any], raw_hint)) if isinstance(raw_hint, dict) else None
+        hint: Json | None = dict(raw_hint) if isinstance(raw_hint, dict) else None
         why = check(str(shape), data)
         return (None, why) if why else (part(str(shape), data, hint), str(shape))
     if widget is not None:
@@ -315,8 +316,8 @@ def run(
             filled = layout.fill(w.tree, w.schema, data)
         except layout.LayoutError as e:
             return None, f"{e} The {w.widget_id} widget's fields are: {layout.fields_of(w.schema)}."
-        ref = {"id": w.widget_id, "version": w.version, "name": w.name}
-        part_ = {"type": "widget", "id": "", "template": ref, "layout": filled}
+        ref: Json = {"id": w.widget_id, "version": w.version, "name": w.name}
+        part_: Json = {"type": "widget", "id": "", "template": ref, "layout": filled}
         if granted is not None and (missing := _ungranted(part_, granted)):
             return None, f"The {w.widget_id} widget needs {', '.join(missing)}, which this agent does not have."
         return part_, w.widget_id
@@ -326,7 +327,7 @@ def run(
         composed = layout.check(tree)
     except layout.LayoutError as e:
         return None, str(e)
-    part_ = {"type": "widget", "id": "", "layout": composed}
+    part_: Json = {"type": "widget", "id": "", "layout": composed}
     if granted is not None and (missing := _ungranted(part_, granted)):
         return None, f"A button requires {', '.join(missing)}, which this agent does not have; drop the button."
     return part_, "layout"

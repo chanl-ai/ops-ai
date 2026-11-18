@@ -328,18 +328,17 @@ async def _record_name(rt: Runtime, kind: str, record_id: str) -> str | None:
             return str((await registry(rt).version(record_id, int(row["version"])))["spec"].get("name") or "")
         if kind == "skill":
             row = await skills(rt).row(record_id)
-            found = await skills(rt).version(record_id, int(row["version"]))
-            content = cast(dict[str, Any], (found or {}).get("content") or {})
-            return str(content.get("name") or "")
+            found = await skills(rt).version(record_id, row.version)
+            return str((found.content if found else {}).get("name") or "")
         if kind == "guardrail":
-            found = await guardrails(rt).find(record_id)
-            return str(found["name"]) if found else None
+            held = await guardrails(rt).find(record_id)
+            return held.name if held else None
     except NotFound:
         return None
     if kind in tt.TYPE_KINDS:
         return await tt.name(rt, kind, record_id)
-    found = await definitions(rt).get(record_id, team=current_team())
-    return str(found["name"]) if found else None
+    found = await definitions(rt).row(record_id, team=current_team())
+    return found.name if found else None
 
 
 async def _record_digest(rt: Runtime, kind: str, record_id: str) -> str | None:
@@ -349,19 +348,19 @@ async def _record_digest(rt: Runtime, kind: str, record_id: str) -> str | None:
             row = await registry(rt).row(record_id)
             return str((await registry(rt).version(record_id, int(row["version"])))["digest"])
         if kind == "skill":
-            row = await skills(rt).row(record_id)
-            found = await skills(rt).version(record_id, int(row["version"]))
-            return str(found["digest"]) if found else None
+            skill = await skills(rt).row(record_id)
+            found = await skills(rt).version(record_id, skill.version)
+            return found.digest if found else None
         if kind == "guardrail":
-            row = await guardrails(rt).row(record_id)
-            found = await guardrails(rt).version(record_id, int(row["version"]))
-            return str(found["digest"]) if found else None
+            guardrail = await guardrails(rt).row(record_id)
+            held = await guardrails(rt).version(record_id, guardrail.version)
+            return held.digest if held else None
     except NotFound:
         return None
     if kind in tt.TYPE_KINDS:
         return await tt.digest(rt, kind, record_id)
-    found = await definitions(rt).get(record_id, team=current_team())
-    return str(found["digest"]) if found else None
+    found = await definitions(rt).row(record_id, team=current_team())
+    return found.digest if found else None
 
 
 @router.get("", response_model=Envelope[list[TemplateView]])
@@ -452,7 +451,7 @@ async def _remove_cell(rt: Runtime, copy: dict[str, Any]) -> dict[str, Any]:
     if kind != "skill":
         return {"area": AREAS[kind], "action": "delete"}
     try:
-        created_by = (await skills(rt).row(record)).get("created_by")
+        created_by = (await skills(rt).row(record)).created_by
     except NotFound:
         created_by = None
     return {"area": "skills", "action": "delete", "owner": created_by}
@@ -480,7 +479,7 @@ async def _names_in_use(rt: Runtime, kind: str) -> set[str]:
     if kind in tt.TYPE_KINDS:
         return await tt.names_in_use(rt, kind, current_team() or "")
     if kind == "guardrail":
-        return {str(r["name"]).casefold() for r in await guardrails(rt).rows()}
+        return {r.name.casefold() for r in await guardrails(rt).rows()}
     # A skill's name is unique by its slug, which the skill store refuses as name_taken itself.
     return set()
 
@@ -967,10 +966,10 @@ async def _newest(rt: Runtime, kind: str, record_id: str) -> tuple[dict[str, Any
         v = (await registry(rt).versions(record_id))[0]
         return cast(dict[str, Any], v["spec"]), v.get("published_at") is None
     if kind == "guardrail":
-        v = (await guardrails(rt).versions(record_id))[0]
-        return cast(dict[str, Any], v["config"]), v.get("published_at") is None
-    v = (await skills(rt).versions(record_id))[0]
-    return cast(dict[str, Any], v["content"]), v.get("published_at") is None
+        held = (await guardrails(rt).versions(record_id))[0]
+        return held.config, held.published_at is None
+    skill = (await skills(rt).versions(record_id))[0]
+    return skill.content, skill.published_at is None
 
 
 async def _newest_type(rt: Runtime, kind: str, record_id: str) -> tuple[dict[str, Any], bool]:
@@ -1005,10 +1004,12 @@ async def _template_body(rt: Runtime, team: str, kind: str, t: dict[str, Any], y
 async def _legacy_base(rt: Runtime, kind: str, record_id: str, row: dict[str, Any]) -> dict[str, Any] | None:
     """A link made before bases were kept: the record's version whose digest the link names is the copy as made, when
     it still exists; otherwise None, and every difference is a choice kept as the team's."""
-    versions = await (registry(rt) if kind == "agent" else skills(rt)).versions(record_id)
-    key = "spec" if kind == "agent" else "content"
-    found = next((v[key] for v in versions if v["digest"] == row.get("record_digest")), None)
-    return copy_base(kind, cast(dict[str, Any], found)) if found is not None else None
+    if kind == "agent":
+        versions = await registry(rt).versions(record_id)
+        found = next((v["spec"] for v in versions if v["digest"] == row.get("record_digest")), None)
+        return copy_base(kind, cast(dict[str, Any], found)) if found is not None else None
+    held = next((v.content for v in await skills(rt).versions(record_id) if v.digest == row.get("record_digest")), None)
+    return copy_base(kind, held) if held is not None else None
 
 
 def _labelled(outcomes: list[FieldOutcome]) -> list[dict[str, Any]]:
@@ -1158,12 +1159,12 @@ async def take_update(rt: Rt, me: Me, resource: str, copy: str, body: UpdateInpu
             version = await tt.save(rt, me, kind, copy, tt.unflat(kind, merged, keys, str(yours["name"])))
         base = {k: v for k, v in template_body.items() if k != "name"}
     elif taken or chosen:
-        held = await definitions(rt).get(copy, team=current_team())
+        held = await definitions(rt).row(copy, team=current_team())
         assert held is not None
         offered = {f"{x['source']}:{x['id']}": x for x in await _offered(rt, team)}
         records = await _dependencies(rt, me, team, t, offered=offered, given={})
         definition = _pointed(dict(cast(dict[str, Any], t.get("body") or {})), records)
-        definition["id"], definition["name"] = copy, held["name"]
+        definition["id"], definition["name"] = copy, held.name
         answer = await create_definition(rt, me, DefinitionInput(definition=definition))
         version = cast(int | None, json.loads(bytes(answer.body))["data"].get("version"))
     # A workflow conflict kept as the team's moves the link to the new version and leaves its record digest, so the

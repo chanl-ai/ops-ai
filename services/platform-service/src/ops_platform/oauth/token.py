@@ -11,12 +11,22 @@ import hmac
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import TypedDict
 
 from ..auth import Auth, Issued
 from ..store.identity import Grant, IdentityStore, SessionRef
 from . import OAuthError, iso
 from .authorize import code_hash
+
+
+class TokenReply(TypedDict):
+    """A token answer as RFC 6749 section 5.1 names its fields."""
+
+    access_token: str
+    token_type: str
+    expires_in: int
+    refresh_token: str
+
 
 REFUSED = OAuthError("invalid_grant", "That grant is not valid. Connect the assistant again.")
 
@@ -43,7 +53,7 @@ class Tokens:
             raise REFUSED
         return grant, secret
 
-    def _response(self, issued: Issued) -> dict[str, Any]:
+    def _response(self, issued: Issued) -> TokenReply:
         return {
             "access_token": issued.token,
             "token_type": "Bearer",
@@ -51,7 +61,7 @@ class Tokens:
             "refresh_token": issued.refresh_token,
         }
 
-    async def exchange(self, form: dict[str, str], *, request_id: str) -> dict[str, Any]:
+    async def exchange(self, form: dict[str, str], *, request_id: str) -> TokenReply:
         grant_type = form.get("grant_type")
         if grant_type == "authorization_code":
             return await self._code(form)
@@ -59,7 +69,7 @@ class Tokens:
             return await self._renew(form, request_id=request_id)
         raise OAuthError("unsupported_grant_type", "grant_type is authorization_code or refresh_token.")
 
-    async def _code(self, form: dict[str, str]) -> dict[str, Any]:
+    async def _code(self, form: dict[str, str]) -> TokenReply:
         code = form.get("code", "")
         grant, _ = await self._grant(code)
         now = datetime.now(UTC)
@@ -84,7 +94,7 @@ class Tokens:
             raise REFUSED
         return self._response(issued)
 
-    async def _renew(self, form: dict[str, str], *, request_id: str) -> dict[str, Any]:
+    async def _renew(self, form: dict[str, str], *, request_id: str) -> TokenReply:
         presented = form.get("refresh_token", "")
         grant, secret = await self._grant(presented)
         # A renewal sent with another client's id is refused and leaves the grant alone.

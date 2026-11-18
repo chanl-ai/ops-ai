@@ -13,8 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from ops_access import BY_KEY, POLICIES, check_value
 from ops_access.platform_events import POLICY_CHANGED
 from ops_access.policies import PUBLISH_AREAS
-from ops_service_kit.http import Out
+from ops_service_kit.http import Json, Out
 from ops_service_kit.ids import now_iso
+from ops_service_kit.narrow import json_object
 from ops_store import Guarantee
 from ops_store.dialect import insert_ignore
 from ops_store.outbox import add as add_event
@@ -29,17 +30,12 @@ OLD_KEYS = ("toolWritesNeedApproval", "appWritesNeedApproval", "appsChangeWithou
 
 # Each policy's value is free-form JSON (a switch, a number, a list, or a per-team object), keyed by policy: the shape a
 # token carries in `Principal.policies` and `ops_access.policy()` reads.
-type PolicyValues = dict[str, JsonValue]
+PolicyValues = Json
 
 
 class PolicyRow(Out):
     key: str
     value: JsonValue
-
-
-def _object(value: JsonValue) -> dict[str, JsonValue]:
-    """A per-team value or one team's part of it; anything else (none set yet) reads as empty."""
-    return value if isinstance(value, dict) else {}
 
 
 class PolicyStore(TenantDb):
@@ -116,7 +112,7 @@ class PolicyStore(TenantDb):
         async with self.tenant_tx(tenant_id) as c:
             row = (await c.execute(sa.select(policies.c.value).where(policies.c.key == key))).first()
         # No row: no team has a part yet. A catalogue default is never keyed by a team, so it holds none either.
-        return _object(_object(row.value).get(team_id)) if row else {}
+        return json_object(json_object(row.value).get(team_id)) if row else {}
 
     async def _from_old_key(self, tenant_id: str, key: str, value: Any, team_id: str | None) -> tuple[str, Any]:
         """A write to an old key, as the new key's value for the same team: the old keys stay writable for one release
@@ -133,7 +129,7 @@ class PolicyStore(TenantDb):
         answer = "reviewer" if key == "appWritesNeedApproval" else "none"
         listed = [str(n) for n in cast(list[Any], value)] if isinstance(value, list) else []
         kept: dict[str, JsonValue] = {
-            a: e for a, e in apps.items() if _object(e).get("answer") != answer or a in listed
+            a: e for a, e in apps.items() if json_object(e).get("answer") != answer or a in listed
         }
         for app in listed:
             kept.setdefault(app, {"answer": answer})
@@ -145,13 +141,13 @@ class PolicyStore(TenantDb):
 
         async def part(key: str) -> dict[str, JsonValue]:
             row = (await c.execute(sa.select(policies.c.value).where(policies.c.key == key))).first()
-            return _object(row.value if row else {})
+            return json_object(row.value if row else {})
 
-        team = _object((await part("appChanges")).get(team_id))
+        team = json_object((await part("appChanges")).get(team_id))
         # A `tool:<name>` entry is one tool's answer, not an app: the old per-app lists never named it.
         apps = {
-            a: _object(e)
-            for a, e in _object((await part("appChangesByApp")).get(team_id)).items()
+            a: json_object(e)
+            for a, e in json_object((await part("appChangesByApp")).get(team_id)).items()
             if not a.startswith("tool:")
         }
         derived: PolicyValues = {
@@ -190,7 +186,7 @@ async def write_new_workspace_policies(c: AsyncConnection, tenant_id: str, *, at
     for key, wanted in new_workspace_values().items():
         # A per-team value is checked one team's part at a time, as a save through `set` checks it.
         value = (
-            {team: check_value(key, part) for team, part in _object(wanted).items()}
+            {team: check_value(key, part) for team, part in json_object(wanted).items()}
             if BY_KEY[key].per_team
             else check_value(key, wanted)
         )

@@ -13,13 +13,13 @@ import re
 import secrets
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import TypedDict
 from urllib.parse import urlencode, urlsplit
 
 from ops_service_kit.errors import Forbidden, Unauthorized, Unprocessable
 from ops_service_kit.ids import new_id
 
-from ..auth import Auth
+from ..auth import Auth, Claims
 from ..store.identity import Client, IdentityStore, SessionRef
 from ..store.policies import PolicyStore
 from . import OAuthError, iso
@@ -45,6 +45,31 @@ class Request:
     team_id: str
     tenant_id: str
     state: str | None
+
+
+class ConsentClient(TypedDict):
+    id: str
+    name: str
+    nameIsSelfReported: bool
+
+
+class ConsentTeam(TypedDict):
+    id: str
+    name: str
+
+
+class Consent(TypedDict):
+    """What the consent page shows, as `ConsentOut` sends it."""
+
+    client: ConsentClient
+    redirectHost: str
+    team: ConsentTeam
+    resource: str
+    connectionHours: int
+
+
+class Decided(TypedDict):
+    redirectTo: str
 
 
 def redirect_host(uri: str) -> str:
@@ -109,10 +134,10 @@ class Authorizer:
             raise OAuthError("server_error", "This install names no console address (OPS_CONSOLE_URL).", status=503)
         return f"{self.console_url.rstrip('/')}/oauth/authorize?{urlencode(q)}"
 
-    async def _member(self, claims: dict[str, Any], req: Request) -> None:
+    async def _member(self, claims: Claims, req: Request) -> None:
         """The person must be in the address's team, in the team's own workspace. Any member may connect: tools-service
         checks tools:run and each tool's own right on every call, and a refusal there is a tool error."""
-        in_team = req.team_id in [str(t) for t in cast(list[Any], claims.get("team_ids") or [])]
+        in_team = req.team_id in [str(t) for t in claims.get("team_ids") or []]
         if not in_team or req.tenant_id != str(claims["tenant_id"]):
             raise Forbidden("You are not a member of that team.", code="team_forbidden")
 
@@ -120,7 +145,7 @@ class Authorizer:
         value = (await self.policies.values(tenant_id)).get("mcpConnectionHours", DEFAULT_HOURS)
         return int(value) if isinstance(value, int) and not isinstance(value, bool) else DEFAULT_HOURS
 
-    async def show(self, claims: dict[str, Any], q: dict[str, str]) -> dict[str, Any]:
+    async def show(self, claims: Claims, q: dict[str, str]) -> Consent:
         req = await self.check(q)
         await self._member(claims, req)
         return {
@@ -131,9 +156,7 @@ class Authorizer:
             "connectionHours": await self._hours(req.tenant_id),
         }
 
-    async def decide(
-        self, claims: dict[str, Any], q: dict[str, str], *, allow: bool, request_id: str
-    ) -> dict[str, Any]:
+    async def decide(self, claims: Claims, q: dict[str, str], *, allow: bool, request_id: str) -> Decided:
         req = await self.check(q)
         await self._member(claims, req)
         sep = "&" if "?" in req.redirect_uri else "?"

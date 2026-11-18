@@ -7,13 +7,14 @@ import re
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from ops_engine.store import RunStore
+from ops_engine.store import RunStep, RunStore
+from ops_service_kit.narrow import json_list, json_object
 from ops_store.team_scope import acting_team
 
 from .. import task_types as tt
 from ..store.cases import CaseStore
 from ..store.engine import EngineTransactions
-from ..store.task_assists import TaskAssistStore
+from ..store.task_assists import TaskAssistStore, WrittenAssist
 from ..store.task_types import TaskTypeNotFound
 from . import task_assist
 from .deps import Runtime
@@ -44,9 +45,9 @@ class TaskReads:
     def __init__(self, rt: Runtime, runs: list[dict[str, Any]], step_ids: list[str]) -> None:
         self.rt, self.runs, self.step_ids = rt, runs, step_ids
         self._types: dict[tuple[str | None, str, int | None], tuple[int, dict[str, Any]] | TaskTypeNotFound] = {}
-        self._assists: dict[str, tuple[dict[str, Any], str]] | None = None
+        self._assists: dict[str, WrittenAssist] | None = None
         self._cases: dict[str, list[dict[str, Any]]] | None = None
-        self._steps: dict[str, list[dict[str, Any]]] = {}
+        self._steps: dict[str, list[RunStep]] = {}
 
     async def published(self, type_id: str, version: int | None, team: str | None = None) -> tuple[int, dict[str, Any]]:
         """A task type as the team of the run it serves reads it (`team`), or as the acting team."""
@@ -61,7 +62,7 @@ class TaskReads:
             raise found
         return found
 
-    async def assist(self, step_id: str) -> tuple[dict[str, Any], str] | None:
+    async def assist(self, step_id: str) -> WrittenAssist | None:
         if self._assists is None:
             self._assists = await TaskAssistStore(self.rt.db).written_many(self.step_ids)
         return self._assists.get(step_id)
@@ -69,7 +70,7 @@ class TaskReads:
     def _listed(self, run: dict[str, Any]) -> list[dict[str, Any]]:
         return self.runs if any(str(r["id"]) == str(run["id"]) for r in self.runs) else [run]
 
-    async def steps(self, run: dict[str, Any]) -> list[dict[str, Any]]:
+    async def steps(self, run: dict[str, Any]) -> list[RunStep]:
         if str(run["id"]) not in self._steps:
             ids = [str(r["id"]) for r in self._listed(run)]
             self._steps |= await RunStore(EngineTransactions(self.rt.db)).steps_of(ids)
@@ -169,7 +170,7 @@ async def run_cases(rt: Runtime, run: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 async def runs_cases(
-    rt: Runtime, runs: list[dict[str, Any]], steps: dict[str, list[dict[str, Any]]] | None = None
+    rt: Runtime, runs: list[dict[str, Any]], steps: dict[str, list[RunStep]] | None = None
 ) -> dict[str, list[dict[str, Any]]]:
     """run_cases for each of `runs` in three queries however many there are: their steps (unless `steps` has them),
     the cases those runs and the runs they started are on, and the cases' subjects."""
@@ -178,11 +179,10 @@ async def runs_cases(
         steps = await RunStore(EngineTransactions(rt.db)).steps_of(ids)
     started = {
         rid: [
-            str(cast(dict[str, Any], r)["runId"])
+            str(r["runId"])
             for s in steps.get(rid, [])
-            if isinstance(s.get("output"), dict)
-            for r in cast(list[Any], cast(dict[str, Any], s["output"]).get("runs") or [])
-            if isinstance(r, dict) and cast(dict[str, Any], r).get("runId")
+            for r in json_list(json_object(s.output).get("runs"))
+            if isinstance(r, dict) and r.get("runId")
         ]
         for rid in ids
     }

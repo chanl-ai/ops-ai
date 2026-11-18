@@ -144,21 +144,21 @@ async def overview(rt: Rt, me: Me) -> JSONResponse:
         ],
         runs_in_flight=[
             OverviewRunRow(
-                id=str(r["id"]),
-                workflow_id=str(r["workflow_id"]),
-                subject=str(r.get("workflow_name") or r["workflow_id"]),
-                state="waiting" if r["status"] == "waiting" else "running",
-                started_at=str(r["created_at"]),
+                id=r.id,
+                workflow_id=r.workflow_id,
+                subject=r.workflow_name or r.workflow_id,
+                state="waiting" if r.status == "waiting" else "running",
+                started_at=r.created_at,
             )
             for r in flight
         ],
         cases_due=[
             OverviewCaseRow(
-                id=str(r["id"]),
-                subject=str(r["subject"]),
-                customer_name=r.get("customer_name"),
-                status=str(r["status"]),
-                resolution_due_at=r.get("resolution_due_at"),
+                id=r.id,
+                subject=r.subject,
+                customer_name=r.customer_name,
+                status=r.status,
+                resolution_due_at=r.resolution_due_at,
             )
             for r in due_rows
         ],

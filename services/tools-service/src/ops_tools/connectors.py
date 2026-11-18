@@ -23,7 +23,7 @@ from .app_states import AppGroup, AppState
 from .connections.records import connection_base
 from .connections.service import own_key
 from .plugins.host import account_identity, own_and_registration
-from .store.connections import PERSON_ORIGIN
+from .store.connections import PERSON_ORIGIN, Account
 
 if TYPE_CHECKING:
     from .apps import Apps
@@ -219,7 +219,7 @@ async def my_connectors(apps: Apps, who: Caller) -> list[dict[str, Any]]:
         tools = [t for t in tools if t["access"] == "read"] if off else [t for t in tools if t["added"]]
         tools = await _reviewed(apps, who, tools)
         accounts = [] if off else own
-        saved = {str(t["connection_id"]) for t in signed if t.get("pinned")}
+        saved = {t.connection_id for t in signed if t.pinned}
         live = [a for a in accounts if a["state"] == "connected"]
         # The default the gateway uses: the saved one, or the only one; two and none saved is no default (it asks).
         defaults = saved & {a["connectionId"] for a in live} or ({live[0]["connectionId"]} if len(live) == 1 else set())
@@ -250,7 +250,7 @@ async def my_connectors(apps: Apps, who: Caller) -> list[dict[str, Any]]:
                         identity=[
                             ConnectorIdentity(**e) for e in _identity(apps, card, conns.get(a["connectionId"]), a)
                         ],
-                        own=(conns.get(a["connectionId"]) or {}).get("origin") == PERSON_ORIGIN,
+                        own=(acct.origin if (acct := conns.get(a["connectionId"])) else None) == PERSON_ORIGIN,
                     )
                     for a in accounts
                 ],
@@ -268,9 +268,7 @@ async def my_connectors(apps: Apps, who: Caller) -> list[dict[str, Any]]:
     return sorted(rows, key=lambda r: (RANK.get(r["appGroup"], 3), str(r["name"]).lower()))
 
 
-def _identity(
-    apps: Apps, card: dict[str, Any], conn: dict[str, Any] | None, row: dict[str, Any]
-) -> list[dict[str, str]]:
+def _identity(apps: Apps, card: dict[str, Any], conn: Account | None, row: dict[str, Any]) -> list[dict[str, str]]:
     """What tells one of the person's accounts apart, as every account row reads it."""
     if conn is None:
         return []

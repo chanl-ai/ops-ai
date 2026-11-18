@@ -44,7 +44,9 @@ from pydantic_ai.run import AgentRunResultEvent
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import UsageLimits
 
+from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import action_id, input_hash
+from ops_service_kit.narrow import json_object
 
 from . import answer_check, guard, pii, present, search, tool_cache
 from . import plan as planner
@@ -66,9 +68,13 @@ from .types import (
     BaseAnswer,
     CitationRef,
     Guardrail,
+    GuardrailFired,
+    GuardrailRef,
     Interrupt,
+    LoadedSkill,
     Passage,
     PendingCall,
+    Plan,
     Skill,
     TokenUsage,
     ToolCallRecord,
@@ -103,15 +109,13 @@ def refusal_text(status: int, body: object) -> str:
 
 
 def _refusal_field(body: object, name: str) -> str | None:
-    if not isinstance(body, dict):
-        return None
-    fields = cast(dict[str, Any], body)
+    fields = json_object(body)
     inner = fields.get("error")
-    value = cast(dict[str, Any], inner).get(name) if isinstance(inner, dict) else fields.get(name)
+    value = inner.get(name) if isinstance(inner, dict) else fields.get(name)
     return str(value) if value else None
 
 
-def _args(part: ToolCallPart) -> dict[str, Any]:
+def _args(part: ToolCallPart) -> Json:
     return part.args_as_dict()
 
 
@@ -135,7 +139,7 @@ class _TurnState:
     retracted: str = ""
     # Text already sent as deltas this turn.
     shown_text: str = ""
-    loads: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    loads: list[LoadedSkill] = field(default_factory=list[LoadedSkill])
     # How each of `loads` entered the reply (picked, carried, loaded, always), in the same order: told in the journal
     # event, kept out of the result's entries.
     hows: list[str] = field(default_factory=list[str])
@@ -151,7 +155,7 @@ class _TurnState:
     cap_told_step: int | None = None
     # The turn's plan (plan.py) as the last accepted call left it, how many times it was replaced, and the call that
     # drew it, whose part each change redraws.
-    plan: dict[str, Any] | None = None
+    plan: Plan | None = None
     replans: int = 0
     plan_call: str | None = None
     # The model steps (state.step) whose calls to a system succeeded: the plan ticks once each such step ends.
@@ -194,7 +198,7 @@ class _TurnState:
         self.builtin_calls += 1
         return None
 
-    def record(self, tool_call_id: str, tool: str, arguments: dict[str, Any]) -> ToolCallRecord:
+    def record(self, tool_call_id: str, tool: str, arguments: Json) -> ToolCallRecord:
         """The record for a call, created on first sight. The tool function can run before its call event is
         read off the stream, so both paths go through here."""
         if tool_call_id in self.records:
@@ -259,20 +263,20 @@ def _present(state: _TurnState) -> Tool[None]:
         rest = {k: v for k, v in arguments.items() if k != "followUps"}
         if replies is not None and not ({"shape", "kind", "widget", "layout", "data"} & set(rest)):
             # Quick replies alone: nothing is drawn but the chips under the reply.
-            rec.status, rec.output, rec.view = "ok", {"offered": replies}, {"followUps": replies}
+            rec.status, rec.output, rec.view = "ok", {"offered": replies}, {"followUps": [*replies]}
             return {"offered": replies}
         shown, said = present.run(rest, state.req.settings, {t.name for t in state.req.tools})
         if shown is None:
             rec.status, rec.output = "error", {"error": said}
             return {"error": said}
-        drawn = [p for r in state.records.values() if (p := (r.view or {}).get("part"))]
+        drawn = [p for r in state.records.values() if isinstance(p := (r.view or {}).get("part"), dict)]
         if present.already_shown(shown, drawn):
             # The rows a tool's result already drew this turn: nothing is shown twice.
             rec.status, rec.output = "ok", {"presented": "already shown"}
             return {"presented": "already shown", "note": SHOWN}
         state.shown += 1
         rec.status, rec.output = "ok", {"presented": said}
-        rec.view = {"part": shown, **({"followUps": replies} if replies else {})}
+        rec.view = {"part": shown, **({"followUps": [*replies]} if replies else {})}
         return {"presented": said}
 
     # Still offered after a refusal: a model that calls it again reaches `call`, which ends the turn. Withdrawing the
@@ -322,7 +326,7 @@ def _with_earlier(
     system_prompt: str,
     carried: list[Skill],
     reads: list[str],
-    plan: dict[str, Any] | None = None,
+    plan: Plan | None = None,
     picked: list[Skill] | None = None,
 ) -> str:
     """The bodies of skills picked for this reply and of skills an earlier turn loaded, the results earlier turns read
@@ -364,7 +368,7 @@ def _replace(state: _TurnState, text: str, *, guardrail: bool = False) -> TextDe
     return TextReplaced(text)
 
 
-def _fired(hit: guard.Hit, when: str) -> dict[str, Any]:
+def _fired(hit: guard.Hit, when: str) -> GuardrailFired:
     r = hit.rule
     return {"guardrailId": r.guardrail_id, "version": r.version, "name": r.name, "topic": hit.topic, "when": when}
 
@@ -381,7 +385,9 @@ def _plan(state: _TurnState) -> Tool[None]:
             rec.status, rec.output = "error", {"error": planner.KEPT}
             return {"error": planner.KEPT}
         new, why = planner.given(arguments)
-        why = why or planner.check(None, cast(dict[str, Any], new), replan=False, replans=0)
+        if why is None:
+            assert new is not None
+            why = planner.check(None, new, replan=False, replans=0)
         if why is not None:
             rec.status, rec.output = "error", {"error": why}
             return {"error": why}
@@ -567,7 +573,9 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
             rec.output = outcome.output
             rec.view = outcome.view
             part = (outcome.view or {}).get("part")
-            drawn = [p for r in state.records.values() if r is not rec and (p := (r.view or {}).get("part"))]
+            drawn = [
+                p for r in state.records.values() if r is not rec and isinstance(p := (r.view or {}).get("part"), dict)
+            ]
             if part and present.already_shown(part, drawn):
                 # A record or rows an earlier call this turn already drew (a query's row, then the same record read by
                 # id): drawn once.
@@ -600,26 +608,26 @@ def _tool(state: _TurnState, ports: KernelPorts, grant: ToolGrant, *, deferred: 
     return tool
 
 
-def _numbered(state: _TurnState, output: Any) -> Any:
+def _numbered(state: _TurnState, output: JsonValue) -> Any:
     """A result's passages (`{"passages": [{text, title, section?, page?, knowledgeBase?, itemId?}]}`) numbered on from
     the turn's, so the model cites them as it cites the knowledge block; any other result as it is."""
     if not isinstance(output, dict):
         return output
-    result = cast(dict[str, Any], output)
+    result = output
     answers = result.get("answers")
     if isinstance(answers, dict):
-        for kb, a in cast(dict[str, Any], answers).items():
+        for kb, a in answers.items():
             if isinstance(a, dict) and kb not in state.kb_answers:
-                state.kb_answers[str(kb)] = BaseAnswer.of(cast(dict[str, Any], a))
+                state.kb_answers[str(kb)] = BaseAnswer.of(a)
     found = result.get("passages")
     if not isinstance(found, list) or not found:
         return result
-    numbered: list[Any] = []
-    for raw in cast(list[Any], found):
-        if not isinstance(raw, dict) or not cast(dict[str, Any], raw).get("text"):
+    numbered: JsonList = []
+    for raw in found:
+        if not isinstance(raw, dict) or not raw.get("text"):
             numbered.append(raw)
             continue
-        p = cast(dict[str, Any], raw)
+        p = raw
         state.passages.append(
             Passage(
                 document_id=str(p.get("itemId") or p.get("documentId") or ""),
@@ -628,7 +636,7 @@ def _numbered(state: _TurnState, output: Any) -> Any:
                 version=str(p.get("version") or ""),
                 text=str(p["text"]),
                 kb_id=str(p.get("knowledgeBase") or ""),
-                page=p["page"] if isinstance(p.get("page"), int) else None,
+                page=page if isinstance(page := p.get("page"), int) else None,
             )
         )
         numbered.append({"n": len(state.passages), **p})
@@ -646,7 +654,7 @@ async def _retrieve(req: TurnRequest, ports: KernelPorts, state: _TurnState) -> 
     return list(found)
 
 
-def _own_knowledge(req: TurnRequest, arguments: dict[str, Any]) -> dict[str, Any] | None:
+def _own_knowledge(req: TurnRequest, arguments: Json) -> Json | None:
     """A search_knowledge call as the turn may make it. The tool searches only the bases named, or every base of the
     team when the call says `allTeamKnowledgeBases`, which the kernel alone sets, for an agent given that option; a
     model's own flag is dropped. Otherwise the call is narrowed to the turn's own bases, as grounding is: those the
@@ -658,7 +666,8 @@ def _own_knowledge(req: TurnRequest, arguments: dict[str, Any]) -> dict[str, Any
         return None
     named = [str(c) for c in cast(list[Any], asked.get("collections") or [])]
     kept = [c for c in named if c in req.kb_ids]
-    return {**asked, "collections": kept or list(req.kb_ids)}
+    collections: JsonList = [*(kept or req.kb_ids)]
+    return {**asked, "collections": collections}
 
 
 def _close_open(state: _TurnState, why: str) -> list[ToolOutput]:
@@ -888,7 +897,8 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         [_present(state), _plan(state), *([] if searching else [_search(state)])] if builtins else []
     )
     # A plan the turn goes on with: kept at its pause (an approval), or left open by an earlier turn (a Connect card).
-    state.plan = (req.resume.interrupt.plan if req.resume else None) or req.carried_plan
+    carried_plan = req.carried_plan if planner.stored(req.carried_plan) else None
+    state.plan = (req.resume.interrupt.plan if req.resume else None) or carried_plan
     # A skill an earlier turn loaded is carried in whole (below): it is neither listed to load nor loadable again.
     loadable = [s for s in req.settings.skills if not any(skillset.same(s, e) for e in req.carried_skills)]
     if (load_grant := skillset.grant(loadable)) is not None:
@@ -919,7 +929,8 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
         if skill is not None and skill.loading == "on_match" and skill not in state.loaded:
             how = "picked" if entry.get("how") == "picked" else "carried"
             state.loaded.append(skill)
-            state.loads.append(skillset.loaded_entry(skill, str(entry.get("matched") or EARLIER), entry.get("inputs")))
+            inputs = {k: str(v) for k, v in json_object(entry.get("inputs")).items()}
+            state.loads.append(skillset.loaded_entry(skill, str(entry.get("matched") or EARLIER), inputs))
             state.hows.append(how)
             (picked if how == "picked" else carried).append(skill)
             restored += 1
@@ -932,7 +943,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
     # Filled once the turn's rules are known; a turn that ends before then checked none.
     checked: list[Guardrail] = []
 
-    def ref(g: Guardrail) -> dict[str, Any]:
+    def ref(g: Guardrail) -> GuardrailRef:
         return {"guardrailId": g.guardrail_id, "version": g.version, "name": g.name}
 
     def finish(status: Literal["completed", "interrupted", "failed"], stop: str, **extra: Any) -> TurnFinished:
@@ -1012,7 +1023,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             results = DeferredToolResults(approvals={call_id: decision})
             system_prompt, user_prompt = "\n\n".join(f.text for f in req.settings.instructions if f.stable), None
             system_prompt = _with_earlier(
-                _with_skills(system_prompt, loadable), carried, req.earlier_reads, req.carried_plan, picked
+                _with_skills(system_prompt, loadable), carried, req.earlier_reads, carried_plan, picked
             )
         else:
             # Attached files' pages come first: they are what the person asked about, numbered before knowledge.
@@ -1043,7 +1054,7 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             digest = ctx.digest
             history, results, system_prompt, user_prompt = ctx.history, None, ctx.system_prompt, ctx.user_prompt
             system_prompt = _with_earlier(
-                _with_skills(system_prompt, loadable), carried, req.earlier_reads, req.carried_plan, picked
+                _with_skills(system_prompt, loadable), carried, req.earlier_reads, carried_plan, picked
             )
     except UnknownVariableError as e:
         yield finish("failed", "error", error=str(e))
@@ -1266,8 +1277,8 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             else:
                 state.text = message
 
-    fired: dict[str, Any] | None = None
-    noted: dict[str, Any] | None = None
+    fired: GuardrailFired | None = None
+    noted: GuardrailFired | None = None
     # Skills loaded during the reply add their guardrails to the check of the answer.
     always_count = sum(1 for s in req.settings.skills if s.loading == "always")
     for s in state.loaded[always_count:]:
@@ -1330,14 +1341,13 @@ async def _turn(req: TurnRequest, ports: KernelPorts) -> AsyncIterator[KernelEve
             yield finish("completed", "guardrail", guardrail=fired)
             return
 
-    structured: dict[str, Any] = {"output": output} if req.output_schema is not None else {}
-    if noted is not None:
-        structured["guardrail"] = noted
+    structured = {"output": output} if req.output_schema is not None else {}
     done = finish(
         "completed",
         "final",
         no_answer=withheld_by_base or bool(asked and req.user_turn and not passages and not state.order),
         **structured,
+        **({"guardrail": noted} if noted is not None else {}),
     )
     if done.result.citations:
         yield CitationsReady(done.result.citations)

@@ -53,7 +53,7 @@ async def test_run_again_starts_a_set_aside_email_once_for_whoever_may_start_the
     rt: Any = c._transport.app.state.runtime  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue, reportPrivateUsage, reportUnknownMemberType]
     rt.start_files = files_client(Files())
     row = await live_intake(engine, TENANT)
-    event_id = await set_aside(engine, str(row["workflow_id"]))
+    event_id = await set_aside(engine, row.workflow_id)
     url = f"/v1/runs/set-aside-emails/{event_id}/run"
     assert (await c.post(url, headers=VIEWER)).status_code == 403
     assert (await c.post(url, headers=OTHER_REVIEWER)).status_code == 404, "another team's email is not found"

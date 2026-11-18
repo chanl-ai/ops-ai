@@ -15,9 +15,11 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import NotRequired, TypedDict
 
+from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, TooLarge, Unprocessable, ValidationFailed
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
 from ops_service_kit.public_address import AddressRefused
 from ops_signin.dns import TxtResolver, record_value
@@ -28,6 +30,7 @@ from .sso import saml_addresses
 from .store.members import Actor
 from .store.signin import (
     PASSWORD,
+    PROVIDER_CONFIG,
     SIGNIN_ROLES,
     DomainListedError,
     DomainTakenError,
@@ -42,6 +45,105 @@ from .teams import Members
 
 # The membership roles a first SSO sign-in may give; admin is never one.
 JIT_ROLES = SIGNIN_ROLES
+
+
+# The replies below are what the routes send as they are (`ok()` writes the dict), so each key is in reply order.
+class MetadataCertificateReply(TypedDict):
+    fingerprint: str
+    notBefore: str
+    notAfter: str
+
+
+class MetadataReply(TypedDict):
+    idpEntityId: str
+    ssoUrl: str
+    certificates: list[MetadataCertificateReply]
+
+
+class CertificateReply(TypedDict):
+    fingerprint: str
+    notBefore: str
+    notAfter: str
+    source: str
+    addedAt: str
+    state: str
+
+
+class SamlReply(TypedDict):
+    idpEntityId: str | None
+    ssoUrl: str | None
+    certificate: str | None
+    certificates: list[CertificateReply]
+    metadataUrl: str | None
+    metadataReadAt: str | None
+    metadataError: str | None
+    emailAttribute: str | None
+    nameAttribute: str | None
+    signRequests: bool
+    requireEncryption: bool
+    tiles: bool
+    spEntityId: str | None
+    acsUrl: str | None
+    spMetadataUrl: str | None
+    signOnUrl: str | None
+
+
+class OidcReply(TypedDict):
+    issuer: str | None
+    clientId: str | None
+    clientSecretRef: str | None
+    scopes: list[str] | None
+
+
+class TxtRecordReply(TypedDict):
+    name: str
+    value: str
+
+
+class DomainCheckReply(TypedDict):
+    domain: str
+    verifiedAt: str | None
+    record: TxtRecordReply
+
+
+class JitReply(TypedDict):
+    team: str | None
+    role: str
+
+
+class GroupRuleReply(TypedDict):
+    group: str
+    team: str
+    role: str
+
+
+class GroupsReply(TypedDict):
+    # Absent when the provider has rules but no stored group settings.
+    source: NotRequired[str | None]
+    # Null only from a stored null, which reads as keep.
+    onMissing: str | None
+    map: list[GroupRuleReply]
+
+
+class ProviderReply(TypedDict):
+    id: str
+    kind: str
+    label: str
+    enabled: bool
+    domains: list[str]
+    verification: list[DomainCheckReply]
+    oidc: OidcReply | None
+    saml: SamlReply | None
+    jit: JitReply | None
+    groups: GroupsReply | None
+
+
+class SecretReply(TypedDict):
+    name: str
+    version: int
+    createdBy: str
+    createdAt: str
+    rotatedAt: str | None
 
 
 def _iso(t: datetime) -> str:
@@ -71,7 +173,7 @@ def trusted(cert: MetadataCertificate, source: str) -> TrustedCertificate:
     )
 
 
-def metadata_out(m: IdpMetadata) -> dict[str, Any]:
+def metadata_out(m: IdpMetadata) -> MetadataReply:
     return {
         "idpEntityId": m.entity_id,
         "ssoUrl": m.sso_url,
@@ -82,10 +184,10 @@ def metadata_out(m: IdpMetadata) -> dict[str, Any]:
     }
 
 
-def _saml_out(p: Provider, public_url: str | None, console_url: str | None) -> dict[str, Any]:
+def _saml_out(p: Provider, public_url: str | None, console_url: str | None) -> SamlReply:
     c = p.config
     now = datetime.now(UTC)
-    certs = [
+    certs: list[CertificateReply] = [
         {
             "fingerprint": x.fingerprint,
             "notBefore": x.not_before,
@@ -124,7 +226,7 @@ def _saml_out(p: Provider, public_url: str | None, console_url: str | None) -> d
     }
 
 
-def provider_out(p: Provider, public_url: str | None = None, console_url: str | None = None) -> dict[str, Any]:
+def provider_out(p: Provider, public_url: str | None = None, console_url: str | None = None) -> ProviderReply:
     c = p.config
     return {
         "id": p.id,
@@ -160,8 +262,15 @@ def provider_out(p: Provider, public_url: str | None = None, console_url: str | 
     }
 
 
-def _secret_out(r: SecretMeta) -> dict[str, Any]:
-    return r.model_dump(by_alias=True)
+def _secret_out(r: SecretMeta) -> SecretReply:
+    # The model's fields by alias, in its field order: the bytes `model_dump(by_alias=True)` would send.
+    return {
+        "name": r.name,
+        "version": r.version,
+        "createdBy": r.created_by,
+        "createdAt": r.created_at,
+        "rotatedAt": r.rotated_at,
+    }
 
 
 @dataclass
@@ -196,8 +305,12 @@ class ProviderMetadata:
         the entity id already saved: a hijacked metadata URL cannot add a signer for another entity. A failed read
         keeps every certificate already trusted and is shown on the provider. Returns the certificates added."""
         at = _iso(datetime.now(UTC))
+        url = p.config.get("metadataUrl")
+        if url is None:
+            # Callers refresh only a provider with a metadata URL; one without is their mistake, not a failed read.
+            raise KeyError("metadataUrl")
         try:
-            m = await self.read(str(p.config["metadataUrl"]), None)
+            m = await self.read(url, None)
         except (Unprocessable, TooLarge) as e:
             await self.store.metadata_read(p, at=at, error=str(e))
             return []
@@ -239,12 +352,12 @@ class SignInSettings:
         ):
             await self.break_glass.guard_last_provider(before.tenant_id)
 
-    async def read_metadata(self, actor: Actor, *, url: str | None, xml: str | None) -> dict[str, Any]:
+    async def read_metadata(self, actor: Actor, *, url: str | None, xml: str | None) -> MetadataReply:
         """What a provider's metadata says, for the admin to check before saving; saves nothing."""
         await self.members.require_admin(actor, "settings", "manage")
         return metadata_out(await self._reader().read(url, xml))
 
-    async def refresh(self, actor: Actor, provider_id: str) -> dict[str, Any]:
+    async def refresh(self, actor: Actor, provider_id: str) -> ProviderReply:
         """Reads the provider's metadata URL now, as the daily watch does."""
         await self.members.require_admin(actor, "settings", "manage")
         p = await self.store.provider(actor.tenant_id, provider_id)
@@ -259,10 +372,10 @@ class SignInSettings:
     def _reader(self) -> ProviderMetadata:
         return self.metadata or ProviderMetadata(self.store, None)
 
-    def _out(self, p: Provider) -> dict[str, Any]:
+    def _out(self, p: Provider) -> ProviderReply:
         return provider_out(p, self.public_url, self.console_url)
 
-    async def list(self, actor: Actor) -> list[dict[str, Any]]:
+    async def list(self, actor: Actor) -> list[ProviderReply]:
         await self.members.require_admin(actor, "settings", "view")
         return [self._out(p) for p in await self.store.providers(actor.tenant_id)]
 
@@ -271,11 +384,11 @@ class SignInSettings:
         await self.members.require_admin(actor, "settings", "view")
         return sorted(await self.secrets.names(actor.tenant_id))
 
-    async def secrets_listed(self, actor: Actor) -> list[dict[str, Any]]:
+    async def secrets_listed(self, actor: Actor) -> list[SecretReply]:
         await self.members.require_admin(actor, "settings", "view")
         return [_secret_out(r) for r in await self.secrets.listed(actor.tenant_id)]
 
-    async def save_secret(self, actor: Actor, name: str, value: str) -> dict[str, Any]:
+    async def save_secret(self, actor: Actor, name: str, value: str) -> SecretReply:
         """Creates or replaces a secret a provider names; the value is sealed and never returned."""
         await self.members.require_admin(actor, "settings", "manage")
         saved = await self.secrets.save(actor.tenant_id, name, value, by=actor.user_id, request_id=actor.request_id)
@@ -298,7 +411,7 @@ class SignInSettings:
         if not await self.secrets.delete(actor.tenant_id, name, by=actor.user_id, request_id=actor.request_id):
             raise NotFound("sign-in secret")
 
-    async def verify_domain(self, actor: Actor, domain: str) -> dict[str, Any]:
+    async def verify_domain(self, actor: Actor, domain: str) -> ProviderReply:
         """Checks the claim's TXT record and marks it verified; 422 `domain_unverified` with what DNS held when the
         record is absent, 409 `domain_taken` when another workspace verified the domain first."""
         await self.members.require_admin(actor, "settings", "manage")
@@ -330,26 +443,29 @@ class SignInSettings:
             raise NotFound("sign-in provider")
         return self._out(saved)
 
-    async def save(self, actor: Actor, provider_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    async def save(self, actor: Actor, provider_id: str, body: Json) -> ProviderReply:
         await self.members.require_admin(actor, "settings", "manage")
         kind = str(body["kind"])
         config = self._config(kind, body, await self.secrets.names(actor.tenant_id))
         certificates = await self._certificates(config) if kind == "saml" else None
-        listed: list[Any] = body.get("domains") or []
-        domains = [str(d).strip().lower() for d in listed]
+        domains = [str(d).strip().lower() for d in narrow.a_list(body.get("domains") or [], "domains")]
         if kind == PASSWORD and domains:
             raise ValidationFailed("A password provider takes no domains.", code="domains_not_allowed")
-        jit = body.get("jit")
+        given_jit = body.get("jit")
+        jit = narrow.an_object(given_jit, "jit") if given_jit else None
         team, role = (jit.get("team"), str(jit["role"])) if jit else (None, None)
         if role is not None:
             if kind == PASSWORD:
                 raise ValidationFailed("Only a company sign-in creates people.", code="jit_not_allowed")
             if role not in JIT_ROLES:
                 raise ValidationFailed(f"A first sign-in may give {', '.join(JIT_ROLES)}.", code="jit_role")
-        groups = body.get("groups")
+        given_groups = body.get("groups")
+        groups = narrow.an_object(given_groups, "groups") if given_groups else None
         if groups and kind == PASSWORD:
             raise ValidationFailed("Only a company sign-in carries groups.", code="groups_not_allowed")
-        rules: list[dict[str, Any]] = groups["map"] if groups else []
+        rules = (
+            [narrow.an_object(r, "group rule") for r in narrow.a_list(groups["map"], "groups.map")] if groups else []
+        )
         if any(str(r["role"]) not in JIT_ROLES for r in rules):
             raise ValidationFailed(f"A group may give {', '.join(JIT_ROLES)}.", code="group_role")
         # Each team this provider sends people to adds members to it, so each takes that team's own right to add them.
@@ -379,7 +495,9 @@ class SignInSettings:
             kind=kind,
             label=str(body["label"]),
             enabled=bool(body.get("enabled", True)),
-            config=config,
+            # Read back through the stored shape: what is saved has the types every later read expects.
+            config=PROVIDER_CONFIG(config),
+            stored=config,
             jit_team_id=str(team) if team else None,
             jit_role=role,
             domains=domains,
@@ -414,11 +532,12 @@ class SignInSettings:
         if not gone:
             raise NotFound("sign-in provider")
 
-    async def _certificates(self, config: dict[str, Any]) -> list[TrustedCertificate]:
+    async def _certificates(self, config: Json) -> list[TrustedCertificate]:
         """The certificates a SAML save trusts: those typed or uploaded, and those its metadata URL lists, read now
         and only for the entity id being saved. Refused when none is within its dates. The list leaves `config`, which
         keeps the newest one only for a console that reads one certificate."""
-        typed = [str(x) for x in [config.pop("certificate", None), *config.pop("certificates", [])] if x]
+        first = config.pop("certificate", None)
+        typed = [str(x) for x in [first, *narrow.a_list(config.pop("certificates", []), "certificates")] if x]
         certs = [trusted(certificate_of(pem), "manual") for pem in typed]
         if config.get("metadataUrl"):
             m = await self._reader().read(str(config["metadataUrl"]), None)
@@ -440,11 +559,12 @@ class SignInSettings:
         config["certificate"] = max(live, key=lambda c: c.not_after).pem
         return certs
 
-    def _config(self, kind: str, body: dict[str, Any], secret_names: set[str]) -> dict[str, Any]:
+    def _config(self, kind: str, body: Json, secret_names: set[str]) -> Json:
         oidc, saml = body.get("oidc"), body.get("saml")
         if kind == "oidc":
             if not oidc or saml:
                 raise ValidationFailed("An OIDC provider takes the oidc settings only.", code="config_kind")
+            oidc = narrow.an_object(oidc, "oidc")
             ref = oidc.get("clientSecretRef")
             if ref and ref not in secret_names:
                 raise ValidationFailed(f"This workspace saved no sign-in secret named {ref}.", code="secret_missing")
@@ -452,7 +572,8 @@ class SignInSettings:
         if kind == "saml":
             if not saml or oidc:
                 raise ValidationFailed("A SAML provider takes the saml settings only.", code="config_kind")
-            extra: list[Any] = saml.get("certificates") or []
+            saml = narrow.an_object(saml, "saml")
+            extra = narrow.a_list(saml.get("certificates") or [], "certificates")
             listed: list[str] = [str(x) for x in [saml.get("certificate"), *extra] if x]
             if not listed and not saml.get("metadataUrl"):
                 raise ValidationFailed("Give the provider's metadata URL or its certificate.", code="certificate")

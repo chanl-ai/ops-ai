@@ -16,17 +16,20 @@ from typing import Any, ClassVar
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from ops_service_kit.errors import Conflict, NotFound
+from ops_service_kit.errors import Conflict
+from ops_service_kit.http import Json, JsonList, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
 from ops_store.listing import LISTED
+from ops_store.rows import rows as read_rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 from ops_store.search import contains
 from ops_store.team_scope import any_team, team_visible
 
 from .agent_registry import digest_of
 from .base import metadata
-from .tenancy import OWNER, RuntimeStore, current_tenant
+from .tenancy import OWNER, current_tenant
+from .versioned import VersionedRegistry
 
 registry_skills = sa.Table(
     "registry_skills",
@@ -101,7 +104,7 @@ LABELS = {
 }
 
 
-def changes_between(old: dict[str, Any], new: dict[str, Any]) -> list[str]:
+def changes_between(old: Json, new: Json) -> list[str]:
     return [f"Changed {label}" for k, label in LABELS.items() if old.get(k) != new.get(k)]
 
 
@@ -115,19 +118,54 @@ def tokens_of(content: dict[str, Any]) -> int:
     return max(1, (len(text) + longest + 3) // 4)
 
 
-class SkillRegistry(RuntimeStore):
+class SkillRow(Out):
+    """A skill's row: its slug, owning team, newest and newest published version, and why it was deprecated."""
+
+    tenant_id: str
+    id: str
+    slug: str
+    owner_team: str
+    team_id: str
+    origin: str
+    version: int
+    published_version: int | None
+    deprecated_reason: str | None
+    created_at: str
+    updated_at: str
+    updated_by: str
+    created_by: str
+    published_loading: str | None
+
+
+class SkillVersionRow(Out):
+    """One saved version of a skill; `content` is the skill's stored document."""
+
+    tenant_id: str
+    skill_id: str
+    version: int
+    content: Json
+    digest: str
+    tokens: int
+    note: str
+    changes: JsonList
+    saved_at: str
+    saved_by: str
+    published_at: str | None
+    published_by: str | None
+    review_id: str | None
+
+
+class SkillRegistry(VersionedRegistry[SkillRow, SkillVersionRow]):
     # A slug and a version number are unique keys (CAS); a save writes its version and moves the skill in one
     # transaction, as does a publish (TRANSACTION).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION})
-
-    async def rows(self) -> list[dict[str, Any]]:
-        async with self.tx() as c:
-            q = (
-                sa.select(registry_skills)
-                .where(team_visible(registry_skills))
-                .order_by(registry_skills.c.slug, registry_skills.c.id)
-            )
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+    head = registry_skills
+    history = registry_skill_versions
+    subject = "skill_id"
+    noun = "Skill"
+    order = ("slug", "id")
+    head_row = SkillRow
+    version_row = SkillVersionRow
 
     async def attachable(
         self,
@@ -138,7 +176,7 @@ class SkillRegistry(RuntimeStore):
         *,
         ids: list[str] | None = None,
         loading: str | None = None,
-    ) -> list[dict[str, Any]]:
+    ) -> list[SkillRow]:
         """Published, live skills an agent does not hold, by slug (the name in URL form, which the search is turned
         into), searched and limited in the query; `ids` returns exactly those."""
         t = registry_skills.c
@@ -155,40 +193,14 @@ class SkillRegistry(RuntimeStore):
             )
         q = q.order_by(t.slug).offset(offset).limit(limit)
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await read_rows(c, q, SkillRow)
 
     async def owner_team(self, skill_id: str, conn: AsyncConnection | None = None) -> str | None:
         """The team that owns it, whoever is acting; None when there is none. Only for deciding a refusal by the
         owning team, never for showing the record."""
         return (await self.owner_teams(conn, registry_skills, {skill_id}, OWNER)).get(skill_id)
 
-    async def find(self, skill_id: str, c: AsyncConnection | None = None) -> dict[str, Any] | None:
-        q = sa.select(registry_skills).where(registry_skills.c.id == skill_id, team_visible(registry_skills))
-        if c is None:
-            async with self.tx() as conn:
-                r = (await conn.execute(q)).mappings().first()
-        else:
-            r = (await c.execute(q)).mappings().first()
-        return dict(r) if r else None
-
-    async def row(self, skill_id: str, c: AsyncConnection | None = None) -> dict[str, Any]:
-        r = await self.find(skill_id, c)
-        if r is None:
-            raise NotFound(f"Skill {skill_id}")
-        return r
-
-    async def versions(self, skill_id: str) -> list[dict[str, Any]]:
-        q = (
-            sa.select(registry_skill_versions)
-            .where(registry_skill_versions.c.skill_id == skill_id, team_visible(registry_skill_versions))
-            .order_by(registry_skill_versions.c.version.desc())
-        )
-        async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
-
-    async def published_in(
-        self, team: str, ids: list[str] | None = None
-    ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    async def published_in(self, team: str, ids: list[str] | None = None) -> list[tuple[SkillRow, SkillVersionRow]]:
         """(row, published version) of each published, live skill of `team`, or of those of `ids`: two queries
         whatever the count, for a chat send that offers the team's skills."""
         t, v = registry_skills.c, registry_skill_versions.c
@@ -206,23 +218,13 @@ class SkillRegistry(RuntimeStore):
             .where(live, team_visible(registry_skill_versions))
         )
         async with self.tx() as c:
-            rows = [dict(r) for r in (await c.execute(rows_q)).mappings()]
-            versions = {str(r["skill_id"]): dict(r) for r in (await c.execute(versions_q)).mappings()}
-        return [(r, versions[r["id"]]) for r in rows if r["id"] in versions]
-
-    async def version(self, skill_id: str, version: int) -> dict[str, Any] | None:
-        q = sa.select(registry_skill_versions).where(
-            registry_skill_versions.c.skill_id == skill_id,
-            registry_skill_versions.c.version == version,
-            team_visible(registry_skill_versions),
-        )
-        async with self.tx() as c:
-            r = (await c.execute(q)).mappings().first()
-        return dict(r) if r else None
+            rows = await read_rows(c, rows_q, SkillRow)
+            versions = {r.skill_id: r for r in await read_rows(c, versions_q, SkillVersionRow)}
+        return [(r, versions[r.id]) for r in rows if r.id in versions]
 
     async def create(
         self,
-        content: dict[str, Any],
+        content: Json,
         *,
         owner_team: str,
         team_id: str,
@@ -279,26 +281,13 @@ class SkillRegistry(RuntimeStore):
             )
         return sid
 
-    async def save_draft(self, skill_id: str, content: dict[str, Any], *, by: str, note: str) -> int:
+    async def save_draft(self, skill_id: str, content: Json, *, by: str, note: str) -> int:
         """Edits the newest version while it is an unpublished draft, or opens the next version on top of a published
         one. Published versions never change."""
         at = now_iso()
         async with self.tx() as c:
-            row = await self.row(skill_id, c)
-            n = int(row["version"])
-            newest = (
-                (
-                    await c.execute(
-                        sa.select(registry_skill_versions).where(
-                            registry_skill_versions.c.skill_id == skill_id,
-                            registry_skill_versions.c.version == n,
-                            team_visible(registry_skill_versions),
-                        )
-                    )
-                )
-                .mappings()
-                .one()
-            )
+            n = (await self.row(skill_id, c)).version
+            newest = await self.newest(c, skill_id, n)
             values = {
                 "content": content,
                 "digest": digest_of(content),
@@ -307,11 +296,11 @@ class SkillRegistry(RuntimeStore):
                 "saved_at": at,
                 "saved_by": by,
             }
-            if newest["published_at"] is None:
+            if newest.published_at is None:
                 await c.execute(
                     registry_skill_versions.update()
                     .where(registry_skill_versions.c.skill_id == skill_id, registry_skill_versions.c.version == n)
-                    .values(**values, changes=changes_between(newest["content"], content) or ["No change"])
+                    .values(**values, changes=changes_between(newest.content, content) or ["No change"])
                 )
             else:
                 n += 1
@@ -319,7 +308,7 @@ class SkillRegistry(RuntimeStore):
                     registry_skill_versions.insert().values(
                         skill_id=skill_id,
                         version=n,
-                        changes=changes_between(newest["content"], content),
+                        changes=changes_between(newest.content, content),
                         **values,
                     )
                 )

@@ -11,9 +11,8 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Mapping
 from datetime import datetime
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, Literal, TypedDict
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
@@ -22,8 +21,9 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from ops_documents.store.columns import JSON_TEXT
 from ops_documents.store.document_types import EXAMPLES_KEPT_PER_FIELD, document_type_examples
 from ops_documents.store.metadata import RECOVER_PENDING, ROLE, SYSTEM_ROLE, metadata
-from ops_service_kit.http import Out
+from ops_service_kit.http import Json, JsonValue, Out
 from ops_service_kit.listing import ListParams
+from ops_service_kit.narrow import a_list, an_object
 from ops_store import isolation
 from ops_store.listing import ListPage, list_page
 from ops_store.outbox import add, outbox_table
@@ -112,17 +112,76 @@ extraction_corrections = sa.Table(
 )
 
 
-def file_read(
-    file_id: str, extraction_id: str, doc_type: Mapping[str, Any], answer: Mapping[str, Any], *, name: str | None = None
-) -> dict[str, Any]:
+class NewExtraction(TypedDict):
+    """A new extraction's row, its request as JSON (written as text)."""
+
+    id: str
+    tenant_id: str
+    team: str
+    file_id: str
+    file_digest: str
+    request: Json
+    schema_digest: str
+    alias: str
+    status: Status
+    attempts: int
+    key_hash: str
+    request_hash: str
+    type_id: JsonValue
+    asked_by: str
+    asked_at: datetime
+
+
+class NewCorrection(TypedDict):
+    """A checker's correction, the value it replaced beside the one put in its place."""
+
+    tenant_id: str
+    extraction_id: str
+    field: str
+    record: int | None
+    original: JsonValue
+    original_confidence: float
+    corrected: JsonValue
+    corrected_by: str
+    corrected_at: datetime
+
+
+class NewExample(TypedDict):
+    """The example a correction teaches its document type."""
+
+    tenant_id: str
+    id: str
+    team: str
+    type_id: str
+    field: str
+    line: JsonValue
+    value: JsonValue
+    extraction_id: str
+    record: int
+    corrected_by: str
+    created_at: datetime
+
+
+class CorrectedEvent(TypedDict):
+    """extraction.corrected as the outbox writes it."""
+
+    tenant_id: str
+    team_id: str
+    name: str
+    key: str
+    payload: Json
+    actor: str
+
+
+def file_read(file_id: str, extraction_id: str, doc_type: Json, answer: Json, *, name: str | None = None) -> Json:
     """What an event tells the workflow that saves a read on its file (Save data on file's `read`): the document type,
     its name, how it was read and the fields waiting for a person. One shape for extraction.read and
     extraction.corrected, so both saves record the same thing."""
-    payload: dict[str, Any] = {
+    payload: Json = {
         "fileId": file_id,
         "extractionId": extraction_id,
         "documentType": dict(doc_type),
-        "needsReview": list(cast(list[Any], answer.get("needsReview") or [])),
+        "needsReview": list(a_list(answer.get("needsReview") or [], "needsReview")),
     }
     for key in ("path", "templateId", "classification"):
         if answer.get(key):
@@ -140,11 +199,11 @@ class ExtractionRow(Out):
     team: str
     file_id: str
     file_digest: str
-    request: Annotated[dict[str, Any], JSON_TEXT]
+    request: Annotated[Json, JSON_TEXT]
     alias: str
     status: Status
     outcome: str | None
-    result: Annotated[dict[str, Any] | None, JSON_TEXT]
+    result: Annotated[Json | None, JSON_TEXT]
     error_code: str | None
     error: str | None
     attempts: int
@@ -180,7 +239,7 @@ class ExtractionsStore(Store):
     role = ROLE
     system_role = SYSTEM_ROLE
 
-    async def insert(self, values: Mapping[str, Any]) -> ExtractionRow:
+    async def insert(self, values: NewExtraction) -> ExtractionRow:
         """The new row, or the row that already holds its Idempotency-Key (the caller compares request hashes)."""
         row = {**values, "request": json.dumps(values["request"], sort_keys=True)}
         async with self.tx() as c:
@@ -194,7 +253,7 @@ class ExtractionsStore(Store):
                 if held is None:
                     raise
                 return held
-        found = await self.get(str(values["id"]))
+        found = await self.get(values["id"])
         assert found is not None
         return found
 
@@ -246,38 +305,38 @@ class ExtractionsStore(Store):
         status: Status,
         at: datetime,
         outcome: str | None = None,
-        result: dict[str, Any] | None = None,
+        result: Json | None = None,
         error_code: str | None = None,
         error: str | None = None,
         tokens: tuple[int, int] | None = None,
         fingerprint: str | None = None,
     ) -> None:
         tenant = isolation.tenant()
-        values: dict[str, Any] = {
-            "status": status,
-            "outcome": outcome,
-            "result": json.dumps(result) if result is not None else None,
-            "error_code": error_code,
-            "error": error,
-            "finished_at": at,
-        }
-        if tokens is not None:
-            values |= {"input_tokens": tokens[0], "output_tokens": tokens[1]}
-        if fingerprint is not None:
-            values["layout_fingerprint"] = fingerprint
-        async with self.tx() as c:
-            await c.execute(
-                sa.update(extractions)
-                .where(extractions.c.tenant_id == tenant, extractions.c.id == extraction_id)
-                .values(**values)
+        change = (
+            sa.update(extractions)
+            .where(extractions.c.tenant_id == tenant, extractions.c.id == extraction_id)
+            .values(
+                status=status,
+                outcome=outcome,
+                result=json.dumps(result) if result is not None else None,
+                error_code=error_code,
+                error=error,
+                finished_at=at,
             )
+        )
+        if tokens is not None:
+            change = change.values(input_tokens=tokens[0], output_tokens=tokens[1])
+        if fingerprint is not None:
+            change = change.values(layout_fingerprint=fingerprint)
+        async with self.tx() as c:
+            await c.execute(change)
             e = extractions
             q = sa.select(e.c.team, e.c.file_id, e.c.type_id, e.c.asked_by, e.c.request).where(
                 e.c.tenant_id == tenant, e.c.id == extraction_id, team_visible(e)
             )
             row = (await c.execute(q)).first()
             if row is not None:
-                review = cast(list[Any], (result or {}).get("needsReview") or [])
+                review = a_list((result or {}).get("needsReview") or [], "needsReview")
                 payload = {
                     "extractionId": extraction_id,
                     "fileId": row.file_id,
@@ -291,9 +350,9 @@ class ExtractionsStore(Store):
                     c, service_outbox, tenant_id=tenant, team_id=row.team, name=FINISHED_EVENT,
                     key=extraction_id, payload=payload, actor=row.asked_by,
                 )  # fmt: skip
-                doc_type = cast(dict[str, Any], json.loads(row.request)).get("documentType")
+                doc_type = an_object(json.loads(row.request), "a stored request").get("documentType")
                 if status == "done" and outcome in ("ok", "review") and isinstance(doc_type, dict):
-                    read = file_read(row.file_id, extraction_id, cast(dict[str, Any], doc_type), result or {})
+                    read = file_read(row.file_id, extraction_id, doc_type, result or {})
                     await add(
                         c, service_outbox, tenant_id=tenant, team_id=row.team, name=READ_EVENT,
                         key=extraction_id, payload=read, actor=row.asked_by,
@@ -371,11 +430,11 @@ class ExtractionsStore(Store):
 
     async def correct(
         self,
-        values: Mapping[str, Any],
-        result: dict[str, Any],
+        values: NewCorrection,
+        result: Json,
         *,
-        event: Mapping[str, Any] | None = None,
-        example: Mapping[str, Any] | None = None,
+        event: CorrectedEvent | None = None,
+        example: NewExample | None = None,
     ) -> None:
         """Records a correction and writes the extraction's answer with the corrected value, its event when given, and
         the example it teaches its document type, in one transaction."""
@@ -464,7 +523,7 @@ class ExtractionsStore(Store):
         return len(ids)
 
 
-async def _keep_example(c: AsyncConnection, example: Mapping[str, Any]) -> None:
+async def _keep_example(c: AsyncConnection, example: NewExample) -> None:
     """The example a correction teaches: it replaces the one the same read's field taught before, and adds
     nothing when another read of the type already taught the same field, line and value."""
     e = document_type_examples.c

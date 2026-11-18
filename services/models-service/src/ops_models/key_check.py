@@ -12,11 +12,12 @@ from __future__ import annotations
 import ipaddress
 import json
 import re
-from typing import Any, Literal, cast
+from typing import Literal
 from urllib.parse import urlsplit
 
 import httpx
 
+from ops_service_kit.narrow import a_list, an_object, json_object
 from ops_service_kit.public_address import AddressRefused, FetchFailed, PublicFetch
 
 Kind = Literal["openai", "azure-openai", "anthropic"]
@@ -102,10 +103,14 @@ async def listed_models(
     except FetchFailed as e:
         raise KeyRefused(_reason(e.status)) from e
     try:
-        answer: Any = json.loads(body) or {}
-        rows = cast(list[dict[str, Any]], answer.get("data") or [])
-    except (ValueError, AttributeError) as e:
+        loaded: object = json.loads(body) or {}
+    except ValueError as e:
         raise KeyRefused("The provider's answer was not a list of models.") from e
+    answer = json_object(loaded)
+    if not isinstance(loaded, dict):
+        raise KeyRefused("The provider's answer was not a list of models.")
+    listed = answer.get("data")
+    rows = [an_object(m, "model") for m in (a_list(listed, "data") if listed else [])]
     listed = [
         {"id": str(m["id"]), **({"model": str(m["model"])} if m.get("model") else {})} for m in rows if m.get("id")
     ]

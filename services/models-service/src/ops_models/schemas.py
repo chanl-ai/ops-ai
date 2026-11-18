@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from ops_service_kit.http import ExternalOut, In, ListResult, Out, Passthrough
+from ops_service_kit.http import ExternalOut, In, Json, ListResult, Out, Passthrough
 
 
 class Health(Out):
@@ -177,6 +177,33 @@ class ChatCompletion(ExternalOut):
     model: str
     choices: list[ChatChoice]
     usage: ChatUsage
+
+
+class ChunkDelta(ExternalOut):
+    """What one stream chunk adds to the reply. Dumped with `exclude_unset`, so a delta carries only the keys it was
+    built with (`{}` on the finishing chunk)."""
+
+    role: Literal["assistant"] | None = None
+    content: str | None = None
+    # The calls as the model wrote them, each with its `index` in the stream.
+    tool_calls: list[Json] | None = None
+
+
+class ChunkChoice(ExternalOut):
+    index: int
+    delta: ChunkDelta
+    # Always set, `null` until the last chunk: OpenAI clients read the key on every chunk.
+    finish_reason: Literal["stop", "tool_calls"] | None
+
+
+class ChatChunk(ExternalOut):
+    """One `chat.completion.chunk` this service writes itself (the scripted provider). A real provider's chunks are
+    passed on as parsed, never through this model, so a field it adds reaches the client unchanged."""
+
+    object: Literal["chat.completion.chunk"]
+    choices: list[ChunkChoice]
+    # Only on the last chunk, which `stream_options.include_usage` asks for.
+    usage: ChatUsage | None = None
 
 
 class EmbeddingsRequest(In):

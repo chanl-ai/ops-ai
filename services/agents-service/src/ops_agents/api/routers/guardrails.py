@@ -19,6 +19,7 @@ from ops_service_kit.http import Envelope, In, OptionsPage, options_page, option
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
 
+from ...store.guardrails import GuardrailRow
 from ..agent_registry import registry as agent_registry
 from ..agent_registry import require_owner_or_admin
 from ..auth import Principal, principal, reader_of, require_builder
@@ -100,8 +101,7 @@ async def guardrail_options(
     offset, window = options_window(None if ids else cursor, limit)
     rows = await guardrails(rt).pinnable(search, offset, window, ids)
     opts = [
-        {"id": r["id"], "label": r["name"], "hint": f"v{r['published_version']} · {r['owner']}", "disabled": None}
-        for r in rows
+        {"id": r.id, "label": r.name, "hint": f"v{r.published_version} · {r.owner}", "disabled": None} for r in rows
     ]
     return ok(options_page(opts, offset, limit))
 
@@ -111,11 +111,11 @@ async def get_guardrail(rt: Rt, _: Reader, __: Tx, guardrail_id: str) -> JSONRes
     return ok(await view(rt, guardrail_id))
 
 
-async def changeable(rt: Runtime, me: Principal, guardrail_id: str, action: str) -> dict[str, Any]:
+async def changeable(rt: Runtime, me: Principal, guardrail_id: str, action: str) -> GuardrailRow:
     """The guardrail's row once the caller may change it (auth.require_builder: the roles grid, in the team that owns
     it or, for one no team owns, the team the request acts in)."""
     row = await guardrails(rt).row(guardrail_id)
-    require_builder(me, area="guardrails", team_id=row["team_id"], action=action, what=f"guardrail {row['name']}")
+    require_builder(me, area="guardrails", team_id=row.team_id, action=action, what=f"guardrail {row.name}")
     return row
 
 
@@ -143,10 +143,10 @@ async def update_guardrail(rt: Rt, me: Me, _: Tx, guardrail_id: str, body: Guard
     the version they pin until a publish and a re-pin."""
     reg = guardrails(rt)
     row = await changeable(rt, me, guardrail_id, "edit")
-    newest = await reg.version(guardrail_id, int(row["version"]))
+    newest = await reg.version(guardrail_id, row.version)
     assert newest is not None
-    merged: dict[str, Any] = {**newest["config"], **body.model_dump(by_alias=True, exclude_none=True, exclude={"note"})}
-    await reg.save_draft(guardrail_id, check_config(row["kind"], merged), by=me.email, note=body.note)
+    merged: dict[str, Any] = {**newest.config, **body.model_dump(by_alias=True, exclude_none=True, exclude={"note"})}
+    await reg.save_draft(guardrail_id, check_config(row.kind, merged), by=me.email, note=body.note)
     return ok(await view(rt, guardrail_id))
 
 
@@ -157,13 +157,13 @@ async def request_guardrail_publish(rt: Rt, me: Me, guardrail_id: str, body: Gua
     writes."""
     reg = guardrails(rt)
     row = await changeable(rt, me, guardrail_id, "publish")
-    if body.version != row["version"] or row["published_version"] == body.version:
-        raise Conflict(f"v{body.version} is not the newest draft (v{row['version']}).", code="not_newest_draft")
+    if body.version != row.version or row.published_version == body.version:
+        raise Conflict(f"v{body.version} is not the newest draft (v{row.version}).", code="not_newest_draft")
     v = await reg.version(guardrail_id, body.version)
     assert v is not None
-    live = await reg.version(guardrail_id, int(row["published_version"])) if row["published_version"] else None
+    live = await reg.version(guardrail_id, row.published_version) if row.published_version else None
     decision = await review_needed(
-        rt, area="guardrails", team_id=row["team_id"], old=live["config"] if live else None, new=v["config"]
+        rt, area="guardrails", team_id=row.team_id, old=live.config if live else None, new=v.config
     )
     approved = not decision.review_required
     req = await agent_registry(rt).open_request(
@@ -174,9 +174,9 @@ async def request_guardrail_publish(rt: Rt, me: Me, guardrail_id: str, body: Gua
         by=me.email,
         body={
             "guardrailId": guardrail_id,
-            "name": row["name"],
-            "savedBy": v["saved_by"],
-            "config": v["config"],
+            "name": row.name,
+            "savedBy": v.saved_by,
+            "config": v.config,
             **decision.record(),
         },
         approved=approved,
@@ -209,10 +209,10 @@ async def delete_guardrail(rt: Rt, me: Me, _: Tx, guardrail_id: str) -> Response
     row = await guardrails(rt).row(guardrail_id)
     first = await guardrails(rt).version(guardrail_id, 1)
     require_owner_or_admin(
-        me, area="guardrails", team_id=row["team_id"], created_by=first["saved_by"] if first else "", what=row["name"]
+        me, area="guardrails", team_id=row.team_id, created_by=first.saved_by if first else "", what=row.name
     )
     if users := await pinned_by(rt, guardrail_id):
         raise Conflict(f"Pinned by {', '.join(users)}; unpin it first.", code="guardrail_pinned")
     await guardrails(rt).delete(guardrail_id)
-    log.info("guardrail_deleted", guardrail=guardrail_id, name=row["name"], by=me.email)
+    log.info("guardrail_deleted", guardrail=guardrail_id, name=row.name, by=me.email)
     return Response(status_code=204)

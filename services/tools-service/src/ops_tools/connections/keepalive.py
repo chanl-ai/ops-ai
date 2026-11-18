@@ -44,9 +44,9 @@ class SignInKeepalive:
         for tenant, team in await self.teams.teams():
             with isolation.scope(tenant, team):
                 for row in await self.store.idle_sign_ins(tenant, before):
-                    connection, person = str(row["connection_id"]), str(row["person_id"])
+                    connection, person = row.connection_id, row.person_id
                     try:
-                        if await self.auth.keep_alive(tenant, connection, person, int(row["rotations"]), actor=ACTOR):
+                        if await self.auth.keep_alive(tenant, connection, person, row.rotations, actor=ACTOR):
                             refreshed += 1
                     except Exception as e:  # one sign-in's failure never stops the pass
                         log.warning("sign_in_keepalive_failed", connection=connection, error=type(e).__name__)

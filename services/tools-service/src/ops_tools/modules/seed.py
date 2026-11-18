@@ -597,9 +597,9 @@ async def _seed_team(connections: ConnectionStore, row: dict[str, Any], now: dat
     """Moves a seeded connection nobody has changed (its first revision, written by the seed) to the team the seed now
     gives it; one a person changed is left where it is."""
     stored = await connections.get(str(row["tenant_id"]), str(row["id"]))
-    if stored is None or stored["team_id"] == row["team_id"]:
+    if stored is None or stored.team_id == row["team_id"]:
         return
-    if stored["revision"] == 1 and stored["created_by"] == row["created_by"]:
+    if stored.revision == 1 and stored.created_by == row["created_by"]:
         await connections.change(
             str(row["tenant_id"]), str(row["id"]), 1, {"team_id": row["team_id"]}, actor="dev seed", at=now
         )

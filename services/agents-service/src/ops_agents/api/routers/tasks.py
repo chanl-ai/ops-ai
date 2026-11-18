@@ -83,8 +83,8 @@ async def _opened(rt: Runtime, run_id: str) -> Literal["waiting", "starting"]:
     runs = RunStore(EngineTransactions(rt.db))
     deadline = asyncio.get_running_loop().time() + OPEN_WAIT_SECONDS
     while True:
-        run = await runs.get(run_id)
-        if run is not None and run["status"] == "waiting":
+        run = await runs.row(run_id)
+        if run is not None and run.status == "waiting":
             return "waiting"
         if asyncio.get_running_loop().time() >= deadline:
             return "starting"

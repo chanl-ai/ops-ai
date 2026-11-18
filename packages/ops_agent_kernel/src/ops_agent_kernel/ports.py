@@ -7,6 +7,8 @@ from typing import Any, Protocol
 
 from pydantic_ai.models import Model
 
+from ops_service_kit.http import Json
+
 from .tool_cache import ToolCaches
 from .types import Passage
 
@@ -26,9 +28,7 @@ class ToolOutcome:
 
 
 class ToolExecutor(Protocol):
-    async def execute(
-        self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
-    ) -> ToolOutcome:
+    async def execute(self, tool: str, arguments: Json, *, key: str, approval_token: str | None) -> ToolOutcome:
         """Runs one granted tool. `key` is the idempotency key; writes carry the approval token."""
         ...
 

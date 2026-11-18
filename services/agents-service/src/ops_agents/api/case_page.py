@@ -15,8 +15,9 @@ from ops_engine.store import RunStore
 from ops_service_kit.errors import Forbidden
 
 from ..case_fields import fields_view, specs_of
-from ..store.case_links import CaseLinks
+from ..store.case_links import CaseEmail, CaseLinks, RelatedCase
 from ..store.case_types import CaseTypeNotFound
+from ..store.cases import CaseRecord
 from ..store.engine import EngineTransactions
 from . import case_story
 from .actors import ActorReads, actor_reads, named_actors
@@ -49,12 +50,12 @@ def _clock(due: str, met_at: str | None, paused: str | None, now: datetime) -> d
     return {"state": "breached" if left < 0 else "running", "dueAt": due, "leftS": left, "metAt": None}
 
 
-def sla(row: dict[str, Any], now: datetime) -> dict[str, Any]:
-    done = row["status"] in ("resolved", "closed")
+def sla(row: CaseRecord, now: datetime) -> dict[str, Any]:
+    done = row.status in ("resolved", "closed")
     return {
-        "response": _clock(row["response_due_at"], row["responded_at"], row["paused_since"], now),
-        "resolution": _clock(row["resolution_due_at"], row["updated_at"] if done else None, row["paused_since"], now),
-        "pausedSince": row["paused_since"],
+        "response": _clock(row.response_due_at, row.responded_at, row.paused_since, now),
+        "resolution": _clock(row.resolution_due_at, row.updated_at if done else None, row.paused_since, now),
+        "pausedSince": row.paused_since,
     }
 
 
@@ -67,18 +68,18 @@ def _may(me: Principal, action: str, team: str, **kw: Any) -> bool:
 
 
 async def _type_fields(
-    rt: Runtime, row: dict[str, Any]
+    rt: Runtime, row: CaseRecord
 ) -> tuple[dict[str, Any] | None, list[dict[str, Any]], tuple[str, str] | None]:
     """The case's type, its fields in the type's order, and the type's deadline field as (key, label)."""
-    values = cast(dict[str, Any], row.get("fields") or {})
-    if not row.get("type_id"):
+    values = cast(dict[str, Any], row.fields or {})
+    if not row.type_id:
         return None, fields_view(None, values, set()), None
     try:
-        types = await seeded_case_types(rt.db, str(row["team_id"]))
-        n, record = await types.published(str(row["type_id"]), row.get("type_version"))
+        types = await seeded_case_types(rt.db, str(row.team_id))
+        n, record = await types.published(str(row.type_id), row.type_version)
     except CaseTypeNotFound:
         return None, fields_view(None, values, set()), None
-    kind = {"id": row["type_id"], "version": n, "name": record.get("name") or row["type_id"]}
+    kind = {"id": row.type_id, "version": n, "name": record.get("name") or row.type_id}
     specs = cast(list[dict[str, Any]], record.get("fields") or [])
     key = record.get("deadline")
     label = next((str(f.get("label") or key) for f in specs if f.get("key") == key), None) if key else None
@@ -109,11 +110,11 @@ def _end_of(value: Any) -> datetime | None:
     return at if at.tzinfo else at.replace(tzinfo=UTC)
 
 
-def timer(row: dict[str, Any], deadline: tuple[str, str] | None, resolution: dict[str, Any], now: datetime) -> Row:
+def timer(row: CaseRecord, deadline: tuple[str, str] | None, resolution: dict[str, Any], now: datetime) -> Row:
     """The case's one timer: its type's deadline field when it holds a date, labelled as the field is; met once
     the case is resolved or closed, breached past the date, never paused (a court date does not move while the bank
     waits on the customer). Otherwise the resolution clock."""
-    due = _end_of(cast(dict[str, Any], row.get("fields") or {}).get(deadline[0])) if deadline else None
+    due = _end_of(cast(dict[str, Any], row.fields or {}).get(deadline[0])) if deadline else None
     if deadline is None or due is None:
         return {
             "label": "Resolution",
@@ -121,7 +122,7 @@ def timer(row: dict[str, Any], deadline: tuple[str, str] | None, resolution: dic
             "state": resolution["state"],
             "leftS": resolution["leftS"],
         }
-    if row["status"] in ("resolved", "closed"):
+    if row.status in ("resolved", "closed"):
         return {"label": deadline[1], "dueAt": due.isoformat(), "state": "met", "leftS": None}
     left = int((due - now).total_seconds())
     return {
@@ -195,7 +196,7 @@ def _called_step(review: dict[str, Any]) -> str | None:
 async def failed_calls(rt: Runtime, runs: list[dict[str, Any]]) -> set[str]:
     """The step keys of the case's runs' calls that answered an error, read in one query for every run."""
     steps = await RunStore(EngineTransactions(rt.db)).steps_of([str(r["id"]) for r in runs])
-    return {str(s["key"]) for rows in steps.values() for s in rows if s["status"] == "error"}
+    return {s.key for rows in steps.values() for s in rows if s.status == "error"}
 
 
 def actions_of(reviews: list[dict[str, Any]], failed: set[str]) -> list[dict[str, Any]]:
@@ -227,7 +228,7 @@ def whats_left(
     waiting: list[dict[str, Any]],
     actions: list[dict[str, Any]],
     runs: list[dict[str, Any]],
-    row: dict[str, Any],
+    row: CaseRecord,
     *,
     team_name: str,
     due: str | None,
@@ -260,7 +261,7 @@ def whats_left(
         if a["status"] == "refused" and a["taskId"] not in open_tasks
     ]
     busy = any(str(r.get("status")) in IN_FLIGHT for r in runs)
-    resolvable = not items and not busy and row["status"] in UNRESOLVED and may_edit
+    resolvable = not items and not busy and row.status in UNRESOLVED and may_edit
     return {"items": items, "resolvable": resolvable}
 
 
@@ -275,8 +276,8 @@ class CaseReads:
     case_type: Row | None
     typed: list[Row]
     deadline: tuple[str, str] | None
-    emails: list[Row]
-    related: list[Row]
+    emails: list[CaseEmail]
+    related: list[RelatedCase]
     failed: set[str]
     origin: OriginReads
     feed: FeedReads
@@ -301,10 +302,10 @@ def _files_of(typed: list[Row], runs: list[Row]) -> list[Row]:
     return [{"id": i, "name": n} for i, n in files.items()]
 
 
-async def case_reads(rt: Runtime, me: Principal, row: Row) -> CaseReads:
+async def case_reads(rt: Runtime, me: Principal, row: CaseRecord) -> CaseReads:
     """The database reads of `assembled`, all local, for the route's transaction. Who the page names is read here too
     (`actor_reads`), so `ask_case` asks platform-service with none open."""
-    case_id, team = str(row["id"]), str(row["team_id"])
+    case_id, team = str(row.id), str(row.team_id)
     links = CaseLinks(rt.db)
     runs = await links.runs(case_id, team)
     decisions = await RunStore(EngineTransactions(rt.db)).resumes([str(r["id"]) for r in runs])
@@ -315,16 +316,16 @@ async def case_reads(rt: Runtime, me: Principal, row: Row) -> CaseReads:
     failed = await failed_calls(rt, runs)
     origin = await case_story.origin_reads(rt, row)
     feed = await case_story.feed_reads(rt, row, runs, scope=key_scope(me))
-    raws = [*([str(row["assignee"])] if row["assignee"] else []), *origin.raws(), *feed.raws()]
+    raws = [*([str(row.assignee)] if row.assignee else []), *origin.raws(), *feed.raws()]
     known = await actor_reads(rt, raws)
     return CaseReads(runs, decisions, titles, case_type, typed, deadline, emails, related, failed, origin, feed, known)
 
 
-async def ask_case(rt: Runtime, row: Row, reads: CaseReads) -> CaseAsked:
+async def ask_case(rt: Runtime, row: CaseRecord, reads: CaseReads) -> CaseAsked:
     """Asks the other services what the page words it with, with nothing open: people's names, the masking policy, the
     team's name, file names, and for each Human Task the tools-service policy of its calls, the review deadline, the
     tool directory and the deciding team (each kept for the request, so building the views asks none of them)."""
-    team = str(row["team_id"])
+    team = str(row.team_id)
     who = await named_actors(rt, reads.known)
     masking = await people_see_masked(rt, team)
     names = getattr(rt, "team_names", None)
@@ -341,17 +342,17 @@ async def ask_case(rt: Runtime, row: Row, reads: CaseReads) -> CaseAsked:
     return CaseAsked(who, masking, team_name)
 
 
-async def assembled(rt: Runtime, me: Principal, row: Row, reads: CaseReads, asked: CaseAsked) -> Row:
+async def assembled(rt: Runtime, me: Principal, row: CaseRecord, reads: CaseReads, asked: CaseAsked) -> Row:
     """The case page from `reads` and `asked`. Only the Human Task views read the database here (a connect wait's first
     run), so a caller holds a transaction for this call."""
     now = datetime.now(UTC)
-    case_id, team = str(row["id"]), str(row["team_id"])
+    case_id, team = str(row.id), str(row.team_id)
     runs, case_type, typed, deadline = reads.runs, reads.case_type, reads.typed, reads.deadline
     reviews = await _reviews(rt, case_id, reads)
     waiting = waiting_of(reviews)
     clock = timer(row, deadline, sla(row, now)["resolution"], now)
     emails, related = reads.emails, reads.related
-    opener = str(row["created_by"]) if str(row["created_by"]).startswith("run:") else ""
+    opener = str(row.created_by) if str(row.created_by).startswith("run:") else ""
     first = next((r for r in runs if f"run:{r['id']}" == opener), None)
     linked = await named(rt, team, _files_of(typed, runs))
     file_names = {str(f["id"]): f["name"] for f in linked if f["name"]}
@@ -361,16 +362,16 @@ async def assembled(rt: Runtime, me: Principal, row: Row, reads: CaseReads, aske
     drafted = actions_of(reviews, reads.failed)
     page = {
         "caseType": case_type,
-        "owner": {"email": row["assignee"], "name": (who.get(row["assignee"]) or {}).get("name") or row["assignee"]}
-        if row["assignee"]
+        "owner": {"email": row.assignee, "name": (who.get(row.assignee) or {}).get("name") or row.assignee}
+        if row.assignee
         else None,
         "team": {"id": team, "name": team_name},
         "customer": {
-            "id": row["customer_id"],
-            "name": row["customer_name"] or row["customer_id"],
-            "href": f"/cases?customer={row['customer_id']}",
+            "id": row.customer_id,
+            "name": row.customer_name or row.customer_id,
+            "href": f"/cases?customer={row.customer_id}",
         }
-        if row["customer_id"]
+        if row.customer_id
         else None,
         "sla": sla(row, now),
         "nextAction": {
@@ -399,28 +400,28 @@ async def assembled(rt: Runtime, me: Principal, row: Row, reads: CaseReads, aske
             ],
             "emails": [
                 {
-                    "id": e["id"],
-                    "subject": e["subject"] or "(no subject)",
+                    "id": e.id,
+                    "subject": e.subject or "(no subject)",
                     "direction": "in",
-                    "at": e["recorded_at"],
+                    "at": e.recorded_at,
                     "href": f"/activity?case={case_id}&kind=email",
                 }
                 for e in emails
             ],
             "cases": [
                 {
-                    "id": c["id"],
-                    "subject": c["subject"],
-                    "status": c["status"],
-                    "relation": c["relation"],
-                    "href": f"/cases/{c['id']}",
+                    "id": c.id,
+                    "subject": c.subject,
+                    "status": c.status,
+                    "relation": c.relation,
+                    "href": f"/cases/{c.id}",
                 }
                 for c in related
             ],
             "allHrefs": {
                 "runs": f"/activity?case={case_id}&kind=workflow_run",
                 "emails": f"/activity?case={case_id}&kind=email",
-                "cases": f"/cases?customer={row['customer_id']}" if row["customer_id"] else None,
+                "cases": f"/cases?customer={row.customer_id}" if row.customer_id else None,
             },
         },
         "workflow": {
@@ -434,7 +435,7 @@ async def assembled(rt: Runtime, me: Principal, row: Row, reads: CaseReads, aske
             "assign": _may(me, "edit", team),
             "changeStatus": _may(me, "edit", team),
             # Closing or reopening is a person's, and cases.manage (an admin, or whoever opened it under `own`).
-            "close": caller_of(me).kind == "person" and _may(me, "manage", team, owner=row["created_by"]),
+            "close": caller_of(me).kind == "person" and _may(me, "manage", team, owner=row.created_by),
             "note": _may(me, "edit", team),
         },
         "whatsLeft": whats_left(

@@ -267,7 +267,7 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
         if b is None or not b.connection_id or host.connections is None:
             return True
         conn = await host.connections.get(tenant_id, b.connection_id)
-        return (conn or {}).get("status") != "connected"
+        return (conn.status if conn else None) != "connected"
 
     @r.get("/v1/apps/{app_id}/resources", response_model=Envelope[list[AppResource]])
     async def list_app_resources(  # pyright: ignore[reportUnusedFunction]

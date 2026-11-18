@@ -16,14 +16,16 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, TypedDict, cast
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import Conflict, ValidationFailed
-from ops_service_kit.http import JsonValue
+from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import new_id
+from ops_service_kit.narrow import a_list, an_object, as_json, json_list, json_object
+from ops_store import documents
 
 from .ai import spent_on
 from .files import FileNotScanned, Stored
@@ -99,6 +101,43 @@ class Host(BaseModel):
 
 
 HOSTS = TypeAdapter(list[Host])
+
+
+class SourceConfig(TypedDict, total=False):
+    """A tool source's stored `config`: what `source_config` wrote at create, and what each sync keeps between runs
+    (where its listing got to, which items it saw and which it tombstoned). Every key is optional, since a source
+    made before a key existed lacks it, and each declared type admits the null an older writer may have stored."""
+
+    plugin: str | None
+    source: str | None
+    title: str | None
+    listTool: str | None
+    getTool: str | None
+    changesTool: str | None
+    scopesTool: str | None
+    previewTool: str | None
+    listsWhole: bool | None
+    # Read with int(); a string or float an older writer stored still reads.
+    fetchAtOnce: int | float | str | None
+    site: bool | None
+    getTakesTag: bool | None
+    connectionId: str | None
+    schedule: Json | None
+    values: Json | None
+    waitingHosts: JsonList | None
+    # `needs_reconnect` while the connection refuses its sign-in; a bool from older writers.
+    paused: bool | str | None
+    lastFullAt: str | None
+    watermark: JsonValue
+    cursor: JsonValue
+    changesCursor: JsonValue
+    seenSoFar: list[str] | None
+    tombstones: JsonValue
+    repeats: JsonValue
+
+
+# Read with the source row's `config`; a key holding another type fails the read (`StoredShapeError`).
+SOURCE_CONFIG = documents.stored(SourceConfig)
 
 
 def waiting_in(cfg: dict[str, JsonValue]) -> list[str]:
@@ -180,13 +219,20 @@ class ToolReader:
             "source": cfg.get("source"),
             "values": cfg.get("values") or {},
         }
-        kw: dict[str, Any] = {"tenant": tenant_id, "team": team_id}
-        if credentials:
-            # The person's own credentials decide; this service's token rides beside them.
-            kw |= {"headers": credentials, "token_header": "X-Service-Authorization"}
-        return list(await self.tools.post("/v1/knowledge-sources/hosts", json=body, **kw) or [])
+        # The person's own credentials decide when given; this service's token rides beside them.
+        answer = await self.tools.post(
+            "/v1/knowledge-sources/hosts",
+            json=body,
+            tenant=tenant_id,
+            team=team_id,
+            headers=credentials or None,
+            token_header="X-Service-Authorization" if credentials else "Authorization",
+        )
+        return list(answer or [])
 
-    async def call(self, tenant_id: str, team_id: str, tool: str, args: dict[str, JsonValue], *, act: str) -> Answer:
+    async def call(
+        self, tenant_id: str, team_id: str, tool: str | None, args: dict[str, JsonValue], *, act: str
+    ) -> Answer:
         body = {
             "tool": tool,
             "input": args,
@@ -200,9 +246,9 @@ class ToolReader:
             return Answer(False, code=str(e.code or "refused"), message=e.message)
         except ServiceUnreachable as e:
             return Answer(False, code="UPSTREAM_UNREACHABLE", message=str(e))
-        answer = cast(dict[str, Any], data or {})
+        answer = json_object(data)
         if not answer.get("ok"):
-            error = cast(dict[str, Any], cast(dict[str, Any], answer.get("output") or {}).get("error") or {})
+            error = json_object(json_object(answer.get("output")).get("error"))
             return Answer(False, code=str(error.get("code") or "TOOL_FAILED"), message=str(error.get("message") or ""))
         return Answer(True, answer.get("output"))
 
@@ -310,25 +356,32 @@ def source_values(declared: Declared, given: JsonValue) -> dict[str, JsonValue]:
     values = given if isinstance(given, dict) else {}
     if unknown := sorted(set(values) - set(inputs)):
         raise ValidationFailed(f"{declared.title} takes no {', '.join(unknown)}.", code="invalid_source_values")
-    for name, field in inputs.items():
+    for name, declared_input in inputs.items():
         if values.get(name) in (None, "", []):
-            if field.get("required", True):
+            if declared_input.get("required", True):
                 raise ValidationFailed(f"{declared.title} needs {name}.", code="invalid_source_values")
             continue
-        expected = INPUT_TYPES.get(str(field.get("type") or "string"), str)
+        expected = INPUT_TYPES.get(str(declared_input.get("type") or "string"), str)
         if not isinstance(values[name], expected):
             raise ValidationFailed(
-                f"{name} is a {field.get('type') or 'string'} for {declared.title}.", code="invalid_source_values"
+                f"{name} is a {declared_input.get('type') or 'string'} for {declared.title}.",
+                code="invalid_source_values",
             )
     return values
 
 
-def _content(item: dict[str, Any]) -> bytes:
+def _as_given(value: JsonValue) -> str | None:
+    """A plugin's title or address stored as the plugin sent it, as it always was: a plugin declares both as text, and
+    one that sends another kind has it kept, not dropped or rewritten."""
+    return cast(str | None, value)
+
+
+def _content(item: Json) -> bytes:
     content = str(item.get("content") or "")
     return base64.b64decode(content) if item.get("encoding") == "base64" else content.encode()
 
 
-def _filename(item: dict[str, Any]) -> str:
+def _filename(item: Json) -> str:
     """The name the parser reads the type from: the title with the extension its mime gives."""
     ext = {"text/html": ".html", "text/plain": ".txt", "text/markdown": ".md", "application/pdf": ".pdf"}
     title = str(item.get("title") or item.get("id") or "item")
@@ -354,17 +407,16 @@ class Pacer:
             self.next = max(now, self.next) + self.pace
 
 
-def _listing(out: Any) -> list[dict[str, Any]] | None:
+def _listing(out: JsonValue) -> list[Json] | None:
     """The page's items when the answer is a knowledge listing, else None."""
     if not isinstance(out, dict):
         return None
-    items = cast(dict[str, Any], out).get("items")
+    items = out.get("items")
     if not isinstance(items, list):
         return None
-    rows = cast(list[Any], items)
-    if not all(isinstance(r, dict) and {"id", "updated_at"} <= set(cast(dict[str, Any], r)) for r in rows):
+    if not all(isinstance(r, dict) and {"id", "updated_at"} <= set(r) for r in items):
         return None
-    return [cast(dict[str, Any], r) for r in rows]
+    return [json_object(r) for r in items]
 
 
 def _less_overlap(stamp: str) -> str:
@@ -385,7 +437,7 @@ async def sync_tool_source(
     trigger: str,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> RunWrite:
-    cfg: dict[str, Any] = dict(s.config or {})
+    cfg = SOURCE_CONFIG(s.config or {})
     tenant, team, source_id = who.tenant_id, str(s.team_id), str(s.id)
     act = f"kb-sync:{source_id}"
     if cfg.get("paused") == "needs_reconnect":
@@ -412,18 +464,23 @@ async def sync_tool_source(
     cursor = cfg.get("cursor") if trigger != "full" else None
     # The source's own settings go to every call; an incremental run lists only what changed when the plugin has a
     # changes tool and a cursor from the last run, else lists from the watermark.
-    given: dict[str, Any] = {"source": cfg["values"]} if cfg.get("values") else {}
+    given: Json = {"source": values} if (values := cfg.get("values")) else {}
     by_changes = bool(not full and cfg.get("changesTool") and cfg.get("changesCursor"))
-    list_tool = str(cfg["changesTool"] if by_changes else cfg["listTool"])
+    if by_changes:
+        list_tool = str(cfg.get("changesTool"))
+    elif "listTool" in cfg:
+        list_tool = str(cfg["listTool"])
+    else:
+        raise KeyError("listTool")
     if by_changes and not cursor:
-        cursor = cfg["changesCursor"]
+        cursor = cfg.get("changesCursor")
     removed_at_source: list[str] = []
-    tombstones = cast(dict[str, Any], cfg.setdefault("tombstones", {}))
+    tombstones = an_object(cfg.setdefault("tombstones", {}), "tombstones")
     gone_now: list[str] = []
     # Only a listing read from its first page sees every item, so only then is an unseen item removed. One longer than a
     # run's pages carries what it listed so far (`seenSoFar`) into the run that finishes it.
     from_start = cursor is None
-    carried = set(cast(list[str], cfg.get("seenSoFar") or [])) if cursor else set[str]()
+    carried = set(cfg.get("seenSoFar") or []) if cursor else set[str]()
     whole = from_start or "seenSoFar" in cfg
     if from_start:
         cfg.pop("seenSoFar", None)
@@ -433,18 +490,18 @@ async def sync_tool_source(
     log: list[str] = []
     status, stopped = "success", ""
     seen: set[str] = set()
-    changed: list[dict[str, Any]] = []
+    changed: list[Json] = []
     newest: str | None = None
     watermark: str | None = None
 
     async def save() -> None:
-        await service.store.update_source(tenant, source_id, {"config": dict(cfg)})
+        await service.store.update_source(tenant, source_id, {"config": an_object(as_json(cfg), "source config")})
 
     pages, restarted, resumes = 0, False, False
     # The seconds between two fetches of this source's items: the source's own rate, or the slower pace its listing
     # names (a site's robots.txt Crawl-delay). Each fetch is its own call, so the plugin cannot pace them itself.
-    values = cast(dict[str, Any], cfg.get("values") or {})
-    pace = 1.0 / float(values["rate"]) if isinstance(values.get("rate"), int | float) and values["rate"] > 0 else 0.0
+    rate = json_object(cfg.get("values")).get("rate")
+    pace = 1.0 / float(rate) if isinstance(rate, int | float) and rate > 0 else 0.0
     while True:
         if pages >= MAX_PAGES:
             # The items listed so far are fetched now; the next run lists on from the saved cursor.
@@ -482,9 +539,10 @@ async def sync_tool_source(
             status, stopped = "failed", "The tool's answer is not a knowledge listing."
             errors.append({"phase": "list", "errorClass": "contract", "message": stopped})
             break
-        out = cast(dict[str, Any], page.output)
-        if isinstance(out.get("pace_s"), int | float):
-            pace = max(pace, float(out["pace_s"]))
+        out = json_object(page.output)
+        named = out.get("pace_s")
+        if isinstance(named, int | float):
+            pace = max(pace, float(named))
         for r in rows:
             item_id = str(r["id"])
             counts["listed"] += 1
@@ -542,6 +600,8 @@ async def sync_tool_source(
             tag = {"tag": held.tag} if cfg.get("getTakesTag") and held and held.tag else {}
             async with lock:
                 await paced.turn()
+                if "getTool" not in cfg:
+                    raise KeyError("getTool")
                 return await reader.call(tenant, team, cfg["getTool"], {**given, "id": item_id, **tag}, act=act)
 
         # An item the listing already read (a crawl following links) is not fetched again.
@@ -573,12 +633,17 @@ async def sync_tool_source(
             if not got.ok:
                 counts["failed"] += 1
                 errors.append(
-                    {"itemTitle": r.get("title"), "phase": "get", "errorClass": got.code, "message": got.message}
+                    {
+                        "itemTitle": _as_given(r.get("title")),
+                        "phase": "get",
+                        "errorClass": got.code,
+                        "message": got.message,
+                    }
                 )
                 if got.code == "RATE_LIMITED":
                     status = "partial"
                 continue
-            item = cast(dict[str, Any], got.output)
+            item = an_object(got.output, "fetched item")
             if item.get("unchanged") is True:
                 held = known.get(str(r["id"]))
                 if held is not None:
@@ -586,7 +651,8 @@ async def sync_tool_source(
                 counts["unchanged"] += 1
                 continue
             await _put(service, who, s, known, item, marker=str(r["marker"]), parent=None, counts=counts, errors=errors)
-            for child in cast(list[dict[str, Any]], item.get("children") or []):
+            children = item.get("children")
+            for child in (an_object(c, "child item") for c in (a_list(children, "children") if children else [])):
                 kid_id = str(child["id"])
                 seen.add(kid_id)
                 marker = str(child.get("marker") or child.get("updated_at") or "")
@@ -602,7 +668,7 @@ async def sync_tool_source(
                         who,
                         s,
                         known,
-                        cast(dict[str, Any], kid.output),
+                        an_object(kid.output, "fetched item"),
                         marker=marker,
                         parent=str(item["id"]),
                         counts=counts,
@@ -690,7 +756,7 @@ async def _put(
     who: Who,
     s: SourceRow,
     known: dict[str, ItemRow],
-    item: dict[str, Any],
+    item: Json,
     *,
     marker: str,
     parent: str | None,
@@ -713,7 +779,9 @@ async def _put(
         await service.files.use(tenant, team, stored.file_id, source_id=source_id, source_name=str(s.name))
     except (ValueError, FileNotScanned) as e:
         counts["failed"] += 1
-        errors.append({"itemTitle": item.get("title"), "phase": "store", "errorClass": "snapshot", "message": str(e)})
+        errors.append(
+            {"itemTitle": _as_given(item.get("title")), "phase": "store", "errorClass": "snapshot", "message": str(e)}
+        )
         return
     if ex is not None and ex.digest == stored.digest and ex.status == "indexed":
         await service.store.update_item(tenant, ex.id, {"marker": marker})
@@ -722,9 +790,9 @@ async def _put(
     extra: ItemFetched = {
         "marker": marker,
         "parent_id": None,
-        "url": item.get("url"),
+        "url": _as_given(item.get("url")),
         "folder": str(item["folder"])[:400] if item.get("folder") else None,
-        "fields": {str(k): str(v) for k, v in cast(dict[str, Any], item.get("metadata") or {}).items()} or None,
+        "fields": {str(k): str(v) for k, v in json_object(item.get("metadata")).items()} or None,
         "tag": str(item["marker"])[:200] if item.get("marker") else None,
         "gone_count": 0,
     }
@@ -734,7 +802,7 @@ async def _put(
         )
         extra["parent_id"] = parent_row.id if parent_row else None
     found = Stored(stored.file_id, name, stored.mime, stored.size, stored.digest, stored.deduplicated)
-    allowed = cast(list[Any], item["allowed"]) if isinstance(item.get("allowed"), list) else None
+    allowed = json_list(item["allowed"]) if isinstance(item.get("allowed"), list) else None
     origin = Origin(item_id, str(item.get("title") or item_id), extra, allowed=[str(a) for a in allowed or []] or None)
     done = await service._read_file(who, s, ex, name=name, found=found, rebuild=False, origin=origin)  # pyright: ignore[reportPrivateUsage]
     # The row as written, so a later look at this item in the run (its attachments, gone or removed) reads it.

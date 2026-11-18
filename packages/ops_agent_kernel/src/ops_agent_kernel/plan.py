@@ -9,10 +9,13 @@ or skipped its title reads "Did N steps". Titles and notes are masked as reply t
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, TypeGuard
+
+from ops_service_kit.http import Json, JsonList
+from ops_service_kit.narrow import json_list, json_object
 
 from .pii import mask
-from .types import ToolGrant
+from .types import Plan, PlanStep, ToolGrant
 
 NAME = "plan"
 SERVER = "kernel"
@@ -66,35 +69,50 @@ def _text(value: Any) -> str:
     return mask(str(value or "").strip())[:TITLE_CHARS]
 
 
-def given(arguments: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+def given(arguments: Json) -> tuple[Plan | None, str | None]:
     """The plan the call sends, cleaned and masked, or why its shape is refused."""
     raw = arguments.get("steps")
-    if not isinstance(raw, list) or not MIN_STEPS <= len(cast(list[Any], raw)) <= MAX_STEPS:
+    if not isinstance(raw, list) or not MIN_STEPS <= len(raw) <= MAX_STEPS:
         return None, f"A plan has {MIN_STEPS} to {MAX_STEPS} steps; for fewer, make the reads without a plan."
-    steps: list[dict[str, Any]] = []
-    for s in cast(list[Any], raw):
-        step = cast(dict[str, Any], s) if isinstance(s, dict) else {}
+    steps: list[PlanStep] = []
+    for s in raw:
+        step = json_object(s)
         status = str(step.get("status") or "")
         if not step.get("title") or status not in STATUSES:
             return None, f"Each step is {{title, status}} with status one of {', '.join(STATUSES)}."
-        steps.append(
-            {
-                "title": _text(step["title"]),
-                "status": status,
-                **({"note": _text(step["note"])} if step.get("note") else {}),
-            }
-        )
+        clean: PlanStep = {"title": _text(step["title"]), "status": status}
+        if step.get("note"):
+            clean["note"] = _text(step["note"])
+        steps.append(clean)
     return {"title": _text(arguments.get("title")) or "Plan", "steps": steps}, None
 
 
-def check(before: dict[str, Any] | None, plan: dict[str, Any], *, replan: bool, replans: int) -> str | None:
+def stored(value: object) -> TypeGuard[Plan]:
+    """Whether a plan read back from a stored reply has the plan's shape (a title, and steps each with a title and a
+    status). Checked in place, never copied, so the plan goes on exactly as it was written."""
+    plan = json_object(value)
+    steps = plan.get("steps")
+    return (
+        isinstance(value, dict)
+        and isinstance(plan.get("title"), str)
+        and isinstance(steps, list)
+        and all(
+            isinstance(s, dict)
+            and isinstance(json_object(s).get("title"), str)
+            and isinstance(json_object(s).get("status"), str)
+            for s in steps
+        )
+    )
+
+
+def check(before: Plan | None, plan: Plan, *, replan: bool, replans: int) -> str | None:
     """Why `plan` cannot follow `before`, or None. A replan replaces the open steps and keeps the finished ones."""
-    steps = cast(list[dict[str, Any]], plan["steps"])
+    steps = plan["steps"]
     if sum(s["status"] in ("doing", "blocked") for s in steps) > 1:
         return "One step is doing (or blocked) at a time; mark it done before the next one starts."
     if before is None:
         return None
-    old = cast(list[dict[str, Any]], before["steps"])
+    old = before["steps"]
     if replan:
         if replans >= MAX_REPLANS:
             return f"The plan was replaced {MAX_REPLANS} times this reply; finish with what you have."
@@ -112,43 +130,43 @@ def check(before: dict[str, Any] | None, plan: dict[str, Any], *, replan: bool, 
     return None
 
 
-def finished(plan: dict[str, Any]) -> bool:
-    return all(s["status"] in FINISHED for s in cast(list[dict[str, Any]], plan["steps"]))
+def finished(plan: Plan) -> bool:
+    return all(s["status"] in FINISHED for s in plan["steps"])
 
 
-def current(plan: dict[str, Any]) -> str | None:
+def current(plan: Plan) -> str | None:
     """The step being worked: the one doing or blocked, else the first not finished."""
-    steps = cast(list[dict[str, Any]], plan["steps"])
+    steps = plan["steps"]
     live = next((s for s in steps if s["status"] in ("doing", "blocked")), None)
     nxt = live or next((s for s in steps if s["status"] not in FINISHED), None)
     return str(nxt["title"]) if nxt else None
 
 
-def answer(plan: dict[str, Any]) -> dict[str, Any]:
+def answer(plan: Plan) -> Json:
     """What the model is told after a call: the step it is on and how many are left."""
-    left = sum(s["status"] not in FINISHED for s in cast(list[dict[str, Any]], plan["steps"]))
+    left = sum(s["status"] not in FINISHED for s in plan["steps"])
     return {"ok": True, "current": current(plan), "left": left}
 
 
-def part(plan: dict[str, Any]) -> dict[str, Any]:
+def part(plan: Plan) -> Json:
     """The plan as the steps shape: a skipped step reads done with "(skipped)", a blocked one failed with its note."""
-    steps = cast(list[dict[str, Any]], plan["steps"])
-    rows = [
+    steps = plan["steps"]
+    rows: JsonList = [
         {
             "title": s["title"]
             + (SKIPPED if s["status"] == "skipped" else "")
-            + (f": {s['note']}" if s.get("note") and s["status"] == "blocked" else ""),
+            + (f": {s['note']}" if "note" in s and s["note"] and s["status"] == "blocked" else ""),
             "state": SHOWN[s["status"]],
         }
         for s in steps
     ]
-    title = f"Did {len(steps)} steps" if finished(plan) else str(plan["title"])
+    title = f"Did {len(steps)} steps" if finished(plan) else plan["title"]
     return {"type": "widget", "id": "", "shape": "steps", "data": rows, "hint": {"title": title}}
 
 
-def paused(plan: dict[str, Any], why: str) -> dict[str, Any]:
+def paused(plan: Plan, why: str) -> Plan:
     """The plan when the turn stops before it finished: the step being worked is blocked, with why."""
-    steps = [dict(s) for s in cast(list[dict[str, Any]], plan["steps"])]
+    steps = [s.copy() for s in plan["steps"]]
     live = next((s for s in steps if s["status"] in ("doing", "blocked")), None)
     live = live or next((s for s in steps if s["status"] not in FINISHED), None)
     if live is not None:
@@ -160,10 +178,10 @@ def paused(plan: dict[str, Any], why: str) -> dict[str, Any]:
 KEPT = "The plan is kept and ticks itself as your reads come back; go on with the next step's reads, or answer."
 
 
-def ticked(plan: dict[str, Any]) -> dict[str, Any]:
+def ticked(plan: Plan) -> Plan:
     """The plan once its current step's reads are back: that step done (the first open one when none was started),
     the next open one doing."""
-    steps = [dict(s) for s in cast(list[dict[str, Any]], plan["steps"])]
+    steps = [s.copy() for s in plan["steps"]]
     live = next((s for s in steps if s["status"] in ("doing", "blocked")), None)
     live = live or next((s for s in steps if s["status"] == "todo"), None)
     if live is not None:
@@ -175,32 +193,33 @@ def ticked(plan: dict[str, Any]) -> dict[str, Any]:
     return {**plan, "steps": steps}
 
 
-def closed(plan: dict[str, Any]) -> dict[str, Any]:
+def closed(plan: Plan) -> Plan:
     """The plan when the answer came with nothing waiting: the step being worked done, steps never started skipped."""
-    steps: list[dict[str, Any]] = []
-    for s in cast(list[dict[str, Any]], plan["steps"]):
+    steps: list[PlanStep] = []
+    for s in plan["steps"]:
         status = {"doing": "done", "blocked": "done", "todo": "skipped"}.get(s["status"], s["status"])
         steps.append({**s, "status": status})
     return {**plan, "steps": steps}
 
 
-def from_part(part: dict[str, Any]) -> dict[str, Any] | None:
+def from_part(part: Json) -> Plan | None:
     """A plan read back from its drawn part, for the next turn to go on with; None when it was finished."""
     back = {"pending": "todo", "running": "doing", "done": "done", "failed": "blocked"}
-    steps: list[dict[str, Any]] = []
-    for row in cast(list[dict[str, Any]], part.get("data") or []):
+    steps: list[PlanStep] = []
+    for raw in json_list(part.get("data")):
+        row = json_object(raw)
         title, status = str(row.get("title") or ""), back.get(str(row.get("state")), "todo")
         if title.endswith(SKIPPED):
             title, status = title[: -len(SKIPPED)], "skipped"
         steps.append({"title": title, "status": status})
-    title = str(cast(dict[str, Any], part.get("hint") or {}).get("title") or "Plan")
-    plan = {"title": title, "steps": steps}
+    title = str(json_object(part.get("hint")).get("title") or "Plan")
+    plan: Plan = {"title": title, "steps": steps}
     return None if not steps or finished(plan) else plan
 
 
-def prompt(plan: dict[str, Any]) -> str:
+def prompt(plan: Plan) -> str:
     """The plan an earlier turn left unfinished, for this turn to go on with."""
-    lines = "\n".join(f"- {s['title']}: {s['status']}" for s in cast(list[dict[str, Any]], plan["steps"]))
+    lines = "\n".join(f"- {s['title']}: {s['status']}" for s in plan["steps"])
     return (
         f"## Plan in progress: {plan['title']}\n\n{lines}\n\nGo straight to the reads of the first step not done (a "
         "blocked step waited for the person, who has now answered). The checklist ticks itself as your reads come "

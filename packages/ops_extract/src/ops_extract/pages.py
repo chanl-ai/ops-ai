@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
+from ops_extract.shapes import Layout
 from ops_ingest import ParsedDocument
 from ops_ingest.models import Table
 
@@ -19,7 +19,7 @@ class Pages:
     count: int
     confidence: dict[int, dict[str, float]] = field(default_factory=dict[int, dict[str, float]])
     # The layout the text was rendered from, when there is one, so a field's quote can be found as boxes.
-    layout: dict[str, Any] | None = None
+    layout: Layout | None = None
 
 
 def pages_of(doc: ParsedDocument) -> Pages:

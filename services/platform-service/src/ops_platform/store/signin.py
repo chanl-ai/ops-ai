@@ -17,7 +17,7 @@ from __future__ import annotations
 import secrets
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, ClassVar
+from typing import Any, ClassVar, NotRequired, TypedDict
 
 import sqlalchemy as sa
 from pydantic import JsonValue
@@ -26,10 +26,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_access import MEMBER_ROLES_BY_RANK
-from ops_service_kit.http import Out
+from ops_service_kit import narrow
+from ops_service_kit.http import Json, Out
 from ops_service_kit.ids import new_id
 from ops_store import Guarantee
 from ops_store.dialect import insert_ignore
+from ops_store.documents import StoredShapeError, stored
 from ops_store.rows import one, rows
 
 from .audit import record, record_grants_ending
@@ -95,10 +97,92 @@ class TrustedCertificate:
     warned: str | None = None
 
 
-def group_settings(config: dict[str, Any]) -> dict[str, JsonValue]:
+class GroupsConfig(TypedDict, total=False):
+    """A provider's group settings: `source` (the claim or attribute read, null for the default `groups`) and
+    `onMissing` (keep | remove; absent on a provider saved before the choice existed)."""
+
+    source: str | None
+    onMissing: str | None
+
+
+class ProviderConfig(TypedDict, total=False):
+    """A provider's stored `config`: the OIDC or the SAML settings an admin saved, with no key for a null. Every key is
+    optional because a password provider stores `{}` and older rows lack the later keys; a key not named here (an
+    older row's group `map`) is kept as stored."""
+
+    # OIDC
+    issuer: str
+    clientId: str
+    clientSecretRef: str
+    scopes: list[str]
+    # SAML: the newest certificate still in its dates, for a console that reads one (the trusted ones are rows).
+    idpEntityId: str
+    ssoUrl: str
+    certificate: str
+    metadataUrl: str
+    metadataReadAt: str
+    # Null after a metadata read that went right.
+    metadataError: str | None
+    emailAttribute: str
+    nameAttribute: str
+    signRequests: bool
+    requireEncryption: bool
+    tiles: bool
+    # Null is never written; it reads as no group settings.
+    groups: GroupsConfig | None
+
+
+# What a save writes is checked against the shape before it is stored.
+PROVIDER_CONFIG = stored(ProviderConfig)
+
+
+def config_view(value: object) -> ProviderConfig:
+    """A stored config as the settings pages read it: the stored document when it fits the shape, else the same
+    document without the declared keys whose value has another type. A row an older release wrote with a wrong type
+    still lists, saves over and deletes, so an admin can repair it; a sign-in reads the stored document itself through
+    OIDC_SIGN_IN or SAML_SIGN_IN and fails on that type. A document that is not an object fails here as it did."""
+    try:
+        return PROVIDER_CONFIG(value)
+    except StoredShapeError:
+        document = narrow.an_object(value, "a sign-in provider's config")
+    fits: Json = {}
+    for key, held in document.items():
+        try:
+            PROVIDER_CONFIG({key: held})
+        except StoredShapeError:
+            continue
+        fits[key] = held
+    return PROVIDER_CONFIG(fits)
+
+
+class OidcSignIn(TypedDict):
+    """The stored settings an OIDC sign-in uses; a missing required key or another type fails the sign-in."""
+
+    issuer: str
+    clientId: str
+    clientSecretRef: NotRequired[str | None]
+    scopes: NotRequired[list[str] | None]
+
+
+class SamlSignIn(TypedDict):
+    """The stored settings a SAML sign-in uses. `signRequests` and `requireEncryption` are not declared: they are
+    read as truthy or not, whatever their stored type."""
+
+    idpEntityId: str
+    ssoUrl: str
+    certificate: NotRequired[str | None]
+    emailAttribute: NotRequired[str | None]
+    nameAttribute: NotRequired[str | None]
+
+
+# Read where a sign-in starts, so a provider missing one of these keys fails the sign-in instead of starting it.
+OIDC_SIGN_IN = stored(OidcSignIn)
+SAML_SIGN_IN = stored(SamlSignIn)
+
+
+def group_settings(config: ProviderConfig) -> GroupsConfig:
     """A provider's group settings: `source` (the claim or attribute read) and `onMissing` (keep | remove)."""
-    found: JsonValue = config.get("groups")
-    return found if isinstance(found, dict) else {}
+    return config.get("groups") or {}
 
 
 class BreakGlassRow(Out):
@@ -133,7 +217,9 @@ class Provider:
     kind: str
     label: str
     enabled: bool
-    config: dict[str, Any]
+    # The settings pages' view (`config_view`); `stored` is the document as stored, which a sign-in reads.
+    config: ProviderConfig
+    stored: Json
     jit_team_id: str | None
     jit_role: str | None
     domains: list[str] = field(default_factory=list[str])
@@ -334,7 +420,7 @@ class SignInStore(TenantDb):
 
     async def metadata_read(self, p: Provider, *, at: str, error: str | None) -> None:
         """Records when the provider's metadata URL was last read and what was wrong with it, if anything."""
-        config = {**p.config, "metadataReadAt": at, "metadataError": error}
+        config: Json = {**p.stored, "metadataReadAt": at, "metadataError": error}
         async with self.tenant_tx(p.tenant_id) as c:
             await c.execute(
                 signin_providers.update().where(signin_providers.c.id == p.id).values(config=config, updated_at=at)
@@ -1063,7 +1149,8 @@ async def _providers(c: AsyncConnection, provider_id: str | None = None) -> list
             kind=str(r["kind"]),
             label=str(r["label"]),
             enabled=bool(r["enabled"]),
-            config=dict(r["config"] or {}),
+            config=config_view(r["config"] or {}),
+            stored=narrow.an_object(r["config"] or {}, "a sign-in provider's config"),
             jit_team_id=r["jit_team_id"],
             jit_role=r["jit_role"],
             domains=[x.domain for x in claims.get(str(r["id"]), [])],

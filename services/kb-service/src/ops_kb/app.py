@@ -540,11 +540,11 @@ def create_kb_app(
     @sources.get("/{source_id}/tombstones", response_model=Envelope[list[Tombstone]])
     async def list_tombstones(source_id: str, who: Person, _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """Addresses removed after answering gone twice at their source; a sync leaves them out until lifted."""
-        return ok(await service.tombstones(who, source_id))
+        return ok([t.model_dump(by_alias=True) for t in await service.tombstones(who, source_id)])
 
     @sources.post("/{source_id}/tombstones/lift", response_model=Envelope[list[Tombstone]])
     async def lift_tombstones(source_id: str, body: TombstonesIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
-        return ok(await service.lift_tombstones(who, source_id, body.ids))
+        return ok([t.model_dump(by_alias=True) for t in await service.lift_tombstones(who, source_id, body.ids)])
 
     @sources.post("/{source_id}/ai-approval", response_model=Envelope[Source])
     async def decide_ai_steps(source_id: str, body: AiApprovalIn, who: Caller) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

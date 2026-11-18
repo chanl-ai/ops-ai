@@ -52,7 +52,7 @@ async def _case(e: AsyncEngine, case_id: str, subject: str, *, team: str = TEAM,
 
 
 async def _ids(e: AsyncEngine, teams: list[str], **params: Any) -> list[str]:
-    return [str(r["id"]) for r in (await CaseStore(e).page(teams, ListParams(**params)))["data"]]
+    return [r.id for r in (await CaseStore(e).page(teams, ListParams(**params)))[1]]
 
 
 async def test_the_page_holds_the_acting_team_when_the_policy_lets_every_team_through(

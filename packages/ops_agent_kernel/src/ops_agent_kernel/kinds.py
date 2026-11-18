@@ -15,22 +15,24 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any
+
+from ops_service_kit.http import Json, JsonList
+from ops_service_kit.narrow import json_list, json_object
 
 MAX_ITEMS = 50
 
-TEXT: dict[str, Any] = {"type": "string", "minLength": 1, "maxLength": 2000}
-CELL: dict[str, Any] = {"type": ["string", "number", "boolean", "null"]}
-TONE: dict[str, Any] = {"enum": ["neutral", "info", "success", "warning", "danger"]}
-STATE: dict[str, Any] = {"enum": ["pending", "active", "done", "failed"]}
+TEXT: Json = {"type": "string", "minLength": 1, "maxLength": 2000}
+CELL: Json = {"type": ["string", "number", "boolean", "null"]}
+TONE: Json = {"enum": ["neutral", "info", "success", "warning", "danger"]}
+STATE: Json = {"enum": ["pending", "active", "done", "failed"]}
 # A file the console opens in its own Files panel: an id, never a URL.
-FILE_ID: dict[str, Any] = {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"}
+FILE_ID: Json = {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$"}
 # The app a card's data came from, by its id in the team's Apps (`plugin:opsai.salesforce`): the console draws its name
 # and logo from the team's own record of it.
-APP: dict[str, Any] = {"type": "string", "pattern": "^[a-z]+:[A-Za-z0-9._-]{1,80}$"}
+APP: Json = {"type": "string", "pattern": "^[a-z]+:[A-Za-z0-9._-]{1,80}$"}
 # A record in that app, by its path only. The console opens it on the address the app's account signed in to, so a
 # card can never send anyone to a host the model chose: no scheme, no host, no `//`, no query.
-OPEN: dict[str, Any] = {
+OPEN: Json = {
     "type": "object",
     "properties": {"path": {"type": "string", "pattern": "^/(?!/)[A-Za-z0-9/_.~%-]{0,300}$"}, "label": TEXT},
     "required": ["path"],
@@ -38,11 +40,11 @@ OPEN: dict[str, Any] = {
 }
 
 
-def _obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
+def _obj(properties: Json, required: JsonList) -> Json:
     return {"type": "object", "properties": properties, "required": required, "additionalProperties": False}
 
 
-def _list(item: dict[str, Any], *, least: int = 1, most: int = MAX_ITEMS) -> dict[str, Any]:
+def _list(item: Json, *, least: int = 1, most: int = MAX_ITEMS) -> Json:
     return {"type": "array", "items": item, "minItems": least, "maxItems": most}
 
 
@@ -54,7 +56,7 @@ PAIRS = _list(_obj({"label": TEXT, "value": CELL, "was": CELL}, ["label", "value
 ROWS = _list({"type": "object", "maxProperties": 20, "additionalProperties": CELL})
 STEP = _obj({"label": TEXT, "state": STATE, "detail": TEXT, "at": TEXT}, ["label", "state"])
 
-SCHEMAS: dict[str, dict[str, Any]] = {
+SCHEMAS: dict[str, Json] = {
     # A figure with its change and recent trend; `goodWhen` says which way is good, so the change is coloured right.
     "metric": _obj(
         {
@@ -317,19 +319,29 @@ KINDS = tuple(SCHEMAS)
 PRIMITIVES = ("metric", "table", "chart")
 
 
-def template(kind: str) -> dict[str, Any]:
+def fields(kind: str) -> list[str]:
+    """A kind's top-level field names, in its schema's order."""
+    return list(json_object(SCHEMAS[kind]["properties"]))
+
+
+def required(kind: str) -> list[str]:
+    """The fields a kind's data must have."""
+    return [str(name) for name in json_list(SCHEMAS[kind]["required"])]
+
+
+def template(kind: str) -> Json:
     """The binding a `present {kind, data}` call fills: the kind's node with each top-level field bound to the same
     field of the data, so the existing binder (`layout.fill`) checks and fills it."""
-    return {"type": kind, **{name: {"$bind": f"/{name}"} for name in SCHEMAS[kind]["properties"]}}
+    return {"type": kind, **{name: {"$bind": f"/{name}"} for name in fields(kind)}}
 
 
 def describe() -> str:
     """One line per kind for the present tool's description: its fields, required ones marked."""
     out: list[str] = []
-    for kind, schema in SCHEMAS.items():
-        required = set(schema["required"])
-        fields = ", ".join(f"{name}{'*' if name in required else ''}" for name in schema["properties"])
-        out.append(f"{kind}({fields})")
+    for kind in SCHEMAS:
+        needed = set(required(kind))
+        listed = ", ".join(f"{name}{'*' if name in needed else ''}" for name in fields(kind))
+        out.append(f"{kind}({listed})")
     return "; ".join(out)
 
 

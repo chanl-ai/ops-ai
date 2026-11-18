@@ -26,6 +26,7 @@ from sqlalchemy.pool import Pool, StaticPool
 
 from ops_agents.api.app import create_app
 from ops_agents.store.base import metadata
+from ops_agents.store.skills import SkillVersionRow
 from ops_engine.store import metadata as engine_metadata
 from ops_service_kit.settings import Settings
 
@@ -87,12 +88,12 @@ async def publish_skill(client: AsyncClient, sid: str) -> int:
     from ops_agents.api.skills import skills  # noqa: PLC0415 - the review is not this test's subject
 
     reg = skills(store(client))
-    n = int((await reg.row(sid))["version"])
+    n = (await reg.row(sid)).version
     await reg.publish(sid, n, by="approver@harborpine.example", review_id="rv_test")
     return n
 
 
-async def versions(client: AsyncClient, sid: str) -> list[dict[str, Any]]:
+async def versions(client: AsyncClient, sid: str) -> list[SkillVersionRow]:
     from ops_agents.api.skills import skills  # noqa: PLC0415
 
     return await skills(store(client)).versions(sid)
@@ -115,7 +116,7 @@ async def test_a_skill_the_team_edited_keeps_its_edit_takes_the_rest_and_asks_ag
     sid = await add_skill(client)
     await edit_skill(client, sid, instructions="Quote the fee schedule and the date it took effect.")
     published = await publish_skill(client, sid)
-    before = {v["version"]: v["digest"] for v in await versions(client, sid)}
+    before = {v.version: v.digest for v in await versions(client, sid)}
     wire(client, [pack(2, instructions="Quote the section and link it.", use_when="A customer disputes a fee")])
     listed = ok(await client.get("/v1/templates", params={"kind": "skill"}, headers=OPS))
     assert listed[0]["state"] == "update_available"
@@ -124,10 +125,10 @@ async def test_a_skill_the_team_edited_keeps_its_edit_takes_the_rest_and_asks_ag
     taken = ok(await client.post(path(sid), json={"expect": review["expect"]}, headers=OPS))
     assert taken["version"] == published + 1
     newest = (await versions(client, sid))[0]
-    assert newest["published_at"] is None
-    assert newest["content"]["instructions"] == "Quote the fee schedule and the date it took effect."
-    assert newest["content"]["useWhen"] == "A customer disputes a fee"
-    after = {v["version"]: v["digest"] for v in await versions(client, sid)}
+    assert newest.published_at is None
+    assert newest.content["instructions"] == "Quote the fee schedule and the date it took effect."
+    assert newest.content["useWhen"] == "A customer disputes a fee"
+    after = {v.version: v.digest for v in await versions(client, sid)}
     assert after[published] == before[published]
     wire(client, [pack(3, instructions="Quote the section, link it, and name the owner.")])
     again = ok(await client.get(path(sid), headers=OPS))
@@ -140,7 +141,7 @@ async def test_a_conflict_the_person_settles_for_the_template_is_written(client:
     wire(client, [pack(2, instructions="Quote the section and link it.")])
     taken = ok(await client.post(path(sid), json={"choices": {"instructions": "template"}}, headers=OPS))
     assert taken["taken"] is True
-    assert (await versions(client, sid))[0]["content"]["instructions"] == "Quote the section and link it."
+    assert (await versions(client, sid))[0].content["instructions"] == "Quote the section and link it."
 
 
 async def test_the_base_survives_the_team_saving_over_its_draft_twice(client: AsyncClient) -> None:
@@ -151,7 +152,7 @@ async def test_the_base_survives_the_team_saving_over_its_draft_twice(client: As
     review = ok(await client.get(path(sid), headers=OPS))
     assert outcomes(review) == {"useWhen": "taken", "instructions": "kept", "guardrails": "kept"}
     ok(await client.post(path(sid), json={}, headers=OPS))
-    content = (await versions(client, sid))[0]["content"]
+    content = (await versions(client, sid))[0].content
     assert content["instructions"] == "Quote the schedule." and content["useWhen"] == "A customer disputes a fee"
     assert content["guardrails"] == ["Never quote a fee that is not in the schedule"]
 
@@ -165,7 +166,7 @@ async def test_an_open_skill_draft_is_merged_into_and_keeps_its_edit(client: Asy
     assert review["draftOpen"] is True
     taken = ok(await client.post(path(sid), json={}, headers=OPS))
     assert taken["version"] == published + 1 and len(await versions(client, sid)) == published + 1
-    assert (await versions(client, sid))[0]["content"]["instructions"] == "Quote the schedule."
+    assert (await versions(client, sid))[0].content["instructions"] == "Quote the schedule."
 
 
 async def test_an_agent_draft_under_review_is_never_rewritten(client: AsyncClient) -> None:
@@ -195,7 +196,7 @@ async def test_a_stale_review_is_refused_and_saves_nothing(client: AsyncClient) 
     stale = await client.post(path(sid), json={"expect": review["expect"]}, headers=OPS)
     assert stale.status_code == 409 and stale.json()["error"]["code"] == "update_stale", stale.text
     assert len(await versions(client, sid)) == 1
-    assert (await versions(client, sid))[0]["content"]["useWhen"] == SKILL["body"]["use_when"]
+    assert (await versions(client, sid))[0].content["useWhen"] == SKILL["body"]["use_when"]
 
 
 async def test_a_detached_copy_takes_no_update_and_its_template_is_offered_again(client: AsyncClient) -> None:

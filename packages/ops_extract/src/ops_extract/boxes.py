@@ -10,11 +10,12 @@ box never points at text the model made up. Boxes are `{page, x, y, w, h}`, frac
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any, cast
 
-from ops_extract.checks import fold
+from ops_extract.checks import entries, fold
+from ops_extract.shapes import Box, Layout, LayoutWord, Located, Rect
+from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.narrow import Malformed, an_object
 
-Layout = dict[str, Any]
 # Words whose tops differ by less than this share of a word's height are on one line, so they share a box.
 SAME_LINE = 0.5
 # A table row the page text joins with " | " puts a separator in the quote that is not a word on the page.
@@ -33,36 +34,36 @@ def _matches(page_word: str, token: str, *, first: bool, last: bool) -> bool:
     return (first and page_word.endswith(token)) or (last and page_word.startswith(token))
 
 
-def runs(words: list[dict[str, Any]], wanted: list[str]) -> Iterator[list[dict[str, Any]]]:
+def runs(words: list[LayoutWord], wanted: list[str]) -> Iterator[list[LayoutWord]]:
     """Every run of `words`, in reading order, whose folded text is `wanted`."""
-    folded = [fold(str(w["text"])) for w in words]
+    folded = [fold(w["text"]) for w in words]
     n = len(wanted)
     for start in range(len(words) - n + 1):
         if all(_matches(folded[start + i], t, first=i == 0, last=i == n - 1) for i, t in enumerate(wanted)):
             yield words[start : start + n]
 
 
-def _find(words: list[dict[str, Any]], wanted: list[str]) -> list[dict[str, Any]] | None:
+def _find(words: list[LayoutWord], wanted: list[str]) -> list[LayoutWord] | None:
     """The first run of `words`, in reading order, whose folded text is `wanted`."""
     return next(runs(words, wanted), None)
 
 
-def union(words: list[dict[str, Any]]) -> list[float]:
+def union(words: list[LayoutWord]) -> Rect:
     """The box around `words`, as [x0, top, x1, bottom] fractions of the page."""
-    boxes = [cast(list[float], w["box"]) for w in words]
+    boxes = [w["box"] for w in words]
     return [min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes)]
 
 
-def line_boxes(words: list[dict[str, Any]], page: int) -> list[dict[str, Any]]:
-    lines: list[list[list[float]]] = []
+def line_boxes(words: list[LayoutWord], page: int) -> list[Box]:
+    lines: list[list[Rect]] = []
     for w in words:
-        box = cast(list[float], w["box"])
+        box = w["box"]
         last = lines[-1][-1] if lines else None
         if last is not None and abs(box[1] - last[1]) < SAME_LINE * max(box[3] - box[1], 1e-6):
             lines[-1].append(box)
         else:
             lines.append([box])
-    out: list[dict[str, Any]] = []
+    out: list[Box] = []
     for boxes in lines:
         x0, top = min(b[0] for b in boxes), min(b[1] for b in boxes)
         x1, bottom = max(b[2] for b in boxes), max(b[3] for b in boxes)
@@ -72,70 +73,99 @@ def line_boxes(words: list[dict[str, Any]], page: int) -> list[dict[str, Any]]:
     return out
 
 
-def _inside(box: list[float] | None, x: float, y: float) -> bool:
+def _inside(box: Rect | None, x: float, y: float) -> bool:
     return box is not None and box[0] <= x <= box[2] and box[1] <= y <= box[3]
 
 
-def _block_ids(layout: Layout, words: list[dict[str, Any]], page: int) -> list[str]:
+def _block_ids(layout: Layout, words: list[LayoutWord], page: int) -> list[str]:
     """The block, or the table cell when the word is in one, holding each word's centre; each id once, in order."""
     ids: list[str] = []
-    blocks = [b for b in cast(list[dict[str, Any]], layout.get("blocks") or []) if int(b["page"]) == page]
+    blocks = [b for b in layout.get("blocks") or [] if b["page"] == page]
     for w in words:
-        box = cast(list[float], w["box"])
+        box = w["box"]
         cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
         for b in blocks:
             if not _inside(b.get("box"), cx, cy):
                 continue
-            cells = cast(list[dict[str, Any]], b.get("cells") or [])
-            cell = next((c for c in cells if _inside(c.get("box"), cx, cy)), None)
-            found = str(cell["id"] if cell else b["id"])
+            cell = next((c for c in b.get("cells") or [] if _inside(c.get("box"), cx, cy)), None)
+            found = cell["id"] if cell else b["id"]
             if found not in ids:
                 ids.append(found)
             break
     return ids
 
 
-def locate(layout: Layout, page: int | None, quote: str | None, value: Any) -> dict[str, Any] | None:
-    """The field's `{boxes, blocks}`, or None when the quote is not on its page or the page has no word boxes."""
+def locate(layout: Layout, page: JsonValue, quote: JsonValue, value: JsonValue) -> Located | None:
+    """The field's `{boxes, blocks}`, or None when the quote is not on its page or the page has no word boxes. The
+    page and quote are a citation's as stored: a page that is no page number matches no words."""
     if page is None or not quote:
         return None
-    on_page = [
-        w for w in cast(list[dict[str, Any]], layout.get("words") or []) if int(w["page"]) == page and w.get("box")
-    ]
+    if not isinstance(quote, str):
+        raise Malformed(f"quote {quote!r} is not text")
+    on_page = [w for w in layout.get("words") or [] if w["page"] == page and w.get("box")]
     quoted = tokens(quote)
     run = _find(on_page, quoted) if quoted else None
     if run is None:
         return None
+    number = run[0]["page"]
     wanted = tokens(str(value)) if value is not None else []
     narrowed = _find(run, wanted) if wanted and len(wanted) < len(run) else None
     chosen = narrowed or run
-    return {"boxes": line_boxes(chosen, page), "blocks": _block_ids(layout, chosen, page)}
+    return {"boxes": line_boxes(chosen, number), "blocks": _block_ids(layout, chosen, number)}
 
 
-def printed(result: dict[str, Any]) -> Any:
+def printed(result: Json) -> JsonValue:
     """The text a field's value was printed as, which its box is narrowed to: the cleaned value when it is in the
     quote (a number without its label), else what the model said. A normalised value (a date as 2026-10-02, an amount
     as 1250.0) is not printed anywhere, so it is never used."""
     value, said = result.get("value"), result.get("extractedValue")
-    quote = str(cast(dict[str, Any], result.get("citation") or {}).get("quote") or "")
+    quote = str(an_object(result.get("citation") or {}, "citation").get("quote") or "")
     if isinstance(value, str) and value and " ".join(tokens(value)) in " ".join(tokens(quote)):
         return value
     return said
 
 
-def with_boxes(out: dict[str, Any], layout: Layout) -> dict[str, Any]:
+def box_json(box: Box) -> Json:
+    """A box as the JSON a field's result stores."""
+    return {"page": box["page"], "x": box["x"], "y": box["y"], "w": box["w"], "h": box["h"]}
+
+
+def with_boxes(out: Json, layout: Layout) -> Json:
     """The scored answer with `boxes` and `blocks` on every field whose quote was found, single or several records."""
 
-    def place(fields: dict[str, dict[str, Any]]) -> None:
-        for result in fields.values():
-            citation = cast(dict[str, Any], result.get("citation") or {})
+    def place(fields: Json) -> None:
+        for key, value in fields.items():
+            result = an_object(value, f"field {key}")
+            citation = an_object(result.get("citation") or {}, f"field {key}'s citation")
             found = locate(layout, citation.get("page"), citation.get("quote"), printed(result))
             if found is not None:
-                result.update(found)
+                result["boxes"] = [box_json(b) for b in found["boxes"]]
+                result["blocks"] = [*found["blocks"]]
 
     if "records" in out:
-        for record in cast(list[dict[str, Any]], out["records"]):
-            place(cast(dict[str, dict[str, Any]], record["fields"]))
+        for record in entries(out["records"]):
+            place(an_object(an_object(record, "a record")["fields"], "a record's fields"))
     else:
-        place(cast(dict[str, dict[str, Any]], out.get("fields") or {}))
+        place(an_object(out.get("fields") or {}, "fields"))
+    return out
+
+
+def _number(b: Json, key: str) -> float:
+    value = b[key]
+    if not isinstance(value, int | float | str):
+        raise Malformed(f"box {key} {value!r} is not a number")
+    return float(value)
+
+
+def boxes_of(value: JsonValue) -> list[Box]:
+    """A field result's stored `boxes` read back; a box missing a part, or with a part that is no number, raises."""
+    out: list[Box] = []
+    for item in entries(value):
+        b = an_object(item, "a box")
+        page = b["page"]
+        if not isinstance(page, int | float | str):
+            raise Malformed(f"box page {page!r} is not a number")
+        out.append(
+            {"page": int(page), "x": _number(b, "x"), "y": _number(b, "y"), "w": _number(b, "w"), "h": _number(b, "h")}
+        )
     return out

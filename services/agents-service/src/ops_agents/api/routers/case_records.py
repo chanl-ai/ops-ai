@@ -22,11 +22,11 @@ from ops_access import can
 from ops_engine.store import RunStore
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound, Unprocessable
-from ops_service_kit.http import Envelope, In, JsonValue, ListResult, Out
+from ops_service_kit.http import Envelope, In, Json, JsonValue, ListResult, Out
 from ops_service_kit.listing import ListQuery
 from ops_store import isolation
 
-from ...store.cases import CaseNotFound, CaseStore, Priority, Status
+from ...store.cases import CaseNotFound, CaseRecord, CaseStore, Priority, Status
 from ...store.engine import EngineTransactions
 from ...store.tenancy import current_team
 from ..actors import actor_reads, named_actors
@@ -340,24 +340,31 @@ def _left(due: str, now: datetime) -> int:
     return int((datetime.fromisoformat(due.replace("Z", "+00:00")) - now).total_seconds())
 
 
-def _view(row: dict[str, Any], now: datetime | None = None) -> dict[str, Any]:
+def _view(row: CaseRecord, now: datetime | None = None) -> dict[str, Any]:
     at = now or datetime.now(UTC)
-    running = row["paused_since"] is None and row["status"] not in ("resolved", "closed")
-    fields: dict[str, Any] = {k: v for k, v in row.items() if k in CaseView.model_fields}
-    fields["response_left_s"] = _left(row["response_due_at"], at) if running and not row["responded_at"] else None
-    fields["resolution_left_s"] = _left(row["resolution_due_at"], at) if running else None
-    return CaseView(**fields).model_dump(mode="json", by_alias=True)
+    running = row.paused_since is None and row.status not in ("resolved", "closed")
+    view = CaseView.model_validate(
+        row.model_dump(include=set(CaseView.model_fields))
+        | {
+            "response_left_s": _left(row.response_due_at, at) if running and not row.responded_at else None,
+            "resolution_left_s": _left(row.resolution_due_at, at) if running else None,
+        }
+    )
+    return view.model_dump(mode="json", by_alias=True)
 
 
-async def _visible(store: CaseStore, me: Principal, case_id: str) -> dict[str, Any]:
+async def _visible(store: CaseStore, me: Principal, case_id: str) -> CaseRecord:
     try:
         return await store.get(case_id, [_team(me)])
     except CaseNotFound:
         raise NotFound(f"Case {case_id}") from None
 
 
-async def _detail(store: CaseStore, row: dict[str, Any]) -> dict[str, Any]:
-    events = [CaseEventView(**{k: e[k] for k in CaseEventView.model_fields}) for e in await store.events(row["id"])]
+async def _detail(store: CaseStore, row: CaseRecord) -> dict[str, Any]:
+    events = [
+        CaseEventView.model_validate(e.model_dump(include=set(CaseEventView.model_fields)))
+        for e in await store.events(row.id)
+    ]
     return {**_view(row), "events": [e.model_dump(mode="json", by_alias=True) for e in events]}
 
 
@@ -388,14 +395,13 @@ async def list_cases(
     keeps the open ones past their deadline, leaving out a case that waits on the customer."""
     del status, priority, assignee, customer_id  # read from `q.filters`, which holds each value given
     async with isolation.request_transaction():
-        listed = await CaseStore(rt.db).page([_team(me)], q, overdue=overdue)
-        rows = listed["data"]
-        known = await actor_reads(rt, [str(r["assignee"]) for r in rows if r["assignee"]])
+        listed, rows = await CaseStore(rt.db).page([_team(me)], q, overdue=overdue)
+        known = await actor_reads(rt, [r.assignee for r in rows if r.assignee])
     # One batched read of the page's owners, with nothing open; a person platform-service cannot name keeps their email
     # as the name.
     who = await named_actors(rt, known)
     shown = [
-        _view(r) | {"owner": {"email": r["assignee"], "name": who[r["assignee"]]["name"]} if r["assignee"] else None}
+        _view(r) | {"owner": {"email": r.assignee, "name": who[r.assignee]["name"]} if r.assignee else None}
         for r in rows
     ]
     return ok({**listed, "data": shown})
@@ -432,14 +438,14 @@ async def change_case(rt: Rt, me: Me, _: Tx, case_id: str, body: CasePatch) -> J
     required = [f for f in ("subject", "status", "priority", "response_due_at", "resolution_due_at") if f in changes]
     if any(changes[f] is None for f in required):
         raise Unprocessable("Subject, status, priority and deadlines cannot be cleared.", code="field_required")
-    can(who, "cases", "edit", team=row["team_id"], what="this case")
+    can(who, "cases", "edit", team=row.team_id, what="this case")
     status = changes.get("status")
-    if status is not None and "closed" in (status, row["status"]) and status != row["status"]:
+    if status is not None and "closed" in (status, row.status) and status != row.status:
         if who.kind != "person":
             raise Unprocessable("Only a person closes or reopens a case.", code="person_required")
-        can(who, "cases", "manage", team=row["team_id"], owner=row["created_by"], what="this case")
+        can(who, "cases", "manage", team=row.team_id, owner=row.created_by, what="this case")
     await store.change(case_id, changes, by=_by(me))
-    return ok(await _detail(store, await store.get(case_id, [row["team_id"]])))
+    return ok(await _detail(store, await store.get(case_id, [row.team_id])))
 
 
 async def _ref_team(rt: Runtime, kind: str, ref: str) -> str | None:
@@ -448,9 +454,9 @@ async def _ref_team(rt: Runtime, kind: str, ref: str) -> str | None:
 
     run_id = ref.split(":", 1)[0] if kind == "decision" else ref
     if kind in ("run", "decision"):
-        run = await RunStore(EngineTransactions(rt.db)).get(run_id)
+        run = await RunStore(EngineTransactions(rt.db)).row(run_id)
         if run is not None:
-            return str(run.get("team_id") or "") or None
+            return run.team_id or None
     thread = await graph_store(rt).thread(run_id)
     return str(thread["team_id"]) if thread is not None and thread.get("team_id") else None
 
@@ -460,16 +466,16 @@ async def add_event(rt: Rt, me: Me, _: Tx, case_id: str, body: EventIn) -> JSONR
     """Adds a note, or a run, chat or decision the case now covers, to its timeline."""
     store = CaseStore(rt.db)
     row = await _visible(store, me, case_id)
-    can(caller_of(me), "cases", "edit", team=row["team_id"], what="this case")
+    can(caller_of(me), "cases", "edit", team=row.team_id, what="this case")
     if body.kind == "note" and not body.text:
         raise Unprocessable("A note needs text.", code="text_required")
     if body.kind != "note" and not body.ref:
         raise Unprocessable(f"A {body.kind} entry names the {body.kind} it is about.", code="ref_required")
     # A case names only its own team's runs, chats and decisions: another team's would bring their decisions, reasons
     # and approvers onto this timeline.
-    if body.kind != "note" and await _ref_team(rt, body.kind, str(body.ref)) != row["team_id"]:
+    if body.kind != "note" and await _ref_team(rt, body.kind, str(body.ref)) != row.team_id:
         raise NotFound(body.kind.capitalize())
-    detail = {"text": body.text} if body.text else {}
+    detail: Json = {"text": body.text} if body.text else {}
     await store.add_event(case_id, body.kind, ref=body.ref, detail=detail, by=_by(me))
     return ok(await _detail(store, row), 201)
 
@@ -482,6 +488,6 @@ async def link_case(rt: Rt, me: Me, _: Tx, case_id: str, body: LinkIn) -> JSONRe
     if body.case_id == case_id:
         raise Unprocessable("A case cannot be linked to itself.", code="self_link")
     await _visible(store, me, body.case_id)
-    can(caller_of(me), "cases", "edit", team=row["team_id"], what="this case")
+    can(caller_of(me), "cases", "edit", team=row.team_id, what="this case")
     await store.link(case_id, body.case_id, by=_by(me))
     return ok(await _detail(store, row), 201)

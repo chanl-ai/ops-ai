@@ -33,19 +33,24 @@ from ops_documents.pending import Pending
 from ops_documents.readings import READING_PROCESS, SYNC_BYTES, SYNC_PAGES, Readings, settings_of
 from ops_documents.store import ExtractionRow, ExtractionsStore
 from ops_documents.store.document_types import SINGLE
-from ops_documents.store.extractions import file_read
+from ops_documents.store.extractions import CorrectedEvent, NewExample, file_read
 from ops_extract import boxes, classify, page_images, prompt, result, rules, templates
-from ops_extract.checks import CLEAN_RULES, DEFAULT_FLOOR, in_quote, threshold
+from ops_extract.checks import CLEAN_RULES, DEFAULT_FLOOR, entries, in_quote, threshold
 from ops_extract.floor import FloorUnreadError, PlatformFloor
 from ops_extract.layout import layout_of, page_text
 from ops_extract.pages import Pages
+from ops_extract.shapes import Box, Check, FieldDefinition, Layout, SavedTemplate
 from ops_files_client import FileInfo
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_ingest.reading import Reading, read
+from ops_service_kit import narrow
+from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
+from ops_service_kit.narrow import Malformed, a_list, an_object, required
 from ops_service_kit.settings import Settings
 from ops_store import background, isolation
+from ops_store.documents import stored
 from ops_store.listing import ListPage
 
 log = get_logger("ops_documents.extraction")
@@ -312,15 +317,15 @@ class Pictures:
                 out.append(page_images.whole(n, image))
         return out
 
-    async def crops(self, boxed: dict[str, list[dict[str, Any]]]) -> dict[str, page_images.PageImage]:
+    async def crops(self, boxed: dict[str, list[Box]]) -> dict[str, page_images.PageImage]:
         """Per field, the part of its page around its boxes, or none when the policy says no."""
         if not boxed or not await self.allowed():
             return {}
         out: dict[str, page_images.PageImage] = {}
         for key, found in boxed.items():
-            page = int(found[0]["page"])
+            page = found[0]["page"]
             if (image := await self._page(page)) is not None:
-                out[key] = page_images.crop(page, image, [b for b in found if int(b["page"]) == page])
+                out[key] = page_images.crop(page, image, [boxes.box_json(b) for b in found if b["page"] == page])
         return out
 
 
@@ -328,10 +333,10 @@ class Pictures:
 LOW_CONFIDENCE = "was read with too little confidence to trust"
 
 
-def fingerprint_of(out: dict[str, Any], layout: dict[str, Any]) -> str:
+def fingerprint_of(out: Json, layout: Layout) -> str:
     """A single-record read's layout without its values, from the boxes its fields were found in."""
-    fields = cast(dict[str, dict[str, Any]], out.get("fields") or {})
-    found = {k: cast(list[dict[str, Any]], f.get("boxes") or []) for k, f in fields.items()}
+    fields = an_object(out.get("fields") or {}, "fields")
+    found = {k: boxes.boxes_of(an_object(f, f"field {k}").get("boxes")) for k, f in fields.items()}
     return templates.fingerprint(templates.Read(layout, found))
 
 
@@ -384,6 +389,23 @@ def _error_code(r: httpx.Response) -> str | None:
 
 def _key_hash(who: Who, key: str) -> str:
     return _sha(f"{who.tenant_id}\n{who.team}\n{who.actor}\n{key}")
+
+
+# What a stored request holds, read as the shapes `request_of` and the version's checks let it be saved as.
+FIELD = stored(FieldDefinition)
+CHECK = stored(Check)
+TEMPLATE = stored(SavedTemplate)
+
+
+def fields_of(request: Json) -> list[FieldDefinition]:
+    """The fields a stored request asks for; one that is not an object, or has no text key, fails the read."""
+    return [FIELD(f) for f in entries(request.get("fields"))]
+
+
+def review_below(request: Json) -> float | None:
+    """The confidence below which a stored request's fields wait for a person; a value that is not one fails the read,
+    as the scorer would."""
+    return None if request.get("reviewBelow") is None else required(request, "reviewBelow", float)
 
 
 def request_of(body: dict[str, Any]) -> dict[str, Any]:
@@ -652,7 +674,7 @@ class Extractor:
             )
             if held.id != extraction_id:
                 return answer_of(held)
-            result = {"fileId": file.id, "fields": {}, "needsReview": ["documentType"], "classification": found}
+            result: Json = {"fileId": file.id, "fields": {}, "needsReview": ["documentType"], "classification": found}
             await self.store.finish(extraction_id, status="done", outcome="unknown", result=result, at=self.clock())
             return answer_of(await self._row(who.tenant_id, extraction_id))
 
@@ -708,9 +730,9 @@ class Extractor:
         original = fields[key]
         fields[key] = {**original, "value": value, "corrected": True, "needsReview": False}
         # A person set the value, so it no longer waits for one: the to-check count follows the correction.
-        target["needsReview"] = [k for k in cast(list[str], target.get("needsReview") or []) if k != key]
+        target["needsReview"] = [k for k in a_list(target.get("needsReview") or [], "needsReview") if k != key]
         if many:
-            target["values"][key] = value
+            an_object(target["values"], "values")[key] = value
             every = cast(list[dict[str, Any]], answer["records"])
             answer["needsReview"] = [i for i, r in enumerate(every) if r["needsReview"]]
         await self.store.correct(
@@ -733,7 +755,7 @@ class Extractor:
 
     def _example(
         self, who: Who, row: ExtractionRow, key: str, original: dict[str, Any], value: Any, *, record: int | None
-    ) -> dict[str, Any] | None:
+    ) -> NewExample | None:
         """What a correction of a typed read teaches its type: the field, the line its value was printed on
         (the read's quote for it) and the corrected value, for the read's tenant and team. A read with fields of its
         own and no type teaches nothing, and neither does a correction whose quote does not show the corrected value:
@@ -743,8 +765,8 @@ class Extractor:
         if not doc_type:
             return None
         citation = cast(dict[str, Any], original.get("citation") or {})
-        fields = cast(list[dict[str, Any]], row.request.get("fields") or [])
-        asked = next((f for f in fields if f["key"] == key), dict[str, Any]())
+        unknown: FieldDefinition = {"key": key}
+        asked = next((f for f in fields_of(row.request) if f["key"] == key), unknown)
         if not in_quote(asked, value, citation.get("quote")):
             return None
         return {
@@ -761,12 +783,12 @@ class Extractor:
             "created_at": self.clock(),
         }
 
-    async def _examples(self, row: ExtractionRow, fields: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async def _examples(self, row: ExtractionRow, fields: list[FieldDefinition]) -> list[dict[str, Any]]:
         """The recent examples of the read's type for the fields it asks; none for a read with no type."""
         doc_type = cast(dict[str, Any] | None, row.request.get("documentType"))
         if not doc_type or self.types is None:
             return []
-        keys = [str(f["key"]) for f in fields]
+        keys = [f["key"] for f in fields]
         return await self.types.examples(row.tenant_id, row.team, str(doc_type["id"]), keys)
 
     async def masks(self, who: Who) -> bool:
@@ -775,7 +797,7 @@ class Extractor:
 
     async def _corrected_event(
         self, who: Who, row: ExtractionRow, answer: dict[str, Any], key: str, record: int | None
-    ) -> dict[str, Any] | None:
+    ) -> CorrectedEvent | None:
         """extraction.corrected, so the file's saved read follows the correction (its event workflow re-runs Save data
         on file). Only for a read of a document type, and only the file's newest one for the team: correcting an
         older read must not put it back on the file over a newer one."""
@@ -855,7 +877,7 @@ class Extractor:
             if not await self.store.start(eid, self.clock()):
                 return await self._row(tenant, eid)
         request = row.request
-        fields = cast(list[dict[str, Any]], request["fields"])
+        fields = fields_of(request)
         read = str(request.get("read") or "fields")
         pages, limited = _limited(pages, request)
         if not pages.texts:
@@ -868,8 +890,8 @@ class Extractor:
                 return await self._row(tenant, eid)
         many = bool(request["many"])
         pictures = self._pictures(row, file)
-        layouts = cast(list[dict[str, Any]], request.get("templates") or [])
-        miss: dict[str, Any] | None = None
+        layouts = entries(request.get("templates"))
+        miss: Json | None = None
         if layouts and not many and pages.layout is not None:
             read, miss = await self._by_template(row, layouts, pages, pictures)
             if read is not None:
@@ -877,13 +899,13 @@ class Extractor:
         if self.models is None:
             return await self._fail(row, "not_configured", "documents-service has no models-service key")
         usage = Usage()
-        proposal: dict[str, Any] | None = None
+        proposal: Json | None = None
         if read == "propose":
             try:
                 proposal = await self._propose(row, pages, usage)
             except ModelRefusedError as e:
                 return await self._refused(row, e)
-            fields = cast(list[dict[str, Any]], proposal["fields"])
+            fields = [FIELD(f) for f in entries(proposal["fields"])]
             if not fields:
                 out: dict[str, Any] = {
                     "fileId": row.file_id, "proposal": proposal, "fields": {}, "needsReview": [], **limited,
@@ -927,7 +949,7 @@ class Extractor:
             pages.ocr,
             file_id=row.file_id,
             many=many,
-            review_below=request.get("reviewBelow"),
+            review_below=review_below(request),
             floor=floor,
             word_confidence=pages.confidence,
         )
@@ -951,16 +973,18 @@ class Extractor:
             return await self._row(tenant, eid)
 
     async def _by_template(
-        self, row: ExtractionRow, layouts: list[dict[str, Any]], pages: Pages, pictures: Pictures | None
-    ) -> tuple[ExtractionRow | None, dict[str, Any] | None]:
+        self, row: ExtractionRow, layouts: list[JsonValue], pages: Pages, pictures: Pictures | None
+    ) -> tuple[ExtractionRow | None, Json | None]:
         """The read from the first template the file matches, with no model call, or None and the best miss.
         A matched template whose required zone reads nothing is a miss too (likely the wrong form), so the model reads
         the file rather than a part being saved; a zone that reads an invalid value is re-read alone."""
         assert pages.layout is not None
-        fields = cast(list[dict[str, Any]], row.request["fields"])
+        fields = fields_of(row.request)
         floor = await self.floors.floor(row.tenant_id, row.team) if self.floors is not None else DEFAULT_FLOOR
         best: templates.Miss | None = None
-        for template in layouts:
+        for held in layouts:
+            # Read when it is tried, so a template the file never reaches cannot fail the read.
+            template = TEMPLATE(held)
             found = templates.match(template, pages.layout)
             if isinstance(found, templates.Miss):
                 best = found if best is None or found.score > best.score else best
@@ -972,14 +996,15 @@ class Extractor:
                 pages.ocr,
                 file_id=row.file_id,
                 many=False,
-                review_below=row.request.get("reviewBelow"),
+                review_below=review_below(row.request),
                 floor=floor,
                 word_confidence=pages.confidence,
             )
             empty = [
-                str(f["key"])
+                f["key"]
                 for f in fields
-                if f.get("required") and out["fields"][str(f["key"])].get("extractedValue") is None
+                if f.get("required")
+                and an_object(an_object(out["fields"], "fields")[f["key"]], f["key"]).get("extractedValue") is None
             ]
             if empty:
                 best = templates.Miss(found.template_id, 1.0, [f"zone {k} read nothing" for k in empty])
@@ -1001,27 +1026,31 @@ class Extractor:
     async def _ruled(
         self,
         row: ExtractionRow,
-        out: dict[str, Any],
+        out: Json,
         pages: Pages,
         usage: Usage,
         floor: float,
         *,
         pictures: Pictures | None = None,
-    ) -> tuple[result.Status, dict[str, Any]]:
+    ) -> tuple[result.Status, Json]:
         """The read after its checks: every field a rule rejected (its type, pattern, emptyWhen or a check
         across fields) is asked again in one model call naming only those fields and why; a value that now passes
         every rule replaces the first, and one that still fails goes to review with the rule named. When the read may
         show page images, a field read below its review threshold joins the re-read too, and each field
         whose words were found goes with a crop of the page around them."""
-        checks = cast(list[dict[str, Any]], row.request.get("checks") or [])
-        fields = cast(dict[str, dict[str, Any]], out["fields"])
+        checks = [CHECK(c) for c in entries(row.request.get("checks"))]
+        fields = an_object(out["fields"], "fields")
         first = copy.deepcopy(fields)
         rules.apply(first, checks)
         failures = rules.failed(first)
         crops = await self._crops(row, first, failures, pages, floor=floor, pictures=pictures)
-        failures |= {k: (first[k].get("extractedValue"), LOW_CONFIDENCE) for k in crops if k not in failures}
+        failures |= {
+            k: (an_object(first[k], f"field {k}").get("extractedValue"), LOW_CONFIDENCE)
+            for k in crops
+            if k not in failures
+        }
         if failures and self.models is not None:
-            asked = [f for f in cast(list[dict[str, Any]], row.request["fields"]) if str(f["key"]) in failures]
+            asked = [f for f in fields_of(row.request) if f["key"] in failures]
             schema = prompt.schema_for(asked, many=False)
             try:
                 answer = await self.models.structured(
@@ -1032,24 +1061,26 @@ class Extractor:
                 )  # fmt: skip
             except ModelRefusedError:
                 answer = None
-            said = {k: v for k, v in cast(dict[str, Any], answer or {}).items() if k in failures}
+            # An answer that is not an object fails the read, as it always has.
+            said: Json = {k: v for k, v in an_object(answer or {}, "the re-read's answer").items() if k in failures}
             if answer is not None and not prompt.schema_errors(said, schema):
                 _, again = result.scored(
                     asked, said, pages.texts, pages.ocr, file_id=row.file_id, many=False,
-                    review_below=row.request.get("reviewBelow"), floor=floor, word_confidence=pages.confidence,
+                    review_below=review_below(row.request), floor=floor, word_confidence=pages.confidence,
                 )  # fmt: skip
-                for key, r in cast(dict[str, dict[str, Any]], again["fields"]).items():
+                for key, value in an_object(again["fields"], "fields").items():
+                    r = an_object(value, f"field {key}")
                     if not r.get("rejected") and r.get("value") is not None:
                         fields[key] = {**r, "reread": True}
         rules.apply(fields, checks)
-        out["needsReview"] = [k for k, r in fields.items() if r.get("needsReview")]
+        out["needsReview"] = [k for k, r in fields.items() if an_object(r, f"field {k}").get("needsReview")]
         return ("review" if out["needsReview"] else "ok"), out
 
     async def _crops(
         self,
         row: ExtractionRow,
-        fields: dict[str, dict[str, Any]],
-        failures: dict[str, tuple[Any, str]],
+        fields: Json,
+        failures: dict[str, tuple[JsonValue, str]],
         pages: Pages,
         *,
         floor: float,
@@ -1059,25 +1090,26 @@ class Extractor:
         words were found on the page. A doubtful field with no words found adds nothing an image could show."""
         if pictures is None or pages.layout is None or self.models is None:
             return {}
-        asked = {str(f["key"]): f for f in cast(list[dict[str, Any]], row.request["fields"])}
-        below = row.request.get("reviewBelow")
-        doubtful = [
-            k
-            for k, r in fields.items()
-            if k in failures
-            or (
-                r.get("value") is not None
-                and r.get("confidence") is not None
-                and k in asked
-                and float(r["confidence"]) < threshold(asked[k], below, floor)
-            )
-        ]
-        boxed: dict[str, list[dict[str, Any]]] = {}
+        asked = {f["key"]: f for f in fields_of(row.request)}
+        below = review_below(row.request)
+        doubtful: list[str] = []
+        for k, value in fields.items():
+            r = an_object(value, f"field {k}")
+            confidence = r.get("confidence")
+            if k in failures:
+                doubtful.append(k)
+            elif r.get("value") is not None and confidence is not None and k in asked:
+                if not isinstance(confidence, int | float | str):
+                    raise Malformed(f"field {k}'s confidence {confidence!r} is not a number")
+                if float(confidence) < threshold(asked[k], below, floor):
+                    doubtful.append(k)
+        boxed: dict[str, list[Box]] = {}
         for k in doubtful:
-            citation = cast(dict[str, Any], fields[k].get("citation") or {})
-            found = boxes.locate(pages.layout, citation.get("page"), citation.get("quote"), boxes.printed(fields[k]))
-            if found and found.get("boxes"):
-                boxed[k] = cast(list[dict[str, Any]], found["boxes"])
+            r = an_object(fields[k], f"field {k}")
+            citation = an_object(r.get("citation") or {}, f"field {k}'s citation")
+            found = boxes.locate(pages.layout, citation.get("page"), citation.get("quote"), boxes.printed(r))
+            if found and found["boxes"]:
+                boxed[k] = found["boxes"]
         return await pictures.crops(boxed)
 
     def _pictures(self, row: ExtractionRow, file: FileInfo) -> Pictures | None:
@@ -1096,7 +1128,7 @@ class Extractor:
 
         return Pictures(load, file.mime, allow)
 
-    async def layout_of(self, who: Who, row: ExtractionRow) -> dict[str, Any]:
+    async def layout_of(self, who: Who, row: ExtractionRow) -> Layout:
         """The layout an extraction read: from the stored reading of its file's bytes, else read again from the file."""
         if self.readings is not None and row.file_digest:
             ocr = settings_of(bool(row.request.get("ocr")))
@@ -1105,29 +1137,31 @@ class Extractor:
                 return layout_of(stored)
         return layout_of(await self._reading(who, await self.files.readable(who, row.file_id), row.request))
 
-    async def _propose(self, row: ExtractionRow, pages: Pages, usage: Usage) -> dict[str, Any]:
+    async def _propose(self, row: ExtractionRow, pages: Pages, usage: Usage) -> Json:
         """Fields in the document type's shape and a suggested name, read from the first pages only, so an unknown
         document's cost is bounded; the read that follows uses every page like any other. A proposed field the scorer
         could not check (no key, an unknown type, a key twice) is left out."""
         assert self.models is not None
-        first = sorted(pages.texts)[: int(row.request.get("proposePages") or PROPOSE_PAGES)]
-        user = prompt.propose_prompt([pages.texts[n] for n in first], hint=row.request.get("hint"))
+        size = row.request.get("proposePages") or PROPOSE_PAGES
+        if not isinstance(size, int | float | str):
+            raise Malformed(f"proposePages {size!r} is not a number")
+        first = sorted(pages.texts)[: int(size)]
+        user = prompt.propose_prompt([pages.texts[n] for n in first], hint=narrow.field(row.request, "hint", str))
         answer = await self.models.structured(
             prompt.PROPOSE_SYSTEM, user, prompt.PROPOSAL_SCHEMA, run=row.id, step="propose", tenant=row.tenant_id,
             usage=usage,
         )  # fmt: skip
-        raw = cast(dict[str, Any], answer) if isinstance(answer, dict) else {}
-        kept: list[dict[str, Any]] = []
-        for f in cast(list[Any], raw.get("fields") or []):
+        raw = narrow.json_object(answer)
+        kept: list[Json] = []
+        for f in entries(raw.get("fields")):
             if not isinstance(f, dict):
                 continue
-            one = cast(dict[str, Any], f)
-            key, kind = one.get("key"), one.get("type") or "text"
+            key, kind = f.get("key"), f.get("type") or "text"
             if not isinstance(key, str) or not key or kind not in FIELD_TYPES or any(k["key"] == key for k in kept):
                 continue
-            named = {k: one[k] for k in ("key", "label", "description", "options") if k in one}
+            named: Json = {k: f[k] for k in ("key", "label", "description", "options") if k in f}
             kept.append(named | {"type": kind})
-        return {"name": str(raw.get("name") or ""), "fields": kept}
+        return {"name": str(raw.get("name") or ""), "fields": [*kept]}
 
     async def _refused(self, row: ExtractionRow, e: ModelRefusedError) -> ExtractionRow:
         code, message = REFUSALS.get(e.code or "", ("model_unavailable", str(e)))

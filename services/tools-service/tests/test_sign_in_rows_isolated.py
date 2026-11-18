@@ -99,7 +99,8 @@ async def test_another_team_finds_no_sign_in_through_the_store(engine: AsyncEngi
         now = datetime.now(UTC)
         assert await store.take_state(tenant, f"s_{TEAM_A}", connection_id=con, person=PERSON, now=now) is None
     with isolation.scope(tenant, TEAM_A):
-        assert (await store.token(tenant, con, PERSON) or {}).get("access_ct") == "sealed"
+        held = await store.token(tenant, con, PERSON)
+        assert held is not None and held.access_ct == "sealed"
 
 
 async def test_the_database_alone_hides_and_guards_them(engine: AsyncEngine, tenant: str) -> None:
@@ -141,6 +142,6 @@ async def test_a_moved_connection_takes_its_rows(engine: AsyncEngine, tenant: st
     with isolation.tenant_wide("TESTS", tenant_id=tenant):
         await store.change(tenant, con, 2, {"team_id": TEAM_B}, actor="dev seed", at=now)
     with isolation.scope(tenant, TEAM_B):
-        found: dict[str, Any] = await store.token(tenant, con, PERSON) or {}
-        assert found.get("access_ct") == "sealed"
-        assert [p["person_id"] for p in await store.people(tenant, con)] == [PERSON]
+        found = await store.token(tenant, con, PERSON)
+        assert found is not None and found.access_ct == "sealed"
+        assert [p.person_id for p in await store.people(tenant, con)] == [PERSON]

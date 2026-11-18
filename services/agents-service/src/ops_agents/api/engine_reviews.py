@@ -16,10 +16,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from ops_engine.store import RUN_PREFIX, DefinitionStore, RunStore
+from ops_engine.store import RUN_PREFIX, DefinitionRow, DefinitionStore, RunStore
 from ops_policy import input_hash
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ValidationFailed
 from ops_service_kit.logging import get_logger
+from ops_service_kit.narrow import json_list, json_object
 
 from ..store.cases import CaseNotFound, CaseStore
 from ..store.engine import DatabaseError, EngineTransactions
@@ -38,7 +39,7 @@ from .auth import (
 )
 from .deps import Runtime
 from .engine_resume import enqueue_resume, resumed
-from .engine_runs import first_run
+from .engine_runs import starters_of
 from .legacy_tasks import NOT_READ, legacy_task
 from .option_inputs import held_calls
 from .review_sla import sla_hours
@@ -80,8 +81,8 @@ async def _connect_view(rt: Runtime, run: dict[str, Any], payload: dict[str, Any
     wait = connect_wait(payload)
     if wait is None:
         return None
-    first = await first_run(_runs(rt), run)
-    return wait | {"person": person_of(first.get("created_by"))}
+    above = await starters_of(_runs(rt), str(run.get("created_by") or ""), run.get("team_id"))
+    return wait | {"person": person_of(above[-1].created_by if above else run.get("created_by"))}
 
 
 def is_engine_id(review_id: str) -> bool:
@@ -97,7 +98,8 @@ async def _visible(rt: Runtime, run_id: str) -> dict[str, Any]:
     from .routers.engine import visible_run  # noqa: PLC0415 - the router imports the Reviews facade's neighbours
 
     try:
-        return await visible_run(rt, run_id)
+        # The Reviews views below still read the run as its stored mapping.
+        return (await visible_run(rt, run_id)).model_dump()
     except NotFound as e:
         raise NotFound("Review") from e
 
@@ -336,7 +338,7 @@ async def reply_preview(rt: Runtime, team: str, draft: Any, call: dict[str, Any]
     subjects: dict[str, str] = {}
     for case_id in {c for c in on_case.values() if c}:
         with contextlib.suppress(CaseNotFound):
-            subjects[case_id] = str((await store.get(case_id, [team])).get("subject") or "")
+            subjects[case_id] = (await store.get(case_id, [team])).subject
     return {
         "to": str(args.get("to") or ""),
         "mailbox": str(args["mailbox"]) if args.get("mailbox") else None,
@@ -365,7 +367,7 @@ def _read_line(read: dict[str, Any]) -> tuple[str, str]:
 
 async def titles_of(rt: Runtime, run: dict[str, Any]) -> dict[str, Any]:
     """The run's workflow by its display name and each step by its own, from the version the run pinned."""
-    stored = await DefinitionStore(EngineTransactions(rt.db)).get(str(run["workflow_id"]), run.get("version"))
+    stored = await DefinitionStore(EngineTransactions(rt.db)).row(str(run["workflow_id"]), run.get("version"))
     return _titles(run, stored)
 
 
@@ -383,11 +385,11 @@ async def titles_by_run(rt: Runtime, runs: list[dict[str, Any]]) -> dict[str, di
     }
 
 
-def _titles(run: dict[str, Any], stored: dict[str, Any] | None) -> dict[str, Any]:
-    definition = cast(dict[str, Any], (stored or {}).get("definition") or {})
-    nodes = [cast(dict[str, Any], n) for n in cast(list[Any], definition.get("nodes") or []) if isinstance(n, dict)]
+def _titles(run: dict[str, Any], stored: DefinitionRow | None) -> dict[str, Any]:
+    definition = json_object(stored.definition if stored else None)
+    nodes = [json_object(n) for n in json_list(definition.get("nodes")) if isinstance(n, dict)]
     return {
-        "workflow": str((stored or {}).get("name") or run["workflow_id"]),
+        "workflow": (stored.name if stored else "") or str(run["workflow_id"]),
         "steps": {str(n.get("id")): str(n.get("name") or n.get("id")) for n in nodes},
     }
 
@@ -611,9 +613,10 @@ async def team_runs(rt: Runtime) -> list[dict[str, Any]]:
     waiting = await store.list(team_id=current_team(), status="waiting", limit=cap)
     if len(waiting) >= cap:
         log.warning("review_source_capped", source="waiting_runs", cap=cap)
-    seen = {str(r["id"]) for r in recent}
-    rows = recent + [r for r in waiting if str(r["id"]) not in seen]
-    return sorted(rows, key=lambda r: str(r["created_at"]), reverse=True)
+    seen = {r.id for r in recent}
+    rows = recent + [r for r in waiting if r.id not in seen]
+    # The Reviews views read each run as its stored mapping.
+    return [r.model_dump() for r in sorted(rows, key=lambda r: r.created_at, reverse=True)]
 
 
 # One run, or one decision of it, as the runner's store returns it.
@@ -1072,5 +1075,6 @@ async def run_as_team_account(rt: Runtime, me: Principal, review_id: str) -> dic
     require_team_account_use(me, team_id=str(run["team_id"]), what=f"{app}'s team account")
     if not wait["teamAccount"]:
         raise Conflict(f"{app} has no team account to run as; its person connects their own.", code="no_team_account")
-    await resumed(rt.db, run, waiting, {"teamAccount": {"by": me.email}}, source="team_account")
+    resume = {"teamAccount": {"by": me.email}}
+    await resumed(rt.db, str(run["id"]), str(run["team_id"]), waiting, resume, source="team_account")
     return await view(rt, await _visible(rt, str(run["id"])))

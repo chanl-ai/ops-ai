@@ -424,7 +424,7 @@ async def keep(rt: Any, key: str, value: str, *, kind: str = "fact", agent: str 
             source="extraction",
             thread_id=None,
         )
-    return str(row["id"])
+    return str(row.id)
 
 
 def lines_of(text: str) -> list[str]:
@@ -474,8 +474,8 @@ async def test_a_turn_records_the_memory_versions_it_used(stack: Stack) -> None:
     assert fixed.status_code == 200, fixed.text
     with tenant_scope(TENANT):
         then = (await Memories(graph_store(rt).engine).by_ids([used]))[used]
-    assert (then["value"], then["status"]) == ("Leeds Central", SUPERSEDED), "the version used, as it was"
-    assert then["use_count"] == 1 and then["last_used_at"]
+    assert (then.value, then.status) == ("Leeds Central", SUPERSEDED), "the version used, as it was"
+    assert then.use_count == 1 and then.last_used_at
 
 
 async def test_a_forget_is_undone_within_its_grace_and_not_after(stack: Stack) -> None:  # noqa: F811

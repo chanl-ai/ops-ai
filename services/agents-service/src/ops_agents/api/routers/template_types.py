@@ -69,13 +69,13 @@ async def make(rt: Runtime, me: Principal, kind: str, t: dict[str, Any], name: s
 
 async def newest(rt: Runtime, kind: str, type_id: str) -> tuple[dict[str, Any], bool]:
     """The type's newest record and whether that version is an unpublished draft."""
-    v = (await (await _store(rt, kind)).get(type_id))["versions"][0]
-    return cast(dict[str, Any], v["record"]), v.get("published_at") is None
+    v = (await (await _store(rt, kind)).get(type_id)).versions[0]
+    return v.record, v.published_at is None
 
 
 async def name(rt: Runtime, kind: str, type_id: str) -> str | None:
     try:
-        return str((await (await _store(rt, kind)).get(type_id))["name"])
+        return (await (await _store(rt, kind)).get(type_id)).name
     except NotFound:
         return None
 
@@ -90,7 +90,7 @@ async def digest(rt: Runtime, kind: str, type_id: str) -> str | None:
 
 
 async def names_in_use(rt: Runtime, kind: str, team: str) -> set[str]:
-    return {str(r["name"]).casefold() for r in await (await _store(rt, kind, team)).rows() if r["team_id"] == team}
+    return {r.name.casefold() for r in await (await _store(rt, kind, team)).rows() if r.team_id == team}
 
 
 async def save(rt: Runtime, me: Principal, kind: str, type_id: str, record: dict[str, Any]) -> int:
@@ -99,7 +99,7 @@ async def save(rt: Runtime, me: Principal, kind: str, type_id: str, record: dict
         await case_routes.save_type(rt, me, type_id, case_routes.Definition.model_validate(record))
     else:
         await task_routes.save_type(rt, me, type_id, task_routes.Definition.model_validate(record))
-    return int((await (await _store(rt, kind, store_team(me))).get(type_id))["version"])
+    return (await (await _store(rt, kind, store_team(me))).get(type_id)).version
 
 
 def flat(kind: str, record: dict[str, Any] | None) -> dict[str, Any] | None:

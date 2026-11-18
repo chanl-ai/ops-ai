@@ -18,7 +18,6 @@ from collections.abc import Callable, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
 
 from ops_documents.errors import FileMissingError, FileNotReadyError
 from ops_documents.files import Files, Who
@@ -36,6 +35,7 @@ from ops_ingest.reading import (
     open_file,
     read,
 )
+from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 from ops_store import background, isolation
 
@@ -73,10 +73,10 @@ def next_reading(queued: Sequence[ReadingRow], running_teams: Sequence[str]) -> 
     return 0
 
 
-def answer_of(row: ReadingRow, file_id: str, pages: Sequence[Page] | None = None) -> dict[str, Any]:
+def answer_of(row: ReadingRow, file_id: str, pages: Sequence[Page] | None = None) -> Json:
     """What a caller reads: the reading's status and progress, then, once done, the file's facts and its pages."""
     mode, _, language = row.key.partition(":")
-    out: dict[str, Any] = {
+    out: Json = {
         "fileId": file_id,
         "digest": row.digest,
         "status": row.status,
@@ -124,7 +124,7 @@ class Readings:
 
     # ── Asking ────────────────────────────────────────────────────────────
 
-    async def ask(self, who: Who, file_id: str, settings: ReadingSettings) -> tuple[int, dict[str, Any]]:
+    async def ask(self, who: Who, file_id: str, settings: ReadingSettings) -> tuple[int, Json]:
         """(200, the reading) when it is stored or was made now, (202, its status) when it is read in the background,
         (200, failed with the reason) for a file that cannot be read at all."""
         file = await self.files.readable(who, file_id)
@@ -161,9 +161,7 @@ class Readings:
             await self._later(row)
         return 202, answer_of(row, file_id)
 
-    async def get(
-        self, who: Who, file_id: str, settings: ReadingSettings, *, page: int | None = None
-    ) -> dict[str, Any]:
+    async def get(self, who: Who, file_id: str, settings: ReadingSettings, *, page: int | None = None) -> Json:
         """The reading as it is now, with its pages (or one page) once done; status `none` when never asked for."""
         file = await self.files.readable(who, file_id)
         digest = self._digest(file)

@@ -24,6 +24,7 @@ from ops_agent_kernel.types import (
     TurnRequest,
     TurnResult,
 )
+from ops_service_kit.http import Json
 
 FEES = Passage("doc_1", "Fee schedule", "Wires", "v2", "An outgoing wire costs 25.00.", "kb_fees")
 MESSAGE = "I could not find that in the fee schedule. A banker will call you back."
@@ -33,9 +34,7 @@ SETTINGS = AgentSettings("ag_fees", 1, [PromptFragment("You answer fee questions
 
 
 class Tools:
-    async def execute(
-        self, tool: str, arguments: dict[str, object], *, key: str, approval_token: str | None
-    ) -> ToolOutcome:
+    async def execute(self, tool: str, arguments: Json, *, key: str, approval_token: str | None) -> ToolOutcome:
         return ToolOutcome(True, {})
 
 

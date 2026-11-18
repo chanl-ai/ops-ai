@@ -75,13 +75,14 @@ class SignInWatch:
         """One pass over every SAML provider of an open workspace; returns how many notices it sent."""
         sent = 0
         for tenant_id, provider_id in await self.store.watched():
-            p = await self.store.provider(tenant_id, provider_id)
-            if p is None:
-                continue
+            # Loaded inside the try: a provider whose row cannot be read is logged and skipped, and the pass goes on.
             try:
+                p = await self.store.provider(tenant_id, provider_id)
+                if p is None:
+                    continue
                 sent += await self._one(p)
             except Exception as e:
-                log.warning("signin_watch_failed", provider=p.id, error=type(e).__name__)
+                log.warning("signin_watch_failed", provider=provider_id, error=type(e).__name__)
         return sent
 
     async def _one(self, p: Provider) -> int:

@@ -395,8 +395,8 @@ class ToolRegistry:
             )
             if conn is not None and self.connections is not None:
                 # A test run takes the app's sandbox account when the team has one (records.account_for).
-                found = await self.connections.accounts(tenant_id, str(conn["team_id"]), str(conn["app_id"]))
+                found = await self.connections.accounts(tenant_id, conn.team_id, conn.app_id)
                 conn = account_for(conn, found, run) or conn
-                module = {**module, "connection_id": conn["id"]}
-            module = {**module, "sandbox": bool((conn or {}).get("sandbox"))}
+                module = {**module, "connection_id": conn.id}
+            module = {**module, "sandbox": bool(conn.sandbox) if conn else False}
         return Resolved(op["access"], op["executor"], module, op)

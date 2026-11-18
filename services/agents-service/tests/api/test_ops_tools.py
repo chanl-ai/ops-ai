@@ -61,7 +61,7 @@ async def opened(stack_: Stack, team: str, subject: str) -> str:
         case = await CaseStore(rt.db).open(
             team_id=team, subject=subject, priority="normal", by="seed@harborpine.example"
         )
-    return str(case.case["id"])
+    return str(case.case.id)
 
 
 def ids(outcome: Any) -> list[str]:
@@ -236,7 +236,7 @@ async def test_a_case_read_brings_its_customer_due_date_and_notes(stack: Stack) 
             by="seed@harborpine.example",
             customer_name="Okafor Family Trust",
         )
-        cid = str(made.case["id"])
+        cid = str(made.case.id)
         await store.add_event(
             cid, "note", ref=None, detail={"text": "Risk profile last refreshed 14 months ago."}, by="x"
         )

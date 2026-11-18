@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TypedDict
 
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
 from ops_service_kit.ids import new_id
@@ -66,6 +66,28 @@ def closed() -> Forbidden:
     return Forbidden("This workspace is closed.", code="workspace_closed")
 
 
+class WorkspaceStateView(TypedDict):
+    """The workspace's owner and status as `/v1/me` and the lifecycle routes send them."""
+
+    ownerUserId: str | None
+    status: str
+    # While closed, when its records are removed; None otherwise.
+    purgeAfter: str | None
+
+
+class DeleteCheck(TypedDict):
+    """What a team's Delete card shows."""
+
+    teamId: str
+    status: str
+    security: bool
+    daysLeft: int | None
+    usageKnown: bool
+    liveWorkflows: list[str]
+    runsInProgress: int
+    canDelete: bool
+
+
 @dataclass
 class WorkspaceLifecycle:
     store: LifecycleStore
@@ -77,7 +99,7 @@ class WorkspaceLifecycle:
     async def _is_owner(self, actor: Actor) -> None:
         await self.members.require_admin(workspace(actor), "workspace", "manage")
 
-    def state_of(self, s: WorkspaceState) -> dict[str, Any]:
+    def state_of(self, s: WorkspaceState) -> WorkspaceStateView:
         """What `/v1/me` says of the workspace: its owner, status and, while closed, when it will be purged."""
         purge_after = None
         if s.status == CLOSED and s.closed_at:
@@ -89,7 +111,7 @@ class WorkspaceLifecycle:
         if await self.store.status(tenant_id) in (CLOSED, PURGING, PURGED):
             raise closed()
 
-    async def transfer(self, actor: Actor, to: str) -> dict[str, Any]:
+    async def transfer(self, actor: Actor, to: str) -> WorkspaceStateView:
         await self._is_owner(actor)
         if to == actor.user_id:
             raise ValidationFailed("Pick another account admin.", code="same_owner")
@@ -128,7 +150,7 @@ class WorkspaceLifecycle:
             log.warning("team_usage_unread", extra={"error": str(e)})
             raise _unavailable() from e
 
-    async def close(self, actor: Actor, name: str, usage: UsageReader) -> dict[str, Any]:
+    async def close(self, actor: Actor, name: str, usage: UsageReader) -> WorkspaceStateView:
         await self._is_owner(actor)
         rows = await self.teams.every(actor.tenant_id, statuses=["active", "archived"])
         if name.strip() != (await self.store.name(actor.tenant_id)):
@@ -149,7 +171,7 @@ class WorkspaceLifecycle:
             raise closed() from e
         return self.state_of(await self.store.state(actor.tenant_id))
 
-    async def restore(self, actor: Actor) -> dict[str, Any]:
+    async def restore(self, actor: Actor) -> WorkspaceStateView:
         await self._is_owner(actor)
         try:
             await self.store.restore(actor.tenant_id, by=actor.user_id, request_id=actor.request_id)
@@ -171,7 +193,7 @@ class WorkspaceLifecycle:
         if not left:
             raise NotFound("team membership")
 
-    async def delete_check(self, actor: Actor, team_id: str, usage: UsageReader) -> dict[str, Any]:
+    async def delete_check(self, actor: Actor, team_id: str, usage: UsageReader) -> DeleteCheck:
         """What the Delete card shows: whether the team may be deleted now and, if not, each reason. The reads run in
         one transaction that ends before agents-service is asked, so none is open across the call."""
         async with isolation.request_transaction():

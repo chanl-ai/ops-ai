@@ -18,14 +18,16 @@ from pydantic import Field
 
 from ops_access import can
 from ops_identity.fastapi import Tx
+from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, In, OptionsPage, options_page, options_window
+from ops_service_kit.http import Envelope, In, JsonValue, OptionsPage, options_page, options_window
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
 from ops_store import isolation
 
 from ...store.skill_list import View, menu_versions, newest_specs, offered_by, skills_page
+from ...store.skills import SkillRow
 from ...store.template_copies import TemplateCopies
 from ..agent_registry import registry as agent_registry
 from ..agent_registry import require_owner_or_admin
@@ -194,7 +196,7 @@ async def skill_options(rt: Rt, _: Annotated[Principal, Depends(reader_of("skill
             for t in await known_tools(rt, listed=directory)
         ]
         specs = await newest_specs(rt.db)
-        teams = sorted({str(r["owner_team"]) for r in await skills(rt).rows()})
+        teams = sorted({r.owner_team for r in await skills(rt).rows()})
     held: list[Any] = [k for s in specs for k in cast(list[Any], s.get("collections") or [])]
     kbs = sorted({str(k) for k in held})
     return ok({"teams": teams, "tools": tools, "knowledgeBases": kbs, "limits": LIMITS})
@@ -207,7 +209,7 @@ async def get_skill(
     """The skill with its instructions and every version: skills: view in the skill's team (403 `forbidden`), the same
     right render asks for, so a person who may only chat never reads a skill's text."""
     row = await skills(rt).row(skill_id)
-    can(caller_of(caller), "skills", "view", team=str(row["team_id"]), what=row["slug"], code="forbidden")
+    can(caller_of(caller), "skills", "view", team=row.team_id, what=row.slug, code="forbidden")
     return ok(await detail(rt, skill_id))
 
 
@@ -220,7 +222,7 @@ async def render_skill(
     skills: view there too (403 `forbidden`). 422 `skill_not_published`, `part_required`, `unknown_part`,
     `unknown_input` or `missing_input`."""
     row = await skills(rt).row(skill_id)
-    can(caller_of(caller), "skills", "view", team=str(row["team_id"]), what=row["slug"], code="forbidden")
+    can(caller_of(caller), "skills", "view", team=row.team_id, what=row.slug, code="forbidden")
     return ok(await render_published(rt, skill_id, body.part, body.inputs))
 
 
@@ -229,10 +231,8 @@ async def _request_review(rt: Runtime, skill_id: str, version: int, note: str, b
     v = await reg.version(skill_id, version)
     assert v is not None
     row = await reg.row(skill_id)
-    live = await reg.version(skill_id, int(row["published_version"])) if row["published_version"] else None
-    decision = await decide(
-        rt, area="skills", team_id=row["team_id"], old=live["content"] if live else None, new=v["content"]
-    )
+    live = await reg.version(skill_id, row.published_version) if row.published_version else None
+    decision = await decide(rt, area="skills", team_id=row.team_id, old=live.content if live else None, new=v.content)
     approved = not decision.review_required
     req = await agent_registry(rt).open_request(
         "skill",
@@ -242,11 +242,11 @@ async def _request_review(rt: Runtime, skill_id: str, version: int, note: str, b
         by=by,
         body={
             "skillId": skill_id,
-            "skillName": v["content"]["name"],
-            "savedBy": v["saved_by"],
+            "skillName": v.content["name"],
+            "savedBy": v.saved_by,
             **decision.record(),
             **decision.record(),
-            "changes": v["changes"],
+            "changes": v.changes,
         },
         approved=approved,
     )
@@ -254,16 +254,16 @@ async def _request_review(rt: Runtime, skill_id: str, version: int, note: str, b
         await publish(rt, req, "auto-approve (dev)")
 
 
-async def changeable(rt: Runtime, me: Principal, skill_id: str, action: str) -> dict[str, Any]:
+async def changeable(rt: Runtime, me: Principal, skill_id: str, action: str) -> SkillRow:
     """The skill's row once the caller may change it (auth.require_builder: the roles grid, in the team that owns
     it or, for one no team owns, the team the request acts in)."""
     row = await skills(rt).row(skill_id)
     require_builder(
         me,
         area="skills",
-        team_id=row["team_id"],
+        team_id=row.team_id,
         action=action,
-        what=f"skill {row['slug']}",
+        what=f"skill {row.slug}",
     )
     return row
 
@@ -288,13 +288,13 @@ async def _editable(rt: Runtime, me: Principal, skill_id: str, base_version: int
     """The newest version once a draft save may write it: 409 when the skill is deprecated, `base_version` is not
     the newest version, or the newest is in review."""
     row = await changeable(rt, me, skill_id, "edit")
-    if row["deprecated_reason"]:
+    if row.deprecated_reason:
         raise Conflict("The skill is deprecated; it takes no new versions.", code="skill_deprecated")
-    if base_version != row["version"]:
-        raise Conflict(f"v{row['version']} was saved after v{base_version}; reload and edit again.", code="stale_base")
+    if base_version != row.version:
+        raise Conflict(f"v{row.version} was saved after v{base_version}; reload and edit again.", code="stale_base")
     if any(r["status"] == "pending" for r in await agent_registry(rt).requests("skill", skill_id)):
         raise Conflict("The newest version is in review; decide the review first.", code="review_open")
-    return int(row["version"])
+    return row.version
 
 
 @router.put("/v1/skills/{skill_id}/draft", response_model=Envelope[SkillDetail])
@@ -307,7 +307,11 @@ async def save_skill_draft(rt: Rt, me: Me, skill_id: str, body: SkillDraftPatch)
     async with isolation.request_transaction():
         newest = await reg.version(skill_id, await _editable(rt, me, skill_id, body.base_version))
     assert newest is not None
-    merged = {**newest["content"], "toolIds": [t["toolId"] for t in newest["content"]["tools"]]}
+    tools = narrow.a_list(newest.content["tools"], "tools")
+    merged: dict[str, JsonValue] = {
+        **newest.content,
+        "toolIds": [narrow.an_object(t, "tool")["toolId"] for t in tools],
+    }
     merged |= body.model_dump(by_alias=True, exclude_none=True, exclude={"note", "base_version"})
     merged.pop("slug", None)
     content = await check_content(rt, merged)
@@ -344,13 +348,11 @@ async def delete_skill(rt: Rt, me: Me, _: Tx, skill_id: str) -> Response:
     """Refused (403) unless the caller created the skill or is an admin of its team, and (409) while it is pinned.
     Who deleted it is logged; agents-service has no audit table yet."""
     row = await skills(rt).row(skill_id)
-    require_owner_or_admin(
-        me, area="skills", team_id=row["team_id"], created_by=row["created_by"] or "", what=row["slug"]
-    )
-    require_unpinned(await pinned_by(rt, skill_id), row["slug"])
+    require_owner_or_admin(me, area="skills", team_id=row.team_id, created_by=row.created_by or "", what=row.slug)
+    require_unpinned(await pinned_by(rt, skill_id), row.slug)
     await skills(rt).delete(skill_id)
     await TemplateCopies(rt.db).removed_record("skill", skill_id)
-    log.info("skill_deleted", skill=skill_id, slug=row["slug"], by=me.email)
+    log.info("skill_deleted", skill=skill_id, slug=row.slug, by=me.email)
     return Response(status_code=204)
 
 
@@ -386,12 +388,12 @@ async def agent_skill_options(  # noqa: PLR0917 - FastAPI reads each query param
     rows = await reg.attachable(search, held, offset, window, ids=ids, loading=loading)
     opts: list[dict[str, Any]] = []
     for r in rows:
-        v = await reg.version(r["id"], int(r["published_version"] or r["version"]))
-        content = cast(dict[str, Any], (v or {}).get("content") or {})
+        v = await reg.version(r.id, r.published_version or r.version)
+        content = v.content if v is not None else {}
         missing = missing_for(content, spec)
-        hint = f"v{r['published_version']} · {content.get('useWhen', '')}"
+        hint = f"v{r.published_version} · {content.get('useWhen', '')}"
         reason = f"Needs {', '.join(missing)}; grant them on this agent first." if missing else None
-        opts.append({"id": r["id"], "label": content.get("name", r["slug"]), "hint": hint, "disabled": reason})
+        opts.append({"id": r.id, "label": content.get("name", r.slug), "hint": hint, "disabled": reason})
     return ok(options_page(opts, offset, limit))
 
 
@@ -405,9 +407,9 @@ async def attach_skill(rt: Rt, me: Me, _: Tx, agent_id: str, skill_id: str, body
     version = body.version
     if version is None:
         found = await skills(rt).find(skill_id)
-        if found is None or found["published_version"] is None:
+        if found is None or found.published_version is None:
             raise NotFound(f"Published skill {skill_id}")
-        version = int(found["published_version"])
+        version = found.published_version
     spec["skillPins"] = await pin(rt, spec, skill_id, version, by=me.email, at=now_iso())
     await reg.save(agent_id, spec, by=me.email, note=f"Attached {skill_id} v{version}")
     return ok(await agent_skills(rt, agent_id))

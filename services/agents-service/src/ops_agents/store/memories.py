@@ -7,14 +7,16 @@ from __future__ import annotations
 import re
 from collections import Counter
 from datetime import datetime, timedelta
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, TypedDict
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
 from ops_store.dialect import insert_ignore, lock_key
+from ops_store.rows import one, rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, full_text
 from ops_store.team_scope import any_team, team_visible
 
@@ -157,30 +159,86 @@ async def _has_full_text_index(c: AsyncConnection) -> bool:
     return _FULL_TEXT[url]
 
 
-def _get(row: Any, name: str) -> Any:
-    """A column of a row read as a mapping or as a tuple."""
-    if isinstance(row, dict):
-        return cast(dict[str, Any], row)[name]
-    return getattr(row, name)
+class MemoryRecord(Out):
+    """An agent_memories row as stored, every column in table order. Key and value stay as the person or agent wrote
+    them; status, kind and source stay plain text, as stored."""
+
+    id: str
+    tenant_id: str
+    team_id: str
+    agent_id: str
+    person: str
+    kind: str
+    key: str | None
+    value: str
+    confidence: float
+    source: str
+    source_thread_id: str | None
+    created_at: str
+    superseded_at: str | None
+    status: str
+    quote: str | None
+    source_message_id: str | None
+    sensitivity: str
+    supersedes_id: str | None
+    confirmed_at: str | None
+    use_count: int
+    last_used_at: str | None
+    erase_after: str | None
 
 
-def _audit(person: str, row: Any, action: str, actor: str, at: str) -> dict[str, Any]:
-    """One memory_audit row for `action` on `row`: who, which team and which memory, never its text."""
+class MemoryMatch(MemoryRecord):
+    """A memory found for some words, with its `match` score: PostgreSQL's full-text rank, SQL Server's full-text
+    rank, or the number of words found."""
+
+    match: float
+
+
+class MemoryAuditRecord(Out):
+    """A memory_audit row, every column in table order: who did what to which memory, never its text."""
+
+    id: str
+    tenant_id: str
+    person: str
+    team_id: str
+    agent_id: str
+    memory_id: str | None
+    action: str
+    actor: str
+    at: str
+
+
+class AuditValues(TypedDict):
+    """What a memory_audit row is written with; its tenant comes from the column's default."""
+
+    id: str
+    person: str
+    team_id: str
+    agent_id: str
+    memory_id: str | None
+    action: str
+    actor: str
+    at: str
+
+
+def _audit(person: str, row: Any, action: str, actor: str, at: str) -> AuditValues:
+    """One memory_audit row for `action` on `row` (a memory, or a row selecting its id, agent_id and team_id): who,
+    which team and which memory, never its text."""
     return {
         "id": new_id("mau"),
         "person": person,
-        "team_id": _get(row, "team_id"),
-        "agent_id": _get(row, "agent_id"),
-        "memory_id": _get(row, "id"),
+        "team_id": row.team_id,
+        "agent_id": row.agent_id,
+        "memory_id": row.id,
         "action": action,
         "actor": actor,
         "at": at,
     }
 
 
-def _confirmed(row: dict[str, Any]) -> bool:
+def _confirmed(row: MemoryRecord) -> bool:
     """The person stands behind it: they said it again, asked for it (both stamp confirmed_at), or wrote it."""
-    return bool(row.get("confirmed_at")) or row.get("source") == PERSON
+    return bool(row.confirmed_at) or row.source == PERSON
 
 
 # Background process (docs/architecture/identity-and-tenancy.md, "The team is the workspace"): the workspace retention
@@ -225,13 +283,13 @@ class Memories:
         sensitivity: str = "none",
         supersedes_id: str | None = None,
         confirmed: bool = False,
-    ) -> dict[str, Any]:
+    ) -> MemoryRecord:
         """Saves one memory. An active one replaces `supersedes_id` and the memory in use for its key in the same
         scope, unless that memory is one the person confirmed or wrote and this one is not confirmed: then both are
         kept, the new one in conflict, until the person chooses. A suggestion replaces nothing until the person says
-        yes."""
+        yes. The memory as saved, read back by the insert."""
         m, now = agent_memories, now_iso()
-        row = {
+        row: dict[str, str | float | None] = {
             "id": new_id("mem"),
             "team_id": team_id,
             "agent_id": agent_id,
@@ -259,23 +317,21 @@ class Memories:
                 hit = [m.c.id == supersedes_id] if supersedes_id else []
                 if key:
                     hit.append(sa.and_(m.c.agent_id == agent_id, m.c.key == key))
-                replaced = (
-                    [dict(r) for r in (await c.execute(sa.select(m).where(*same, sa.or_(*hit)))).mappings()]
-                    if hit
-                    else []
-                )
+                replaced = await rows(c, sa.select(m).where(*same, sa.or_(*hit)), MemoryRecord) if hit else []
                 held = next((r for r in replaced if _confirmed(r)), None)
                 if held is not None and not confirmed:
-                    row |= {"status": CONFLICT, "supersedes_id": held["id"]}
+                    row |= {"status": CONFLICT, "supersedes_id": held.id}
                 elif replaced:
-                    row["supersedes_id"] = supersedes_id or replaced[0]["id"]
+                    row["supersedes_id"] = supersedes_id or replaced[0].id
                     await c.execute(
                         m.update()
-                        .where(m.c.id.in_([r["id"] for r in replaced]))
+                        .where(m.c.id.in_([r.id for r in replaced]))
                         .values(superseded_at=now, status=SUPERSEDED)
                     )
-            await c.execute(m.insert().values(**row))
-        return row
+            saved = await one(c, m.insert().values(**row).returning(m), MemoryRecord)
+        if saved is None:
+            raise RuntimeError(f"the insert of memory {row['id']} returned no row")
+        return saved
 
     async def confirm(self, person: str, team_id: str, memory_id: str) -> None:
         """The person said a memory again: it is confirmed, so a later learned contradiction asks before replacing."""
@@ -287,21 +343,21 @@ class Memories:
                 .values(confirmed_at=now_iso())
             )
 
-    async def accept(self, person: str, memory_id: str, *, actor: str) -> dict[str, Any] | None:
+    async def accept(self, person: str, memory_id: str, *, actor: str) -> MemoryRecord | None:
         """The person said yes to a suggestion (or chose a memory in conflict): it is in use and confirmed, and the
         memory it changes, or the one in use for its key, is replaced. None when the person has no such memory
         waiting."""
         m, now = agent_memories, now_iso()
         current = await self.get(person, memory_id)
-        if current is None or current["status"] not in (SUGGESTED, CONFLICT):
+        if current is None or current.status not in (SUGGESTED, CONFLICT):
             return None
         async with tenant_tx(self.engine) as c:
-            await lock_key(c, f"memory:{current_tenant()}:{current['team_id']}:{person}")
-            hit = [m.c.id == current["supersedes_id"]] if current["supersedes_id"] else []
-            if current["key"]:
-                hit.append(sa.and_(m.c.agent_id == current["agent_id"], m.c.key == current["key"]))
+            await lock_key(c, f"memory:{current_tenant()}:{current.team_id}:{person}")
+            hit = [m.c.id == current.supersedes_id] if current.supersedes_id else []
+            if current.key:
+                hit.append(sa.and_(m.c.agent_id == current.agent_id, m.c.key == current.key))
             if hit:
-                same = [*self._mine(person, None), m.c.team_id == current["team_id"], m.c.status == ACTIVE]
+                same = [*self._mine(person, None), m.c.team_id == current.team_id, m.c.status == ACTIVE]
                 await c.execute(
                     m.update()
                     .where(*same, m.c.id != memory_id, sa.or_(*hit))
@@ -316,34 +372,34 @@ class Memories:
         replaced another, that one is in use again. False when the person has no such memory in use or waiting."""
         m, now = agent_memories, now_iso()
         current = await self.get(person, memory_id)
-        if current is None or current["status"] not in OPEN:
+        if current is None or current.status not in OPEN:
             return False
         async with tenant_tx(self.engine) as c:
-            await lock_key(c, f"memory:{current_tenant()}:{current['team_id']}:{person}")
+            await lock_key(c, f"memory:{current_tenant()}:{current.team_id}:{person}")
             await c.execute(
                 m.update().where(m.c.id == memory_id).values(status=FORGOTTEN, erase_after=erase_after(now))
             )
-            if current["status"] == ACTIVE and current["supersedes_id"]:
+            if current.status == ACTIVE and current.supersedes_id:
                 await c.execute(
                     m.update()
-                    .where(*self._mine(person, None), m.c.id == current["supersedes_id"], m.c.status == SUPERSEDED)
+                    .where(*self._mine(person, None), m.c.id == current.supersedes_id, m.c.status == SUPERSEDED)
                     .values(status=ACTIVE, superseded_at=None)
                 )
             await c.execute(memory_audit.insert().values(**_audit(person, current, "undo", actor, now)))
         return True
 
-    async def by_ids(self, ids: list[str]) -> dict[str, dict[str, Any]]:
+    async def by_ids(self, ids: list[str]) -> dict[str, MemoryRecord]:
         """Memories by id, whoever's, in the caller's tenant: what a thread's replies say they remembered."""
         if not ids:
             return {}
         m = agent_memories
         async with tenant_tx(self.engine) as c:
             q = sa.select(m).where(m.c.tenant_id == current_tenant(), team_visible(m), m.c.id.in_(ids))
-            return {str(r["id"]): dict(r) for r in (await c.execute(q)).mappings()}
+            return {r.id: r for r in await rows(c, q, MemoryRecord)}
 
     async def current(
         self, person: str, agent_id: str | None = None, *, team_id: str | None = None, limit: int = 200
-    ) -> list[dict[str, Any]]:
+    ) -> list[MemoryRecord]:
         """The person's memories in use, newest first; with `agent_id`, those that agent may use; with `team_id`,
         that team's only, named here because team_visible passes every team when the caller acts in none."""
         m = agent_memories
@@ -351,11 +407,11 @@ class Memories:
         if team_id is not None:
             q = q.where(m.c.team_id == team_id)
         async with tenant_tx(self.engine) as c:
-            return [dict(r) for r in (await c.execute(q.order_by(m.c.created_at.desc()).limit(limit))).mappings()]
+            return await rows(c, q.order_by(m.c.created_at.desc()).limit(limit), MemoryRecord)
 
     async def in_use(
         self, person: str, team_id: str, agent_id: str, *, kinds: tuple[str, ...] = (), limit: int = 200
-    ) -> list[dict[str, Any]]:
+    ) -> list[MemoryRecord]:
         """The person's memories in use in this team that `agent_id` may use, of `kinds` when named, newest first. The
         team is named here, not left to team_visible, which passes every team when the caller acts in none."""
         m = agent_memories
@@ -366,7 +422,7 @@ class Memories:
             q = q.where(m.c.kind.in_(kinds))
         q = q.order_by(m.c.created_at.desc()).limit(limit)
         async with tenant_tx(self.engine) as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, MemoryRecord)
 
     async def record_use(self, team_id: str, thread_id: str, message_id: str, picks: list[tuple[str, str]]) -> None:
         """Records which memory versions one reply used and why, and counts each use once per reply (a resumed turn
@@ -396,7 +452,7 @@ class Memories:
 
     async def matches(
         self, person: str, team_id: str, agent_id: str, words: list[str], *, limit: int = 10
-    ) -> list[dict[str, Any]]:
+    ) -> list[MemoryMatch]:
         """The person's memories in use in this team that `agent_id` may use, best match for `words` first, each with
         its `match` score: found and ranked by the database across every such memory, however old. PostgreSQL ranks
         its full-text match, SQL Server its full-text index when the server has one; otherwise
@@ -430,7 +486,7 @@ class Memories:
                 score = sum((sa.case((text.contains(w), 1), else_=0) for w in tokens), sa.literal(0))
                 q = sa.select(m, score.label("match")).where(*where, score > 0)
             q = q.order_by(score.desc(), m.c.created_at.desc()).limit(limit)
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, MemoryMatch)
 
     async def supersede(self, person: str, memory_id: str) -> None:
         """Marks one of the person's memories replaced: a corrected episode, which has no key to supersede by."""
@@ -442,15 +498,11 @@ class Memories:
                 .values(superseded_at=now_iso(), status=SUPERSEDED)
             )
 
-    async def get(self, person: str, memory_id: str) -> dict[str, Any] | None:
+    async def get(self, person: str, memory_id: str) -> MemoryRecord | None:
         m = agent_memories
         async with tenant_tx(self.engine) as c:
-            r = (
-                (await c.execute(sa.select(m).where(*self._mine(person, None), team_visible(m), m.c.id == memory_id)))
-                .mappings()
-                .first()
-            )
-        return dict(r) if r else None
+            q = sa.select(m).where(*self._mine(person, None), team_visible(m), m.c.id == memory_id)
+            return await one(c, q, MemoryRecord)
 
     async def forget(
         self, person: str, *, actor: str, agent_id: str | None = None, memory_id: str | None = None
@@ -479,17 +531,17 @@ class Memories:
         for its key now. False when there is no such forgotten memory or its grace has passed."""
         m, now = agent_memories, now_iso()
         row = await self.get(person, memory_id)
-        if row is None or row["status"] != FORGOTTEN or not row["erase_after"] or row["erase_after"] <= now:
+        if row is None or row.status != FORGOTTEN or not row.erase_after or row.erase_after <= now:
             return False
         async with tenant_tx(self.engine) as c:
-            await lock_key(c, f"memory:{current_tenant()}:{row['team_id']}:{person}")
-            if row["key"]:
+            await lock_key(c, f"memory:{current_tenant()}:{row.team_id}:{person}")
+            if row.key:
                 await c.execute(
                     m.update()
                     .where(
-                        *self._mine(person, str(row["agent_id"])),
-                        m.c.team_id == row["team_id"],
-                        m.c.key == row["key"],
+                        *self._mine(person, row.agent_id),
+                        m.c.team_id == row.team_id,
+                        m.c.key == row.key,
                         m.c.status == ACTIVE,
                     )
                     .values(status=SUPERSEDED, superseded_at=now)
@@ -512,8 +564,8 @@ class Memories:
         a reply or a use record holds then find no memory, which reads as forgotten. The memories asked for, per team
         (their earlier versions are not counted)."""
         m, now = agent_memories, now_iso()
-        found = {str(_get(r, "id")): r for r in rows}
-        frontier = [str(_get(r, "supersedes_id")) for r in rows if _get(r, "supersedes_id")]
+        found = {str(r.id): r for r in rows}
+        frontier = [str(r.supersedes_id) for r in rows if r.supersedes_id]
         while frontier:
             older = (
                 await c.execute(
@@ -528,9 +580,9 @@ class Memories:
         await c.execute(m.delete().where(m.c.tenant_id == current_tenant(), m.c.id.in_(list(found))))
         await c.execute(
             memory_audit.insert(),
-            [_audit(str(_get(r, "person")), r, "erase", actor, now) for r in found.values()],
+            [_audit(str(r.person), r, "erase", actor, now) for r in found.values()],
         )
-        return Counter(str(_get(r, "team_id")) for r in rows)
+        return Counter(str(r.team_id) for r in rows)
 
     async def expire(self, before: str, *, actor: str) -> Counter[str]:
         """Deletes the tenant's memories saved before `before` (every person and agent) and audits each as `expire` in
@@ -599,9 +651,9 @@ class Memories:
                 )
             )
 
-    async def audit_rows(self, person: str) -> list[dict[str, Any]]:
+    async def audit_rows(self, person: str) -> list[MemoryAuditRecord]:
         a = memory_audit
         q = sa.select(a).where(a.c.tenant_id == current_tenant(), team_visible(a), a.c.person == person)
         q = q.order_by(a.c.at.desc())
         async with tenant_tx(self.engine) as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, MemoryAuditRecord)

@@ -4,12 +4,15 @@ superseded), which only the transitions below change."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, ClassVar, TypedDict
+from typing import Annotated, Any, ClassVar, TypedDict
 
 import sqlalchemy as sa
-from pydantic import JsonValue
+from pydantic import BeforeValidator, JsonValue
 
+from ops_service_kit.http import Json, Out
+from ops_service_kit.narrow import json_object
 from ops_store import Guarantee
+from ops_store.rows import one, rows
 
 from .tables import engine_definitions, engine_runs, engine_steps
 from .tx import LIVE_WORKFLOWS, Transactions
@@ -76,6 +79,66 @@ def watched_mailbox(definition: JsonValue) -> str | None:
     return None
 
 
+# A stored definition that is not an object reads as {}, as its readers read it with `or {}`: one odd row must not fail
+# a list or the mailbox listener for every team. An object is kept as stored, so its digest is unchanged.
+StoredDefinition = Annotated[Json, BeforeValidator(json_object)]
+
+
+class DefinitionRow(Out):
+    """One stored version of a workflow, as `engine_definitions` holds it. The definition stays the JSON it was
+    stored as: its digest hashes that JSON, so it is never rebuilt from a model here."""
+
+    tenant_id: str
+    workflow_id: str
+    version: int
+    digest: str
+    name: str
+    definition: StoredDefinition
+    created_at: str
+    created_by: str
+    team_id: str | None = None
+    stage: str
+    archived_at: str | None = None
+    archived_by: str | None = None
+    description: str
+    trigger: str
+    startable: bool
+    takes_files: bool
+    mailbox: str | None = None
+
+
+class DefinitionVersion(Out):
+    """One version in a workflow's history."""
+
+    version: int
+    digest: str
+    created_at: str
+    created_by: str
+    stage: str
+
+
+class DefinitionSummary(Out):
+    """A workflow's latest version with the version that serves it and its run counts (DefinitionStore.summaries)."""
+
+    workflow_id: str
+    name: str
+    version: int
+    digest: str
+    definition: StoredDefinition
+    created_at: str
+    created_by: str
+    team_id: str | None = None
+    stage: str
+    archived_at: str | None = None
+    # The version that serves it and that version's stage; None before the first approval.
+    current_version: int | None = None
+    current_stage: str | None = None
+    runs: int
+    recent: int
+    reviewed: int
+    open_reviews: int
+
+
 class DefinitionStore:
     # A version is the next number for its workflow unless its digest is stored already (CAS on the unique digest).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.TRANSACTION, Guarantee.CAS})
@@ -89,7 +152,7 @@ class DefinitionStore:
         workflow_id: str,
         *,
         name: str,
-        definition: dict[str, Any],
+        definition: Json,
         digest: str,
         now: str,
         by: str,
@@ -135,18 +198,22 @@ class DefinitionStore:
             )
             return version, True
 
-    async def current(self, workflow_id: str, *, team: str | None = None) -> dict[str, Any] | None:
+    async def serving(self, workflow_id: str, *, team: str | None = None) -> DefinitionRow | None:
         """The version that serves the workflow, live or paused; None when no version has been approved."""
         t = engine_definitions
         q = t.select().where(
             t.c.workflow_id == workflow_id, t.c.tenant_id == self.tx.tenant(), t.c.stage.in_(CURRENT), _seen_by(team)
         )
         async with self.tx.tenant_tx() as c:
-            row = (await c.execute(q.order_by(t.c.version.desc()).limit(1))).mappings().first()
-        return dict(row) if row else None
+            return await one(c, q.order_by(t.c.version.desc()).limit(1), DefinitionRow)
 
-    async def currents(self, workflow_ids: set[str]) -> dict[str, dict[str, Any]]:
-        """current() for each of these workflows in one query, so a list of many runs reads the versions that serve
+    async def current(self, workflow_id: str, *, team: str | None = None) -> dict[str, Any] | None:
+        """serving() as a mapping; only tests still read it, and it goes once they read serving()."""
+        found = await self.serving(workflow_id, team=team)
+        return found.model_dump() if found else None
+
+    async def currents(self, workflow_ids: set[str]) -> dict[str, DefinitionRow]:
+        """serving() for each of these workflows in one query, so a list of many runs reads the versions that serve
         their workflows together; a workflow with no approved version is left out."""
         if not workflow_ids:
             return {}
@@ -155,23 +222,22 @@ class DefinitionStore:
             t.c.workflow_id.in_(sorted(workflow_ids)), t.c.tenant_id == self.tx.tenant(), t.c.stage.in_(CURRENT)
         )
         async with self.tx.tenant_tx() as c:
-            rows = (await c.execute(q.order_by(t.c.version))).mappings().all()
-        # Ascending, so each workflow keeps its highest version, as current() orders and takes the first.
-        return {str(r["workflow_id"]): dict(r) for r in rows}
+            found = await rows(c, q.order_by(t.c.version), DefinitionRow)
+        # Ascending, so each workflow keeps its highest version, as serving() orders and takes the first.
+        return {r.workflow_id: r for r in found}
 
-    async def live(self, workflow_id: str, *, team: str | None = None) -> dict[str, Any] | None:
+    async def live(self, workflow_id: str, *, team: str | None = None) -> DefinitionRow | None:
         """The version a live run starts on; None when there is none or the workflow is paused."""
-        row = await self.current(workflow_id, team=team)
-        return row if row and row["stage"] == "live" else None
+        row = await self.serving(workflow_id, team=team)
+        return row if row and row.stage == "live" else None
 
-    async def live_everywhere(self) -> list[dict[str, Any]]:
+    async def live_everywhere(self) -> list[DefinitionRow]:
         """Every live version in every tenant, for a loop that serves live workflows from outside any request (the
         mailbox listener). Paused versions are left out: they start no runs."""
         t = engine_definitions
         async with self.tx.system_tx(LIVE_WORKFLOWS) as c:
             live = sa.and_(t.c.stage == "live", t.c.archived_at.is_(None))
-            rows = await c.execute(t.select().where(live).order_by(t.c.tenant_id, t.c.workflow_id))
-            return [dict(r) for r in rows.mappings()]
+            return await rows(c, t.select().where(live).order_by(t.c.tenant_id, t.c.workflow_id), DefinitionRow)
 
     async def go_live(self, workflow_id: str, version: int) -> str:
         """Makes `version` the one that serves the workflow and supersedes the one before, in one transaction. A
@@ -189,7 +255,7 @@ class DefinitionStore:
             await c.execute(t.update().where(mine, t.c.version == version).values(stage=stage))
         return stage
 
-    async def set_paused(self, workflow_id: str, paused: bool, *, team: str | None = None) -> dict[str, Any] | None:
+    async def set_paused(self, workflow_id: str, paused: bool, *, team: str | None = None) -> DefinitionRow | None:
         """Pauses or resumes the version that serves the workflow; None when it has none. Runs in flight keep going:
         only new live starts are refused."""
         t = engine_definitions
@@ -198,11 +264,11 @@ class DefinitionStore:
         )
         async with self.tx.tenant_tx() as c:
             await c.execute(t.update().where(where).values(stage="paused" if paused else "live"))
-        return await self.current(workflow_id, team=team)
+        return await self.serving(workflow_id, team=team)
 
     async def set_archived(
         self, workflow_id: str, archived: bool, *, by: str, now: str, team: str | None = None
-    ) -> dict[str, Any] | None:
+    ) -> DefinitionRow | None:
         """Archives every version of the workflow, or restores it; its stages, versions and runs are kept, so
         a restored workflow serves as it did. Runs already started keep going. None when `team` sees no version."""
         t = engine_definitions
@@ -210,20 +276,26 @@ class DefinitionStore:
         values = {"archived_at": now, "archived_by": by} if archived else {"archived_at": None, "archived_by": None}
         async with self.tx.tenant_tx() as c:
             await c.execute(t.update().where(where).values(**values))
-        return await self.get(workflow_id, team=team)
+        return await self.row(workflow_id, team=team)
 
-    async def get(
+    async def row(
         self, workflow_id: str, version: int | None = None, *, team: str | None = None
-    ) -> dict[str, Any] | None:
+    ) -> DefinitionRow | None:
         """One version, the latest when `version` is None; None when `team` may not see it."""
         t = engine_definitions
         q = t.select().where(t.c.workflow_id == workflow_id, t.c.tenant_id == self.tx.tenant(), _seen_by(team))
         q = q.where(t.c.version == version) if version is not None else q.order_by(t.c.version.desc()).limit(1)
         async with self.tx.tenant_tx() as c:
-            row = (await c.execute(q)).mappings().first()
-        return dict(row) if row else None
+            return await one(c, q, DefinitionRow)
 
-    async def pinned(self, keys: set[tuple[str, int]]) -> dict[tuple[str, int], dict[str, Any]]:
+    async def get(
+        self, workflow_id: str, version: int | None = None, *, team: str | None = None
+    ) -> dict[str, Any] | None:
+        """row() as a mapping; only tests still read it, and it goes once they read row()."""
+        found = await self.row(workflow_id, version, team=team)
+        return found.model_dump() if found else None
+
+    async def pinned(self, keys: set[tuple[str, int]]) -> dict[tuple[str, int], DefinitionRow]:
         """The versions at these (workflow_id, version) pairs in one query, so a page naming the workflows of many runs
         reads them together; a pair with no row is left out."""
         if not keys:
@@ -232,10 +304,10 @@ class DefinitionStore:
         # An OR of pairs, not a tuple IN, which SQL Server refuses.
         pairs = sa.or_(*(sa.and_(t.c.workflow_id == w, t.c.version == v) for w, v in sorted(keys)))
         async with self.tx.tenant_tx() as c:
-            rows = (await c.execute(t.select().where(t.c.tenant_id == self.tx.tenant(), pairs))).mappings().all()
-        return {(str(r["workflow_id"]), int(r["version"])): dict(r) for r in rows}
+            found = await rows(c, t.select().where(t.c.tenant_id == self.tx.tenant(), pairs), DefinitionRow)
+        return {(r.workflow_id, r.version): r for r in found}
 
-    async def versions(self, workflow_id: str) -> list[dict[str, Any]]:
+    async def versions(self, workflow_id: str) -> list[DefinitionVersion]:
         t = engine_definitions
         q = (
             sa.select(t.c.version, t.c.digest, t.c.created_at, t.c.created_by, t.c.stage)
@@ -243,9 +315,9 @@ class DefinitionStore:
             .order_by(t.c.version)
         )
         async with self.tx.tenant_tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, DefinitionVersion)
 
-    async def summaries(self, since: str | None = None, *, team: str | None = None) -> list[dict[str, Any]]:
+    async def summaries(self, since: str | None = None, *, team: str | None = None) -> list[DefinitionSummary]:
         """Each workflow's latest version (name, version, digest, definition, stage, when and by whom), the version
         that serves it with its stage (`current_version`, `current_stage`; None before the first approval), how many
         runs it has had on any version, and how many started at or after `since` (an ISO time; none when left out),
@@ -307,10 +379,11 @@ class DefinitionStore:
                 t.c.archived_at,
                 serving.c.current_version,
                 serving.c.current_stage,
-                runs.c.runs,
-                runs.c.recent,
-                humans.c.reviewed,
-                humans.c.open_reviews,
+                # A workflow with no runs, or none that opened a Human Task, joins no row: it counts 0.
+                sa.func.coalesce(runs.c.runs, 0).label("runs"),
+                sa.func.coalesce(runs.c.recent, 0).label("recent"),
+                sa.func.coalesce(humans.c.reviewed, 0).label("reviewed"),
+                sa.func.coalesce(humans.c.open_reviews, 0).label("open_reviews"),
             )
             .join(latest, sa.and_(t.c.workflow_id == latest.c.workflow_id, t.c.version == latest.c.version))
             .outerjoin(serving, serving.c.workflow_id == t.c.workflow_id)
@@ -319,17 +392,7 @@ class DefinitionStore:
             .where(t.c.tenant_id == tenant, _seen_by(team))
         )
         async with self.tx.tenant_tx() as c:
-            rows = (await c.execute(q)).mappings()
-            return [
-                dict(row)
-                | {
-                    "runs": int(row["runs"] or 0),
-                    "recent": int(row["recent"] or 0),
-                    "reviewed": int(row["reviewed"] or 0),
-                    "open_reviews": int(row["open_reviews"] or 0),
-                }
-                for row in rows
-            ]
+            return await rows(c, q, DefinitionSummary)
 
     async def delete_draft(self, workflow_id: str, *, team: str | None = None) -> str:
         """Removes every version of a workflow that has never run. The versions are locked first, and a run start

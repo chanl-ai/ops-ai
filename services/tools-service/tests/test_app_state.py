@@ -79,7 +79,7 @@ async def test_on_an_app_each_person_signs_in_to_the_card_is_the_callers_own(wor
     conn = await connected(world, tenant)
     row = await world.store.get(tenant, conn)
     assert row is not None
-    await world.store.change(tenant, conn, int(row["revision"]), {"sign_in": "person"}, actor="t", at=datetime.now(UTC))
+    await world.store.change(tenant, conn, int(row.revision), {"sign_in": "person"}, actor="t", at=datetime.now(UTC))
     await signed(world, tenant, conn, "https://acme.my.desk.test", person_id="usr_james")
     james = person(tenant, *JAMES)
     assert (await card(world, tenant, james))["appState"] == "connected"
@@ -115,7 +115,7 @@ async def test_a_service_asking_for_a_person_reads_that_persons_own_sign_in(worl
     conn = await connected(world, tenant)
     row = await world.store.get(tenant, conn)
     assert row is not None
-    await world.store.change(tenant, conn, int(row["revision"]), {"sign_in": "person"}, actor="t", at=datetime.now(UTC))
+    await world.store.change(tenant, conn, int(row.revision), {"sign_in": "person"}, actor="t", at=datetime.now(UTC))
     await signed(world, tenant, conn, "https://acme.my.desk.test", person_id="usr_james")
     james = await card(world, tenant, acting_for(tenant, "usr_james"))
     maya = await card(world, tenant, acting_for(tenant, "usr_maya"))
@@ -134,7 +134,7 @@ async def test_with_the_team_account_as_backup_a_persons_card_is_their_own_and_a
     row = await world.store.get(tenant, conn)
     assert row is not None
     await world.store.change(
-        tenant, conn, int(row["revision"]), {"sign_in": "person_or_team"}, actor="t", at=datetime.now(UTC)
+        tenant, conn, int(row.revision), {"sign_in": "person_or_team"}, actor="t", at=datetime.now(UTC)
     )
     await signed(world, tenant, conn, "https://acme.my.desk.test")
     assert state(await card(world, tenant)) == ("needs_sign_in", "Connect your own account.")
