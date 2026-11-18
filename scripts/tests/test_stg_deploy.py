@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 STUBS = {
     "fly": 'echo "fly $*" >> "$LOG"\n'
-    'case "$1 $2" in\n  "machine list") echo m1 ;;\n'
+    'case "$1 $2" in\n  "machine list") printf "m1\\nm2\\n" ;;\n'
     '  "ssh console") [ "$HEALTH" = up ] && echo "ok processes" || exit 1 ;;\nesac\n',
     "docker": 'echo "docker $*" >> "$LOG"\n[ "$1" != port ] || echo 127.0.0.1:55432\n',
     "make": 'echo "make $*" >> "$LOG"\n',
@@ -61,8 +61,11 @@ def run(tmp: Path, **env: str) -> tuple[subprocess.CompletedProcess[str], str]:
 def test_rollback_swaps_the_image_and_checks_health_only(tmp_path: Path) -> None:
     proc, calls = run(tmp_path, STG_ROLLBACK="1", HEALTH="up")
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "--image registry.fly.io/stg-app:" in calls and "--build-only" not in calls
+    assert "--build-only" not in calls
     assert "ssh console" in calls
+    assert "fly deploy" not in calls, "a rollback ran the release command through fly deploy"
+    for m in ("m1", "m2"):
+        assert f"fly machine update {m} -a stg-app --image registry.fly.io/stg-app:" in calls, calls
     for step in ("docker run", "make -s", "psql", "fly proxy"):
         assert step not in calls, f"a rollback ran {step}:\n{calls}"
     assert "OCR" not in proc.stdout and "walk" not in proc.stdout

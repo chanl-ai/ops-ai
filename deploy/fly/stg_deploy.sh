@@ -10,7 +10,7 @@
 #   6 walk    docs/usecases/lib/stg_click_walk.mjs signs in and opens every console page and the first row of each list;
 #             SKIP_WALK=1 leaves it out
 # STG_ROLLBACK=1 (make stg-rollback) is a different run: REF's image is already pushed, so it only replaces the machine
-# with it (step 2) and waits for every process (step 4). No grants, OCR, plugin, sign-in or walk step: migrations only
+# with it (step 2, `fly machine update`, so the release command does not run) and waits for every process (step 4). No grants, OCR, plugin, sign-in or walk step: migrations only
 # add, so the older image runs on the newer schema, and grants for an older ref are already applied.
 # Each step prints its seconds; any failure exits non-zero. App names come from ~/.config/ops-ai/staging.env
 # (template deploy/fly/staging.env.example); secrets are read from the same directory and never printed.
@@ -61,9 +61,20 @@ fi
 
 # From here the running machine changes; deploy-staging.yml reads this line to decide whether a failure needs a rollback.
 echo "stg-deploy: replacing the machine with $image"
-fly deploy "$work/src" -c "$work/src/deploy/fly/fly.toml" -a "$app" --image "$image" --ha=false \
-  --wait-timeout 10m
-step "deploy (release command and machine)"
+if [ "$rollback" = 1 ]; then
+  # A machine-level update keeps each machine's config and never runs the release command: migrate on an older image
+  # against a database at a newer revision fails ("Can't locate revision"). It starts the machine and waits for Fly's checks.
+  machines=$(fly machine list -a "$app" -q)
+  [ -n "$machines" ] || { echo "stg-deploy: rollback: $app has no machines"; exit 1; }
+  for m in $machines; do
+    fly machine update "$m" -a "$app" --image "$image" --yes --wait-timeout 600
+  done
+  step "rollback (machines updated)"
+else
+  fly deploy "$work/src" -c "$work/src/deploy/fly/fly.toml" -a "$app" --image "$image" --ha=false \
+    --wait-timeout 10m
+  step "deploy (release command and machine)"
+fi
 
 if [ "$rollback" != 1 ]; then
   # grants.sql at REF, built on a throwaway server of the cluster's major version.
