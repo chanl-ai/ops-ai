@@ -1528,7 +1528,11 @@ class ModuleStore(Store):
         # older operation may predate response_transform and timeout_ms, an approval its team. Only the table's own
         # columns: a baseline or staged copy written before a column was dropped (self_approval) still carries it,
         # and a discard writes those copies back.
-        children: tuple[tuple[sa.Table, Sequence[Mapping[str, object]], Mapping[str, object]], ...] = (
+        children: tuple[
+            tuple[sa.Table, list[Operation], ColumnDefaults],
+            tuple[sa.Table, list[Version], VersionDefaults],
+            tuple[sa.Table, list[Approval], ApprovalDefaults],
+        ] = (
             (module_operations, agg["operations"], column_defaults()),
             (module_versions, agg["versions"], version_defaults()),
             (module_approvals, agg["approvals"], approval_defaults()),

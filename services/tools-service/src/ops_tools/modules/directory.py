@@ -8,12 +8,13 @@ an owned team sees modules whose owner group is one of its own.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from ops_service_kit.errors import Forbidden
+
+from ..store.modules import Module, ModuleGrants
 
 
 class Sees(Protocol):
@@ -81,7 +82,7 @@ class Directory:
     def sees(self, team: Team, owners: list[str | None]) -> bool:
         return team.scope == "all" or any(o in team.owner_groups for o in owners if o)
 
-    def owners(self, m: Mapping[str, Any]) -> list[str | None]:
+    def owners(self, m: Module) -> list[str | None]:
         """A module's owner group and those of the teams owning the workflows it is approved for, as each approval
         recorded them when it was requested (the workflow's team comes from agents-service)."""
         groups: list[str | None] = [m["owner_team"]]
@@ -90,7 +91,7 @@ class Directory:
             groups.extend(team.owner_groups if team else [])
         return groups
 
-    def sees_module(self, team: Team, m: Mapping[str, Any], operation: str | None = None) -> bool:
+    def sees_module(self, team: Team, m: Module | ModuleGrants, operation: str | None = None) -> bool:
         """A team reads its own modules, workspace-level ones (no team) and those approved for one of its workflows,
         which is the explicit grant across teams. No scope reaches another team's modules otherwise. A grant reaches
         only the operations it names (`operation`, when one is asked about) and nothing past its end date."""

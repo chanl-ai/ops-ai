@@ -23,7 +23,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterable, AsyncIterator, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 from botocore.exceptions import ClientError
 from obstore.store import S3Store
@@ -105,7 +105,7 @@ class S3ObjectStore:
     def presign_put(self, key: str, *, content_type: str, max_bytes: int, expires_in: int) -> PresignedRequest:
         validate_key(key)
         check_expiry(expires_in, self._config.max_url_seconds)
-        params: dict[str, Any] = {
+        params: dict[str, str | int] = {
             "Bucket": self._config.bucket,
             "Key": key,
             "ContentType": content_type,
