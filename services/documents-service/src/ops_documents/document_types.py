@@ -29,6 +29,8 @@ from ops_documents.extraction import (
     PATH_TEMPLATE,
     TEMPLATE,
     Extractor,
+    ResolvedVersion,
+    fields_of,
     request_of,
 )
 from ops_documents.files import Files, Who
@@ -54,7 +56,7 @@ from ops_pii import mask
 from ops_service_kit.http import Json, JsonList, JsonValue, PageJSON
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
-from ops_service_kit.narrow import an_object, entries, json_list, json_object
+from ops_service_kit.narrow import a_list, an_object, entries, json_list, json_object
 from ops_service_kit.settings import Settings
 from ops_store import background, isolation
 
@@ -142,15 +144,15 @@ class TypePage(TypedDict):
     canCreate: bool
 
 
-def _version_view(v: VersionRow) -> dict[str, Any]:
+def _version_view(v: VersionRow) -> Json:
     return {
         "version": v.version,
-        "fields": v.fields,
+        "fields": [*v.fields],
         "many": v.many,
         "reviewBelow": v.review_below,
         "dateOrder": v.date_order or DEFAULT_DATE_ORDER,
-        "templates": v.templates or [],
-        "checks": v.checks or [],
+        "templates": [*(v.templates or [])],
+        "checks": [*(v.checks or [])],
         "pageImages": bool(v.page_images),
         "offerAt": v.offer_at or DEFAULT_OFFER_AT,
         "note": v.note,
@@ -159,7 +161,7 @@ def _version_view(v: VersionRow) -> dict[str, Any]:
     }
 
 
-def _sample_view(s: SampleRow) -> dict[str, Any]:
+def _sample_view(s: SampleRow) -> Json:
     return {
         "id": s.id,
         "fileId": s.file_id,
@@ -170,8 +172,8 @@ def _sample_view(s: SampleRow) -> dict[str, Any]:
     }
 
 
-def _test_view(t: TestRow) -> dict[str, Any]:
-    out: dict[str, Any] = {
+def _test_view(t: TestRow) -> Json:
+    out: Json = {
         "id": t.id,
         "typeId": t.type_id,
         "version": t.version,
@@ -187,7 +189,7 @@ def _test_view(t: TestRow) -> dict[str, Any]:
     return out
 
 
-def example_view(e: ExampleRow) -> dict[str, Any]:
+def example_view(e: ExampleRow) -> Json:
     """An example as a read is given it and a person sees it: its record's position, or none for a read of one."""
     return {
         "id": e.id,
@@ -285,17 +287,18 @@ class DocumentTypes:
             ]
         if layouts and request["many"]:
             raise InvalidRequestError("templates read one record; a type reading several takes the model path")
-        keys = {str(f["key"]) for f in request["fields"]}
+        asked = fields_of(request)
+        keys = {f["key"] for f in asked}
         if found := templates.problems(layouts if isinstance(given, list) else given, keys):
             raise InvalidRequestError("; ".join(found[:5]))
         held_checks: JsonValue = body.get("checks") or []
         checks: JsonList = json_list(held_checks)
-        types = {str(f["key"]): str(f.get("type") or "text") for f in request["fields"]}
+        types = {f["key"]: str(f.get("type") or "text") for f in asked}
         if found := rules.problems(held_checks, keys, types):
             raise InvalidRequestError("; ".join(found[:5]))
         return {
-            "fields": request["fields"],
-            "many": request["many"],
+            "fields": a_list(request["fields"], "fields"),
+            "many": bool(request["many"]),
             "review_below": request["reviewBelow"],
             "date_order": order,
             "templates": layouts,
@@ -322,11 +325,11 @@ class DocumentTypes:
         if carried_forward:
             # Templates a person saved are not lost to a new version that does not name them: each is carried forward,
             # and one reading a field the new version no longer has is flagged for a rebuild and never matched.
-            saved = [an_object(t, "a saved template") for t in entries(latest.get("allTemplates"))]
+            saved = latest["allTemplates"]
             body = {**body, "templates": [carried(t, keys) for t in saved]}
         if body.get("checks") is None:
             # Checks carry forward too; one naming a field the new version lacks is dropped, since it cannot run.
-            held = [an_object(c, "a saved check") for c in entries(latest.get("checks"))]
+            held = latest["checks"]
             body = {**body, "checks": [c for c in held if set(rules.named(c)) <= keys]}
         if body.get("pageImages") is None:
             body = {**body, "pageImages": latest["pageImages"]}
@@ -345,7 +348,7 @@ class DocumentTypes:
         self._may_write(who)
         return await self.store.delete(who.team, type_id)
 
-    async def get_version(self, who: Who, type_id: str, version: int) -> dict[str, Any] | None:
+    async def get_version(self, who: Who, type_id: str, version: int) -> Json | None:
         if await self._own(who, type_id) is None:
             return None
         found = await self.store.version(type_id, version)
@@ -355,7 +358,7 @@ class DocumentTypes:
         row = await self.store.get(type_id)
         return row if row is not None and row.team == who.team else None
 
-    async def get(self, who: Who, type_id: str) -> dict[str, Any] | None:
+    async def get(self, who: Who, type_id: str) -> Json | None:
         row = await self._own(who, type_id)
         if row is None:
             return None
@@ -374,7 +377,7 @@ class DocumentTypes:
             "canEdit": who.edits,
         }
 
-    async def list(self, who: Who) -> list[dict[str, Any]]:
+    async def list(self, who: Who) -> list[TypeSummary]:
         return [
             {"id": r.id, "name": r.name, "description": r.description, "latestVersion": r.latest_version}
             for r in await self.store.every(who.team)
@@ -392,7 +395,7 @@ class DocumentTypes:
         row = await self._own(who, type_id)
         return row.name if row is not None else None
 
-    async def resolve(self, who: Who, type_id: str, version: int | None) -> dict[str, Any]:
+    async def resolve(self, who: Who, type_id: str, version: int | None) -> ResolvedVersion:
         """The version an extraction reads with: the one asked for, or the newest. Another team's type, or a version
         it does not have, is not found."""
         # The type and its version in one transaction; inside a caller's own one, part of it.
@@ -460,7 +463,7 @@ class DocumentTypes:
         reads = [await self._read_of(who, type_id, r, i) for r, i in zip(rows, ids, strict=True)]
         tid = f"tpl_{uuid.uuid4().hex[:10]}"
         draft = templates.suggest(reads, template_id=tid)
-        fields = [FIELD(f) for f in entries(version["fields"])]
+        fields = [FIELD(f) for f in version["fields"]]
         checks: list[dict[str, Any]] = []
         for row, read in zip(rows, reads, strict=True):
             assert row is not None and row.result is not None
@@ -492,7 +495,7 @@ class DocumentTypes:
                 return None
             version = await self.resolve(who, type_id, None)
             recent = await store.recent_reads(who.team, type_id, last=TEMPLATE_OFFER_READS)
-        current = entries(version.get("templates"))
+        current = version["templates"]
         groups: dict[str, list[ExtractionRow]] = {}
         for row in recent:
             result = row.result or {}
@@ -506,7 +509,7 @@ class DocumentTypes:
             groups.setdefault(fp, []).append(row)
         offers: list[dict[str, Any]] = []
         for fp, members in groups.items():
-            if len(members) < int(version["offerAt"]):
+            if len(members) < version["offerAt"]:
                 continue
             # One layout per offered group, from the layout cache, to ask whether a current template reads it.
             layout = await self.extractor.layout_of(who, members[0])
@@ -570,14 +573,14 @@ class DocumentTypes:
 
     # ── examples ──
 
-    async def examples(self, tenant: str, team: str, type_id: str, keys: list[str]) -> list[dict[str, Any]]:
+    async def examples(self, tenant: str, team: str, type_id: str, keys: list[str]) -> list[Json]:
         """What a read of the type is given: the newest few per field it asks, within the two caps."""
         found = await self.store.recent_examples(
             team, type_id, keys, per_field=EXAMPLES_PER_FIELD, total=EXAMPLES_IN_ALL
         )
         return [example_view(e) for e in found]
 
-    async def list_examples(self, who: Who, type_id: str) -> list[dict[str, Any]] | None:
+    async def list_examples(self, who: Who, type_id: str) -> list[Json] | None:
         """The type's examples in the caller's team, newest first, each printed line masked as the team masks personal
         data in what people see, and its corrected value too; the stored example, which reads are given, stays real."""
         async with isolation.request_transaction():
@@ -596,7 +599,7 @@ class DocumentTypes:
 
     # ── tests ──
 
-    async def estimate(self, who: Who, type_id: str, version: int) -> dict[str, Any] | None:
+    async def estimate(self, who: Who, type_id: str, version: int) -> Json | None:
         """What testing the version spends before it is run: one model call per sample (two when a re-ask is
         needed), at most MAX_TEST_SAMPLES samples, priced at the extract alias's current price when it is known."""
         # Every row it reads in one transaction, closed before models-service is asked for the price.
@@ -613,7 +616,7 @@ class DocumentTypes:
             elif (measured := await extractions.tokens_per_call(None)) is not None:
                 tokens, basis = measured, "tenant"
         price = await self.prices.price(ALIAS, tenant=who.tenant_id) if self.prices is not None else None
-        out: dict[str, Any] = {
+        out: Json = {
             "samples": samples,
             "calls": samples,
             "maxCalls": samples * 2,
@@ -628,7 +631,7 @@ class DocumentTypes:
             out["maxCost"] = str((per_call * samples * 2).quantize(Decimal("0.0001")))
         return out
 
-    async def start_test(self, who: Who, type_id: str, version: int) -> dict[str, Any] | None:
+    async def start_test(self, who: Who, type_id: str, version: int) -> Json | None:
         self._may_write(who)
         # The run's row commits before the task that runs it starts, so the task finds it.
         async with isolation.request_transaction():
@@ -655,7 +658,7 @@ class DocumentTypes:
         await self._later(test)
         return _test_view(test)
 
-    async def get_test(self, who: Who, type_id: str, test_id: str) -> dict[str, Any] | None:
+    async def get_test(self, who: Who, type_id: str, test_id: str) -> Json | None:
         if await self._own(who, type_id) is None:
             return None
         found = await self.store.test(test_id)
@@ -690,7 +693,7 @@ class DocumentTypes:
         try:
             await self.store.set_test(test_id, {"status": "running"})
             version = await self.resolve(who, test.type_id, test.version)
-            fields = [FIELD(f) for f in entries(version["fields"])]
+            fields = [FIELD(f) for f in version["fields"]]
             samples = (await self.store.samples(test.type_id))[:MAX_TEST_SAMPLES]
             rows: list[dict[str, Any]] = []
             for s in samples:
@@ -702,7 +705,7 @@ class DocumentTypes:
                     idempotency_key=f"{test_id}:{s.id}",
                     inline=True,
                 )
-                rows.append(self._compare(fields, bool(version["many"]), s, answer))
+                rows.append(self._compare(fields, version["many"], s, answer))
             await self.store.set_test(
                 test_id, {"status": "done", "result": self._summary(fields, rows), "finished_at": self.clock()}
             )
@@ -762,14 +765,14 @@ class DocumentTypes:
         return {"samples": rows, "fields": per, "accuracy": round(hits / total, 4) if total else None}
 
 
-def masked(value: Any) -> Any:
+def masked(value: JsonValue) -> JsonValue:
     """`value` with every string in it masked as the team masks personal data; numbers and the shape stay."""
     if isinstance(value, str):
         return mask(value)
     if isinstance(value, list):
-        return [masked(v) for v in cast(list[Any], value)]
+        return [masked(v) for v in value]
     if isinstance(value, dict):
-        return {k: masked(v) for k, v in cast(dict[str, Any], value).items()}
+        return {k: masked(v) for k, v in value.items()}
     return value
 
 
