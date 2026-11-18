@@ -8,8 +8,9 @@ import pytest
 
 from ops_agents.api.engine_reviews import _action_inputs  # pyright: ignore[reportPrivateUsage]
 from ops_service_kit.errors import ValidationFailed
+from ops_service_kit.http import Json
 
-ACTION = {"inputs": [{"name": "assignee", "format": "person"}]}
+ACTION: Json = {"inputs": [{"name": "assignee", "format": "person"}]}
 
 
 def test_person_input_accepts_an_email_and_refuses_a_non_email() -> None:

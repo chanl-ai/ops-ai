@@ -16,6 +16,7 @@ from ops_agents.store.engine import EngineTransactions
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.store import RunStore
 from ops_service_kit.errors import ValidationFailed
+from ops_service_kit.http import Json
 from tests.engine.review_flows import flow, paused
 from tests.engine.test_worker import M, drain
 
@@ -35,7 +36,7 @@ CHECK = flow(
         "summary": {"read": READ},
     }
 )
-BOTH = {"0": ["name", "amount"], "1": ["amount", "name"]}
+BOTH: Json = {"0": ["name", "amount"], "1": ["amount", "name"]}
 
 
 @pytest.fixture
