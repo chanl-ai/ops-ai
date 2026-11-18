@@ -3,7 +3,7 @@
 // My Domain) and the plugins repo's fake GitHub. Turn on saves the team's setting and opens no sign-in window; her own
 // sign-in is the optional Connect my account after it. Ravi, a viewer, sees no Connect and who can; and James's first
 // chat with the team's assistant asks him for his own Salesforce account. Before that, a member and an admin open an
-// app the team has not set up from Connectors › Mine and never reach a 404. Screenshots go to OPS_USECASE_SHOTS when set.
+// app the team has not set up from Connectors › Mine and never reach a 404. Screenshots go to the evidence folder.
 import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -16,7 +16,7 @@ const tools = `http://127.0.0.1:${TOOLS_PORT}`;
 const agentsUrl = `http://127.0.0.1:${AGENTS_PORT}`;
 const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const PASSWORD = 'northfield-demo';
-const SHOTS = process.env.OPS_USECASE_SHOTS || evidenceDir('628', 'uc');
+const SHOTS = evidenceDir('628', 'uc');
 const PLUGINS = join(process.env.OPS_PLUGINS_REPO || join(ROOT, '..', 'ops-ai-plugins'), 'plugins');
 const LIB = join(ROOT, 'docs/usecases/lib');
 

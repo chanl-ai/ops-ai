@@ -1,7 +1,7 @@
 // uc-703 Add account is on the Accounts tab for whoever manages apps, and never for a member, ui layer:
 // docs/usecases/tools-service/add-account-lives-on-the-accounts-tab.md. Salesforce has two team accounts (Retail org and
 // EU org, at two My Domains of the fake Salesforce). Priya (admin) and Maya (member) open its Accounts tab at 1440 and
-// 390; Maya also opens Connectors > Mine. Screenshots go to OPS_USECASE_SHOTS when set (the evidence folder otherwise).
+// 390; Maya also opens Connectors > Mine. Screenshots go to the evidence folder. (the evidence folder otherwise).
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
@@ -15,7 +15,7 @@ const platform = `http://127.0.0.1:${PLATFORM_PORT}`;
 const PASSWORD = 'northfield-demo';
 const PRIYA = 'p.shah@harborpine.example';
 const MAYA = 'm.okafor@harborpine.example';
-const SHOTS = process.env.OPS_USECASE_SHOTS || evidenceDir('703', 'uc');
+const SHOTS = evidenceDir('703', 'uc');
 const SALESFORCE = join(process.env.OPS_PLUGINS_REPO || join(ROOT, '..', 'ops-ai-plugins'), 'plugins/salesforce/src/ops_plugin_salesforce');
 const LIB = join(ROOT, 'docs/usecases/lib');
 const APP = 'plugin:opsai.salesforce';

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 import { ROOT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
-const SHOTS = evidenceDir('198');
+const SHOTS = evidenceDir('164');
 
 async function signIn(page, consoleUrl, email) {
   await page.goto(`${consoleUrl}/login`, { waitUntil: 'domcontentloaded', timeout: 120_000 });

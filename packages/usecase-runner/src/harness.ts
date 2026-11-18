@@ -10,6 +10,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { ensureConsoleBuild, materializeConsoleBuild } from './console-build.ts';
+import { caseDir } from './evidence.ts';
 import { pgUrl } from './isolation.ts';
 export { requireStagingOrigin } from './deployed.ts';
 
@@ -17,9 +18,12 @@ import { chromium as playwrightChromium, type Browser, type BrowserContext } fro
 
 /** The tree the runner was invoked from (OPS_USECASE_ROOT, set by the runner), else the one this package sits in. */
 export const ROOT = process.env.OPS_USECASE_ROOT ?? resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
-/** Where a use case keeps its screenshots and logs (not created here): OPS_EVIDENCE_DIR, else .logs/usecases/, ignored by git. */
+/**
+ * The one place a use case writes anything (not created here): OPS_EVIDENCE_DIR, else .logs/usecases/, ignored by git.
+ * `name` is the case's id; scripts/check_usecase_outputs.py fails a use-case script that writes anywhere else.
+ */
 export function evidenceDir(name: string, ...parts: string[]): string {
-  return join(process.env.OPS_EVIDENCE_DIR ?? join(ROOT, '.logs', 'usecases'), name, ...parts);
+  return caseDir(ROOT, name, ...parts);
 }
 export const AGENTS_PORT = Number(process.env.OPS_USECASE_AGENTS_PORT ?? 8790);
 export const CONSOLE_PORT = Number(process.env.OPS_USECASE_CONSOLE_PORT ?? 3018);
@@ -68,7 +72,9 @@ function writeRunTsconfig(app = 'apps/console', file = CONSOLE_TSCONFIG): void {
   writeFileSync(join(appDir, file), `${JSON.stringify(config, null, 2)}\n`);
 }
 const DB = process.env.OPS_USECASE_DB ?? 'ops_usecase';
-const LOG_DIR = join(process.env.OPS_LOG_DIR ?? join(ROOT, '.logs'), 'usecase');
+// The running script's own folder for the services' logs: use-case-NNN-layer.ext names its case, any other script its file name.
+const SCRIPT = (process.argv[1] ?? '').split('/').pop()?.replace(/\.\w+$/, '') ?? '';
+const LOG_DIR = caseDir(ROOT, /uc-(\d+)/.exec(SCRIPT)?.[1] ?? (SCRIPT.replace(/^(test|evidence)-/, '') || 'run'), 'logs');
 
 let checked = 0;
 let failed = 0;
@@ -823,7 +829,7 @@ export async function withUiStack<T>(body: (consoleUrl: string, stack: Stack) =>
     // run's database is created by the agents service's migrate step; models-service adds its own chain beside it.
     const agentsDir = join(ROOT, 'services/agents-service');
     await runToEnd('agents-migrate', ['uv', 'run', 'python', 'scripts/scripted_server.py', '--port', '0', '--db', DB, '--migrate-only'], agentsDir, env);
-    fakeOpenAi = await serve('fake-openai', FAKE_OPENAI_PORT, ['uv', 'run', '--project', '..', 'python', '-m', 'fake_openai', join(ROOT, options.fakeModelRules ?? DEMO_RULES)], join(ROOT, 'services/models-service/scripts'), stackEnv(process.env, { FAKE_OPENAI_PORT: String(FAKE_OPENAI_PORT), FAKE_OPENAI_API_KEY: FAKE_OPENAI_KEY }), `http://127.0.0.1:${FAKE_OPENAI_PORT}/v1/models`, 60_000);
+    fakeOpenAi = await serve('fake-openai', FAKE_OPENAI_PORT, ['uv', 'run', '--project', '..', 'python', '-m', 'fake_openai', resolve(ROOT, options.fakeModelRules ?? DEMO_RULES)], join(ROOT, 'services/models-service/scripts'), stackEnv(process.env, { FAKE_OPENAI_PORT: String(FAKE_OPENAI_PORT), FAKE_OPENAI_API_KEY: FAKE_OPENAI_KEY }), `http://127.0.0.1:${FAKE_OPENAI_PORT}/v1/models`, 60_000);
     const modelsDir = join(ROOT, 'services/models-service');
     const modelsEnv = stackEnv(process.env, {
       OPS_DATABASE_URL: runDb,

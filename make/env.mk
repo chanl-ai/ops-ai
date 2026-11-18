@@ -5,13 +5,30 @@
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))..)
 
-# .env is optional. Plain KEY=value lines; values already in the caller's environment win (make does not override an
-# environment variable with a file assignment unless told to), so a wrapper or an exported shell variable still rules.
+# .env is optional. Plain KEY=value lines. A key set in .env replaces the same key in the caller's environment (make lets a
+# file assignment override an environment variable unless run with -e); keys the secrets command supplies (below) never do.
 -include $(ROOT)/.env
 export $(shell sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' $(ROOT)/.env 2>/dev/null)
 # Per-developer keys outside the image (devcontainer). Same KEY=value shape as .env.
 -include $(ROOT)/.devcontainer/.env.local
 export $(shell sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' $(ROOT)/.devcontainer/.env.local 2>/dev/null)
+
+# A secrets command is optional. When OPS_SECRETS_CMD is set (a secrets manager's export that prints KEY=value lines)
+# and OPS_NO_SECRETS_CMD is unset or 0, scripts/secrets_cmd_env.py runs it once per top-level make: the keys are
+# exported, so a sub-make sees them in its environment and OPS_SECRETS_LOADED skips the run. Precedence: the caller's
+# environment, then the command, then .env, then .devcontainer/.env.local. The fragment is a mode-600 file under .run/
+# that exists only while make reads it. `make help` skips it.
+OPS_SECRETS_FILE := $(ROOT)/.run/secrets.mk
+ifeq ($(strip $(OPS_SECRETS_CMD)),)
+else ifneq ($(filter-out 0,$(strip $(OPS_NO_SECRETS_CMD)))$(OPS_SECRETS_LOADED),)
+else ifneq ($(filter-out help,$(or $(MAKECMDGOALS),help)),)
+$(shell rm -f '$(OPS_SECRETS_FILE)'; python3 '$(ROOT)/scripts/secrets_cmd_env.py' "$$OPS_SECRETS_CMD" '$(OPS_SECRETS_FILE)' 1>&2)
+-include $(OPS_SECRETS_FILE)
+ifneq ($(wildcard $(OPS_SECRETS_FILE)),)
+export OPS_SECRETS_LOADED := 1
+endif
+$(shell rm -f '$(OPS_SECRETS_FILE)')
+endif
 
 # One stack per machine, on the fixed ports below, run from whichever checkout of this repository last ran `make up`
 # (`make review` runs it from the review worktree). Its pids, logs and state (the first admin, the fake bank's

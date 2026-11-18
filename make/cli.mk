@@ -78,8 +78,9 @@ chat-connected: ## make chat-connected THREAD=th_… [APP=Salesforce] AS=james: 
 	$(call need,THREAD,THREAD=th_…)
 	@$(OPS_CLI) chat $(OPS_AS) connected $(THREAD) $(if $(APP),'$(APP)')
 # A Salesforce test sign-in for chat scripts (scripts/sf_signin.py). The default stack's .env is read for its database
-# and secrets key, as the stack reads it; an offset stack keeps the ports make names.
-SF_SIGNIN = $(if $(filter-out 0,$(OPS_PORT_OFFSET)),,set -a; [ -f $(ROOT)/.env ] && . $(ROOT)/.env >/dev/null 2>&1; set +a;) \
+# and secrets key, as the stack reads it; an offset stack keeps the ports make names. With the secrets command's keys loaded the
+# file is not sourced over them, and sf_signin.py reads the environment first; no .env is needed.
+SF_SIGNIN = $(if $(or $(filter-out 0,$(OPS_PORT_OFFSET)),$(OPS_SECRETS_LOADED)),,set -a; [ -f $(ROOT)/.env ] && . $(ROOT)/.env >/dev/null 2>&1; set +a;) \
 	OPS_ENV_FILE=$(ROOT)/.env uv run --quiet --project $(ROOT) python $(ROOT)/scripts/sf_signin.py
 sf-signin-save: ## make sf-signin-save AS=james: keep a copy of the person's Salesforce sign-in (sealed, never printed)
 	$(call need,AS,AS=james)

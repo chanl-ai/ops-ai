@@ -1,12 +1,13 @@
-# Checks on GitHub-hosted runners only, since a fork's pull request runs its own code. A push to develop that passes
-# ci-ok is then deployed to staging (job `staging`, which calls deploy-staging.yml).
+# Checks on GitHub-hosted runners only, since a fork's pull request runs its own code. A push to develop, a release/* or
+# a hotfix/* branch that passes ci-ok is then deployed to staging (job `staging`, which calls deploy-staging.yml).
 name: ci
 
 on:
   pull_request:
-  # develop and main run the same checks after a merge; the staging job at the end deploys develop.
+  # develop and main run the same checks after a merge; the staging job at the end deploys develop, and a release or
+  # hotfix branch (docs/deploy/release.md) so the release is tested on staging.
   push:
-    branches: [develop, main]
+    branches: [develop, main, "release/**", "hotfix/**"]
 
 permissions:
   contents: read
@@ -26,8 +27,9 @@ env:
   OPS_SMTP_HOST: 127.0.0.1
   OPS_GREENMAIL_HOST: 127.0.0.1
   OPS_MAILPIT_HOST: 127.0.0.1
-  # What the changed-files plan compares against: the pull request's base, or the branch tip before a push.
-  BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+  # What the changed-files plan compares against: the pull request's base, or the branch tip before a push. A branch's
+  # first push has no tip before it (an all-zero sha), so the whole difference from main is checked.
+  BASE_SHA: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || 'origin/main' }}
 
 jobs:
   plan:
@@ -383,14 +385,14 @@ jobs:
           echo "every check that ran passed"
 
   staging:
-    # Every merge to develop goes to staging once ci-ok passed for that commit, so the owner tests the real combination.
-    # Pull requests and pushes to main never reach this job. deploy-staging.yml holds the deploy, the pin rules
-    # (an open release PR or STAGING_HOLD skip it with a notice), the checks, the rollback and the summary.
+    # Every merge to develop, and every push to a release or hotfix branch, goes to staging once ci-ok passed for that
+    # commit, so the owner tests the real combination. Pull requests and pushes to main never reach this job.
+    # deploy-staging.yml holds the deploy, the freeze rules (a release or hotfix branch on origin, or STAGING_HOLD, skips
+    # a develop deploy with a notice), the checks, the rollback and the summary.
     needs: ci-ok
-    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/develop' && needs.ci-ok.result == 'success' }}
+    if: ${{ !cancelled() && github.event_name == 'push' && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/heads/hotfix/')) && needs.ci-ok.result == 'success' }}
     permissions:
       contents: read
-      pull-requests: read # to see an open release PR
     uses: ./.github/workflows/deploy-staging.yml
     with:
       ref: ${{ github.sha }}

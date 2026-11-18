@@ -20,7 +20,7 @@ Status: current. Id: `uc-563`. Service: `platform-service` with every service th
 
 The installer is `scripts/sample_team.py install`, the command `make sample-team` runs. The script runs it with
 `--name "CLI bank <tag>"` (a team of its own) and `--no-levy` (the levy story's code module and workflows need the
-documents model). Its lines go to `.logs/usecase/uc563-install-*.log`, never to the script's output, because the
+documents model). Its lines go to `.logs/usecases/563/logs/uc563-install-*.log`, never to the script's output, because the
 installer's FAIL lines are not the script's checks.
 
 ## Steps and expected results

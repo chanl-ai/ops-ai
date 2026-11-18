@@ -56,7 +56,7 @@ and walks the console headless; a failed smoke stops promotion.
 Why: staging tests the real combination before people do.
 
 Today (`.github/workflows/deploy-staging.yml`): ci.yml's `staging` job calls it after `ci-ok` on every push to
-develop (`!cancelled()` keeps it from being skipped when the plan skipped a job), and it runs by hand for any ref.
+develop and on every push to a `release/*` or `hotfix/*` branch (`!cancelled()` keeps it from being skipped when the plan skipped a job), and it runs by hand for any ref. A develop push is skipped while any release or hotfix branch exists on origin, so a release under test is not overwritten.
 `deploy/fly/stg_deploy.sh` does everything the rule asks; a failed check after the machine changed rolls back to the
 release before. Not yet run on GitHub.
 
@@ -69,11 +69,11 @@ run after merge, which proves the `staging` environment's secrets and the rollba
 
 ## DL5 Production gets a tagged commit staging ran
 
-Rule: production deploys only a tag `vYYYY-MM-DD.N` on a commit staging ran; migrations apply before new processes
+Rule: production deploys only a tag `vX.Y.Z` on a commit staging ran; migrations apply before new processes
 start; rollback redeploys the previous image; migrations only add (`DA10`).
 Why: promotion is repeatable and reversible.
 
-Today: `.github/workflows/release-tag.yml` tags on merge to `main`; no workflow deploys the tag. A workflow returns once
+Today: `.github/workflows/release-tag.yml` tags the merge of a release or hotfix branch into `main` (`docs/deploy/release.md`); no workflow deploys the tag. A workflow returns once
 the owner has made the `production` environment (`docs/deploy/fly-staging.md`, "Production on GitHub"). `release-images.yml`
 has never built from a merged commit.
 

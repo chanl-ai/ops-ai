@@ -94,7 +94,7 @@ await withUiStack(
       );
 
       // The card's evidence: the check at desktop and phone width.
-      const shots = evidenceDir('169');
+      const shots = evidenceDir('224');
       mkdirSync(shots, { recursive: true });
       await page.locator('main').screenshot({ path: join(shots, 'read-check-1280.png') });
       await page.setViewportSize({ width: 400, height: 900 });
@@ -156,7 +156,7 @@ await withUiStack(
 
       // The acknowledgement opened from its own address, which Human Tasks now opens beside its queue:
       // the question, the reply as it will leave, the cases. The question, body and footer are the decision panel's.
-      const taskShots = join(ROOT, 'docs/console/proposed/tasks');
+      const taskShots = evidenceDir('224');
       mkdirSync(taskShots, { recursive: true });
       await page.goto(`${consoleUrl}/reviews/${encodeURIComponent(started.runId)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
       const ackQuestion = await page.getByTestId('decision-question').innerText();
@@ -231,7 +231,7 @@ await withUiStack(
 
       // 4e: the approver changes the proposed amount while approving. The task and the case then show the
       // amount the bank was told, not the proposed 3,250.00.
-      const holdShots = evidenceDir('420');
+      const holdShots = evidenceDir('224');
       mkdirSync(holdShots, { recursive: true });
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.goto(`${consoleUrl}/reviews/${encodeURIComponent(heldId)}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -281,7 +281,7 @@ await withUiStack(
       await page.getByTestId('node-repeats').first().waitFor({ timeout: 60_000 }).catch(() => undefined);
       // A long line drops what it repeats over on the canvas and keeps it in its title, which this reads.
       const repeats = await page.getByTestId('node-repeats').evaluateAll((els) => els.map((e) => e.getAttribute('title') || e.textContent || ''));
-      const eachShots = evidenceDir('306');
+      const eachShots = evidenceDir('224');
       mkdirSync(eachShots, { recursive: true });
       if (childrenShown) await page.getByTestId('run-children').screenshot({ path: join(eachShots, 'run-children-1280.png') });
       await page.locator('[data-testid="node-repeats"]').first().screenshot({ path: join(eachShots, 'node-repeats-1280.png') });
@@ -312,7 +312,7 @@ await withUiStack(
       // At 1280 the record's table fits its pane: the Source column wraps instead of being cut off.
       await page.setViewportSize({ width: 1280, height: 800 });
       const overflow = await page.getByTestId('read-record-1').evaluate((el) => [...el.querySelectorAll('table')].map((t) => t.parentElement.scrollWidth - t.parentElement.clientWidth));
-      await page.screenshot({ path: join(ROOT, 'docs/console/proposed/tasks/task-read-check-records-1280.png') });
+      await page.screenshot({ path: join(evidenceDir('224'), 'task-read-check-records-1280.png') });
       await page.setViewportSize({ width: 1440, height: 1000 });
       check('6b at 1280 each record table fits its pane, Source included', overflow.length > 0 && overflow.every((d) => d <= 1), { overflow });
       check('6 a notice naming three debtors reads as one tab per record, showing one record at a time', names.length === 3 && second && firstHidden, { names, second, firstHidden, records: await page.locator('[data-testid^="read-record-"]').count(), title: await page.getByTestId('decision-question').innerText().catch(() => ''), body: (await page.locator('main').innerText().catch(() => '')).replace(/\s+/g, ' ').slice(0, 300) });

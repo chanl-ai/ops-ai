@@ -34,6 +34,9 @@ help: ## List targets
 	@printf '\nPer service (generated; SERVICES=%s)\n' "$(SERVICES)"
 	@printf '  %-20s %s\n' "<verb>-<svc>" "make -C <svc dir> <verb>; verbs: $(SERVICE_VERBS)"
 
+print-env-check: ## make print-env-check [KEYS='A B']: whether each named key is set in make's environment (names only, never values)
+	@for k in $(or $(KEYS),SF_TEST_USERNAME OPS_MODELS_KEY); do if [ -n "$$(printenv "$$k")" ]; then echo "$$k: set"; else echo "$$k: not set"; fi; done
+
 agent-preflight: ## A builder's first step: make agent-preflight CARD=c-1 (needs CL_AGENT); one line and exit 1 if not ready
 	@python3 scripts/agents/preflight.py "$(CARD)"
 

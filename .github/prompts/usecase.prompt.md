@@ -43,7 +43,7 @@ Then run the new use case once with `/usecase run`; the stub fails until its ste
 
 - `passed` is a step whose check passed. `FAILED` shows the check name and its detail. `not run` means the script
   stopped before that step. `open` marks a step the product cannot do yet.
-- A failure's full output is in `.run/usecases/<id>-<layer>.log`. Read it before guessing at a cause.
+- A failure's full output is in `.logs/usecases/<id>/<layer>.log`. Read it before guessing at a cause.
 - A story works only when its proving step passed and none of its steps failed.
 
 ## Rules

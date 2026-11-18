@@ -2,9 +2,11 @@
 // docs/usecases/agents-service/scanned-chat-attachment.md, story S4. Headless Chromium against a console whose chat
 // calls agents-service on the scripted model, with files-service, documents-service and kb-service of the run's own.
 // A banker attaches a page that is only a scan, asks about it, and the answer cites the scan's page.
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { AGENTS_PORT, check, chromium, finish, replyDone, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { AGENTS_PORT, check, chromium, evidenceDir, finish, replyDone, withUiStack } from '@ops-ai/usecase-runner/harness';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const TEAM = { 'X-Team-Id': 'team_ops' };
@@ -41,7 +43,8 @@ await withUiStack(async (consoleUrl) => {
     if (cited) await marker.click();
     const location = cited ? await page.getByRole('dialog').getByTestId('citation-location').innerText().catch(() => '') : '';
     const last = (await api(`/chat/threads/${tid}`)).data.messages.at(-1);
-    await page.screenshot({ path: process.env.OPS_UC_SHOT ?? '/tmp/uc-673-ui.png', fullPage: false });
+    mkdirSync(evidenceDir('673', 'screens'), { recursive: true });
+    await page.screenshot({ path: join(evidenceDir('673', 'screens'), 'chat.png'), fullPage: false });
     check('1 a scanned attachment is read by OCR and the answer cites its page', ready && cited && /scanned\.pdf · p\.1/.test(location), { ready, cited, location, reply: last?.content?.slice(0, 160), citations: last?.citations?.map((c) => `${c.title} p${c.page}`) });
     check('no page errors', errors.length === 0, errors);
   } finally {
