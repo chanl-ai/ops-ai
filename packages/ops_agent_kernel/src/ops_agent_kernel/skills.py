@@ -8,10 +8,10 @@ loaded, guardrails; it never adds a tool.
 
 from __future__ import annotations
 
-from typing import Any
+from ops_service_kit.http import Json, JsonList
 
 from .events import SkillLoaded
-from .types import Guardrail, Skill, ToolGrant
+from .types import Guardrail, LoadedSkill, Skill, ToolGrant
 
 NAME = "load_skill"
 MAX_PER_TURN = 2
@@ -25,7 +25,7 @@ ALWAYS = "Always on"
 
 def grant(skills: list[Skill]) -> ToolGrant | None:
     """The built-in, offered only when the agent pins an on-match skill; its slug argument is one of theirs."""
-    slugs = [s.slug for s in skills if s.loading == "on_match"]
+    slugs: JsonList = [s.slug for s in skills if s.loading == "on_match"]
     if not slugs:
         return None
     return ToolGrant(
@@ -72,28 +72,31 @@ def guardrails_of(skill: Skill) -> list[Guardrail]:
     return [Guardrail(skill.skill_id, skill.version, f"{skill.name} (skill)", skill.guardrails, message, scopes)]
 
 
-def loaded_entry(skill: Skill, matched: str, inputs: dict[str, str] | None = None) -> dict[str, Any]:
+def loaded_entry(skill: Skill, matched: str, inputs: dict[str, str] | None = None) -> LoadedSkill:
     """`matched` comes from the model: kept to one plain line of at most 200 characters before it is journalled. A
     part and a picked part's inputs are kept only when there are any."""
     clean = " ".join("".join(ch if ch.isprintable() else " " for ch in matched).split())[:MATCHED_MAX]
-    return {
+    entry: LoadedSkill = {
         "skillId": skill.skill_id,
         "name": skill.name,
         "version": skill.version,
         "matched": clean or skill.use_when[:MATCHED_MAX],
-        **({"part": skill.part} if skill.part else {}),
-        **({"inputs": inputs} if inputs else {}),
     }
+    if skill.part:
+        entry["part"] = skill.part
+    if inputs:
+        entry["inputs"] = inputs
+    return entry
 
 
-def event(entry: dict[str, Any], how: str) -> SkillLoaded:
+def event(entry: LoadedSkill, how: str) -> SkillLoaded:
     """The journal event for one entry of the turn's loads, with how it entered the reply."""
     return SkillLoaded(
         entry["skillId"], entry["version"], entry["name"], entry["matched"], entry.get("part"), how, entry.get("inputs")
     )
 
 
-def same(skill: Skill, entry: dict[str, Any]) -> bool:
+def same(skill: Skill, entry: LoadedSkill | Json) -> bool:
     """Whether a journalled entry names this skill, and this part of it."""
     return skill.skill_id == entry.get("skillId") and skill.part == (entry.get("part") or "")
 
