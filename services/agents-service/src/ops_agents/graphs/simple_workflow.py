@@ -11,6 +11,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from ops_agent_kernel.types import AgentSettings, PromptFragment, TurnRequest
+from ops_service_kit.http import Json, JsonList
 from ops_service_kit.ids import new_id
 
 from .common import GraphDeps, kernel_turn
@@ -27,20 +28,20 @@ class ProductQuestionState(TypedDict):
     kb_ids: NotRequired[list[str]]
     category: NotRequired[str]
     answer: NotRequired[str]
-    citations: NotRequired[list[dict[str, Any]]]
+    citations: NotRequired[list[Json]]
     no_answer: NotRequired[bool]
 
 
 def build(deps: GraphDeps, checkpointer: BaseCheckpointSaver[Any] | None) -> CompiledStateGraph[Any, Any, Any, Any]:
-    async def classify(state: ProductQuestionState) -> dict[str, Any]:
+    async def classify(state: ProductQuestionState) -> Json:
         return {"category": await deps.models.classify(state["question"], LABELS)}
 
-    async def answer(state: ProductQuestionState) -> dict[str, Any]:
+    async def answer(state: ProductQuestionState) -> Json:
         settings = AgentSettings("wf_product_question", 1, [ANSWER], deps.model_alias, max_tool_calls=0)
         kb_ids = state.get("kb_ids") or [k.id for k in deps.catalog.knowledge_bases]
         req = TurnRequest(new_id("turn"), new_id("run"), settings, [], user_turn=state["question"], kb_ids=kb_ids)
         result = await kernel_turn("answer", req, deps.ports, deps.meter, deps.model_alias)
-        citations = [
+        citations: JsonList = [
             {"n": c.n, "documentId": c.passage.document_id, "title": c.passage.title, "section": c.passage.section}
             for c in result.citations
         ]
