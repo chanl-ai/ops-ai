@@ -12,11 +12,14 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime, timedelta
-from typing import Any, Literal, cast
+from typing import Any, Literal, NotRequired, TypedDict, cast
 
 from ops_identity.fastapi import DEV_TEAM
+from ops_service_kit.http import Json
 from ops_store import isolation
+from ops_store.documents import stored
 from ops_store.team_scope import acting_as
 
 from ..connections.records import auth_of, connection_base, seed_rows
@@ -43,6 +46,7 @@ from ..store.modules import (
 # The dev seed writes every team's connections into one tenant, each in its own team.
 SEED = "seed"
 
+
 DOCUMENT_SERVICE = {
     "displayName": "Document service",
     "name": "document-service",
@@ -58,11 +62,38 @@ SENDS = {
     "send_reply": ("Email a reply to a customer.", True),
     "send_acknowledgement": ("Email an automatic acknowledgement to the sender of a message; no approval.", False),
 }
+
+
 # Tools of the platform itself, run locally in every tenant's Runtime module, and the one declaration of their access
 # and approval (registry.WORKFLOW_TOOLS reads it). open_case opens a case in the caller's team: a write, but
 # one that changes only the team's own case list and closes nothing, so it runs without approval unless the team's
 # toolWritesNeedApproval policy is on.
-PLATFORM_TOOLS: list[dict[str, Any]] = [
+class ToolDeclaration(TypedDict):
+    """A tool the platform runs itself: its access and approval, and the JSON Schema of its input."""
+
+    name: str
+    description: str
+    access: Literal["read", "write"]
+    requires_approval: bool
+    input_schema: Json
+    timeout_ms: NotRequired[int]
+    system: NotRequired[bool]
+
+
+class CatalogTool(TypedDict):
+    """A tool of the agents catalogue (tools.json): a read may leave out whether it waits."""
+
+    name: str
+    description: str
+    access: Literal["read", "write"]
+    requires_approval: NotRequired[bool | None]
+    input_schema: NotRequired[Json]
+    timeout_ms: NotRequired[int]
+    system: NotRequired[bool]
+
+
+CATALOG_TOOL = stored(CatalogTool)
+PLATFORM_TOOLS: list[ToolDeclaration] = [
     {
         "name": "open_case",
         "description": "Open a case for a customer issue in your team; returns its id. Calling again with the same "
@@ -104,7 +135,7 @@ PLATFORM_TOOLS: list[dict[str, Any]] = [
 # approval, each call in the call log.
 # One call's limit: the gateway's deadline is this and its 5 s margin, inside chat's 30 s gateway client.
 FILE_TOOL_TIMEOUT_MS = 20_000
-FILE_TOOLS: list[dict[str, Any]] = [
+FILE_TOOLS: list[ToolDeclaration] = [
     {
         "name": "read_file",
         "timeout_ms": FILE_TOOL_TIMEOUT_MS,
@@ -136,7 +167,7 @@ FILE_TOOLS: list[dict[str, Any]] = [
 ]
 FILE_TOOL_NAMES = tuple(str(t["name"]) for t in FILE_TOOLS)
 # The built-in Knowledge bases tool: a read with no approval, each call in the call log.
-KNOWLEDGE_TOOLS: list[dict[str, Any]] = [
+KNOWLEDGE_TOOLS: list[ToolDeclaration] = [
     {
         "name": "search_knowledge",
         "description": "Search the team's knowledge bases and answer with the passages found and where each came from. "
@@ -182,18 +213,25 @@ SAMPLE_ACTOR = "Sample data"
 SAMPLE_NOTE = "Called by the sample tool sets"
 
 
-def fields_of(schema: dict[str, Any]) -> list[InputField]:
-    """A JSON Schema object's top-level properties as the console's SchemaField list."""
-    required: set[str] = set(schema.get("required") or [])
-    props: dict[str, dict[str, Any]] = schema.get("properties") or {}
+def fields_of(schema: Json) -> list[InputField]:
+    """A JSON Schema object's top-level properties as the console's SchemaField list. A property's type, description
+    and allowed values are kept as the schema gives them (a nullable type is a list, an enum may hold numbers): an
+    MCP server's tool list must still be discovered, and saving a field validates it."""
+    needed = set(cast("Iterable[str]", schema.get("required") or []))
+    props = schema.get("properties") or {}
+    if not isinstance(props, dict):
+        raise AttributeError("the schema's properties are not an object")
     out: list[InputField] = []
-    for name, p in props.items():
-        field: InputField = {"name": name, "type": p.get("type", "string"), "required": name in required}
+    for name, value in props.items():
+        if not isinstance(value, dict):
+            raise AttributeError(f"the schema's property {name} is not an object")
+        p = value
+        field = {"name": name, "type": p.get("type", "string"), "required": name in needed}
         if p.get("description"):
             field["description"] = p["description"]
         if p.get("enum"):
             field["enum"] = p["enum"]
-        out.append(field)
+        out.append(cast(InputField, field))
     return out
 
 
@@ -213,7 +251,7 @@ def kind_of(module: Module) -> str:
     """What a module calls, read from its tools: `mcp` an MCP server, `code` functions on runner-service or the
     platform's own tools, `http` an app's address (also a module with no tools yet). Only http and mcp have an address,
     which lives on their connection."""
-    executors = {str(o.get("executor")) for o in cast(list[dict[str, Any]], module.get("operations") or [])}
+    executors = {str(o.get("executor")) for o in module.get("operations") or []}
     if "mcp" in executors:
         return "mcp"
     return "code" if executors & {"code", "local"} and "http" not in executors else "http"
@@ -237,7 +275,7 @@ def open_connection(
 
 
 def blank(
-    *, module_id: str, tenant_id: str, team_id: str | None, owner: str, me: str, at: datetime, input: dict[str, Any]
+    *, module_id: str, tenant_id: str, team_id: str | None, owner: str, me: str, at: datetime, input: Mapping[str, str]
 ) -> Aggregate:
     """A draft with a name and nothing else; operations, connection and settings are added on its page."""
     display = input["displayName"].strip()
@@ -292,7 +330,7 @@ def blank(
 
 
 def runtime_module(
-    catalog: list[dict[str, Any]], *, tenant_id: str, team_id: str | None, me: str, at: datetime
+    catalog: Sequence[ToolDeclaration | CatalogTool], *, tenant_id: str, team_id: str | None, me: str, at: datetime
 ) -> Aggregate:
     """The agents catalogue's demo tools that no console module holds, as one published module the gateway runs
     locally, so every tool a call can name is in the registry."""
@@ -473,7 +511,8 @@ def _local_fields(module_id: str, n: int, name: str) -> StoredOperation:
     out["approvers"] = 1
     out["amount_max"] = None
     out["stub"] = {"ok": True}
-    if timeout := declared.get(name, {}).get("timeout_ms"):
+    declaration = declared.get(name)
+    if declaration is not None and (timeout := declaration.get("timeout_ms")):
         out["timeout_ms"] = timeout
     return out
 
@@ -606,16 +645,17 @@ async def _seed_team(connections: ConnectionStore, row: dict[str, Any], now: dat
 
 
 def aggregates(
-    seed: dict[str, Any], *, tenant_id: str, now: datetime, catalog: list[dict[str, Any]] | None = None
+    seed: dict[str, Any], *, tenant_id: str, now: datetime, catalog: Sequence[Json] | None = None
 ) -> list[Aggregate]:
     """`catalog` is the agents catalogue's tools.json: those tools run locally, and the ones no console module holds
     join one Runtime module."""
     tools = {t["name"]: t for t in seed["tools"]}
-    local = {t["name"] for t in catalog or []} | set(WORKFLOW_TOOLS)
+    catalogued = [CATALOG_TOOL(t) for t in catalog or []]
+    local = {t["name"] for t in catalogued} | set(WORKFLOW_TOOLS)
     # A tool the Runtime runs locally takes the Runtime's input, which can differ from the console seed's picture of
     # the same operation; the gateway validates calls against what will actually run.
     runtime_input = {
-        t["name"]: fields_of(t.get("input_schema") or {}) for t in [*(catalog or []), *PLATFORM_TOOLS, *READ_TOOLS]
+        t["name"]: fields_of(t.get("input_schema") or {}) for t in [*catalogued, *PLATFORM_TOOLS, *READ_TOOLS]
     } | dict.fromkeys(SENDS, SEND_REPLY_INPUT)
     # Workflows are agents-service's; the seed keeps each approval's workflow name, and a test fixture may list them.
     workflows = {w["id"]: w["name"] for w in seed.get("workflows", [])}
@@ -773,7 +813,7 @@ def aggregates(
         )
     )
     held = {o["name"] for m in out for o in m["operations"]}
-    rest = [t for t in [*(catalog or []), *PLATFORM_TOOLS] if t["name"] not in held and not t.get("system")]
+    rest = [t for t in [*catalogued, *PLATFORM_TOOLS] if t["name"] not in held and not t.get("system")]
     if rest:
         # The catalogue's runtime tools are the platform's, like the platform tools module: no team owns them.
         out.append(runtime_module(rest, tenant_id=tenant_id, team_id=None, me=seed["currentUser"], at=ago(30)))
@@ -786,7 +826,7 @@ async def load(
     *,
     tenant_id: str,
     now: datetime,
-    catalog: list[dict[str, Any]] | None = None,
+    catalog: Sequence[Json] | None = None,
 ) -> int:
     """Writes the seeded modules: missing ones are added, ones nobody has edited since the seed wrote them (revision
     0) are replaced so a changed seed reaches an existing dev database, and edited ones are left alone; an unedited

@@ -15,10 +15,10 @@ from __future__ import annotations
 import json
 import re
 import time
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, TypedDict, cast
+from typing import Any, NotRequired, TypedDict, cast
 from urllib.parse import urlsplit
 
 import httpx
@@ -36,6 +36,7 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListParams
 from ops_store import isolation
@@ -64,6 +65,7 @@ from ..store.modules import (
     Binding,
     Change,
     CodeSettings,
+    Header,
     HostNotAllowedError,
     InputField,
     Module,
@@ -72,6 +74,8 @@ from ..store.modules import (
     ModuleRef,
     ModuleStore,
     Operation,
+    PinnedBy,
+    Reachability,
     ServiceEvent,
     StaleModuleError,
     StoredOperation,
@@ -100,8 +104,197 @@ NO_TRAFFIC = CallStats(calls=0, errors=0, p95_ms=0)
 NO_CALLS = DayStats(count=0, errors=0, p95_ms=0)
 
 
-def _rates(t: CallStats) -> dict[str, Any]:
+class Rates(TypedDict):
+    calls24h: int
+    errorRate: float
+    p95Ms: int
+
+
+def _rates(t: CallStats) -> Rates:
     return {"calls24h": t.calls, "errorRate": t.errors / t.calls if t.calls else 0, "p95Ms": t.p95_ms}
+
+
+class WorkflowRef(TypedDict):
+    id: str
+    name: str
+
+
+class PendingReview(TypedDict):
+    id: str | None
+    version: str
+    requestedBy: str
+    requestedAt: str | None
+
+
+class ModuleRow(TypedDict):
+    """A module as the list shows it (and the detail begins). `nextExpiry`, `connectionId`, `unsetSecrets` and
+    `canEdit` are set only when the module has one, the list asks for secrets, or the caller is a list's reader."""
+
+    id: str
+    name: str
+    displayName: str
+    system: str
+    description: str
+    type: str
+    status: str
+    version: str
+    major: int
+    ownerTeam: str
+    endpoint: str | None
+    operationCount: int
+    accessClasses: list[str]
+    approvalState: str
+    pendingApprovals: int
+    workflows: list[WorkflowRef]
+    calls24h: int
+    errorRate: float
+    p95Ms: int
+    reachable: bool
+    drift: bool
+    connection: Json | None
+    signIn: str
+    updatedAt: str | None
+    nextExpiry: NotRequired[str | None]
+    # Set after the fields above, in this order.
+    pendingReview: NotRequired[PendingReview | None]
+    connectionId: NotRequired[str]
+    templateId: NotRequired[str | None]
+    protection: NotRequired[str | None]
+    unsetSecrets: NotRequired[int]
+    canEdit: NotRequired[bool]
+
+
+class RunContext(TypedDict):
+    """Who a test run acts as: the module owner, who needs no workflow approval, and the values bound fields take."""
+
+    id: str
+    label: str
+    workflowId: str
+    workflowName: str
+    caseId: str
+    bindings: dict[str, JsonValue]
+
+
+class ApprovalCore(TypedDict):
+    id: str
+    workflowId: str
+    workflowName: str
+    environment: str
+    major: int
+    operations: list[str]
+    requestedBy: str
+    justification: str
+    status: str
+
+
+class ApprovalView(ApprovalCore, total=False):
+    """A workflow's approval as the API shows it; a field with no value is left out, so a key present is not null."""
+
+    constraints: str | None
+    requestedAt: str | None
+    decidedBy: str | None
+    decidedAt: str | None
+    expiresAt: str | None
+    reason: str | None
+    reviewId: str | None
+    deciderTeam: str | None
+
+
+class VersionView(TypedDict, total=False):
+    """A published version as the API shows it; a field with no value is left out."""
+
+    version: str
+    major: int
+    status: str
+    publishedAt: str | None
+    publishedBy: str
+    note: str
+    changes: list[Change]
+    pinnedBy: list[PinnedBy]
+    reachability: list[Reachability]
+    reviewId: str | None
+    requestedAt: str | None
+    reviewer: str | None
+    finding: str | None
+    reviewRequired: bool | None
+    policy: str | None
+
+
+class Rights(TypedDict):
+    canEdit: bool
+    canDelete: bool
+    canPublish: bool
+
+
+class ModuleDetail(ModuleRow):
+    """A module's page: its row, settings, operations, approvals and versions, and what the caller may do with it."""
+
+    ownerContacts: list[str]
+    auth: Json
+    timeoutMs: int
+    egressHosts: list[str]
+    dataClassification: str
+    operations: list[OperationView]
+    pendingChanges: list[Change]
+    approvals: list[ApprovalView]
+    versions: list[VersionView]
+    runContexts: list[RunContext]
+    canDelete: NotRequired[bool]
+    canPublish: NotRequired[bool]
+
+
+class SecretSetting(TypedDict):
+    name: str
+    set: bool
+    available: bool
+
+
+class AnswerView(TypedDict, total=False):
+    answer: str
+    answerSource: str
+    answerRole: str | None
+    waits: bool
+
+
+class OperationView(AnswerView):
+    """An operation as the tool page shows it; a write also carries its approval answer for the team in view."""
+
+    id: str
+    toolId: str
+    name: str
+    description: str
+    access: str
+    enabled: bool
+    input: list[InputField]
+    maskedOutput: list[str]
+    binding: Binding | None
+    rateLimitPerMin: int
+    requiresApproval: bool | None
+    approvalMode: str | None
+    reviewerRole: str | None
+    approvers: int
+    approverTeam: str | None
+    stepUp: bool
+    idempotent: bool
+    needsPerson: bool
+    scopes: list[str]
+    calls24h: int
+    errorRate: float
+    p95Ms: int
+    approvedWorkflows: int
+    method: NotRequired[str]
+    path: NotRequired[str]
+    executor: NotRequired[str]
+    code: NotRequired[CodeSettings]
+    headers: NotRequired[list[Header]]
+    signInHeader: NotRequired[str | None]
+    body: NotRequired[str]
+    bodyEncoding: NotRequired[str]
+    responseTransform: NotRequired[str]
+    timeoutMs: NotRequired[int]
+    amountMax: NotRequired[float]
+    secrets: NotRequired[list[SecretSetting]]
+    stub: NotRequired[JsonValue]
 
 
 # Short enough that an approval granted for 30 days (the test default) is not expiring the day it is granted.
@@ -542,7 +735,7 @@ class ModuleService:
         traffic: Traffic,
         have: dict[str | None, set[str]] | None = None,
         conns: dict[str, Account] | None = None,
-    ) -> dict[str, Any]:
+    ) -> ModuleRow:
         now = self.clock()
         conn = (conns or {}).get(m["connection_id"] or "")
         ops = m["operations"]
@@ -564,10 +757,12 @@ class ModuleService:
             state = "expiring"
         else:
             state = "approved"
-        workflows = {a["workflow_id"]: {"id": a["workflow_id"], "name": a["workflow_name"]} for a in active}
+        workflows: dict[str, WorkflowRef] = {
+            a["workflow_id"]: {"id": a["workflow_id"], "name": a["workflow_name"]} for a in active
+        }
         status = status_of(conn, now) if conn else ""
         waiting = conn is not None and self.awaits_sign_in is not None and self.awaits_sign_in(m, conn)
-        row: dict[str, Any] = {
+        row: ModuleRow = {
             "id": m["id"],
             "name": m["name"],
             "displayName": m["display_name"],
@@ -613,7 +808,7 @@ class ModuleService:
             row["unsetSecrets"] = len(needed - have.get(m["team_id"], set()))
         return row
 
-    def _run_contexts(self) -> list[dict[str, Any]]:
+    def _run_contexts(self) -> list[RunContext]:
         """The module owner only, who needs no workflow approval. The test panel's Run as lists it alone: a
         workflow's context ran with typed sample values rather than a case, so it proved nothing a real run would."""
         return [
@@ -634,9 +829,9 @@ class ModuleService:
         approvals: list[Approval],
         t: CallStats,
         have: dict[str | None, set[str]] | None = None,
-    ) -> dict[str, Any]:
+    ) -> OperationView:
         policy = approval_policy(m, o)
-        out: dict[str, Any] = {
+        out: OperationView = {
             "id": o["id"],
             "toolId": o["tool_id"],
             "name": o["name"],
@@ -665,11 +860,12 @@ class ModuleService:
             if o[col] is not None:
                 out[key] = o[col]
         out["executor"] = o["executor"]
-        if o.get("code"):
-            out["code"] = o["code"]
+        code = o.get("code")
+        if code:
+            out["code"] = code
         out["headers"] = o.get("headers") or []
         # A tool saved before sign-in headers were refused still sends one; its page asks to move it to the app.
-        held = cast(list[dict[str, str]], out["headers"])
+        held = o.get("headers") or []
         out["signInHeader"] = next(
             (h["key"] for h in held if CREDENTIAL_HEADER.match(h["key"].strip()) and h["value"].strip()), None
         )
@@ -693,10 +889,14 @@ class ModuleService:
         out["stub"] = o.get("stub")
         return out
 
-    def _rights(self, who: Caller, m: Aggregate) -> dict[str, bool]:
+    def _rights(self, who: Caller, m: Aggregate) -> Rights:
         """What the caller may do with this module, by the check each write route runs: `can` for the action
         with the module's protection, so the console's buttons and the routes never disagree."""
-        return {f"can{a.capitalize()}": self._may(who, m, a) for a in ("edit", "delete", "publish")}
+        return {
+            "canEdit": self._may(who, m, "edit"),
+            "canDelete": self._may(who, m, "delete"),
+            "canPublish": self._may(who, m, "publish"),
+        }
 
     def _may(self, who: Caller, m: Aggregate, action: str) -> bool:
         """One of `_rights`' flags: the module is the caller's team's and `can` allows the action on it. Reads only
@@ -716,7 +916,7 @@ class ModuleService:
 
     async def _detail(
         self, m: Aggregate, team: Team, who: Caller | None = None, *, levels: Levels | None = None
-    ) -> dict[str, Any]:
+    ) -> ModuleDetail:
         """`who` is the person asking; their rights on the module ride along. A service applying a decision has none.
         Without `levels` they are asked of platform-service here, after the module's reads."""
         m = (await self._as_team_sees(str(m["tenant_id"]), team.id, [m]))[0]
@@ -728,7 +928,7 @@ class ModuleService:
             key=lambda a: (STATUS_ORDER[a["status"]], _iso(a["expires_at"]) or "9"),
         )
         auth = auth_of(m["auth"])
-        return {
+        detail: ModuleDetail = {
             **self._row(m, traffic, have, await self._connections_of(str(m["tenant_id"]), [m])),
             "ownerContacts": m["owner_contacts"],
             "auth": auth,
@@ -748,18 +948,25 @@ class ModuleService:
             "approvals": [self._approval_out(a) for a in ordered],
             "versions": [self._version_out(v) for v in reversed(m["versions"])],
             "runContexts": self._run_contexts(),
-            **(self._rights(who, m) if who is not None else {}),
         }
+        if who is not None:
+            rights = self._rights(who, m)
+            detail["canEdit"], detail["canDelete"], detail["canPublish"] = (
+                rights["canEdit"],
+                rights["canDelete"],
+                rights["canPublish"],
+            )
+        return detail
 
     async def _with_answers(
-        self, m: Aggregate, team: Team, shown: list[dict[str, Any]], levels: Levels | None = None
-    ) -> list[dict[str, Any]]:
+        self, m: Aggregate, team: Team, shown: list[OperationView], levels: Levels | None = None
+    ) -> list[OperationView]:
         """Each write's answer for the team in view (waits, who answers, which level), from the resolver the gateway
         runs, so the tool page and the operations table never apply the rule themselves."""
         tenant = str(m["tenant_id"])
         levels = levels or await self.approvals.levels(tenant, team.id)
         by_name = {str(o["name"]): o for o in m["operations"]}
-        out: list[dict[str, Any]] = []
+        out: list[OperationView] = []
         for row in shown:
             o = by_name[str(row["name"])]
             if o["access"] not in WRITES:
@@ -778,8 +985,8 @@ class ModuleService:
                 tool=str(o["name"]),
             )
             out.append(
-                row
-                | {
+                {
+                    **row,
                     "answer": ans["answer"],
                     "answerSource": ans["source"],
                     "answerRole": ans["reviewerRole"],
@@ -789,10 +996,10 @@ class ModuleService:
         return out
 
     @staticmethod
-    def _drop_none(d: dict[str, Any]) -> dict[str, Any]:
-        return {k: v for k, v in d.items() if v is not None}
+    def _drop_none[V: Mapping[str, object]](d: V) -> V:
+        return cast(V, {k: v for k, v in d.items() if v is not None})
 
-    def _approval_out(self, a: Approval) -> dict[str, Any]:
+    def _approval_out(self, a: Approval) -> ApprovalView:
         return self._drop_none(
             {
                 "id": a["id"],
@@ -816,7 +1023,7 @@ class ModuleService:
             }
         )
 
-    def _version_out(self, v: Version) -> dict[str, Any]:
+    def _version_out(self, v: Version) -> VersionView:
         return self._drop_none(
             {
                 "version": v["version"],
@@ -964,7 +1171,7 @@ class ModuleService:
             "viewCounts": {v: totals[v] for v in MODULE_VIEWS},
         }
 
-    async def get(self, who: Caller, module_id: str) -> dict[str, Any]:
+    async def get(self, who: Caller, module_id: str) -> ModuleDetail:
         levels = await self._levels(who.tenant_id, who.team)
         reviews = decides_security_reviews(who)
         found = await self.store.get(who.tenant_id, module_id, reviews=reviews) if reviews else None
@@ -1257,7 +1464,7 @@ class ModuleService:
     async def _name_free(self, who: Caller, name: str) -> bool:
         return name not in await self.store.names(who.tenant_id, who.team.id)
 
-    async def create(self, who: Caller, i: dict[str, Any]) -> dict[str, Any]:
+    async def create(self, who: Caller, i: dict[str, Any]) -> ModuleDetail:
         _can(who, "tools", "create", what="tools")
         template = _provisioned(who, i)
         base = _kebab(i["name"])
@@ -1430,7 +1637,7 @@ class ModuleService:
         conn = await self.connections.get(tenant_id, cid) if (cid := m["connection_id"]) else None
         return connection_base(conn) if conn else ""
 
-    async def create_blank(self, who: Caller, i: dict[str, Any]) -> dict[str, Any]:
+    async def create_blank(self, who: Caller, i: dict[str, Any]) -> ModuleDetail:
         _can(who, "tools", "create", what="tools")
         template = _provisioned(who, i)
         name = _kebab(i["name"])
@@ -1449,7 +1656,7 @@ class ModuleService:
             owner=owner,
             me=who.name,
             at=self.clock(),
-            input={**i, "displayName": i["display_name"], "name": name},
+            input={"displayName": i["display_name"], "name": name, "description": i.get("description") or ""},
         )
         if conn is not None:
             # A custom app's tools are paths on its connection's base address: it is the module's only one.
@@ -1467,7 +1674,7 @@ class ModuleService:
 
     # ── Editing ───────────────────────────────────────────────────────────
 
-    async def update_details(self, who: Caller, module_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+    async def update_details(self, who: Caller, module_id: str, patch: dict[str, Any]) -> ModuleDetail:
         _can(who, "tools", "edit", what="tools")
         levels = await self._levels(who.tenant_id, who.team)
         m = await self._changeable(who, module_id)
@@ -1526,7 +1733,7 @@ class ModuleService:
         else:
             self._stage(m, changes)
 
-    async def add_operation(self, who: Caller, module_id: str, h: dict[str, Any]) -> dict[str, Any]:
+    async def add_operation(self, who: Caller, module_id: str, h: dict[str, Any]) -> ModuleDetail:
         _can(who, "tools", "edit", what="tools")
         m = await self._changeable(who, module_id)
         conn = await self.connections.get(who.tenant_id, cid) if (cid := m["connection_id"]) else None
@@ -1545,7 +1752,7 @@ class ModuleService:
         await self._append(who, m, [op])
         return await self._detail(await self._save(m), who.team, who)
 
-    async def set_connection(self, who: Caller, module_id: str, connection_id: str | None) -> dict[str, Any]:
+    async def set_connection(self, who: Caller, module_id: str, connection_id: str | None) -> ModuleDetail:
         _can(who, "tools", "edit", what="tools")
         levels = await self._levels(who.tenant_id, who.team)
         m = await self._changeable(who, module_id)
@@ -1611,7 +1818,7 @@ class ModuleService:
 
     async def update_operation(
         self, who: Caller, module_id: str, op_id: str, patch: dict[str, Any], fields: set[str]
-    ) -> dict[str, Any]:
+    ) -> ModuleDetail:
         """`fields` names the keys the caller sent, so `binding: null` (remove it) differs from leaving it out."""
         _can(who, "tools", "edit", what="tools")
         levels = await self._levels(who.tenant_id, who.team)
@@ -1848,7 +2055,7 @@ class ModuleService:
         kind = "binding_changed" if added else "settings"
         return [{"operation": o["name"], "kind": kind, "detail": detail, "major": bool(added)}]
 
-    async def add_function(self, who: Caller, module_id: str, f: dict[str, Any]) -> dict[str, Any]:
+    async def add_function(self, who: Caller, module_id: str, f: dict[str, Any]) -> ModuleDetail:
         """Adds a function to a code module."""
         _can(who, "tools", "edit", what="tools")
         levels = await self._levels(who.tenant_id, who.team)
@@ -2058,7 +2265,7 @@ class ModuleService:
             out.append({"operation": name, "kind": "schema_changed", "detail": "Fields reordered", "major": False})
         return out
 
-    async def publish(self, who: Caller, module_id: str, note: str) -> dict[str, Any]:
+    async def publish(self, who: Caller, module_id: str, note: str) -> ModuleDetail:
         _can(who, "tools", "publish", what="tools")
         m = await self._owned(who, module_id)
         _not_a_plugin(m)
@@ -2140,7 +2347,7 @@ class ModuleService:
             security=security,
         )
 
-    async def discard(self, who: Caller, module_id: str) -> dict[str, Any]:
+    async def discard(self, who: Caller, module_id: str) -> ModuleDetail:
         _can(who, "tools", "edit", what="tools")
         levels = await self._levels(who.tenant_id, who.team)
         m = await self._changeable(who, module_id)
@@ -2151,7 +2358,7 @@ class ModuleService:
         m.update(operations=restored, pending=[], baseline=None)
         return await self._detail(await self._save(m), who.team, who, levels=levels)
 
-    async def request_review(self, who: Caller, module_id: str, note: str) -> dict[str, Any]:
+    async def request_review(self, who: Caller, module_id: str, note: str) -> ModuleDetail:
         _can(who, "tools", "publish", what="tools")
         m = await self._owned(who, module_id)
         _not_a_plugin(m)
@@ -2186,7 +2393,7 @@ class ModuleService:
         decision: str,
         reason: str | None,
         by: str | None,
-    ) -> dict[str, Any]:
+    ) -> ModuleDetail:
         """A decision made in Reviews, sent by agents-service, which already held it to the review rules: not
         the requester, not the saver, Security for a security change, a reason for a no. Approving the module's
         current version publishes it and clears drift, since the reviewed tool list is the one now held; a no sends a
@@ -2223,7 +2430,7 @@ class ModuleService:
 
     # ── Workflow approvals ────────────────────────────────────────────────
 
-    async def request_approval(self, who: Caller, module_id: str, i: dict[str, Any]) -> dict[str, Any]:
+    async def request_approval(self, who: Caller, module_id: str, i: dict[str, Any]) -> ApprovalView:
         _can(who, "tools", "edit", what="tools")
         m = await self._find(who, module_id)
         _not_a_plugin(m)
@@ -2302,7 +2509,7 @@ class ModuleService:
         by: str | None,
         team_id: str | None = None,
         deciders: Sequence[str] = (),
-    ) -> dict[str, Any]:
+    ) -> ApprovalView:
         """A tool access review's decision from Human Tasks, applied to the module's approval: approved grants
         it, anything else ends the request. Applying the same decision again changes nothing; a request already ended
         another way (revoked, or decided otherwise) is refused, so a late approval never revives a revoked grant."""
@@ -2342,7 +2549,7 @@ class ModuleService:
 
     async def decide_approval(
         self, who: Caller, module_id: str, approval_id: str, decision: str, reason: str | None
-    ) -> dict[str, Any]:
+    ) -> ApprovalView:
         m = await self._owned(who, module_id)
         a = next((x for x in m["approvals"] if x["id"] == approval_id), None)
         if a is None:
@@ -2445,7 +2652,7 @@ class ModuleService:
         bound: list[dict[str, Any]] = []
         b = o["binding"]
         if b:
-            value = (ctx or {}).get("bindings", {}).get(b["bindTo"]) if ctx else None
+            value = ctx["bindings"].get(b["bindTo"]) if ctx else None
             source = b["bindTo"]
             if not value and (ctx is None or ctx["caseId"] == SAMPLE_CASE):
                 # The owner, or a sample context, has no case: the value typed stands in for it, marked as a sample.
@@ -2730,7 +2937,7 @@ class ModuleService:
         executor = "mcp" if found["type"] == "mcp" else "http"
         return [{**listed[o["name"]], "access": o["access"], "executor": executor} for o in chosen]
 
-    async def import_operations(self, who: Caller, module_id: str, i: dict[str, Any]) -> dict[str, Any]:
+    async def import_operations(self, who: Caller, module_id: str, i: dict[str, Any]) -> ModuleDetail:
         """Appends the chosen operations as the source describes them now; the caller picks which, and confirms each
         one's access class, but never supplies their method, path, inputs or headers."""
         _can(who, "tools", "create", what="tools")

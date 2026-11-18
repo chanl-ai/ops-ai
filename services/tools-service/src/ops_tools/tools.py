@@ -3,7 +3,7 @@ run here after the gateway has allowed the call instead of inside the Runtime.""
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -68,7 +68,7 @@ class AccessDecisions(Protocol):
         by: str | None,
         team_id: str | None = None,
         deciders: Sequence[str] = (),
-    ) -> dict[str, Any]: ...
+    ) -> Mapping[str, object]: ...
 
 
 class ToolRunner(Protocol):
