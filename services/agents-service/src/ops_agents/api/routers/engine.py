@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Iterable
 from dataclasses import replace
-from typing import Annotated, Any, Literal, TypeAlias, cast
+from typing import Annotated, Any, Literal, TypeAlias, TypedDict, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
@@ -44,11 +44,11 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
-from ops_service_kit.http import Envelope, In, JsonValue, LabelledListResult, ListResult, paged
+from ops_service_kit.http import Envelope, In, Json, JsonList, JsonValue, LabelledListResult, ListResult, paged
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
-from ops_service_kit.narrow import json_object
+from ops_service_kit.narrow import a_list, an_object, json_object
 from ops_store import isolation
 
 from ...store.actor_names import UNNAMED_WORKFLOW
@@ -62,7 +62,7 @@ from ...store.tenancy import current_team, current_tenant
 from ...store.trigger_events import TriggerEvents
 from .. import ai_steps_gate, engine_lifecycle, run_starts, run_story, step_shapes, task_view
 from ..account_names import account_uses_in
-from ..actors import ActorView, actor_reads, named_actors, started_by_of
+from ..actors import ActorView, NamedActors, actor_reads, named_actors, started_by_of
 from ..agent_registry import registry as agent_registry
 from ..auth import (
     Principal,
@@ -78,11 +78,10 @@ from ..auth import (
 )
 from ..deps import Runtime, runtime
 from ..email_trigger import run_again
-from ..engine_reviews import Row
 from ..engine_runs import live_version, start_run
 from ..envelope import ok
 from ..file_names import named, names_asked_once
-from ..run_story import decisions_in, files_in, steps_view
+from ..run_story import Decision, decisions_in, files_in, steps_view
 from ..schemas import SSE_RESPONSE, DocumentRead, Out, PublishReview  # pyright: ignore[reportPrivateImportUsage]
 from .tool_catalog import known_tools
 
@@ -229,7 +228,7 @@ def _port_in(message: str) -> str | None:
     return None
 
 
-def enrich_check(check: dict[str, Any]) -> dict[str, Any]:
+def enrich_check(check: Json) -> Json:
     """Adds path, port and suggestion from the check the engine already returned. Does not change its meaning."""
     node, field, code, message = check.get("node"), check.get("field"), check.get("code"), check.get("message") or ""
     path = f"nodes.{node}.parameters.{field}" if node and field else (f"nodes.{node}" if node else None)
@@ -237,7 +236,8 @@ def enrich_check(check: dict[str, Any]) -> dict[str, Any]:
         **check,
         "path": check.get("path") or path,
         "port": check.get("port")
-        or (_port_in(message) if code in {"unknown_port", "unconnected_port", "duplicate_port"} else None),
+        # The engine words every check's message as text.
+        or (_port_in(cast(str, message)) if code in {"unknown_port", "unconnected_port", "duplicate_port"} else None),
         "suggestion": check.get("suggestion") or _CHECK_SUGGESTION.get(str(code or "")),
     }
 
@@ -494,7 +494,50 @@ def workflow_status(summary: DefinitionSummary, request: PublishRequestRow | Non
     return "in_review" if request is not None else "draft"
 
 
-def start_of(definition: dict[str, Any]) -> dict[str, Any]:
+class StartSummary(TypedDict):
+    """How a definition starts (`start_of`), keys in reply order."""
+
+    kind: JsonValue
+    byHand: bool
+    takesFiles: bool
+
+
+class PendingPublish(TypedDict):
+    reviewId: str
+    toVersion: int
+    requestedBy: str
+
+
+class WorkflowListParts(TypedDict, total=False):
+    """What a v2 row of the Workflows list adds when a publish request is open."""
+
+    pendingPublish: PendingPublish
+
+
+class WorkflowListRow(WorkflowListParts):
+    """A v2 workflow as a row of the Workflows list (`v2_workflow_rows`), keys in reply order."""
+
+    id: str
+    name: str
+    description: str
+    teamId: str | None
+    trigger: str
+    agentSlugs: list[str]
+    stepCount: int
+    gateCount: int
+    runs24h: int
+    reviewed24h: int
+    openReviews: int
+    status: str
+    version: int
+    updatedAt: str
+    deploymentCount: int
+    kind: str
+    engine: str
+    start: StartSummary
+
+
+def start_of(definition: Json) -> StartSummary:
     """How a definition starts, for the Workflows list and its pickers: the start form's kind, whether a person
     starts it by hand (a declared start form, and not only other workflows), and whether that form takes a file."""
     form = start_form(definition, REGISTRY)
@@ -506,12 +549,12 @@ def start_of(definition: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def v2_workflow_rows(rt: Runtime, since: str) -> list[dict[str, Any]]:
+async def v2_workflow_rows(rt: Runtime, since: str) -> list[WorkflowListRow]:
     """Each v2 workflow as a row of the Workflows list (schemas.Workflow, `engine` v2), so the list joins both kinds on
     the server: steps are its nodes, gates its human reviews, the trigger its trigger node's type label; its status is
     the serving version's stage (live or paused), a draft before the first approval, and an open publish request is
     its `pendingPublish`, as for v1. Fields v2 has no counterpart for (agents, reviews, deployments) are empty."""
-    out: list[dict[str, Any]] = []
+    out: list[WorkflowListRow] = []
     try:
         found = await definitions(rt).summaries(since=since, team=current_team())
     except DatabaseError as e:  # a database not yet migrated to the runner's tables lists v1 workflows alone
@@ -520,9 +563,9 @@ async def v2_workflow_rows(rt: Runtime, since: str) -> list[dict[str, Any]]:
     open_requests = await pending_requests(rt)
     for d in found:
         request = open_requests.get(d.workflow_id)
-        stored: dict[str, Any] = d.definition
-        nodes: list[dict[str, Any]] = list(stored.get("nodes") or [])
-        types = [REGISTRY.find(str(n.get("type")), int(n.get("typeVersion") or 0)) for n in nodes]
+        stored = d.definition
+        nodes = [an_object(n, "a definition's node") for n in a_list(stored.get("nodes") or [], "a definition's nodes")]
+        types = [REGISTRY.find(str(n.get("type")), int(cast(int, n.get("typeVersion") or 0))) for n in nodes]
         # The description says what starts it, as a v1 workflow's trigger text does; else the trigger node's type.
         trigger = str(stored.get("description") or "") or next(
             (t.label for t in types if t and t.group == "trigger"), ""
@@ -548,15 +591,15 @@ async def v2_workflow_rows(rt: Runtime, since: str) -> list[dict[str, Any]]:
                 "engine": "v2",
                 "start": start_of(stored),
                 **(
-                    {
-                        "pendingPublish": {
+                    WorkflowListParts(
+                        pendingPublish={
                             "reviewId": request.id,
                             "toVersion": request.version,
                             "requestedBy": request.requested_by,
                         }
-                    }
+                    )
                     if request
-                    else {}
+                    else WorkflowListParts()
                 ),
             }
         )
@@ -1051,20 +1094,90 @@ def can_cancel(me: Principal, run: StoredRun) -> bool:
     return True
 
 
-def run_failure(run: StoredRun, steps: list[dict[str, Any]]) -> dict[str, Any] | None:
+class RunFailureView(TypedDict):
+    """Why a run failed (`run_failure`), keys in reply order."""
+
+    code: None
+    message: str
+    nodeId: JsonValue
+    nodeName: None
+    field: None
+    attempt: JsonValue
+    retryable: bool
+    suggestion: str
+
+
+class RunWaitingView(TypedDict):
+    node: JsonValue
+    iteration: JsonValue
+    payload: JsonValue
+
+
+class RunView(TypedDict):
+    """A run as its routes return it (`run_view`), keys in reply order."""
+
+    id: str
+    workflowId: str
+    version: int
+    digest: str
+    mode: str
+    status: str
+    outcome: str | None
+    outcomeText: str | None
+    error: str | None
+    input: JsonValue
+    output: JsonValue
+    waiting: RunWaitingView | None
+    createdBy: str
+    createdAt: str
+    updatedAt: str
+    finishedAt: str | None
+
+
+class RunStartedView(TypedDict):
+    """A run just started (`started_view`), keys in reply order."""
+
+    runId: str
+    workflowId: str
+    version: int
+    digest: str
+    status: str
+    created: bool
+
+
+class StartedRun(TypedDict):
+    """A run a step started, with its status now (`started_runs`)."""
+
+    nodeId: str
+    index: int
+    runId: str
+    status: str
+    outcome: str | None
+
+
+class RunResultView(TypedDict):
+    """The End a run finished on, with its outcome and output (`run_result`)."""
+
+    node: JsonValue
+    name: str | None
+    outcome: JsonValue
+    output: JsonValue
+
+
+def run_failure(run: StoredRun, steps: list[Json]) -> RunFailureView | None:
     """The stored error sentence plus the last step that failed, so a builder does not parse `error` themselves."""
     message = run.error
     if not message:
         return None
     failed = next((s for s in reversed(steps) if s.get("error")), None)
-    attempts = list((failed or {}).get("attempts") or [])
+    attempts = list(cast(Iterable[JsonValue], (failed or {}).get("attempts") or []))
     return {
         "code": None,
         "message": message,
         "nodeId": (failed or {}).get("nodeId"),
         "nodeName": None,
         "field": None,
-        "attempt": attempts[-1]["attempt"] if attempts else None,
+        "attempt": an_object(attempts[-1], "a step's attempt")["attempt"] if attempts else None,
         "retryable": run.status == "stuck",
         "suggestion": (
             "Retry this stuck run from its last recorded step."
@@ -1074,12 +1187,12 @@ def run_failure(run: StoredRun, steps: list[dict[str, Any]]) -> dict[str, Any] |
     }
 
 
-async def ended_view(rt: Runtime, r: StoredRun) -> dict[str, Any]:
+async def ended_view(rt: Runtime, r: StoredRun) -> RunView:
     """run_view with how the run ended as a sentence (run_story.outcome_texts), for a route that returns one run."""
-    return run_view(r) | {"outcomeText": (await run_story.outcome_texts(rt, [r.model_dump()])).get(r.id)}
+    return {**run_view(r), "outcomeText": (await run_story.outcome_texts(rt, [r.model_dump()])).get(r.id)}
 
 
-def run_view(r: StoredRun) -> dict[str, Any]:
+def run_view(r: StoredRun) -> RunView:
     waiting = r.waiting
     return {
         "id": r.id,
@@ -1093,7 +1206,9 @@ def run_view(r: StoredRun) -> dict[str, Any]:
         "error": r.error,
         "input": r.input,
         "output": r.output,
-        "waiting": {k: waiting[k] for k in ("node", "iteration", "payload")} if waiting else None,
+        "waiting": RunWaitingView(node=waiting["node"], iteration=waiting["iteration"], payload=waiting["payload"])
+        if waiting
+        else None,
         "createdBy": r.created_by,
         "createdAt": r.created_at,
         "updatedAt": r.updated_at,
@@ -1133,7 +1248,7 @@ async def startable(
     return stored
 
 
-def started_view(run: StoredRun, created: bool) -> dict[str, Any]:
+def started_view(run: StoredRun, created: bool) -> RunStartedView:
     return {
         "runId": run.id,
         "workflowId": run.workflow_id,
@@ -1267,18 +1382,19 @@ async def get_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
         names = getattr(rt, "team_names", None)
         team = (await names.name(run.team_id) if names is not None else None) or run.team_id
         await run_story.ask_story(rt, raw, steps, reads)
-        files = await named(rt, run.team_id, files_in(run.input))
+        files = await named(rt, run.team_id, [{"id": f["id"], "name": f["name"]} for f in files_in(run.input)])
         told = await run_story.story_view(
             rt, raw, steps, reads, who=who, team_name=team, scope=key_scope(me), masking=False
         )
-    body = run_view(run) | {
+    body = {
+        **run_view(run),
         "outcomeText": run_story.outcome_sentences([raw], ends, versions).get(run.id),
         "workflowName": told.pop("workflowName"),
         "failure": run_failure(run, steps),
         "steps": steps,
         "children": children,
         "files": files,
-        "decisions": [d | {"by": who.get(d["by"]) if d["by"] else None} for d in decided],
+        "decisions": [{**d, "by": who.get(d["by"]) if d["by"] else None} for d in decided],
         "result": run_result(raw, steps, reads.stored, decided=decided, names=who),
         "canCancel": can_cancel(me, run),
         "canRetry": can_retry(me, run),
@@ -1293,8 +1409,7 @@ async def get_engine_run(rt: Rt, me: Me, run_id: str) -> JSONResponse:
     shown["story"] = run_story.masked_story(shown["story"])
     shown = run_story.keep_channel(shown, body, reads.addresses)
     # The lines are sentences, so the addresses are kept inside them rather than by value.
-    said = cast(Row, body["story"])
-    shown["story"]["lines"] = run_story.masked_lines(cast(list[Row], said["lines"]), reads.addresses)
+    shown["story"]["lines"] = run_story.masked_lines(told["lines"], reads.addresses)
     return ok(shown)
 
 
@@ -1314,22 +1429,21 @@ def _values_masked(body: Any) -> Any:
     """The run as people read it with masking on: every value under _VALUE_KEYS, wherever it sits. The stored
     run keeps the real values the steps after them use."""
     if isinstance(body, dict):
-        return {k: masked(v) if k in _VALUE_KEYS else _values_masked(v) for k, v in cast(dict[str, Any], body).items()}
+        return {k: masked(v) if k in _VALUE_KEYS else _values_masked(v) for k, v in cast(Json, body).items()}
     if isinstance(body, list):
-        return [_values_masked(v) for v in cast(list[Any], body)]
+        return [_values_masked(v) for v in cast(JsonList, body)]
     return body
 
 
-async def started_runs(store: RunStore, steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+async def started_runs(store: RunStore, steps: list[Json]) -> list[StartedRun]:
     """The runs the steps started, from each step's `runs` output (Start workflow), with their status now."""
     started: list[tuple[str, int, str]] = []
     for s in steps:
         out = s.get("output")
-        listed = cast(list[Any], cast(dict[str, Any], out).get("runs") or []) if isinstance(out, dict) else []
-        for i, r in enumerate(listed):
-            if isinstance(r, dict) and cast(dict[str, Any], r).get("runId"):
-                row = cast(dict[str, Any], r)
-                started.append((str(s["nodeId"]), int(row.get("index", i)), str(row["runId"])))
+        listed = cast(list[JsonValue], out.get("runs") or []) if isinstance(out, dict) else []
+        for i, row in enumerate(listed):
+            if isinstance(row, dict) and row.get("runId"):
+                started.append((str(s["nodeId"]), int(cast(int, row.get("index", i))), str(row["runId"])))
     found = {r.id: r for r in await store.many([rid for _, _, rid in started])}
     return [
         {
@@ -1345,13 +1459,13 @@ async def started_runs(store: RunStore, steps: list[dict[str, Any]]) -> list[dic
 
 
 def run_result(
-    run: dict[str, Any],
-    steps: list[dict[str, Any]],
+    run: Json,
+    steps: list[Json],
     stored: StoredDefinition | None,
     *,
-    decided: list[dict[str, Any]] | None = None,
-    names: dict[str, dict[str, Any]] | None = None,
-) -> dict[str, Any] | None:
+    decided: list[Decision] | None = None,
+    names: NamedActors | None = None,
+) -> RunResultView | None:
     """The run's result: the End node it finished on, from the pinned definition and the journal, with the outcome and
     output the worker recorded on the run. An output that is the last Human Task's decision reads as people read it:
     the decision in words and who decided by name, since masking is for customer data and a staff address would show
@@ -1359,16 +1473,15 @@ def run_result(
     if run["status"] == "cancelled" or run["outcome"] is None:
         return None
     nodes = engine_lifecycle.nodes_of(json_object(stored.definition) if stored else None)
-    ends = [s for s in steps if nodes.get(s["nodeId"], {}).get("type") == "ops.flow.end" and s["status"] == "ok"]
+    ends = [s for s in steps if nodes.get(str(s["nodeId"]), {}).get("type") == "ops.flow.end" and s["status"] == "ok"]
     end = ends[-1]["nodeId"] if ends else None
-    name = str(nodes[end].get("name") or end) if end else None
+    name = str(nodes[str(end)].get("name") or end) if end else None
     output = run["output"]
     last = decided[-1] if decided else None
-    if isinstance(output, dict) and last is not None and cast(dict[str, Any], output).get("decision") == last["action"]:
-        output = cast(dict[str, Any], output)
-        shown: dict[str, Any] = {
+    if isinstance(output, dict) and last is not None and output.get("decision") == last["action"]:
+        shown: Json = {
             **output,
-            "decision": run_story.decision_label(nodes.get(last["nodeId"]), last["action"]),
+            "decision": run_story.decision_label(nodes.get(str(last["nodeId"])), last["action"]),
         }
         who = (names or {}).get(str(output.get("by") or ""))
         if who:

@@ -33,6 +33,7 @@ from ops_engine.store import DefinitionRow, DefinitionStore, RunStore
 from ops_files_client import FilesClient
 from ops_identity import ServiceClient, dev_service_signer
 from ops_service_kit.errors import Unprocessable
+from ops_service_kit.http import Json
 from tests.engine.test_email_trigger import MAILBOX, NOTICE, PDF, TEAM, FakeFiles, connect, mail
 from tests.engine.test_worker import CountingTools, drain, worker
 
@@ -140,7 +141,7 @@ async def by_mailbox(engine: AsyncEngine, tenant: str, row: DefinitionRow, files
 
 async def by_test_email(engine: AsyncEngine, tenant: str, row: DefinitionRow, files: Files, ids: list[str]) -> str:
     rt: Any = SimpleNamespace(db=engine, start_files=files_client(files))
-    values = {
+    values: Json = {
         "from": NOTICE["from"]["emailAddress"]["address"],
         "subject": NOTICE["subject"],
         "body": NOTICE["body"]["content"],

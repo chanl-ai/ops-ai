@@ -128,7 +128,7 @@ async def test_the_write_preview_carries_the_operations_labels(stack: Stack) -> 
     call = {"tool": "place_hold", "input": {"accountId": "CHQ-2219", "amount": 2140.55}}
     payload = {"taskType": {"id": "write_approval"}, "params": {"title": "Hold the funds", "call": call}}
     with tenant_scope(TENANT), acting_as("team_ops"):
-        task = await task_view.typed_task(rt, payload) or {}
+        task: dict[str, Any] = await task_view.typed_task(rt, payload) or {}
         expected = await describe_call(rt, call, currency=None, money_key=None)
     [preview] = [r["data"] for r in task["regions"] if r["region"] == "write_preview"]
     assert preview["fields"] == expected["fields"] and preview["fields"], preview
