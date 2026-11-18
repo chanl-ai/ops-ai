@@ -69,7 +69,8 @@ def test_the_checks_job_runs_the_list_on_a_one_file_service_change(tmp_path: Pat
     assert p["full"] == "false", p
     job = CI["jobs"]["checks"]
     # The job's own condition holds for a plan that is not full, and it runs the list, not a copy of it.
-    assert job["if"] == "needs.plan.outputs.full != 'true'"
+    assert "needs.plan.outputs.full != 'true'" in job["if"]
+    assert "needs.plan.outputs.release == 'true'" in job["if"]
     assert "make -s checks" in [step.get("run") for step in job["steps"]]
     assert job["steps"][1].get("with", {}).get("fetch-depth", 0) == 0 or job["steps"][0]["with"]["fetch-depth"] == 0
     assert any(step.get("with", {}).get("node") == "true" for step in job["steps"]), (
@@ -145,7 +146,10 @@ def test_the_both_database_run_and_the_release_proof_are_required_with_their_tri
         assert package in steps
     assert "files-service" in steps and "SQL Server passed" in steps
     # A pull request into main is a release.
-    assert jobs["release-proof"]["if"] == "github.event_name == 'pull_request' && github.base_ref == 'main'"
+    proof_if = jobs["release-proof"]["if"]
+    assert "github.event_name == 'pull_request'" in proof_if
+    assert "github.base_ref == 'main'" in proof_if
+    assert "needs.plan.outputs.release == 'true'" in proof_if
     release = "\n".join(str(step.get("run", "")) for step in jobs["release-proof"]["steps"])
     assert "make db-scripts-proof FROM=" in release and "make install-proof" in release
 

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Prints what ci.yml runs for the changes since <base sha>, as key=value lines; the suites come from verify-changed.sh's
 # plan so CI and a local run pick the same ones. Keys: full, services, packages (JSON lists), console, docs, scripts,
-# service_jobs (the service matrix: one job per service, or per test shard and its checks for the long suites).
+# service_jobs (the service matrix: one job per service, or per test shard and its checks for the long suites), release.
+# A push to release/* or hotfix/* (GITHUB_REF) is always a full plan with release=true: the impact plan once skipped
+# jobs on such a push and let a failure reach develop untested. ci.yml then also runs `checks` and release-proof.
 # A full plan runs what `make verify` runs, spread over jobs: every service of its suite list (make/python.mk,
 # VERIFY_POOL) in the service matrix, and the rest of python-verify, sdk-verify and changelog-verify in one job.
 set -euo pipefail
@@ -12,7 +14,9 @@ if [ -f "$base" ]; then changed=$(cat "$base"); else changed=$(git diff --name-o
 flag() { if grep -qE "$1" <<<"$changed"; then echo true; else echo false; fi; }
 json() { if [ "$#" -eq 0 ]; then echo '[]'; else printf '"%s",' "$@" | sed 's/,$//; s/^/[/; s/$/]/'; fi; }
 
-plan=$(VERIFY_CHANGED_PLAN=jobs scripts/verify-changed.sh "$base")
+release=false
+case "${GITHUB_REF:-}" in refs/heads/release/* | refs/heads/hotfix/*) release=true ;; esac
+if [ "$release" = true ]; then plan="plan: full"; else plan=$(VERIFY_CHANGED_PLAN=jobs scripts/verify-changed.sh "$base"); fi
 if grep -qx 'plan: full' <<<"$plan"; then
   full=true; packages=(); rest=()
   read -r -a pool <<<"$(make -s -f make/python.mk -f /dev/stdin <<<'print-pool: ; @echo $(VERIFY_POOL)' print-pool 2>/dev/null)"
@@ -43,6 +47,7 @@ for svc in ${services[@]+"${services[@]}"}; do
   for i in $(seq 1 "$n"); do jobs_json+=("{\"service\":\"$svc\",\"part\":\"test $i/$n\"}"); done
 done
 echo "full=$full"
+echo "release=$release"
 # The suites of make verify that are not a service's, which a full plan's repo job runs through python-verify.
 echo "repo_pool=${rest[*]+${rest[*]}}"
 echo "services=$(json ${services[@]+"${services[@]}"})"
