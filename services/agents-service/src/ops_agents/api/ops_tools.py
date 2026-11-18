@@ -13,8 +13,9 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
-from typing import Any, cast
+from typing import TypedDict, cast
 
+from fastapi.responses import JSONResponse
 from langgraph.config import get_config
 
 from ops_access import can
@@ -24,6 +25,7 @@ from ops_agent_kernel.types import ToolGrant
 from ops_contracts.chat import ChatMessage
 from ops_engine.node_types import start_form
 from ops_service_kit.errors import ApiError
+from ops_service_kit.http import Json, JsonList
 from ops_service_kit.logging import get_logger
 from ops_store import isolation
 
@@ -78,7 +80,28 @@ ASSISTANT_FRAGMENTS: dict[str, str] = {
     "change, keep a short checklist with plan, mark each step as you go in the same step as its reads, and answer once "
     "at the end; never plan one lookup, and do not stop to ask between steps.",
 }
-OPS_ASSISTANT: dict[str, Any] = {
+
+
+class Fragment(TypedDict):
+    text: str
+
+
+class AssistantSeed(TypedDict):
+    """The declared Ops Assistant, as `AgentDefinition` reads a seed agent."""
+
+    name: str
+    role: str
+    version: int
+    instructions: list[Fragment]
+    tools: list[str]
+    default_kb_ids: list[str]
+    all_team_knowledge: bool
+    suggestions: list[str]
+    max_tool_calls: int
+    model_alias: str
+
+
+OPS_ASSISTANT: AssistantSeed = {
     "name": "Ops Assistant",
     "role": "Answers from the apps and knowledge your team has, as you, and drafts changes for your approval",
     "version": 7,
@@ -115,7 +138,7 @@ async def assistant_id(rt: Runtime, team_id: str) -> str:
     return next((aid for aid in (made_before_id(team_id), made) if owners.get(aid) == team_id), made)
 
 
-def _declared(rt: Runtime, aid: str) -> dict[str, Any]:
+def _declared(rt: Runtime, aid: str) -> Json:
     return spec_from_seed(AgentDefinition.model_validate({**OPS_ASSISTANT, "id": aid}), rt.settings.model_alias)
 
 
@@ -135,7 +158,7 @@ async def follow_declared(rt: Runtime, aid: str) -> None:
     if all(published.spec.get(k) == v for k, v in want.items()):
         return
 
-    async def change(s: dict[str, Any]) -> dict[str, Any]:
+    async def change(s: Json) -> Json:
         return {**s, **want}
 
     await seed_agent_version(rt, aid, change, f"Ops Assistant {OPS_ASSISTANT['version']}", by=SYSTEM)
@@ -175,12 +198,12 @@ async def catch_up_assistants(rt: Runtime) -> int:
     return seen
 
 
-_TEXT = {"type": "string", "maxLength": 200}
+_TEXT: Json = {"type": "string", "maxLength": 200}
 # The card for an app the team has off: offered only while the team has one (apps_line: installed, off).
 REQUEST_APP = "request_app"
 APP_OFF = "APP_OFF_FOR_TEAM"
 
-TOOLS: dict[str, tuple[str, dict[str, Any]]] = {
+TOOLS: dict[str, tuple[str, Json]] = {
     "find_cases": (
         "Find the team's cases by words in the subject or the customer's name, by status, or assigned to the person "
         "you are talking with. Answers with up to five cases, as cards or, from three, as one table.",
@@ -231,9 +254,9 @@ TOOLS: dict[str, tuple[str, dict[str, Any]]] = {
 }
 
 
-def declared_args(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
+def declared_args(tool: str, arguments: Json) -> Json:
     """Only the arguments the tool declares: a person, email or team the model adds is dropped here."""
-    declared = cast(dict[str, Any], TOOLS[tool][1].get("properties") or {})
+    declared = cast(Json, TOOLS[tool][1].get("properties") or {})
     return {k: v for k, v in arguments.items() if k in declared}
 
 
@@ -254,9 +277,9 @@ def _brief(row: CaseRecord, events: list[CaseEventRecord]) -> str:
     return "; ".join(parts)
 
 
-def _case_rows(rows: list[CaseRecord]) -> dict[str, Any]:
+def _case_rows(rows: list[CaseRecord]) -> Json:
     """The cases as one table part: subject first, the id last, which the chat's table keeps behind its View menu."""
-    data = [
+    data: JsonList = [
         {
             "subject": r.subject,
             "customer": r.customer_name or "",
@@ -302,24 +325,25 @@ class OpsReads:
             ToolGrant(name, OPS_SERVER, description, "read", schema) for name, (description, schema) in offered.items()
         ]
 
-    async def _off_apps(self, team: str) -> list[dict[str, Any]]:
+    async def _off_apps(self, team: str) -> list[Json]:
         """The installed apps the team has off, as the apps line reads them for the turn's person; none when that list
         cannot be read, so the card is never offered for an app nobody can see."""
         person = TURN_PERSON.get()
         apps_line = self.rt.apps_line
         if person is None or not person.email or apps_line is None or self.rt.app_states is None:
             return []
-        cards = cast(list[dict[str, Any]], await apps_line.cards(team, person.email) or [])
+        # An app card as tools-service lists it: its own JSON, read for the three keys the offer needs.
+        cards: list[Json] = await apps_line.cards(team, person.email) or []
         return [
             c
             for c in cards
             # Off for the team (with or without an auth config yet): a team admin turns it on.
             if c.get("appGroup") == "needs_admin"
-            and not cast(dict[str, Any], c.get("plugin") or {}).get("teamOn")
+            and not cast(Json, c.get("plugin") or {}).get("teamOn")
             and c.get("name")
         ]
 
-    async def run(self, tool: str, arguments: dict[str, Any]) -> ToolOutcome:
+    async def run(self, tool: str, arguments: Json) -> ToolOutcome:
         person = TURN_PERSON.get()
         if person is None:
             return _refused("This conversation's person is not known to this turn; ask again.")
@@ -334,15 +358,16 @@ class OpsReads:
         except ApiError as e:
             return _refused(str(e))
 
-    async def _find_cases(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
+    async def _find_cases(self, person: Principal, args: Json) -> ToolOutcome:
         rows, total = await CaseStore(self.rt.db).list(
             [str(person.team_id)],
-            status=[args["status"]] if args.get("status") else [],
+            # The model's arguments, passed on as they came: the store reads them as it always has.
+            status=[cast(str, args["status"])] if args.get("status") else [],
             priority=[],
             assignee=(person.email or person.sub) if args.get("assignedToMe") else None,
             customer_id=None,
             overdue=bool(args.get("overdue")),
-            search=args.get("search"),
+            search=cast(str | None, args.get("search")),
             page=1,
             size=LIMIT,
         )
@@ -357,7 +382,7 @@ class OpsReads:
             return ToolOutcome(True, {"cards": [], "summary": summary}, {"part": _case_rows(rows)})
         return _answer([{"type": "case", "id": r.id} for r in rows], summary)
 
-    async def _get_case(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
+    async def _get_case(self, person: Principal, args: Json) -> ToolOutcome:
         case_id = str(args["caseId"])
         try:
             row = await CaseStore(self.rt.db).get(case_id, [str(person.team_id)])
@@ -366,7 +391,7 @@ class OpsReads:
         events = await CaseStore(self.rt.db).events(case_id)
         return _answer([{"type": "case", "id": case_id}], _brief(row, events))
 
-    async def _my_human_tasks(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
+    async def _my_human_tasks(self, person: Principal, args: Json) -> ToolOutcome:
         """`mine`: the open tasks assigned to the person; when none is, the open tasks they may decide. `team`: every
         open task of the team; `overdue`: those past their deadline. The answer states the counts Human Tasks shows
         (Assigned to me, All open), so what the agent says always agrees with that page."""
@@ -377,7 +402,7 @@ class OpsReads:
             self.rt, view=view, filters={}, search=None, page_no=1, size=50, me=names, teams=reader_teams(person)
         )
         counts = cast(dict[str, int], rows["viewCounts"])
-        data = cast(list[dict[str, Any]], rows["data"])
+        data = cast(list[Json], rows["data"])
         mine, open_ = counts.get("mine", 0), counts.get("open", 0)
         if which == "mine":
             assigned = [r for r in data if r.get("assignee") in names]
@@ -398,38 +423,37 @@ class OpsReads:
         named = "; ".join(str(r.get("title") or r["id"]) for r in data)
         return _answer(cards, f"{lead} {named}".strip() if data else lead)
 
-    async def _get_human_task(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
+    async def _get_human_task(self, person: Principal, args: Json) -> ToolOutcome:
         task_id = str(args["taskId"])
         review = await hitl_facade.get_review(self.rt, task_id)
         return _answer([{"type": "task", "id": task_id}], str(review.get("title") or task_id))
 
-    async def _startable(self, person: Principal) -> list[dict[str, Any]]:
+    async def _startable(self, person: Principal) -> list[Json]:
         runner = ChildRuns(self.rt)
-        out: list[dict[str, Any]] = []
+        out: list[Json] = []
         for row in await engine_workflows(self.rt):
-            if start_form(cast(dict[str, Any], row["definition"] or {}), REGISTRY) is None:
+            if start_form(cast(Json, row["definition"] or {}), REGISTRY) is None:
                 continue  # started only by its source (a mailbox, a schedule), not by hand
             if await runner.refused_for_person(str(row["workflow_id"]), row.get("team_id")) is None:
                 out.append(row)
         return out
 
-    async def _list_startable_workflows(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
+    async def _list_startable_workflows(self, person: Principal, args: Json) -> ToolOutcome:
         rows = await self._startable(person)
         named = "; ".join(
-            f"{r['workflow_id']} ({cast(dict[str, Any], r['definition'] or {}).get('name') or r['workflow_id']})"
-            for r in rows
+            f"{r['workflow_id']} ({cast(Json, r['definition'] or {}).get('name') or r['workflow_id']})" for r in rows
         )
         return _answer(
             [], f"Workflows you may start: {named}" if rows else "There is no workflow you may start by hand."
         )
 
-    async def _start_workflow_form(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
+    async def _start_workflow_form(self, person: Principal, args: Json) -> ToolOutcome:
         workflow = str(args["workflowId"])
         if workflow not in {str(r["workflow_id"]) for r in await self._startable(person)}:
             return _refused(f"{workflow} is not a workflow you may start by hand.")
         return _answer([{"type": "start", "id": workflow}], f"The start form of {workflow}.")
 
-    async def _request_app(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
+    async def _request_app(self, person: Principal, args: Json) -> ToolOutcome:
         """The refusal a call on an app the team has off gets at the gateway, so chat draws the same card: the app, its
         id and the team, which the card's Ask an admin names."""
         asked = str(args["app"]).strip().lower()
@@ -447,7 +471,7 @@ class OpsReads:
         }
         return ToolOutcome(False, {"error": error}, for_model=carded({"error": error}))
 
-    async def _get_run(self, person: Principal, args: dict[str, Any]) -> ToolOutcome:
+    async def _get_run(self, person: Principal, args: Json) -> ToolOutcome:
         from .routers.engine import visible_run  # noqa: PLC0415 - the router imports this module's neighbours
 
         run_id = str(args["runId"])
@@ -455,17 +479,18 @@ class OpsReads:
         return _answer([{"type": "run", "id": run_id}], f"Run {run_id} of {run.workflow_id}: {run.status}")
 
 
-def _data(response: Any) -> dict[str, Any]:
-    return cast(dict[str, Any], json.loads(bytes(response.body))["data"])
+def _data(response: JSONResponse) -> Json:
+    return cast(Json, json.loads(bytes(response.body))["data"])
 
 
-async def _filled(rt: Runtime, me: Principal, card: dict[str, Any]) -> dict[str, Any]:
+async def _filled(rt: Runtime, me: Principal, card: Json) -> Json:
     """One card reference with its record's view as `me` reads it on the record's own page; `missing` when the record
     is gone or out of `me`'s reach, so the card says so and offers nothing."""
     from .routers import case_records, reviews  # noqa: PLC0415 - the routers import this module's neighbours
     from .routers import engine as engine_routes  # noqa: PLC0415
 
     kind, ref = str(card.get("type") or ""), str(card.get("id") or "")
+    view: Json
     try:
         if kind == "case":
             view = _data(await case_records.get_case(rt=rt, me=me, case_id=ref))
@@ -496,11 +521,11 @@ async def fill_cards(rt: Runtime, me: Principal, messages: list[ChatMessage]) ->
             raw: object = call.output
             if call.server != OPS_SERVER or not isinstance(raw, dict):
                 continue
-            output = cast(dict[str, Any], raw)
+            output = cast(Json, raw)
             cards = output.get("cards")
             if not isinstance(cards, list):
                 continue
-            refs = [cast(dict[str, Any], c) for c in cast(list[Any], cards) if isinstance(c, dict)]
+            refs = [c for c in cards if isinstance(c, dict)]
             fresh = [c for c in refs if (str(c.get("type")), str(c.get("id"))) not in drawn]
             drawn |= {(str(c.get("type")), str(c.get("id"))) for c in fresh}
             call.output = {**output, "cards": [await _filled(rt, me, c) for c in fresh]}
@@ -510,14 +535,14 @@ def team_created_handlers(runtime: Callable[[], Runtime]) -> dict[str, Handler]:
     """A team platform-service just made gets its Ops Assistant as its default agent, unless the team
     already has a default (a repeat delivery after a team admin chose another), which is left as it is."""
 
-    async def provision(_tenant: str, team_id: str, _payload: dict[str, Any]) -> int:
+    async def provision(_tenant: str, team_id: str, _payload: Json) -> int:
         rt = runtime()
         if await TeamDefaults(rt.db).agent(team_id) is not None:
             return 0
         await ensure_ops_assistant(rt, team_id)
         return 1
 
-    async def policy_changed(tenant: str, team_id: str, _payload: dict[str, Any]) -> int:
+    async def policy_changed(tenant: str, team_id: str, _payload: Json) -> int:
         # The tool list kept for the team carries each write's answer; drop it so the next turn reads the new ones.
         forget = getattr(runtime().directory(), "forget_for", None)
         if forget is None:

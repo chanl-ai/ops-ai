@@ -18,9 +18,10 @@ and who decided, so a publish under "never" still says who published."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, cast, get_args
+from typing import Literal, cast, get_args
 
 from ops_access import publish_mode
+from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.logging import get_logger
 
 from ..store.tenancy import NoTenantError
@@ -51,7 +52,7 @@ MINOR_FIELDS: dict[Area, frozenset[str]] = {
 ALWAYS_MAJOR = frozenset({"approval", "approvals", "access", "egress", "requiresApproval", "approvalPolicy"})
 # Reviewed under "never" as well: what a publish lets an agent say or do without a person. Each is a path into the
 # version, with the value an unset path stands for.
-SECURITY_PATHS: dict[tuple[str, ...], Any] = {
+SECURITY_PATHS: dict[tuple[str, ...], JsonValue] = {
     **{(k,): None for k in ALWAYS_MAJOR},
     ("guardrailPins",): None,
     ("guardrails", "blockedTopics"): None,
@@ -68,8 +69,9 @@ class Decision:
     # policy_unread. The publish dialog says it before anyone presses Publish.
     reason: str = "major_change"
 
-    def record(self) -> dict[str, Any]:
-        """Kept on the publish request: what the policy said when it was asked."""
+    def record(self) -> Json:
+        """Kept on the publish request: what the policy said when it was asked. JSON, as each caller spreads it into
+        the request body it stores."""
         return {
             "reviewRequired": self.review_required,
             "policy": self.mode,
@@ -78,7 +80,7 @@ class Decision:
         }
 
 
-def is_major(area: Area, old: dict[str, Any] | None, new: dict[str, Any]) -> bool:
+def is_major(area: Area, old: Json | None, new: Json) -> bool:
     if old is None or area == "guardrails":
         return True
     if area == "workflows":
@@ -87,41 +89,39 @@ def is_major(area: Area, old: dict[str, Any] | None, new: dict[str, Any]) -> boo
     return bool(changed & ALWAYS_MAJOR) or bool(changed - MINOR_FIELDS[area])
 
 
-def _unplaced(doc: dict[str, Any]) -> dict[str, Any]:
+def _unplaced(doc: Json) -> Json:
     """A workflow with each node's canvas position dropped. Positions sit inside `nodes`, so a top-level diff would read
     moving a step (Tidy up) as a change to the steps; moving steps alone is minor."""
     nodes = doc.get("nodes")
     if not isinstance(nodes, list):
         return doc
-    kept = [
-        {k: v for k, v in cast(dict[str, Any], n).items() if k != "position"} if isinstance(n, dict) else n
-        for n in cast(list[Any], nodes)
-    ]
-    return doc | {"nodes": kept}
+    kept: JsonList = [{k: v for k, v in n.items() if k != "position"} if isinstance(n, dict) else n for n in nodes]
+    unplaced: Json = {"nodes": kept}
+    return doc | unplaced
 
 
-def is_security_change(area: Area, old: dict[str, Any] | None, new: dict[str, Any]) -> bool:
+def is_security_change(area: Area, old: Json | None, new: Json) -> bool:
     if area == "guardrails":
         return True
     return any(_at(old or {}, path, unset) != _at(new, path, unset) for path, unset in SECURITY_PATHS.items())
 
 
-def _at(doc: dict[str, Any], path: tuple[str, ...], unset: Any) -> Any:
-    value: Any = doc
+def _at(doc: Json, path: tuple[str, ...], unset: JsonValue) -> JsonValue:
+    value: JsonValue = doc
     for key in path:
-        value = cast(dict[str, Any], value).get(key) if isinstance(value, dict) else None
+        value = value.get(key) if isinstance(value, dict) else None
     found = _rule(value)
     return unset if found is None else found
 
 
-def _rule(value: Any) -> Any:
+def _rule(value: JsonValue) -> JsonValue:
     """A setting with its empty parts dropped, so no pins and an absent field are the same rule. False and 0 are values:
     switching redaction off is a change, never an unset field that reads as its default."""
     if isinstance(value, dict):
-        kept = {k: r for k, v in cast(dict[str, Any], value).items() if (r := _rule(v)) is not None}
+        kept: Json = {k: r for k, v in value.items() if (r := _rule(v)) is not None}
         return kept or None
     if isinstance(value, list):
-        kept_items = [r for v in cast(list[Any], value) if (r := _rule(v)) is not None]
+        kept_items: JsonList = [r for v in value if (r := _rule(v)) is not None]
         return kept_items or None
     return None if value is None or value == "" else value
 
@@ -130,11 +130,7 @@ def dev_auto_approves(rt: Runtime) -> bool:
     return rt.settings.registry_auto_approve and rt.settings.environment == "dev"
 
 
-# The workspace's publishReview document, `{team: {area: mode}}`.
-Document = dict[str, Any]
-
-
-async def team_document(rt: Runtime) -> Document | None:
+async def team_document(rt: Runtime) -> Json | None:
     """The workspace's publishReview policy, `{team: {area: mode}}`, read live from platform-service on every decision
     so a change applies to the next publish. Empty without a platform URL or before a tenant is set
     (the start-up seed); None when platform-service cannot be read."""
@@ -147,7 +143,8 @@ async def team_document(rt: Runtime) -> Document | None:
     except PolicyUnread as e:
         log.warning("publishReview unread; the publish waits for review", extra={"error": str(e)})
         return None
-    return cast(dict[str, Any], found) if isinstance(found, dict) else {}
+    # The workspace's publishReview document, `{team: {area: mode}}`, as platform-service answers it.
+    return cast(Json, found) if isinstance(found, dict) else {}
 
 
 async def decide(
@@ -155,9 +152,9 @@ async def decide(
     *,
     area: Area,
     team_id: str,
-    old: dict[str, Any] | None,
-    new: dict[str, Any],
-    document: Document | Literal["read"] | None = "read",
+    old: Json | None,
+    new: Json,
+    document: Json | Literal["read"] | None = "read",
 ) -> Decision:
     """`old` is what is published now (None before a first publish), `new` what is being published. When the policy
     cannot be read the publish opens a review, so nothing skips one because platform-service was down. A caller that

@@ -29,7 +29,7 @@ from ops_agents.domain.evals import TRIGGER_MANUAL
 from ops_identity.fastapi import Tx
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable, ValidationFailed
-from ops_service_kit.http import Envelope, In, ListResult, Out
+from ops_service_kit.http import Envelope, In, Json, ListResult, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListQuery
 from ops_store import isolation
@@ -59,7 +59,7 @@ from ..deps import Runtime, runtime
 from ..envelope import ok
 from ..guardrails import resolve_pins
 from ..model_aliases import chat_aliases
-from ..publish_policy import Decision, Document, decide, team_document
+from ..publish_policy import Decision, decide, team_document
 from ..review_sla import sla_hours
 from ..rights import rights
 from ..runs import graph_store
@@ -679,7 +679,7 @@ async def _publish_decision(
     agent_id: str,
     row: AgentRow,
     version: int,
-    document: Document | Literal["read"] | None = "read",
+    document: Json | Literal["read"] | None = "read",
 ) -> Decision:
     """What the team's publish policy says about publishing `version`; the preview and the publish both ask here, so
     the dialog never promises what the publish does not do."""
