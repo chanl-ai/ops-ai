@@ -30,7 +30,7 @@ await withUiStack(
       const linked = await link.waitFor({ timeout: 60_000 }).then(() => true, () => false);
       check('Access offers Teams to a workspace admin', linked);
       await link.click();
-      await sam.waitForURL((u) => u.pathname === '/access/teams', { timeout: 60_000 });
+      await sam.waitForURL((u) => u.pathname === '/govern/access/teams', { timeout: 60_000 });
       await sam.getByTestId('teams-create').waitFor({ timeout: 60_000 });
 
       await sam.getByTestId('teams-create').click();

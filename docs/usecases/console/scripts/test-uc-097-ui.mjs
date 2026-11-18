@@ -32,8 +32,8 @@ await withUiStack(
       await dialog.getByLabel('Name').fill(`Limits ${TAG}`);
       await dialog.getByLabel('When the agent uses it').fill('The person asks for limits.');
       await dialog.getByLabel('Name').press('Enter');
-      await page.waitForURL((u) => /^\/widgets\/[^/]+$/.test(u.pathname), { timeout: 30_000 }).catch(() => undefined);
-      check('Enter in the name field creates the widget and opens its editor', new URL(page.url()).pathname === `/widgets/limits-${TAG}`, page.url());
+      await page.waitForURL((u) => /^\/build\/widgets\/[^/]+$/.test(u.pathname), { timeout: 30_000 }).catch(() => undefined);
+      check('Enter in the name field creates the widget and opens its editor', new URL(page.url()).pathname === `/build/widgets/limits-${TAG}`, page.url());
 
       // Steps 3-4: the New guardrail dialog; Enter in the topics field adds a topic and saves nothing.
       await page.goto(`${consoleUrl}/guardrails`, { waitUntil: 'domcontentloaded', timeout: 120_000 });

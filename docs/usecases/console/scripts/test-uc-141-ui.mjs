@@ -11,6 +11,9 @@ const json = async (r) => {
   return body.data;
 };
 
+// Activity's Status column has five statuses for every kind of row (lib/activity-status.ts): a queued run reads Running.
+const shownStatus = (status) => (status === 'queued' ? 'running' : status.replace(/_/g, ' '));
+
 await withUiStack(
   async (consoleUrl) => {
     const J = { Authorization: `Bearer ${await tokenFor('j.richardson@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
@@ -40,7 +43,7 @@ await withUiStack(
       const text = listed ? await row.innerText() : '';
       const server = await json(await fetch(`${agents}/v1/runs/${started.runId}`, { headers: J }));
       const outcome = listed ? (await row.getByTestId('activity-status').innerText()).trim().toLowerCase() : '';
-      check('1 Activity lists the run by its workflow name, kind and outcome', listed && text.includes(name) && /Workflow run/.test(text) && outcome === server.status.replace(/_/g, ' '), { text: text.slice(0, 160), outcome, server: server.status });
+      check('1 Activity lists the run by its workflow name, kind and outcome', listed && text.includes(name) && /Workflow run/.test(text) && outcome === shownStatus(server.status), { text: text.slice(0, 160), outcome, server: server.status });
 
       // 2. The Kind filter asks the server for that kind.
       await page.locator('main').getByRole('button', { name: 'Kind', exact: true }).click();
@@ -60,7 +63,7 @@ await withUiStack(
 
       // 4. A row opens its run.
       await page.getByTestId(`activity-row-workflow_run:${started.runId}`).click();
-      const opened = await page.waitForURL(`**/workflows/runs/${started.runId}`, { timeout: 60_000 }).then(() => true, () => false);
+      const opened = await page.waitForURL(`**/build/runs/${started.runId}`, { timeout: 60_000 }).then(() => true, () => false);
       check('4 a run row opens the run page', opened, page.url());
 
       check('no page errors', errors.length === 0, errors.slice(0, 3));

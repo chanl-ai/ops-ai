@@ -121,7 +121,7 @@ await withUiStack(
       await page.getByRole('tab', { name: 'JSON' }).click({ timeout: 5000 }).catch(() => undefined);
       await page.getByTestId('definition-run-input').fill(JSON.stringify({ customerId: 'CUS-1001', amount: 250 }));
       await page.getByTestId('definition-start-run-submit').click();
-      await page.waitForURL(/\/workflows\/runs\/[^/?]+/, { timeout: 60_000 });
+      await page.waitForURL(/\/build\/runs\/[^/?]+/, { timeout: 60_000 });
       const runId = decodeURIComponent(new URL(page.url()).pathname.split('/').pop());
       await page.getByTestId('run-status').waitFor({ timeout: 60_000 });
       await page.waitForTimeout(2_000);

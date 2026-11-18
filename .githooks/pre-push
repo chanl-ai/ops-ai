@@ -2,16 +2,19 @@
 # ops-ai hook: lint and format of the Python files the pushed commits change, and the console's whole unit suite when the
 # pushed commits change the console or embed app (the commit hook runs only the tests next to the staged files). A
 # checkpoint push reports a red suite and goes on: the head commit's message holds "[skip ci]", or OPS_CHECKPOINT_PUSH=1.
-# The other tests run in CI.
+# The other tests run in CI. A ref whose commits all exist on the remote already (a release branch cut at develop's head,
+# a tag on a merged commit) skips the console suite: those commits were tested before they reached the remote, and a
+# fresh worktree has no node_modules to run it with. Lint and format still run.
 cd "$(git rev-parse --show-toplevel)" || exit 1
 root=$PWD
+remote=${1:-}
 # OPS_RUFF names another ruff (scripts/tests/test_pre_push.py); by default the workspace's.
 ruff=${OPS_RUFF:-"uv run --quiet --project $root ruff"}
 refs=$(cat)
 d=$(git rev-parse --git-common-dir) || exit 1
 if [ -x "$d/hooks/pre-push.local" ]; then printf '%s\n' "$refs" | "$d/hooks/pre-push.local" "$@" || exit $?; fi
 zero=0000000000000000000000000000000000000000
-printf '%s\n' "$refs" | while read -r _local_ref local_sha _remote_ref remote_sha; do
+printf '%s\n' "$refs" | while read -r _local_ref local_sha remote_ref remote_sha; do
   [ -n "$local_sha" ] || continue
   [ "$local_sha" = "$zero" ] && continue  # a delete sends no commits
   since=$remote_sha
@@ -21,6 +24,11 @@ printf '%s\n' "$refs" | while read -r _local_ref local_sha _remote_ref remote_sh
   [ -n "$since" ] || continue
   files=$(git diff --name-only --diff-filter=ACMR "$since" "$local_sha" -- '*.py')
   console=$(git diff --name-only "$since" "$local_sha" -- apps/console apps/embed package.json pnpm-lock.yaml)
+  # Skips only when rev-list succeeds and lists nothing: an unnamed remote, a URL or a failed lookup runs the suite.
+  if [ -n "$console" ] && [ -n "$remote" ] && unsent=$(git rev-list -n 1 "$local_sha" --not "--remotes=$remote" 2>/dev/null) && [ -z "$unsent" ]; then
+    echo "pre-push: every commit pushed to $remote_ref is already on $remote, so the console unit suite was skipped."
+    console=
+  fi
   [ -n "$files" ] || [ -n "$console" ] || continue
   # The pushed content, not the working tree: another builder's unfinished file must not block this push. The whole
   # commit is exported because ruff tells first-party packages from third-party ones by the folders on disk; only the

@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { AGENTS_PORT, PLATFORM_PORT, ROOT, TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-import { decideInConsole } from '../../lib/workflow_ui.mjs';
+import { decideInConsole, publishReviewOn } from '../../lib/workflow_ui.mjs';
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const tools = `http://127.0.0.1:${TOOLS_PORT}`;
@@ -101,6 +101,9 @@ async function pickSecret(page, id) {
 
 await withUiStack(
   async (consoleUrl, stack) => {
+    // A new workspace publishes at once; the workflows here must wait for another person, so review is on for
+    // workflows first, before anyone signs in (a policy change refuses older tokens).
+    await publishReviewOn({ workflows: 'always' });
     const S = as(await tokenFor(SAM), 'team_security');
     const J = as(await tokenFor(JAMES));
     const P = as(await tokenFor(PRIYA));
