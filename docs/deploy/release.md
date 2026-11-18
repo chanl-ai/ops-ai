@@ -10,7 +10,7 @@ one prints what it would do unless `DRY=0`.
 
 | Step | Who | Command or action |
 |---|---|---|
-| 1. Cut | Maintainer | `make release-cut V=X.Y.Z` (preview), then `DRY=0`: pushes `release/X.Y.Z` from `origin/develop`. The push runs `ci.yml`, whose `staging` job deploys the branch with the click walk. A hotfix is `make hotfix-cut V=X.Y.Z`, from `origin/main` |
+| 1. Cut | Maintainer | `make release-cut V=X.Y.Z` (preview), then `DRY=0`: pushes `release/X.Y.Z` from `origin/develop`. The push runs `ci.yml`, whose `staging` job deploys the branch with the click walk. The pre-push hook skips the console suite for it, since every commit is already on origin. A hotfix is `make hotfix-cut V=X.Y.Z`, from `origin/main` |
 | 2. Test staging | Maintainer, owner | The click walk of that deploy, use cases against staging (`OPS_USECASE_BASE_URL=https://<staging host> make usecase-test UC=<id> LAYER=api`; only use cases marked safe run, see `docs/usecases/README.md`), and the owner's click-through. Only fixes go on the release branch; each push to it deploys again |
 | 3. Open the PR | Maintainer | `make release-pr V=X.Y.Z` (preview), then `DRY=0`: opens `release/X.Y.Z` into `main` titled `release: X.Y.Z (develop → main)` (`release: X.Y.Z (hotfix → main)` for a hotfix) |
 | 4. Merge | Owner | A merge commit. No squash and no rebase, so main's first-parent history holds one commit per release |
