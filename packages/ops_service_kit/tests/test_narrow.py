@@ -26,3 +26,14 @@ def test_field_of_the_wrong_kind_reads_as_the_default() -> None:
     assert narrow.field(obj, "missing", str, "none") == "none"
     assert narrow.field(obj, "label", str) == "x"
     assert narrow.field({"rate": 3}, "rate", float) == 3.0
+
+
+def test_a_value_that_decides_something_fails_on_a_wrong_shape() -> None:
+    with pytest.raises(narrow.Malformed, match="counts is not an object"):
+        narrow.an_object("junk", "counts")
+    with pytest.raises(narrow.Malformed, match="rows is not a list"):
+        narrow.a_list({}, "rows")
+    for bad in ({"published": "2"}, {"published": True}, {"published": None}, {}):
+        with pytest.raises(narrow.Malformed, match="published is not a int"):
+            narrow.required(bad, "published", int)
+    assert narrow.required({"published": 2}, "published", int) == 2

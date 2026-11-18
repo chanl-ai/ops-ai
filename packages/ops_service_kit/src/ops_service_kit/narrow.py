@@ -1,6 +1,10 @@
 """Typed reads of untyped input (a parsed body, a stored JSON column, another service's answer), in place of
 `cast(dict[str, Any], x)`. A cast checks nothing; these check the shape and fall back to an empty or default value,
-so a caller writes the fallback once instead of `x if isinstance(x, dict) else {}` at every read."""
+so a caller writes the fallback once instead of `x if isinstance(x, dict) else {}` at every read.
+
+The falling-back reads (`json_object`, `json_list`, `field`) suit display and optional data. A value that decides
+something (a guard, a count, a billed amount, what is saved) is read with `an_object`, `a_list` or `required`, which
+raise `Malformed` on a wrong shape, so bad input fails the call instead of reading as empty or zero."""
 
 from __future__ import annotations
 
@@ -23,6 +27,32 @@ def json_object(value: object) -> Json:
 def json_list(value: object) -> JsonList:
     """`value` itself when it is a list, else a new empty list. Never raises."""
     return cast(JsonList, value) if isinstance(value, list) else []
+
+
+class Malformed(ValueError):
+    """Input that had to have a shape did not have it."""
+
+
+def an_object(value: object, what: str) -> Json:
+    """`value` itself when it is an object, else `Malformed` naming `what`."""
+    if not isinstance(value, dict):
+        raise Malformed(f"{what} is not an object")
+    return cast(Json, value)
+
+
+def a_list(value: object, what: str) -> JsonList:
+    """`value` itself when it is a list, else `Malformed` naming `what`."""
+    if not isinstance(value, list):
+        raise Malformed(f"{what} is not a list")
+    return cast(JsonList, value)
+
+
+def required[T: (str, int, float, bool)](obj: Mapping[str, JsonValue], key: str, kind: type[T]) -> T:
+    """The scalar at `key`, read as `field` reads it, or `Malformed` when it is missing or another type."""
+    value = field(obj, key, kind)
+    if value is None:
+        raise Malformed(f"{key} is not a {kind.__name__}")
+    return value
 
 
 def as_json(value: object) -> JsonValue:
