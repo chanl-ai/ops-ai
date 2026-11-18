@@ -32,6 +32,7 @@ from langgraph.graph import END, START, StateGraph  # pyright: ignore[reportMiss
 from langgraph.types import interrupt
 
 from ops_checkpointer import LeaseSupersededError
+from ops_service_kit.http import Json, JsonList, JsonValue
 
 from . import ai_steps
 from .definition import FALLBACK, MAPPING_PREFIX, TEXT_PATH, NodeInstance, WorkflowDefinition
@@ -123,12 +124,12 @@ class NodeCall:
     iteration: int
     attempt: int
     key: str
-    params: dict[str, Any]
+    params: Json
     generation: int | None
     ports: EnginePorts
     run_input: Any
     # The run so far as mappings read it ({input, nodes}), and the definition, for a step that names another node.
-    scope: Mapping[str, Any]
+    scope: Mapping[str, JsonValue]
     definition: WorkflowDefinition | None = None
 
 
@@ -140,7 +141,7 @@ def lookup(path: str, scope: Mapping[str, Any]) -> Any:
     here: Any = scope
     for part in path[len(MAPPING_PREFIX) :].split("."):
         if isinstance(here, Mapping):
-            here = cast(Mapping[str, Any], here).get(part)
+            here = cast(Mapping[str, JsonValue], here).get(part)
         elif isinstance(here, list) and part.isdigit() and int(part) < len(cast(list[Any], here)):
             here = cast(list[Any], here)[int(part)]
         else:
@@ -172,14 +173,14 @@ def resolve(value: Any, scope: Mapping[str, Any]) -> Any:
     if isinstance(value, str) and "{$." in value:
         return TEXT_PATH.sub(lambda m: _text(lookup(m.group(1), scope)), value)
     if isinstance(value, dict):
-        return {k: resolve(v, scope) for k, v in cast(dict[str, Any], value).items()}
+        return {k: resolve(v, scope) for k, v in cast(Json, value).items()}
     if isinstance(value, list):
         return [resolve(v, scope) for v in cast(list[Any], value)]
     return value
 
 
-def scope_of(state: Mapping[str, Any]) -> dict[str, Any]:
-    nodes = {k[len(CHANNEL) :]: v for k, v in state.items() if k.startswith(CHANNEL) and v is not None}
+def scope_of(state: Mapping[str, JsonValue]) -> Json:
+    nodes: Json = {k[len(CHANNEL) :]: v for k, v in state.items() if k.startswith(CHANNEL) and v is not None}
     return {"input": state.get(INPUT), "nodes": nodes}
 
 
@@ -191,7 +192,7 @@ async def trigger_payload(call: NodeCall) -> Outcome:
 
 
 async def data_set(call: NodeCall) -> Outcome:
-    return Outcome("out", dict(call.params.get("values") or {}))
+    return Outcome("out", dict(cast(Json, call.params.get("values") or {})))
 
 
 async def data_transform(call: NodeCall) -> Outcome:
@@ -216,17 +217,17 @@ async def data_filter(call: NodeCall) -> Outcome:
     items = call.params.get("items")
     if not isinstance(items, list):
         return Outcome("error", {"error": "Filter read no list.", "code": "not_a_list"})
-    conditions = cast(list[Mapping[str, Any]], call.params.get("conditions") or [])
+    conditions = cast(list[Mapping[str, JsonValue]], call.params.get("conditions") or [])
     combine = call.params.get("combine") or "all"
     kept: list[Any] = []
     dropped: list[Any] = []
     for item in cast(list[Any], items):
         results: list[bool] = []
         for raw in conditions:
-            cond: dict[str, Any] = dict(raw)
+            cond: Json = dict(raw)
             left: Any = cond.get("left")
             if isinstance(item, Mapping) and isinstance(left, str) and not left.startswith(MAPPING_PREFIX):
-                cond = {**cond, "left": cast(Mapping[str, Any], item).get(left)}
+                cond = {**cond, "left": cast(Mapping[str, JsonValue], item).get(left)}
             results.append(_holds(cond))
         ok = any(results) if combine == "any" else bool(results) and all(results)
         (kept if ok else dropped).append(item)
@@ -240,7 +241,7 @@ async def data_compute(call: NodeCall) -> Outcome:
     if call.ports.expressions is None:
         raise RuntimeError("no expressions port: this worker cannot evaluate formulas")
     formulas = {str(k): str(v) for k, v in dict(call.node.parameters.get("expressions") or {}).items()}
-    out, why = await call.ports.expressions.evaluate(formulas, dict(call.params.get("values") or {}))
+    out, why = await call.ports.expressions.evaluate(formulas, dict(cast(Json, call.params.get("values") or {})))
     if out is None:
         return Outcome("error", {"error": why, "code": "formula_failed"})
     return Outcome("out", out)
@@ -256,7 +257,7 @@ _COMPARE: dict[str, Callable[[Any, Any], bool]] = {
 }
 
 
-def _holds(condition: Mapping[str, Any]) -> bool:
+def _holds(condition: Mapping[str, JsonValue]) -> bool:
     left, op, right = condition.get("left"), str(condition.get("op")), condition.get("right")
     if op == "exists":
         return left is not None
@@ -271,7 +272,7 @@ def _holds(condition: Mapping[str, Any]) -> bool:
 
 
 async def flow_if(call: NodeCall) -> Outcome:
-    conditions = cast(list[Mapping[str, Any]], call.params.get("conditions") or [])
+    conditions = cast(list[Mapping[str, JsonValue]], call.params.get("conditions") or [])
     results = [_holds(c) for c in conditions]
     passed = any(results) if call.params.get("combine") == "any" else all(results)
     return Outcome("true" if passed else "false", {"result": passed})
@@ -280,15 +281,15 @@ async def flow_if(call: NodeCall) -> Outcome:
 async def flow_switch(call: NodeCall) -> Outcome:
     """The first way out whose rules hold, in the order the builder listed them; otherwise when none does. Otherwise
     carries every rule it tried, with the value each read, so a run shows why no case matched."""
-    cases = cast(list[Mapping[str, Any]], call.params.get("cases") or [])
+    cases = cast(list[Mapping[str, JsonValue]], call.params.get("cases") or [])
     for case in cases:
-        results = [_holds(c) for c in cast(list[Mapping[str, Any]], case.get("conditions") or [])]
+        results = [_holds(c) for c in cast(list[Mapping[str, JsonValue]], case.get("conditions") or [])]
         if results and (any(results) if case.get("combine") == "any" else all(results)):
             return Outcome(str(case["name"]), {"case": str(case["name"])})
     tried = [
         {"case": str(case.get("name")), **{k: c.get(k) for k in ("left", "op", "right")}}
         for case in cases
-        for c in cast(list[Mapping[str, Any]], case.get("conditions") or [])
+        for c in cast(list[Mapping[str, JsonValue]], case.get("conditions") or [])
     ]
     return Outcome("otherwise", {"case": "otherwise", "tried": tried})
 
@@ -304,7 +305,7 @@ def _fact(value: Any, numeric: bool) -> Any:
     spacing; anything else as its JSON. Text reads as a number (1,200.00 is 1200) only in a `numeric` field: digits in
     a case number or an account id are text, and their leading zeros count."""
     if isinstance(value, Mapping) and "value" in value:
-        value = cast(Mapping[str, Any], value)["value"]
+        value = cast(Mapping[str, JsonValue], value)["value"]
     if isinstance(value, bool):
         return value
     if isinstance(value, int | float):
@@ -321,25 +322,25 @@ def _numeric(declared: Any, values: list[Any]) -> bool:
     """A field is a number when the builder typed it number or money, or, untyped, when a read value says it is."""
     if declared:
         return declared in NUMERIC
-    return any(isinstance(v, Mapping) and cast(Mapping[str, Any], v).get("type") in NUMERIC for v in values)
+    return any(isinstance(v, Mapping) and cast(Mapping[str, JsonValue], v).get("type") in NUMERIC for v in values)
 
 
 def _blank(value: Any) -> bool:
     if isinstance(value, Mapping) and "value" in value:
-        value = cast(Mapping[str, Any], value)["value"]
+        value = cast(Mapping[str, JsonValue], value)["value"]
     return value is None or (isinstance(value, str) and not value.strip()) or value in ([], {})
 
 
 async def data_combine(call: NodeCall) -> Outcome:
     """Each field from its first-ranked source that has it, which source that was, and every field the sources give
     different values for, with each source's value. An empty value is no value, so it never disagrees."""
-    sources: list[tuple[str, Mapping[str, Any]]] = []
-    for raw in cast(list[Mapping[str, Any]], call.params.get("sources") or []):
+    sources: list[tuple[str, Mapping[str, JsonValue]]] = []
+    for raw in cast(list[Mapping[str, JsonValue]], call.params.get("sources") or []):
         found = raw.get("values")
-        sources.append((str(raw["name"]), cast(Mapping[str, Any], found) if isinstance(found, Mapping) else {}))
+        sources.append((str(raw["name"]), cast(Mapping[str, JsonValue], found) if isinstance(found, Mapping) else {}))
     by_name = dict(sources)
     order = [name for name, _ in sources]
-    listed = cast(list[Mapping[str, Any]], call.params.get("fields") or [])
+    listed = cast(list[Mapping[str, JsonValue]], call.params.get("fields") or [])
     ranked: dict[str, list[str]] = {}
     for f in listed:
         ranks = [str(n) for n in cast(list[Any], f.get("from") or []) if str(n) in by_name]
@@ -347,9 +348,9 @@ async def data_combine(call: NodeCall) -> Outcome:
             ranked[str(f["field"])] = ranks
     typed = {str(f["field"]): f.get("type") for f in listed}
     names = list(dict.fromkeys([*ranked, *(field for _, values in sources for field in values)]))
-    values: dict[str, Any] = {}
+    values: Json = {}
     picked: dict[str, str] = {}
-    conflicts: list[dict[str, Any]] = []
+    conflicts: list[Json] = []
     for field in names:
         present = [
             (n, by_name[n].get(field)) for n in (ranked.get(field) or order) if not _blank(by_name[n].get(field))
@@ -371,27 +372,29 @@ def _plain_text(value: Any) -> str:
 def _field(row: Any, name: str) -> Any:
     here: Any = row
     for part in name.split("."):
-        here = cast(Mapping[str, Any], here).get(part) if isinstance(here, Mapping) else None
+        here = cast(Mapping[str, JsonValue], here).get(part) if isinstance(here, Mapping) else None
     return here
 
 
-def _rule_holds(rule: Mapping[str, Any], item: Any, candidate: Any) -> bool:
+def _rule_holds(rule: Mapping[str, JsonValue], item: Any, candidate: Any) -> bool:
     left = _plain_text(_field(item, str(rule["left"])))
     right = _plain_text(_field(candidate, str(rule["right"])))
     if not left or not right:
         return False  # an empty value never matches: a blank address is not "in" every address
     if rule.get("op") == "overlaps":
-        return min(len(left), len(right)) >= int(rule.get("minLength") or 1) and (left in right or right in left)
+        return min(len(left), len(right)) >= int(cast(float | str, rule.get("minLength") or 1)) and (
+            left in right or right in left
+        )
     return left == right
 
 
 async def data_match(call: NodeCall) -> Outcome:
     raw = call.params.get("candidates")
     listed: list[Any] = cast(list[Any], raw) if isinstance(raw, list) else [raw] if isinstance(raw, Mapping) else []
-    rows: list[Mapping[str, Any]] = [cast(Mapping[str, Any], r) for r in listed if isinstance(r, Mapping)]
+    rows: list[Mapping[str, JsonValue]] = [cast(Mapping[str, JsonValue], r) for r in listed if isinstance(r, Mapping)]
     item = call.params.get("item")
-    every = cast(list[Mapping[str, Any]], call.params.get("all") or [])
-    some = cast(list[Mapping[str, Any]], call.params.get("any") or [])
+    every = cast(list[Mapping[str, JsonValue]], call.params.get("all") or [])
+    some = cast(list[Mapping[str, JsonValue]], call.params.get("any") or [])
     matches = [
         r
         for r in rows
@@ -403,20 +406,20 @@ async def data_match(call: NodeCall) -> Outcome:
     )
 
 
-def next_iteration(scope: Mapping[str, Any], node_id: str) -> int:
-    env = cast(Mapping[str, Any], cast(Mapping[str, Any], scope.get("nodes") or {}).get(node_id) or {})
-    return int(env.get("iteration") or 0) + 1
+def next_iteration(scope: Mapping[str, JsonValue], node_id: str) -> int:
+    env = cast(Mapping[str, JsonValue], cast(Mapping[str, JsonValue], scope.get("nodes") or {}).get(node_id) or {})
+    return int(cast(float | str, env.get("iteration") or 0)) + 1
 
 
-def write_call(call: NodeCall, node_id: str) -> dict[str, Any]:
+def write_call(call: NodeCall, node_id: str) -> Json:
     """The call tool node `node_id` will make, as a review approves it: its operation, its input resolved against the
     run so far, and the key its first attempt sends (a write gets one attempt). The approval token a decision mints is
     bound to exactly this thread, step, operation and input."""
     target = call.definition.node(node_id) if call.definition else None
     if target is None:
         raise ValueError(f"{call.node.id} approves {node_id}, which is not a node of this workflow")
-    params = cast(dict[str, Any], resolve(target.parameters, call.scope))
-    arguments = dict(cast(dict[str, Any], params.get("input") or {}))
+    params = cast(Json, resolve(target.parameters, call.scope))
+    arguments = dict(cast(Json, params.get("input") or {}))
     if missing := sorted(k for k, v in arguments.items() if v is None):
         # Approving a call with a value read as nothing would bind the token to it; refuse instead.
         plain = (
@@ -438,7 +441,7 @@ NEVER_SENT = frozenset({"CONNECT_FAILED", "CONNECT_TIMEOUT", "POOL_TIMEOUT", "TL
 
 
 def never_sent(error: Any) -> bool:
-    return isinstance(error, dict) and cast(dict[str, Any], error).get("code") in NEVER_SENT
+    return isinstance(error, dict) and cast(Json, error).get("code") in NEVER_SENT
 
 
 def sent_and_unanswered(error: Any) -> bool:
@@ -447,7 +450,7 @@ def sent_and_unanswered(error: Any) -> bool:
     status_failure). A write that ends this way may have happened."""
     if not isinstance(error, dict):
         return False
-    e = cast(dict[str, Any], error)
+    e = cast(Json, error)
     code, status = e.get("code"), e.get("status")
     if code == "UPSTREAM_TIMEOUT":
         return True
@@ -458,8 +461,8 @@ def _error_code(output: Any) -> str | None:
     """The gateway's failure code in a tool's output (`{"error": {"code": ...}}`), or None."""
     if not isinstance(output, dict):
         return None
-    error: Any = cast(dict[str, Any], output).get("error")
-    return str(cast(dict[str, Any], error).get("code")) if isinstance(error, dict) else None
+    error: Any = cast(Json, output).get("error")
+    return str(cast(Json, error).get("code")) if isinstance(error, dict) else None
 
 
 # The gateway's refusal for a call acting for a person who has not connected their own account (tools-service
@@ -470,19 +473,19 @@ NOT_LINKED = "CONNECTION_NOT_LINKED"
 SIGN_IN_ENDED = "AUTH_FAILED"
 
 
-def connect_wait(output: Any) -> dict[str, Any] | None:
+def connect_wait(output: Any) -> Json | None:
     """The event and key to wait on when `output` is a refusal a person answers by signing in: their own account not
     connected yet, or a team account whose sign-in ended. None otherwise, and for any refusal naming no event."""
     if _error_code(output) not in (NOT_LINKED, SIGN_IN_ENDED):
         return None
-    details: Any = cast(dict[str, Any], cast(dict[str, Any], output)["error"]).get("details")
+    details: Any = cast(Json, cast(Json, output)["error"]).get("details")
     if not isinstance(details, dict):
         return None
-    d = cast(dict[str, Any], details)
+    d = cast(Json, details)
     event: Any = d.get("connectedEvent")
-    if not isinstance(event, dict) or not cast(dict[str, Any], event).get("key"):
+    if not isinstance(event, dict) or not cast(Json, event).get("key"):
         return None
-    named = cast(dict[str, Any], event)
+    named = cast(Json, event)
     return {
         "name": str(named.get("name")),
         "key": str(named["key"]),
@@ -511,18 +514,21 @@ def step_accounts(value: object) -> dict[str, str]:
 
 async def gateway_call(call: NodeCall) -> Outcome:
     token = call.params.get("approvalToken")
-    arguments = dict(call.params.get("input") or {})
+    arguments = dict(cast(Json, call.params.get("input") or {}))
     if reviewer := call.params.get("approvedBy"):
         # A reviewed write: the call the decision approved, with the token minted for it. With no approval (a
         # rejection, or no decision) it is sent without a token and the gateway refuses it.
-        env = cast(Mapping[str, Any], cast(Mapping[str, Any], call.scope.get("nodes") or {}).get(str(reviewer)) or {})
-        out = cast(Mapping[str, Any], env.get("out") or {})
-        approved = cast(Mapping[str, Any], out.get("call") or {})
+        env = cast(
+            Mapping[str, JsonValue],
+            cast(Mapping[str, JsonValue], call.scope.get("nodes") or {}).get(str(reviewer)) or {},
+        )
+        out = cast(Mapping[str, JsonValue], env.get("out") or {})
+        approved = cast(Mapping[str, JsonValue], out.get("call") or {})
         if approved.get("tool") == call.params.get("operation") and _step(str(approved.get("step"))) == _step(call.key):
-            arguments = dict(cast(Mapping[str, Any], approved.get("input") or {}))
+            arguments = dict(cast(Mapping[str, JsonValue], approved.get("input") or {}))
             # Minted here from the recorded approvals and sent at once; never written to state or the journal. Bound
             # to the key this attempt sends, so a write sent again under the next attempt's key keeps its approval.
-            approval = cast(Mapping[str, Any] | None, out.get("approval"))
+            approval = cast(Mapping[str, JsonValue] | None, out.get("approval"))
             bound = {**approved, "step": call.key}
             token = await call.ports.tools.mint(call.run_id, bound, dict(approval)) if approval else None
         else:
@@ -550,8 +556,8 @@ async def gateway_call(call: NodeCall) -> Outcome:
         app = str(wait.get("app") or "the app")
         woke = park_external(
             call,
-            event=wait["name"],
-            key=wait["key"],
+            event=str(wait["name"]),
+            key=str(wait["key"]),
             title=f"Sign in to {app} again to continue"
             if wait.get("again")
             else f"Connect your {app} account to continue",
@@ -589,7 +595,7 @@ async def gateway_call(call: NodeCall) -> Outcome:
 async def review_open(call: NodeCall) -> Outcome:
     options = call.type.output_ports(call.params)
     step_id = f"{call.run_id}:{call.node.id}:{call.iteration}"
-    payload: dict[str, Any] = {
+    payload: Json = {
         "kind": "review",
         "node": call.node.id,
         "review_id": step_id,
@@ -602,35 +608,35 @@ async def review_open(call: NodeCall) -> Outcome:
         "onTimeout": call.params.get("onTimeout") or "wait",
     }
     if call.params.get("slaHours") is not None:
-        payload["slaHours"] = float(call.params["slaHours"])
+        payload["slaHours"] = float(cast(float | str, call.params["slaHours"]))
     if call.params.get("remindEveryHours"):
-        payload["remindEveryHours"] = float(call.params["remindEveryHours"])
+        payload["remindEveryHours"] = float(cast(float | str, call.params["remindEveryHours"]))
     for key in ("notDecidedBy", "requestedBy"):
         if key in call.node.parameters:
             given = call.params.get(key)
             named = cast(list[Any], given) if isinstance(given, list) else [given]
-            payload[key] = sorted({str(x).strip().lower() for x in named if x})
+            payload[key] = [*sorted({str(x).strip().lower() for x in named if x})]
     editable = "editable" in call.node.parameters
     if editable:
         payload["editable"] = {"path": call.node.parameters["editable"], "value": call.params.get("editable")}
     if approves := call.params.get("approves"):
         payload["call"] = write_call(call, str(approves))
     if ref := call.params.get("taskType"):
-        if not isinstance(ref, dict) or not cast(dict[str, Any], ref).get("id"):
+        if not isinstance(ref, dict) or not cast(Json, ref).get("id"):
             raise ValueError(f"{call.node.id}: taskType read {ref!r}, not {{id, version}}")
-        typed = cast(dict[str, Any], ref)
+        typed = cast(Json, ref)
         version = cast(int | None, typed.get("version"))
         if call.ports.task_types is not None:
             version = await call.ports.task_types.pin(str(typed["id"]), version)
         payload["taskType"] = {"id": str(typed["id"]), "version": version}
-        payload["params"] = dict(cast(dict[str, Any], call.params.get("params") or {}))
+        payload["params"] = dict(cast(Json, call.params.get("params") or {}))
     if "options" in call.params:
-        listed: list[dict[str, Any]] = []
+        listed: JsonList = []
         for raw in cast(list[Any], call.params["options"]):
-            o = dict(cast(dict[str, Any], raw)) if isinstance(raw, dict) else {"name": str(raw)}
-            declared: dict[str, Any] = {"name": o["name"], "label": o.get("label") or str(o["name"]).capitalize()}
-            if isinstance(o.get("call"), dict) and cast(dict[str, Any], o["call"]).get("node"):
-                declared["call"] = write_call(call, str(cast(dict[str, Any], o["call"])["node"]))
+            o = dict(cast(Json, raw)) if isinstance(raw, dict) else {"name": str(raw)}
+            declared: Json = {"name": o["name"], "label": o.get("label") or str(o["name"]).capitalize()}
+            if isinstance(o.get("call"), dict) and cast(Json, o["call"]).get("node"):
+                declared["call"] = write_call(call, str(cast(Json, o["call"])["node"]))
                 declared["inputs"] = list(cast(list[Any], o.get("inputs") or []))
             listed.append(declared)
         payload["options"] = listed
@@ -644,7 +650,7 @@ async def review_open(call: NodeCall) -> Outcome:
     else:
         payload["review_id"] = await call.ports.reviews.open(call.run_id, call.node.id, call.iteration, payload)
         decision = interrupt(payload)
-    chosen = dict(cast(dict[str, Any], decision)) if isinstance(decision, dict) else {"decision": decision}
+    chosen = dict(cast(Json, decision)) if isinstance(decision, dict) else {"decision": decision}
     port = str(chosen.get("option") or DEFAULT_OPTIONS.get(str(chosen.get("decision")), chosen.get("decision")))
     if port not in options:
         raise ValueError(f"{call.node.id} was decided {port!r}; its options are {', '.join(options)}")
@@ -677,7 +683,7 @@ async def kernel_turn(call: NodeCall) -> Outcome:
         message=f"{prompt}\n\nInput:\n{data}" if prompt else data,
         # Not the attempt: a retried turn repeats its tool keys, so the gateway answers a write once.
         turn_id=f"{call.run_id}:{call.node.id}:{call.iteration}",
-        output_schema=cast(dict[str, Any] | None, call.params.get("outputSchema")),
+        output_schema=cast(Json | None, call.params.get("outputSchema")),
         model_alias=cast(str | None, call.params.get("model")) or None,
         max_tool_calls=cast(int | None, call.params.get("maxToolCalls")),
     )
@@ -699,7 +705,7 @@ async def ai_prompt(call: NodeCall) -> Outcome:
         raise RuntimeError("no prompt port: this worker runs no AI steps (no model configured)")
     types = call.ports.document_types
 
-    async def lookup(type_id: str, version: int | None) -> list[dict[str, Any]]:
+    async def lookup(type_id: str, version: int | None) -> list[Json]:
         assert types is not None
         return await types.fields(call.run_id, type_id, version)
 
@@ -726,14 +732,14 @@ async def ai_extract(call: NodeCall) -> Outcome:
         raise RuntimeError("no documents port: this worker cannot run Extract from file")
     file_id = str(call.params.get("file") or "")
     below = call.params.get("reviewBelow")
-    request: dict[str, Any] = {
+    request: Json = {
         "fields": list(cast(list[Any], call.params.get("fields") or [])),
         "many": bool(call.params.get("many")),
         "ocr": bool(call.params.get("ocr")),
         "reviewBelow": float(below) if isinstance(below, int | float) else None,
     }
     # A documentType whose id resolved to nothing (a read request that named no type) is no type at all.
-    doc_type = cast(dict[str, Any] | None, call.params.get("documentType"))
+    doc_type = cast(Json | None, call.params.get("documentType"))
     if doc_type is not None and not doc_type.get("id"):
         doc_type = None
     if call.params.get("detect") and not doc_type and not call.params.get("fields"):
@@ -764,7 +770,7 @@ async def ai_extract(call: NodeCall) -> Outcome:
         # A long file is read in the background: the step parks until documents-service reports the read
         # finished. The step then runs again, and its request under the same key reads the finished extraction.
         eid = str(answer.get("id") or "")
-        seconds = float(call.params.get("waitSeconds") or EXTRACT_WAIT_SECONDS)
+        seconds = float(cast(float | str, call.params.get("waitSeconds") or EXTRACT_WAIT_SECONDS))
         title = call.node.name or "Extract from file"
         park_external(call, event="extraction.finished", key=eid, title=title, timeout_seconds=seconds)
         # Back here only when the time limit (or a callback) woke a read still under way.
@@ -775,7 +781,7 @@ async def ai_extract(call: NodeCall) -> Outcome:
             "error", {"error": f"The read did not finish in {seconds:g} seconds", "code": "extraction_timeout"}
         )
     if status == "failed":
-        error = cast(dict[str, Any], answer.get("error") or {})
+        error = cast(Json, answer.get("error") or {})
         if error.get("code") == "schema_error":
             return Outcome(
                 "error", {"error": error.get("message"), "code": "schema_error", "details": error.get("details")}
@@ -797,18 +803,18 @@ async def ai_extract(call: NodeCall) -> Outcome:
     return Outcome(str(answer["outcome"]), out)
 
 
-def read_on_file(read: dict[str, Any], *, checked: bool, type_name: Any) -> dict[str, Any] | None:
+def read_on_file(read: Json, *, checked: bool, type_name: Any) -> Json | None:
     """What a file records of a read: its type and version, template or model, the fields waiting for a person
     and the extraction; None for a read naming no document type or extraction, never data made up for the file. A
     Detect read that found none of the team's types is recorded with no type, as not recognised."""
-    doc_type = cast(dict[str, Any], read.get("documentType") or {})
-    classification = cast(dict[str, Any], read.get("classification") or {})
+    doc_type = cast(Json, read.get("documentType") or {})
+    classification = cast(Json, read.get("classification") or {})
     unrecognised = not doc_type.get("id") and bool(classification)
     if (not doc_type.get("id") and not unrecognised) or not read.get("extractionId"):
         return None
-    data: dict[str, Any] = {
+    data: Json = {
         "typeId": None if unrecognised else str(doc_type["id"]),
-        "version": None if unrecognised else int(doc_type.get("version") or 1),
+        "version": None if unrecognised else int(cast(float | str, doc_type.get("version") or 1)),
         "path": str(read.get("path") or "model"),
         # After a person checked the fields none wait; otherwise those under the threshold (records, for several).
         "fieldsToCheck": 0 if checked else len(cast(list[Any], read.get("needsReview") or [])),
@@ -831,7 +837,7 @@ async def files_set_data(call: NodeCall) -> Outcome:
     made up for the file."""
     if call.ports.file_data is None:
         raise RuntimeError("no file data port: this worker cannot run Save data on file")
-    read = cast(dict[str, Any], call.params.get("read") or {})
+    read = cast(Json, call.params.get("read") or {})
     data = read_on_file(read, checked=bool(call.params.get("checked")), type_name=call.params.get("typeName"))
     if data is None:
         return Outcome("error", {"error": "The read names no document type or extraction.", "code": "no_read"})
@@ -856,7 +862,7 @@ def _first_text(value: Any) -> str | None:
     if isinstance(value, str):
         return value.strip() or None if not _ID_VALUE.match(value) else None
     if isinstance(value, Mapping):
-        for v in cast(Mapping[str, Any], value).values():
+        for v in cast(Mapping[str, JsonValue], value).values():
             if (found := _first_text(v)) is not None:
                 return found
     if isinstance(value, list):
@@ -866,7 +872,7 @@ def _first_text(value: Any) -> str | None:
     return None
 
 
-def child_label(template: Any, scope: Mapping[str, Any], item: Any, looping: bool) -> str | None:
+def child_label(template: Any, scope: Mapping[str, JsonValue], item: Any, looping: bool) -> str | None:
     """What a started child is about, for the run page: the step's `label` read for this item, else the item's
     first text that is not an id; None for a step that starts one child with no label."""
     if isinstance(template, str) and template.strip():
@@ -883,7 +889,7 @@ async def workflow_start(call: NodeCall) -> Outcome:
     if call.ports.runs is None:
         raise RuntimeError("no run port: this worker cannot start workflows")
     workflow = str(call.params["workflow"])
-    raw_input = cast(dict[str, Any], call.node.parameters.get("input") or {})
+    raw_input = cast(Json, call.node.parameters.get("input") or {})
     looping = call.node.parameters.get("forEach") not in (None, "")
     items: list[Any] = [None]
     if looping:
@@ -891,7 +897,7 @@ async def workflow_start(call: NodeCall) -> Outcome:
         if not isinstance(listed, list):
             what = type(listed).__name__ if listed is not None else "nothing"
             return Outcome("error", {"error": f"For each read {what}, not a list.", "code": "not_a_list"})
-        limit = int(call.params.get("maxItems") or DEFAULT_MAX_ITEMS)
+        limit = int(cast(float | str, call.params.get("maxItems") or DEFAULT_MAX_ITEMS))
         if len(cast(list[Any], listed)) > limit:
             message = f"For each read {len(cast(list[Any], listed))} items; this step starts at most {limit}."
             return Outcome("error", {"error": message, "code": "too_many_items"})
@@ -904,20 +910,18 @@ async def workflow_start(call: NodeCall) -> Outcome:
 
     async def start(index: int, item: Any) -> StartedRun:
         scope = {**call.scope, "item": item, "index": index} if looping else call.scope
-        child_input = cast(dict[str, Any], resolve(raw_input, scope))
+        child_input = cast(Json, resolve(raw_input, scope))
         return await cast(RunPort, call.ports.runs).start(call.run_id, workflow, child_input, f"{prefix}{index}")
 
     if not call.params.get("wait"):
-        started: list[dict[str, Any]] = []
+        started: JsonList = []
         for index, item in enumerate(items):
             try:
                 child = await start(index, item)
             except RunRefusedError as e:
                 return Outcome("error", {"error": str(e), "code": e.code, "runs": started})
-            started.append(
-                {"index": index, "runId": child.run_id, "created": child.created}
-                | ({"label": labels[index]} if labels[index] else {})
-            )
+            entry: Json = {"index": index, "runId": child.run_id, "created": child.created}
+            started.append(entry | ({"label": labels[index]} if labels[index] else {}))
         return Outcome("started", {"workflowId": workflow, "count": len(started), "runs": started})
     return await _wait_for_children(call, workflow, items, start, prefix, labels=labels)
 
@@ -927,11 +931,9 @@ ENDED = ("succeeded", "failed", "cancelled")
 CHILD_OUTPUT_MAX_BYTES = 64 * 1024
 
 
-def _collected(
-    workflow: str, children: list[dict[str, Any]], total: int, labels: list[str | None] | None = None
-) -> dict[str, Any]:
+def _collected(workflow: str, children: list[Json], total: int, labels: list[str | None] | None = None) -> Json:
     """The children that ended, in item order, with a count by outcome; an output over the size cap is left out."""
-    rows: list[dict[str, Any]] = []
+    rows: JsonList = []
     counts: dict[str, int] = {}
     for c in children:
         if c["status"] not in ENDED:
@@ -940,15 +942,14 @@ def _collected(
         big = len(json.dumps(output, default=str)) > CHILD_OUTPUT_MAX_BYTES
         outcome = str(c.get("outcome") or c["status"])
         row = {"index": c["index"], "runId": c["runId"], "outcome": outcome, "output": None if big else output}
-        label = labels[int(c["index"])] if labels and 0 <= int(c["index"]) < len(labels) else None
+        index: Any = c["index"]
+        label = labels[int(index)] if labels and 0 <= int(index) < len(labels) else None
         rows.append(row | ({"label": label} if label else {}))
         counts[outcome] = counts.get(outcome, 0) + 1
-    return {"workflowId": workflow, "count": total, "children": rows, "counts": counts}
+    return {"workflowId": workflow, "count": total, "children": rows, "counts": {**counts}}
 
 
-def park_external(
-    call: NodeCall, *, event: str, key: str, title: str, timeout_seconds: float, **shown: Any
-) -> dict[str, Any]:
+def park_external(call: NodeCall, *, event: str, key: str, title: str, timeout_seconds: float, **shown: Any) -> Json:
     """Parks the step on work another service finishes: the pass ends and no worker is held. The run is woken
     by whichever comes first: the service event `event` carrying correlation key `key`, a signed callback to the
     step's resume URL, or the time limit (none when 0). Returns how it was woken: `{"event": payload}`,
@@ -967,7 +968,7 @@ def park_external(
             "wakeAfterSeconds": timeout_seconds,
         }
     )
-    return cast(dict[str, Any], resumed) if isinstance(resumed, dict) else {}
+    return cast(Json, resumed) if isinstance(resumed, dict) else {}
 
 
 async def _wait_for_children(
@@ -983,11 +984,11 @@ async def _wait_for_children(
     ended, or the step's timeout fell due) read them all in one call, start more, and go on by `done` once every child
     has ended, or by `timeout` with the rest named. A refused start still takes the error port."""
     runs = cast(RunPort, call.ports.runs)
-    batch = int(call.params.get("batchSize") or len(items) or 1)
+    batch = int(cast(float | str, call.params.get("batchSize") or len(items) or 1))
     hours = call.params.get("timeoutHours")
     resumed: Any = None
 
-    async def with_outputs() -> list[dict[str, Any]]:
+    async def with_outputs() -> list[Json]:
         # States are read on every wake, outputs once, when the step goes on.
         return await runs.children(call.run_id, prefix, outputs=True)
 
@@ -1009,9 +1010,9 @@ async def _wait_for_children(
             unfinished += 1
         if len(begun) == len(items) and unfinished == 0:
             return Outcome("done", _collected(workflow, await with_outputs(), len(items), labels))
-        if isinstance(resumed, dict) and cast(dict[str, Any], resumed).get("timeout"):
+        if isinstance(resumed, dict) and cast(Json, resumed).get("timeout"):
             out = _collected(workflow, await with_outputs(), len(items), labels)
-            ended = {c["index"] for c in out["children"]}
+            ended = {cast(int, c["index"]) for c in cast(list[Json], out["children"])}
             waiting = [c["runId"] for c in children if c["index"] not in ended]
             return Outcome("timeout", out | {"waiting": waiting, "notStarted": len(items) - len(begun)})
         resumed = interrupt(
@@ -1022,7 +1023,7 @@ async def _wait_for_children(
                 "workflowId": workflow,
                 "total": len(items),
                 "timeoutHours": hours,
-                "wakeAfterSeconds": float(hours) * 3600 if hours else None,
+                "wakeAfterSeconds": float(cast(float | str, hours)) * 3600 if hours else None,
             }
         )
 
@@ -1063,7 +1064,7 @@ async def case_add(call: NodeCall) -> Outcome:
             call.run_id,
             case_id,
             str(note) if note else None,
-            cast(dict[str, Any], fields) if fields else None,
+            cast(Json, fields) if fields else None,
             status=str(status) if status else None,
             key=f"{call.run_id}:{call.node.id}:{call.iteration}",
         )
@@ -1083,15 +1084,15 @@ async def flow_join(call: NodeCall) -> Outcome:
     """Join: each step connected to it, by id, with its output when it left by the connected port, or None
     when it took another port or never ran. The compiler adds a Join deferred, so this runs once, after every branch
     that can still arrive."""
-    nodes = cast(dict[str, Any], call.scope.get("nodes") or {})
-    branches: dict[str, Any] = {}
+    nodes = cast(Json, call.scope.get("nodes") or {})
+    branches: Json = {}
     for c in call.definition.connections if call.definition else []:
         if c.target.node != call.node.id:
             continue
-        env = cast(dict[str, Any] | None, nodes.get(c.source.node))
+        env = cast(Json | None, nodes.get(c.source.node))
         took = env is not None and env.get("port") == c.source.port
         if took or c.source.node not in branches:
-            branches[c.source.node] = cast(dict[str, Any], env).get("out") if took else None
+            branches[c.source.node] = cast(Json, env).get("out") if took else None
     return Outcome("out", branches)
 
 
@@ -1116,10 +1117,10 @@ async def flow_wait(call: NodeCall) -> Outcome:
         due = _instant(raw)
         if due is None:
             return Outcome("error", {"error": f"{raw!r} is not a date", "code": "not_a_date", "value": raw})
-        out: dict[str, Any] = {"until": due.isoformat().replace("+00:00", "Z")}
+        out: Json = {"until": due.isoformat().replace("+00:00", "Z")}
         seconds = (due - datetime.now(UTC)).total_seconds()
     else:
-        seconds = float(call.params.get("seconds") or 0)
+        seconds = float(cast(float | str, call.params.get("seconds") or 0))
         out = {"seconds": seconds}
     if seconds > 0:
         interrupt(
@@ -1133,12 +1134,12 @@ async def flow_wait_for(call: NodeCall) -> Outcome:
     callback's body or the event's payload, or by `timeout` with what it waited for."""
     event = str(call.params.get("event") or "")
     key = str(call.params.get("key") or "") if event else ""
-    seconds = float(call.params.get("timeoutSeconds") or 86400)
+    seconds = float(cast(float | str, call.params.get("timeoutSeconds") or 86400))
     woke = park_external(call, event=event, key=key, title=call.node.name or call.node.id, timeout_seconds=seconds)
     if woke.get("timeout"):
         return Outcome("timeout", {"waitedFor": event or "a callback", "key": key, "seconds": seconds})
     answer = woke.get("callback") if "callback" in woke else woke.get("event")
-    return Outcome("ok", cast(dict[str, Any], answer) if isinstance(answer, dict) else {"value": answer})
+    return Outcome("ok", cast(Json, answer) if isinstance(answer, dict) else {"value": answer})
 
 
 async def ai_knowledge(call: NodeCall) -> Outcome:
@@ -1153,7 +1154,7 @@ async def ai_knowledge(call: NodeCall) -> Outcome:
     except Exception as e:  # the port names why it cannot answer; the step leaves by notFound
         return Outcome("notFound", {"passages": [], "error": str(e), "code": "unavailable"})
     if call.params.get("limit"):
-        found = found[: int(call.params["limit"])]
+        found = found[: int(cast(float | str, call.params["limit"]))]
     passages = [
         {
             "documentId": p.document_id,
@@ -1171,10 +1172,10 @@ async def ai_knowledge(call: NodeCall) -> Outcome:
 
 async def action_send(call: NodeCall) -> Outcome:
     """Reply on the channel that started the run, through send_reply."""
-    payload: Mapping[str, Any] = {}
+    payload: Mapping[str, JsonValue] = {}
     raw_input: object = call.run_input
     if isinstance(raw_input, Mapping):
-        payload = cast(Mapping[str, Any], raw_input)
+        payload = cast(Mapping[str, JsonValue], raw_input)
     to = str(call.params.get("to") or payload.get("from") or payload.get("sender") or "")
     subject = str(call.params.get("subject") or f"Re: {payload.get('subject') or ''}")
     body = str(call.params.get("body") or "")
@@ -1198,16 +1199,16 @@ async def action_send(call: NodeCall) -> Outcome:
         token = await call.ports.tools.mint(
             call.run_id,
             {"tool": "send_reply", "input": arguments, "step": call.key},
-            dict(cast(Mapping[str, Any], approval)),
+            dict(cast(Mapping[str, JsonValue], approval)),
         )
     result = await call.ports.tools.call(
         "send_reply", arguments, call.key, call.generation, str(token) if token else None
     )
     if result.ok:
-        out: dict[str, Any] = {}
+        out: Json = {}
         raw_output: object = result.output
         if isinstance(raw_output, dict):
-            out = dict(cast(dict[str, Any], raw_output))
+            out = dict(cast(Json, raw_output))
         out.setdefault("status", "sent")
         return Outcome("sent", out)
     return Outcome("error", {"error": str(result.reason or result.output), "code": "send_failed"})
@@ -1215,8 +1216,8 @@ async def action_send(call: NodeCall) -> Outcome:
 
 async def flow_repeat(call: NodeCall) -> Outcome:
     """Bounded until: leave by done when the predicate holds, exhausted at the cap, else again."""
-    cap = int(call.params.get("max") or 8)
-    conditions = cast(list[Mapping[str, Any]], call.params.get("conditions") or [])
+    cap = int(cast(float | str, call.params.get("max") or 8))
+    conditions = cast(list[Mapping[str, JsonValue]], call.params.get("conditions") or [])
     results = [_holds(c) for c in conditions]
     done = any(results) if call.params.get("combine") == "any" else bool(results) and all(results)
     count = call.iteration
@@ -1230,7 +1231,7 @@ async def flow_repeat(call: NodeCall) -> Outcome:
 async def flow_ask(call: NodeCall) -> Outcome:
     """Interrupt for a reply on a conversation key; a zero deadline times out without pausing."""
     raw = call.params.get("timeoutSeconds")
-    seconds = float(raw) if raw is not None else 86400.0
+    seconds = float(cast(float | str, raw)) if raw is not None else 86400.0
     key = str(call.params.get("key") or call.run_id)
     prompt = str(call.params.get("prompt") or call.node.name or call.node.id)
     if seconds <= 0:
@@ -1239,7 +1240,7 @@ async def flow_ask(call: NodeCall) -> Outcome:
     if woke.get("timeout"):
         return Outcome("timedOut", {"reason": "deadline", "key": key})
     answer = woke.get("event") if "event" in woke else woke.get("callback", woke)
-    return Outcome("replied", cast(dict[str, Any], answer) if isinstance(answer, dict) else {"value": answer})
+    return Outcome("replied", cast(Json, answer) if isinstance(answer, dict) else {"value": answer})
 
 
 EXECUTORS: dict[str, Executor] = {
@@ -1276,7 +1277,7 @@ EXECUTORS: dict[str, Executor] = {
 # ── the wrapper ──
 
 
-def _envelope(row: StepRow) -> dict[str, Any]:
+def _envelope(row: StepRow) -> Json:
     return {
         "port": row.port or "",
         "stepId": f"{row.run_id}:{row.node_id}:{row.iteration}",
@@ -1293,7 +1294,7 @@ class Wrapper:
     journal: Journal
     definition: WorkflowDefinition | None = None
 
-    async def deadline(self, params: Mapping[str, Any]) -> float:
+    async def deadline(self, params: Mapping[str, JsonValue]) -> float:
         """The attempt's limit: the step's own `timeoutSeconds`, else the type's default, raised to how long the
         gateway may take over the operation when that is longer (a code operation's run limit)."""
         own = self.node.parameters.get("timeoutSeconds")
@@ -1307,27 +1308,27 @@ class Wrapper:
                 limit = max(limit, float(longest))
         return limit
 
-    async def effects(self, params: Mapping[str, Any]) -> str:
+    async def effects(self, params: Mapping[str, JsonValue]) -> str:
         if self.type.executor == "gateway.call":
             access = await self.ports.tools.access(str(params.get("operation")))
             return "read" if access == "read" else "write"  # unknown counts as a write: one attempt, reconciled
         return self.type.effects
 
-    async def __call__(self, state: dict[str, Any], config: RunnableConfig) -> dict[str, Any]:
-        cfg: dict[str, Any] = dict(config.get("configurable") or {})
+    async def __call__(self, state: Json, config: RunnableConfig) -> Json:
+        cfg: Json = dict(config.get("configurable") or {})
         run_id = str(cfg["run_id"])
         generation = cast(int | None, cfg.get("lease_generation"))
         test_mode = cfg.get("engine_mode") == "test"
         nid = self.node.id
-        prev = cast(dict[str, Any] | None, state.get(channel(nid)))
-        iteration = int(prev["iteration"]) + 1 if prev else 1
+        prev = cast(Json | None, state.get(channel(nid)))
+        iteration = int(cast(float | str, prev["iteration"])) + 1 if prev else 1
         # Rows read back are written by this worker from here on, under its own generation.
         rows = [replace(r, generation=generation) for r in await self.journal.steps(run_id, nid, iteration)]
         if not self.ports.faults.ignore_recorded:
             done = next((r for r in rows if recorded(r) or (r.status == "pinned" and test_mode)), None)
             if done is not None:
                 return {channel(nid): _envelope(done)}
-        params = cast(dict[str, Any], resolve(self.node.parameters, scope_of(state)))
+        params = cast(Json, resolve(self.node.parameters, scope_of(state)))
         last = rows[-1] if rows else None
 
         def row(attempt: int, effects: str, status: Any = "running") -> StepRow:
@@ -1472,7 +1473,7 @@ class Wrapper:
                 continue
             return await self.record(r, outcome)
 
-    async def record(self, r: StepRow, outcome: Outcome, *, error: str | None = None) -> dict[str, Any]:
+    async def record(self, r: StepRow, outcome: Outcome, *, error: str | None = None) -> Json:
         """Finishes the attempt with the port it leaves by. The error port is recorded as an error, and like any
         recorded port it is returned on a re-run instead of running the node again."""
         status: StepStatus = "error" if outcome.port == "error" else "ok"
@@ -1487,7 +1488,7 @@ class Wrapper:
         cause: str | None = None,
         deadline_s: float | None = None,
         may_resend: bool = False,
-    ) -> dict[str, Any] | None:
+    ) -> Json | None:
         """A write whose outcome is unknown: the gateway's record under the attempt's own key decides. Found done
         means the write happened; refused or failed by its input is that port; absent means it never arrived, and the
         run takes the error port rather than risk a second send. Lost, failed after reaching the system, or still
@@ -1496,7 +1497,7 @@ class Wrapper:
         worker tries the run again later, the row left as it is. With `may_resend`, a write the gateway never ran under
         the key (no record, which also blocks the key, or a record that it never reached the system) returns None:
         the caller sends it again under the next attempt's key."""
-        operation = str(cast(dict[str, Any], dangling.input or {}).get("operation") or "")
+        operation = str(cast(Json, dangling.input or {}).get("operation") or "")
         found = await self.ports.tools.find(dangling.key, operation)
         name = self.node.name or self.node.id
         if found is not None and found.pending:
@@ -1538,9 +1539,9 @@ def _past(started_at: str | None, seconds: float) -> bool:
 
 def _error_of(out: Any) -> Any:
     """The gateway's error inside a step's output: the error port wraps the tool's own `{"error": ...}` once more."""
-    error: Any = cast(dict[str, Any], out).get("error") if isinstance(out, dict) else None
+    error: Any = cast(Json, out).get("error") if isinstance(out, dict) else None
     while isinstance(error, dict):
-        layer = cast(dict[str, Any], error)
+        layer = cast(Json, error)
         inner: Any = layer.get("error")
         if "code" in layer or not isinstance(inner, dict):
             break
@@ -1551,7 +1552,7 @@ def _error_of(out: Any) -> Any:
 def technical_error(out: Any) -> str:
     error = _error_of(out)
     if isinstance(error, dict):
-        e = cast(dict[str, Any], error)
+        e = cast(Json, error)
         return f"{e.get('code') or 'error'}: {e.get('message') or ''}".strip()
     return json.dumps(out)[:300]
 
@@ -1566,7 +1567,7 @@ SECRET_KEYS = frozenset({"approvalToken", "approval_token"})
 def redacted(value: Any) -> Any:
     """`value` with every approval token replaced: what the journal and a run's detail may hold."""
     if isinstance(value, dict):
-        items = cast(dict[str, Any], value).items()
+        items = cast(Json, value).items()
         return {k: ("[redacted]" if k in SECRET_KEYS and v else redacted(v)) for k, v in items}
     if isinstance(value, list):
         return [redacted(v) for v in cast(list[Any], value)]
@@ -1590,7 +1591,7 @@ def compile_definition(
     checkpointer: Any,
 ) -> Any:
     """The definition as a compiled LangGraph graph on `checkpointer`. The definition must have passed `validate`."""
-    fields: dict[str, Any] = {INPUT: Any, **{channel(n.id): dict[str, Any] | None for n in d.nodes}}
+    fields = {INPUT: Any, **{channel(n.id): Json | None for n in d.nodes}}
     state = TypedDict("WorkflowState", fields, total=False)  # type: ignore[misc]  # names are runtime data
     g: Any = StateGraph(cast(Any, state))
     trigger = ""
@@ -1608,8 +1609,8 @@ def compile_definition(
             continue
         routes = {p: d.targets(n.id, p) for p in out_ports}
 
-        def route(s: dict[str, Any], nid: str = n.id, routes: dict[str, list[str]] = routes) -> list[str] | str:
-            env = cast(dict[str, Any], s.get(channel(nid)) or {})
+        def route(s: Json, nid: str = n.id, routes: dict[str, list[str]] = routes) -> list[str] | str:
+            env = cast(Json, s.get(channel(nid)) or {})
             return routes.get(str(env.get("port")), []) or END
 
         g.add_conditional_edges(n.id, route, sorted({*[x for v in routes.values() for x in v], END}))
@@ -1621,7 +1622,7 @@ class CompiledCache:
 
     def __init__(self, registry: TypeRegistry, ports: EnginePorts, journal: Journal, checkpointer: Any) -> None:
         self.registry, self.ports, self.journal, self.checkpointer = registry, ports, journal, checkpointer
-        self._graphs: dict[str, Any] = {}
+        self._graphs: Json = {}
 
     def get(self, d: WorkflowDefinition) -> Any:
         digest = d.digest()

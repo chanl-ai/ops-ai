@@ -21,12 +21,15 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from typing import Any, Literal, cast
 
 import jsonschema
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from ops_service_kit.http import Json, JsonList, JsonValue
+from ops_service_kit.narrow import json_object
 
 from .node_types import TypeRegistry
 from .starts import file_shape
@@ -103,7 +106,7 @@ def parse(source: str | dict[str, Any]) -> WorkflowDefinition:
             raise InvalidDefinitionError(f"not YAML: {e}") from e
     if not isinstance(raw, dict):
         raise InvalidDefinitionError("a definition is an object with schemaVersion, id, nodes and connections")
-    if cast(dict[str, Any], raw).get("schemaVersion") != 2:
+    if cast(Json, raw).get("schemaVersion") != 2:
         raise InvalidDefinitionError("schemaVersion must be 2; version 1 definitions are published on /v1/graphs")
     try:
         return WorkflowDefinition.model_validate(raw)
@@ -120,19 +123,19 @@ def mappings(value: Any) -> Iterator[str]:
         else:
             yield from TEXT_PATH.findall(value)
     elif isinstance(value, dict):
-        for v in cast(dict[str, Any], value).values():
+        for v in cast(Json, value).values():
             yield from mappings(v)
     elif isinstance(value, list):
         for v in cast(list[Any], value):
             yield from mappings(v)
 
 
-def named_nodes(parameters: dict[str, Any]) -> list[str]:
+def named_nodes(parameters: Mapping[str, JsonValue]) -> list[str]:
     """Nodes a parameter names by id: the write a review approves, the review that approves a write."""
     out = [str(parameters[k]) for k in ("approves", "approvedBy") if parameters.get(k)]
-    for o in cast(list[Any], parameters.get("options") or []):
-        if isinstance(o, dict) and isinstance(cast(dict[str, Any], o).get("call"), dict):
-            out.append(str(cast(dict[str, Any], cast(dict[str, Any], o)["call"]).get("node")))
+    for o in cast(JsonList, parameters.get("options") or []):
+        if isinstance(o, dict) and isinstance(call := o.get("call"), dict):
+            out.append(str(call.get("node")))
     return out
 
 
@@ -145,11 +148,11 @@ def referenced_node(path: str) -> str | None:
 LOOP_ROOTS = ("item", "index")
 
 
-def _loop_paths_outside(parameters: dict[str, Any]) -> list[str]:
+def _loop_paths_outside(parameters: Mapping[str, JsonValue]) -> list[str]:
     """`$.item` and `$.index` paths a step uses where no item is: anywhere but the `input` and `label` of a step that
     sets `forEach`. They would read as nothing at run time."""
     looping = parameters.get("forEach") not in (None, "")
-    per_item: dict[str, Any] = {"input": parameters.get("input") or {}, "label": parameters.get("label") or ""}
+    per_item: Json = {"input": parameters.get("input") or {}, "label": parameters.get("label") or ""}
     allowed: set[str] = set(mappings(per_item)) if looping else set()
     return [
         p for p in mappings(parameters) if p[len(MAPPING_PREFIX) :].split(".")[0] in LOOP_ROOTS and p not in allowed
@@ -177,9 +180,9 @@ def _approval_order(d: WorkflowDefinition, known: set[str]) -> list[dict[str, An
     for n in d.nodes:
         approved = [str(n.parameters["approves"])] if n.parameters.get("approves") else []
         approved += [
-            str(cast(dict[str, Any], cast(dict[str, Any], o)["call"]).get("node"))
-            for o in cast(list[Any], n.parameters.get("options") or [])
-            if isinstance(o, dict) and isinstance(cast(dict[str, Any], o).get("call"), dict)
+            str(call.get("node"))
+            for o in cast(JsonList, n.parameters.get("options") or [])
+            if isinstance(o, dict) and isinstance(call := o.get("call"), dict)
         ]
         before = _ancestors(d, n.id)
         for target_id in approved:
@@ -221,15 +224,15 @@ def _unmarked_file_inputs(d: WorkflowDefinition, registry: TypeRegistry) -> list
     )
     if trigger is None:
         return []
-    schema = cast(dict[str, Any], trigger.parameters.get("inputSchema") or {})
-    props = cast(dict[str, Any], schema.get("properties") or {})
+    schema = cast(Json, trigger.parameters.get("inputSchema") or {})
+    props = cast(Json, schema.get("properties") or {})
     out: list[dict[str, Any]] = []
     for n in d.nodes:
         t = registry.find(n.type, n.type_version)
         if t is None:
             continue
-        for param, spec in cast(dict[str, Any], t.parameters.get("properties") or {}).items():
-            if not isinstance(spec, dict) or cast(dict[str, Any], spec).get("format") != "file":
+        for param, spec in cast(Json, t.parameters.get("properties") or {}).items():
+            if not isinstance(spec, dict) or json_object(spec).get("format") != "file":
                 continue
             for path in mappings(n.parameters.get(param)):
                 found = INPUT_FILE_PATH.match(path.strip())
@@ -237,9 +240,9 @@ def _unmarked_file_inputs(d: WorkflowDefinition, registry: TypeRegistry) -> list
                     continue
                 name = found.group(1)
                 field = props.get(name)
-                if isinstance(field, dict) and file_shape(cast(dict[str, Any], field)):
+                if isinstance(field, dict) and file_shape(json_object(field)):
                     continue
-                title = str(cast(dict[str, Any], field).get("title") or name) if isinstance(field, dict) else name
+                title = str(json_object(field).get("title") or name) if isinstance(field, dict) else name
                 msg = (
                     f"{n.id} reads {title} as a file, so the trigger's input must declare {name} a file field "
                     '(format "file"); otherwise the start form asks for a file id in a text box.'
