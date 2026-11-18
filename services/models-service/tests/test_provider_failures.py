@@ -162,3 +162,16 @@ async def test_a_provider_body_that_echoes_the_key_never_reaches_the_answer_or_t
         assert LEAKED_KEY not in r.text and "sk-upstream" not in r.text
         rows = await rig.models.calls(rig.key_id)
         assert LEAKED_KEY not in str(rows)
+
+
+async def test_a_reply_whose_content_is_not_text_fails_the_call_unbilled(models: Models) -> None:
+    # Content as a list of parts (some reasoning models send one) is not read here; the call fails, it is not a 200.
+    parts = [{"type": "thinking", "thinking": "..."}, {"type": "text", "text": "Yes"}]
+    reply = {
+        "choices": [{"index": 0, "message": {"role": "assistant", "content": parts}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 5, "completion_tokens": 2},
+    }
+    r, reasons = await _refusal(models, _answers(200, reply))
+    assert r.status_code == 502, r.text
+    assert r.json()["error"]["code"] == "provider_error"
+    assert reasons == [("error", "provider_error")]

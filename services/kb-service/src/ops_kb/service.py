@@ -32,12 +32,13 @@ from ops_ingest.rules import ItemFacts, evaluate_rules
 from ops_ingest.split import ai_step_allowed, document_digest
 from ops_ingest.strategies.faq import piece_digest
 from ops_ingest.text import approx_tokens
+from ops_service_kit import narrow
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound, ServiceUnavailable, ValidationFailed
-from ops_service_kit.http import JsonValue, options_page, options_window
+from ops_service_kit.http import Json, JsonValue, options_page, options_window
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
-from ops_service_kit.narrow import json_object
+from ops_service_kit.narrow import json_list, json_object
 from ops_service_kit.settings import Settings
 from ops_store import isolation
 from ops_store.listing import ListPage
@@ -64,13 +65,16 @@ from .retrieval import Found, Lane, Passage, Retriever, Scope, Search
 from .schemas import (
     AccessSettings,
     AnswerSettings,
+    ItemReading,
     PreviewIn,
+    ReadingPage,
     RetrievalSettings,
     ScopesIn,
     ScopesPage,
     SourceDefaults,
     SourcePreview,
     SyncSettings,
+    Tombstone,
 )
 from .search import lanes_for
 from .settled import Settled, parse_error, settled_new, settled_row
@@ -2322,13 +2326,16 @@ class KnowledgeService:
         doc = parsed_of(answer, fields=fields, furniture=cleaning.furniture, main_content=cleaning.main_content)
         return without(doc, set(repeats_of(s))) if cleaning.site_repeats else doc
 
-    async def tombstones(self, who: Who, source_id: str) -> list[dict[str, Any]]:
+    async def tombstones(self, who: Who, source_id: str) -> list[Tombstone]:
         """The addresses removed after answering gone twice, with when and why; the next sync leaves them out."""
         s = await self._source_row(who, source_id)
-        marks = cast(dict[str, dict[str, Any]], dict(s.config or {}).get("tombstones") or {})
-        return [{"id": k, "at": v.get("at"), "reason": v.get("reason")} for k, v in sorted(marks.items())]
+        marks = json_object(json_object(s.config).get("tombstones"))
+        return [
+            Tombstone(id=k, at=narrow.field(mark, "at", str), reason=narrow.field(mark, "reason", str))
+            for k, mark in ((k, json_object(v)) for k, v in sorted(marks.items()))
+        ]
 
-    async def lift_tombstones(self, who: Who, source_id: str, ids: list[str]) -> list[dict[str, Any]]:
+    async def lift_tombstones(self, who: Who, source_id: str, ids: list[str]) -> list[Tombstone]:
         """Lets the next sync take those addresses in again, if the source still lists them."""
         s = await self._changeable_source(who, source_id)
         cfg: dict[str, Any] = dict(s.config or {})
@@ -2732,7 +2739,7 @@ class KnowledgeService:
         page["facets"] = {key: page["facets"].get(key, {}) for key in DOCUMENT_FACETS}
         return page
 
-    async def _reading_summary(self, who: Who, s: SourceRow, i: ItemRow) -> dict[str, Any] | None:
+    async def _reading_summary(self, who: Who, s: SourceRow, i: ItemRow) -> ItemReading | None:
         """How the item's file was read and what cleaning removed, page by page, from its stored reading; None for an
         item with no file or while documents-service has no finished reading for it."""
         if self.readings is None or not i.file_id:
@@ -2746,32 +2753,37 @@ class KnowledgeService:
         if answer.get("status") != "done":
             return None
         cleaning = settings.cleaning
-        pages = cast(list[dict[str, Any]], answer.get("pages") or [])
-        blocks_of = [cast(list[dict[str, Any]], p.get("blocks") or []) for p in pages]
+        pages = [json_object(p) for p in json_list(answer.get("pages"))]
+        blocks_of = [[json_object(b) for b in json_list(p.get("blocks"))] for p in pages]
         has_main = cleaning.main_content and any(b.get("main") for blocks in blocks_of for b in blocks)
 
-        def dropped(b: dict[str, Any]) -> bool:
+        def dropped(b: Json) -> bool:
             if cleaning.furniture and b.get("furniture"):
                 return True
             return has_main and not b.get("main") and b.get("kind") != "title"
 
-        out: list[dict[str, Any]] = []
+        out: list[ReadingPage] = []
         for page, blocks in zip(pages, blocks_of, strict=True):
             kinds: dict[str, int] = {}
             for b in blocks:
                 if not dropped(b):
                     kinds[str(b.get("kind"))] = kinds.get(str(b.get("kind")), 0) + 1
             quality = json_object(page.get("ocr"))
+            removed = sum(len(str(b.get("text") or "")) for b in blocks if dropped(b))
+            number, read_by = narrow.field(page, "number", int), narrow.field(page, "source", str)
+            # `ocrConfidence` only when the page has an OCR quality: the reply is dumped with `exclude_unset`.
             out.append(
-                {
-                    "number": page.get("number"),
-                    "readBy": page.get("source"),
-                    "blocks": kinds,
-                    "removedChars": sum(len(str(b.get("text") or "")) for b in blocks if dropped(b)),
-                    **({"ocrConfidence": quality.get("mean")} if quality else {}),
-                }
+                ReadingPage(number=number, read_by=read_by, blocks=kinds, removed_chars=removed)
+                if not quality
+                else ReadingPage(
+                    number=number,
+                    read_by=read_by,
+                    blocks=kinds,
+                    removed_chars=removed,
+                    ocr_confidence=narrow.field(quality, "mean", float),
+                )
             )
-        return {"readerVersion": answer.get("readerVersion"), "ocr": ocr, "pages": out}
+        return ItemReading(reader_version=narrow.field(answer, "readerVersion", str), ocr=ocr, pages=out)
 
     async def item(self, who: Who, item_id: str) -> dict[str, Any]:
         """The item, its source, pieces, versions and copy read in one transaction; then, with none open,
@@ -2789,10 +2801,11 @@ class KnowledgeService:
         searched: dict[str, list[dict[str, str]]] = {}
         for u in units:
             searched.setdefault(u.chunk_id, []).append({"kind": u.kind, "text": u.text})
+        reading = await self._reading_summary(who, s, i)
         settings = self.settings_of(s)
         return {
             **self._item(i, s, copies),
-            "reading": await self._reading_summary(who, s, i),
+            "reading": reading.model_dump(by_alias=True, exclude_unset=True) if reading else None,
             "settingsUsed": {
                 "preset": settings.ingest.preset,
                 "strategies": settings.ingest.strategies,
@@ -2887,8 +2900,8 @@ def audit_entry(  # noqa: PLR0917 - each argument a different part of the entry
         old = before.get(key)
         if old == after:
             continue
+        was, now = json_object(old), json_object(after)
         if isinstance(old, dict) and isinstance(after, dict):
-            was, now = cast(dict[str, Any], old), cast(dict[str, Any], after)
             keys = sorted(k for k in {*was, *now} if was.get(k) != now.get(k))
             changes[key] = {k: {"from": was.get(k), "to": now.get(k)} for k in keys}
         else:
@@ -3225,7 +3238,11 @@ def ai_steps_on(settings: IngestSettings) -> bool:
 def scope_of(r: dict[str, Any]) -> Scope:
     """A base's scope from its retrieval settings: the pieces its search may return."""
     filters = dict(r.get("filters") or {})
-    conditions = cast(list[dict[str, Any]], filters.get("conditions") or [])
+    # The filter decides what a search may return: a malformed one fails the search rather than widening it.
+    listed = filters.get("conditions")
+    conditions = [
+        narrow.an_object(c, "filter condition") for c in (narrow.a_list(listed, "conditions") if listed else [])
+    ]
     return Scope(
         collections=tuple(r.get("scopeCollections") or ()),
         source_ids=tuple(r.get("scopeSourceIds") or ()),
@@ -3358,9 +3375,9 @@ def settled(current: dict[str, dict[str, Any]], given: dict[str, Any]) -> dict[s
         sent = given.get(name)
         if sent is None:
             continue
+        patch = json_object(sent)
         if not isinstance(sent, dict):
             raise ValidationFailed(f"{name} is an object of settings.", code="invalid_settings")
-        patch = cast(dict[str, Any], sent)
         merged: dict[str, Any] = {**current[name], **patch}
         if name == "access" and isinstance(patch.get("mcp"), dict):
             merged["mcp"] = {**current["access"]["mcp"], **json_object(patch["mcp"])}

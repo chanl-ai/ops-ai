@@ -45,6 +45,7 @@ from ops_service_kit.errors import (
 from ops_service_kit.http import (
     Envelope,
     In,
+    Json,
     ListResult,
     Out,
     error_body,
@@ -56,6 +57,7 @@ from ops_service_kit.http import (
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListParams, ListQuery
 from ops_service_kit.logging import get_logger
+from ops_service_kit.narrow import an_object, json_object
 from ops_service_kit.public_address import PublicFetch
 from ops_service_kit.settings import Settings
 from ops_store import isolation
@@ -283,9 +285,17 @@ def typed(reply: Out | Sequence[Out], status: int = 200) -> JSONResponse:
     return ok([r.model_dump(by_alias=True) for r in reply], status)
 
 
-def _tool_call(call: Mapping[str, Any]) -> ToolCall:
+class ServedVersion(TypedDict, total=False):
+    """The alias version a call is served by, as its call-log columns; empty until the alias is resolved."""
+
+    alias_version: int
+    provider_model: str
+
+
+def _tool_call(call: Json) -> ToolCall:
     """A provider's tool call in OpenAI's reply format; a key OpenAI's format does not name is not passed on."""
-    function: Mapping[str, Any] = call.get("function") or {}
+    found = call.get("function")
+    function = an_object(found, "tool call function") if found else {}
     named = ToolFunction(name=str(function.get("name") or ""), arguments=str(function.get("arguments") or ""))
     return ToolCall(id=str(call.get("id") or ""), type="function", function=named)
 
@@ -971,10 +981,10 @@ def create_models_app(
         """One authenticated call on its way to a provider: the key, the alias version it is served by, its price, and
         the one call-log row it writes, whether it is refused here, fails at the provider or settles."""
 
-        def __init__(self, key: KeyRow, row: dict[str, Any], tenant: str | None) -> None:
+        def __init__(self, key: KeyRow, row: dict[str, str | int | None], tenant: str | None) -> None:
             self.key, self.row, self.tenant = key, row, tenant
             self.started = time.perf_counter()
-            self.version: dict[str, Any] = {}
+            self.version: ServedVersion = {}
             self.alias_row: ServingAlias | None = None
             self.price = Price(Decimal(0))
             self.provider: Any = None
@@ -1184,7 +1194,7 @@ def create_models_app(
             )
         try:
             secrets_by_ref = {str(ref): provider_key} if ref and provider_key else {}
-            gate.provider = provider_for(alias_row.model_dump(), secrets_by_ref, http)
+            gate.provider = provider_for(alias_row, secrets_by_ref, http)
         except ProviderError as e:
             await gate.log("error", e.code)
             return provider_refused(e)
@@ -1242,7 +1252,7 @@ def create_models_app(
                 settled = False
                 reason = "provider_error"
                 try:
-                    pending: dict[str, Any] | None = first
+                    pending: Json | None = first
                     while pending is not None:
                         out = {**pending, "id": call_id, "created": created, "model": alias_name}
                         yield f"data: {json.dumps(out)}\n\n"
@@ -1373,13 +1383,13 @@ def _version_fields(body: AliasVersionIn) -> AliasFields:
 TEXT_PARTS = frozenset({"text", "input_text", "output_text", "refusal"})
 
 
-def images_in(messages: list[dict[str, Any]]) -> int:
+def images_in(messages: list[Json]) -> int:
     """How many parts of the request's messages carry something other than text; a string content carries none."""
     count = 0
     for m in messages:
         content = m.get("content")
         if isinstance(content, list):
-            for part in cast(list[Any], content):
-                kind = cast(dict[str, Any], part).get("type") if isinstance(part, dict) else None
+            for part in content:
+                kind = json_object(part).get("type") if isinstance(part, dict) else None
                 count += kind not in TEXT_PARTS
     return count

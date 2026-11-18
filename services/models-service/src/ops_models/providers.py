@@ -13,14 +13,19 @@ import json
 import re
 from collections.abc import AsyncIterator, Iterator, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Protocol, cast
+from typing import Any, Literal, Protocol
 from urllib.parse import quote
 
 import httpx
+from pydantic import TypeAdapter
 
+from ops_service_kit.http import Json, JsonList, JsonValue
+from ops_service_kit.narrow import Malformed, a_list, an_object, json_list, json_object
 from ops_service_kit.scripted_vectors import SCRIPTED_WIDTH, scripted_vector
 
 from .connection_settings import AZURE_OPENAI_V1
+from .schemas import ChatChunk, ChatUsage, ChunkChoice, ChunkDelta
+from .store.aliases import ServingAlias
 
 
 @dataclass(frozen=True)
@@ -28,10 +33,11 @@ class Completion:
     text: str | None
     input_tokens: int
     output_tokens: int
+    # The calls as the model wrote them (OpenAI's `tool_calls`); the reply keeps only the keys OpenAI's format names.
     tool_calls: list[dict[str, Any]] = field(default_factory=lambda: [])
 
     @property
-    def finish_reason(self) -> str:
+    def finish_reason(self) -> Literal["stop", "tool_calls"]:
         return "tool_calls" if self.tool_calls else "stop"
 
 
@@ -98,35 +104,53 @@ def unreached(e: httpx.HTTPError) -> ProviderError:
 
 
 class Provider(Protocol):
-    async def complete(self, model_id: str, body: dict[str, Any]) -> Completion: ...
+    async def complete(self, model_id: str, body: Json) -> Completion: ...
 
     async def embed(self, model_id: str, inputs: list[str], dimensions: int | None) -> Embedded:
         """One vector per input, in order, `dimensions` wide when the caller names a width."""
         ...
 
-    def stream(self, model_id: str, body: dict[str, Any], usage: StreamUsage) -> AsyncIterator[dict[str, Any]]:
-        """OpenAI `chat.completion.chunk` dicts; `usage` holds the totals once the iterator is exhausted."""
+    def stream(self, model_id: str, body: Json, usage: StreamUsage) -> AsyncIterator[Json]:
+        """OpenAI `chat.completion.chunk` objects; `usage` holds the totals once the iterator is exhausted."""
         ...
 
 
-def _words(messages: list[dict[str, Any]]) -> int:
-    return sum(len(str(m.get("content") or "").split()) for m in messages)
+def _words(messages: JsonList) -> int:
+    return sum(len(str(json_object(m).get("content") or "").split()) for m in messages)
+
+
+def _count(value: JsonValue) -> int:
+    """A provider's token count or index as `int()` reads it (2, 2.0 and "2" alike). Anything else is `Malformed`: a
+    count that is billed is never read as 0."""
+    if isinstance(value, int | float | str):
+        return int(value)
+    raise Malformed(f"{value!r} is not a count")
+
+
+def malformed(e: ValueError) -> ProviderError:
+    """A provider answer of the wrong shape, failed as the provider's error: the call is logged and not billed."""
+    return ProviderError(why=f"provider answer malformed: {e}")
+
+
+# A provider's vector, checked: a missing or non-numeric one fails the call as it did before it was checked.
+_VECTOR: TypeAdapter[list[float]] = TypeAdapter(list[float])
 
 
 _CALL = re.compile(r"\bcall (\w+)")
 
 
-def _call_arguments(rest: str) -> dict[str, Any] | None:
+def _call_arguments(rest: str) -> Json | None:
     """The JSON object right after `call <tool>`; empty when nothing JSON-like follows, None when it does not parse to
     an object."""
     rest = rest.lstrip()
     if not rest.startswith(("{", "[")):
         return {}
     try:
-        found, _ = json.JSONDecoder().raw_decode(rest)
+        found: object = json.JSONDecoder().raw_decode(rest)[0]
     except ValueError:
         return None
-    return cast(dict[str, Any], found) if isinstance(found, dict) else None
+    parsed = json_object(found)
+    return parsed if isinstance(found, dict) else None
 
 
 class ScriptedProvider:
@@ -135,13 +159,13 @@ class ScriptedProvider:
     written right after the name (`call github_list_issues {"owner": "acme"}`), else with no arguments. A `{` or `[`
     after the name that is not one JSON object is answered as text naming the problem, not called with nothing."""
 
-    def _answer(self, model_id: str, body: dict[str, Any]) -> Completion:
-        messages: list[dict[str, Any]] = list(body.get("messages") or [])
+    def _answer(self, model_id: str, body: Json) -> Completion:
+        messages = json_list(body.get("messages"))
         prompt_tokens = _words(messages)
-        tools: list[dict[str, Any]] = list(body.get("tools") or [])
-        functions: list[dict[str, Any]] = [t.get("function") or {} for t in tools]
+        tools = [an_object(t, "tool") for t in json_list(body.get("tools"))]
+        functions = [an_object(f, "tool function") if (f := t.get("function")) else {} for t in tools]
         offered = {str(f.get("name")) for f in functions}
-        last = messages[-1] if messages else {}
+        last = json_object(messages[-1]) if messages else {}
         said = str(last.get("content") or "")
         wanted = _CALL.search(said) if last.get("role") == "user" else None
         if wanted and wanted.group(1) in offered:
@@ -149,7 +173,7 @@ class ScriptedProvider:
             if arguments is None:
                 text = f"call {wanted.group(1)}: the arguments after its name must be one JSON object"
                 return Completion(text, prompt_tokens, len(text.split()))
-            call = {
+            call: Json = {
                 "id": "call_scripted_1",
                 "type": "function",
                 "function": {"name": wanted.group(1), "arguments": json.dumps(arguments)},
@@ -158,14 +182,14 @@ class ScriptedProvider:
         text = f"scripted reply from {model_id}"
         return Completion(text, prompt_tokens, len(text.split()))
 
-    async def complete(self, model_id: str, body: dict[str, Any]) -> Completion:
+    async def complete(self, model_id: str, body: Json) -> Completion:
         return self._answer(model_id, body)
 
     async def embed(self, model_id: str, inputs: list[str], dimensions: int | None) -> Embedded:
         width = dimensions or SCRIPTED_WIDTH
         return Embedded([scripted_vector(t, width) for t in inputs], sum(len(t.split()) for t in inputs))
 
-    async def stream(self, model_id: str, body: dict[str, Any], usage: StreamUsage) -> AsyncIterator[dict[str, Any]]:
+    async def stream(self, model_id: str, body: Json, usage: StreamUsage) -> AsyncIterator[Json]:
         done = self._answer(model_id, body)
         usage.input_tokens, usage.output_tokens = done.input_tokens, done.output_tokens
         for chunk in completion_chunks(done):
@@ -173,30 +197,56 @@ class ScriptedProvider:
 
 
 def completion_chunks(done: Completion) -> Iterator[dict[str, Any]]:
-    """A finished completion as OpenAI `chat.completion.chunk` dicts: a role delta, the text word by word or each tool
-    call whole, the finish reason, then the usage-only chunk `stream_options.include_usage` asks for."""
-    yield _chunk({"role": "assistant", "content": ""})
+    """A finished completion as OpenAI `chat.completion.chunk` objects: a role delta, the text word by word or each
+    tool call whole, the finish reason, then the usage-only chunk `stream_options.include_usage` asks for."""
+    yield _chunk(ChunkDelta(role="assistant", content=""))
     if done.tool_calls:
         for i, call in enumerate(done.tool_calls):
-            yield _chunk({"tool_calls": [{"index": i, **call}]})
+            yield _chunk(ChunkDelta(tool_calls=[{"index": i, **call}]))
     else:
         for i, word in enumerate((done.text or "").split(" ")):
-            yield _chunk({"content": word if i == 0 else " " + word})
-    yield _chunk({}, finish_reason=done.finish_reason)
+            yield _chunk(ChunkDelta(content=word if i == 0 else " " + word))
+    yield _chunk(ChunkDelta(), finish_reason=done.finish_reason)
     # OpenAI's last chunk under include_usage: no choices, the totals. Callers meter from it.
-    totals = {"prompt_tokens": done.input_tokens, "completion_tokens": done.output_tokens}
-    yield {
-        "object": "chat.completion.chunk",
-        "choices": [],
-        "usage": {**totals, "total_tokens": sum(totals.values())},
-    }
+    totals = ChatUsage(
+        prompt_tokens=done.input_tokens,
+        completion_tokens=done.output_tokens,
+        total_tokens=done.input_tokens + done.output_tokens,
+    )
+    yield ChatChunk(object="chat.completion.chunk", choices=[], usage=totals).model_dump(exclude_unset=True)
 
 
-def _chunk(delta: dict[str, Any], finish_reason: str | None = None) -> dict[str, Any]:
-    return {
-        "object": "chat.completion.chunk",
-        "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
-    }
+def _chunk(delta: ChunkDelta, finish_reason: Literal["stop", "tool_calls"] | None = None) -> Json:
+    choice = ChunkChoice(index=0, delta=delta, finish_reason=finish_reason)
+    # `exclude_unset` keeps the wire shape: a delta names only what it adds, and a chunk has no `usage` key.
+    return ChatChunk(object="chat.completion.chunk", choices=[choice]).model_dump(exclude_unset=True)
+
+
+def _usage(answer: Json) -> Json:
+    """The answer's `usage`; empty when it is absent or null, as an answer without totals is metered at 0."""
+    found = answer.get("usage")
+    return an_object(found, "usage") if found else {}
+
+
+def _completion(answer: JsonValue) -> Completion:
+    """A chat completion answer read as `Completion`. Text content only: content of another kind (a list of parts)
+    is `Malformed`, as the reply could not carry it."""
+    data = an_object(answer, "answer")
+    usage = _usage(data)
+    listed = data.get("choices")
+    choices: JsonList = a_list(listed, "choices") if listed else [{}]
+    found = an_object(choices[0], "choice").get("message")
+    message = an_object(found, "message") if found else {}
+    content = message.get("content")
+    if content is not None and not isinstance(content, str):
+        raise Malformed("message content is not text")
+    calls = message.get("tool_calls")
+    return Completion(
+        content,
+        _count(usage.get("prompt_tokens", 0)),
+        _count(usage.get("completion_tokens", 0)),
+        [an_object(c, "tool call") for c in (a_list(calls, "tool_calls") if calls else [])],
+    )
 
 
 class OpenAICompatibleProvider:
@@ -226,11 +276,11 @@ class OpenAICompatibleProvider:
                 code, why=f"provider answered {r.status_code}", retry_after=r.headers.get("retry-after")
             )
 
-    def _keep(self, chunk: dict[str, Any]) -> dict[str, Any] | None:
+    def _keep(self, chunk: Json) -> Json | None:
         """The chunk as callers get it, or None to drop it."""
         return chunk
 
-    async def complete(self, model_id: str, body: dict[str, Any]) -> Completion:
+    async def complete(self, model_id: str, body: Json) -> Completion:
         try:
             r = await self.client.post(
                 self._url(model_id), json={**body, "model": model_id, "stream": False}, headers=self._headers
@@ -239,19 +289,13 @@ class OpenAICompatibleProvider:
             # An unreachable endpoint is the provider's failure (502), not this service's (500).
             raise unreached(e) from e
         self._answered(r)
-        data: dict[str, Any] = r.json()
-        usage: dict[str, Any] = data.get("usage") or {}
-        choices: list[dict[str, Any]] = data.get("choices") or [{}]
-        message: dict[str, Any] = choices[0].get("message") or {}
-        return Completion(
-            message.get("content"),
-            int(usage.get("prompt_tokens", 0)),
-            int(usage.get("completion_tokens", 0)),
-            list(message.get("tool_calls") or []),
-        )
+        try:
+            return _completion(r.json())
+        except ValueError as e:
+            raise malformed(e) from e
 
     async def embed(self, model_id: str, inputs: list[str], dimensions: int | None) -> Embedded:
-        body: dict[str, Any] = {"model": model_id, "input": inputs}
+        body: Json = {"model": model_id, "input": list[JsonValue](inputs)}
         if dimensions is not None:
             body["dimensions"] = dimensions
         try:
@@ -259,14 +303,23 @@ class OpenAICompatibleProvider:
         except httpx.HTTPError as e:
             raise unreached(e) from e
         self._answered(r)
-        data: dict[str, Any] = r.json()
-        rows = sorted(cast(list[dict[str, Any]], data.get("data") or []), key=lambda d: int(d.get("index", 0)))
+        try:
+            data = an_object(r.json(), "answer")
+            listed = data.get("data")
+            rows = sorted(
+                (an_object(d, "vector row") for d in (a_list(listed, "data") if listed else [])),
+                key=lambda d: _count(d.get("index", 0)),
+            )
+            usage = _usage(data)
+            vectors = [_VECTOR.validate_python(d["embedding"]) for d in rows]
+            used = _count(usage.get("prompt_tokens", 0))
+        except (ValueError, KeyError) as e:
+            raise ProviderError(why=f"provider answer malformed: {e!r}") from e
         if len(rows) != len(inputs):
             raise ProviderError(why=f"provider returned {len(rows)} vectors for {len(inputs)} inputs")
-        usage: dict[str, Any] = data.get("usage") or {}
-        return Embedded([[float(x) for x in d["embedding"]] for d in rows], int(usage.get("prompt_tokens", 0)))
+        return Embedded(vectors, used)
 
-    async def stream(self, model_id: str, body: dict[str, Any], usage: StreamUsage) -> AsyncIterator[dict[str, Any]]:
+    async def stream(self, model_id: str, body: Json, usage: StreamUsage) -> AsyncIterator[Json]:
         # include_usage puts the totals on a last chunk with no choices; metering needs them.
         sent = {**body, "model": model_id, "stream": True, "stream_options": {"include_usage": True}}
         try:
@@ -278,11 +331,16 @@ class OpenAICompatibleProvider:
                     data = line.removeprefix("data:").strip()
                     if data == "[DONE]":
                         break
-                    chunk: dict[str, Any] = json.loads(data)
-                    if u := chunk.get("usage"):
-                        usage.input_tokens = int(u.get("prompt_tokens", 0))
-                        usage.output_tokens = int(u.get("completion_tokens", 0))
-                    if (kept := self._keep(chunk)) is not None:
+                    # Passed on as parsed, never through a model: a field the provider adds reaches the client.
+                    try:
+                        chunk = an_object(json.loads(data), "stream chunk")
+                        if u := _usage(chunk):
+                            usage.input_tokens = _count(u.get("prompt_tokens", 0))
+                            usage.output_tokens = _count(u.get("completion_tokens", 0))
+                        kept = self._keep(chunk)
+                    except ValueError as e:
+                        raise malformed(e) from e
+                    if kept is not None:
                         yield kept
         except httpx.HTTPError as e:
             raise unreached(e) from e
@@ -351,25 +409,24 @@ class AzureOpenAIProvider(OpenAICompatibleProvider):
         """`answered from <region>, expected <region>` when Azure answered from another region; None otherwise."""
         return region_mismatch(self.observed_region, self.region)
 
-    def _keep(self, chunk: dict[str, Any]) -> dict[str, Any] | None:
-        raw: list[dict[str, Any]] = chunk.get("choices") or []
-        choices = [{k: v for k, v in c.items() if k not in _AZURE_ANNOTATIONS} for c in raw if "delta" in c]
+    def _keep(self, chunk: Json) -> Json | None:
+        listed = chunk.get("choices")
+        raw = [an_object(c, "choice") for c in (a_list(listed, "choices") if listed else [])]
+        choices: JsonList = [{k: v for k, v in c.items() if k not in _AZURE_ANNOTATIONS} for c in raw if "delta" in c]
         if not choices and not chunk.get("usage"):
             return None
         return {**{k: v for k, v in chunk.items() if k not in _AZURE_ANNOTATIONS}, "choices": choices}
 
 
-def provider_for(
-    connection: Mapping[str, Any] | Any, secrets: Mapping[str, str], client: httpx.AsyncClient
-) -> Provider:
-    kind = connection["type"]
+def provider_for(connection: ServingAlias, secrets: Mapping[str, str], client: httpx.AsyncClient) -> Provider:
+    kind = connection.type
     if kind == "scripted":
         return ScriptedProvider()
-    key_ref = connection.get("key_ref")
-    api_key = secrets.get(str(key_ref)) if key_ref else None
+    key_ref = connection.key_ref
+    api_key = secrets.get(key_ref) if key_ref else None
     if kind == "openai-compatible":
-        return OpenAICompatibleProvider(str(connection["base_url"]), api_key, client)
+        return OpenAICompatibleProvider(str(connection.base_url), api_key, client)
     if kind == "azure-openai":
-        version, region = str(connection["api_version"]), connection.get("region")
-        return AzureOpenAIProvider(str(connection["base_url"]), version, region, api_key, client)
+        version, region = str(connection.api_version), connection.region
+        return AzureOpenAIProvider(str(connection.base_url), version, region, api_key, client)
     raise ProviderError("provider_bad_request", why=f"provider type {kind} is not served yet")
