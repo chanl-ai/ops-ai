@@ -33,7 +33,7 @@ from ops_documents.pending import Pending
 from ops_documents.readings import READING_PROCESS, SYNC_BYTES, SYNC_PAGES, Readings, settings_of
 from ops_documents.store import ExtractionRow, ExtractionsStore
 from ops_documents.store.document_types import SINGLE
-from ops_documents.store.extractions import file_read
+from ops_documents.store.extractions import CorrectedEvent, NewExample, file_read
 from ops_extract import boxes, classify, page_images, prompt, result, rules, templates
 from ops_extract.checks import CLEAN_RULES, DEFAULT_FLOOR, entries, in_quote, threshold
 from ops_extract.floor import FloorUnreadError, PlatformFloor
@@ -43,10 +43,11 @@ from ops_extract.shapes import Box, Layout
 from ops_files_client import FileInfo
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_ingest.reading import Reading, read
+from ops_service_kit import narrow
 from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
-from ops_service_kit.narrow import Malformed, an_object
+from ops_service_kit.narrow import Malformed, a_list, an_object, required
 from ops_service_kit.settings import Settings
 from ops_store import background, isolation
 from ops_store.listing import ListPage
@@ -389,6 +390,12 @@ def _key_hash(who: Who, key: str) -> str:
     return _sha(f"{who.tenant_id}\n{who.team}\n{who.actor}\n{key}")
 
 
+def review_below(request: Json) -> float | None:
+    """The confidence below which a stored request's fields wait for a person; a value that is not one fails the read,
+    as the scorer would."""
+    return None if request.get("reviewBelow") is None else required(request, "reviewBelow", float)
+
+
 def request_of(body: dict[str, Any]) -> dict[str, Any]:
     """The extraction asked for, checked: fields with a key and a known type, and the options that change the answer.
     A full-text or proposed read names no fields."""
@@ -655,7 +662,7 @@ class Extractor:
             )
             if held.id != extraction_id:
                 return answer_of(held)
-            result = {"fileId": file.id, "fields": {}, "needsReview": ["documentType"], "classification": found}
+            result: Json = {"fileId": file.id, "fields": {}, "needsReview": ["documentType"], "classification": found}
             await self.store.finish(extraction_id, status="done", outcome="unknown", result=result, at=self.clock())
             return answer_of(await self._row(who.tenant_id, extraction_id))
 
@@ -711,9 +718,9 @@ class Extractor:
         original = fields[key]
         fields[key] = {**original, "value": value, "corrected": True, "needsReview": False}
         # A person set the value, so it no longer waits for one: the to-check count follows the correction.
-        target["needsReview"] = [k for k in cast(list[str], target.get("needsReview") or []) if k != key]
+        target["needsReview"] = [k for k in a_list(target.get("needsReview") or [], "needsReview") if k != key]
         if many:
-            target["values"][key] = value
+            an_object(target["values"], "values")[key] = value
             every = cast(list[dict[str, Any]], answer["records"])
             answer["needsReview"] = [i for i, r in enumerate(every) if r["needsReview"]]
         await self.store.correct(
@@ -736,7 +743,7 @@ class Extractor:
 
     def _example(
         self, who: Who, row: ExtractionRow, key: str, original: dict[str, Any], value: Any, *, record: int | None
-    ) -> dict[str, Any] | None:
+    ) -> NewExample | None:
         """What a correction of a typed read teaches its type: the field, the line its value was printed on
         (the read's quote for it) and the corrected value, for the read's tenant and team. A read with fields of its
         own and no type teaches nothing, and neither does a correction whose quote does not show the corrected value:
@@ -778,7 +785,7 @@ class Extractor:
 
     async def _corrected_event(
         self, who: Who, row: ExtractionRow, answer: dict[str, Any], key: str, record: int | None
-    ) -> dict[str, Any] | None:
+    ) -> CorrectedEvent | None:
         """extraction.corrected, so the file's saved read follows the correction (its event workflow re-runs Save data
         on file). Only for a read of a document type, and only the file's newest one for the team: correcting an
         older read must not put it back on the file over a newer one."""
@@ -930,7 +937,7 @@ class Extractor:
             pages.ocr,
             file_id=row.file_id,
             many=many,
-            review_below=request.get("reviewBelow"),
+            review_below=review_below(request),
             floor=floor,
             word_confidence=pages.confidence,
         )
@@ -975,7 +982,7 @@ class Extractor:
                 pages.ocr,
                 file_id=row.file_id,
                 many=False,
-                review_below=row.request.get("reviewBelow"),
+                review_below=review_below(row.request),
                 floor=floor,
                 word_confidence=pages.confidence,
             )
@@ -1047,7 +1054,7 @@ class Extractor:
             if answer is not None and not prompt.schema_errors(said, schema):
                 _, again = result.scored(
                     asked, said, pages.texts, pages.ocr, file_id=row.file_id, many=False,
-                    review_below=row.request.get("reviewBelow"), floor=floor, word_confidence=pages.confidence,
+                    review_below=review_below(row.request), floor=floor, word_confidence=pages.confidence,
                 )  # fmt: skip
                 for key, value in an_object(again["fields"], "fields").items():
                     r = an_object(value, f"field {key}")
@@ -1072,7 +1079,7 @@ class Extractor:
         if pictures is None or pages.layout is None or self.models is None:
             return {}
         asked = {str(f["key"]): f for f in (an_object(x, "a field") for x in entries(row.request["fields"]))}
-        below = row.request.get("reviewBelow")
+        below = review_below(row.request)
         doubtful: list[str] = []
         for k, value in fields.items():
             r = an_object(value, f"field {k}")
@@ -1123,8 +1130,11 @@ class Extractor:
         document's cost is bounded; the read that follows uses every page like any other. A proposed field the scorer
         could not check (no key, an unknown type, a key twice) is left out."""
         assert self.models is not None
-        first = sorted(pages.texts)[: int(row.request.get("proposePages") or PROPOSE_PAGES)]
-        user = prompt.propose_prompt([pages.texts[n] for n in first], hint=row.request.get("hint"))
+        size = row.request.get("proposePages") or PROPOSE_PAGES
+        if not isinstance(size, int | float | str):
+            raise Malformed(f"proposePages {size!r} is not a number")
+        first = sorted(pages.texts)[: int(size)]
+        user = prompt.propose_prompt([pages.texts[n] for n in first], hint=narrow.field(row.request, "hint", str))
         answer = await self.models.structured(
             prompt.PROPOSE_SYSTEM, user, prompt.PROPOSAL_SCHEMA, run=row.id, step="propose", tenant=row.tenant_id,
             usage=usage,

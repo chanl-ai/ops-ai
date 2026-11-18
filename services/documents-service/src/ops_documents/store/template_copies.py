@@ -17,13 +17,13 @@ the chain's prefix."""
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
 from ops_documents.store.metadata import ROLE, metadata
-from ops_service_kit.http import Out
+from ops_service_kit.http import Json, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import isolation
 from ops_store.rows import one, rows
@@ -88,7 +88,7 @@ class CopyRow(Out):
     version: int
     digest: str | None
     record_version: int | None
-    base: dict[str, Any] | None
+    base: Json | None
     installed_by: str
     installed_at: str
     removed_at: str | None
@@ -131,7 +131,7 @@ class TemplateCopies(Store):
         by: str,
         digest: str | None = None,
         record_version: int | None = None,
-        base: dict[str, Any] | None = None,
+        base: Json | None = None,
     ) -> tuple[CopyRow, bool]:
         """Records a new copy and answers it with True; when another install of the same template won the race, answers
         that one's row with False. The base goes in the same insert, so the loser's base never lands on the winner's."""
@@ -169,7 +169,7 @@ class TemplateCopies(Store):
             return await one(c, q, CopyRow)
 
     async def updated(
-        self, copy_id: str, *, version: int, digest: str | None, record_version: int, base: dict[str, Any] | None
+        self, copy_id: str, *, version: int, digest: str | None, record_version: int, base: Json | None
     ) -> None:
         """The copy took its template's update: it now stands for that version and body, the type version made, and
         `base` is the template body it was merged against (never the merged result)."""

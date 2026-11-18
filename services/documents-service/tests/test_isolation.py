@@ -17,6 +17,7 @@ from ops_documents.store import ReadingsStore, metadata
 from ops_documents.store.extractions import extractions
 from ops_documents.store.metadata import ROLE, SYSTEM_ROLE
 from ops_documents.store.readings import documents_reading_files, documents_reading_pages, documents_readings
+from ops_service_kit.http import Json
 from ops_store import isolation
 from ops_store.conformance import isolation_suite
 from ops_store.dialect import system_tx
@@ -64,7 +65,7 @@ async def test_the_system_role_reads_the_outbox_and_queued_work_and_nothing_else
 
 async def test_one_team_cannot_read_another_teams_reading_of_the_same_bytes(engine: AsyncEngine, tenant: str) -> None:
     store = ReadingsStore(engine)
-    page = {"number": 1, "source": "text", "text": "Overdraft limits for the cards team"}
+    page: Json = {"number": 1, "source": "text", "text": "Overdraft limits for the cards team"}
     with isolation.scope(tenant, "team_ops"):
         await store.link("f_ops", "team_ops", "d1", datetime.now(UTC))
         await store.put_done(

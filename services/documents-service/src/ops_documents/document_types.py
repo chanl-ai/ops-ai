@@ -34,6 +34,7 @@ from ops_documents.store.document_types import (
     SampleRow,
     TestRow,
     TypeRow,
+    VersionOptions,
     VersionRow,
 )
 from ops_documents.store.extractions import ExtractionRow
@@ -248,7 +249,7 @@ class DocumentTypes:
         assert found is not None
         return found
 
-    def _checked(self, body: dict[str, Any], *, carried_forward: bool = False) -> dict[str, Any]:
+    def _checked(self, body: dict[str, Any], *, carried_forward: bool = False) -> VersionOptions:
         """The version's fields and options, checked as an extraction request checks them. Only a template this service
         carried forward may be flagged needsRebuild: a posted flag is dropped, so a posted zone naming a field the
         version lacks is refused rather than saved unchecked."""
@@ -292,7 +293,7 @@ class DocumentTypes:
         }
 
     @staticmethod
-    def _may_show_pages(who: Who, version: dict[str, Any], *, held: bool) -> None:
+    def _may_show_pages(who: Who, version: VersionOptions, *, held: bool) -> None:
         """Page images leave for the model provider: turning them on needs documents.manage; a version keeping
         what the one before held, or turning them off, needs only documents.edit."""
         if version["page_images"] and not held and not who.manages:
@@ -539,7 +540,7 @@ class DocumentTypes:
             added_at=self.clock(),
         )
         async with isolation.request_transaction():
-            await self.store.add_sample({"tenant_id": who.tenant_id, **sample.model_dump()})
+            await self.store.add_sample(who.tenant_id, sample)
         return _sample_view(sample)
 
     async def remove_sample(self, who: Who, type_id: str, sample_id: str) -> bool:

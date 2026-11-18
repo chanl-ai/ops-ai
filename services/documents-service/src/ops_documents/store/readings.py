@@ -26,7 +26,8 @@ from ops_documents.store.columns import JSON_TEXT
 from ops_documents.store.extractions import service_outbox
 from ops_documents.store.metadata import RECOVER_PENDING, ROLE, SYSTEM_ROLE, metadata
 from ops_ingest.reading import Page
-from ops_service_kit.http import Out
+from ops_service_kit.http import Json, Out
+from ops_service_kit.narrow import Malformed
 from ops_store import isolation
 from ops_store.outbox import add
 from ops_store.rows import one, rows
@@ -109,7 +110,7 @@ class ReadingRow(Out):
     status: ReadingStatus
     pages_total: int | None
     pages_done: int
-    facts: Annotated[dict[str, Any] | None, JSON_TEXT]
+    facts: Annotated[Json | None, JSON_TEXT]
     error_code: str | None
     error: str | None
     attempts: int
@@ -127,7 +128,7 @@ ROW = (
 )  # fmt: skip
 
 
-def _pack(page: dict[str, Any]) -> bytes:
+def _pack(page: Json) -> bytes:
     return gzip.compress(json.dumps(page, separators=(",", ":")).encode())
 
 
@@ -232,7 +233,7 @@ class ReadingsStore(Store):
             )
         return tries
 
-    async def opened(self, row: ReadingRow, *, pages_total: int, facts: dict[str, Any]) -> None:
+    async def opened(self, row: ReadingRow, *, pages_total: int, facts: Json) -> None:
         t = documents_readings
         async with self.tx() as c:
             await c.execute(
@@ -241,7 +242,7 @@ class ReadingsStore(Store):
                 .values(pages_total=pages_total, facts=json.dumps(facts))
             )
 
-    async def save_page(self, row: ReadingRow, number: int, page: dict[str, Any]) -> None:
+    async def save_page(self, row: ReadingRow, number: int, page: Json) -> None:
         """One finished page, and the count of pages done; saving a page again (after a restart) replaces it."""
         t = documents_readings
         async with self.tx() as c:
@@ -251,7 +252,7 @@ class ReadingsStore(Store):
             )
 
     async def _put_page(
-        self, c: AsyncConnection, team: str, digest: str, version: str, key: str, *, number: int, page: dict[str, Any]
+        self, c: AsyncConnection, team: str, digest: str, version: str, key: str, *, number: int, page: Json
     ) -> None:
         p = documents_reading_pages
         await c.execute(sa.delete(p).where(self._where(p, team, digest, version, key), p.c.page == number))
@@ -273,8 +274,8 @@ class ReadingsStore(Store):
         version: str,
         key: str,
         *,
-        facts: dict[str, Any],
-        pages: list[dict[str, Any]],
+        facts: Json,
+        pages: list[Json],
         file_id: str,
         team: str,
         actor: str,
@@ -297,7 +298,10 @@ class ReadingsStore(Store):
                         )
                     )  # fmt: skip
                     for page in pages:
-                        await self._put_page(c, team, digest, version, key, number=int(page["number"]), page=page)
+                        number = page.get("number")
+                        if not isinstance(number, int | float | str):
+                            raise Malformed(f"page number {number!r} is not a number")
+                        await self._put_page(c, team, digest, version, key, number=int(number), page=page)
                     await self._events(
                         c, team, digest, version, key, name=FINISHED_EVENT, said={"status": "done", "pages": len(pages)}
                     )
@@ -323,13 +327,13 @@ class ReadingsStore(Store):
                 .values(status=status, finished_at=at, duration_ms=duration_ms, error_code=error_code, error=error)
             )
             name = FINISHED_EVENT if status == "done" else FAILED_EVENT
-            said: dict[str, Any] = {"status": status, "pages": row.pages_total}
+            said: Json = {"status": status, "pages": row.pages_total}
             if error_code:
                 said |= {"errorCode": error_code, "error": error}
             await self._events(c, row.team, row.digest, row.version, row.key, name=name, said=said)
 
     async def _events(
-        self, c: AsyncConnection, team: str, digest: str, version: str, key: str, *, name: str, said: dict[str, Any]
+        self, c: AsyncConnection, team: str, digest: str, version: str, key: str, *, name: str, said: Json
     ) -> None:
         f = documents_reading_files
         tenant = isolation.tenant()
