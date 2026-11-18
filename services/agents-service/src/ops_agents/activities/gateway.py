@@ -14,12 +14,13 @@ from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
-from typing import Any, Protocol, cast
+from typing import Any, NotRequired, Protocol, TypedDict, cast
 
 import httpx
 
 from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ServiceCallError, ServiceClient, segment
+from ops_service_kit.http import Json, JsonValue
 
 from .shaper import shape_part
 from .tool_directory import OperationRef, ToolDirectory, ToolsUnavailable
@@ -60,7 +61,7 @@ def current_run_context() -> RunContext:
     try:
         from langgraph.config import get_config  # noqa: PLC0415 - only graph runs have one
 
-        configurable: dict[str, Any] = get_config().get("configurable") or {}
+        configurable = get_config().get("configurable") or {}
         return RunContext(
             thread=configurable.get("thread_id"),
             act="graph",
@@ -130,6 +131,21 @@ class ActingForHeaders(Protocol):
     async def headers(self, ctx: RunContext, *, tenant_id: str | None, team_id: str | None) -> dict[str, str]: ...
 
 
+class GatewayAnswer(TypedDict):
+    """tools-service's answer to a call (POST /v1/calls): whether it ran, the tool's own output, and a view when the
+    tool drew one."""
+
+    ok: bool
+    output: JsonValue
+    view: NotRequired[Json | None]
+
+
+class Fence(TypedDict):
+    """tools-service's answer to raising a thread's write fence (POST /v1/fences)."""
+
+    generation: int
+
+
 class GatewayClient:
     def __init__(self, tools: ServiceClient) -> None:
         """`tools` calls tools-service as this service, naming the tenant of the run it calls for; tools-service takes
@@ -153,7 +169,7 @@ class GatewayClient:
         """The tool's access class and write approval policy (`approval`: approvers, stepUp) as
         tools-service's registry has them; access "unknown" and no policy when it is not registered."""
         try:
-            return cast(dict[str, Any], await self.tools.get(f"/v1/tools/{segment(tool)}"))
+            return await self.tools.get(f"/v1/tools/{segment(tool)}")
         except ValueError:
             return {"access": "unknown", "approval": None}  # no registered tool's name holds a slash
         except ServiceCallError as e:
@@ -161,12 +177,12 @@ class GatewayClient:
                 return {"access": "unknown", "approval": None}
             raise
 
-    async def review_decision(self, module_id: str, decision: dict[str, Any]) -> None:
+    async def review_decision(self, module_id: str, decision: Json) -> None:
         """Applies a tool module review's decision in tools-service: publish the reviewed version, or return it
         to draft or withdraw it. Raises on any answer but success, so the request stays marked to apply again."""
         await self.tools.post(f"/v1/tool-modules/{segment(module_id)}/review-decisions", decision)
 
-    async def egress_host_decision(self, decision: dict[str, Any]) -> None:
+    async def egress_host_decision(self, decision: Json) -> None:
         """Applies an approved host in tools-service: the host joins the tenant's allow-list. Raises on any
         answer but success, so the request stays marked to apply again."""
         # The one call that claims secrets_egress:manage, so no other call of this client carries it.
@@ -177,18 +193,14 @@ class GatewayClient:
         """Raises the thread's write fence in tools-service to `generation` (E2c) and returns the fence. Raises
         GatewayRefused when the fence is already higher: this generation is stale too."""
         try:
-            data = cast(
-                dict[str, Any], await self.tools.post("/v1/fences", {"thread": thread_id, "generation": generation})
-            )
+            data = cast(Fence, await self.tools.post("/v1/fences", {"thread": thread_id, "generation": generation}))
         except ServiceCallError as e:
             if e.status == 409:
                 raise GatewayRefused(str(e), ["lease superseded"]) from e
             raise
         return int(data["generation"])
 
-    async def evaluate(
-        self, expressions: dict[str, str], values: dict[str, Any]
-    ) -> tuple[dict[str, Any] | None, str | None]:
+    async def evaluate(self, expressions: dict[str, str], values: Json) -> tuple[Json | None, str | None]:
         """A Calculate step's formulas evaluated in tools-service's sandbox (POST /v1/expressions/evaluate): their
         values by name, or None and why a formula failed. Any other refusal or no answer raises."""
         try:
@@ -197,19 +209,15 @@ class GatewayClient:
             if e.status == 400:
                 return None, str(e)
             raise
-        return dict(cast(dict[str, Any], data)["out"]), None
+        return dict(cast(dict[str, Json], data)["out"]), None
 
-    async def abandon(self, key: str, tool: str, thread: str | None) -> dict[str, Any]:
+    async def abandon(self, key: str, tool: str, thread: str | None) -> Json:
         """The gateway's call under idempotency key `key`, or, when it has none, the key abandoned so that call is
         refused if it arrives later: `{abandoned, call}` (POST /v1/calls/abandon). How a workflow run settles a write
         it lost the answer to."""
-        return cast(
-            dict[str, Any], await self.tools.post("/v1/calls/abandon", {"key": key, "tool": tool, "thread": thread})
-        )
+        return cast(Json, await self.tools.post("/v1/calls/abandon", {"key": key, "tool": tool, "thread": thread}))
 
-    async def call(
-        self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
-    ) -> dict[str, Any]:
+    async def call(self, tool: str, arguments: Json, *, key: str, approval_token: str | None) -> GatewayAnswer:
         try:
             return await self._call(tool, arguments, key=key, approval_token=approval_token)
         except GatewayRefused as e:
@@ -222,9 +230,7 @@ class GatewayClient:
                 raise GatewayRefused(NEEDS_REVIEW, [NEEDS_REVIEW]) from e
             return await self._call(tool, arguments, key=key, approval_token=renewed)
 
-    async def _call(
-        self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
-    ) -> dict[str, Any]:
+    async def _call(self, tool: str, arguments: Json, *, key: str, approval_token: str | None) -> GatewayAnswer:
         ctx = current_run_context()
         # The lease generation travels as a header; the gateway fences writes on it (E2b).
         headers = {"X-Lease-Generation": str(ctx.generation)} if ctx.generation is not None else {}
@@ -244,7 +250,7 @@ class GatewayClient:
             "approvalToken": approval_token,
         }
         try:
-            return cast(dict[str, Any], await self.tools.post("/v1/calls", body, headers=headers))
+            return cast(GatewayAnswer, await self.tools.post("/v1/calls", body, headers=headers))
         except ServiceCallError as e:
             # A refusal the chat draws as a card keeps its envelope (code and details), so the card can name the app,
             # the team or the accounts; any other 403 or 409 is a refusal the model reads in words.
@@ -302,11 +308,11 @@ TOOL_OFF_LINE = (
 CARD_CODES = ("CONNECTION_NOT_LINKED", APP_OFF, CHOICE, TEAM_SIGN_IN, SIGN_IN_ENDED, TOOL_OFF)
 
 
-def _object(value: Any) -> dict[str, Any] | None:
-    return cast(dict[str, Any], value) if isinstance(value, dict) else None
+def _object(value: object) -> Json | None:
+    return cast(Json, value) if isinstance(value, dict) else None
 
 
-def carded(output: Any) -> str | None:
+def carded(output: object) -> str | None:
     """The plain line for a refusal the chat draws as a card (a sign-in to give, an app the team has off, or which of
     two accounts to use), or None for any other outcome, which the model reads as it is."""
     error = _object((_object(output) or {}).get("error"))
@@ -321,7 +327,7 @@ def carded(output: Any) -> str | None:
         return SIGN_IN_ENDED_LINE.format(app=str(details.get("connection") or details.get("app") or "this app"))
     if error.get("code") == CHOICE:
         accounts = details.get("accounts")
-        n = len(cast(list[Any], accounts)) if isinstance(accounts, list) else 2
+        n = len(accounts) if isinstance(accounts, list) else 2
         return CHOICE_LINE.format(n=n, app=str(details.get("app") or "this app"))
     if error.get("code") == APP_OFF:
         return APP_OFF_LINE.format(app=str(details.get("app") or "this app"))
@@ -335,7 +341,7 @@ def carded(output: Any) -> str | None:
     return line.format(app=str(details.get("app") or details.get("connection") or "this app"))
 
 
-def gateway_error(e: ServiceCallError) -> dict[str, Any]:
+def gateway_error(e: ServiceCallError) -> Json:
     """The gateway's error envelope as a tool outcome: code, message, status and details."""
     return {"code": e.code, "message": str(e), "status": e.status, **({"details": e.details} if e.details else {})}
 
@@ -350,9 +356,7 @@ class GatewayToolExecutor:
         self._gateway = gateway
         self._directory = directory
 
-    async def execute(
-        self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
-    ) -> ToolOutcome:
+    async def execute(self, tool: str, arguments: Json, *, key: str, approval_token: str | None) -> ToolOutcome:
         # The kernel calls only tools in the turn's grants; the gateway resolves the name in the registry and refuses
         # one it does not hold or that is hidden, unpublished or drifted.
         try:
@@ -415,4 +419,4 @@ class GatewayReplySender:
         data = await self._gateway.call(
             "send_reply", {"to": to, "subject": subject, "body": body}, key=key, approval_token=approval_token
         )
-        return str(data["output"]["reference"])
+        return str(cast(Json, data["output"])["reference"])

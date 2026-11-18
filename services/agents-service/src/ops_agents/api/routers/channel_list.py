@@ -11,7 +11,7 @@ is one union of mailboxes, embeds and the local copy of platform's API keys, pag
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal, TypeAlias, cast
+from typing import Annotated, Any, Literal, NotRequired, TypeAlias, TypedDict, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from ops_access import can
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, Unprocessable
-from ops_service_kit.http import Envelope, In, ListResult, Out
+from ops_service_kit.http import Envelope, In, Json, ListResult, Out
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListParams
 from ops_store import isolation
@@ -30,6 +30,7 @@ from ...store.channel_list import (
     NOT_FOUND,
     ChannelList,
     ChannelRecord,
+    Counts,
     KindCount,
     watched_address,
 )
@@ -183,7 +184,93 @@ def _reason(row: ChannelRecord, now: datetime) -> str | None:
     return "Starts any live workflow of its team"
 
 
-def _counts(c: Any) -> dict[str, Any]:
+class CountsReply(TypedDict):
+    traffic24h: int
+    errors24h: int
+    activity7d: int
+    lastActivityAt: str | None
+
+
+class ServesReply(TypedDict):
+    kind: str | None
+    id: str
+    name: str | None
+    version: int | Literal["latest"]
+    latestVersion: int | None
+    behind: int
+
+
+class HealthReply(TypedDict):
+    state: str
+    checkedAt: str
+    reason: NotRequired[str]
+
+
+class EmbedReply(TypedDict):
+    agentId: str | None
+    agentVersion: int | None
+    origins: list[str]
+    retiredAt: str | None
+    activeKeys: int
+
+
+class ChannelReply(TypedDict):
+    """A ChannelRow as `replies` builds it, in reply order."""
+
+    id: str
+    type: str
+    name: str
+    detail: str
+    teamId: str
+    teamName: str | None
+    serves: ServesReply | None
+    servesCount: int
+    health: HealthReply
+    paused: bool
+    traffic24h: int
+    errors24h: int
+    activity7d: int
+    lastActivityAt: str | None
+    canEdit: bool
+    embed: NotRequired[EmbedReply]
+
+
+class KindReply(TypedDict):
+    type: str
+    built: bool
+    health: str | None
+    active: int
+    attention: int
+    total: int
+
+
+class WhereReply(TypedDict):
+    kind: str
+    id: str
+    name: str
+    type: NotRequired[str]
+    workflowId: NotRequired[str]
+
+
+class PlaceReply(TypedDict):
+    """A LivePlace as `_place` and `_steps` build it, in reply order."""
+
+    where: WhereReply
+    version: int | Literal["latest"] | None
+    pinned: bool
+    behind: int
+    health: HealthReply | None
+    traffic24h: int | None
+    errors24h: int | None
+    lastActivityAt: str | None
+
+
+class VersionReply(TypedDict):
+    version: int
+    places: int
+
+
+def _counts(c: Counts) -> CountsReply:
     return {
         "traffic24h": c.traffic24h,
         "errors24h": c.errors24h,
@@ -192,7 +279,7 @@ def _counts(c: Any) -> dict[str, Any]:
     }
 
 
-def _serves(row: ChannelRecord) -> dict[str, Any] | None:
+def _serves(row: ChannelRecord) -> ServesReply | None:
     if not row.serves_id:
         return None
     pinned, latest = row.pinned, row.latest_version
@@ -207,16 +294,19 @@ def _serves(row: ChannelRecord) -> dict[str, Any] | None:
     }
 
 
-async def replies(rt: Runtime, me: Principal, rows: list[ChannelRecord], now: datetime) -> list[dict[str, Any]]:
+async def replies(rt: Runtime, me: Principal, rows: list[ChannelRecord], now: datetime) -> list[ChannelReply]:
     """The store's rows as the list answers them; asks platform-service for the teams' names with no transaction
     open."""
     names = rt.team_names if isinstance(rt.team_names, PlatformTeamNames) else None
-    out: list[dict[str, Any]] = []
+    out: list[ChannelReply] = []
     for r in rows:
         checked = _iso(now)
         reason = _reason(r, now)
         origins = r.origins
-        row: dict[str, Any] = {
+        health: HealthReply = {"state": r.health, "checkedAt": checked}
+        if reason:
+            health["reason"] = reason
+        row: ChannelReply = {
             "id": r.id,
             "type": r.type,
             "name": r.name,
@@ -225,7 +315,7 @@ async def replies(rt: Runtime, me: Principal, rows: list[ChannelRecord], now: da
             "teamName": await names.name(r.team_id) if names is not None else None,
             "serves": _serves(r),
             "servesCount": r.serves_count,
-            "health": {"state": r.health, "checkedAt": checked} | ({"reason": reason} if reason else {}),
+            "health": health,
             "paused": bool(r.paused),
             **_counts(r.counts),
             # An API key changes in Settings, API keys, on platform-service: nothing here edits it.
@@ -244,9 +334,9 @@ async def replies(rt: Runtime, me: Principal, rows: list[ChannelRecord], now: da
     return out
 
 
-def kinds_of(counted: list[KindCount]) -> list[dict[str, Any]]:
+def kinds_of(counted: list[KindCount]) -> list[KindReply]:
     by_type = {k.type: k for k in counted}
-    out: list[dict[str, Any]] = []
+    out: list[KindReply] = []
     for kind, built in KINDS:
         k = by_type.get(kind)
         out.append(
@@ -282,7 +372,7 @@ async def list_channels(rt: Rt, me: Me, q: Annotated[ChannelsQuery, Query()]) ->
     return ok(page | {"kinds": kinds_of(listed.kinds)})
 
 
-async def channel_row(rt: Runtime, me: Principal, channel_id: str, teams: tuple[str, ...]) -> dict[str, Any]:
+async def channel_row(rt: Runtime, me: Principal, channel_id: str, teams: tuple[str, ...]) -> ChannelReply:
     now = datetime.now(UTC)
     found = await replies(rt, me, await ChannelList(rt.db).rows(teams, now=now, ids=[channel_id]), now)
     if not found:
@@ -342,8 +432,8 @@ class Live(Out):
     rows: list[LivePlace]
 
 
-def _place(row: dict[str, Any]) -> dict[str, Any]:
-    serves = cast(dict[str, Any], row["serves"] or {})
+def _place(row: ChannelReply) -> PlaceReply:
+    serves = row["serves"] or {}
     return {
         "where": {"kind": "channel", "id": row["id"], "name": row["name"], "type": row["type"]},
         "version": serves.get("version"),
@@ -356,15 +446,13 @@ def _place(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _steps(
-    live: list[dict[str, Any]], node_type: str, param: str, target: str, version: int | None
-) -> list[dict[str, Any]]:
+def _steps(live: list[Json], node_type: str, param: str, target: str, version: int | None) -> list[PlaceReply]:
     """Each live workflow step that names `target`: it runs the published version, so it is never pinned."""
-    out: list[dict[str, Any]] = []
+    out: list[PlaceReply] = []
     for d in live:
-        definition = cast(dict[str, Any], d["definition"] or {})
-        for n in cast(list[dict[str, Any]], definition.get("nodes") or []):
-            params = cast(dict[str, Any], n.get("parameters") or {})
+        definition = cast(Json, d["definition"] or {})
+        for n in cast(list[Json], definition.get("nodes") or []):
+            params = cast(Json, n.get("parameters") or {})
             if n.get("type") == node_type and params.get(param) == target:
                 out.append(
                     {
@@ -372,7 +460,7 @@ def _steps(
                             "kind": "workflow_step",
                             "id": str(n.get("id")),
                             "name": f"{d['name'] or d['workflow_id']}: {n.get('name') or n.get('id')}",
-                            "workflowId": d["workflow_id"],
+                            "workflowId": cast(str, d["workflow_id"]),
                         },
                         "version": version,
                         "pinned": False,
@@ -386,7 +474,7 @@ def _steps(
     return out
 
 
-def _versions(rows: list[dict[str, Any]], latest: int | None) -> list[dict[str, Any]]:
+def _versions(rows: list[PlaceReply], latest: int | None) -> list[VersionReply]:
     counts: dict[int, int] = {}
     for r in rows:
         v = latest if r["version"] == "latest" else r["version"]

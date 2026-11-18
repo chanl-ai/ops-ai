@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
 from ops_service_kit.errors import NotFound
-from ops_service_kit.http import Envelope, options_page, options_window, page_window, paged
+from ops_service_kit.http import Envelope, Json, options_page, options_window, page_window, paged
 from ops_store import isolation
 
 from ...activities.tool_directory import ToolsUnavailable
@@ -130,7 +130,7 @@ async def known_tools(rt: Runtime, *, fresh: bool = False, listed: ToolRows | No
 FACETS = ("app", "kind", "status")
 
 
-def _kind_of(tool: dict[str, Any], card: dict[str, Any] | None) -> str:
+def _kind_of(tool: dict[str, Any], card: Json | None) -> str:
     if tool["access"] == "workflow":
         return "workflow"
     if str(tool["id"]).startswith("agent:"):
@@ -138,7 +138,7 @@ def _kind_of(tool: dict[str, Any], card: dict[str, Any] | None) -> str:
     return "app" if card is not None and card.get("kind") in ("plugin", "builtin") else "custom"
 
 
-def _status_of(tool: dict[str, Any], card: dict[str, Any] | None) -> str:
+def _status_of(tool: dict[str, Any], card: Json | None) -> str:
     if card is not None and card.get("appGroup") != "on":
         # tools-service says who acts next: the person's own sign-in, or the team's (an admin).
         return "needs_your_sign_in" if card.get("appGroup") == "needs_you" else "app_not_connected"
@@ -244,10 +244,14 @@ async def not_added(rt: Runtime, team: str | None, search: str) -> list[dict[str
         return []
     q = search.strip().lower()
     return [
-        {"appId": str(c["id"]), "name": str(c["name"]), "count": int(c["toolsCount"]) - int(c["toolsAdded"])}
+        {
+            "appId": str(c["id"]),
+            "name": str(c["name"]),
+            "count": int(cast(float | str, c["toolsCount"])) - int(cast(float | str, c["toolsAdded"])),
+        }
         for c in cards
         if c.get("toolsAdded") is not None
-        and int(c["toolsCount"]) > int(c["toolsAdded"])
+        and int(cast(float | str, c["toolsCount"])) > int(cast(float | str, c["toolsAdded"]))
         and (not q or q in str(c["name"]).lower())
     ]
 
