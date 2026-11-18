@@ -90,7 +90,7 @@ def test_the_rule_reads_the_step_types_not_names() -> None:
 
 def test_each_trigger_kind_declares_its_start_form() -> None:
     reg = default_registry()
-    request = start_form(notice({"type": "string", "format": "file", "title": "Notice"}), reg)
+    request: dict[str, Any] | None = start_form(notice({"type": "string", "format": "file", "title": "Notice"}), reg)
     assert request is not None and request["kind"] == "form" and request["via"] == "form"
     assert request["schema"]["properties"]["notice"]["format"] == "file" and request["takesFiles"] is True
     email = start_form(

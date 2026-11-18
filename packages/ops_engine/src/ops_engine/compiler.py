@@ -994,7 +994,7 @@ async def _wait_for_children(
 
     while True:
         children = await runs.children(call.run_id, prefix)
-        begun = {int(c["index"]) for c in children}
+        begun = {int(cast("str | int | float", c["index"])) for c in children}
         unfinished = sum(1 for c in children if c["status"] not in ENDED)
         for index, item in enumerate(items):
             if unfinished >= batch:
@@ -1181,7 +1181,7 @@ async def action_send(call: NodeCall) -> Outcome:
     body = str(call.params.get("body") or "")
     if not to:
         return Outcome("error", {"error": "Send read no recipient.", "code": "no_recipient"})
-    arguments = {"to": to, "subject": subject, "body": body}
+    arguments: Json = {"to": to, "subject": subject, "body": body}
     token = None
     # A run without a review port (a unit run) sends without an own approval.
     reviews = cast("ReviewPort | None", call.ports.reviews)

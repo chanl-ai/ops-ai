@@ -24,6 +24,7 @@ from typing import Any, cast
 from langgraph.types import Command
 
 from ops_checkpointer import LeaseSupersededError
+from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 from ops_store import background
 
@@ -85,10 +86,10 @@ class WorkerHost:
     review_hours: Callable[[], Awaitable[float]] | None = None
     # Records a reminder on a review still waiting, with the run and {node, iteration, n, title, openedAt,
     # waitedHours}: the host reports it as its `task.reminder` service event. None records only the run's own event.
-    remind: Callable[[RunRow, dict[str, Any]], Awaitable[None]] | None = None
+    remind: Callable[[RunRow, Json], Awaitable[None]] | None = None
     # The URL and token an outside system resumes a step parked on its work with, from the run and its waiting
     # state; None gives a parked step no callback, so only its event or its time limit wakes it.
-    resume_link: Callable[[RunRow, dict[str, Any], float], dict[str, str]] | None = None
+    resume_link: Callable[[RunRow, Json, float], dict[str, str]] | None = None
     _cache: CompiledCache | None = field(default=None, init=False)
 
     def cache(self) -> CompiledCache:
@@ -97,21 +98,21 @@ class WorkerHost:
         return self._cache
 
 
-def config(run: RunRow, generation: int | None) -> dict[str, Any]:
-    configurable: dict[str, Any] = {"thread_id": run.id, "run_id": run.id, "engine_mode": run.mode}
+def config(run: RunRow, generation: int | None) -> Json:
+    configurable: Json = {"thread_id": run.id, "run_id": run.id, "engine_mode": run.mode}
     if generation is not None:
         configurable["lease_generation"] = generation
     return {"configurable": configurable, "recursion_limit": RECURSION_LIMIT}
 
 
-def ending(values: dict[str, Any]) -> dict[str, Any] | None:
+def ending(values: Json) -> Json | None:
     """The End node's envelope among the final values, if the run reached one."""
     for key, env in values.items():
         if key.startswith(CHANNEL) and isinstance(env, dict):
-            e = cast(dict[str, Any], env)
+            e = cast(Json, env)
             out = e.get("out")
             if e.get("port") == "" and isinstance(out, dict) and "outcome" in out:
-                return cast(dict[str, Any], out)
+                return cast(Json, out)
     return None
 
 
@@ -314,7 +315,7 @@ class Worker:
         stored = await self.definitions.row(run.workflow_id, run.version)
         if stored is None or stored.digest != run.digest:
             raise RuntimeError(f"{run.workflow_id} version {run.version} is missing or changed under its digest")
-        graph = self.host.cache().get(parse(cast(dict[str, Any], stored.definition)))
+        graph = self.host.cache().get(parse(stored.definition))
         cfg = config(run, generation)
         saver = self.host.checkpointer
         if hasattr(saver, "araise_fence"):
@@ -333,9 +334,9 @@ class Worker:
             if work.kind not in ("resume", "timeout"):
                 await self._waiting(run, generation, waiting)  # a start that reached its review before a crash
                 return
-            meant = cast(dict[str, Any], work.payload or {}).get("interruptId")
-            asked = cast(dict[str, Any], work.payload or {})
-            here = cast(dict[str, Any], waiting.value or {})
+            meant = cast(Json, work.payload or {}).get("interruptId")
+            asked = cast(Json, work.payload or {})
+            here = cast(Json, waiting.value or {})
             other_step = asked.get("node") is not None and asked.get("node") != here.get("node")
             other_pass = asked.get("iteration") is not None and asked.get("iteration") != here.get("iteration")
             if (meant is not None and meant != waiting.id) or other_step or other_pass:
@@ -346,8 +347,10 @@ class Worker:
             if here.get("kind") == "external":
                 # Every way a parked step wakes (event, callback, time limit) clears its wait row here too, so the
                 # time limit's resume leaves none behind.
-                await self.runs.unpark(run.id, str(here.get("node")), int(here.get("iteration") or 1))
-            graph_input = Command(resume=cast(dict[str, Any], work.payload or {}).get("resume"))
+                await self.runs.unpark(
+                    run.id, str(here.get("node")), int(cast("str | int | float", here.get("iteration") or 1))
+                )
+            graph_input = Command(resume=cast(Json, work.payload or {}).get("resume"))
         elif work.kind in ("timeout", "remind"):
             return  # the review was decided before its deadline or its reminder
         elif snap.next:
@@ -364,7 +367,7 @@ class Worker:
         async for mode, chunk in steps:
             if mode == "tasks":
                 phase = "end" if "result" in chunk else "start"
-                data: dict[str, Any] = {"phase": phase}
+                data: Json = {"phase": phase}
                 if phase == "end":
                     data["error"] = chunk.get("error") is not None
                 await self._event(run, generation, "node", chunk["name"], data)
@@ -375,14 +378,14 @@ class Worker:
             await self._finished(run, generation, graph, cfg)
 
     async def _waiting(self, run: RunRow, generation: int, interrupt: Any) -> None:
-        payload = cast(dict[str, Any], interrupt.value)
+        payload = cast(Json, interrupt.value)
         node = str(payload.get("node"))
-        iteration = int(payload.get("iteration") or 1)
+        iteration = int(cast("str | int | float", payload.get("iteration") or 1))
         waiting = {"node": node, "iteration": iteration, "interruptId": interrupt.id, "payload": payload}
         if payload.get("kind") == "external":
             # A step parked on outside work: the row its event or callback finds it by is written with the
             # waiting state, and the callback's URL and token are derived now, never stored apart from the run.
-            seconds = float(payload.get("timeoutSeconds") or 0)
+            seconds = float(cast("str | int | float", payload.get("timeoutSeconds") or 0))
             if self.host.resume_link is not None:
                 waiting["payload"] = payload | {"resume": self.host.resume_link(run, waiting, seconds)}
             wait = {
@@ -406,7 +409,7 @@ class Worker:
                 "timeout",
                 f"timeout:{run.id}:{node}:{iteration}",
                 {"resume": {"timeout": True}, "node": node, "iteration": iteration},
-                after_seconds=float(payload["wakeAfterSeconds"]),
+                after_seconds=float(cast("str | int | float", payload["wakeAfterSeconds"])),
             )
         if payload.get("remindEveryHours"):
             await self._next_reminder(run, payload, interrupt.id, 1)
@@ -420,22 +423,23 @@ class Worker:
                 "timeout",
                 f"timeout:{run.id}:{node}:{iteration}",
                 {"resume": resume, "interruptId": interrupt.id},
-                after_seconds=float(hours) * 3600,
+                after_seconds=float(cast("str | int | float", hours)) * 3600,
             )
 
-    async def _next_reminder(self, run: RunRow, payload: dict[str, Any], interrupt_id: str, n: int) -> None:
+    async def _next_reminder(self, run: RunRow, payload: Json, interrupt_id: str, n: int) -> None:
         """Queues reminder `n` of a waiting review, keyed by it, so a pause found again queues none twice."""
-        node, iteration = str(payload.get("node")), int(payload.get("iteration") or 1)
+        node, iteration = str(payload.get("node")), int(cast("str | int | float", payload.get("iteration") or 1))
         await self.queue.enqueue(
             run.id,
             "remind",
             f"remind:{run.id}:{node}:{iteration}:{n}",
             {"interruptId": interrupt_id, "node": node, "n": n},
-            after_seconds=float(payload["remindEveryHours"]) * 3600 * n - self._waited(payload),
+            after_seconds=float(cast("str | int | float", payload["remindEveryHours"])) * 3600 * n
+            - self._waited(payload),
         )
 
     @staticmethod
-    def _waited(payload: dict[str, Any]) -> float:
+    def _waited(payload: Json) -> float:
         """Seconds since the review opened, by its `openedAt`; 0 when it has none."""
         opened = payload.get("openedAt")
         if not isinstance(opened, str):
@@ -446,15 +450,15 @@ class Worker:
     async def _remind(self, run: RunRow, generation: int, work: Work, interrupt: Any) -> None:
         """A reminder falls due: recorded when the run still waits at the same review, then the next one queued. A
         review decided since, or a later pause, takes no reminder and queues none."""
-        asked = cast(dict[str, Any], work.payload or {})
+        asked = cast(Json, work.payload or {})
         if asked.get("interruptId") != interrupt.id:
             return
-        payload = cast(dict[str, Any], interrupt.value)
-        n = int(asked.get("n") or 1)
-        node, iteration = str(payload.get("node")), int(payload.get("iteration") or 1)
+        payload = cast(Json, interrupt.value)
+        n = int(cast("str | int | float", asked.get("n") or 1))
+        node, iteration = str(payload.get("node")), int(cast("str | int | float", payload.get("iteration") or 1))
         if await self.queue.leaving(run.id, interrupt.id, node, iteration):
             return  # decided, but the decision's row is queued behind this one
-        reminder: dict[str, Any] = {
+        reminder: Json = {
             "node": node,
             "iteration": iteration,
             "n": n,
@@ -478,8 +482,8 @@ class Worker:
             return f"Ended at {end}, an end marked as a failure"
         step = failing[-1]
         stored = await self.definitions.row(run.workflow_id, run.version)
-        definition = cast(dict[str, Any], (stored.definition if stored else None) or {})
-        nodes = cast(list[dict[str, Any]], definition.get("nodes") or [])
+        definition: Json = (stored.definition if stored else None) or {}
+        nodes = cast(list[Json], definition.get("nodes") or [])
         named = (str(n.get("name")) for n in nodes if n.get("id") == step.node_id and n.get("name"))
         name = next(named, step.node_id)
         out = step.output if isinstance(step.output, dict) else {}
@@ -488,8 +492,8 @@ class Worker:
         attempts = f" after {tries} attempts" if tries > 1 else ""
         return f"{name} failed{attempts}: {said}. The run ended at {end}."
 
-    async def _finished(self, run: RunRow, generation: int, graph: Any, cfg: dict[str, Any]) -> None:
-        values = cast(dict[str, Any], (await graph.aget_state(cfg)).values or {})
+    async def _finished(self, run: RunRow, generation: int, graph: Any, cfg: Json) -> None:
+        values = cast(Json, (await graph.aget_state(cfg)).values or {})
         end = ending(values) or {}
         outcome = str(end.get("outcome") or "done")
         failed = end.get("result") == "failed"

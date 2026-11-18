@@ -10,6 +10,8 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
+from ops_service_kit.http import Json, JsonList, JsonValue
+
 from .ports import PromptPort, PromptRequest
 
 # The ports every Classify step has besides one per category; a category may not take either name.
@@ -29,22 +31,22 @@ FIELD_TYPES: dict[str, str] = {
 
 @dataclass(frozen=True)
 class Job:
-    schema: Callable[[Mapping[str, Any]], dict[str, Any]]
-    instructions: Callable[[Mapping[str, Any]], str]
+    schema: Callable[[Mapping[str, JsonValue]], Json]
+    instructions: Callable[[Mapping[str, JsonValue]], str]
     # The port an answer leaves by, and the step's output.
-    route: Callable[[dict[str, Any], Mapping[str, Any]], tuple[str, dict[str, Any]]]
+    route: Callable[[Json, Mapping[str, JsonValue]], tuple[str, Json]]
 
 
-def _extra(params: Mapping[str, Any]) -> str:
+def _extra(params: Mapping[str, JsonValue]) -> str:
     more = str(params.get("instructions") or "").strip()
     return f"\n\n{more}" if more else ""
 
 
-def _categories(params: Mapping[str, Any]) -> list[dict[str, Any]]:
-    return [cast(dict[str, Any], c) for c in cast(list[Any], params.get("categories") or []) if isinstance(c, dict)]
+def _categories(params: Mapping[str, JsonValue]) -> list[Json]:
+    return [cast(Json, c) for c in cast(list[Any], params.get("categories") or []) if isinstance(c, dict)]
 
 
-def _classify_schema(params: Mapping[str, Any]) -> dict[str, Any]:
+def _classify_schema(params: Mapping[str, JsonValue]) -> Json:
     names = [str(c["name"]) for c in _categories(params)]
     return {
         "type": "object",
@@ -59,7 +61,7 @@ def _classify_schema(params: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _classify_instructions(params: Mapping[str, Any]) -> str:
+def _classify_instructions(params: Mapping[str, JsonValue]) -> str:
     lines = "\n".join(f"- {c['name']}: {c.get('description') or c['name']}" for c in _categories(params))
     return (
         "Put the text in exactly one of these categories, or none when none fits. Give your confidence from 0 to 1 "
@@ -67,11 +69,11 @@ def _classify_instructions(params: Mapping[str, Any]) -> str:
     )
 
 
-def _classify_route(answer: dict[str, Any], params: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
+def _classify_route(answer: Json, params: Mapping[str, JsonValue]) -> tuple[str, Json]:
     names = {str(c["name"]) for c in _categories(params)}
     floor = params.get("minConfidence")
     floor = float(floor) if isinstance(floor, int | float) else DEFAULT_FLOOR
-    category, confidence = str(answer.get("category")), float(answer.get("confidence") or 0)
+    category, confidence = str(answer.get("category")), float(cast("str | int | float", answer.get("confidence") or 0))
     out = {
         "category": category if category in names else None,
         "confidence": confidence,
@@ -81,7 +83,7 @@ def _classify_route(answer: dict[str, Any], params: Mapping[str, Any]) -> tuple[
     return (category if category in names and confidence >= floor else OTHERWISE), out
 
 
-def _summary_schema(params: Mapping[str, Any]) -> dict[str, Any]:
+def _summary_schema(params: Mapping[str, JsonValue]) -> Json:
     return {
         "type": "object",
         "additionalProperties": False,
@@ -90,7 +92,7 @@ def _summary_schema(params: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _summary_instructions(params: Mapping[str, Any]) -> str:
+def _summary_instructions(params: Mapping[str, JsonValue]) -> str:
     words = params.get("maxWords")
     n = int(words) if isinstance(words, int) and words > 0 else DEFAULT_WORDS
     return f"Summarise the text in at most {n} words, keeping names, amounts and dates exactly as written." + _extra(
@@ -98,24 +100,24 @@ def _summary_instructions(params: Mapping[str, Any]) -> str:
     )
 
 
-def fields_schema(fields: list[dict[str, Any]]) -> dict[str, Any]:
+def fields_schema(fields: list[Json]) -> Json:
     """The answer for Extract from text: each field's value by its key, null when the text does not give it."""
-    props: dict[str, Any] = {}
+    props: Json = {}
     for f in fields:
-        kind: dict[str, Any] = {"type": [FIELD_TYPES.get(str(f.get("type") or "text"), "string"), "null"]}
+        kind: Json = {"type": [FIELD_TYPES.get(str(f.get("type") or "text"), "string"), "null"]}
         if f.get("type") == "enum" and f.get("options"):
-            kind["enum"] = [*cast(list[Any], f["options"]), None]
+            kind["enum"] = [*cast(JsonList, f["options"]), None]
         if f.get("description"):
             kind["description"] = str(f["description"])
         props[str(f["key"])] = kind
     return {"type": "object", "additionalProperties": False, "required": list(props), "properties": props}
 
 
-def _fields(params: Mapping[str, Any]) -> list[dict[str, Any]]:
-    return [cast(dict[str, Any], f) for f in cast(list[Any], params.get("fields") or []) if isinstance(f, dict)]
+def _fields(params: Mapping[str, JsonValue]) -> list[Json]:
+    return [cast(Json, f) for f in cast(list[Any], params.get("fields") or []) if isinstance(f, dict)]
 
 
-def _extract_instructions(params: Mapping[str, Any]) -> str:
+def _extract_instructions(params: Mapping[str, JsonValue]) -> str:
     lines = "\n".join(f"- {f['key']}: {f.get('label') or f['key']}" for f in _fields(params))
     return (
         "Read these fields from the text. Give each value as the text writes it; give null for a field the text does "
@@ -123,7 +125,7 @@ def _extract_instructions(params: Mapping[str, Any]) -> str:
     )
 
 
-def _draft_schema(params: Mapping[str, Any]) -> dict[str, Any]:
+def _draft_schema(params: Mapping[str, JsonValue]) -> Json:
     return {
         "type": "object",
         "additionalProperties": False,
@@ -132,14 +134,14 @@ def _draft_schema(params: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _draft_instructions(params: Mapping[str, Any]) -> str:
+def _draft_instructions(params: Mapping[str, JsonValue]) -> str:
     return (
         "Write the draft the instructions ask for, from the text given. It is a draft: a person or a later step sends "
         "it. Give a subject when it is an email, else null." + _extra(params)
     )
 
 
-def _ok(answer: dict[str, Any], params: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
+def _ok(answer: Json, params: Mapping[str, JsonValue]) -> tuple[str, Json]:
     return "ok", answer
 
 
@@ -157,22 +159,22 @@ def message_of(text: Any) -> str:
 
 
 async def resolve_fields(
-    params: Mapping[str, Any], lookup: Callable[[str, int | None], Awaitable[list[dict[str, Any]]]] | None
-) -> dict[str, Any]:
+    params: Mapping[str, JsonValue], lookup: Callable[[str, int | None], Awaitable[list[Json]]] | None
+) -> Json:
     """The step's settings with a named document type's fields in place (Extract from text): `lookup` reads
     them as whoever runs the step, the run's team in a workflow or the caller's on the route."""
     out = dict(params)
     if (ref := out.get("documentType")) and not out.get("fields"):
         if lookup is None:
             raise RuntimeError("no document types lookup: this host cannot read a document type's fields")
-        typed = cast(dict[str, Any], ref)
-        out["fields"] = await lookup(str(typed["id"]), cast(int | None, typed.get("version")))
+        typed = cast(Json, ref)
+        out["fields"] = cast(JsonList, await lookup(str(typed["id"]), cast(int | None, typed.get("version"))))
     return out
 
 
 async def run(
-    type_id: str, params: Mapping[str, Any], prompts: PromptPort, *, turn_id: str, run_id: str | None = None
-) -> tuple[str, dict[str, Any]]:
+    type_id: str, params: Mapping[str, JsonValue], prompts: PromptPort, *, turn_id: str, run_id: str | None = None
+) -> tuple[str, Json]:
     """One AI step's answer and the port it leaves by: the workflow step (compiler.ai_prompt) and agents-service's
     AI step route both run it, so a step and an outside caller get the same answer. An answer outside the schema, or
     a host that refuses the call, leaves by error; a model out of reach is raised by the port."""
@@ -189,4 +191,4 @@ async def run(
     )
     if not result.ok:
         return ERROR, {"error": result.error or result.text, "code": result.code}
-    return job.route(cast(dict[str, Any], result.output or {}), params)
+    return job.route(cast(Json, result.output or {}), params)
