@@ -84,7 +84,7 @@ async def tell_parent(rt: Runtime, child: Mapping[str, JsonValue]) -> None:
     the conversation shows after the turn that started it. No model call; the person reads the outcome."""
     meta = narrow.an_object(child.get("meta") or {}, "thread meta")
     parent_id = meta.get("parentThreadId")
-    parent = await graph_store(rt).thread(str(parent_id)) if parent_id else None
+    parent = await graph_store(rt).thread_row(str(parent_id)) if parent_id else None
     if parent is None:
         return
     child_id = str(child["id"])
@@ -93,7 +93,7 @@ async def tell_parent(rt: Runtime, child: Mapping[str, JsonValue]) -> None:
     values: Json = (await graph.aget_state(config(child_id))).values or {}
     if meta.get("startedBy") == "workflow":
         # A levy case: the parent case lists each child's outcome, read from its own meta.
-        listed = narrow.entries(narrow.an_object(parent.get("meta") or {}, "thread meta").get("children"))
+        listed = narrow.entries(parent.meta_object().get("children"))
         entry: Json = {
             "threadId": child_id,
             "customerId": meta.get("customerId"),
@@ -104,11 +104,11 @@ async def tell_parent(rt: Runtime, child: Mapping[str, JsonValue]) -> None:
             "note": values.get("note"),
         }
         others = [c for c in listed if narrow.an_object(c, "a listed child").get("threadId") != child_id]
-        await graph_store(rt).merge_meta(parent["id"], {"children": [*others, entry]}, lock=True)
-        await write_children_back(rt, parent["id"], child_id)
+        await graph_store(rt).merge_meta(parent.id, {"children": [*others, entry]}, lock=True)
+        await write_children_back(rt, parent.id, child_id)
     await EventLog(graph_store(rt).engine).append(
-        thread_id=parent["id"],
-        team_id=parent["team_id"],
+        thread_id=parent.id,
+        team_id=parent.team_id,
         run_id=None,
         type_="child_finished",
         data={
@@ -265,8 +265,8 @@ class ChildRuns:
         no person and is not a chat (an unattended agent run, which acts as the agent)."""
         person = TURN_PERSON.get()
         if person is None:
-            parent = await graph_store(self.rt).thread(parent_thread_id) if parent_thread_id else None
-            if parent is not None and narrow.an_object(parent["meta"] or {}, "thread meta").get("chat"):
+            parent = await graph_store(self.rt).thread_row(parent_thread_id) if parent_thread_id else None
+            if parent is not None and parent.meta_object().get("chat"):
                 return Forbidden(
                     "This conversation's person is not known to this turn, so it starts no workflow; ask again.",
                     code="person_required",
@@ -358,29 +358,29 @@ class ChildRuns:
             why = await refusal(self.rt, workflow)
             message = why.message if why else f"Workflow {workflow} is not published, so it cannot start."
             return ToolOutcome(ok=False, output={"error": message, "code": why.code if why else "not_published"})
-        parent = await store.thread(parent_thread_id)
+        parent = await store.thread_row(parent_thread_id)
         assert parent is not None, "a tool runs inside its parent's run"
         thread_meta: Json = {
             "startedBy": "agent",
             # The person a chat turn ran it for, beside the agent that started it.
             **({"startedFor": person.email} if (person := TURN_PERSON.get()) is not None else {}),
-            "agentName": narrow.an_object(parent["meta"] or {}, "thread meta").get("agentName") or "an agent",
+            "agentName": parent.meta_object().get("agentName") or "an agent",
             **(meta or {}),
             "parentThreadId": parent_thread_id,
             "parentRunId": parent_run_id,
         }
-        row, created = await store.find_or_create_thread(
+        row, created = await store.open_thread(
             new_id("gth"),
             workflow,
             thread_meta,
-            parent["team_id"],
+            parent.team_id,
             now_iso(),
             external_key=f"tool:{key}",
             parent_thread_id=parent_thread_id,
             version=pin[0],
             digest=pin[1],
         )
-        thread_id = row["id"]
+        thread_id = row.id
         if created:
             await self._run(
                 thread_id,
@@ -394,14 +394,14 @@ class ChildRuns:
     ) -> ToolOutcome:
         """Starts a v2 workflow through the runner's queue, keyed by the tool call so a retried turn meets the same
         run, and waits for a worker to end or pause it. The output carries the run id, so the chat links the run."""
-        parent = await graph_store(self.rt).thread(parent_thread_id)
-        meta = narrow.an_object((parent or {}).get("meta") or {}, "thread meta")
+        parent = await graph_store(self.rt).thread_row(parent_thread_id)
+        meta = parent.meta_object() if parent is not None else {}
         runs = RunStore(EngineTransactions(self.rt.db))
         try:
             run, _ = await start_run(
                 runs,
                 stored,
-                team_id=(parent or {}).get("team_id") or "local",
+                team_id=(parent.team_id if parent is not None else "") or "local",
                 mode="live",
                 input=arguments,
                 run_key=f"tool:{key}",

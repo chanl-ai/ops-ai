@@ -232,8 +232,8 @@ async def create_thread(rt: Rt, me: Me, _: Tx, body: ThreadInput) -> JSONRespons
                 raise Conflict(
                     f"Deployment {body.deployment_id} is paused; it opens no new cases.", code="deployment_paused"
                 )
-            return ok({"threadId": existing["id"], "graph": existing["graph"], "created": False})
-    row, created = await store.find_or_create_thread(
+            return ok({"threadId": existing.id, "graph": existing.graph, "created": False})
+    row, created = await store.open_thread(
         thread_id,
         body.graph,
         owned(body.metadata, me),
@@ -246,9 +246,9 @@ async def create_thread(rt: Rt, me: Me, _: Tx, body: ThreadInput) -> JSONRespons
         digest=digest,
     )
     if created:
-        await _set_budget(rt, row["id"], body.budget, default_budget)
-        await _agent_budget(rt, row["id"], body.graph)
-    data = {"threadId": row["id"], "graph": row["graph"], "version": row["version"], "created": created}
+        await _set_budget(rt, row.id, body.budget, default_budget)
+        await _agent_budget(rt, row.id, body.graph)
+    data = {"threadId": row.id, "graph": row.graph, "version": row.version, "created": created}
     return ok(data, status=201 if created else 200)
 
 

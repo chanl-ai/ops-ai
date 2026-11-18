@@ -10,6 +10,7 @@ from collections.abc import Collection, Mapping, Sequence
 from typing import Any, ClassVar
 
 import sqlalchemy as sa
+import sqlalchemy.exc
 from pydantic import BaseModel, JsonValue
 
 from ops_service_kit import narrow
@@ -109,7 +110,8 @@ class RunThread(BaseModel):
 
 
 class ThreadRow(BaseModel):
-    """A `graph_threads` row, every column."""
+    """A `graph_threads` row, every column, refused when its meta is not an object or its overrides are neither an
+    object nor null: the lists, reviews and `runs.resolve` that read it fail on such a row."""
 
     id: str
     graph: str
@@ -126,6 +128,32 @@ class ThreadRow(BaseModel):
     overrides: dict[str, JsonValue] | None
     owner: str | None
     tenant_id: str
+
+
+class StoredThread(BaseModel):
+    """A `graph_threads` row, every column, as stored: `meta` and `overrides` are whatever JSON the row holds, for the
+    reads that never refused a row (`thread`, `threads`, `open_thread`). `meta_object` is the object view; access and
+    list rules read a strict `ThreadRow` instead."""
+
+    id: str
+    graph: str
+    meta: JsonValue
+    team_id: str
+    created_at: str
+    updated_at: str
+    status: str
+    version: int | None
+    digest: str | None
+    external_key: str | None
+    deployment_id: str | None
+    parent_thread_id: str | None
+    overrides: JsonValue
+    owner: str | None
+    tenant_id: str
+
+    def meta_object(self) -> Json:
+        """The meta as an object, empty when unset (null or empty); any other value fails as `Malformed`."""
+        return narrow.an_object(self.meta or {}, "thread meta")
 
 
 class StoredVersion(BaseModel):
@@ -232,15 +260,21 @@ class GraphStore(RuntimeStore):
             row = (await c.execute(q)).first()
         return (str(row[0]), str(row[1])) if row else None
 
-    async def thread_by_key(self, external_key: str) -> dict[str, Any] | None:
+    async def thread_by_key(self, external_key: str) -> StoredThread | None:
         async with self.tx() as c:
             q = graph_threads.select().where(
                 graph_threads.c.external_key == external_key, mine(graph_threads), team_visible(graph_threads)
             )
-            row = (await c.execute(q)).mappings().first()
-        return dict(row) if row else None
+            return await one(c, q.limit(1), StoredThread)
 
     async def find_or_create_thread(
+        self, thread_id: str, graph: str, meta: Json, team_id: str, now: str, *, external_key: str
+    ) -> tuple[dict[str, Any], bool]:
+        """`open_thread` with the row as a mapping, for the callers that still read a thread by key."""
+        row, created = await self.open_thread(thread_id, graph, meta, team_id, now, external_key=external_key)
+        return row.model_dump(), created
+
+    async def open_thread(
         self,
         thread_id: str,
         graph: str,
@@ -253,7 +287,7 @@ class GraphStore(RuntimeStore):
         parent_thread_id: str | None = None,
         version: int | None = None,
         digest: str | None = None,
-    ) -> tuple[dict[str, Any], bool]:
+    ) -> tuple[StoredThread, bool]:
         """The thread for `external_key`, created when there is none, in one transaction: the insert either wins or
         conflicts on the unique key, and the conflict path reads the existing row. Returns (row, created)."""
         values = {
@@ -275,20 +309,17 @@ class GraphStore(RuntimeStore):
         async with self.tx() as c:
             stmt = insert_ignore(c, graph_threads, values, keys=["tenant_id", "external_key"])
             created = (await c.execute(stmt)).rowcount == 1
-            row = (
-                (
-                    await c.execute(
-                        graph_threads.select().where(
-                            graph_threads.c.external_key == external_key,
-                            mine(graph_threads),
-                            team_visible(graph_threads),
-                        )
-                    )
-                )
-                .mappings()
-                .one()
+            row = await one(
+                c,
+                graph_threads.select().where(
+                    graph_threads.c.external_key == external_key, mine(graph_threads), team_visible(graph_threads)
+                ),
+                StoredThread,
             )
-        return dict(row), created
+            if row is None:
+                # Inside the transaction, so the insert rolls back with it (another team's thread holds the key).
+                raise sqlalchemy.exc.NoResultFound("No row was found when one was required")
+        return row, created
 
     async def pin(self, thread_id: str, version: int, digest: str, now: str) -> None:
         async with self.tx() as c:
@@ -370,22 +401,19 @@ class GraphStore(RuntimeStore):
             )
             return version
 
-    async def thread(self, thread_id: str) -> dict[str, Any] | None:
+    async def thread_row(self, thread_id: str) -> StoredThread | None:
+        q = graph_threads.select().where(
+            graph_threads.c.id == thread_id, mine(graph_threads), team_visible(graph_threads)
+        )
         async with self.tx() as c:
-            row = (
-                (
-                    await c.execute(
-                        graph_threads.select().where(
-                            graph_threads.c.id == thread_id, mine(graph_threads), team_visible(graph_threads)
-                        )
-                    )
-                )
-                .mappings()
-                .first()
-            )
-        return dict(row) if row else None
+            return await one(c, q, StoredThread)
 
-    async def threads(self, graph: str | None) -> list[dict[str, Any]]:
+    async def thread(self, thread_id: str) -> dict[str, Any] | None:
+        """`thread_row` as a mapping, for the callers that still read a thread by key."""
+        row = await self.thread_row(thread_id)
+        return row.model_dump() if row is not None else None
+
+    async def thread_rows(self, graph: str | None) -> list[StoredThread]:
         q = (
             graph_threads.select()
             .where(mine(graph_threads), team_visible(graph_threads))
@@ -394,7 +422,11 @@ class GraphStore(RuntimeStore):
         if graph:
             q = q.where(graph_threads.c.graph == graph)
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, StoredThread)
+
+    async def threads(self, graph: str | None) -> list[dict[str, Any]]:
+        """`thread_rows` as mappings, for the callers that still read a thread by key."""
+        return [r.model_dump() for r in await self.thread_rows(graph)]
 
     async def thread_page(
         self, graph: str, labels: Mapping[str, str], other: str, wanted: Sequence[str], *, offset: int, limit: int

@@ -86,14 +86,16 @@ async def definition(rt: Runtime, name: str, version: int) -> WorkflowDefinition
 
 async def resolve(rt: Runtime, thread_id: str) -> tuple[dict[str, Any], Any]:
     """The thread and the graph it runs on: a code graph by name, or its pinned workflow version compiled from JSON."""
-    row = await graph_store(rt).thread(thread_id)
+    row = await graph_store(rt).thread_row(thread_id)
     if row is None:
         # Another tenant's or team's thread is not found either: the store and the database never return it.
         raise NotFound("Thread")
-    found = (await resolve_rows(rt, [ThreadRow.model_validate(row)])).graphs[thread_id]
+    stored = row.model_dump()
+    # Strict: a thread whose meta is not an object, or whose overrides are neither an object nor null, does not resolve.
+    found = (await resolve_rows(rt, [ThreadRow.model_validate(stored)])).graphs[thread_id]
     if isinstance(found, ApiError):
         raise found
-    return row, found
+    return stored, found
 
 
 # A thread's graph, compiled from code or from its pinned workflow version; LangGraph ships no type stubs, so the
