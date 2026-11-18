@@ -1,17 +1,13 @@
 // uc-054 a builder imports a spec with access preset per operation and no connection to pick, ui layer:
 // docs/usecases/console/import-presets-access.md. Signed in through platform-service; tools-service reads the fake
 // bank's spec over https.
-import { PLATFORM_PORT, TOOLS_PORT, check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
-
-const tools = `http://127.0.0.1:${TOOLS_PORT}`;
-const tokenFor = async (email) => (await (await fetch(`http://127.0.0.1:${PLATFORM_PORT}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: 'northfield-demo' }) })).json()).data.token;
+import { check, chromium, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
+import { allowBank } from '../../lib/connection_ui.mjs';
 
 await withUiStack(
   async (consoleUrl, stack) => {
-    // An admin allows the bank's host and the private range it serves on.
-    const P = { Authorization: `Bearer ${await tokenFor('p.shah@harborpine.example')}`, 'X-Team-Id': 'team_ops', 'Content-Type': 'application/json' };
-    await fetch(`${tools}/v1/egress/hosts`, { method: 'POST', headers: P, body: JSON.stringify({ value: stack.bank.host, note: 'uc-054' }) });
-    await fetch(`${tools}/v1/egress/ranges`, { method: 'POST', headers: P, body: JSON.stringify({ value: stack.bank.range, note: 'uc-054' }) });
+    // A Security admin allows the bank's host and the private range it serves on.
+    await allowBank(stack.bank);
 
     const browser = await chromium.launch();
     try {
