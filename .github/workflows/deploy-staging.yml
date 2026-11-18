@@ -2,8 +2,9 @@
 #   - ci.yml calls it after ci-ok passes on a push to develop, with that commit;
 #   - anyone with write access runs it by hand (Actions, deploy-staging, Run workflow, or `make stg-deploy-ci REF=`)
 #     with a branch, tag or commit.
-# A merge is not deployed while staging is pinned: an open release PR (develop into main) or the repository variable
-# STAGING_HOLD (its value is the reason). A hand-started run deploys anyway and says in the summary what it overrode.
+# A merge to develop is not deployed while staging is frozen: a release/* or hotfix/* branch exists on origin (a release
+# under test must not be overwritten) or the repository variable STAGING_HOLD is set (its value is the reason). A push
+# to a release or hotfix branch is deployed, and so is a hand-started run, which says in the summary what it overrode.
 #
 # The deploy is .github/actions/stg-deploy (`make stg-deploy REF=<sha>`): build once per commit, migrate, grants, every
 # process up, OCR, plugins, a signed-in request, then the click walk (skip_walk leaves the walk out). When a step fails
@@ -52,7 +53,6 @@ jobs:
       url: https://${{ vars.STG_APP }}.fly.dev
     permissions:
       contents: read
-      pull-requests: read # to see an open release PR
     # One deploy at a time, from either trigger. A run that is waiting is replaced by a newer one; a running one finishes.
     # Set on the job: concurrency at the top of a called workflow does not apply.
     concurrency:
@@ -77,7 +77,6 @@ jobs:
       - name: What to deploy, and is staging pinned?
         id: plan
         env:
-          GH_TOKEN: ${{ github.token }}
           ASKED: ${{ inputs.ref }}
           HOLD: ${{ vars.STAGING_HOLD }}
         run: |
@@ -85,10 +84,16 @@ jobs:
           sha=$(git rev-parse --verify -q "$ASKED^{commit}" || git rev-parse --verify -q "origin/$ASKED^{commit}") \
             || { echo "::error title=Staging not deployed::No commit named $ASKED"; exit 1; }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          # The pin file stg_deploy.sh reads lives on the owner's machine, so the runner asks GitHub instead.
-          release=$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --head develop --state open --json number --jq '.[0].number // empty')
+          # The pin file stg_deploy.sh reads lives on the owner's machine, so the runner asks the remote instead. Only a
+          # develop push is frozen: a push to the release or hotfix branch itself is the deploy being tested.
           pin=""
-          [ -z "$release" ] || pin="release PR #$release is open"
+          case "$GITHUB_REF" in
+            refs/heads/release/* | refs/heads/hotfix/*) ;;
+            *)
+              branches=$(git ls-remote --heads origin 'refs/heads/release/*' 'refs/heads/hotfix/*' | sed 's|.*refs/heads/||' | tr '\n' ' ')
+              [ -z "$branches" ] || pin="staging is frozen for ${branches% }"
+              ;;
+          esac
           [ -z "$HOLD" ] || pin="${pin:+$pin; }STAGING_HOLD is set: $HOLD"
           go=true
           if [ -n "$pin" ] && [ "$MANUAL" = true ]; then
@@ -96,7 +101,7 @@ jobs:
             echo "::warning title=Staging pin overridden::$note"
           elif [ -n "$pin" ]; then
             go=false
-            note="Not deployed: $pin. Clear STAGING_HOLD or merge or close the release PR; the next merge to develop deploys."
+            note="Not deployed: $pin. Clear STAGING_HOLD, or merge the release or hotfix branch and delete it; the next merge to develop deploys."
             echo "::notice title=Staging not deployed::$note"
           else
             note=""

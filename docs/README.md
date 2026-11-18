@@ -188,6 +188,7 @@ Start at `architecture/README.md`; it gives the reading order and what is proven
 | `deploy/fly-staging.md` | Staging on one Fly machine: what runs, the facts that shape the image, the commands that create the app, first-run steps, deploy and roll back, and a local run |
 | `deploy/demo-mailbox.md` | A demo mailbox on Fly: the Stalwart mail server, its DNS records, secrets, sending a test, rotating the password and the cost |
 | `deploy/docs-site.md` | The docs site (`apps/docs`) on Vercel: project settings, the static build under `/docs`, and serving it at a path of another host |
+| `deploy/release.md` | Releasing with gitflow: `release/X.Y.Z` cut from develop, tested on staging, merged into main with a merge commit, tagged and merged back; hotfixes; what each push or tag starts; the checks after; the branch protection to set |
 | `deploy/release-package.md` | The release package a client team installs from: `make release-package`, what it holds, the proof from the tarball alone, the facts that shape it and what pushing the images would need |
 | `deploy/security-scanning.md` | Every security scan (CodeQL, Scorecard, the dependency check, the release image scan), the SBOM, signatures and build provenance on each release, the settings the owner switches on, and how to verify a release |
 | `deploy/install-guide.md` | Generated from `guide/install.md` and `guide/operate.md` and shipped in the release package as INSTALL.md: install with install.sh, then status, logs, upgrade, back up, restore and scaling |
