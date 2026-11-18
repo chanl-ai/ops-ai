@@ -1,7 +1,5 @@
-# 15 boundaries crossed without a model in packages/ops_identity (scripts/check_typed_boundaries.py). A row may only fall.
-1 dict-any packages/ops_identity/src/ops_identity/acting_for.py
-8 dict-any packages/ops_identity/src/ops_identity/client.py
-1 dict-any packages/ops_identity/src/ops_identity/fastapi.py
+# 6 boundaries crossed without a model in packages/ops_identity (scripts/check_typed_boundaries.py). A row may only fall.
+1 dict-any packages/ops_identity/src/ops_identity/client.py
 1 dict-any packages/ops_identity/src/ops_identity/jwks.py
 3 dict-any packages/ops_identity/src/ops_identity/principal.py
 1 dict-any packages/ops_identity/src/ops_identity/resolve.py

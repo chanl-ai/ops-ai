@@ -1,3 +1,2 @@
-# 22 boundaries crossed without a model in services/documents-service (scripts/check_typed_boundaries.py). A row may only fall.
-14 dict-any services/documents-service/src/ops_documents/document_types.py
+# 8 boundaries crossed without a model in services/documents-service (scripts/check_typed_boundaries.py). A row may only fall.
 8 dict-any services/documents-service/src/ops_documents/models.py
