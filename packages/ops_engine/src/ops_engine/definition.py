@@ -80,7 +80,7 @@ class WorkflowDefinition(_Model):
     def node(self, node_id: str) -> NodeInstance | None:
         return next((n for n in self.nodes if n.id == node_id), None)
 
-    def wire(self) -> Json:
+    def wire(self) -> dict[str, Any]:
         return self.model_dump(mode="json", by_alias=True)
 
     def digest(self) -> str:
