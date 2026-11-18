@@ -13,31 +13,34 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, Protocol, cast
 
+from ops_service_kit.http import Json, JsonValue
+
 from . import ai_steps
 from .definition import NodeInstance, WorkflowDefinition, mappings
 from .node_types import NodeType, TypeRegistry
 
-Shape = dict[str, Any]
+Shape = Json
 Ports = dict[str, Shape]
 
 
 class Lookups(Protocol):
     """What a shape needs from other services, read as whoever asks for the shapes."""
 
-    async def document_fields(self, type_id: str, version: int | None) -> list[dict[str, Any]]: ...
+    async def document_fields(self, type_id: str, version: int | None) -> list[Json]: ...
 
     async def operation_output(self, operation: str) -> Shape | None: ...
 
 
 def closed(
-    required: tuple[str, ...] = (), optional: tuple[str, ...] = (), props: Mapping[str, Shape] | None = None
+    required: tuple[str, ...] = (), optional: tuple[str, ...] = (), props: Mapping[str, JsonValue] | None = None
 ) -> Shape:
-    typed = dict(props or {})
-    properties: dict[str, Shape] = {k: typed.get(k, {}) for k in (*required, *optional)} | typed
-    return {"type": "object", "properties": properties, "required": list(required), "additionalProperties": False}
+    typed: Json = dict(props or {})
+    properties: Json = {k: typed.get(k, {}) for k in (*required, *optional)} | typed
+    listed: list[JsonValue] = list(required)
+    return {"type": "object", "properties": properties, "required": listed, "additionalProperties": False}
 
 
-def opened(required: tuple[str, ...] = (), props: Mapping[str, Shape] | None = None) -> Shape:
+def opened(required: tuple[str, ...] = (), props: Mapping[str, JsonValue] | None = None) -> Shape:
     shape = closed(required, props=props)
     del shape["additionalProperties"]
     return shape
@@ -51,12 +54,10 @@ def mismatches(shape: Shape, out: Any) -> list[str]:
     """What `out` breaks of `shape`: a key a closed shape does not list, or a required key it lacks."""
     if not isinstance(out, Mapping):
         return [f"wrote {type(out).__name__}, not an object"]
-    keys = {str(k) for k in cast(Mapping[str, Any], out)}
+    keys = {str(k) for k in cast(Mapping[str, JsonValue], out)}
     problems = [f"requires {k}" for k in cast(list[str], shape.get("required") or []) if k not in keys]
     if not is_open(shape):
-        problems += [
-            f"undeclared {k}" for k in sorted(keys - set(cast(Mapping[str, Any], shape.get("properties") or {})))
-        ]
+        problems += [f"undeclared {k}" for k in sorted(keys - set(cast(Json, shape.get("properties") or {})))]
     return problems
 
 
@@ -70,7 +71,7 @@ EMAIL = closed(
 
 
 def _keys(value: Any) -> tuple[str, ...]:
-    return tuple(str(k) for k in cast(Mapping[str, Any], value)) if isinstance(value, Mapping) else ()
+    return tuple(str(k) for k in cast(Mapping[str, JsonValue], value)) if isinstance(value, Mapping) else ()
 
 
 async def _trigger(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
@@ -127,7 +128,7 @@ async def _switch(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
 
 
 async def _combine(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
-    fields = [str(f.get("field")) for f in cast(list[Mapping[str, Any]], node.parameters.get("fields") or [])]
+    fields = [str(f.get("field")) for f in cast(list[Json], node.parameters.get("fields") or [])]
     # A source may give fields the step does not list, so its values stay open.
     values = opened(props={f: {} for f in fields})
     out = closed(("values", "sources", "conflicts", "hasConflicts"), props={"values": values})
@@ -173,7 +174,7 @@ async def _extract(node: NodeInstance, t: NodeType, lookups: Lookups) -> Ports:
     (records, what needs review) besides, so it stays open."""
     ref = node.parameters.get("documentType")
     fields: dict[str, Shape] = {}
-    typed: Mapping[str, Any] = cast(Mapping[str, Any], ref) if isinstance(ref, Mapping) else {}
+    typed: Json = cast(Json, ref) if isinstance(ref, Mapping) else {}
     if typed.get("id"):
         listed = await lookups.document_fields(str(typed["id"]), cast(int | None, typed.get("version")))
         fields = {str(f.get("key") or f.get("name")): {} for f in listed}
@@ -283,7 +284,7 @@ async def shapes(d: WorkflowDefinition, registry: TypeRegistry, lookups: Lookups
             continue
         out[n.id] = await BUILDERS[t.executor](n, t, lookups)
     for n in joins:
-        branches = {
+        branches: Json = {
             c.source.node: {"anyOf": [out.get(c.source.node, {}).get(c.source.port, ANY), {"type": "null"}]}
             for c in d.connections
             if c.target.node == n.id
@@ -300,11 +301,11 @@ def _field_of(path: str) -> tuple[str, str] | None:
     return None
 
 
-async def unknown_fields(d: WorkflowDefinition, registry: TypeRegistry, lookups: Lookups) -> list[dict[str, Any]]:
+async def unknown_fields(d: WorkflowDefinition, registry: TypeRegistry, lookups: Lookups) -> list[Json]:
     """`unknown_output_field` warnings: a mapping reads a field no port of the step it names can output, every one of
     that step's shapes being closed. A field an open shape may carry is never warned."""
     found = await shapes(d, registry, lookups)
-    out: list[dict[str, Any]] = []
+    out: list[Json] = []
     for n in d.nodes:
         for path in mappings(n.parameters):
             read = _field_of(path)
@@ -312,7 +313,7 @@ async def unknown_fields(d: WorkflowDefinition, registry: TypeRegistry, lookups:
                 continue
             step, field = read
             ports = found[step].values()
-            if any(is_open(s) or field in (s.get("properties") or {}) for s in ports):
+            if any(is_open(s) or field in cast(Json, s.get("properties") or {}) for s in ports):
                 continue
             message = f"{path} reads {field}, which {step} never outputs."
             out.append(

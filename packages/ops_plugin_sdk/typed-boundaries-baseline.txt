@@ -1,9 +1,5 @@
-# 63 boundaries crossed without a model in packages/ops_plugin_sdk (scripts/check_typed_boundaries.py). A row may only fall.
-4 dict-any packages/ops_plugin_sdk/src/ops_plugin_sdk/answers.py
+# 26 boundaries crossed without a model in packages/ops_plugin_sdk (scripts/check_typed_boundaries.py). A row may only fall.
 6 dict-any packages/ops_plugin_sdk/src/ops_plugin_sdk/context.py
-1 dict-any packages/ops_plugin_sdk/src/ops_plugin_sdk/formats.py
 1 dict-any packages/ops_plugin_sdk/src/ops_plugin_sdk/knowledge.py
-1 dict-any packages/ops_plugin_sdk/src/ops_plugin_sdk/manifest.py
-13 dict-any packages/ops_plugin_sdk/src/ops_plugin_sdk/paging.py
-25 dict-any packages/ops_plugin_sdk/src/ops_plugin_sdk/testing.py
-12 dict-any packages/ops_plugin_sdk/src/ops_plugin_sdk/versions.py
+7 dict-any packages/ops_plugin_sdk/src/ops_plugin_sdk/paging.py
+12 dict-any packages/ops_plugin_sdk/src/ops_plugin_sdk/testing.py

@@ -9,7 +9,7 @@ publish request reads the team's publish policy and review deadline there, and t
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, Literal, TypeAlias
+from typing import Annotated, Any, Literal, NotRequired, TypeAlias, TypedDict
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
@@ -23,13 +23,21 @@ from ops_engine.store.definitions import HUMAN_REVIEW
 from ops_identity import CurrentTenantCaller
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unprocessable, ValidationFailed
-from ops_service_kit.http import Envelope, In, ListResult, paged
+from ops_service_kit.http import Envelope, In, Json, JsonList, ListResult, pagination
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListParams
 from ops_store import isolation
+from ops_store.listing import ListPage
 
 from ...store.tenancy import tenant_tx
 from ...store.workflow_list import SORTS, PageExtra, WorkflowRow, page_details, workflows_page
+from ...store.workflow_registry import (
+    CheckResultJSON,
+    NewValidation,
+    RegistryWorkflowRow,
+    ValidationRow,
+    ValidationSummaryJSON,
+)
 from .. import engine_lifecycle
 from ..agent_registry import registry as agent_registry
 from ..agent_registry import review_view
@@ -53,10 +61,15 @@ from ..schemas import (
 )
 from ..team_names import team_name
 from ..workflow_registry import (
+    WorkflowJSON,
+    WorkflowLeadJSON,
+    WorkflowRunJSON,
+    WorkflowStartJSON,
     agent_pins,
     compile_graph,
     counts_24h,
     new_row,
+    pending_json,
     publish,
     registry,
     run_rows,
@@ -128,40 +141,63 @@ class TestInput(In):
 
 async def _view(
     rt: Runtime, workflow_id: str, counts: tuple[dict[str, int], dict[str, int]] | None = None
-) -> dict[str, Any]:
+) -> WorkflowJSON:
     reg = registry(rt)
     row = await reg.row(workflow_id)
     versions = await reg.versions(workflow_id)
-    live = next((v for v in versions if v["version"] == row["published_version"]), None)
+    live = next((v for v in versions if v.version == row.published_version), None)
     pending = next(
-        (r for r in await agent_registry(rt).requests("workflow", workflow_id) if r["status"] == "pending"), None
+        (r for r in await agent_registry(rt).requests("workflow", workflow_id) if r.status == "pending"), None
     )
     runs, waiting = counts or await counts_24h(rt)
-    return workflow_view(row, live, pending, runs.get(workflow_id, 0), waiting.get(workflow_id, 0))
+    return workflow_view(
+        row,
+        version=row.published_version,
+        live_graph=live.graph if live else None,
+        draft=row.draft,
+        pending=pending,
+        runs=runs.get(workflow_id, 0),
+        waiting=waiting.get(workflow_id, 0),
+    )
 
 
-async def _detail(rt: Runtime, workflow_id: str) -> dict[str, Any]:
+class DraftJSON(TypedDict):
+    """`schemas.WorkflowDraft` as a detail shows it, in reply order."""
+
+    graph: Json
+    savedAt: str | None
+    savedBy: str | None
+
+
+class WorkflowDetailJSON(WorkflowJSON):
+    """`schemas.WorkflowDetail` before the team's name and the caller's rights, in reply order."""
+
+    graph: Json
+    draft: NotRequired[DraftJSON]
+
+
+async def _detail(rt: Runtime, workflow_id: str) -> WorkflowDetailJSON:
     reg = registry(rt)
     row = await reg.row(workflow_id)
     versions = await reg.versions(workflow_id)
-    live = next((v for v in versions if v["version"] == row["published_version"]), None)
-    graph: dict[str, Any] = (live["graph"] if live else row["draft"]) or {"nodes": [], "edges": []}
-    out: dict[str, Any] = {**await _view(rt, workflow_id), "graph": {"workflowId": workflow_id, **graph}}
-    if row["draft"] is not None:
+    live = next((v for v in versions if v.version == row.published_version), None)
+    graph: Json = (live.graph if live else row.draft) or {"nodes": [], "edges": []}
+    out: WorkflowDetailJSON = {**await _view(rt, workflow_id), "graph": {"workflowId": workflow_id, **graph}}
+    if row.draft is not None:
         out["draft"] = {
-            "graph": {"workflowId": workflow_id, **row["draft"]},
-            "savedAt": row["draft_saved_at"],
-            "savedBy": row["draft_saved_by"],
+            "graph": {"workflowId": workflow_id, **row.draft},
+            "savedAt": row.draft_saved_at,
+            "savedBy": row.draft_saved_by,
         }
     return out
 
 
-def _graph(raw: dict[str, Any]) -> dict[str, Any]:
+def _graph(raw: Json) -> Json:
     """The nodes and edges of a console graph; the console's workflowId and emailConfig are not part of it."""
     return {"nodes": raw.get("nodes") or [], "edges": raw.get("edges") or []}
 
 
-V1_START: dict[str, Any] = {"kind": "form", "byHand": True, "takesFiles": False}
+V1_START: WorkflowStartJSON = {"kind": "form", "byHand": True, "takesFiles": False}
 
 
 class WorkflowsQuery(BaseModel):
@@ -215,19 +251,27 @@ async def list_workflows(rt: Rt, me: Me, _: Tx, q: Annotated[WorkflowsQuery, Que
     return ok({**listed, "data": data})
 
 
-def _listed_row(r: WorkflowRow, more: PageExtra) -> dict[str, Any]:
+def _listed_row(r: WorkflowRow, more: PageExtra) -> WorkflowJSON:
     """A page row as schemas.Workflow: a v1 workflow as its detail page shows it, a v2 one with its steps and gates
     from its latest definition and the fields v2 has no counterpart for (agents, deployments) empty."""
     pending = more.pending
     if r.source == "v1":
-        row = {**r.model_dump(), "published_version": r.version, "draft": more.draft}
-        live = {"graph": more.graph} if more.graph else None
-        request = pending.model_dump() if pending else None
-        return {**workflow_view(row, live, request, r.runs24h, more.waiting), "start": V1_START}
+        return {
+            **workflow_view(
+                r,
+                version=r.version,
+                live_graph=more.graph,
+                draft=more.draft,
+                pending=pending,
+                runs=r.runs24h,
+                waiting=more.waiting,
+            ),
+            "start": V1_START,
+        }
     stored = more.definition if isinstance(more.definition, dict) else {}
     raw = stored.get("nodes")
     nodes = [n for n in raw if isinstance(n, dict)] if isinstance(raw, list) else []
-    return {
+    lead: WorkflowLeadJSON = {
         "id": r.id,
         "name": r.name,
         "description": r.description,
@@ -242,34 +286,28 @@ def _listed_row(r: WorkflowRow, more: PageExtra) -> dict[str, Any]:
         "status": r.status,
         "version": r.version,
         "updatedAt": r.updated_at,
-        "deploymentCount": 0,
-        "kind": "standard",
-        "engine": "v2",
-        "start": {"kind": engine.start_of(stored)["kind"], "byHand": r.startable, "takesFiles": r.takes_files},
-        **(
-            {
-                "pendingPublish": {
-                    "reviewId": pending.id,
-                    "toVersion": pending.version,
-                    "requestedBy": pending.requested_by,
-                }
-            }
-            if pending
-            else {}
-        ),
     }
+    start: WorkflowStartJSON = {
+        "kind": engine.start_of(stored)["kind"],
+        "byHand": r.startable,
+        "takesFiles": r.takes_files,
+    }
+    row: WorkflowJSON = {**lead, "deploymentCount": 0, "kind": "standard", "engine": "v2", "start": start}
+    if pending:
+        row["pendingPublish"] = pending_json(pending)
+    return row
 
 
-async def changeable(rt: Runtime, me: Principal, workflow_id: str, action: str) -> dict[str, Any]:
+async def changeable(rt: Runtime, me: Principal, workflow_id: str, action: str) -> RegistryWorkflowRow:
     """The workflow's row once the caller may change it (auth.require_builder: the roles grid, in the team that owns
     it or, for one no team owns, the team the request acts in)."""
     row = await registry(rt).row(workflow_id)
     require_builder(
         me,
         area="workflows",
-        team_id=row["team_id"],
+        team_id=row.team_id,
         action=action,
-        what=f"workflow {row['name']}",
+        what=f"workflow {row.name}",
     )
     return row
 
@@ -348,7 +386,7 @@ async def validate_graph(rt: Rt, me: Me, _: Tx, workflow_id: str, body: Validate
     compiled = compile_graph(workflow_id, _graph(body.graph), await agent_pins(rt))
     results = [c.result() for c in compiled.checks]
     passed = sum(1 for c in compiled.checks if c.passed)
-    run = {
+    run: NewValidation = {
         "id": new_id("val"),
         "workflow_id": workflow_id,
         "ran_at": now_iso(),
@@ -360,7 +398,27 @@ async def validate_graph(rt: Rt, me: Me, _: Tx, workflow_id: str, body: Validate
     return ok(_validation_view(run))
 
 
-def _validation_view(run: dict[str, Any]) -> dict[str, Any]:
+class ValidationRunJSON(TypedDict):
+    """`schemas.ValidationRun`, in reply order: a run as recorded now, or as read back."""
+
+    id: str
+    workflowId: str
+    ranAt: str
+    target: str
+    results: list[CheckResultJSON] | JsonList
+    summary: ValidationSummaryJSON | Json
+
+
+def _validation_view(run: NewValidation | ValidationRow) -> ValidationRunJSON:
+    if isinstance(run, ValidationRow):
+        return {
+            "id": run.id,
+            "workflowId": run.workflow_id,
+            "ranAt": run.ran_at,
+            "target": run.target,
+            "results": run.results,
+            "summary": run.summary,
+        }
     return {
         "id": run["id"],
         "workflowId": run["workflow_id"],
@@ -385,7 +443,7 @@ async def test_run(rt: Rt, me: Me, workflow_id: str, body: TestInput) -> JSONRes
     if rt.graph_deps is None:
         raise ServiceUnavailable(rt.model_error or "No model is configured.", code="model_unavailable")
     row = await changeable(rt, me, workflow_id, "test")
-    graph = _graph(body.graph or row["draft"] or {})
+    graph = _graph(body.graph or row.draft or {})
     compiled = compile_graph(workflow_id, graph, await agent_pins(rt))
     if compiled.definition is None:
         raise Unprocessable(
@@ -426,14 +484,15 @@ async def request_publish(rt: Rt, me: Me, workflow_id: str, body: PublishInput) 
             details={"checks": [c.result() for c in compiled.checks if not c.passed]},
         )
     versions = await registry(rt).versions(workflow_id)
-    live = next((v["graph"] for v in versions if v["version"] == row["published_version"]), None)
-    decision = await decide(rt, area="workflows", team_id=row["team_id"], old=live, new=graph)
+    live = next((v.graph for v in versions if v.version == row.published_version), None)
+    decision = await decide(rt, area="workflows", team_id=row.team_id, old=live, new=graph)
     approved = not decision.review_required
     passed = sum(1 for c in compiled.checks if c.passed)
-    info: dict[str, Any] = {
+    to_version = (versions[0].version + 1) if versions else 1
+    info: Json = {
         "workflowId": workflow_id,
-        "fromVersion": row["published_version"] or 0,
-        "toVersion": (versions[0]["version"] + 1) if versions else 1,
+        "fromVersion": row.published_version or 0,
+        "toVersion": to_version,
         "note": body.note,
         "requestedBy": me.email,
         "changes": [],
@@ -445,20 +504,20 @@ async def request_publish(rt: Rt, me: Me, workflow_id: str, body: PublishInput) 
         **decision.record(),
     }
     req = await agent_registry(rt).open_request(
-        "workflow", workflow_id, info["toVersion"], note=body.note, by=me.email, body=info, approved=approved
+        "workflow", workflow_id, to_version, note=body.note, by=me.email, body=info, approved=approved
     )
     if approved:
         version = await publish(
-            rt, workflow_id, compiled.definition, graph, note=body.note, by=req["decided_by"], review_id=req["id"]
+            rt, workflow_id, compiled.definition, graph, note=body.note, by=str(req.decided_by), review_id=req.id
         )
-        req = {**req, "version": version, "body": {**info, "toVersion": version}}
-    return ok(review_view(req, name=row["name"], slug="", sla_hours=await sla_hours(rt)), status=201)
+        req = req.model_copy(update={"version": version, "body": {**info, "toVersion": version}})
+    return ok(review_view(req, name=row.name, slug="", sla_hours=await sla_hours(rt)), status=201)
 
 
 @router.post("/{workflow_id}/status", response_model=Envelope[Workflow])
 async def set_status(rt: Rt, me: Me, _: Tx, workflow_id: str, body: StatusInput) -> JSONResponse:
     row = await changeable(rt, me, workflow_id, "change the status of")
-    if body.status == "live" and row["published_version"] is None:
+    if body.status == "live" and row.published_version is None:
         raise Conflict("Publish this workflow before setting it live.", code="not_published")
     await registry(rt).update(workflow_id, status=body.status)
     return ok(await _view(rt, workflow_id))
@@ -470,12 +529,12 @@ async def list_versions(rt: Rt, _: Tx, workflow_id: str) -> JSONResponse:
     return ok(
         [
             {
-                "version": v["version"],
-                "publishedAt": v["published_at"],
-                "publishedBy": v["published_by"],
-                "note": v["note"],
-                "changes": v["changes"],
-                "current": v["version"] == row["published_version"],
+                "version": v.version,
+                "publishedAt": v.published_at,
+                "publishedBy": v.published_by,
+                "note": v.note,
+                "changes": v.changes,
+                "current": v.version == row.published_version,
             }
             for v in await registry(rt).versions(workflow_id)
         ]
@@ -486,10 +545,10 @@ async def list_versions(rt: Rt, _: Tx, workflow_id: str) -> JSONResponse:
 async def restore_version(rt: Rt, me: Me, _: Tx, workflow_id: str, version: int) -> JSONResponse:
     """Copies a published version's graph into the draft; nothing publishes."""
     await changeable(rt, me, workflow_id, "restore a version of")
-    v = next((v for v in await registry(rt).versions(workflow_id) if v["version"] == version), None)
+    v = next((v for v in await registry(rt).versions(workflow_id) if v.version == version), None)
     if v is None:
         raise NotFound(f"Workflow {workflow_id} version {version}")
-    await registry(rt).update(workflow_id, draft=v["graph"], draft_saved_at=now_iso(), draft_saved_by=me.email)
+    await registry(rt).update(workflow_id, draft=v.graph, draft_saved_at=now_iso(), draft_saved_by=me.email)
     return ok(await _view(rt, workflow_id))
 
 
@@ -497,7 +556,7 @@ async def restore_version(rt: Rt, me: Me, _: Tx, workflow_id: str, version: int)
 async def move_pointer(rt: Rt, me: Me, _: Tx, workflow_id: str, body: PointerInput) -> JSONResponse:
     """Points new threads at an already-published version, for a rollback; running threads keep theirs."""
     await changeable(rt, me, workflow_id, "roll back")
-    if not any(v["version"] == body.version for v in await registry(rt).versions(workflow_id)):
+    if not any(v.version == body.version for v in await registry(rt).versions(workflow_id)):
         raise NotFound(f"Workflow {workflow_id} version {body.version}")
     await registry(rt).update(workflow_id, published_version=body.version)
     return ok(await _view(rt, workflow_id))
@@ -515,7 +574,12 @@ async def list_runs(rt: Rt, _: Tx, workflow_id: str, q: Annotated[RunsQuery, Que
     statuses, and the status counts are over every run."""
     await registry(rt).row(workflow_id)
     rows, total, counted = await run_rows(rt, workflow_id, q.status, (q.page - 1) * q.pageSize, q.pageSize)
-    return ok(paged(rows, total, q.page, q.pageSize, facets={"status": counted}))
+    page: ListPage[WorkflowRunJSON] = {
+        "data": rows,
+        "pagination": pagination(total, q.page, q.pageSize),
+        "facets": {"status": counted},
+    }
+    return ok(page)
 
 
 @refs_router.get("", response_model=Envelope[list[WorkflowRef]])
@@ -526,10 +590,10 @@ async def workflow_refs(rt: Rt, caller: CurrentTenantCaller, _: Tx) -> JSONRespo
     team = None if caller.kind == "service" else caller.team_id
     can(caller, "workflows", "view", team=team, what="the workflow list")
     reg = registry(rt)
-    rows = await reg.refs_every_team() if team is None else [r for r in await reg.rows() if r["team_id"] == team]
+    rows = await reg.refs_every_team() if team is None else [r for r in await reg.rows() if r.team_id == team]
     # By id: the registry reads are unordered, so a workflow updated a moment ago would otherwise move in the list.
-    rows = sorted(rows, key=lambda r: str(r["id"]))
-    refs = [{"id": r["id"], "name": r["name"], "teamId": r["team_id"], "status": r["status"]} for r in rows]
+    rows = sorted(rows, key=lambda r: r.id)
+    refs = [{"id": r.id, "name": r.name, "teamId": r.team_id, "status": r.status} for r in rows]
     # Workflow definitions (v2) are grantable too: each one a version has been approved for, with its team; one
     # no team owns is listed with an empty team, and a grant for it is refused.
     for d in await engine_lifecycle.definitions(rt).summaries(team=team):

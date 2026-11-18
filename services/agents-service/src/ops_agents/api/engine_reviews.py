@@ -14,13 +14,15 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any, NotRequired, TypedDict, cast
 
 from ops_engine.store import RUN_PREFIX, DefinitionRow, DefinitionStore, RunStore
 from ops_policy import input_hash
 from ops_service_kit.errors import Conflict, Forbidden, NotFound, ValidationFailed
+from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.logging import get_logger
-from ops_service_kit.narrow import json_list, json_object
+from ops_service_kit.narrow import an_object, entries, json_list, json_object
+from ops_store.documents import stored
 
 from ..store.cases import CaseNotFound, CaseStore
 from ..store.engine import DatabaseError, EngineTransactions
@@ -51,6 +53,206 @@ from .tool_access import WritePolicy, policy_of
 
 log = get_logger("ops_agents.api.engine_reviews")
 
+
+# The stored shapes below are read with `ops_store.documents.stored`, which keeps keys they do not name, so a `waiting`
+# document read, changed and written back keeps what it held. Runs waiting now were paused by earlier releases, so
+# every key is optional and holds any JSON: a value of another type reads as the views read it (often as nothing)
+# instead of refusing the task, which would hide it from the Reviews list.
+
+
+class ProposedCall(TypedDict, total=False):
+    """A write a review step approves (ops_engine compiler.write_call): its operation, its input (the workflow's data)
+    and the step key its approval binds to."""
+
+    tool: JsonValue
+    input: JsonValue
+    step: JsonValue
+
+
+class ReviewOption(TypedDict, total=False):
+    """One choice a review step offers (compiler.review_open): its name and label, and the write it approves with the
+    inputs an approver may change."""
+
+    name: JsonValue
+    label: JsonValue
+    call: JsonValue
+    inputs: JsonValue
+
+
+class ReviewPayload(TypedDict, total=False):
+    """What a paused step waits with: a review (compiler.review_open) or a wait for outside work such as a person
+    connecting an account (compiler's external wait). `draft`, `params` and `editable.value` are the workflow's own
+    data."""
+
+    kind: JsonValue
+    node: JsonValue
+    review_id: JsonValue
+    step_id: JsonValue
+    iteration: JsonValue
+    title: JsonValue
+    draft: JsonValue
+    openedAt: JsonValue
+    onTimeout: JsonValue
+    slaHours: JsonValue
+    remindEveryHours: JsonValue
+    notDecidedBy: JsonValue
+    requestedBy: JsonValue
+    editable: JsonValue
+    call: JsonValue
+    taskType: JsonValue
+    params: JsonValue
+    options: JsonValue
+    event: JsonValue
+    key: JsonValue
+    app: JsonValue
+    connectionId: JsonValue
+    appId: JsonValue
+    teamAccount: JsonValue
+    timeoutSeconds: JsonValue
+    resume: JsonValue
+
+
+class Waiting(TypedDict, total=False):
+    """A waiting run's `waiting` column (ops_engine worker._waiting): the paused node and pass, the interrupt and the
+    step's payload."""
+
+    node: JsonValue
+    iteration: JsonValue
+    interruptId: JsonValue
+    payload: JsonValue
+
+
+class Decision(TypedDict, total=False):
+    """What a decision resumes the step with (its resume work row's `resume`), as `decide` and `run_as_team_account`
+    write it and compiler.review_open reads it."""
+
+    decision: JsonValue
+    option: JsonValue
+    confirmed: JsonValue
+    inputs: JsonValue
+    reason: JsonValue
+    by: JsonValue
+    edited: JsonValue
+    call: JsonValue
+    approval: Approval | JsonValue
+    teamAccount: JsonValue
+    event: JsonValue
+
+
+class ResumeRow(TypedDict, total=False):
+    """A resume work row's payload (engine_resume.enqueue_resume): the decision, the step's payload it decided, when,
+    and the interrupt it answered."""
+
+    resume: JsonValue
+    payload: JsonValue
+    at: JsonValue
+    interruptId: JsonValue
+
+
+WAITING = stored(Waiting)
+PAYLOAD = stored(ReviewPayload)
+OPTION = stored(ReviewOption)
+CALL = stored(ProposedCall)
+DECISION = stored(Decision)
+RESUME_ROW = stored(ResumeRow)
+
+
+class Approval(TypedDict):
+    """The recorded approvals a decision rests on; the worker mints the call's token from them."""
+
+    step: str
+    tool: str
+    inputHash: str
+    approvers: list[str]
+
+
+class ConnectWait(TypedDict):
+    """The app a paused step waits for a person to connect."""
+
+    app: str
+    connectionId: JsonValue
+    appId: JsonValue
+    teamAccount: bool
+
+
+class ConnectView(ConnectWait):
+    """A connect wait with the person whose account it waits for."""
+
+    person: str | None
+
+
+class Deadline(TypedDict):
+    sla: str
+    onTimeout: str
+    dueAt: str | None
+    minutes: int | None
+
+
+class TypedFields(TypedDict):
+    customer: str
+    amount: float | None
+    currency: str | None
+    proposal: str
+
+
+class Citation(TypedDict):
+    page: JsonValue
+    quote: JsonValue
+
+
+class ReadField(TypedDict):
+    """One extracted field of a record as a person checks it."""
+
+    value: JsonValue
+    extractedValue: JsonValue
+    confidence: float | None
+    needsReview: bool
+    citation: Citation | None
+    boxes: JsonList
+    bySource: NotRequired[Json]
+    conflict: NotRequired[bool]
+
+
+class ReadRecord(TypedDict):
+    values: Json
+    fields: dict[str, ReadField]
+
+
+class SchemaField(TypedDict):
+    key: str
+    label: str
+    type: str
+    required: bool
+    keyField: bool
+
+
+class ReadView(TypedDict):
+    """An Extract from file result as people read it (read_view)."""
+
+    fileId: str
+    fileName: str | None
+    floor: float | None
+    schema: list[SchemaField]
+    records: list[ReadRecord]
+    sources: list[str]
+    editable: bool
+    corrected: list[Json] | None
+
+
+class ReplyCase(TypedDict):
+    runId: str
+    caseId: str | None
+    subject: str | None
+
+
+class ReplyPreview(TypedDict):
+    to: str
+    mailbox: str | None
+    subject: str
+    body: str
+    cases: list[ReplyCase]
+
+
 # The key of an all_rows row that holds what expand builds its full review from; expand drops it with the row.
 BUILD = "_engine_review"
 
@@ -64,7 +266,7 @@ CONNECTED = "app_account.connected"
 CONNECT_KIND = "connect_account"
 
 
-def connect_wait(payload: dict[str, Any]) -> dict[str, Any] | None:
+def connect_wait(payload: ReviewPayload) -> ConnectWait | None:
     """The app a paused step waits for a person to connect, from its park; None for any other pause."""
     if payload.get("kind") != "external" or payload.get("event") != CONNECTED:
         return None
@@ -76,13 +278,20 @@ def connect_wait(payload: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-async def _connect_view(rt: Runtime, run: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any] | None:
+async def _connect_view(rt: Runtime, run: Json, payload: ReviewPayload) -> ConnectView | None:
     """A connect wait as the task shows it: the app, and the person whose account it waits for (the run's starter)."""
     wait = connect_wait(payload)
     if wait is None:
         return None
-    above = await starters_of(_runs(rt), str(run.get("created_by") or ""), run.get("team_id"))
-    return wait | {"person": person_of(above[-1].created_by if above else run.get("created_by"))}
+    above = await starters_of(_runs(rt), str(run.get("created_by") or ""), cast(str | None, run.get("team_id")))
+    person = person_of(above[-1].created_by if above else run.get("created_by"))
+    return {
+        "app": wait["app"],
+        "connectionId": wait["connectionId"],
+        "appId": wait["appId"],
+        "teamAccount": wait["teamAccount"],
+        "person": person,
+    }
 
 
 def is_engine_id(review_id: str) -> bool:
@@ -93,7 +302,7 @@ def _runs(rt: Runtime) -> RunStore:
     return RunStore(EngineTransactions(rt.db))
 
 
-async def _visible(rt: Runtime, run_id: str) -> dict[str, Any]:
+async def _visible(rt: Runtime, run_id: str) -> Json:
     """The run behind a review, if the selected team may see it (routers/engine.visible_run); else not found."""
     from .routers.engine import visible_run  # noqa: PLC0415 - the router imports the Reviews facade's neighbours
 
@@ -104,12 +313,12 @@ async def _visible(rt: Runtime, run_id: str) -> dict[str, Any]:
         raise NotFound("Review") from e
 
 
-def _options(payload: dict[str, Any]) -> list[str]:
-    raw = cast(list[Any], payload.get("options") or [])
-    return [str(cast(dict[str, Any], o).get("name") if isinstance(o, dict) else o) for o in raw]
+def _options(payload: ReviewPayload) -> list[str]:
+    # `entries` iterates as `payload.get("options") or []` did, so a number there still fails the decision.
+    return [str(o.get("name") if isinstance(o, dict) else o) for o in entries(payload.get("options"))]
 
 
-def step_id(run: dict[str, Any], payload: dict[str, Any]) -> str:
+def step_id(run: Json, payload: ReviewPayload) -> str:
     """A v2 review's id: its step (run:node:iteration), so two review steps of one run are two reviews."""
     return str(payload.get("step_id") or run["id"])
 
@@ -118,37 +327,47 @@ def run_of(review_id: str) -> str:
     return review_id.split(":", 1)[0]
 
 
-def _calls(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    listed = [cast(dict[str, Any], o) for o in cast(list[Any], payload.get("options") or []) if isinstance(o, dict)]
-    found = [payload.get("call"), *(o.get("call") for o in listed)]
-    return [cast(dict[str, Any], c) for c in found if isinstance(c, dict)]
+def _listed_options(payload: ReviewPayload) -> list[ReviewOption]:
+    """The step's declared options, skipping any entry that is not an object."""
+    return [OPTION(o) for o in entries(payload.get("options")) if isinstance(o, dict)]
 
 
-def _number(value: Any) -> float | None:
+def _stored_calls(payload: ReviewPayload) -> list[Json]:
+    """The step's call and each option's, as the payload holds them (the same objects, so a caller can tell which
+    option a call is)."""
+    found = [payload.get("call"), *(o.get("call") for o in _listed_options(payload))]
+    return [c for c in found if isinstance(c, dict)]
+
+
+def _calls(payload: ReviewPayload) -> list[ProposedCall]:
+    return [CALL(c) for c in _stored_calls(payload)]
+
+
+def _number(value: object) -> float | None:
     try:
-        return float(value) if value not in (None, "") and not isinstance(value, bool) else None
+        return float(cast(Any, value)) if value not in (None, "") and not isinstance(value, bool) else None
     except (TypeError, ValueError):
         return None
 
 
-def typed_fields(draft: Any, calls: list[dict[str, Any]]) -> dict[str, Any]:
+def typed_fields(draft: object, calls: list[ProposedCall]) -> TypedFields:
     """What a review row shows from its step's summary and proposed calls, for any workflow: the customer (the summary's
     matched customer, else its record's name), the amount the first call would act on, that call's account currency
     (none when no account was read), and the proposal as one readable line instead of the summary's raw dict."""
-    d = cast(dict[str, Any], draft) if isinstance(draft, dict) else {}
+    d = json_object(draft)
     customer, record = d.get("customer"), d.get("record")
-    found: dict[str, Any] = cast(dict[str, Any], customer) if isinstance(customer, dict) else {}
-    read: dict[str, Any] = cast(dict[str, Any], record) if isinstance(record, dict) else {}
+    found = json_object(customer)
+    read = json_object(record)
     name = found.get("name") or (customer if isinstance(customer, str) else None) or read.get("name")
-    first = calls[0] if calls else {}
-    args = cast(dict[str, Any], first.get("input") or {})
+    first: ProposedCall = calls[0] if calls else {}
+    args = an_object(first.get("input") or {}, "the call's input")
     amount = _number(args.get("amount"))
     if amount is None:
         amount = _number(read.get("amount"))
-    accounts = [cast(dict[str, Any], a) for a in cast(list[Any], d.get("accounts") or []) if isinstance(a, dict)]
+    accounts = [json_object(a) for a in entries(d.get("accounts")) if isinstance(a, dict)]
     account = next((a for a in accounts if a.get("id") == args.get("account_id")), accounts[0] if accounts else {})
-    if first.get("tool"):
-        proposal = f"{first['tool']}: " + ", ".join(f"{k} {v}" for k, v in args.items())
+    if tool := first.get("tool"):
+        proposal = f"{tool}: " + ", ".join(f"{k} {v}" for k, v in args.items())
     else:
         proposal = draft if isinstance(draft, str) else "" if draft is None else json.dumps(draft, default=str)
     return {
@@ -159,56 +378,51 @@ def typed_fields(draft: Any, calls: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _read_in(draft: Any) -> dict[str, Any] | None:
+def _read_in(draft: object) -> Json | None:
     """The Extract from file result a review's summary holds (a value with its file, field schema and records or
-    fields), whatever key the workflow gave it."""
-    if not isinstance(draft, dict):
-        return None
-    for value in cast(dict[str, Any], draft).values():
+    fields), whatever key the workflow gave it; None when the summary is not an object."""
+    for value in json_object(draft).values():
         if is_read(value):
-            return cast(dict[str, Any], value)
+            return json_object(value)
     return None
 
 
-def _combined_in(draft: Any) -> dict[str, Any] | None:
+def _combined_in(draft: object) -> Json | None:
     """A Combine facts result the summary holds (its values, the source each came from, and the fields the sources
-    disagree on), whatever key the workflow gave it."""
-    if not isinstance(draft, dict):
-        return None
-    for value in cast(dict[str, Any], draft).values():
-        if isinstance(value, dict):
-            v = cast(dict[str, Any], value)
-            if isinstance(v.get("sources"), dict) and isinstance(v.get("conflicts"), list) and "values" in v:
-                return v
+    disagree on), whatever key the workflow gave it; None when the summary is not an object."""
+    for value in json_object(draft).values():
+        if (
+            isinstance(value, dict)
+            and isinstance(value.get("sources"), dict)
+            and isinstance(value.get("conflicts"), list)
+            and "values" in value
+        ):
+            return value
     return None
 
 
-def _plain(value: Any) -> Any:
+def _plain(value: JsonValue) -> JsonValue:
     """A source's value as a person reads it: an extracted field's `value`, anything else as it is."""
-    if isinstance(value, dict):
-        found = cast(dict[str, Any], value)
-        if "value" in found:
-            return found["value"]
-    return cast(Any, value)
+    if isinstance(value, dict) and "value" in value:
+        return value["value"]
+    return value
 
 
-def _by_source(record: dict[str, Any], combined: dict[str, Any]) -> list[str]:
+def _by_source(record: ReadRecord, combined: Json) -> list[str]:
     """Marks each field of a one-record read with every source's value and whether they disagree; returns the sources
     in the order they first appear. A field the sources agree on shows the value of the source it was taken from."""
-    picked = cast(dict[str, Any], combined.get("sources") or {})
-    values = cast(dict[str, Any], combined.get("values") or {})
-    disputed: dict[str, list[dict[str, Any]]] = {}
-    for c in cast(list[Any], combined.get("conflicts") or []):
+    picked = json_object(combined.get("sources") or {})
+    values = combined.get("values") or {}
+    disputed: dict[str, list[Json]] = {}
+    for c in entries(combined.get("conflicts")):
         if isinstance(c, dict):
-            row = cast(dict[str, Any], c)
-            disputed[str(row.get("field"))] = [
-                cast(dict[str, Any], x) for x in cast(list[Any], row.get("values") or []) if isinstance(x, dict)
-            ]
+            disputed[str(c.get("field"))] = [x for x in entries(c.get("values")) if isinstance(x, dict)]
     names: list[str] = []
-    for key, field in cast(dict[str, dict[str, Any]], record["fields"]).items():
+    for key, field in record["fields"].items():
         seen = {str(x.get("source")): _plain(x.get("value")) for x in disputed.get(key, [])}
         if not seen and key in picked:
-            seen = {str(picked[key]): _plain(values.get(key))}
+            # Read only here, as `.get` was: values that are not an object fail the read when a field reaches them.
+            seen = {str(picked[key]): _plain(an_object(values, "the combined values").get(key))}
         if seen:
             field["bySource"] = seen
             field["conflict"] = key in disputed
@@ -216,59 +430,68 @@ def _by_source(record: dict[str, Any], combined: dict[str, Any]) -> list[str]:
     return names
 
 
-def _field(scored: Any) -> dict[str, Any]:
-    s = cast(dict[str, Any], scored) if isinstance(scored, dict) else {}
-    cited = cast(dict[str, Any], s.get("citation") or {})
+def _field(scored: JsonValue) -> ReadField:
+    s = json_object(scored)
+    cited = s.get("citation") or {}
+    # A citation that is not an object failed `.get` before; it still fails here.
+    page, quote = (an_object(cited, "a field's citation").get(k) for k in ("page", "quote"))
     return {
         "value": s.get("value"),
         "extractedValue": s.get("extractedValue"),
         "confidence": _number(s.get("confidence")),
         "needsReview": bool(s.get("needsReview")),
-        "citation": {"page": cited.get("page"), "quote": cited.get("quote")} if cited else None,
-        "boxes": [
-            b for b in cast(list[Any], s.get("boxes") or []) if isinstance(b, dict) and _is_box(cast(dict[str, Any], b))
-        ],
+        "citation": {"page": page, "quote": quote} if cited else None,
+        "boxes": [b for b in entries(s.get("boxes")) if isinstance(b, dict) and _is_box(b)],
     }
 
 
-def _task_words(task: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+class TaskWords(TypedDict, total=False):
+    """What a typed review's list row takes from its task."""
+
+    title: str
+    reasoning: list[str]
+    customer: str
+
+
+def _task_words(task: dict[str, Any], payload: ReviewPayload) -> TaskWords:
     """A typed review's row words from its task: the header's title and the message as the reason, and whoever the step
     names as having asked, so a list row reads as the task screen does whatever the workflow."""
-    data = {str(r["region"]): cast(dict[str, Any], r.get("data") or {}) for r in task["regions"]}
-    words: dict[str, Any] = {}
+    data = {str(r["region"]): cast(Json, r.get("data") or {}) for r in task["regions"]}
+    words: TaskWords = {}
     if title := data.get("header", {}).get("title"):
         words["title"] = str(title)
     if text := data.get("message", {}).get("text"):
         words["reasoning"] = [str(text)]
-    if asked := [str(x) for x in cast(list[Any], payload.get("requestedBy") or []) if x]:
+    if asked := [str(x) for x in entries(payload.get("requestedBy")) if x]:
         words["customer"] = f"Requested by {', '.join(requester(a) for a in asked)}"
     return words
 
 
-def _is_box(b: dict[str, Any]) -> bool:
+def _is_box(b: Json) -> bool:
     """A box the console can place: a page and four fractions. Anything else from the read is left out."""
     return isinstance(b.get("page"), int) and all(isinstance(b.get(k), (int, float)) for k in ("x", "y", "w", "h"))
 
 
-def read_view(read: dict[str, Any], file_name: str | None, edited: Any) -> dict[str, Any]:
+def read_view(read: Json, file_name: str | None, edited: JsonValue) -> ReadView:
     """An Extract from file result as people read it, wherever it is shown (Human Tasks, a run's page): the file, the
     floor, each field's label, and per record each field's value, confidence and page quote, with the corrected values a
     person approved it with (`edited`, the whole records list) or None. Nothing takes a correction here; the caller says
     whether its step does (`editable`)."""
-    rows: list[Any] = []
+    rows: JsonList = []
     if "records" in read:
-        rows = cast(list[Any], read.get("records") or [])
-    elif isinstance(read.get("fields"), dict):
+        rows = list(entries(read.get("records")))
+    elif isinstance(fields := read.get("fields"), dict):
         # A one-record read: its fields as one record, with the values the next step reads.
-        fields = cast(dict[str, Any], read["fields"])
-        rows = [{"values": {k: cast(dict[str, Any], f).get("value") for k, f in fields.items()}, "fields": fields}]
-    records: list[dict[str, Any]] = []
+        values: Json = {k: an_object(f, f"field {k}").get("value") for k, f in fields.items()}
+        rows = [{"values": values, "fields": fields}]
+    records: list[ReadRecord] = []
     for row in rows:
-        r = cast(dict[str, Any], row) if isinstance(row, dict) else {}
-        scored = cast(dict[str, Any], r.get("fields") or {})
+        r = json_object(row)
+        scored = an_object(r.get("fields") or {}, "a record's fields")
         records.append(
             {
-                "values": dict(cast(dict[str, Any], r.get("values") or {})),
+                # dict() as before: it also takes a list of pairs, and refuses what it refused.
+                "values": dict(cast(Json, r.get("values") or {})),
                 "fields": {str(k): _field(v) for k, v in scored.items()},
             }
         )
@@ -284,33 +507,33 @@ def read_view(read: dict[str, Any], file_name: str | None, edited: Any) -> dict[
                 "required": bool(f.get("required")),
                 "keyField": f.get("keyField") is True,
             }
-            for f in (cast(dict[str, Any], x) for x in cast(list[Any], read.get("schema") or []) if isinstance(x, dict))
+            for f in (x for x in entries(read.get("schema")) if isinstance(x, dict))
         ],
         "records": records,
         "sources": [],
         "editable": False,
-        "corrected": [dict(cast(dict[str, Any], r).get("values") or {}) for r in cast(list[Any], edited)]
+        "corrected": [dict(cast(Json, an_object(r, "a corrected record").get("values") or {})) for r in edited]
         if isinstance(edited, list)
         else None,
     }
 
 
-def is_read(value: Any) -> bool:
+def is_read(value: object) -> bool:
     """Whether a value is an Extract from file result: its file, the type's field schema, and records or fields."""
     if not isinstance(value, dict):
         return False
-    v = cast(dict[str, Any], value)
+    v = cast(Json, value)
     return "fileId" in v and isinstance(v.get("schema"), list) and ("records" in v or "fields" in v)
 
 
-def document_read(draft: Any, payload: dict[str, Any], resume: dict[str, Any] | None) -> dict[str, Any] | None:
+def document_read(draft: object, payload: ReviewPayload, resume: Decision | None) -> ReadView | None:
     """A document read as Human Tasks shows it (read_view), with whether the step takes a correction and, for a
     one-record read a Combine facts step weighed, each source's value."""
     read = _read_in(draft)
     if read is None:
         return None
     # Workflows name the file under `document` (the levy flows) or `file` (system extract); either is the file name.
-    name = cast(dict[str, Any], draft).get("document") or cast(dict[str, Any], draft).get("file")
+    name = json_object(draft).get("document") or json_object(draft).get("file")
     view = read_view(read, str(name) if isinstance(name, str) and name else None, (resume or {}).get("edited"))
     combined = _combined_in(draft)
     # Several sources side by side only for a one-record read: Combine facts merges one set of fields.
@@ -320,16 +543,17 @@ def document_read(draft: Any, payload: dict[str, Any], resume: dict[str, Any] | 
     return view
 
 
-async def reply_preview(rt: Runtime, team: str, draft: Any, call: dict[str, Any]) -> dict[str, Any] | None:
+async def reply_preview(rt: Runtime, team: str, draft: object, call: ProposedCall) -> ReplyPreview | None:
     """The reply a review approves (its send_reply call) as it will leave, with the cases the summary's started runs
     are on; a run that has not opened its case yet has none."""
     if call.get("tool") != "send_reply":
         return None
-    args = cast(dict[str, Any], call.get("input") or {})
-    summary = cast(dict[str, Any], draft) if isinstance(draft, dict) else {}
+    # `.get` on an input that is not an object failed before; it still fails.
+    args = an_object(call.get("input") or {}, "the reply's input")
+    summary = json_object(draft)
     started = summary.get("cases")
-    listed = cast(list[Any], cast(dict[str, Any], started).get("runs") or []) if isinstance(started, dict) else []
-    rows = [cast(dict[str, Any], r) for r in listed if isinstance(r, dict)]
+    listed = entries(started.get("runs")) if isinstance(started, dict) else []
+    rows = [r for r in listed if isinstance(r, dict)]
     runs = [r for r in rows if r.get("runId")]
     store = CaseStore(rt.db)
     on_case = await store.cases_of_runs([str(r["runId"]) for r in runs])
@@ -355,7 +579,7 @@ async def reply_preview(rt: Runtime, team: str, draft: Any, call: dict[str, Any]
     }
 
 
-def _read_line(read: dict[str, Any]) -> tuple[str, str]:
+def _read_line(read: ReadView) -> tuple[str, str]:
     """The row's customer and proposal for a document read: who it names and what a person is asked to check."""
     names = [str(r["values"].get("name")) for r in read["records"] if r["values"].get("name")]
     doubtful = sum(1 for r in read["records"] for f in r["fields"].values() if f["needsReview"])
@@ -365,31 +589,34 @@ def _read_line(read: dict[str, Any]) -> tuple[str, str]:
     return ", ".join(names), f"Read {count} record{'s' if count != 1 else ''}{of}{check}"
 
 
-async def titles_of(rt: Runtime, run: dict[str, Any]) -> dict[str, Any]:
+async def titles_of(rt: Runtime, run: Json) -> dict[str, Any]:
     """The run's workflow by its display name and each step by its own, from the version the run pinned."""
-    stored = await DefinitionStore(EngineTransactions(rt.db)).row(str(run["workflow_id"]), run.get("version"))
-    return _titles(run, stored)
+    pinned = await DefinitionStore(EngineTransactions(rt.db)).row(
+        str(run["workflow_id"]), cast(int | None, run.get("version"))
+    )
+    return _titles(run, pinned)
 
 
-async def titles_by_run(rt: Runtime, runs: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+async def titles_by_run(rt: Runtime, runs: list[Json]) -> dict[str, dict[str, Any]]:
     """titles_of for each run, the versions they pinned read in one query, with the version that now serves each run's
     workflow (`live`, read in one more) for a review older than typed steps (legacy_tasks)."""
-    keys = {(str(r["workflow_id"]), int(r["version"])) for r in runs if r.get("version") is not None}
+    keys = {(str(r["workflow_id"]), int(cast(int, r["version"]))) for r in runs if r.get("version") is not None}
     store = DefinitionStore(EngineTransactions(rt.db))
-    stored = await store.pinned(keys)
+    pinned = await store.pinned(keys)
     serving = await store.currents({str(r["workflow_id"]) for r in runs})
-    return {
-        str(r["id"]): _titles(r, stored.get((str(r["workflow_id"]), int(r.get("version") or 0))))
-        | {"live": serving.get(str(r["workflow_id"]))}
-        for r in runs
-    }
+    out: dict[str, dict[str, Any]] = {}
+    for r in runs:
+        titles = _titles(r, pinned.get((str(r["workflow_id"]), int(cast(int, r.get("version") or 0)))))
+        titles["live"] = serving.get(str(r["workflow_id"]))
+        out[str(r["id"])] = titles
+    return out
 
 
-def _titles(run: dict[str, Any], stored: DefinitionRow | None) -> dict[str, Any]:
-    definition = json_object(stored.definition if stored else None)
+def _titles(run: Json, row: DefinitionRow | None) -> dict[str, Any]:
+    definition = json_object(row.definition if row else None)
     nodes = [json_object(n) for n in json_list(definition.get("nodes")) if isinstance(n, dict)]
     return {
-        "workflow": (stored.name if stored else "") or str(run["workflow_id"]),
+        "workflow": (row.name if row else "") or str(run["workflow_id"]),
         "steps": {str(n.get("id")): str(n.get("name") or n.get("id")) for n in nodes},
     }
 
@@ -397,14 +624,15 @@ def _titles(run: dict[str, Any], stored: DefinitionRow | None) -> dict[str, Any]
 ON_TIMEOUT = {"expire": "Expires: takes the timeout path", "wait": "Stays open, shows overdue"}
 
 
-def review_deadline(payload: dict[str, Any], workspace_hours: float, now: datetime) -> dict[str, Any]:
+def review_deadline(payload: ReviewPayload, workspace_hours: float, now: datetime) -> Deadline:
     """The step's deadline as the row and sheet show it: its own slaHours, else the workspace's review deadline,
     counted from when it opened. A step paused before deadlines were recorded has no openedAt and no countdown."""
     own = payload.get("slaHours")
-    hours = float(own) if own is not None else workspace_hours
+    # float() as before: a number or a numeric string, and it refuses anything else.
+    hours = float(cast(Any, own)) if own is not None else workspace_hours
     sla = f"{hours:g}h" + ("" if own is not None else " (workspace)")
     opened = payload.get("openedAt")
-    out: dict[str, Any] = {
+    out: Deadline = {
         "sla": sla,
         "onTimeout": ON_TIMEOUT.get(str(payload.get("onTimeout") or "wait"), ON_TIMEOUT["wait"]),
         "dueAt": None,
@@ -417,25 +645,23 @@ def review_deadline(payload: dict[str, Any], workspace_hours: float, now: dateti
     return out
 
 
-def as_decided(payload: dict[str, Any], resume: dict[str, Any]) -> dict[str, Any]:
+def as_decided(payload: ReviewPayload, resume: Decision) -> ReviewPayload:
     """The paused step's payload with the call its decision sent in place of the one proposed, so a decided review reads
     what was done: an approver who changed an input (a hold's amount) sees that value, as the bank was told.
     A new payload; the stored one is left as it is."""
     sent = resume.get("call")
     if not isinstance(sent, dict):
         return payload
+    out = payload.copy()
     if isinstance(payload.get("call"), dict):
-        return payload | {"call": sent}
-    listed = cast(list[Any], payload.get("options") or [])
+        out["call"] = sent
+        return out
     chosen = resume.get("option")
-    return payload | {
-        "options": [
-            cast(dict[str, Any], o) | {"call": sent}
-            if isinstance(o, dict) and cast(dict[str, Any], o).get("name") == chosen
-            else o
-            for o in listed
-        ]
-    }
+    out["options"] = [
+        o | {"call": sent} if isinstance(o, dict) and o.get("name") == chosen else o
+        for o in entries(payload.get("options"))
+    ]
+    return out
 
 
 async def view(
@@ -457,12 +683,13 @@ async def view(
         titles = await titles_of(rt, run)
     payload = _payload(run, decided)
     options = _options(payload)
-    calls = _calls(payload)
-    policies = [await policy_of(rt, str(c["tool"])) for c in calls if c.get("tool")]
+    held = _stored_calls(payload)
+    calls = [CALL(c) for c in held]
+    policies = [await policy_of(rt, str(c.get("tool"))) for c in calls if c.get("tool")]
     two = any(p.approvers > 1 for p in policies)
     step_up = any(p.step_up for p in policies)
     draft = payload.get("draft")
-    call = calls[0] if calls else {}
+    call: ProposedCall = calls[0] if calls else {}
     deadline = review_deadline(payload, await sla_hours(rt), datetime.now(UTC))
     connect = await _connect_view(rt, run, payload)
     if connect is not None:
@@ -472,15 +699,18 @@ async def view(
     # Each call in words; typed_fields reads the input named amount as the review's amount, so that input is
     # shown as money in the account's currency.
     money_key = "amount" if typed["amount"] is not None else None
-    described = [await describe_call(rt, c, currency=typed["currency"], money_key=money_key) for c in calls]
-    declared = [cast(dict[str, Any], o) for o in cast(list[Any], payload.get("options") or []) if isinstance(o, dict)]
+    described = [
+        await describe_call(rt, json_object(c), currency=typed["currency"], money_key=money_key) for c in calls
+    ]
+    declared = _listed_options(payload)
     labels = {str(o.get("name")): str(o.get("label") or str(o.get("name")).capitalize()) for o in declared}
-    said = {id(c): d for c, d in zip(calls, described, strict=True)}
-    inputs_of = {str(o.get("name")): list(cast(list[Any], o.get("inputs") or [])) for o in declared}
+    # By the stored call object: an option's call is the one of `held` it is.
+    said = {id(c): d for c, d in zip(held, described, strict=True)}
+    inputs_of = {str(o.get("name")): list(entries(o.get("inputs"))) for o in declared}
 
     def option_view(name: str) -> dict[str, Any]:
         opt_call = next((o.get("call") for o in declared if str(o.get("name")) == name), None)
-        d = said.get(id(cast(dict[str, Any], opt_call))) if isinstance(opt_call, dict) else None
+        d = said.get(id(opt_call)) if isinstance(opt_call, dict) else None
         return {
             "name": name,
             "label": labels.get(name, name.capitalize()),
@@ -537,10 +767,10 @@ async def view(
         "calls": None,
         "error": None,
         "caseId": case_id or None,
-        "decidingTeam": await deciding_team(rt, run.get("team_id")),
+        "decidingTeam": await deciding_team(rt, cast(str | None, run.get("team_id"))),
         **typed,
     }
-    if task := await typed_task(rt, payload, run, reads):
+    if task := await typed_task(rt, json_object(payload), run, reads):
         out["task"] = task
         out |= _task_words(task, payload)
         # A typed task's actions say what each choice does; listed under Details they read as things already done.
@@ -558,14 +788,15 @@ async def view(
         customer=typed["customer"],
         title=out["title"],
     )
-    read = document_read(draft, payload, cast(dict[str, Any], (decided or {}).get("resume") or {}))
+    decision = DECISION((decided or {}).get("resume") or {})
+    read = document_read(draft, payload, decision)
     if read is not None:
         out["customer"], out["proposal"] = _read_line(read)
         out["read"] = read
     if calls and (reply := await reply_preview(rt, str(run["team_id"]), draft, calls[0])) is not None:
         out["reply"] = reply
     if decided is not None:
-        resume = cast(dict[str, Any], decided.get("resume") or {})
+        resume = decision
         out |= {
             "status": _decided_status(decided),
             "decidedAt": decided.get("at"),
@@ -577,22 +808,23 @@ async def view(
         }
     # A review older than typed steps draws through a task type too, from the words built above.
     if "task" not in out and (
-        legacy := await legacy_task(rt, run, payload, out, live=titles.get("live", NOT_READ), reads=reads)
+        legacy := await legacy_task(rt, run, json_object(payload), out, live=titles.get("live", NOT_READ), reads=reads)
     ):
         out["task"] = legacy
     return out
 
 
-async def _decisions(rt: Runtime, run_id: str) -> list[dict[str, Any]]:
-    return [cast(dict[str, Any], w["payload"]) for w in await _runs(rt).work(run_id) if w["kind"] == "resume"]
+async def _decisions(rt: Runtime, run_id: str) -> list[Json]:
+    """The run's resume rows' payloads (ResumeRow), oldest first."""
+    return [w["payload"] for w in await _runs(rt).work(run_id) if w["kind"] == "resume"]
 
 
-def _payload(run: dict[str, Any], decided: dict[str, Any] | None) -> dict[str, Any]:
+def _payload(run: Json, decided: Json | ResumeRow | None) -> ReviewPayload:
     """The step's payload as its review reads it: the decided call in place of the proposed one once decided."""
-    waiting: dict[str, Any] = dict(run.get("waiting") or {})
-    payload: dict[str, Any] = dict((decided or {}).get("payload") or waiting.get("payload") or {})
+    waiting = WAITING(run.get("waiting") or {})
+    payload = PAYLOAD((decided or {}).get("payload") or waiting.get("payload") or {})
     if decided is not None:
-        payload = as_decided(payload, cast(dict[str, Any], decided.get("resume") or {}))
+        payload = as_decided(payload, DECISION(decided.get("resume") or {}))
     return payload
 
 
@@ -603,7 +835,7 @@ def _risk(policies: list[WritePolicy]) -> str:
     return "medium" if any(p.access == "write" for p in policies) else "low"
 
 
-async def team_runs(rt: Runtime) -> list[dict[str, Any]]:
+async def team_runs(rt: Runtime) -> list[Json]:
     """The team's runs a task list reads, newest first: the newest 200, for the decided tasks they hold, and the
     newest `review_list_rows_per_source` runs waiting for a person, so an open task leaves the list only past that
     many waiting runs (logged as `review_source_capped`)."""
@@ -619,27 +851,23 @@ async def team_runs(rt: Runtime) -> list[dict[str, Any]]:
     return [r.model_dump() for r in sorted(rows, key=lambda r: r.created_at, reverse=True)]
 
 
-# One run, or one decision of it, as the runner's store returns it.
-Row = dict[str, Any]
-
-
 @dataclass(frozen=True)
 class RowReads:
     """What `all_rows` reads from this service's own tables: the runs, the case each is on, and the review steps they
     hold, so a route can ask tools-service about `tools` with nothing open before `build_rows`."""
 
     on_case: dict[str, str]
-    steps: list[tuple[Row, Row | None]]
-    payloads: list[Row]
+    steps: list[tuple[Json, Json | None]]
+    payloads: list[ReviewPayload]
 
     @property
     def tools(self) -> list[str]:
-        return sorted({str(c["tool"]) for p in self.payloads for c in _calls(p) if c.get("tool")})
+        return sorted({str(c.get("tool")) for p in self.payloads for c in _calls(p) if c.get("tool")})
 
 
-def tools_of(steps: list[tuple[Row, Row | None]]) -> list[str]:
+def tools_of(steps: list[tuple[Json, Json | None]]) -> list[str]:
     """The tools the calls of these review steps (a run and its decision, None for the one it waits on) name."""
-    return sorted({str(c["tool"]) for run, d in steps for c in _calls(_payload(run, d)) if c.get("tool")})
+    return sorted({str(c.get("tool")) for run, d in steps for c in _calls(_payload(run, d)) if c.get("tool")})
 
 
 async def ask_policies(rt: Runtime, tools: list[str]) -> None:
@@ -656,7 +884,7 @@ async def read_rows(rt: Runtime) -> RowReads | None:
         return None
     on_case = await CaseStore(rt.db).cases_of_runs([str(r["id"]) for r in runs])
     decisions = await _runs(rt).resumes([str(r["id"]) for r in runs])
-    steps: list[tuple[Row, Row | None]] = []
+    steps: list[tuple[Json, Json | None]] = []
     for run in runs:
         steps += [(run, d) for d in decisions.get(str(run["id"]), [])]
         if run["status"] == "waiting" and run.get("waiting"):
@@ -683,7 +911,7 @@ async def build_rows(rt: Runtime, reads: RowReads | None) -> list[dict[str, Any]
     now = datetime.now(UTC)
     out: list[dict[str, Any]] = []
     for (run, decided), payload in zip(steps, payloads, strict=True):
-        policies = [await policy_of(rt, str(c["tool"])) for c in _calls(payload) if c.get("tool")]
+        policies = [await policy_of(rt, str(c.get("tool"))) for c in _calls(payload) if c.get("tool")]
         # A wait for a person to connect their account has no deadline.
         timed = decided is None and connect_wait(payload) is None
         row: dict[str, Any] = {
@@ -717,7 +945,7 @@ async def expand(rt: Runtime, rows: list[dict[str, Any]]) -> list[dict[str, Any]
     runs = list({str(r[BUILD][0]["id"]): r[BUILD][0] for r in light}.values())
     named = await titles_by_run(rt, runs)
     payloads = [_payload(r[BUILD][0], r[BUILD][1]) for r in light]
-    reads = TaskReads(rt, runs, [str(p["step_id"]) for p in payloads if p.get("step_id")])
+    reads = TaskReads(rt, runs, [str(p.get("step_id")) for p in payloads if p.get("step_id")])
     built: dict[int, dict[str, Any]] = {}
     for r in light:
         run, decided, case_id = r[BUILD]
@@ -743,17 +971,17 @@ async def all_places(rt: Runtime) -> list[dict[str, Any]]:
     for run in runs:
         case_id = on_case.get(str(run["id"])) or None
         for d in decisions.get(str(run["id"]), []):
-            payload = cast(dict[str, Any], d.get("payload") or {})
+            payload = PAYLOAD(d.get("payload") or {})
             out.append({"id": step_id(run, payload), "status": _decided_status(d), "caseId": case_id, "dueAt": None})
         if run["status"] == "waiting" and run.get("waiting"):
-            waiting = cast(dict[str, Any], dict(run["waiting"]).get("payload") or {})
+            waiting = PAYLOAD(WAITING(run["waiting"]).get("payload") or {})
             due = review_deadline(waiting, hours, now)["dueAt"]
             out.append({"id": step_id(run, waiting), "status": "pending", "caseId": case_id, "dueAt": due})
     return out
 
 
-def _decided_status(decided: dict[str, Any]) -> str:
-    resume = cast(dict[str, Any], decided.get("resume") or {})
+def _decided_status(decided: Json | ResumeRow) -> str:
+    resume = DECISION(decided.get("resume") or {})
     approved = resume.get("decision") in ("approved", "approve") and resume.get("option") != "reject"
     return "approved" if approved else "rejected"
 
@@ -761,73 +989,84 @@ def _decided_status(decided: dict[str, Any]) -> str:
 async def get(rt: Runtime, review_id: str) -> dict[str, Any]:
     """A review by its step id; a run id names the step the run waits on, else its latest decision."""
     run = await _visible(rt, run_of(review_id))
-    waiting = dict(run.get("waiting") or {})
-    if run["status"] == "waiting" and waiting and review_id in (run["id"], step_id(run, waiting.get("payload") or {})):
+    waiting = WAITING(run.get("waiting") or {})
+    if (
+        run["status"] == "waiting"
+        and waiting
+        and review_id in (run["id"], step_id(run, PAYLOAD(waiting.get("payload") or {})))
+    ):
         return await view(rt, run)
     decided = [
-        d for d in await _decisions(rt, run["id"]) if review_id in (run["id"], step_id(run, d.get("payload") or {}))
+        d
+        for d in await _decisions(rt, cast(str, run["id"]))
+        if review_id in (run["id"], step_id(run, PAYLOAD(RESUME_ROW(d).get("payload") or {})))
     ]
     if decided:
         return await view(rt, run, decided[-1])
     raise NotFound("Review")
 
 
-async def _check_decider(rt: Runtime, approver: Principal, run: dict[str, Any], calls: list[dict[str, Any]]) -> None:
+async def _check_decider(rt: Runtime, approver: Principal, run: Json, calls: list[Json]) -> None:
     """Who may decide a run's review: a reviewer or admin of the run's team, whatever the writes it decides (`calls`)
     are, and not who started the run or whom the step names in requestedBy while requesterMayDecide is off.
     Anyone the step names in notDecidedBy is refused whatever the policy, such as whoever saved the version it
     approves."""
     del calls
-    paused = cast(dict[str, Any], dict(run.get("waiting") or {}).get("payload") or {})
-    barred = {str(x).lower() for x in cast(list[Any], paused.get("notDecidedBy") or [])}
+    paused = PAYLOAD(WAITING(run.get("waiting") or {}).get("payload") or {})
+    # `entries` iterates as `or []` did: a number in either list still fails the check rather than passing it.
+    barred = {str(x).lower() for x in entries(paused.get("notDecidedBy"))}
     if approver.email.lower() in barred:
         raise Forbidden("You are named as not deciding this review; another reviewer must.", code="not_decided_by")
     require_reviews_decide(review_teams(approver), str(run["team_id"]), "this review")
     # Who started the run, and whoever the step names as having asked (an event's requester), under the same policy.
-    asked = [run["created_by"], *(str(x) for x in cast(list[Any], paused.get("requestedBy") or []))]
+    asked = [cast(str | None, run["created_by"]), *(str(x) for x in entries(paused.get("requestedBy")))]
     require_not_own(approver, asked, team=str(run["team_id"]), what="this run's review")
 
 
 async def check_decider(rt: Runtime, approver: Principal, review_id: str) -> None:
     """The decision route's checks on a waiting run's review, without deciding it (canDecide)."""
     run = await _visible(rt, run_of(review_id))
-    waiting: dict[str, Any] = dict(run.get("waiting") or {})
+    waiting = WAITING(run.get("waiting") or {})
     if not waiting:
         raise Conflict("This run is not waiting for a decision.", code="run_not_waiting")
-    await _check_decider(rt, approver, run, held_calls(cast(dict[str, Any], waiting.get("payload") or {})))
+    await _check_decider(rt, approver, run, held_calls(json_object(PAYLOAD(waiting.get("payload") or {}))))
 
 
-NOTHING = object()
+class Nothing:
+    """No correction was sent."""
 
 
-def _record_keys(row: Any) -> set[str] | None:
+NOTHING = Nothing()
+
+
+def _record_keys(row: JsonValue) -> set[str] | None:
     """The field names of one record (`{"values": {...}}`), or None when it is not one."""
     if not isinstance(row, dict):
         return None
-    values = cast(dict[str, Any], row).get("values")
-    return {str(k) for k in cast(dict[str, Any], values)} if isinstance(values, dict) else None
+    values = row.get("values")
+    return {str(k) for k in values} if isinstance(values, dict) else None
 
 
-def correction(paused: dict[str, Any], inputs: dict[str, Any] | None) -> tuple[Any, dict[str, Any] | None]:
+def correction(paused: ReviewPayload, inputs: Json | None) -> tuple[JsonValue | Nothing, Json | None]:
     """A reviewer's correction (`inputs.edited`) of the step's editable value, checked against it, and the inputs left
     for the option's call. A list of records keeps each record's `values` to the keys the read has; a dict keeps its own
     keys. NOTHING when no correction was sent."""
     rest = dict(inputs or {})
     if "edited" not in rest:
         return NOTHING, inputs
-    edited: Any = rest.pop("edited")
+    edited = rest.pop("edited")
     editable = paused.get("editable")
     if not isinstance(editable, dict):
         raise ValidationFailed("This review has nothing to correct.")
-    was: Any = cast(dict[str, Any], editable).get("value")
+    was = editable.get("value")
     if isinstance(was, list):
         allowed: set[str] = set()
-        for row in cast(list[Any], was):
+        for row in was:
             allowed |= _record_keys(row) or set()
         if not isinstance(edited, list):
             raise ValidationFailed("A correction lists the records, each with its values.")
         found: set[str] = set()
-        for row in cast(list[Any], edited):
+        for row in edited:
             keys = _record_keys(row)
             if keys is None:
                 raise ValidationFailed("A correction lists the records, each with its values.")
@@ -836,12 +1075,12 @@ def correction(paused: dict[str, Any], inputs: dict[str, Any] | None) -> tuple[A
     elif isinstance(was, dict):
         if not isinstance(edited, dict):
             raise ValidationFailed("A correction has the same fields as what was read.")
-        unknown = sorted({str(k) for k in cast(dict[str, Any], edited)} - {str(k) for k in cast(dict[str, Any], was)})
+        unknown = sorted({str(k) for k in edited} - {str(k) for k in was})
     else:
         raise ValidationFailed("This review's value cannot be corrected.")
     if unknown:
         raise ValidationFailed(f"A correction names fields the read does not have: {', '.join(unknown)}.")
-    return cast(Any, edited), rest or None
+    return edited, rest or None
 
 
 async def decide(
@@ -852,7 +1091,7 @@ async def decide(
     decision: str,
     reason: str | None,
     step_up_token: str | None = None,
-    inputs: dict[str, Any] | None = None,
+    inputs: Json | None = None,
     amount: float | None = None,
 ) -> dict[str, Any]:
     """Records the decision as the run's resume work row; a repeat of the same decision returns the review, a
@@ -866,20 +1105,20 @@ async def decide(
     runs = _runs(rt)
     review_id, run_id = run_id, run_of(run_id)
     run = await _visible(rt, run_id)
-    waiting: dict[str, Any] = dict(run.get("waiting") or {})
-    if waiting and review_id not in (run_id, step_id(run, waiting.get("payload") or {})):
+    waiting: Waiting = WAITING(run.get("waiting") or {})
+    if waiting and review_id not in (run_id, step_id(run, PAYLOAD(waiting.get("payload") or {}))):
         waiting = {}  # an earlier review step of this run: answered from its decision below
     if not waiting:
         earlier = await _decisions(rt, run_id)
         if earlier:
-            was = cast(dict[str, Any], earlier[-1].get("resume") or {})
+            was = DECISION(RESUME_ROW(earlier[-1]).get("resume") or {})
             if decision in (was.get("decision"), was.get("option")):
                 return await view(rt, run, earlier[-1])
             raise Conflict(
                 f"This review was already decided: {was.get('option') or was.get('decision')}.", code="already_decided"
             )
         raise Conflict("This run is not waiting for a decision.", code="run_not_waiting")
-    paused = cast(dict[str, Any], waiting.get("payload") or {})
+    paused = PAYLOAD(waiting.get("payload") or {})
     if connect_wait(paused) is not None:
         raise Conflict(
             "This run waits for an account: it goes on once its person connects theirs, or runs on the team account.",
@@ -887,24 +1126,23 @@ async def decide(
         )
     edited, inputs = correction(paused, inputs)
     options = _options(paused)
-    call: dict[str, Any] | None = None
+    call: Json | None = None
     if options:
         if decision not in options:
             raise ValidationFailed(f"This review is decided with one of: {', '.join(options)}.")
         # The reject option rejects, as Reject does on a step without options; every other option approves its call.
-        resume: dict[str, Any] = {"decision": "rejected" if decision == "reject" else "approved", "option": decision}
-        declared = [cast(dict[str, Any], o) for o in cast(list[Any], paused["options"]) if isinstance(o, dict)]
-        chosen = next((o for o in declared if o.get("name") == decision), None)
+        resume: Decision = {"decision": "rejected" if decision == "reject" else "approved", "option": decision}
+        chosen = next((o for o in _listed_options(paused) if o.get("name") == decision), None)
         if chosen is not None and chosen.get("call"):
             from .hitl_facade import option_call  # noqa: PLC0415 - hitl_facade imports this module
 
-            call = option_call(chosen, inputs, amount)
+            call = option_call(json_object(chosen), inputs, amount)
     else:
         if decision not in DEFAULT_DECISIONS:
             raise ValidationFailed("This review is approved or rejected.")
         resume = {"decision": "approved" if DEFAULT_DECISIONS[decision] == "approve" else "rejected"}
-        if resume["decision"] == "approved" and paused.get("call"):
-            call = dict(cast(dict[str, Any], paused["call"]))
+        if resume.get("decision") == "approved" and (proposed := paused.get("call")):
+            call = dict(an_object(proposed, "the step's call"))
     if paused.get("taskType"):
         rest = dict(inputs or {})
         confirmed = rest.pop("confirmed", None)
@@ -916,9 +1154,10 @@ async def decide(
             # A typed action's own inputs (a Reject's assignee) travel to the workflow with the decision.
             resume["inputs"] = _action_inputs(action, rest)
     # An approval is checked against the call it sends; a rejection against every write the step holds.
-    await _check_decider(rt, approver, run, [call] if call is not None else held_calls(paused))
-    resume |= {"reason": reason, "by": approver.email}
-    if edited is not NOTHING and resume["decision"] == "approved":
+    await _check_decider(rt, approver, run, [call] if call is not None else held_calls(json_object(paused)))
+    resume["reason"] = reason
+    resume["by"] = approver.email
+    if not isinstance(edited, Nothing) and resume.get("decision") == "approved":
         resume["edited"] = edited
     if call is not None:
         approval = await _approve_call(
@@ -928,44 +1167,46 @@ async def decide(
             return await view(rt, run) | {"status": "in_review"}
         # A reference to the recorded approvals, never the token: the worker mints the token from them when it calls
         # the gateway, so no token is stored in the queue, the journal or a run's detail.
-        resume |= {"call": call, "approval": approval}
-    row, created = await enqueue_resume(rt.db, run_id, waiting, resume)
-    stored = cast(dict[str, Any], row["payload"])
+        resume["call"] = call
+        resume["approval"] = approval
+    row, created = await enqueue_resume(rt.db, run_id, dict(waiting), dict(resume))
     if not created:
-        was = cast(dict[str, Any], stored.get("resume") or {})
-        if was.get("decision") != resume["decision"] or was.get("option") != resume.get("option"):
+        was = DECISION(RESUME_ROW(row["payload"]).get("resume") or {})
+        if was.get("decision") != resume.get("decision") or was.get("option") != resume.get("option"):
             raise Conflict("This review was already decided.", code="already_decided")
-        return await view(rt, run, stored)
+        return await view(rt, run, row["payload"])
     await runs.update(run_id, status="queued", waiting=None)
     await EventLog(rt.db).append(
         thread_id=run_id,
-        team_id=run["team_id"],
+        team_id=cast(str, run["team_id"]),
         run_id=run_id,
         type_="decided",
-        node=str(waiting["node"]),
-        data={"decision": resume["decision"], "option": resume.get("option"), "decidedBy": approver.email},
+        # enqueue_resume's key read `node` already, so it is there.
+        node=str(waiting.get("node")),
+        data={"decision": resume.get("decision"), "option": resume.get("option"), "decidedBy": approver.email},
     )
     cases = CaseStore(rt.db)
     case_id = (await cases.cases_of_runs([run_id])).get(run_id)
     if case_id is not None:
         # The decision is on the case's timeline too: the case reads as the issue's whole history.
-        detail = {"decision": resume["decision"], "option": resume.get("option"), "reason": reason}
+        detail = {"decision": resume.get("decision"), "option": resume.get("option"), "reason": reason}
         await cases.add_event(case_id, "decision", ref=step_id(run, paused), detail=detail, by=approver.email)
-    return await view(rt, run, stored, case_id=case_id or "")
+    return await view(rt, run, row["payload"], case_id=case_id or "")
 
 
 async def _approve_call(
     rt: Runtime,
     approver: Principal,
     run_id: str,
-    call: dict[str, Any],
+    call: Json,
     *,
     step_up_token: str | None,
     team_id: str,
-) -> dict[str, Any] | None:
+) -> Approval | None:
     """Records `approver`'s approval of `call` in the run's team (`team_id`) and returns the approval reference
     ({step, inputHash, approvers}) once as many distinct people as its policy names have approved this exact input;
     None while more are needed."""
+    # Indexed as before: a call missing its tool, input or step fails here rather than approving.
     tool = str(call["tool"])
     policy = await policy_of(rt, tool)  # its approving team was checked with the decider (_check_decider)
     if policy.step_up or workspace_step_up(approver):
@@ -981,14 +1222,15 @@ async def _approve_call(
     return {"step": str(call["step"]), "tool": tool, "inputHash": digest, "approvers": found}
 
 
-async def _typed_action(rt: Runtime, run: dict[str, Any], paused: dict[str, Any], port: str) -> dict[str, Any]:
+async def _typed_action(rt: Runtime, run: Json, paused: ReviewPayload, port: str) -> Json:
     """The task type's action that leads to `port`, from the type version the step names in the run's team; empty when
     it has none."""
-    ref = cast(dict[str, Any], paused["taskType"])
+    ref = an_object(paused.get("taskType"), "the step's taskType")
     types = await task_type_store(rt, str(run["team_id"]))
     _, record = await types.published(str(ref["id"]), cast(int | None, ref.get("version")))
-    actions = cast(list[dict[str, Any]], record.get("actions") or [])
-    none: dict[str, Any] = {}
+    # Each action is read as an object up to the one that matches, as `.get` on each did.
+    actions = (an_object(a, "a task type's action") for a in entries(record.get("actions")))
+    none: Json = {}
     return next((a for a in actions if a.get("port") == port), none)
 
 
@@ -1006,10 +1248,13 @@ def _is_email(text: str) -> bool:
     return len(labels) >= 2 and all(labels)
 
 
-def _action_inputs(action: dict[str, Any], inputs: dict[str, Any]) -> dict[str, Any]:
+def _action_inputs(action: Json, inputs: Json) -> Json:
     """The inputs `action` declares, checked: one it does not declare, or a required one left out, is refused naming
     it, so a misspelt assignee never silently leaves the task with the team."""
-    declared = {str(i["name"]): i for i in cast(list[dict[str, Any]], action.get("inputs") or [])}
+    declared: dict[str, Json] = {}
+    for raw in entries(action.get("inputs")):
+        i = an_object(raw, "an action's input")
+        declared[str(i["name"])] = i
     if unknown := sorted(set(inputs) - set(declared)):
         raise ValidationFailed(f"This action takes no {', '.join(unknown)}.")
     if missing := sorted(n for n, i in declared.items() if i.get("required") and inputs.get(n) in (None, "")):
@@ -1024,23 +1269,24 @@ def _action_inputs(action: dict[str, Any], inputs: dict[str, Any]) -> dict[str, 
     return dict(inputs)
 
 
-def _key_fields_left(paused: dict[str, Any], confirmed: Any) -> int:
+def _key_fields_left(paused: ReviewPayload, confirmed: JsonValue) -> int:
     """How many key fields of the step's read are not in `confirmed` (record index to field keys), counted as the
     console's keyFieldsLeft counts them; 0 when the read marks none or there is no read."""
     read = document_read(paused.get("draft"), paused, None)
     if read is None:
         return 0
-    given = cast(dict[Any, Any], confirmed) if isinstance(confirmed, dict) else {}
-    keys = [str(f["key"]) for f in cast(list[dict[str, Any]], read["schema"]) if f["keyField"]]
+    # Keyed by the record's index as a string ("0"), or as a number by a caller that built the mapping itself.
+    given = cast("dict[object, JsonValue]", confirmed) if isinstance(confirmed, dict) else {}
+    keys = [f["key"] for f in read["schema"] if f["keyField"]]
     left = 0
-    for i in range(len(cast(list[Any], read["records"]))):
+    for i in range(len(read["records"])):
         seen = given.get(str(i), given.get(i))
-        done = {str(k) for k in cast(list[Any], seen)} if isinstance(seen, list) else set[str]()
+        done = {str(k) for k in seen} if isinstance(seen, list) else set[str]()
         left += sum(k not in done for k in keys)
     return left
 
 
-def _key_fields_confirmed(paused: dict[str, Any], confirmed: Any) -> None:
+def _key_fields_confirmed(paused: ReviewPayload, confirmed: JsonValue) -> None:
     if left := _key_fields_left(paused, confirmed):
         what = "1 key field" if left == 1 else f"{left} key fields"
         raise ValidationFailed(f"Confirm {what} before approving.", code="key_fields_unconfirmed")
@@ -1048,10 +1294,10 @@ def _key_fields_confirmed(paused: dict[str, Any], confirmed: Any) -> None:
 
 # What a task type's action can wait for (its `requires`), checked on the decision as the console blocks the button,
 # so a call that skips the console cannot approve values nobody checked.
-REQUIREMENTS: dict[str, Callable[[dict[str, Any], Any], None]] = {"key_fields_confirmed": _key_fields_confirmed}
+REQUIREMENTS: dict[str, Callable[[ReviewPayload, JsonValue], None]] = {"key_fields_confirmed": _key_fields_confirmed}
 
 
-def _check_requirement(name: str, paused: dict[str, Any], confirmed: Any) -> None:
+def _check_requirement(name: str, paused: ReviewPayload, confirmed: JsonValue) -> None:
     check = REQUIREMENTS.get(name)
     if check is None:
         # A type naming a rule this service cannot check is refused rather than approved unchecked.
@@ -1066,8 +1312,8 @@ async def run_as_team_account(rt: Runtime, me: Principal, review_id: str) -> dic
     account in its place, for someone the roles grid lets use it, on an app that has one. The run is queued; the view
     of the task is returned as it now stands."""
     run = await _visible(rt, run_of(review_id))
-    waiting: dict[str, Any] = dict(run.get("waiting") or {})
-    paused = cast(dict[str, Any], waiting.get("payload") or {})
+    waiting = WAITING(run.get("waiting") or {})
+    paused = PAYLOAD(waiting.get("payload") or {})
     wait = connect_wait(paused)
     if not waiting or wait is None or review_id not in (str(run["id"]), step_id(run, paused)):
         raise Conflict("This run is not waiting for an account.", code="run_not_waiting")
@@ -1075,6 +1321,8 @@ async def run_as_team_account(rt: Runtime, me: Principal, review_id: str) -> dic
     require_team_account_use(me, team_id=str(run["team_id"]), what=f"{app}'s team account")
     if not wait["teamAccount"]:
         raise Conflict(f"{app} has no team account to run as; its person connects their own.", code="no_team_account")
-    resume = {"teamAccount": {"by": me.email}}
-    await resumed(rt.db, str(run["id"]), str(run["team_id"]), waiting, resume, source="team_account")
+    resume: Decision = {"teamAccount": {"by": me.email}}
+    await resumed(
+        rt.db, str(run["id"]), str(run["team_id"]), json_object(dict(waiting)), dict(resume), source="team_account"
+    )
     return await view(rt, await _visible(rt, str(run["id"])))

@@ -18,7 +18,7 @@ from pydantic import Field
 from ops_access import can
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Unprocessable
-from ops_service_kit.http import Envelope, In, ListResult
+from ops_service_kit.http import Envelope, In, Json, ListResult
 from ops_service_kit.listing import ListQuery
 
 from ... import task_types as tt
@@ -76,7 +76,7 @@ class TaskTypeDetail(TaskTypeView):
     versions: list[TaskTypeVersionView]
 
 
-def _checked(content: dict[str, Any]) -> dict[str, Any]:
+def _checked(content: Json) -> Json:
     try:
         tt.check_definition(content)
     except tt.TypeDefinitionError as e:
@@ -105,8 +105,8 @@ async def create_type(rt: Runtime, me: Principal, body: TypeIn) -> None:
     if not tt.valid_id(body.id):
         raise Unprocessable("id: lowercase letters, digits and underscores, starting with a letter.", code="invalid_id")
     store = await task_type_store(rt, store_team(me))
-    base: dict[str, Any] = {}
-    copied: dict[str, Any] | None = None
+    base: Json = {}
+    copied: Json | None = None
     if body.copy_of is not None:
         n, base = await store.published(body.copy_of.id, body.copy_of.version)
         copied = {"id": body.copy_of.id, "version": n}

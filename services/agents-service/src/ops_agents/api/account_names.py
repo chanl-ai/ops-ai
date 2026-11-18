@@ -8,10 +8,11 @@ check stops until the name is changed.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import Any, cast
+from typing import Any, TypedDict, cast
 
 from ops_engine.store import DefinitionStore
 from ops_service_kit.errors import Unprocessable
+from ops_service_kit.http import Json
 
 from ..activities.tool_directory import ToolsUnavailable
 from ..store.engine import EngineTransactions
@@ -22,15 +23,24 @@ from .deps import Runtime
 TOOL_STEP = "ops.action.tool"
 
 
+class AccountUses(TypedDict):
+    """What names an account, in reply order: draft and published counts, then the workflow and agent ids."""
+
+    drafts: int
+    published: int
+    workflows: list[str]
+    agents: list[str]
+
+
 def step_names(definition: Mapping[str, Any]) -> list[tuple[str, str, str]]:
     """(step label or id, app id, account name) for each account the definition's tool steps name."""
     out: list[tuple[str, str, str]] = []
-    for node in cast(list[dict[str, Any]], definition.get("nodes") or []):
+    for node in cast(list[Json], definition.get("nodes") or []):
         if str(node.get("type") or "").split("@")[0] != TOOL_STEP:
             continue
-        params = cast(dict[str, Any], node.get("parameters") or {})
+        params = cast(Json, node.get("parameters") or {})
         where = str(node.get("label") or node.get("name") or node.get("id") or "a step")
-        for app, name in cast(dict[str, Any], params.get("accounts") or {}).items():
+        for app, name in cast(Json, params.get("accounts") or {}).items():
             if isinstance(name, str) and name.strip():
                 out.append((where, str(app), name.strip()))
     return out
@@ -73,7 +83,7 @@ def uses_of(definitions: Iterable[tuple[str, Mapping[str, Any]]], app: str, name
     return [i for i, d in definitions if any(a == app and n.casefold() == key for _, a, n in step_names(d))]
 
 
-async def account_uses_in(rt: Runtime, team: str, app: str, name: str) -> dict[str, Any]:
+async def account_uses_in(rt: Runtime, team: str, app: str, name: str) -> AccountUses:
     """The team's workflow drafts and published versions, and agents, that name the account `name` of `app`: the
     counts and ids a rename warns with and a delete is refused with. Names compare trimmed and case-folded, as calls
     compare them."""
@@ -82,10 +92,10 @@ async def account_uses_in(rt: Runtime, team: str, app: str, name: str) -> dict[s
     workflows: list[str] = []
     for row in await store.summaries(team=team):
         wid = row.workflow_id
-        latest = uses_of([(wid, cast(dict[str, Any], row.definition or {}))], app, name)
+        latest = uses_of([(wid, row.definition or {})], app, name)
         live_version = row.current_version
         live = await store.row(wid, live_version, team=team) if live_version else None
-        named_live = bool(live and uses_of([(wid, cast(dict[str, Any], live.definition))], app, name))
+        named_live = bool(live and uses_of([(wid, live.definition)], app, name))
         drafts += int(bool(latest) and row.stage == "draft")
         published += int(named_live)
         if latest or named_live:

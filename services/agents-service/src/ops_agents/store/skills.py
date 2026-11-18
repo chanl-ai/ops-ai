@@ -11,11 +11,12 @@ load adds to a turn: the whole body, or the shared instructions plus the longest
 from __future__ import annotations
 
 import re
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict
 from ops_service_kit.http import Json, JsonList, Out
 from ops_service_kit.ids import new_id, now_iso
@@ -108,12 +109,13 @@ def changes_between(old: Json, new: Json) -> list[str]:
     return [f"Changed {label}" for k, label in LABELS.items() if old.get(k) != new.get(k)]
 
 
-def tokens_of(content: dict[str, Any]) -> int:
+def tokens_of(content: Json) -> int:
     """What the body adds to a turn, at four characters a token: the instructions plus the guardrail lines, and with
-    parts the longest part on top, since a part is always read with the shared instructions."""
-    lines: list[Any] = list(content.get("guardrails") or [])
+    parts the longest part on top, since a part is always read with the shared instructions. A count that is billed,
+    so a part that is not an object, or a list that is a number, fails the save."""
+    lines = narrow.entries(content.get("guardrails"))
     text = str(content.get("instructions") or "") + "".join(str(g) for g in lines)
-    parts: list[dict[str, Any]] = list(content.get("parts") or [])
+    parts = [narrow.an_object(p, "part") for p in narrow.entries(content.get("parts"))]
     longest = max((len(str(p.get("instructions") or "")) for p in parts), default=0)
     return max(1, (len(text) + longest + 3) // 4)
 

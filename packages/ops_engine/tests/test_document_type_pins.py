@@ -17,12 +17,12 @@ def step(node_id: str, doc_type: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-WIRE = {"nodes": [step("read", {"id": "levy_notice"}), step("again", {"id": "invoice", "version": 3})]}
+WIRE: dict[str, Any] = {"nodes": [step("read", {"id": "levy_notice"}), step("again", {"id": "invoice", "version": 3})]}
 
 
 def test_only_steps_without_a_version_are_pinned_and_a_chosen_version_stays() -> None:
     assert unpinned(WIRE) == {"levy_notice"}
-    out = pinned(WIRE, {"levy_notice": 4, "invoice": 9})
+    out: dict[str, Any] = pinned(WIRE, {"levy_notice": 4, "invoice": 9})
     assert [n["parameters"]["documentType"] for n in out["nodes"]] == [
         {"id": "levy_notice", "version": 4},
         {"id": "invoice", "version": 3},

@@ -6,15 +6,15 @@ bank."""
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_identity import dev_service_signer, mint_service_token
 from ops_identity.testing import TEST_TOKEN_TTL_S
 from ops_policy import mint
+from ops_service_kit.http import Json
 from ops_tools.auth.tokens import Tokens
-from ops_tools.store.connections import ConnectionStore
+from ops_tools.store.connections import ConnectionStore, NewAccount
 from ops_tools.store.modules import ModuleStore
 
 from .conftest import credentials
@@ -52,7 +52,7 @@ def as_james(tenant: str) -> dict[str, str]:
 async def person_key_connection(engine: AsyncEngine, tenant: str) -> str:
     """The bank's module signs in with each person's own API key, and James has given none."""
     store, now, conn = ConnectionStore(engine), datetime.now(UTC), "con_bank_own"
-    row: dict[str, Any] = {
+    row: NewAccount = {
         "tenant_id": tenant,
         "id": conn,
         "app_id": conn,
@@ -69,7 +69,7 @@ async def person_key_connection(engine: AsyncEngine, tenant: str) -> str:
         "updated_at": now,
     }
     assert await store.create(row, actor="t", at=now)
-    plain = {"baseUrl": ENDPOINT, "name": "X-Api-Key"}
+    plain: Json = {"baseUrl": ENDPOINT, "name": "X-Api-Key"}
     await store.change(tenant, conn, 1, {"settings": plain, "secrets": {}}, actor="t", at=now)
     modules = ModuleStore(engine)
     m = await modules.get(tenant, MODULE)

@@ -11,6 +11,7 @@ from typing import Any
 from ops_identity import dev_service_signer, mint_service_token
 from ops_identity.testing import TEST_TOKEN_TTL_S
 from ops_policy import mint
+from ops_service_kit.http import Json
 
 from .test_app_accounts import (
     ID,
@@ -69,7 +70,11 @@ async def test_a_team_account_needs_its_sign_in_then_is_connected(world: World, 
 async def test_a_signed_in_account_whose_test_failed_says_why(world: World, tenant: str) -> None:  # noqa: F811
     conn = await connected(world, tenant)
     await signed(world, tenant, conn, "https://acme.my.desk.test")
-    failed = {"status": "failed", "message": "acme.my.desk.test answered 403.", "at": datetime.now(UTC).isoformat()}
+    failed: Json = {
+        "status": "failed",
+        "message": "acme.my.desk.test answered 403.",
+        "at": datetime.now(UTC).isoformat(),
+    }
     await world.store.set_token_test(tenant, conn, "", failed)
     assert state(await card(world, tenant)) == ("test_failed", "acme.my.desk.test answered 403.")
 

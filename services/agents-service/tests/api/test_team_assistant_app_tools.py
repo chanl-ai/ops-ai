@@ -8,7 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 from ops_agents.activities.tool_directory import OperationRef
 from ops_agents.api.agent_registry import registry
@@ -56,10 +56,10 @@ async def test_the_assistant_gets_the_apps_read_tools_once_and_nothing_else(stac
     assert live is not None and {"salesforce_query", "salesforce_get_record"} <= set(live.tools), live
     assert not {"salesforce_update_record", "github_list_issues"} & set(live.tools), live.tools
     with tenant_scope(TENANT):
-        before = (await registry(rt).row(AID))["version"]
+        before = (await registry(rt).row(AID)).version
     again = (await give(c, ADMIN)).json()["data"]
     with tenant_scope(TENANT):
-        after = (await registry(rt).row(AID))["version"]
+        after = (await registry(rt).row(AID)).version
     assert again["state"] == "already" and before == after, again
 
 
@@ -77,7 +77,7 @@ async def test_a_draft_someone_is_editing_is_not_stepped_over(stack: Stack) -> N
     await start(c, ADMIN)
     with tenant_scope(TENANT):
         reg = registry(rt)
-        spec = dict((await reg.version(AID, int((await reg.row(AID))["published_version"])))["spec"])
+        spec = dict((await reg.version(AID, cast(int, (await reg.row(AID)).published_version))).spec)
         await reg.save(AID, {**spec, "role": "Our desk helper"}, by="jane@harborpine.example")
     data = (await give(c, ADMIN)).json()["data"]
     live = rt.catalog.agent(AID)

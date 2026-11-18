@@ -23,12 +23,13 @@ from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlsplit
 
 from ops_identity import ActingForPerson
+from ops_service_kit.http import Json
 
 from ..connections.account_events import CONNECTED, connected_key, needs_reconnect_event
 from ..connections.records import EXPIRED, REFUSED
 from ..environments import LIVE
 from ..secrets import SecretMissing, SecretResolver
-from ..store.connections import SHARED, Account, ConnectionStore, TokenRow
+from ..store.connections import SHARED, Account, AuditEvent, ConnectionStore, TokenRow
 from ..store.modules import Module, ModuleRef
 from .assertion import SigningError, read_certificate
 from .kinds import Kind, kind_of, origin
@@ -321,7 +322,7 @@ class Authenticator:
                 # and marked, so Your connections says the sign-in expired and offers Reconnect.
                 at = datetime.now(UTC)
                 await self.connections.mark_refused(tenant_id, str(connection_id), person, reason=str(e), at=at)
-                event = {"action": "refresh_failed", "actor": actor, "at": at}
+                event: AuditEvent = {"action": "refresh_failed", "actor": actor, "at": at}
                 await self.connections.note(
                     tenant_id, str(connection_id), {**event, "detail": {"code": e.code, "own": True}}
                 )
@@ -367,7 +368,7 @@ class Authenticator:
             else:
                 at = datetime.now(UTC)
                 await self.connections.mark_refused(tenant_id, connection_id, person, reason=str(e), at=at)
-                event = {"action": "refresh_failed", "actor": actor, "at": at}
+                event: AuditEvent = {"action": "refresh_failed", "actor": actor, "at": at}
                 await self.connections.note(
                     tenant_id, connection_id, {**event, "detail": {"code": e.code, "own": True}}
                 )
@@ -392,12 +393,12 @@ class Authenticator:
         notice = needs_reconnect_event(conn, state=state, reason=why, since=since, at=at)
         await self.connections.needs_reconnect(tenant_id, connection_id, str(e) if state == REFUSED else None, notice)
         if state == REFUSED:
-            event = {"action": "refresh_failed", "actor": actor, "at": at}
+            event: AuditEvent = {"action": "refresh_failed", "actor": actor, "at": at}
             await self.connections.note(tenant_id, connection_id, {**event, "detail": {"code": e.code}})
         message = (
             f"{name} needs reconnecting: {why} An admin reconnects its team account under Apps, then runs it again."
         )
-        details = {
+        details: Json = {
             "connectionId": connection_id, "appId": str(conn.app_id), "app": name, "connection": name,
             "account": "team", "state": state,
             # What a run waits on until an admin signs the team account in again: that sign-in reports it.
@@ -430,7 +431,7 @@ class Authenticator:
             else f"{name} signs in as each person, and this call acts for nobody."
         )
         reason: NotLinkedReason = "needs_person" if backed else "no_person"
-        details = {
+        details: Json = {
             "connectionId": str(conn.id),
             "appId": str(conn.app_id),
             "connection": str(name),
@@ -448,7 +449,7 @@ class Authenticator:
         assert prepared.person is not None
         at = datetime.now(UTC)
         await self.connections.mark_refused(tenant_id, connection_id, prepared.person, reason=reason, at=at)
-        event = {"action": "refresh_failed", "actor": acting_for.email, "at": at}
+        event: AuditEvent = {"action": "refresh_failed", "actor": acting_for.email, "at": at}
         await self.connections.note(tenant_id, connection_id, {**event, "detail": {"code": "REFUSED", "own": True}})
         conn = await self.connections.get(tenant_id, connection_id)
         if conn is None:

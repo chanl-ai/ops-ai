@@ -6,9 +6,10 @@ documents-service's (api/chat_attachments.py calls both)."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import cast
 
 from ops_agent_kernel.types import ATTACHMENT_KB, Passage
+from ops_service_kit.http import Json
 
 # The attached text one turn may read, across every file in the thread; a file past it says so in the reply.
 TURN_TEXT_CHARS = 24_000
@@ -22,10 +23,10 @@ class Page:
     text: str
 
 
-def pages_of(reading: dict[str, Any]) -> list[Page]:
+def pages_of(reading: Json) -> list[Page]:
     """A finished reading's pages that hold text, each whole."""
     out: list[Page] = []
-    for p in cast(list[dict[str, Any]], reading.get("pages") or []):
+    for p in cast(list[Json], reading.get("pages") or []):
         text = str(p.get("text") or "")
         if text.strip():
             out.append(Page(cast(int | None, p.get("number")), text))

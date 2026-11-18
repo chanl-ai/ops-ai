@@ -6,11 +6,12 @@ refused while any does. Each call carries a service token holding `workflows:vie
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import cast
 
 from ops_documents.files import Who
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import ServiceUnavailable
+from ops_service_kit.narrow import an_object, entries
 from ops_service_kit.settings import Settings
 
 
@@ -30,7 +31,9 @@ class TypeUses:
                 "agents-service did not say which workflows read this document type; try again shortly.",
                 code="type_uses_unavailable",
             ) from e
-        return list(cast(dict[str, Any], found).get(type_id) or [])
+        # A guard: an answer that is not an object fails the call, so no delete is made unchecked.
+        uses = an_object(found, "agents-service's type uses").get(type_id)
+        return cast(list[dict[str, str]], [*entries(uses)])
 
 
 def type_uses(settings: Settings) -> TypeUses | None:

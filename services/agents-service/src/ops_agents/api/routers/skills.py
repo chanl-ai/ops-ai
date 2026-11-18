@@ -20,7 +20,7 @@ from ops_access import can
 from ops_identity.fastapi import Tx
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, In, JsonValue, OptionsPage, options_page, options_window
+from ops_service_kit.http import Envelope, In, Json, JsonList, JsonValue, OptionsPage, options_page, options_window
 from ops_service_kit.ids import now_iso
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
@@ -29,8 +29,8 @@ from ops_store import isolation
 from ...store.skill_list import View, menu_versions, newest_specs, offered_by, skills_page
 from ...store.skills import SkillRow
 from ...store.template_copies import TemplateCopies
+from ..agent_registry import AgentSpec, require_owner_or_admin
 from ..agent_registry import registry as agent_registry
-from ..agent_registry import require_owner_or_admin
 from ..auth import Principal, caller_in, caller_of, principal, reader_of, require_builder
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -40,6 +40,7 @@ from ..skills import (
     LIMITS,
     agent_skills,
     check_content,
+    content_of,
     detail,
     list_row,
     missing_for,
@@ -164,23 +165,23 @@ async def list_skills(
     a tool or knowledge base the agent lacks as `locked`, naming them in `needs`."""
     # Read from `q.filters`; declared so the document and the SDKs name them.
     del status, owner_team, origin, loading, knowledge_bases
-    spec: dict[str, Any] | None = None
+    spec: Json | None = None
     offered = None
     if agent_id is not None:
         agents = agent_registry(rt)
         agent_row = await agents.row(agent_id)
-        held: dict[str, Any] = (await agents.version(agent_id, int(agent_row["version"])))["spec"]
+        held = (await agents.version(agent_id, agent_row.version)).spec
         spec = held
         menu = str(held.get("skillMenu") or "team")
         # A chat's skills are its team's: the team the request acts in, else the agent's own.
-        team = caller.team_id or str(agent_row.get("team_id") or "")
+        team = caller.team_id or str(agent_row.team_id or "")
         offered = offered_by(agent_id, team=team, menu=menu)
     listed, counts = await skills_page(rt.db, q, view=view, offered=offered)
     body: dict[str, Any] = {**listed, "data": [list_row(r) for r in listed["data"]]}
     if spec is not None:
         contents = await menu_versions(rt.db, [x["id"] for x in body["data"]])
         for x in body["data"]:
-            needs = missing_for(contents.get(x["id"], {}), spec)
+            needs = missing_for(content_of(contents.get(x["id"], {})), cast(AgentSpec, spec))
             x["locked"], x["needs"] = bool(needs), needs
     return ok({**body, "viewCounts": counts})
 
@@ -197,7 +198,7 @@ async def skill_options(rt: Rt, _: Annotated[Principal, Depends(reader_of("skill
         ]
         specs = await newest_specs(rt.db)
         teams = sorted({r.owner_team for r in await skills(rt).rows()})
-    held: list[Any] = [k for s in specs for k in cast(list[Any], s.get("collections") or [])]
+    held = [k for s in specs for k in cast(JsonList, s.get("collections") or [])]
     kbs = sorted({str(k) for k in held})
     return ok({"teams": teams, "tools": tools, "knowledgeBases": kbs, "limits": LIMITS})
 
@@ -292,7 +293,7 @@ async def _editable(rt: Runtime, me: Principal, skill_id: str, base_version: int
         raise Conflict("The skill is deprecated; it takes no new versions.", code="skill_deprecated")
     if base_version != row.version:
         raise Conflict(f"v{row.version} was saved after v{base_version}; reload and edit again.", code="stale_base")
-    if any(r["status"] == "pending" for r in await agent_registry(rt).requests("skill", skill_id)):
+    if any(r.status == "pending" for r in await agent_registry(rt).requests("skill", skill_id)):
         raise Conflict("The newest version is in review; decide the review first.", code="review_open")
     return row.version
 
@@ -381,16 +382,16 @@ async def agent_skill_options(  # noqa: PLR0917 - FastAPI reads each query param
     the query; one that needs a tool or knowledge base the agent lacks is offered disabled with the reason. `loading`
     keeps always-on or on-match skills, also in the query (the published version's mode is kept on the row)."""
     agents = agent_registry(rt)
-    spec = (await agents.version(agent_id, int((await agents.row(agent_id))["version"])))["spec"]
-    held = [str(p["skillId"]) for p in cast(list[dict[str, Any]], spec.get("skillPins") or [])]
+    spec = (await agents.version(agent_id, (await agents.row(agent_id)).version)).spec
+    held = [str(p["skillId"]) for p in cast(list[Json], spec.get("skillPins") or [])]
     reg = skills(rt)
     offset, window = options_window(None if ids else cursor, limit)
     rows = await reg.attachable(search, held, offset, window, ids=ids, loading=loading)
-    opts: list[dict[str, Any]] = []
+    opts: list[Json] = []
     for r in rows:
         v = await reg.version(r.id, r.published_version or r.version)
         content = v.content if v is not None else {}
-        missing = missing_for(content, spec)
+        missing = missing_for(content_of(content), cast(AgentSpec, spec))
         hint = f"v{r.published_version} · {content.get('useWhen', '')}"
         reason = f"Needs {', '.join(missing)}; grant them on this agent first." if missing else None
         opts.append({"id": r.id, "label": content.get("name", r.slug), "hint": hint, "disabled": reason})
@@ -403,14 +404,15 @@ async def attach_skill(rt: Rt, me: Me, _: Tx, agent_id: str, skill_id: str, body
     version is published (spec 11 5.4)."""
     reg = agent_registry(rt)
     row = await agent_changeable(rt, me, agent_id, "attach a skill to")
-    spec = dict((await reg.version(agent_id, int(row["version"])))["spec"])
+    spec = dict((await reg.version(agent_id, row.version)).spec)
     version = body.version
     if version is None:
         found = await skills(rt).find(skill_id)
         if found is None or found.published_version is None:
             raise NotFound(f"Published skill {skill_id}")
         version = found.published_version
-    spec["skillPins"] = await pin(rt, spec, skill_id, version, by=me.email, at=now_iso())
+    pins = await pin(rt, cast(AgentSpec, spec), skill_id, version, by=me.email, at=now_iso())
+    spec["skillPins"] = cast(JsonList, [*pins])
     await reg.save(agent_id, spec, by=me.email, note=f"Attached {skill_id} v{version}")
     return ok(await agent_skills(rt, agent_id))
 
@@ -419,9 +421,10 @@ async def attach_skill(rt: Rt, me: Me, _: Tx, agent_id: str, skill_id: str, body
 async def detach_skill(rt: Rt, me: Me, _: Tx, agent_id: str, skill_id: str) -> JSONResponse:
     reg = agent_registry(rt)
     row = await agent_changeable(rt, me, agent_id, "detach a skill from")
-    spec = dict((await reg.version(agent_id, int(row["version"])))["spec"])
-    held: list[dict[str, Any]] = list(spec.get("skillPins") or [])
-    pins = [p for p in held if p["skillId"] != skill_id]
+    spec = dict((await reg.version(agent_id, row.version)).spec)
+    # A pin that is not an object, or names no skill, raises as indexing it did.
+    held = narrow.a_list(spec.get("skillPins") or [], "skill pins")
+    pins: JsonList = [p for p in held if narrow.an_object(p, "skill pin")["skillId"] != skill_id]
     if len(pins) == len(held):
         raise NotFound(f"Skill {skill_id} on {agent_id}")
     spec["skillPins"] = pins

@@ -3,21 +3,23 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, NotRequired, TypedDict
 
 import sqlalchemy as sa
-from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.errors import NotFound
+from ops_service_kit.http import Json, JsonList, Out
 from ops_service_kit.ids import now_iso
 from ops_store import Guarantee, isolation
+from ops_store.rows import one, rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
 from .graphs import mine
-from .tenancy import OWNER, TOOL_GRANTS, UNIQUE_KEY, RuntimeStore, current_tenant
+from .tenancy import OWNER, TOOL_GRANTS, UNIQUE_KEY, current_tenant
+from .versioned import VersionedRegistry
 
 registry_workflows = sa.Table(
     "registry_workflows",
@@ -87,12 +89,81 @@ registry_validations = sa.Table(
 )
 
 
-def summary_columns(summary: JsonValue) -> dict[str, int]:
-    """The list columns of a test run's summary; a count it does not name is 0."""
-    values = summary if isinstance(summary, dict) else {}
+class CheckOutcomeJSON(TypedDict):
+    """A compile check's `draft` outcome in a validation result, in reply order."""
+
+    passed: bool
+    paused: bool
+    toolsCalled: list[str]
+    reply: str
+    failure: NotRequired[str]
+
+
+class CheckResultJSON(TypedDict):
+    """One compile check as a validation run's result, in reply order."""
+
+    caseId: str
+    caseName: str
+    draft: CheckOutcomeJSON
+    live: None
+    regression: bool
+
+
+class ValidationSummaryJSON(TypedDict):
+    """A validation run's `summary`, in reply order."""
+
+    passed: int
+    total: int
+    regressions: int
+    checksFailing: int
+
+
+class NewValidation(TypedDict):
+    """A validation run as the validate route records it, in column order."""
+
+    id: str
+    workflow_id: str
+    ran_at: str
+    target: str
+    results: list[CheckResultJSON]
+    summary: ValidationSummaryJSON
+
+
+class NewWorkflow(TypedDict):
+    """A registry workflow's columns as a create or a seed writes them, in column order."""
+
+    id: str
+    team_id: str
+    name: str
+    description: str
+    trigger: str
+    status: str
+    published_version: int | None
+    draft: Json | None
+    draft_saved_at: str | None
+    draft_saved_by: str | None
+    created_at: str
+    updated_at: str
+
+
+class NewWorkflowVersion(TypedDict):
+    """A published version's columns as a publish or a seed writes them, in column order."""
+
+    workflow_id: str
+    version: int
+    graph: Json
+    note: str
+    changes: list[str]
+    published_at: str
+    published_by: str
+    review_id: str | None
+
+
+def summary_columns(summary: ValidationSummaryJSON) -> dict[str, int]:
+    """The list columns of a test run's summary; a count it does not name, or names as a non-number, is 0."""
 
     def count(key: str) -> int:
-        value = values.get(key)
+        value = summary.get(key)
         return int(value) if isinstance(value, int | float) else 0
 
     return {
@@ -103,9 +174,65 @@ def summary_columns(summary: JsonValue) -> dict[str, int]:
     }
 
 
-class WorkflowRegistry(RuntimeStore):
+class RegistryWorkflowRow(Out):
+    """A console workflow: its owning team, status, the graph version new threads start on, and its draft."""
+
+    tenant_id: str
+    id: str
+    team_id: str
+    name: str
+    description: str
+    trigger: str
+    status: str
+    published_version: int | None
+    draft: Json | None
+    draft_saved_at: str | None
+    draft_saved_by: str | None
+    created_at: str
+    updated_at: str
+
+
+class WorkflowVersionRow(Out):
+    """One published version of a workflow: the console graph it was published from and who published it."""
+
+    tenant_id: str
+    workflow_id: str
+    version: int
+    graph: Json
+    note: str
+    changes: JsonList
+    published_at: str
+    published_by: str
+    review_id: str | None
+
+
+class ValidationRow(Out):
+    """One test run of a workflow: each check's result, the summary, and the summary's counts as columns."""
+
+    tenant_id: str
+    id: str
+    workflow_id: str
+    ran_at: str
+    target: str
+    results: JsonList
+    summary: Json
+    passed: int
+    total: int
+    regressions: int
+    checks_failing: int
+
+
+class WorkflowRegistry(VersionedRegistry[RegistryWorkflowRow, WorkflowVersionRow]):
     # One version row per (workflow, version), inserted only when missing (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS})
+    head = registry_workflows
+    history = registry_workflow_versions
+    subject = "workflow_id"
+    noun = "Workflow"
+    # Keyed by tenant, so each read names the caller's tenant as well as the row policies do, for SQLite.
+    in_tenant = True
+    head_row = RegistryWorkflowRow
+    version_row = WorkflowVersionRow
 
     async def ids(self) -> set[str]:
         """Every row's id, deleted ones included, in every team: a new workflow's id is unique across the workspace."""
@@ -116,16 +243,17 @@ class WorkflowRegistry(RuntimeStore):
             async with self.tx() as c:
                 return {str(i) for i in (await c.execute(q)).scalars()}
 
-    async def rows(self) -> list[dict[str, Any]]:
+    async def rows(self) -> list[RegistryWorkflowRow]:
+        """The acting team's workflows, deleted ones left out."""
         q = (
             sa.select(registry_workflows)
             .where(registry_workflows.c.status != "deleted", mine(registry_workflows), team_visible(registry_workflows))
             .order_by(registry_workflows.c.id)
         )
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, RegistryWorkflowRow)
 
-    async def refs_every_team(self) -> list[dict[str, Any]]:
+    async def refs_every_team(self) -> list[RegistryWorkflowRow]:
         """Every team's workflows, for a service that governs calls on their behalf (tools-service checks a grant's
         workflow and team here): what it reads decides access by the workflow's own team, not the caller's."""
         q = (
@@ -139,42 +267,21 @@ class WorkflowRegistry(RuntimeStore):
         )
         with isolation.tenant_wide(TOOL_GRANTS):
             async with self.tx() as c:
-                return [dict(r) for r in (await c.execute(q)).mappings()]
+                return await rows(c, q, RegistryWorkflowRow)
 
     async def owner_team(self, workflow_id: str, conn: AsyncConnection | None = None) -> str | None:
         """The team that owns it, whoever is acting; None when there is none. Only for deciding a refusal by the
         owning team, never for showing the record."""
         return (await self.owner_teams(conn, registry_workflows, {workflow_id}, OWNER)).get(workflow_id)
 
-    async def find(self, workflow_id: str) -> dict[str, Any] | None:
-        """The row, deleted or not."""
-        q = sa.select(registry_workflows).where(
-            registry_workflows.c.id == workflow_id, mine(registry_workflows), team_visible(registry_workflows)
-        )
-        async with self.tx() as c:
-            r = (await c.execute(q)).mappings().first()
-        return dict(r) if r else None
-
-    async def row(self, workflow_id: str) -> dict[str, Any]:
-        r = await self.find(workflow_id)
-        if r is None or r["status"] == "deleted":
-            raise NotFound(f"Workflow {workflow_id}")
+    async def row(self, record_id: str, c: AsyncConnection | None = None, *, lock: bool = False) -> RegistryWorkflowRow:
+        """The row, NotFound when it is deleted; `find` returns a deleted one."""
+        r = await self.find(record_id, c, lock=lock)
+        if r is None or r.status == "deleted":
+            raise NotFound(f"Workflow {record_id}")
         return r
 
-    async def versions(self, workflow_id: str) -> list[dict[str, Any]]:
-        q = (
-            sa.select(registry_workflow_versions)
-            .where(
-                registry_workflow_versions.c.workflow_id == workflow_id,
-                mine(registry_workflow_versions),
-                team_visible(registry_workflow_versions),
-            )
-            .order_by(registry_workflow_versions.c.version.desc())
-        )
-        async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
-
-    async def create(self, row: dict[str, Any]) -> None:
+    async def create(self, row: NewWorkflow) -> None:
         async with self.tx() as c:
             await c.execute(registry_workflows.insert().values(**row))
 
@@ -186,7 +293,7 @@ class WorkflowRegistry(RuntimeStore):
                 .values(**values, updated_at=now_iso())
             )
 
-    async def add_version(self, row: dict[str, Any]) -> None:
+    async def add_version(self, row: NewWorkflowVersion) -> None:
         async with self.tx() as c:
             exists = (
                 await c.execute(
@@ -205,11 +312,11 @@ class WorkflowRegistry(RuntimeStore):
         await self.row(workflow_id)
         await self.update(workflow_id, status="deleted", draft=None)
 
-    async def save_validation(self, row: dict[str, Any]) -> None:
+    async def save_validation(self, row: NewValidation) -> None:
         async with self.tx() as c:
             await c.execute(registry_validations.insert().values(**row, **summary_columns(row["summary"])))
 
-    async def validations(self, workflow_ids: set[str]) -> list[dict[str, Any]]:
+    async def validations(self, workflow_ids: set[str]) -> list[ValidationRow]:
         """Every test run of these workflows, newest first. The ids come from `rows()`: the acting team's."""
         if not workflow_ids:
             return []
@@ -219,9 +326,9 @@ class WorkflowRegistry(RuntimeStore):
             .order_by(registry_validations.c.ran_at.desc(), registry_validations.c.id.desc())
         )
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, ValidationRow)
 
-    async def last_validation(self, workflow_id: str) -> dict[str, Any] | None:
+    async def last_validation(self, workflow_id: str) -> ValidationRow | None:
         q = (
             sa.select(registry_validations)
             .where(mine(registry_validations), registry_validations.c.workflow_id == workflow_id)
@@ -229,5 +336,4 @@ class WorkflowRegistry(RuntimeStore):
             .limit(1)
         )
         async with self.tx() as c:
-            r = (await c.execute(q)).mappings().first()
-        return dict(r) if r else None
+            return await one(c, q, ValidationRow)

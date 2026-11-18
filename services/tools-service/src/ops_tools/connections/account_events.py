@@ -10,9 +10,8 @@ signed in again reports it under the key its needs-reconnecting refusal named, s
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
-from ..store.connections import Account
+from ..store.connections import Account, ServiceEvent
 
 NEEDS_RECONNECT = "app_account.needs_reconnect"
 # A person connected their own account of an app, by a sign-in or by giving their key: a run paused for it goes on.
@@ -21,7 +20,7 @@ CONNECTED = "app_account.connected"
 
 def needs_reconnect_event(
     conn: Account, *, state: str, reason: str, since: datetime | None, at: datetime
-) -> dict[str, Any]:
+) -> ServiceEvent:
     """The admins' notice for the team account of `conn`; `since` is when the token that broke was issued or ended
     (none when the account never held one)."""
     connection_id = str(conn.id)
@@ -53,7 +52,7 @@ def connected_key(connection_id: str, person: str) -> str:
     return f"{connection_id}:{person or TEAM}"
 
 
-def connected_event(conn: Account, person: str) -> dict[str, Any]:
+def connected_event(conn: Account, person: str) -> ServiceEvent:
     """`person` connected their own account of `conn`; names only, never what they gave."""
     connection_id = str(conn.id)
     return {

@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from typing import Any, Protocol
+from typing import Any, Protocol, TypedDict, cast
 
 from langgraph.config import get_config, get_stream_writer
 
@@ -22,9 +22,12 @@ from ops_agent_kernel.events import (
 from ops_agent_kernel.kernel import run_turn
 from ops_agent_kernel.ports import KernelPorts, ToolExecutor, ToolOutcome
 from ops_agent_kernel.types import (
+    Access,
     AgentSettings,
     Interrupt,
+    LoadedSkill,
     PendingCall,
+    Plan,
     PromptFragment,
     ToolCallRecord,
     ToolGrant,
@@ -36,6 +39,7 @@ from ops_agents.activities.catalog import AgentDefinition, Catalog
 from ops_agents.activities.tool_directory import CatalogTools, ToolDirectory, grants_for
 from ops_agents.activities.tools import ReplySender
 from ops_metering import Usage
+from ops_service_kit.http import Json, JsonValue
 
 from .metering import Meter, metered
 from .models import GraphModels
@@ -102,12 +106,12 @@ class WorkflowRunner(Protocol):
         self,
         *,
         workflow: str,
-        arguments: dict[str, Any],
+        arguments: Json,
         key: str,
         parent_thread_id: str,
         parent_run_id: str | None,
-        graph_input: dict[str, Any] | None = None,
-        meta: dict[str, Any] | None = None,
+        graph_input: Json | None = None,
+        meta: Json | None = None,
     ) -> ToolOutcome:
         """Finds or creates the child thread for `key`, runs it, and returns its result or a handle to its review.
         `graph_input` is the child's whole state when it is more than an email; `meta` overrides the thread meta."""
@@ -121,9 +125,7 @@ class WorkflowTools:
     inner: ToolExecutor
     runner: WorkflowRunner
 
-    async def execute(
-        self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
-    ) -> ToolOutcome:
+    async def execute(self, tool: str, arguments: Json, *, key: str, approval_token: str | None) -> ToolOutcome:
         if not tool.startswith(WORKFLOW_TOOL_PREFIX):
             return await self.inner.execute(tool, arguments, key=key, approval_token=approval_token)
         configurable = get_config().get("configurable") or {}
@@ -149,7 +151,7 @@ class OpsRunner(Protocol):
         """The Ops tools when `agent_id` is its team's default agent and the turn has a person; none otherwise."""
         ...
 
-    async def run(self, tool: str, arguments: dict[str, Any]) -> ToolOutcome: ...
+    async def run(self, tool: str, arguments: Json) -> ToolOutcome: ...
 
 
 @dataclass(frozen=True)
@@ -160,9 +162,7 @@ class OpsTools:
     runner: OpsRunner
     names: frozenset[str]
 
-    async def execute(
-        self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
-    ) -> ToolOutcome:
+    async def execute(self, tool: str, arguments: Json, *, key: str, approval_token: str | None) -> ToolOutcome:
         if tool not in self.names:
             return await self.inner.execute(tool, arguments, key=key, approval_token=approval_token)
         return await self.runner.run(tool, arguments)
@@ -179,7 +179,7 @@ class MemoryRunner(Protocol):
         """The `search_memory` grant when the agent remembers and the turn has a person."""
         ...
 
-    async def run(self, arguments: dict[str, Any]) -> ToolOutcome: ...
+    async def run(self, arguments: Json) -> ToolOutcome: ...
 
 
 @dataclass(frozen=True)
@@ -189,9 +189,7 @@ class MemoryTools:
     inner: ToolExecutor
     runner: MemoryRunner
 
-    async def execute(
-        self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
-    ) -> ToolOutcome:
+    async def execute(self, tool: str, arguments: Json, *, key: str, approval_token: str | None) -> ToolOutcome:
         if tool != MEMORY_TOOL:
             return await self.inner.execute(tool, arguments, key=key, approval_token=approval_token)
         return await self.runner.run(arguments)
@@ -206,7 +204,7 @@ class AgentRunner(Protocol):
         ...
 
     async def run(
-        self, *, agent: str, arguments: dict[str, Any], key: str, parent_thread_id: str, parent_run_id: str | None
+        self, *, agent: str, arguments: Json, key: str, parent_thread_id: str, parent_run_id: str | None
     ) -> ToolOutcome:
         """Runs `agent`'s own turn on the question for the turn's person and returns its reply."""
         ...
@@ -219,9 +217,7 @@ class AgentTools:
     inner: ToolExecutor
     runner: AgentRunner
 
-    async def execute(
-        self, tool: str, arguments: dict[str, Any], *, key: str, approval_token: str | None
-    ) -> ToolOutcome:
+    async def execute(self, tool: str, arguments: Json, *, key: str, approval_token: str | None) -> ToolOutcome:
         if not tool.startswith(AGENT_TOOL_PREFIX):
             return await self.inner.execute(tool, arguments, key=key, approval_token=approval_token)
         configurable = get_config().get("configurable") or {}
@@ -301,11 +297,11 @@ def reply_call(email: Mapping[str, object], draft: str, review_id: str) -> dict[
     }
 
 
-def approval_token(decision: dict[str, Any] | None) -> str | None:
+def approval_token(decision: Mapping[str, JsonValue] | None) -> str | None:
     """The review service's token from an approved decision; it rides in the checkpointed decision, so a resume in a
-    new process still has it."""
+    new process still has it. Returned as stored: the gateway, not this read, refuses a token that is not one."""
     d = decision or {}
-    return d.get("approval_token") if d.get("decision") == "approved" else None
+    return cast("str | None", d.get("approval_token")) if d.get("decision") == "approved" else None
 
 
 def emit(event: str, node: str, data: Any = None) -> None:
@@ -324,7 +320,7 @@ async def kernel_turn(
     return await metered(meter, alias, "turn", lambda: _kernel_turn(node, req, ports), record=False)
 
 
-def _call_data(c: ToolCallRecord) -> dict[str, Any]:
+def _call_data(c: ToolCallRecord) -> Json:
     """The whole call as plain data, so a reader of the event log can show it without the kernel's types."""
     return {
         "id": c.tool_call_id,
@@ -411,8 +407,27 @@ async def _kernel_turn(node: str, req: TurnRequest, ports: KernelPorts) -> TurnR
     return result
 
 
-def interrupt_to_state(i: Interrupt) -> dict[str, Any]:
-    """An Interrupt as plain data the checkpointer can store; the library history travels base64-encoded."""
+class PendingApproval(TypedDict):
+    """A paused kernel turn as the approval nodes checkpoint it (`pending` in a graph's state): the interrupt, the call
+    it holds, the loop library's history base64-encoded, and the skills and plan the resumed turn goes on with."""
+
+    interrupt_id: str
+    needed: str
+    tool_call_id: str
+    key: str
+    action_id: str
+    tool: str
+    server: str
+    access: Access
+    input: Json
+    input_hash: str
+    history: str
+    loaded_skills: list[LoadedSkill]
+    plan: Plan | None
+
+
+def pending_approval(i: Interrupt) -> PendingApproval:
+    """An Interrupt as plain data the checkpointer can store."""
     p = i.pending_call
     return {
         "interrupt_id": i.interrupt_id,
@@ -431,23 +446,32 @@ def interrupt_to_state(i: Interrupt) -> dict[str, Any]:
     }
 
 
-def interrupt_from_state(d: dict[str, Any]) -> Interrupt:
+def interrupt_to_state(i: Interrupt) -> Json:
+    """`pending_approval` as a graph state's `pending` key holds it: every value, the skills and plan included, is
+    JSON."""
+    return cast(Json, pending_approval(i))
+
+
+def interrupt_from_state(d: Json) -> Interrupt:
+    """The Interrupt a checkpointed `pending` holds. Unchecked: a key it lacks raises KeyError, as the turn it resumes
+    wrote every one."""
+    v = cast(PendingApproval, d)
     call = PendingCall(
-        tool_call_id=d["tool_call_id"],
-        key=d["key"],
-        action_id=d["action_id"],
-        tool=d["tool"],
-        server=d["server"],
-        access=d["access"],
-        input=d["input"],
-        input_hash=d["input_hash"],
+        tool_call_id=v["tool_call_id"],
+        key=v["key"],
+        action_id=v["action_id"],
+        tool=v["tool"],
+        server=v["server"],
+        access=v["access"],
+        input=v["input"],
+        input_hash=v["input_hash"],
     )
     return Interrupt(
-        d["interrupt_id"],
+        v["interrupt_id"],
         "approval",
-        d["needed"],
+        v["needed"],
         call,
-        base64.b64decode(d["history"]),
-        list(d.get("loaded_skills") or []),
-        d.get("plan"),
+        base64.b64decode(v["history"]),
+        list(v.get("loaded_skills") or []),
+        v.get("plan"),
     )

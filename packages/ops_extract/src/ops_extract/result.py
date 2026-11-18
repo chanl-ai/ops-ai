@@ -5,10 +5,10 @@ from __future__ import annotations
 
 from typing import Literal
 
-from ops_extract.checks import entries, score
+from ops_extract.checks import score
 from ops_extract.shapes import FieldDefinition
 from ops_service_kit.http import Json, JsonList, JsonValue
-from ops_service_kit.narrow import an_object, json_object
+from ops_service_kit.narrow import an_object, entries, json_object
 
 Status = Literal["ok", "review"]
 

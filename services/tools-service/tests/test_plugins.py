@@ -22,6 +22,7 @@ from ops_identity import ActingForPerson
 from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.loader import GROUP, Loaded
 from ops_plugin_sdk.manifest import SIGN_IN_KINDS
+from ops_service_kit.http import Json
 from ops_service_kit.settings import PLUGIN_ENTRY_POINTS, Settings
 from ops_tools.auth.kinds import BY_ID
 from ops_tools.egress import EgressDenied, EgressPolicy
@@ -31,7 +32,7 @@ from ops_tools.graph_mailbox import CursorSeal
 from ops_tools.plugins.executor import PluginExecutor
 from ops_tools.plugins.host import PluginHost
 from ops_tools.registry import Resolved, ToolRegistry
-from ops_tools.store.connections import SHARED, ConnectionStore
+from ops_tools.store.connections import SHARED, ConnectionStore, NewAccount
 from ops_tools.store.egress import EgressStore
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
@@ -55,7 +56,7 @@ async def bind(engine: AsyncEngine, tenant: str, team: str, instance: str, conn:
     as the plugin's, in the team, holding `instance` as its own instance (the settings an account keeps)."""
     await PluginBindings(engine).put(tenant, team, ID, enabled=on, connection_id=conn, settings={}, by="test")
     store, now = ConnectionStore(engine), datetime.now(UTC)
-    row = {
+    row: NewAccount = {
         "tenant_id": tenant, "id": conn, "app_id": f"plugin:{ID}", "team_id": team, "name": "Desk",
         "auth_kind": "oauth2_auth_code", "sign_in": "team", "team_backup": False, "status": "healthy", "revision": 1,
         "created_by": "test", "created_at": now, "updated_by": "test", "updated_at": now,
@@ -213,7 +214,7 @@ async def test_a_source_sync_reaches_its_own_site_only_once_the_account_lists_it
     ex = plugin_executor(engine, store, seen)
     policy = Listed()
     ex.http.policy = policy  # type: ignore[assignment]
-    args = {"source": {"start": "https://help.northbank.test"}}
+    args: Json = {"source": {"start": "https://help.northbank.test"}}
 
     async def sync() -> Any:
         return await ex.run(

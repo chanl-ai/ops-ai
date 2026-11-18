@@ -7,9 +7,16 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, TypedDict, cast
 
 from PIL import Image, ImageFilter, ImageOps
+
+
+class _Orientation(TypedDict, total=False):
+    """The keys read from Tesseract's orientation detection (`image_to_osd` as a dict)."""
+
+    rotate: int
+    orientation_conf: float
 
 
 class OcrUnavailableError(RuntimeError):
@@ -96,7 +103,7 @@ class TesseractEngine:
         and the clockwise turn made; a page with too little text for it to judge is left as scanned."""
         try:
             osd = cast(
-                dict[str, Any],
+                _Orientation,
                 self._tess.image_to_osd(image, output_type=self._tess.Output.DICT),  # pyright: ignore[reportUnknownMemberType]
             )
         except Exception:

@@ -14,6 +14,7 @@ from typing import Any, cast
 
 from ops_access import team_on
 from ops_engine.ports import PromptPort, PromptRequest
+from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 
 from .. import task_types as tt
@@ -31,14 +32,14 @@ KEY = "taskAssist"
 # A pause waits at most this long for the assist; past it the task opens without one.
 TIMEOUT_SECONDS = 20.0
 # What a step's assist row holds while the model call runs, and after it failed.
-PENDING: dict[str, Any] = {"pending": True}
-FAILED: dict[str, Any] = {"failed": True}
+PENDING: Json = {"pending": True}
+FAILED: Json = {"failed": True}
 # Past this a pending assist is never filled (its call times out at TIMEOUT_SECONDS, and a worker killed mid-call fills
 # nothing), so it reads as failed and the console stops waiting for it.
 PENDING_LIMIT = timedelta(seconds=TIMEOUT_SECONDS * 3)
 
 
-def settled(written: WrittenAssist | None, now: datetime) -> dict[str, Any] | None:
+def settled(written: WrittenAssist | None, now: datetime) -> Json | None:
     """The assist as a task shows it: a pending one older than PENDING_LIMIT as failed."""
     if written is None:
         return None
@@ -48,7 +49,7 @@ def settled(written: WrittenAssist | None, now: datetime) -> dict[str, Any] | No
     return written.assist
 
 
-SCHEMA: dict[str, Any] = {
+SCHEMA: Json = {
     "type": "object",
     "additionalProperties": False,
     "required": ["question", "summary", "doubtful", "suggestion"],
@@ -66,7 +67,7 @@ SCHEMA: dict[str, Any] = {
 }
 
 
-def instructions(actions: list[dict[str, Any]]) -> str:
+def instructions(actions: list[Json]) -> str:
     names = "\n".join(f"- {a['name']}: {a['label']}: {a.get('consequence') or ''}" for a in actions)
     return (
         "You help a person decide a task. From the task below, write: the one question the person answers, in plain "
@@ -89,10 +90,11 @@ class TaskAssist:
             return False
         return team_on(found, team)
 
-    async def start(self, team: str, payload: dict[str, Any]) -> PromptRequest | None:
+    async def start(self, team: str, payload: Json) -> PromptRequest | None:
         """At a typed step's pause, with no model call: records the step's assist as pending and returns the call that
         writes it; None for an untyped step, with the setting off, or when the step already has one."""
-        ref = cast(dict[str, Any] | None, payload.get("taskType"))
+        # The step's payload as the engine stored it: a reference that is not an object fails at its first read.
+        ref = cast(Json | None, payload.get("taskType"))
         step_id = str(payload.get("step_id") or "")
         if not ref or not step_id or not await self.on(team):
             return None
@@ -104,7 +106,7 @@ class TaskAssist:
             return None
         if not await TaskAssistStore(self.db).put(step_id, PENDING):
             return None
-        bound = tt.bind(record, cast(dict[str, Any] | None, payload.get("params")) or {})
+        bound = tt.bind(record, cast(Json | None, payload.get("params")) or {})
         return PromptRequest(
             instructions=instructions(bound["actions"]),
             message=json.dumps(bound["regions"], ensure_ascii=False, sort_keys=True, default=str),
@@ -124,12 +126,12 @@ class TaskAssist:
             return
         output: Any = result.output
         if result.ok and isinstance(output, dict):
-            await store.fill(step_id, cast(dict[str, Any], output))
+            await store.fill(step_id, cast(Json, output))
         else:
             log.warning("task_assist_unanswered", step=step_id, code=result.code)
             await store.fill(step_id, FAILED)
 
-    async def write(self, team: str, payload: dict[str, Any]) -> None:
+    async def write(self, team: str, payload: Json) -> None:
         """Both halves at once, for a caller that waits for the assist."""
         if (request := await self.start(team, payload)) is not None:
             await self.finish(str(payload["step_id"]), request)
@@ -141,7 +143,7 @@ def kernel_assist(db: AsyncEngine, agents: KernelAgents, policies: PolicySource)
     return TaskAssist(db, KernelPrompts(agents.ports, agents.model_alias), policies)
 
 
-def region(assist: dict[str, Any] | None, actions: list[dict[str, Any]]) -> dict[str, Any] | None:
+def region(assist: Json | None, actions: list[Json]) -> Json | None:
     """The assist as the task's `assist` region, marked as AI; a suggestion of an action the type lacks is dropped."""
     if not assist or assist.get("failed"):
         return None
@@ -149,8 +151,9 @@ def region(assist: dict[str, Any] | None, actions: list[dict[str, Any]]) -> dict
         # On its way: the console shows that and reads the task again until the assist is written.
         return {"region": "assist", "collapsed": False, "data": {"pending": True, "ai": True}}
     names = {str(a["name"]) for a in actions}
-    suggestion = cast(dict[str, Any] | None, assist.get("suggestion"))
+    # A suggestion that is not an object fails at its first read, as the model's answer was stored.
+    suggestion = cast(Json | None, assist.get("suggestion"))
     if suggestion is not None and str(suggestion.get("action")) not in names:
         suggestion = None
-    data = {**assist, "suggestion": suggestion, "ai": True}
+    data: Json = {**assist, "suggestion": suggestion, "ai": True}
     return {"region": "assist", "collapsed": False, "data": data}

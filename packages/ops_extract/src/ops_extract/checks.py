@@ -18,7 +18,7 @@ import regex
 from ops_contracts.field_values import DEFAULT_DATE_ORDER, as_date, as_number, normalise
 from ops_extract.shapes import FieldDefinition
 from ops_service_kit.http import Json, JsonValue
-from ops_service_kit.narrow import Malformed
+from ops_service_kit.narrow import Malformed, entries
 
 # Signals (research): quote exact 1.0, found after folding 0.85, not found 0; value valid as given 1.0,
 # normalised 0.9, invalid 0; a page read by OCR multiplies by its words' recognition confidence when the reader kept
@@ -44,19 +44,6 @@ CLEAN_RULES = (TRIM_PUNCTUATION, LAST_FOUR, STRIP_LABEL)
 _TRAILING = re.compile(r"[\s,;:]+$")
 # A label is a short run of words starting with a letter, then a colon and space: "Case reference: ", "Release: ".
 _LABEL = re.compile(r"^[A-Za-z][A-Za-z .#/()'-]{0,39}:\s+(?=\S)")
-
-
-def entries(value: JsonValue) -> list[JsonValue]:
-    """`value or []` iterated: a list's items, an object's keys, a string's characters, nothing for an empty or false
-    value; a number or `true` is not iterable and raises. Saved definitions are read this way so a wrongly shaped one
-    is refused (or fails the read) exactly as it was before it was typed."""
-    if not value:
-        return []
-    if isinstance(value, list):
-        return value
-    if isinstance(value, dict | str):
-        return [*value]
-    raise Malformed(f"{value!r} is not a list")
 
 
 def fold(text: str) -> str:
@@ -204,8 +191,7 @@ def score(
             "needsReview": bool(field.get("required")) or bool(field.get("alwaysReview")),
             "citation": None,
         }
-    # `normalise` is shared with case types, which read a field as a plain mapping.
-    value, valid = normalise(dict(field), raw)
+    value, valid = normalise(field, raw)
     said = str(quote) if quote is not None else None
     # The quote must be on its page and must say the value: either failing means nothing backs the value.
     confidence = ground(said, page, pages) * valid * (1.0 if in_quote(field, value, said) else 0.0)

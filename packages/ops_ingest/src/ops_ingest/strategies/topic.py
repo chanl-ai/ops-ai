@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import cast
 
 from ops_ingest.models import Chunk, ParsedDocument, Section
-from ops_ingest.strategies.base import SplitContext, json_list, json_object, section_text
+from ops_ingest.strategies.base import ModelReply, SplitContext, json_list, json_object, section_text
 from ops_ingest.strategies.structure import split_section, split_structure
 from ops_ingest.text import pack_sentences
 
@@ -30,7 +30,7 @@ Document: {title}
 """
 
 
-def valid_groups(data: dict[str, object] | None, count: int) -> list[list[int]] | None:
+def valid_groups(data: ModelReply | None, count: int) -> list[list[int]] | None:
     raw = json_list(data.get("groups")) if data is not None else None
     if raw is None:
         return None

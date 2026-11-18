@@ -63,8 +63,8 @@ def _graph(name: str, ports: EnginePorts) -> Any:
 
 
 def test_both_start_forms_take_files() -> None:
-    files = start_form(SEED["levy_files"], default_registry())
-    one = start_form(SEED["attachment_record"], default_registry())
+    files: dict[str, Any] | None = start_form(SEED["levy_files"], default_registry())
+    one: dict[str, Any] | None = start_form(SEED["attachment_record"], default_registry())
     assert files is not None and files["takesFiles"] and files["schema"]["required"] == ["files"]
     assert one is not None and one["takesFiles"] and one["schema"]["properties"]["fileId"]["format"] == "file"
 

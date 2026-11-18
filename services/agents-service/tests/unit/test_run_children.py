@@ -10,6 +10,7 @@ import pytest
 from ops_agents.api.routers.engine import started_runs
 from ops_agents.api.run_story import decisions_in, files_in
 from ops_engine.store import RunRow
+from ops_service_kit.http import Json
 
 
 def _run(run_id: str, status: str, outcome: str | None) -> RunRow:
@@ -77,7 +78,7 @@ async def test_each_started_run_is_listed_in_item_order_with_its_status_in_one_r
 
 def test_files_in_finds_each_file_id_once_at_any_depth_and_nothing_else() -> None:
     a, b = "fil_" + "a" * 32, "fil_" + "b" * 32
-    given = {
+    given: Json = {
         "documentFileId": a,
         "files": [{"fileId": b, "name": "TEST012.pdf"}],
         "again": [a],

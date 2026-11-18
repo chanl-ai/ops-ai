@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -38,7 +38,7 @@ async def engine(database_url: str) -> AsyncIterator[AsyncEngine]:
     await e.dispose()
 
 
-async def _origin(w: World, created_by: str, team: str = "team_ops") -> dict[str, Any]:
+async def _origin(w: World, created_by: str, team: str = "team_ops") -> case_story.CaseOrigin:
     rt: Any = SimpleNamespace(db=w.engine)
     with tenant_scope(w.tenant):
         # Only who opened the case and its team are read; the rest of the row does not matter here.
@@ -294,6 +294,6 @@ async def test_the_feed_tells_the_email_that_led_to_the_case_and_says_its_openin
         await store.add_event(case, "run", ref=debtor, detail={}, by=f"run:{debtor}")
         row = await store.get(case, ["team_ops"])
         runs = await CaseLinks(engine).runs(case, "team_ops")
-        told = [x["text"] for x in (await case_story.feed(rt, row, runs, scope=None))["lines"]]
+        told = [cast(str, x["text"]) for x in (await case_story.feed(rt, row, runs, scope=None))["lines"]]
     assert "Email from registry@court.example: Notice of garnishment" in told, told
     assert not any(t.endswith("opened this case") for t in told), told

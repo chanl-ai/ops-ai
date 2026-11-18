@@ -11,17 +11,18 @@ the decision standing with `resumed_at` unset, and the next decide with the same
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, NotRequired, TypedDict, cast
 
 from langgraph.types import Command
-from pydantic import JsonValue
 
 from ops_access import can
 from ops_agents.graphs.definition import WorkflowDefinition, option_declarations, option_name
+from ops_service_kit import narrow
 from ops_service_kit.errors import ApiError, Conflict, NotFound, ValidationFailed
+from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 from ops_store import isolation
@@ -66,6 +67,76 @@ def is_chat_graph(graph: str) -> bool:
     return graph in CASE_GRAPHS_EXCLUDED or graph.startswith("agent:")
 
 
+class ThreadCall(TypedDict, total=False):
+    """A write a paused thread step holds (`call`, an option's call, a `calls` entry): its operation, its input and the
+    step key its approval binds to. The graphs write it (graphs/common.reply_call, the approval nodes, definition's
+    levy calls); a workflow run's step holds the same keys (engine_reviews.ProposedCall), typed there for the stored
+    check this checkpoint value is not read through."""
+
+    tool: str
+    input: Json
+    step: str
+
+
+class ThreadPayload(TypedDict, total=False):
+    """What a paused thread step waits with (the interrupt's value in the LangGraph checkpoint): a workflow review
+    (definition's human node, complex_workflow.human), a chat or agent node's write approval (the approval nodes) or
+    an exhausted budget (metering.guard). A checkpoint can hold values that are not JSON and keys of any type, so the
+    fields name the shape the graphs write and nothing here checks it: each read below behaves as it did on a dict."""
+
+    kind: str
+    node: str
+    review_id: str
+    to: str
+    draft: JsonValue
+    score: float
+    attempts: int
+    customer: Json
+    error: JsonValue
+    call: ThreadCall
+    calls: dict[str, ThreadCall]
+    options: list[JsonValue]
+    ask_first: bool
+    requested_by: JsonValue
+    reviewer_role: JsonValue
+    step_up: bool
+
+
+class RunStep(TypedDict):
+    """One step of a Cases run (`RunStep` in apps/console/src/lib/types/cases.ts), from its runs' journals."""
+
+    nodeId: str
+    label: str
+    kind: str
+    status: str
+    durationMs: NotRequired[int]
+    detail: NotRequired[Any]
+
+
+class SummaryRow(TypedDict):
+    """One case thread as the Cases views, counts, search and facets read it (`summary_rows`); `thread` is its row."""
+
+    id: str
+    workflowId: str
+    subject: str
+    state: str
+    status: str
+    startedAt: str
+    durationMs: int
+    queue: str | None
+    slaMinutes: int | None
+    slaDueAt: str | None
+    parentThreadId: str | None
+    thread: Json
+
+
+class Paged[T](TypedDict):
+    """One page of rows and where it sits (`page`)."""
+
+    data: list[T]
+    pagination: Json
+
+
 STEP_KIND = {
     "human": "review",
     "send_reply": "action",
@@ -78,9 +149,10 @@ def _title(graph: str) -> str:
     return graph.replace("_", " ").capitalize()
 
 
-def _get(d: Any, key: str) -> Any:
-    """`d[key]` for a JSON object from the journal or an interrupt, None for anything else."""
-    return cast(dict[str, Any], d).get(key) if isinstance(d, dict) else None
+def _get(d: object, key: str) -> Any:
+    """`d[key]` for a JSON object from the journal or an interrupt, None for anything else. Unchecked: a checkpoint's
+    value need not be JSON, and each caller reads it as it reads any other value."""
+    return narrow.json_object(d).get(key)
 
 
 def _parse(ts: str | None) -> datetime | None:
@@ -92,18 +164,24 @@ def _minutes_until(ts: str | None, now: datetime) -> int | None:
     return None if due is None else int((due - now).total_seconds() // 60)
 
 
-def _steps(runs: list[dict[str, Any]], waiting_at: list[str]) -> list[dict[str, Any]]:
-    steps: list[dict[str, Any]] = [
+def _steps(runs: list[Json], waiting_at: list[str]) -> list[RunStep]:
+    steps: list[RunStep] = [
         {"nodeId": "trigger", "label": "Started", "kind": "trigger", "status": "done", "durationMs": 0}
     ]
     for r in runs:
         if r["kind"] == "sla":
             continue
-        open_steps: dict[str, list[dict[str, Any]]] = {}
-        for e in r["events"]:
-            node = e.get("node")
+        open_steps: dict[str, list[RunStep]] = {}
+        for e in cast(list[Json], r["events"]):
+            # A journal's node is a step name; read unchecked, as each read below reads it.
+            node = cast(str | None, e.get("node"))
             if e.get("event") == "node_start" and node:
-                step = {"nodeId": node, "label": _title(node), "kind": STEP_KIND.get(node, "tool"), "status": "done"}
+                step: RunStep = {
+                    "nodeId": node,
+                    "label": _title(node),
+                    "kind": STEP_KIND.get(node, "tool"),
+                    "status": "done",
+                }
                 step["durationMs"] = 0
                 steps.append(step)
                 open_steps.setdefault(node, []).append(step)
@@ -134,7 +212,7 @@ async def _decisions(rt: Runtime, thread_ids: list[str] | None = None) -> dict[s
     return await ReviewStore(graph_store(rt).engine).latest_decisions(thread_ids)
 
 
-def requester_of(row: dict[str, Any], payload: dict[str, Any]) -> str:
+def requester_of(row: Json, payload: ThreadPayload | Json) -> str:
     """Who asked for the paused step: the person recorded on the interrupt when there is one, else the workflow
     itself (the process principal), which no person can be."""
     return str(payload.get("requested_by") or f"workflow:{row.get('graph')}")
@@ -143,10 +221,15 @@ def requester_of(row: dict[str, Any], payload: dict[str, Any]) -> str:
 CHAT_GRAPH = "agent_wrapper"
 
 
-def _is_chat(row: dict[str, Any]) -> bool:
+def _is_chat(row: Json) -> bool:
     """A chat thread (POST /chat/threads): its id is the conversation's, and its meta names the agent."""
-    meta: dict[str, Any] = row.get("meta") or {}
-    return bool(meta.get("chat"))
+    return bool(_meta(row).get("chat"))
+
+
+def _meta(row: Json) -> Json:
+    """A thread row's meta (a JSON object column; empty when unset). A value of another type fails the read, as
+    reading a key of it did."""
+    return narrow.an_object(row.get("meta") or {}, "a thread's meta")
 
 
 class OptionsUnresolved(Exception):
@@ -156,26 +239,25 @@ class OptionsUnresolved(Exception):
 
 async def resolved_options(
     rt: Runtime,
-    row: dict[str, Any],
-    payload: dict[str, Any],
+    row: Json,
+    payload: ThreadPayload | Json,
     versions: Mapping[tuple[str, int], WorkflowDefinition] | None = None,
-) -> list[dict[str, Any]]:
+) -> list[Json]:
     """The declarations of the step's options. A row stores them as the step declared them at pause time; one paused
     before the declaration existed stores names only, which are resolved against the published version's step
     (the declaration is a property of the workflow version, not of the row) with the calls the row carries.
     `versions`: the workflow versions a list already read, so its rows read none again."""
-    raw: list[Any] = list(payload.get("options") or [])
+    raw: JsonList = list(cast(JsonList, payload.get("options") or []))
     if not raw:
         return []
-    if all(isinstance(o, dict) and "name" in cast(dict[str, Any], o) for o in raw):
-        return [dict(cast(dict[str, Any], o)) for o in raw]
+    if all(isinstance(o, dict) and "name" in o for o in raw):
+        return [dict(cast(Json, o)) for o in raw]
     names = [option_name(o) for o in raw]
     if row.get("version") is None:
         raise OptionsUnresolved(f"The step offers {', '.join(names)} but the thread pins no workflow version.")
     try:
-        d = (versions or {}).get((str(row["graph"]), int(row["version"]))) or await definition(
-            rt, str(row["graph"]), int(row["version"])
-        )
+        graph, version = str(row["graph"]), int(cast(int, row["version"]))
+        d = (versions or {}).get((graph, version)) or await definition(rt, graph, version)
     except NotFound as e:
         raise OptionsUnresolved(f"The thread's workflow version {row['graph']} v{row['version']} is gone.") from e
     node = d.node(str(payload.get("node") or ""))
@@ -183,7 +265,7 @@ async def resolved_options(
         raise OptionsUnresolved(f"Step {payload.get('node')} of {d.name} v{d.version} declares no options.")
     if rt.graph_deps is None:
         raise OptionsUnresolved("Options cannot be declared without the graph runtime (no model configured).")
-    calls: dict[str, Any] = dict(payload.get("calls") or {})
+    calls: dict[str, Json] = dict(cast(dict[str, Json], payload.get("calls") or {}))
     declared = await option_declarations(rt.graph_deps, list(node.config["options"]), calls)
     by_name = {str(o["name"]): o for o in declared}
     missing = [n for n in names if n not in by_name]
@@ -194,25 +276,25 @@ async def resolved_options(
     return [by_name[n] for n in names]
 
 
-async def interrupt_view(rt: Runtime, row: dict[str, Any], interrupt: dict[str, Any]) -> dict[str, Any]:
+async def interrupt_view(rt: Runtime, row: Json, interrupt: Json) -> Json:
     """The pending interrupt as GET state serves it: a step's options as declarations (resolved_options), or the
     names it stored with `optionsError` saying why they could not be declared."""
-    payload: dict[str, Any] = dict(interrupt.get("payload") or {})
+    payload: Json = dict(cast(Json, interrupt.get("payload") or {}))
     if not payload.get("options"):
         return interrupt
     try:
-        payload["options"] = await resolved_options(rt, row, payload)
+        payload["options"] = cast(JsonList, await resolved_options(rt, row, payload))
     except OptionsUnresolved as e:
         payload["optionsError"] = str(e)
     return {**interrupt, "payload": payload}
 
 
-async def _needs_step_up(rt: Runtime, payload: dict[str, Any]) -> bool:
+async def _needs_step_up(rt: Runtime, payload: ThreadPayload | Json) -> bool:
     """Approving needs a step-up when the operation asks for one (its policy's `stepUp`, which two approvers imply).
     A step with options needs one when any option's call does."""
-    raw_listed: list[Any] = list(payload.get("options") or [])
-    listed_options: list[dict[str, Any]] = [dict(cast(dict[str, Any], o)) for o in raw_listed if isinstance(o, dict)]
-    calls: list[Any] = [payload.get("call"), *(o.get("call") for o in listed_options)]
+    raw_listed: JsonList = list(cast(JsonList, payload.get("options") or []))
+    listed_options: list[Json] = [dict(o) for o in raw_listed if isinstance(o, dict)]
+    calls: list[object] = [payload.get("call"), *(o.get("call") for o in listed_options)]
     for tool in {str(_get(c, "tool")) for c in calls if _get(c, "tool")}:
         if (await policy_of(rt, tool)).step_up:
             return True
@@ -239,30 +321,32 @@ async def page_reads(rt: Runtime, threads: list[ThreadRow]) -> PageReads:
     return PageReads((await resolve_rows(rt, threads)).graphs, await _decisions(rt, ids), journals)
 
 
-async def run_row(summary: dict[str, Any], reads: PageReads) -> dict[str, Any]:
+async def run_row(summary: SummaryRow, reads: PageReads) -> Json:
     """One thread as a Cases RunRow (`RunRow` in apps/console/src/lib/types/cases.ts). State, status, subject, queue
     and SLA come from its summary row (`summary_rows`), as the list's do; this adds what only the checkpoint and the
     journal hold: the steps, the waiting call, the error and the trigger. Raises the error resolving its graph
     raised (a version removed, a digest changed)."""
-    row: dict[str, Any] = summary["thread"]
-    graph = reads.graphs[row["id"]]
+    row = summary["thread"]
+    thread_id = cast(str, row["id"])
+    graph = reads.graphs[thread_id]
     if isinstance(graph, ApiError):
         raise graph
-    snap = await graph.aget_state(config(row["id"]))
+    snap = await graph.aget_state(config(thread_id))
     waiting = summary["state"] == "waiting"
     interrupts = pending(snap)
-    work = [r for r in reads.journals.get(row["id"], []) if r.kind != "sla"]
-    decision = reads.decisions.get(row["id"])
-    values: dict[str, Any] = snap.values or {}
-    email: dict[str, Any] = values.get("email") or {}
+    work = [r for r in reads.journals.get(thread_id, []) if r.kind != "sla"]
+    decision = reads.decisions.get(thread_id)
+    values: Json = snap.values or {}
+    email = cast(Json, values.get("email") or {})
     events = work[-1].events if work else []
     error = next((_get(e.get("data"), "message") for e in events if e.get("event") == "error"), None)
-    payload: dict[str, Any] = interrupts[0]["payload"] if waiting and interrupts else {}
+    payload: Json = cast(Json, interrupts[0]["payload"]) if waiting and interrupts else {}
     approved = 1 if decision and decision.decision == "approved" and decision.resumed_at else 0
+    graph_name, meta = cast(str, row["graph"]), cast(Json, row["meta"])
     return {
         "id": row["id"],
         "workflowId": row["graph"],
-        "workflowName": row["meta"].get("workflowName") or _title(row["graph"]),
+        "workflowName": meta.get("workflowName") or _title(graph_name),
         "version": row["version"] or 1,
         "subject": summary["subject"],
         "status": summary["status"],
@@ -270,8 +354,10 @@ async def run_row(summary: dict[str, Any], reads: PageReads) -> dict[str, Any]:
         "durationMs": summary["durationMs"],
         **({"reviewId": row["id"]} if waiting else {}),
         **({"error": error} if summary["state"] == "failed" and error else {}),
-        **_trigger(row["meta"] or {}, email),
-        "steps": _steps([{"kind": r.kind, "events": r.events} for r in work], list(snap.next)),
+        **_trigger(meta or {}, email),
+        "steps": cast(
+            JsonList, _steps([{"kind": r.kind, "events": cast(JsonList, r.events)} for r in work], list(snap.next))
+        ),
         "state": summary["state"],
         "waitingOn": "Reviewers" if waiting else None,
         "queue": summary["queue"],
@@ -282,17 +368,18 @@ async def run_row(summary: dict[str, Any], reads: PageReads) -> dict[str, Any]:
         "actionsPending": 1 if payload.get("call") or payload.get("options") else 0,
         "caseId": None,
         "parentThreadId": row.get("parent_thread_id"),
-        "children": children_view(values, row["meta"] or {}),
+        "children": cast(JsonList | None, children_view(values, meta or {})),
     }
 
 
-def children_view(values: Mapping[str, Any], meta: Mapping[str, Any]) -> list[dict[str, Any]] | None:
+def children_view(values: Mapping[str, JsonValue], meta: Mapping[str, JsonValue]) -> list[Json] | None:
     """A parent's child cases with their current outcome: the list the run wrote (`children` in its state, frozen at
     open time) with each child's finish, written to the parent's meta by `child_runs.tell_parent`, laid over it."""
-    raw_opened: list[Any] = list(values.get("children") or [])
-    raw_finished: list[Any] = list(meta.get("children") or [])
-    opened: list[dict[str, Any]] = [dict(c) for c in raw_opened]
-    finished: list[dict[str, Any]] = [dict(c) for c in raw_finished]
+    # `dict()` of each entry, as before: an entry that is not an object raises or copies its pairs.
+    raw_opened: JsonList = list(cast(JsonList, values.get("children") or []))
+    raw_finished: JsonList = list(cast(JsonList, meta.get("children") or []))
+    opened: list[Json] = [dict(cast(Json, c)) for c in raw_opened]
+    finished: list[Json] = [dict(cast(Json, c)) for c in raw_finished]
     if not opened and not finished:
         return None
     by_id = {c.get("threadId"): c for c in opened}
@@ -301,14 +388,14 @@ def children_view(values: Mapping[str, Any], meta: Mapping[str, Any]) -> list[di
     return list(by_id.values())
 
 
-def _trigger(meta: dict[str, Any], email: dict[str, Any]) -> dict[str, str]:
+def _trigger(meta: Json, email: Json) -> dict[str, str]:
     """What started the run when it was not its own trigger: an agent calling the workflow as a tool."""
     if meta.get("startedBy") == "agent":
         return {"trigger": f"Started by agent {meta.get('agentName') or ''}".rstrip()}
     return {"trigger": f"From {email['sender']}"} if email.get("sender") else {}
 
 
-def _done_today(r: dict[str, Any], now: datetime) -> bool:
+def _done_today(r: SummaryRow, now: datetime) -> bool:
     if r["state"] not in ("done", "failed"):
         return False
     started = _parse(r["startedAt"])
@@ -316,7 +403,7 @@ def _done_today(r: dict[str, Any], now: datetime) -> bool:
     return datetime.fromtimestamp(finished, UTC).date() == now.date()
 
 
-RUN_VIEWS: dict[str, Callable[[dict[str, Any], datetime], bool]] = {
+RUN_VIEWS: dict[str, Callable[[SummaryRow, datetime], bool]] = {
     "needs_person": lambda r, now: r["state"] == "waiting",
     "open": lambda r, now: r["state"] in {"running", "waiting"},
     "past_sla": lambda r, now: r["state"] in ("running", "waiting") and (r["slaMinutes"] or 0) < 0,
@@ -324,7 +411,7 @@ RUN_VIEWS: dict[str, Callable[[dict[str, Any], datetime], bool]] = {
 }
 
 
-def _facets(rows: list[dict[str, Any]], columns: list[str]) -> dict[str, dict[str, int]]:
+def _facets(rows: Sequence[Mapping[str, object]], columns: list[str]) -> dict[str, dict[str, int]]:
     out: dict[str, dict[str, int]] = {c: {} for c in columns}
     for r in rows:
         for c in columns:
@@ -333,11 +420,11 @@ def _facets(rows: list[dict[str, Any]], columns: list[str]) -> dict[str, dict[st
     return out
 
 
-def page(rows: list[dict[str, Any]], page_no: int, size: int) -> dict[str, Any]:
+def page[T](rows: list[T], page_no: int, size: int) -> Paged[T]:
     total = len(rows)
     pages = max(1, -(-total // size))
     start = (page_no - 1) * size
-    meta = {"page": page_no, "pageSize": size, "total": total, "totalPages": pages}
+    meta: Json = {"page": page_no, "pageSize": size, "total": total, "totalPages": pages}
     meta |= {"hasNext": page_no < pages, "hasPrev": page_no > 1}
     return {"data": rows[start : start + size], "pagination": meta}
 
@@ -348,7 +435,7 @@ async def _resolvable(rt: Runtime) -> set[str]:
     return set(await rt.graph_store.latest_versions()) | set(rt.graphs)
 
 
-async def summary_rows(rt: Runtime, now: datetime, only: str | None = None) -> list[dict[str, Any]]:
+async def summary_rows(rt: Runtime, now: datetime, only: str | None = None) -> list[SummaryRow]:
     """Every case thread (or `only` that one) as the fields the Cases views, counts, search and facets read, from
     three queries in all. These are the only source of a row's state, status, subject, queue and SLA: the list and
     the detail page both take them from here, so they cannot disagree. Building full rows (`run_row`: checkpoint,
@@ -366,30 +453,29 @@ async def summary_rows(rt: Runtime, now: datetime, only: str | None = None) -> l
     unsure = [t["id"] for t in threads if t["status"] in ("error", "lease_lost")]
     paused = {t["id"] for t in threads if t["status"] == "interrupted"} | await _still_paused(rt, unsure)
     due = await _open_sla_due(rt, sorted(paused))
-    rows: list[dict[str, Any]] = []
+    rows: list[SummaryRow] = []
     for t in threads:
-        work = [r for r in runs.get(t["id"], []) if r["kind"] != "sla"]
+        work = [r for r in runs.get(t["id"], []) if r.kind != "sla"]
         last = work[-1] if work else None
         waiting = t["id"] in paused and t["status"] != "busy"
-        failed = t["status"] == "error" or (last is not None and last["status"] == "error")
+        failed = t["status"] == "error" or (last is not None and last.status == "error")
         state = "running" if t["status"] == "busy" else "waiting" if waiting else "failed" if failed else "done"
-        started, finished = _parse(t["created_at"]), _parse(last["finished_at"] if last else None)
+        started, finished = _parse(t["created_at"]), _parse(last.finished_at if last else None)
         end = now if state in ("running", "waiting") or finished is None else finished
         # The email in the thread's state is the one the latest input run brought.
-        email: dict[str, Any] = {}
+        email: Json = {}
         for r in reversed(work):
-            journal: dict[str, Any] = r["input"] or {}
-            given: dict[str, Any] = journal.get("input") or {}
-            found_email: dict[str, Any] | None = given.get("email")
+            given = narrow.an_object(narrow.an_object(r.input or {}, "a run's input").get("input") or {}, "its input")
+            found_email = given.get("email")
             if found_email:
-                email = found_email
+                email = narrow.an_object(found_email, "the run's email")
                 break
         sla_due = due.get(t["id"]) if waiting else None
         rows.append(
             {
                 "id": t["id"],
                 "workflowId": t["graph"],
-                "subject": email.get("subject") or t["meta"].get("subject") or _title(t["graph"]),
+                "subject": cast(str, email.get("subject") or t["meta"].get("subject") or _title(t["graph"])),
                 "state": state,
                 "status": {"running": "running", "waiting": "waiting_review", "failed": "failed", "done": "completed"}[
                     state
@@ -442,7 +528,7 @@ async def list_runs(
             in_view = [r for r in in_view if str(r.get(column)) in wanted]
     paged = page(in_view, page_no, size)
     reads = await page_reads(rt, [ThreadRow.model_validate(r["thread"]) for r in paged["data"]])
-    full: list[dict[str, Any]] = []
+    full: list[Json] = []
     for r in paged["data"]:
         try:
             full.append(await run_row(r, reads))
@@ -452,7 +538,7 @@ async def list_runs(
     return {**paged, "data": full, "facets": facets, "viewCounts": counts}
 
 
-async def get_run(rt: Runtime, thread_id: str) -> dict[str, Any]:
+async def get_run(rt: Runtime, thread_id: str) -> Json:
     now = datetime.now(UTC)
     found = await summary_rows(rt, now, only=thread_id)
     if not found:
@@ -488,53 +574,53 @@ async def known_for(
 
 
 async def review_view(
-    rt: Runtime, row: dict[str, Any], interrupt: dict[str, Any], now: datetime, known: Known | None = None
+    rt: Runtime, row: Json, interrupt: Json, now: datetime, known: Known | None = None
 ) -> dict[str, Any]:
     """A paused review step as a console `Review`; `status` is pending until a decision is recorded. `known`: what a
     list read once for all its rows; one review reads its own."""
     known = known or await known_for(rt, [str(row["id"])])
-    payload: dict[str, Any] = interrupt["payload"]
-    call: dict[str, Any] = payload.get("call") or {}
-    policy = await policy_of(rt, call["tool"]) if call.get("tool") else None
+    # The checkpoint's value as it is: a payload that is not an object fails its first read, as it did.
+    payload = cast(ThreadPayload, interrupt["payload"])
+    call = cast(Json, payload.get("call") or {})
+    policy = await policy_of(rt, cast(str, call["tool"])) if call.get("tool") else None
     access = policy.access if policy else "unknown"
     two = bool(policy and policy.approvers > 1)
     due = known.due.get(str(row["id"]))
     chat = _is_chat(row)
-    agent_name = str(row["meta"].get("agentName") or row["meta"].get("agentId") or "")
+    meta = cast(Json, row["meta"])
+    agent_name = str(meta.get("agentName") or meta.get("agentId") or "")
     options_error: str | None = None
     try:
         options = await resolved_options(rt, row, payload, known.versions)
     except OptionsUnresolved as e:
         options, options_error = [], str(e)
-    payload = {**payload, "options": options}
+    payload = cast(ThreadPayload, {**payload, "options": options})
     for o in options:
         # Per option, so a form asks for the step-up only when the chosen call needs it.
         o["stepUp"] = await _needs_step_up(rt, {"call": o.get("call")})
-    subject = str(row["meta"].get("subject") or "")
+    subject = str(meta.get("subject") or "")
     if chat and call.get("tool"):
         title = f"Run {call['tool']} for {agent_name}"
     elif payload.get("to"):
-        title = f"Send reply to {payload['to']}"
+        title = f"Send reply to {payload.get('to')}"
     elif subject:
         title = subject
     else:
-        title = f"Review {_title(row['graph'])}"
+        title = f"Review {_title(cast(str, row['graph']))}"
     # What the proposal would move: the first option's (or the call's) input named amount, as the operation spells it.
-    proposals: list[dict[str, Any]] = [dict(o.get("call") or {}) for o in options] + ([call] if call else [])
+    proposals: list[Json] = [dict(cast(Json, o.get("call") or {})) for o in options] + ([call] if call else [])
     amount = _amount_of(proposals)
     # The step's own call in words, as a workflow review words it (engine_reviews.view): what approving does and sends.
     described = await describe_call(rt, call, currency=None, money_key=None) if call.get("tool") else None
-    customer: dict[str, Any] = dict(payload.get("customer") or {})
-    origin: dict[str, Any] = (
-        {"kind": "chat", "threadId": row["id"], "agentName": agent_name} if chat else {"kind": "workflow"}
-    )
+    customer: Json = dict(payload.get("customer") or {})
+    origin: Json = {"kind": "chat", "threadId": row["id"], "agentName": agent_name} if chat else {"kind": "workflow"}
     return {
         "origin": origin,
         "id": row["id"],
         "title": title,
         "customer": payload.get("to") or customer.get("name") or customer.get("id") or "",
         "workflowId": row["graph"],
-        "workflowName": row["meta"].get("workflowName") or _title(row["graph"]),
+        "workflowName": meta.get("workflowName") or _title(cast(str, row["graph"])),
         "agentSlug": row["graph"],
         "kind": "approval",
         "risk": "high" if two else "medium" if access == "write" else "low",
@@ -567,34 +653,34 @@ async def review_view(
         "consequence": (described["consequence"] or described["sentence"]) if described else None,
         "actionFields": described["fields"] if described else [],
         # Who decides it, as check_thread_decider checks: a write's approving team, else the thread's team.
-        "decidingTeam": await deciding_team(rt, row.get("team_id")),
+        "decidingTeam": await deciding_team(rt, cast(str | None, row.get("team_id"))),
     }
 
 
-def _amount_of(proposals: list[dict[str, Any]]) -> float | None:
+def _amount_of(proposals: list[Json]) -> float | None:
     """The first proposed call input named amount (as the operation spells it), when it is a number."""
     for proposal in proposals:
-        inputs: dict[str, Any] = dict(proposal.get("input") or {})
+        inputs: Json = dict(cast(Json, proposal.get("input") or {}))
         for key, value in inputs.items():
             if key.replace("_", "").casefold().endswith("amount") and isinstance(value, int | float):
                 return float(value)
     return None
 
 
-def _reasoning(payload: dict[str, Any]) -> list[str]:
+def _reasoning(payload: ThreadPayload | Json) -> list[str]:
     out: list[str] = []
     if payload.get("score") is not None:
-        out.append(f"The draft was graded {payload['score']}.")
+        out.append(f"The draft was graded {payload.get('score')}.")
     if payload.get("attempts"):
-        out.append(f"Drafted in {payload['attempts']} attempts.")
+        out.append(f"Drafted in {payload.get('attempts')} attempts.")
     return out
 
 
-def _decided(d: DecisionOut) -> dict[str, Any]:
-    review: dict[str, Any] = dict(d.review)
+def _decided(d: DecisionOut) -> Json:
+    review: Json = dict(d.review)
     # A decision recorded before reviews named their origin was a workflow's: chat approvals were not listed then.
     review.setdefault("origin", {"kind": "workflow"})
-    resume: dict[str, Any] = dict(review.get("resume") or {})
+    resume: Json = dict(cast(Json, review.get("resume") or {}))
     return review | {
         "status": d.decision,
         "decidedBy": d.decided_by,
@@ -618,16 +704,12 @@ class HeldStep:
 Held = dict[str, HeldStep]
 
 
-# A review or a thread row as a dictionary, as the views and the stores hand them on.
-Row = dict[str, Any]
-
-
 @dataclass(frozen=True)
 class ReviewReads:
     """What the review list reads from this service's own tables before any review is built: the waiting graph
     threads with their decisions, the workflow versions they pin, and the engine's review steps."""
 
-    threads: list[tuple[Row, Row | None, DecisionOut | None]]
+    threads: list[tuple[Json, Json | None, DecisionOut | None]]
     versions: dict[tuple[str, int], WorkflowDefinition]
     engine: engine_reviews.RowReads | None
 
@@ -651,8 +733,8 @@ async def ask_outside(rt: Runtime, reads: ReviewReads) -> None:
         if row.get("team_id"):
             teams.add(str(row["team_id"]))
         payload = waiting["payload"]
-        raw_options: list[Any] = list(_get(payload, "options") or [])
-        calls: list[Any] = [_get(payload, "call"), *(_get(o, "call") for o in raw_options)]
+        raw_options: list[object] = list(_get(payload, "options") or [])
+        calls: list[object] = [_get(payload, "call"), *(_get(o, "call") for o in raw_options)]
         by_option: Any = _get(payload, "calls") or {}
         calls += list(by_option.values())
         tools |= {str(_get(c, "tool")) for c in calls if _get(c, "tool")}
@@ -675,7 +757,7 @@ async def read_then_ask(rt: Runtime) -> ReviewReads:
     return reads
 
 
-async def build_reviews(rt: Runtime, reads: ReviewReads) -> tuple[list[Row], Held]:
+async def build_reviews(rt: Runtime, reads: ReviewReads) -> tuple[list[dict[str, Any]], Held]:
     """Every review the selected team may see, each with who it is assigned to. A workflow step is the row
     engine_reviews.all_rows makes, enough to count, filter and page on; `engine_reviews.expand` builds the full review
     of the rows a caller shows. Also each waiting thread review's thread and step payload, so the list says who may
@@ -688,7 +770,7 @@ async def build_reviews(rt: Runtime, reads: ReviewReads) -> tuple[list[Row], Hel
     for row, waiting, d in threads:
         if waiting:
             out.append(await review_view(rt, row, waiting, now, known))
-            held[str(row["id"])] = HeldStep(ThreadRow.model_validate(row), waiting["payload"])
+            held[str(row["id"])] = HeldStep(ThreadRow.model_validate(row), cast(Json, waiting["payload"]))
         elif d is not None:
             out.append(_decided(d))
     # Agent and workflow publish requests are reviews too: one list, counted and filtered with the rest.
@@ -697,36 +779,38 @@ async def build_reviews(rt: Runtime, reads: ReviewReads) -> tuple[list[Row], Hel
     return [r | {"assignee": assigned.get(str(r["id"]), r.get("assignee"))} for r in rows], held
 
 
-async def all_reviews(rt: Runtime) -> tuple[list[Row], Held]:
+async def all_reviews(rt: Runtime) -> tuple[list[dict[str, Any]], Held]:
     """`build_reviews` after its reads, for a caller that holds no transaction of its own."""
     return await build_reviews(rt, await read_then_ask(rt))
 
 
-async def _places(rt: Runtime) -> list[dict[str, Any]]:
+async def _places(rt: Runtime) -> list[Json]:
     """all_reviews by id and status alone, in its order, for a task's place in its queue: no review is built."""
-    threads = [
+    threads: list[Json] = [
         {"id": row["id"], "status": "pending" if waiting or d is None else d.decision}
         for row, waiting, d in (await _thread_reviews(rt))[0]
     ]
-    published = [{"id": r["id"], "status": r["status"]} for r in await publish_reviews.all_views(rt)]
+    published: list[Json] = [{"id": r["id"], "status": r["status"]} for r in await publish_reviews.all_views(rt)]
     return threads + published + await engine_reviews.all_places(rt)
 
 
 async def _thread_reviews(
     rt: Runtime,
 ) -> tuple[
-    list[tuple[dict[str, Any], dict[str, Any] | None, DecisionOut | None]],
+    list[tuple[Json, Json | None, DecisionOut | None]],
     dict[tuple[str, int], WorkflowDefinition],
 ]:
     """Each graph thread that holds a review, with the interrupt it waits on (None once decided) and its decision, of
     the newest `review_list_rows_per_source` threads; their decisions only are read. Also the workflow versions their
     graphs were resolved from, read once for every thread."""
-    out: list[tuple[dict[str, Any], dict[str, Any] | None, DecisionOut | None]] = []
+    out: list[tuple[Json, Json | None, DecisionOut | None]] = []
     capped = await ReviewSources(graph_store(rt).engine).threads(rt.settings.review_list_rows_per_source)
     decisions = await _decisions(rt, [t.id for t in capped])
     # A chat's write approval is listed, so a second approver need not be sent a chat link; other agent graph threads
     # take no review here yet.
-    threads = [r for r in (t.model_dump() for t in capped) if not (is_chat_graph(r["graph"]) and not _is_chat(r))]
+    threads = [
+        r for r in (t.model_dump() for t in capped) if not (is_chat_graph(cast(str, r["graph"])) and not _is_chat(r))
+    ]
     # A run marks its thread idle only when it ends with nothing pending (runs.execute), so an idle thread waits on no
     # review and its graph and checkpoint are not read: only its decision, if any, is listed.
     listed = {r["id"] for r in threads if r["status"] != "idle"}
@@ -930,7 +1014,7 @@ async def get_review(rt: Runtime, thread_id: str) -> dict[str, Any]:
     return _decided(d)
 
 
-async def _thread_step(rt: Runtime, thread_id: str) -> tuple[Row, Row | None, DecisionOut | None]:
+async def _thread_step(rt: Runtime, thread_id: str) -> tuple[Json, Json | None, DecisionOut | None]:
     """A graph thread's row, the step it waits on (None once decided) and its decision; not found when it holds no
     review."""
     row = await graph_store(rt).thread(thread_id)
@@ -946,7 +1030,7 @@ async def _thread_step(rt: Runtime, thread_id: str) -> tuple[Row, Row | None, De
     raise NotFound("Review")
 
 
-async def review_for(rt: Runtime, approver: Principal, thread_id: str) -> Row:
+async def review_for(rt: Runtime, approver: Principal, thread_id: str) -> dict[str, Any]:
     """`get_review` with who it is assigned to and whether `approver` may decide it now (`canDecide`). A graph thread's
     review takes two transactions: the thread and its step, then, once tools-service has answered with none open, the
     review built from them."""
@@ -962,7 +1046,7 @@ async def review_for(rt: Runtime, approver: Principal, thread_id: str) -> Row:
     await ask_outside(rt, ReviewReads([(row, step, d)], {}, None))
     async with isolation.request_transaction():
         review = await with_assignee(rt, await review_view(rt, row, step, datetime.now(UTC)))
-        held = {str(row["id"]): HeldStep(ThreadRow.model_validate(row), step["payload"])}
+        held = {str(row["id"]): HeldStep(ThreadRow.model_validate(row), cast(Json, step["payload"]))}
         return review | {"canDecide": await _may_decide(rt, approver, str(review["id"]), review["status"], held)}
 
 
@@ -975,7 +1059,7 @@ async def decide(
     reason: str | None,
     step_up_token: str | None,
     amount: float | None = None,
-    inputs: dict[str, Any] | None = None,
+    inputs: Json | None = None,
     for_chat: bool = False,
 ) -> dict[str, Any]:
     """Decides as `approver`, from the teams where they hold reviews.decide (any team for dev); a write whose app
@@ -1012,7 +1096,7 @@ async def decide(
     if not waiting or (recorded and recorded.decision_id == waiting[0]["id"]):
         if recorded is None:
             raise Conflict("This thread is not waiting for a decision.", code="run_not_waiting")
-        earlier: dict[str, Any] = dict(recorded.review.get("resume") or {})
+        earlier: Json = dict(cast(Json, recorded.review.get("resume") or {}))
         same = recorded.decision == decision or (earlier.get("option") and earlier["option"] == decision)
         if not same:
             was = earlier.get("option") or recorded.decision
@@ -1022,12 +1106,13 @@ async def decide(
         return await get_review(rt, thread_id)
 
     interrupt = waiting[0]
-    payload: dict[str, Any] = interrupt["payload"]
+    # The checkpoint's value as it is: held_calls and the decider read it unchecked.
+    payload = cast(ThreadPayload, interrupt["payload"])
     try:
         declared = await resolved_options(rt, row, payload)
     except OptionsUnresolved as e:
         raise ValidationFailed(f"This review cannot be decided: {e}") from e
-    payload = {**payload, "options": declared}
+    payload = cast(ThreadPayload, {**payload, "options": declared})
     names = [str(o["name"]) for o in declared]
     if names and decision not in names:
         raise ValidationFailed(f"This review is decided with one of: {', '.join(names)}.")
@@ -1036,17 +1121,23 @@ async def decide(
     # The call this decision authorises: the option's own, or the step's one call when approved.
     option = decision if names else None
     chosen = next((o for o in declared if o["name"] == option), None)
-    call = option_call(chosen, inputs, amount) if chosen else (payload.get("call") if decision == "approved" else None)
+    call: Json | None = (
+        option_call(chosen, inputs, amount)
+        if chosen
+        else (cast(Json | None, payload.get("call")) if decision == "approved" else None)
+    )
     recorded_as = "approved" if option else decision
     # An approval is checked against the call it sends; a rejection against every write the step holds.
-    await check_thread_decider(rt, approver, row, payload, [call] if call else held_calls(payload))
+    await check_thread_decider(rt, approver, row, payload, [call] if call else held_calls(cast(Json, payload)))
     # Recorded on the decision only once verified: a token sent where none was needed proves nothing.
     verified_step_up: str | None = None
     # The chosen call's policy decides the step-up, not the step's other options (a flag's note asks for none).
-    if call and (workspace_step_up(approver) or await _needs_step_up(rt, {**payload, "call": call, "options": []})):
+    if call and (
+        workspace_step_up(approver) or await _needs_step_up(rt, cast(Json, {**payload, "call": call, "options": []}))
+    ):
         require_step_up(rt, approver.email, step_up_token)
         verified_step_up = step_up_ref(step_up_token)
-    resume: dict[str, Any] = {"decision": recorded_as}
+    resume: Json = {"decision": recorded_as}
     if option:
         resume["option"] = option
     if reason:
@@ -1066,7 +1157,7 @@ async def decide(
     # Recorded before the resume: the decision stands even if the resume fails, and a retry resumes once.
     await ReviewStore(store.engine).record_decision(
         thread_id,
-        interrupt["id"],
+        cast(str, interrupt["id"]),
         decision=recorded_as,
         reason=reason,
         by=approver.email,
@@ -1086,7 +1177,7 @@ async def decide(
 
 
 async def check_thread_decider(
-    rt: Runtime, approver: Principal, row: dict[str, Any], payload: dict[str, Any], calls: list[dict[str, Any]]
+    rt: Runtime, approver: Principal, row: Json, payload: ThreadPayload | Json, calls: Sequence[object]
 ) -> None:
     """Who may decide a paused thread step: a reviewer or admin of the thread's team, whatever the writes it decides
     (`calls`) are, and not who asked for it while requesterMayDecide is off."""
@@ -1105,7 +1196,7 @@ async def check_thread_decider(
             "decide",
             team=team,
             from_any_team=True,
-            role=str(payload["reviewer_role"]),
+            role=str(payload.get("reviewer_role")),
             what="this review",
         )
     require_not_own(approver, [requester_of(row, payload)], team=team, what="this")
@@ -1117,7 +1208,7 @@ async def can_decide(rt: Runtime, approver: Principal, review_id: str) -> bool:
         if publish_reviews.is_request_id(review_id):
             req = await registry(rt).request(review_id)
             await publish_reviews.require_publish_decider(rt, req, approver)
-            return req["status"] == "pending"
+            return req.status == "pending"
         if engine_reviews.is_engine_id(review_id):
             await engine_reviews.check_decider(rt, approver, review_id)
             return True
@@ -1127,21 +1218,22 @@ async def can_decide(rt: Runtime, approver: Principal, review_id: str) -> bool:
         waiting = pending(await (await resolve(rt, review_id))[1].aget_state(config(review_id)))
         if not waiting:
             return False
-        payload = cast(dict[str, Any], waiting[0]["payload"])
+        # The checkpoint's value as it is: held_calls and the decider read it unchecked.
+        payload = cast(Json, waiting[0]["payload"])
         await check_thread_decider(rt, approver, row, payload, held_calls(payload))
     except ApiError:
         return False
     return True
 
 
-def option_call(option: dict[str, Any], inputs: dict[str, Any] | None, amount: float | None) -> dict[str, Any]:
+def option_call(option: Json, inputs: Json | None, amount: float | None) -> Json:
     """The call behind a chosen option, with the reviewer's inputs applied and validated against the option's
     declaration (option_inputs.apply_inputs). `amount` fills the one declared input so named, as the console sends it;
     it is refused when the option declares no such input."""
-    given: dict[str, Any] = dict(inputs or {})
+    given: Json = dict(inputs or {})
     if amount is not None:
-        raw_declared: list[Any] = list(option.get("inputs") or [])
-        declared_inputs: list[dict[str, Any]] = [dict(d) for d in raw_declared]
+        raw_declared: JsonList = list(cast(JsonList, option.get("inputs") or []))
+        declared_inputs: list[Json] = [dict(cast(Json, d)) for d in raw_declared]
         named = [str(d["name"]) for d in declared_inputs if str(d["name"]).replace("_", "").casefold() == "amount"]
         if not named:
             raise ValidationFailed(f"The {option.get('name')} option takes no amount.")
@@ -1154,7 +1246,7 @@ async def _resume(rt: Runtime, thread_id: str, recorded: DecisionOut) -> None:
     assert leases is not None
     attempt = recorded.attempts + 1
     run_id = f"run_{recorded.decision_id[:24]}_{attempt}"
-    resume = dict(recorded.review["resume"])
+    resume = dict(cast(Json, recorded.review["resume"]))
     try:
         generation = await leases.acquire(thread_id, run_id)
     except LeaseHeldError as e:
@@ -1171,6 +1263,6 @@ async def _resume(rt: Runtime, thread_id: str, recorded: DecisionOut) -> None:
     status = "error"
     async for e in execute(rt, row, graph, graph_input=Command(resume=resume), run_id=run_id, kind="resume"):
         if e["event"] == "end":
-            status = e["data"]["status"]
+            status = cast(Json, e["data"])["status"]
     if status in ("done", "interrupted"):
         await reviews.update_decision(thread_id, recorded.decision_id, resumed_at=now_iso())

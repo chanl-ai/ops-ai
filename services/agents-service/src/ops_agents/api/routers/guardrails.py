@@ -7,7 +7,7 @@ platform-service answers with the team's publish-review policy.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, TypeAlias
+from typing import Annotated, Literal, TypeAlias
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
@@ -15,7 +15,7 @@ from pydantic import Field
 
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict
-from ops_service_kit.http import Envelope, In, OptionsPage, options_page, options_window, page_window, paged
+from ops_service_kit.http import Envelope, In, Json, OptionsPage, options_page, options_window, page_window, paged
 from ops_service_kit.listing import ListQuery
 from ops_service_kit.logging import get_logger
 
@@ -145,7 +145,7 @@ async def update_guardrail(rt: Rt, me: Me, _: Tx, guardrail_id: str, body: Guard
     row = await changeable(rt, me, guardrail_id, "edit")
     newest = await reg.version(guardrail_id, row.version)
     assert newest is not None
-    merged: dict[str, Any] = {**newest.config, **body.model_dump(by_alias=True, exclude_none=True, exclude={"note"})}
+    merged: Json = {**newest.config, **body.model_dump(by_alias=True, exclude_none=True, exclude={"note"})}
     await reg.save_draft(guardrail_id, check_config(row.kind, merged), by=me.email, note=body.note)
     return ok(await view(rt, guardrail_id))
 

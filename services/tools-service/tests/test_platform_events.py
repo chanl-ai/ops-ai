@@ -14,9 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_access.platform_events import platform_events_router
 from ops_identity import dev_service_signer, mint_service_token
+from ops_service_kit.http import Json
 from ops_tools.auth.tokens import Tokens
 from ops_tools.platform_events import member_removed_handlers, team_created_handlers
-from ops_tools.store.connections import ConnectionStore, connection_tokens
+from ops_tools.store.connections import ConnectionStore, NewAccount, connection_tokens
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.team_defaults import TeamDefaults
 
@@ -36,7 +37,7 @@ def platform(tenant: str, team: str, scopes: list[str]) -> dict[str, str]:
 async def keyed(store: ConnectionStore, tenant: str, team: str) -> str:
     """A connection of `team` each person signs in to with their own API key."""
     now, conn = datetime.now(UTC), f"con_{team}"
-    row: dict[str, Any] = {
+    row: NewAccount = {
         "tenant_id": tenant,
         "id": conn,
         "app_id": conn,
@@ -53,7 +54,7 @@ async def keyed(store: ConnectionStore, tenant: str, team: str) -> str:
         "updated_at": now,
     }
     assert await store.create(row, actor="t", at=now)
-    plain = {"baseUrl": "https://ledger.bank.test", "name": "X-Api-Key"}
+    plain: Json = {"baseUrl": "https://ledger.bank.test", "name": "X-Api-Key"}
     await store.change(tenant, conn, 1, {"settings": plain, "secrets": {}}, actor="t", at=now)
     return conn
 

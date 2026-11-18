@@ -78,7 +78,7 @@ async def test_an_assistant_a_person_changed_is_left_as_it_is(stack: Stack) -> N
     await made_before(rt)
     with tenant_scope(TENANT):
         reg = registry(rt)
-        spec = dict((await reg.version(OLD, 1))["spec"])
+        spec = dict((await reg.version(OLD, 1)).spec)
         n = await reg.save(OLD, {**spec, "role": "Our desk helper"}, by="priya@harborpine.example")
         await reg.publish(OLD, n, by="priya@harborpine.example", review_id="test")
         go_live(rt, OLD, n, {**spec, "role": "Our desk helper"})

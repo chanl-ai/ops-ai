@@ -5,7 +5,7 @@ production, so they are not module versions and need no Security review."""
 # No `from __future__ import annotations`: FastAPI resolves the `Depends(caller)` annotations at import, and
 # `caller` is local to the router factory.
 from datetime import UTC, datetime
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Literal, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse, Response
@@ -14,7 +14,7 @@ from pydantic import Field
 from ops_access import Access, reader_of
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import NotFound, ValidationFailed
-from ops_service_kit.http import Envelope, In, JsonValue, ListResult, Out, ok
+from ops_service_kit.http import Envelope, In, Json, JsonValue, ListResult, Out, ok
 from ops_service_kit.ids import new_id
 from ops_service_kit.listing import ListQuery
 
@@ -78,7 +78,7 @@ class MockList(ListResult[MockAnswer]):
     operation: str
 
 
-def _view(row: MockRow) -> dict[str, Any]:
+def _view(row: MockRow) -> Json:
     return MockAnswer(
         id=row["id"],
         name=row["name"],
@@ -118,9 +118,9 @@ def mocks_router(mocks: MockStore, modules: ModuleStore, directory: Directory) -
         if who.principal is not None:
             Access().can(who.principal, "tools", "edit", what="tools", protection=m.get("protection"))
 
-    def _checked(i: dict[str, Any], op: Operation) -> None:
+    def _checked(i: Json, op: Operation) -> None:
         names = {f["name"] for f in op["input"]}
-        unknown = sorted(str(k) for k in cast(dict[str, Any], i.get("match") or {}) if k not in names)
+        unknown = sorted(str(k) for k in cast(Json, i.get("match") or {}) if k not in names)
         if unknown:
             raise ValidationFailed(
                 f"{', '.join(unknown)} is not an input of {op['name']}.", details={"fields": unknown}

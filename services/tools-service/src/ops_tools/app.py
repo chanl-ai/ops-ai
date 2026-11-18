@@ -7,7 +7,7 @@ import re
 import time
 from collections.abc import AsyncGenerator, Callable, Coroutine
 from contextlib import asynccontextmanager, nullcontext
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, Literal
 
 import httpx
 from fastapi import APIRouter, FastAPI, Header
@@ -57,7 +57,7 @@ from .modules.service import ModuleService
 from .opa import POLICY_FILE, OpaClient, PolicyMismatchError, policy_hash, registered_identities
 from .plugins.executor import PluginExecutor
 from .plugins.host import PluginHost
-from .registry import Resolved, ToolRegistry
+from .registry import GrantableRow, Resolved, ToolRegistry
 from .secrets import SecretResolver
 from .send_check import SendCheck
 from .store import CallLog
@@ -301,7 +301,7 @@ def create_gateway_app(
     counters = rates or RateWindows(log.engine)
 
     async def with_test_account(
-        tenant_id: str, team_id: str | None, mods: dict[str, Any], rows: list[dict[str, Any]]
+        tenant_id: str, team_id: str | None, mods: dict[str, Any], rows: list[GrantableRow]
     ) -> set[str]:
         """The ids of the written-to modules whose app has a test account in `team_id`, as records.account_for
         chooses one for a test run: a plugin's app by its plugin, any other by its connection's app."""
@@ -464,12 +464,12 @@ def create_gateway_app(
         answers."""
         can(caller, "tools", "view", what="the grantable operations")
         levels = await write_approvals.levels(caller.tenant_id, caller.team_id) if write_approvals else None
-        rows = await registry.grantable(caller.tenant_id, team_view(caller))
+        rows: list[GrantableRow] = [{**r} for r in await registry.grantable(caller.tenant_id, team_view(caller))]
         if plugins is not None and caller.team_id:
             # A tool the team has not added from its app's catalog is listed as not added: agents are not offered it,
             # and a run that calls it is refused with the fix.
             off = await plugins.tools_off(caller.tenant_id, caller.team_id)
-            rows = [r | {"added": False} if str(r["name"]) in off else r for r in rows]
+            rows = [{**r, "added": False} if str(r["name"]) in off else r for r in rows]
         mods = (
             {str(m["id"]): m for m in await registry.modules.all_teams(caller.tenant_id)}
             if registry.modules and write_approvals is not None and any(r["access"] in WRITES for r in rows)
@@ -479,7 +479,7 @@ def create_gateway_app(
         if write_approvals is not None:
             # The one rule behind the gateway's wait: each write's answer from its own setting, its app and the team.
             tested = await with_test_account(caller.tenant_id, caller.team_id, mods, rows)
-            out: list[dict[str, Any]] = []
+            out: list[GrantableRow] = []
             for r in rows:
                 if r["access"] not in WRITES:
                     out.append(r)
@@ -491,15 +491,15 @@ def create_gateway_app(
                     m,
                     access=r["access"],
                     setting=r.get("setting"),
-                    reviewer_role=cast(str | None, r.get("setting_role")),
+                    reviewer_role=r.get("setting_role"),
                     approvers=r["approvers"],
                     levels=levels,
                     test_account=str(r.get("module_id") or "") in tested,
                     tool=str(r["name"]),
                 )
                 out.append(
-                    r
-                    | {
+                    {
+                        **r,
                         "requires_approval": ans["waits"],
                         "answer": ans["answer"],
                         "reviewer_role": ans["reviewerRole"],
@@ -509,7 +509,7 @@ def create_gateway_app(
             rows = out
         if write_approvals is not None:
             tested = await with_test_account(caller.tenant_id, caller.team_id, mods, rows)
-            rows = [r | {"test_account": str(r.get("module_id") or "") in tested} for r in rows]
+            rows = [{**r, "test_account": str(r.get("module_id") or "") in tested} for r in rows]
         data = [
             GrantableOperation.model_validate(
                 {k: v for k, v in r.items() if k not in ("setting", "setting_role")}

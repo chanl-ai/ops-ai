@@ -15,7 +15,7 @@ import json
 import secrets
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any, NotRequired, TypedDict, cast
 from urllib.parse import urlencode
 
 import httpx
@@ -24,6 +24,31 @@ import jwt
 from .identity import SignInRefused, VerifiedIdentity
 
 ALGORITHMS = ["RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "ES256", "ES384", "ES512"]
+
+
+class Discovery(TypedDict):
+    """An issuer's discovery document (OpenID Connect Discovery 1.0, section 3) as it sent it: the keys read here,
+    each value checked where it is read. A document missing one fails the read that needs it, as KeyError."""
+
+    issuer: object
+    jwks_uri: object
+    authorization_endpoint: object
+    token_endpoint: object
+    # The issuer's key set as it sent it, cached on the document; `PyJWKSet.from_dict` checks it.
+    _jwks: NotRequired[Any]
+
+
+class IdClaims(TypedDict):
+    """An id_token's claims after `jwt.decode` checked the signature, `exp`, `iat`, `iss`, `aud` and `sub`; the other
+    claims are the provider's and are checked where they are read. The groups claim is read by its configured name."""
+
+    sub: object
+    nonce: NotRequired[object]
+    auth_time: NotRequired[object]
+    email: NotRequired[object]
+    email_verified: NotRequired[object]
+    name: NotRequired[object]
+    _claim_names: NotRequired[object]
 
 
 @dataclass(frozen=True)
@@ -56,7 +81,7 @@ class OidcClient:
 
     config: OidcConfig
     http: httpx.AsyncClient
-    metadata: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
+    metadata: dict[str, Discovery] = field(default_factory=dict[str, Discovery])
     leeway_s: int = 60
     fetch: Callable[[str], Awaitable[bytes]] | None = None
 
@@ -67,12 +92,12 @@ class OidcClient:
         r.raise_for_status()
         return r.json()
 
-    async def _document(self) -> dict[str, Any]:
+    async def _document(self) -> Discovery:
         issuer = self.config.issuer.rstrip("/")
         doc = self.metadata.get(issuer)
         if doc is None:
             try:
-                doc = cast(dict[str, Any], await self._get_json(f"{issuer}/.well-known/openid-configuration"))
+                doc = cast(Discovery, await self._get_json(f"{issuer}/.well-known/openid-configuration"))
             except (httpx.HTTPError, ValueError) as e:
                 raise SignInRefused(f"discovery failed: {e}") from e
             if str(doc.get("issuer", "")).rstrip("/") != issuer:
@@ -80,7 +105,7 @@ class OidcClient:
             self.metadata[issuer] = doc
         return doc
 
-    async def _keys(self, doc: dict[str, Any], *, refresh: bool) -> jwt.PyJWKSet:
+    async def _keys(self, doc: Discovery, *, refresh: bool) -> jwt.PyJWKSet:
         cached = doc.get("_jwks")
         if cached is None or refresh:
             try:
@@ -152,20 +177,20 @@ class OidcClient:
             groups=groups,
         )
 
-    def _groups(self, claims: dict[str, Any]) -> tuple[str, ...] | None:
+    def _groups(self, claims: IdClaims) -> tuple[str, ...] | None:
         """The values of the named groups claim; () when it is missing or empty, since providers such as Keycloak drop
         it once the person is in no group; None when no claim is named, or when Entra's overage marker
         (_claim_names.groups) stands in for it, which says the list is too long to send, not that it is empty."""
         if not self.config.groups_claim:
             return None
         names = claims.get("_claim_names")
-        if isinstance(names, dict) and self.config.groups_claim in cast(dict[str, Any], names):
+        if isinstance(names, dict) and self.config.groups_claim in names:
             return None
         raw = claims.get(self.config.groups_claim)
         listed = cast(list[Any], raw) if isinstance(raw, list) else [raw] if isinstance(raw, str) else []
         return tuple(str(g) for g in listed)
 
-    async def _verify(self, doc: dict[str, Any], id_token: str) -> dict[str, Any]:
+    async def _verify(self, doc: Discovery, id_token: str) -> IdClaims:
         try:
             header = jwt.get_unverified_header(id_token)
         except jwt.PyJWTError as e:
@@ -182,14 +207,17 @@ class OidcClient:
         if key is None:
             raise SignInRefused("no key for the id_token")
         try:
-            claims: dict[str, Any] = jwt.decode(
-                id_token,
-                key=key.key,
-                algorithms=[str(header["alg"])],
-                audience=self.config.client_id,
-                issuer=str(doc["issuer"]),
-                leeway=self.leeway_s,
-                options={"require": ["exp", "iat", "iss", "aud", "sub"]},
+            claims = cast(
+                IdClaims,
+                jwt.decode(
+                    id_token,
+                    key=key.key,
+                    algorithms=[str(header["alg"])],
+                    audience=self.config.client_id,
+                    issuer=str(doc["issuer"]),
+                    leeway=self.leeway_s,
+                    options={"require": ["exp", "iat", "iss", "aud", "sub"]},
+                ),
             )
         except jwt.PyJWTError as e:
             raise SignInRefused(f"id_token refused: {e}") from e

@@ -9,14 +9,16 @@ another (depth 1). A turn with no person (an unattended run, or a turn resumed a
 from __future__ import annotations
 
 import hashlib
-from typing import Any, cast
+from typing import Any
 
 from langgraph.config import get_config
 
 from ops_access import can
 from ops_agent_kernel.ports import ToolOutcome
 from ops_agent_kernel.types import ToolGrant
+from ops_service_kit import narrow
 from ops_service_kit.errors import Forbidden, NotFound
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id, now_iso
 
 from ..graphs.common import AGENT_TOOL_PREFIX
@@ -28,7 +30,7 @@ from .child_runs import TURN_PERSON, run_child
 from .deps import Runtime
 from .runs import config, graph_store, pending, resolve
 
-QUESTION_SCHEMA: dict[str, Any] = {
+QUESTION_SCHEMA: Json = {
     "type": "object",
     "properties": {"question": {"type": "string", "description": "The whole question, with what the person said"}},
     "required": ["question"],
@@ -67,8 +69,8 @@ class AgentCalls:
     async def offers_in(self, agent_id: str, thread_id: str) -> list[ToolGrant]:
         """Specialists `agent_id` may ask: its `agent:<id>` grants, and every specialist when it is the team's default
         and the turn has a person. A specialist's own turn asks no one."""
-        thread = await graph_store(self.rt).thread(thread_id) if thread_id else None
-        if thread is None or cast(dict[str, Any], thread["meta"] or {}).get("calledBy"):
+        thread = await graph_store(self.rt).thread_row(thread_id) if thread_id else None
+        if thread is None or thread.meta_object().get("calledBy"):
             return []
         person = TURN_PERSON.get()
         out: list[ToolGrant] = []
@@ -79,7 +81,7 @@ class AgentCalls:
             for t in (caller.tools if caller is not None else [])
             if str(t).startswith("agent:")
         ]
-        if person is not None and await TeamDefaults(self.rt.db).agent(str(thread["team_id"])) == agent_id:
+        if person is not None and await TeamDefaults(self.rt.db).agent(thread.team_id) == agent_id:
             granted = list(dict.fromkeys([*[a.id for a in self.rt.catalog.agents if a.id != agent_id], *granted]))
         # Only the agents of the thread's tenant: the catalogue holds every tenant's.
         owners = await registry(self.rt).tenant_owners({sid for sid in granted if sid != agent_id})
@@ -99,15 +101,15 @@ class AgentCalls:
         return out
 
     async def run(
-        self, *, agent: str, arguments: dict[str, Any], key: str, parent_thread_id: str, parent_run_id: str | None
+        self, *, agent: str, arguments: Json, key: str, parent_thread_id: str, parent_run_id: str | None
     ) -> ToolOutcome:
         store = graph_store(self.rt)
-        parent = await store.thread(parent_thread_id)
+        parent = await store.thread_row(parent_thread_id)
         assert parent is not None, "a tool runs inside its parent's run"
-        parent_meta = cast(dict[str, Any], parent["meta"] or {})
+        parent_meta = parent.meta_object()
         caller = str(parent_meta.get("agentId") or "")
-        if not caller and str(parent.get("graph") or "").startswith("agent:"):
-            caller = str(parent["graph"]).removeprefix("agent:")
+        if not caller and (parent.graph or "").startswith("agent:"):
+            caller = parent.graph.removeprefix("agent:")
         # Checked again here, not only when offered: a model may name a tool it was never given.
         if f"{AGENT_TOOL_PREFIX}{agent}" not in {g.name for g in await self.offers_in(caller, parent_thread_id)}:
             message = "That agent cannot be asked on this turn."
@@ -126,18 +128,18 @@ class AgentCalls:
             "parentThreadId": parent_thread_id,
             "parentRunId": parent_run_id,
         }
-        row, created = await store.find_or_create_thread(
+        row, created = await store.open_thread(
             new_id("th"),
             CHAT_GRAPH,
             meta,
-            parent["team_id"],
+            parent.team_id,
             now_iso(),
             external_key=f"tool:{key}",
             parent_thread_id=parent_thread_id,
         )
-        thread_id = row["id"]
+        thread_id = row.id
         if created:
-            graph_input: dict[str, Any] = {
+            graph_input: Json = {
                 "agent_id": callee.id,
                 "message": str(arguments.get("question") or ""),
                 "history": [],
@@ -151,7 +153,7 @@ class AgentCalls:
         if pending(snap):
             return ToolOutcome(ok=True, output=base | {"status": "waiting_review"})
         runs = await store.runs(thread_id)
-        if runs and runs[-1]["status"] == "error":
+        if runs and runs[-1].status == "error":
             return ToolOutcome(ok=False, output=base | {"status": "failed"})
-        values = cast(dict[str, Any], snap.values or {})
+        values = narrow.an_object(snap.values or {}, "the specialist's values")
         return ToolOutcome(ok=True, output=base | {"status": "answered", "answer": values.get("reply")})

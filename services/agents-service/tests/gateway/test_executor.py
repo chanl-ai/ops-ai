@@ -19,11 +19,12 @@ from ops_agents.activities.gateway import (
 from ops_agents.activities.tool_directory import OperationRef
 from ops_agents.store.tenancy import tenant_scope
 from ops_identity import ServiceClient, dev_service_signer
+from ops_service_kit.http import Json
 
 from ..unit.test_tool_directory import Clock, Tools, directory, op
 from .conftest import Gateway
 
-DOC = {"customerId": "C-1042", "document": "proof of address", "reason": "Address changed last week."}
+DOC: Json = {"customerId": "C-1042", "document": "proof of address", "reason": "Address changed last week."}
 
 
 def executor(gateway: Gateway) -> GatewayToolExecutor:

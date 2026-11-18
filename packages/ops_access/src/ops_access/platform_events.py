@@ -18,7 +18,7 @@ from pydantic.alias_generators import to_camel
 
 from ops_identity import CurrentService
 from ops_service_kit.errors import ValidationFailed
-from ops_service_kit.http import Envelope, Out, error_responses, ok
+from ops_service_kit.http import Envelope, Json, Out, error_responses, ok
 
 from .check import can
 
@@ -37,7 +37,7 @@ class Handler:
     area: str
     action: str
     # (tenant, team, payload): acts on the event; returns how many records it changed.
-    act: Callable[[str, str, dict[str, Any]], Awaitable[int]]
+    act: Callable[[str, str, Json], Awaitable[int]]
 
 
 class PlatformEventIn(BaseModel):

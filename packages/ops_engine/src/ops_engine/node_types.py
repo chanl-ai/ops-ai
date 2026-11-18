@@ -15,7 +15,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
-from pydantic import JsonValue
+from ops_service_kit.http import Json, JsonValue
 
 from .starts import ONLY_FROM_WORKFLOWS, StartSpec, only_from_workflows, trigger_node
 from .store.definitions import ListColumns, watched_mailbox
@@ -53,7 +53,7 @@ class Port:
     connection: ConnectionType = "main"
     label: str | None = None
 
-    def view(self) -> dict[str, Any]:
+    def view(self) -> Json:
         return {"name": self.name, "connection": self.connection, "label": self.label or self.name.capitalize()}
 
 
@@ -73,8 +73,8 @@ class Retry:
         base, cap = self.backoff
         return min(cap, base * 2 ** max(0, attempt - 2)) if base else 0.0
 
-    def view(self) -> dict[str, Any]:
-        backoff = list(self.waits) if self.waits else list(self.backoff)
+    def view(self) -> Json:
+        backoff: list[JsonValue] = list(self.waits) if self.waits else list(self.backoff)
         return {"attempts": self.attempts, "backoffSeconds": backoff}
 
 
@@ -97,11 +97,11 @@ RETRY_BY_EFFECTS: dict[Effects, Retry] = {
 SET = object()
 
 
-def _port_rule(param: str, value: Any, port: str) -> dict[str, Any]:
+def _port_rule(param: str, value: Any, port: str) -> Json:
     return {"parameter": param, "value": "*" if value is SET else value, "port": port}
 
 
-def _holds(parameters: Mapping[str, Any] | None, param: str, value: Any) -> bool:
+def _holds(parameters: Mapping[str, JsonValue] | None, param: str, value: Any) -> bool:
     found = (parameters or {}).get(param)
     return found not in (None, "", False) if value is SET else found == value
 
@@ -117,7 +117,7 @@ class NodeType:
     effects: Effects
     inputs: tuple[Port, ...] = ()
     outputs: tuple[Port, ...] = ()
-    parameters: Mapping[str, Any] = field(default_factory=lambda: {"type": "object", "properties": {}})
+    parameters: Mapping[str, JsonValue] = field(default_factory=lambda: {"type": "object", "properties": {}})
     # Outputs derived from a parameter: one port per entry of that list parameter (a review's options).
     outputs_from: str | None = None
     # (parameter, value, port): an extra out port the instance has while `parameter` is `value`, e.g. a review's
@@ -139,7 +139,7 @@ class NodeType:
     timeout_seconds: float = 30.0
     # The generated form: {"order": [...], "fields": {name: {"label", "widget", "help"?, "placeholder"?, "source"?,
     # "item"?}}}. `item` is the same shape for the objects of a `list`. Checked against `parameters` on register.
-    ui: Mapping[str, Any] = field(default_factory=lambda: {"order": [], "fields": {}})
+    ui: Mapping[str, JsonValue] = field(default_factory=lambda: {"order": [], "fields": {}})
     # How a person starts a workflow this trigger begins by hand (starts.py); None for a trigger only its source starts.
     start: StartSpec | None = None
 
@@ -150,7 +150,7 @@ class NodeType:
     def retry_policy(self) -> Retry:
         return self.retry or RETRY_BY_EFFECTS[self.effects]
 
-    def output_ports(self, parameters: Mapping[str, Any] | None = None) -> list[str]:
+    def output_ports(self, parameters: Mapping[str, JsonValue] | None = None) -> list[str]:
         """The instance's out ports: the declared ones, or one per entry of `outputs_from` when the instance sets it."""
         ports = [p.name for p in self.outputs]
         if self.outputs_from and parameters is not None:
@@ -161,7 +161,7 @@ class NodeType:
         dropped = {port for param, value, port in self.outputs_unless if _holds(parameters, param, value)}
         return [p for p in ports + [p for p in [*self.extra_outputs, *extra] if p not in ports] if p not in dropped]
 
-    def view(self) -> dict[str, Any]:
+    def view(self) -> Json:
         return {
             "id": self.id,
             "version": self.version,
@@ -188,22 +188,22 @@ class NodeType:
 def option_name(option: Any) -> str:
     """An option is a name, or an object with a `name`."""
     if isinstance(option, dict):
-        return str(cast(dict[str, Any], option).get("name") or "")
+        return str(cast(Json, option).get("name") or "")
     return str(option)
 
 
-def ui_problems(schema: Mapping[str, Any], ui: Mapping[str, Any], at: str = "") -> list[str]:
+def ui_problems(schema: Mapping[str, JsonValue], ui: Mapping[str, JsonValue], at: str = "") -> list[str]:
     """What is wrong with a form against the parameters it edits: a field that is no parameter, a parameter with no
     field, an unknown widget or option source, a `list` with no item form. Empty when the form is sound."""
-    props = cast(Mapping[str, Any], schema.get("properties") or {})
-    fields = cast(Mapping[str, Any], ui.get("fields") or {})
+    props = cast(Mapping[str, JsonValue], schema.get("properties") or {})
+    fields = cast(Mapping[str, JsonValue], ui.get("fields") or {})
     order = list(cast(list[str], ui.get("order") or []))
     out: list[str] = []
     if sorted(order) != sorted(fields):
         out.append(f"{at}order {order} does not list exactly the fields {sorted(fields)}")
     out += [f"{at}{name} has no form field" for name in props if name not in fields]
     for name, spec in fields.items():
-        f = cast(Mapping[str, Any], spec)
+        f = cast(Mapping[str, JsonValue], spec)
         where = f"{at}{name}: "
         if name not in props:
             out.append(f"{where}not a parameter")
@@ -216,12 +216,12 @@ def ui_problems(schema: Mapping[str, Any], ui: Mapping[str, Any], at: str = "") 
         if widget == "source" and f.get("source") not in OPTION_SOURCES:
             out.append(f"{where}unknown option source {f.get('source')!r}")
         if widget == "list":
-            items = cast(Mapping[str, Any], cast(Mapping[str, Any], props[name]).get("items") or {})
+            items = cast(Mapping[str, JsonValue], cast(Mapping[str, JsonValue], props[name]).get("items") or {})
             item = f.get("item")
             if not isinstance(item, Mapping):
                 out.append(f"{where}a list needs an item form")
             else:
-                out += ui_problems(items, cast(Mapping[str, Any], item), f"{at}{name}[].")
+                out += ui_problems(items, cast(Mapping[str, JsonValue], item), f"{at}{name}[].")
     return out
 
 
@@ -263,14 +263,14 @@ class TypeRegistry:
 MAIN_IN = (Port("in"),)
 # A field that names what the step acts on (an operation, an agent, another step) is a literal: resolve() would read a
 # `$.` string from the run, so the input could choose what a reviewed workflow calls.
-_NOT_A_PATH: dict[str, Any] = {"not": {"pattern": r"^\$\."}}
+_NOT_A_PATH: Json = {"not": {"pattern": r"^\$\."}}
 CASE_PRIORITIES = ("low", "normal", "high", "urgent")
 END_RESULTS = ("succeeded", "failed")
 _MAPPING = (
     "A value, or a path into the run: `$.input.<field>` or `$.nodes.<node id>.out.<field>`; in a text, paths in "
     "braces are filled in: `Levy notice: {$.input.record.name}`"
 )
-_CONDITION = {
+_CONDITION: Json = {
     "type": "object",
     "required": ["left", "op"],
     "properties": {
@@ -282,18 +282,18 @@ _CONDITION = {
 
 
 # A setting that may also be a path into the run, resolved when the step runs.
-_A_PATH: dict[str, Any] = {"type": "string", "pattern": "^\\$\\."}
+_A_PATH: Json = {"type": "string", "pattern": "^\\$\\."}
 
 
-def _f(label: str, widget: str, help: str | None = None, **extra: Any) -> dict[str, Any]:
+def _f(label: str, widget: str, help: str | None = None, **extra: JsonValue) -> Json:
     return {"label": label, "widget": widget, **({"help": help} if help else {}), **extra}
 
 
-def _form(*fields: tuple[str, dict[str, Any]]) -> dict[str, Any]:
+def _form(*fields: tuple[str, Json]) -> Json:
     return {"order": [n for n, _ in fields], "fields": dict(fields)}
 
 
-_MATCH_RULE: dict[str, Any] = {
+_MATCH_RULE: Json = {
     "type": "object",
     "additionalProperties": False,
     "required": ["left", "op", "right"],
@@ -317,7 +317,7 @@ MAX_ITEMS, DEFAULT_MAX_ITEMS = 500, 50
 _TIMEOUT = ("timeoutSeconds", _f("Time limit (seconds)", "number", "Per attempt; the type's default when empty"))
 
 # What every AI step takes: the text it reads, extra instructions and a model alias. Each step adds its own.
-_AI_COMMON: dict[str, Any] = {
+_AI_COMMON: Json = {
     "text": {"description": "What the model reads: " + _MAPPING},
     "instructions": {"type": "string", "description": "Anything the model should know or do besides the step's job"},
     "model": {
@@ -339,8 +339,8 @@ def _ai_step(
     type_id: str,
     label: str,
     description: str,
-    own: dict[str, Any],
-    form: tuple[tuple[str, dict[str, Any]], ...],
+    own: Json,
+    form: tuple[tuple[str, Json], ...],
     *,
     required: tuple[str, ...] = (),
     outputs: tuple[Port, ...] = (Port("ok"), Port("error")),
@@ -369,7 +369,7 @@ def _ai_step(
 
 # A test email's form: what the mailbox path reads from a message. The adapter (agents-service `run_starts.py`) turns it
 # into the message the listener would read, attachments included.
-TEST_EMAIL_FORM: Mapping[str, Any] = {
+TEST_EMAIL_FORM: Mapping[str, JsonValue] = {
     "type": "object",
     "required": ["from"],
     "properties": {
@@ -1807,19 +1807,19 @@ def default_registry() -> TypeRegistry:
     return TypeRegistry(BASIC_TYPES)
 
 
-def start_form(definition: Mapping[str, Any] | None, registry: TypeRegistry) -> dict[str, Any] | None:
+def start_form(definition: Mapping[str, JsonValue] | None, registry: TypeRegistry) -> Json | None:
     """The start form of the definition's trigger, resolved for its parameters: `StartSpec.view`, or None when the
     trigger declares no start by hand. A Service event trigger declares one only when its input schema has fields."""
     node = trigger_node(definition)
     if node is None:
         return None
-    t = registry.find(str(node.get("type")), int(node.get("typeVersion") or 1))
+    t = registry.find(str(node.get("type")), int(cast("str | int | float", node.get("typeVersion") or 1)))
     if t is None or t.start is None:
         return None
-    parameters = cast(Mapping[str, Any], node.get("parameters") or {})
+    parameters = cast(Mapping[str, JsonValue], node.get("parameters") or {})
     if t.start.when_schema:
         raw: object = parameters.get(t.start.form_parameter or "")
-        props: object = cast(Mapping[str, Any], raw).get("properties") if isinstance(raw, Mapping) else None
+        props: object = cast(Mapping[str, JsonValue], raw).get("properties") if isinstance(raw, Mapping) else None
         if not isinstance(props, Mapping) or not props:
             return None
     return t.start.view(parameters)

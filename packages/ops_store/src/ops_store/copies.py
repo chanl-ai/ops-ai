@@ -114,7 +114,7 @@ def _keys(table: sa.Table, record: Event, record_id: str) -> dict[str, str | Non
     return {"tenant_id": record.tenant_id, **team, "id": record_id}
 
 
-def _row(table: sa.Table, record: Event, body: Mapping[str, Any]) -> dict[str, Any]:
+def _row(table: sa.Table, record: Event, body: Mapping[str, object]) -> dict[str, Any]:
     """The copy's row for a record: its keys, revision, deleted flag and the payload's values of the copied columns;
     a payload field the copy does not keep is left out."""
     values = {c: body[c] for c in _copied(table) if c in body}
@@ -122,7 +122,7 @@ def _row(table: sa.Table, record: Event, body: Mapping[str, Any]) -> dict[str, A
     return {**keys, "revision": record.revision, "deleted": bool(body.get("deleted")), "deleted_at": None, **values}
 
 
-def _match(table: sa.Table, keys: Mapping[str, Any]) -> list[sa.ColumnElement[bool]]:
+def _match(table: sa.Table, keys: Mapping[str, object]) -> list[sa.ColumnElement[bool]]:
     return [table.c[k] == v for k, v in keys.items()]
 
 

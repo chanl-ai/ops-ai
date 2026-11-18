@@ -18,7 +18,7 @@ team's. `source` is `plugin:<plugin id>` now; a built-in pack is another source 
 import hashlib
 import json
 from collections.abc import Callable
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, Literal, TypedDict
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
@@ -31,12 +31,13 @@ from ops_documents.files import Who
 from ops_documents.models import DocumentTypeIn, DocumentTypeVersionIn, Reply
 from ops_documents.store import NameTakenError, TemplateCopies
 from ops_documents.store.template_copies import CopyRow
-from ops_documents.tools_client import PluginTemplates
+from ops_documents.tools_client import OfferedTemplate, PluginTemplates
 from ops_identity import ServiceCallError, ServiceUnreachable
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import ApiError, Conflict, NotFound, ServiceUnavailable, ValidationFailed
-from ops_service_kit.http import Envelope, In, JsonValue, Out, ok
-from ops_service_kit.template_merge import FieldOutcome, apply, merge
+from ops_service_kit.http import Envelope, In, Json, JsonValue, Out, ok
+from ops_service_kit.narrow import a_list, an_object, entries, required
+from ops_service_kit.template_merge import Choice, FieldOutcome, apply, merge
 
 Kind = Literal["document_type"]
 KIND: Kind = "document_type"
@@ -195,12 +196,30 @@ class CopyDetached(ApiError):
     code = "detached"
 
 
-def _copy_view(row: CopyRow) -> dict[str, Any]:
+class ReviewedExpect(TypedDict):
+    digest: str | None
+    recordDigest: str
+
+
+class Review(TypedDict):
+    """A review of taking a template's update, as `UpdateReview` reads it and a 409 `copy_edited` details it."""
+
+    copy: Json
+    fromVersion: int
+    toVersion: int
+    fields: list[Json]
+    appliesNow: bool
+    expect: ReviewedExpect
+    changes: list[str]
+    edits: list[str]
+
+
+def _copy_view(row: CopyRow) -> Json:
     keys = ("id", "kind", "record_id", "source", "template_id", "version", "detached_at")
     return CopyRef.model_validate({k: getattr(row, k) for k in keys}).model_dump(by_alias=True)
 
 
-def shaped(version: dict[str, Any]) -> dict[str, Any]:
+def shaped(version: Json) -> Json:
     """The part of a type version an update compares, normalised as the create path saves it, so a template body and
     a stored version of the same content compare equal."""
     request = request_of(
@@ -215,40 +234,40 @@ def shaped(version: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _flat(body: dict[str, Any]) -> dict[str, Any]:
+def _flat(body: Json) -> Json:
     """A shaped version as the merge reads it: each extracted field under `field:<key>`, so two sides that changed
     different fields never conflict."""
     out = {k: body.get(k) for k in MERGED}
-    for f in cast(list[dict[str, Any]], body.get("fields") or []):
-        out[FIELD + str(f["key"])] = f
+    for f in entries(body.get("fields")):
+        out[FIELD + str(an_object(f, "a field")["key"])] = f
     return out
 
 
-def _order(*bodies: dict[str, Any] | None) -> list[str]:
+def _order(*bodies: Json | None) -> list[str]:
     """The merge's field list: the options, then extracted fields in the team's order, then ones only the template or
     the base names."""
     keys = list(MERGED)
     for b in bodies:
-        for f in cast(list[dict[str, Any]], (b or {}).get("fields") or []):
-            if (k := FIELD + str(f["key"])) not in keys:
+        for f in entries((b or {}).get("fields")):
+            if (k := FIELD + str(an_object(f, "a field")["key"])) not in keys:
                 keys.append(k)
     return keys
 
 
-def _unflat(flat: dict[str, Any], keys: list[str]) -> dict[str, Any]:
+def _unflat(flat: Json, keys: list[str]) -> Json:
     fields = [flat[k] for k in keys if k.startswith(FIELD) and flat.get(k) is not None]
     return {**{k: flat.get(k) for k in MERGED}, "fields": fields}
 
 
-def _digest(body: dict[str, Any]) -> str:
+def _digest(body: Json) -> str:
     return hashlib.sha256(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()
 
 
-def _labelled(outcomes: list[FieldOutcome]) -> list[dict[str, Any]]:
+def _labelled(outcomes: list[FieldOutcome]) -> list[Json]:
     def label(o: FieldOutcome) -> str:
         if o.field in MERGED:
             return MERGED[o.field]
-        named = cast(dict[str, Any], o.yours or o.template or {})
+        named = an_object(o.yours or o.template or {}, "a field")
         return f"field {named.get('label') or o.field.removeprefix(FIELD)}"
 
     return [
@@ -263,7 +282,7 @@ def templates_router(
     document_types: DocumentTypes,
     caller: Callable[..., Any],
     scope: Callable[[str], Any],
-    responses: dict[int | str, dict[str, Any]],
+    responses: dict[int | str, Json],
 ) -> APIRouter:
     """The routes, acting as `caller` resolves the request (documents' `who`) under `scope(action)`. tools-service is
     reached through `app.state.plugin_templates`; with none, both routes answer 503."""
@@ -271,9 +290,9 @@ def templates_router(
     # same route agents-service answers for agents, skills and workflows), and the first tag names the SDK operation.
     router = APIRouter(responses=responses)
 
-    async def offered(request: Request, who: Who) -> list[dict[str, Any]]:
+    async def offered(request: Request, who: Who) -> list[OfferedTemplate]:
         """Every resource of the plugins on for the caller's team, from tools-service."""
-        tools = cast(PluginTemplates | None, getattr(request.app.state, "plugin_templates", None))
+        tools: PluginTemplates | None = getattr(request.app.state, "plugin_templates", None)
         if tools is None:
             raise ServiceUnavailable("Templates come from tools-service, and this service has no address for it.")
         try:
@@ -283,7 +302,7 @@ def templates_router(
                 "tools-service did not answer with the team's templates. Try again shortly."
             ) from e
 
-    async def listed(request: Request, who: Who) -> list[dict[str, Any]]:
+    async def listed(request: Request, who: Who) -> list[OfferedTemplate]:
         """The document type templates of the plugins on for the caller's team."""
         return [t for t in await offered(request, who) if t.get("kind") == KIND]
 
@@ -302,7 +321,7 @@ def templates_router(
         everything = await offered(request, who)
         on_sources = {str(t["source"]) for t in everything}
         shipped: set[tuple[str, str]] = set()
-        out: list[dict[str, Any]] = []
+        out: list[Json] = []
         cell = {"area": "documents", "action": "edit"}
         for t in (x for x in everything if x.get("kind") == KIND):
             shipped.add((str(t["source"]), str(t["id"])))
@@ -322,7 +341,15 @@ def templates_router(
                 if installed["newerAvailable"] or installed["changed"]
                 else "added"
             )
-            view = {k: t[k] for k in ("source", "plugin", "kind", "id", "version", "title", "requires")}
+            view = {
+                "source": t["source"],
+                "plugin": t["plugin"],
+                "kind": t["kind"],
+                "id": t["id"],
+                "version": t["version"],
+                "title": t["title"],
+                "requires": t["requires"],
+            }
             mine_now = _copy_view(latest) if latest else None
             extra = {
                 "state": state,
@@ -341,7 +368,7 @@ def templates_router(
             if name is None:
                 continue
             shipped.add(at)
-            view: dict[str, Any] = {
+            gone = {
                 "source": c.source,
                 "plugin": plugins.get(c.source)
                 or {
@@ -353,7 +380,7 @@ def templates_router(
                 "id": c.template_id,
                 "version": c.version,
                 "title": name,
-                "requires": {"tools": [], "bind": []},
+                "requires": {"tools": list[str](), "bind": list[str]()},
                 "installed": {"copies": 1, "version": c.version, "newerAvailable": False, "changed": False},
                 "state": "removed_upstream" if c.source in on_sources else "added",
                 "canAdd": False,
@@ -361,13 +388,13 @@ def templates_router(
                 "removeCell": cell,
                 "copy": _copy_view(c),
             }
-            out.append(TemplateView.model_validate(view).model_dump(by_alias=True))
+            out.append(TemplateView.model_validate(gone).model_dump(by_alias=True))
         return ok(out)
 
-    async def make_type(who: Who, t: dict[str, Any], body: InstallInput) -> tuple[str, dict[str, Any]]:
+    async def make_type(who: Who, t: OfferedTemplate, body: InstallInput) -> tuple[str, Json]:
         """The create route's body and path: `DocumentTypeIn`, then `DocumentTypes.create`, which checks the fields as
         an extraction does and makes version 1. Answers the type's id and the base its copy link keeps."""
-        fields = {k: v for k, v in cast(dict[str, Any], t.get("body") or {}).items() if k not in NOT_COPIED}
+        fields = {k: v for k, v in (t.get("body") or {}).items() if k not in NOT_COPIED}
         fields["name"] = body.name or fields.get("name") or t["title"]
         try:
             parsed = DocumentTypeIn.model_validate(fields)
@@ -439,7 +466,7 @@ def templates_router(
             template_id=template_id,
             version=version,
             by=who.actor,
-            digest=cast(str | None, t.get("digest")),
+            digest=t.get("digest"),
             # The create path makes version 1; a later version is the team's own.
             record_version=1,
             base=base,
@@ -451,7 +478,7 @@ def templates_router(
 
     async def review(
         request: Request, who: Who, resource: str, type_id: str
-    ) -> tuple[CopyRow, dict[str, Any], dict[str, Any], list[FieldOutcome], list[str], dict[str, Any]]:
+    ) -> tuple[CopyRow, OfferedTemplate, Review, list[FieldOutcome], list[str], Json]:
         """The copy's row, its template now, the review of taking it, the merge's outcomes and field list, and the
         template's body shaped as a version. 409 `detached` for a copy the team made its own."""
         source, _, template_id = resource.rpartition(":")
@@ -469,11 +496,7 @@ def templates_router(
                 f"Your team detached its copy of {t['title']}, so it takes no updates. Add the template again under "
                 "another name for a fresh copy."
             )
-        fields = {
-            k: v
-            for k, v in cast(dict[str, Any], t.get("body") or {}).items()
-            if k not in (*NOT_COPIED, "name", "description")
-        }
+        fields = {k: v for k, v in (t.get("body") or {}).items() if k not in (*NOT_COPIED, "name", "description")}
         try:
             parsed = DocumentTypeVersionIn.model_validate(fields)
         except ValidationError as e:
@@ -483,18 +506,18 @@ def templates_router(
                 f"{first['msg']}"
             ) from None
         template = shaped(parsed.model_dump(mode="json", by_alias=True))
-        versions = cast(list[dict[str, Any]], found.get("versions") or [])
-        newest = max(versions, key=lambda v: int(v["version"]))
+        versions = [an_object(v, "a version") for v in entries(found.get("versions"))]
+        newest = max(versions, key=lambda v: required(v, "version", int))
         yours = shaped(newest)
         base = row.base
         if base is None and row.record_version is not None:
             # A link made before bases were kept: the version the copy made is the copy as made, when it still exists;
             # otherwise every difference is a choice kept as the team's.
-            made = next((v for v in versions if int(v["version"]) == row.record_version), None)
+            made = next((v for v in versions if required(v, "version", int) == row.record_version), None)
             base = shaped(made) if made is not None else None
         keys = _order(yours, template, base)
         outcomes = merge(_flat(base) if base is not None else None, _flat(yours), _flat(template), keys)
-        view = {
+        view: Review = {
             "copy": _copy_view(row),
             "fromVersion": row.version,
             "toVersion": int(t["version"]),
@@ -553,14 +576,17 @@ def templates_router(
                 f"Your team changed {t['title']} since adding it ({', '.join(kept)}). Resetting makes a new version "
                 "from the app's template, without those changes. Confirm to reset.",
                 code="copy_edited",
-                details=view,
+                details={**view},
             )
         found = await document_types.get(who, copy)
         assert found is not None
-        newest = max(cast(list[dict[str, Any]], found["versions"]), key=lambda v: int(v["version"]))
+        newest = max(
+            [an_object(v, "a version") for v in a_list(found["versions"], "versions")],
+            key=lambda v: required(v, "version", int),
+        )
         yours = _flat(shaped(newest))
-        choices = {o.field: "template" for o in outcomes} if mode == "reset" else dict(body.choices)
-        merged = _flat(template) if mode == "reset" else apply(yours, outcomes, cast(dict[str, Any], choices))
+        choices: dict[str, Choice] = {o.field: "template" for o in outcomes} if mode == "reset" else dict(body.choices)
+        merged = _flat(template) if mode == "reset" else apply(yours, outcomes, choices)
         taken = [o.field for o in outcomes if o.outcome == "taken"]
         chosen = [o.field for o in outcomes if o.outcome == "conflict" and choices.get(o.field) == "template"]
         note = (
@@ -573,16 +599,16 @@ def templates_router(
             made = await document_types.add_version(who, copy, _unflat(merged, keys) | {"note": note})
             if made is None:
                 raise NotFound(f"Document type {copy}")
-            version = int(made["version"])
+            version = required(made, "version", int)
         await copies.updated(
             row.id,
             version=int(t["version"]),
-            digest=cast(str | None, t.get("digest")),
-            record_version=version if version is not None else row.record_version or int(newest["version"]),
+            digest=t.get("digest"),
+            record_version=(version if version is not None else row.record_version or required(newest, "version", int)),
             base=template,
         )
         refreshed = await copies.of_record(copy)
-        out = view | {"copy": _copy_view(refreshed or row), "taken": True, "version": version}
+        out = {**view, "copy": _copy_view(refreshed or row), "taken": True, "version": version}
         return ok(UpdateReview.model_validate(out).model_dump(by_alias=True))
 
     @router.post(

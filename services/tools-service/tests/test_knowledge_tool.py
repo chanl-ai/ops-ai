@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 
 from ops_identity import ServiceClient, dev_service_signer
+from ops_service_kit.http import Json
 from ops_tools.knowledge_tools import KnowledgeSearch
 from ops_tools.registry import ToolRegistry
 
@@ -58,7 +59,7 @@ async def test_a_search_names_its_bases_or_asks_for_the_whole_teams_explicitly()
 
 async def test_a_search_reads_only_the_calling_teams_knowledge_bases() -> None:
     kb = FakeKb()
-    asked = {"query": "How long to file a chargeback?", "allTeamKnowledgeBases": True}
+    asked: Json = {"query": "How long to file a chargeback?", "allTeamKnowledgeBases": True}
     out = await kb.tool().run(asked, tenant=TENANT, team=OPS)
     assert out.ok, out.output
     assert [p["text"] for p in out.output["passages"]] == ["File within 120 days."]

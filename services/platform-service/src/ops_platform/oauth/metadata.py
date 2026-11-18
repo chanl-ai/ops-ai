@@ -3,12 +3,12 @@ S256 challenges are taken."""
 
 from __future__ import annotations
 
-from typing import Any
+from ops_service_kit.http import Json
 
 from . import OAuthError
 
 
-def server_metadata(public_url: str | None) -> dict[str, Any]:
+def server_metadata(public_url: str | None) -> Json:
     if not public_url:
         raise OAuthError(
             "server_error",

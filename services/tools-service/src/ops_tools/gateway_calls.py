@@ -11,19 +11,20 @@ import hashlib
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any, NotRequired, TypedDict, cast
 
 from ops_access import BY_KEY, Access
 from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ActingForPerson, Principal
 from ops_policy import input_hash
 from ops_service_kit.errors import ApiError, Forbidden
+from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
 
 from .auth import SIGNED_WITH, Authenticator
 from .environments import TEST
-from .executor import Executor, Trial, invalid_fields
+from .executor import ConsoleRan, ConsoleRefused, Executor, Trial, invalid_fields
 from .limits import amount_refusal
 from .modules.directory import Sees
 from .modules.policy import WriteApprovals, asker_refusal
@@ -47,24 +48,56 @@ CONSOLE = "console"
 RULES_UNAVAILABLE = "approval_rules_unavailable"
 
 # Turns a call's input into what is sent, and names the values to scrub from its answer (code runs).
-Prepare = Callable[[Resolved | None, dict[str, Any]], Awaitable[tuple[dict[str, Any], list[str]]]]
+Prepare = Callable[[Resolved | None, Json], Awaitable[tuple[Json, list[str]]]]
 # Runs an operation its route owns (the MCP address's platform operations, mcp_tools.py) in place of the executor.
-Run = Callable[[dict[str, Any]], Awaitable[ToolOutcome]]
+Run = Callable[[Json], Awaitable[ToolOutcome]]
 
 
 @dataclass(frozen=True)
 class CallRequest:
     tool: str
-    input: dict[str, Any]
+    input: Json
     key: str
     # thread, step, act and environment, as POST /v1/calls' runContext carries them.
-    run_context: dict[str, Any] = field(default_factory=dict[str, Any])
+    run_context: Json = field(default_factory=Json)
     approval_token: str | None = None
     # The person the call acts for, from a verified acting-for token; never from `run_context`.
     acting_for: ActingForPerson | None = None
     # The person's own yes to a test run that asks them first, from the console's approval card. Honoured only on the
     # console channel, only for the answer "ask the person", and only for the person the call acts for.
     confirmed: bool = False
+
+
+class CallLogRow(TypedDict):
+    """The call row `call` builds and passes to the log as keyword arguments (`GatewayCalls.record`, `claim`). The run
+    context's thread, step and act are what the caller sent; the rest is the gateway's own."""
+
+    id: str
+    tenant_id: str
+    team_id: str | None
+    tool: str
+    access: str
+    input_hash: str
+    idempotency_key: str
+    thread_id: JsonValue
+    step: JsonValue
+    sub: str
+    act: JsonValue
+    approvers: list[str]
+    created_at: str
+    module_id: str | None
+    approval_token_id: str | None
+    environment: str
+    connection_id: str | None
+    channel: str
+    client_name: str | None
+    client_id: str | None
+    link_id: str | None
+    caller_name: str | None
+    acting_for: str | None
+    decision: NotRequired[str]
+    reasons: NotRequired[list[str]]
+    credential: NotRequired[str | None]
 
 
 @dataclass(frozen=True)
@@ -83,7 +116,7 @@ class Refused:
     code: str
     reasons: list[str]
     # What the refusal adds for the caller: the rate limit and its reset, or the fields that failed the schema.
-    details: dict[str, Any] = field(default_factory=dict[str, Any])
+    details: Json = field(default_factory=Json)
 
 
 Outcome = Allowed | Refused
@@ -99,13 +132,13 @@ def _token_ref(token: str | None) -> str | None:
 NOT_LINKED = "CONNECTION_NOT_LINKED"
 
 
-def _error_of(outcome: ToolOutcome) -> dict[str, Any] | None:
+def _error_of(outcome: ToolOutcome) -> Json | None:
     """The executor's {code, message} on a failed call, for the call log."""
     output: Any = outcome.output
     if outcome.ok or not isinstance(output, dict):
         return None
-    error: Any = cast(dict[str, Any], output).get("error")
-    return cast(dict[str, Any], error) if isinstance(error, dict) else None
+    error: Any = cast(Json, output).get("error")
+    return cast(Json, error) if isinstance(error, dict) else None
 
 
 def system_call(token: str | None, workflow: str) -> bool:
@@ -142,7 +175,7 @@ def chosen_accounts(value: object) -> dict[str, str]:
     return {k: v.strip() for k, v in given.items() if isinstance(k, str) and isinstance(v, str) and v.strip()}
 
 
-def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int, str, str, dict[str, Any]] | None:
+def _before_policy(resolved: Resolved | None, args: Json) -> tuple[int, str, str, dict[str, Any]] | None:
     """Registry checks that need no decision from OPA: a hidden operation, an unpublished or drifted module, or input
     that fails the operation's schema, or an amount over its limit, is refused before the policy is asked and before
     anything leaves the gateway."""
@@ -206,7 +239,12 @@ def _before_policy(resolved: Resolved | None, args: dict[str, Any]) -> tuple[int
     problems = invalid_fields(op["input"], args)
     if problems:
         fields = ", ".join(f"{p['field']} ({p['message']})" for p in problems)
-        return 422, "invalid_input", f"input does not match {op['name']}'s schema: {fields}", {"invalid": problems}
+        return (
+            422,
+            "invalid_input",
+            f"input does not match {op['name']}'s schema: {fields}",
+            {"invalid": problems},
+        )
     # The amount limit holds before the policy and before any request is built (shared with the test panel).
     if (over := amount_refusal(op, args)) is not None:
         return over.status, over.code, over.message, {}
@@ -219,11 +257,11 @@ async def sign_in_details(
     module: Module | None,
     person: ActingForPerson | None,
     access: str,
-) -> dict[str, Any]:
+) -> Json:
     """A person's missing sign-in refused before the sign-in step names the account, its app and a link, as the one
     the sign-in step refuses does, so chat draws its Connect card; without them the chat showed a bare error."""
     connection_id = module.get("connection_id") if module else None
-    details: dict[str, Any] = {"reason": "not_connected", "access": "write" if access == "write" else "read"}
+    details: Json = {"reason": "not_connected", "access": "write" if access == "write" else "read"}
     if module and module.get("display_name"):
         details["app"] = str(module.get("app_title") or module["display_name"])
     if auth is not None and person is not None and connection_id:
@@ -260,9 +298,7 @@ class GatewayCalls:
         self.approver = approver
         self.clock = clock
 
-    async def _run(
-        self, resolved: Resolved, tool: str, args: dict[str, Any], own: Run | None = None, **kw: Any
-    ) -> ToolOutcome:
+    async def _run(self, resolved: Resolved, tool: str, args: Json, own: Run | None = None, **kw: Any) -> ToolOutcome:
         """The executor's outcome, or a failed one when it raises. A write's row was claimed as running, and a row left
         running answers every retry "already running", so the run's step could neither finish nor fail."""
         try:
@@ -277,13 +313,13 @@ class GatewayCalls:
         caller: Principal,
         *,
         tool: str,
-        args: dict[str, Any],
+        args: Json,
         environment: str,
         act: str,
         trial: Trial,
         secret_values: dict[str, str] | None,
         confirmed: bool = False,
-    ) -> dict[str, Any]:
+    ) -> ConsoleRan | ConsoleRefused:
         """A tool page's Real run as one gateway call, so it meets every rule an agent's call meets: approvals,
         limits, the egress policy, the team's account and the call log. The answer is plain data, so the module
         service needs no gateway types: {callId, ok, output} when it ran, {callId, status, code, reasons} when not."""
@@ -376,7 +412,7 @@ class GatewayCalls:
         access = resolved.access if resolved else "unknown"
         digest = input_hash(req.input)
         ctx = req.run_context
-        row: dict[str, Any] = {
+        row: CallLogRow = {
             "id": call_id,
             "tenant_id": caller.tenant_id,
             # The team the call acts in, so Usage shows a team only its own calls, also on a module every team shares;
@@ -490,7 +526,7 @@ class GatewayCalls:
                 access=access,
                 setting=setting,
                 reviewer_role=setting_role,
-                approvers=(policy or {}).get("approvers") or 1,
+                approvers=(policy["approvers"] if policy else 0) or 1,
                 channel=(
                     "mcp"
                     if channel == MCP

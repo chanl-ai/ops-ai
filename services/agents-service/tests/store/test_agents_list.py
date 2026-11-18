@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from ops_agents.store.agent_registry import AgentRegistry, registry_agent_versions, registry_agents
 from ops_agents.store.graphs import GraphStore
 from ops_agents.store.tenancy import tenant_tx
+from ops_service_kit.http import Json
 from ops_service_kit.listing import ListParams
 from ops_store import isolation
 from ops_store.team_scope import acting_as
@@ -102,7 +103,7 @@ async def test_sorted_by_tasks_the_busiest_is_first_and_a_test_thread_is_not_cou
     with isolation.scope(tenant, TEAM):
         for agent_id in ("ag_quiet", "ag_busy", "ag_tested"):
             await _agent(engine, agent_id, agent_id)
-        threads: list[tuple[str, dict[str, object]]] = [
+        threads: list[tuple[str, Json]] = [
             ("agent:ag_busy", {}),
             ("agent_wrapper", {"agentId": "ag_busy"}),
             ("agent:ag_quiet", {}),

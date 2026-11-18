@@ -13,7 +13,7 @@ first on a connection of its own and nothing is held while tools-service answers
 from __future__ import annotations
 
 import dataclasses
-from typing import Annotated, Any, Literal, TypeAlias
+from typing import Annotated, Literal, TypeAlias, cast
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -23,10 +23,10 @@ from ops_access import can
 from ops_email import MailboxNotConfiguredError
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable
-from ops_service_kit.http import Envelope, In, Out
+from ops_service_kit.http import Envelope, In, Json, Out
 from ops_service_kit.ids import new_id, now_iso
 
-from ...store.channel_list import ChannelList
+from ...store.channel_list import ChannelList, LiveDefinition
 from ...store.mailboxes import AddressTakenError, MailboxRow, MailboxStore
 from ...store.poll_cursors import PollCursors
 from ...store.tenancy import current_team
@@ -196,23 +196,23 @@ async def _visible(rt: Runtime, me: Principal, mailbox_id: str) -> MailboxRow:
     return m
 
 
-async def _views(rt: Runtime, rows: list[MailboxRow]) -> list[dict[str, Any]]:
+async def _views(rt: Runtime, rows: list[MailboxRow]) -> list[Json]:
     """Each mailbox joined with the live workflows that watch it and when it was last read, in one pass."""
     # The tenant's live versions, read in the request's transaction; by id, so a mailbox lists its workflows in order.
-    live = sorted(await ChannelList(rt.db).live_definitions(), key=lambda r: str(r["workflow_id"]))
-    bound: dict[str, list[dict[str, Any]]] = {}
+    live = sorted(await ChannelList(rt.db).live_definitions(), key=lambda r: str(r.workflow_id))
+    bound: dict[str, list[LiveDefinition]] = {}
     for r in live:
-        b = binding_of(r["definition"])
+        b = binding_of(cast(Json | None, r.definition))
         if b is not None:
             bound.setdefault(b.mailbox.lower(), []).append(r)
-    read = await PollCursors(rt.db).read_at([f"email:{r['workflow_id']}" for rs in bound.values() for r in rs])
-    out: list[dict[str, Any]] = []
+    read = await PollCursors(rt.db).read_at([f"email:{r.workflow_id}" for rs in bound.values() for r in rs])
+    out: list[Json] = []
     for m in rows:
-        mine = [r for r in bound.get(m.address.lower(), []) if r["team_id"] == m.team_id]
-        times = [read[k] for r in mine if (k := f"email:{r['workflow_id']}") in read]
+        mine = [r for r in bound.get(m.address.lower(), []) if r.team_id == m.team_id]
+        times = [read[k] for r in mine if (k := f"email:{r.workflow_id}") in read]
         view = MailboxView(
             **{k: v for k, v in m.values().items() if k in MailboxView.model_fields},
-            workflows=[BoundWorkflow(id=r["workflow_id"], name=r["name"], version=r["version"]) for r in mine],
+            workflows=[BoundWorkflow(id=r.workflow_id, name=r.name, version=r.version) for r in mine],
             last_read_at=max(times) if times else None,
         )
         out.append(view.model_dump(mode="json", by_alias=True))
@@ -268,7 +268,7 @@ async def edit_mailbox(rt: Rt, me: Me, mailbox_id: str, body: MailboxPatch, _: T
     if "address" in values and values["address"].lower() != m.address.lower():
         [view] = await _views(rt, [m])
         if view["workflows"]:
-            names = ", ".join(w["name"] for w in view["workflows"])
+            names = ", ".join(str(w["name"]) for w in cast(list[Json], view["workflows"]))
             raise Conflict(f"Live workflows watch {m.address} ({names}); unpublish them first.", code="mailbox_in_use")
     _check_sender(dataclasses.replace(m, **values))
     try:
@@ -279,8 +279,8 @@ async def edit_mailbox(rt: Rt, me: Me, mailbox_id: str, body: MailboxPatch, _: T
     return ok(view)
 
 
-async def _test(rt: Runtime, m: MailboxRow) -> dict[str, Any]:
-    def failed(why: str) -> dict[str, Any]:
+async def _test(rt: Runtime, m: MailboxRow) -> Json:
+    def failed(why: str) -> Json:
         return TestView(ok=False, steps=[TestStepView(title="Sign in", state="failed")], error=why).model_dump(
             by_alias=True
         )

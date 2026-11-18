@@ -9,13 +9,14 @@ import io
 import math
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any
 
 import pdfplumber
 from PIL import Image, ImageOps
 
+from ops_extract.shapes import Box
 from ops_ingest.reading import MAX_RENDER_PIXELS
 from ops_ingest.reading.images import MAX_IMAGE_PIXELS
+from ops_service_kit.http import Json
 
 # The resolution a page is drawn at, and the longest side it is sent at: enough for the model to read small print, a
 # fraction of the bytes of the 200 dpi OCR render. Providers scale a larger image down before reading it anyway.
@@ -35,7 +36,7 @@ class PageImage:
     page: int
     png: bytes
 
-    def part(self) -> dict[str, Any]:
+    def part(self) -> Json:
         """The OpenAI chat content part carrying the image, as models-service forwards it."""
         url = "data:image/png;base64," + base64.b64encode(self.png).decode()
         return {"type": "image_url", "image_url": {"url": url}}
@@ -76,7 +77,7 @@ def whole(page: int, image: Image.Image) -> PageImage:
     return PageImage(page, _png(image))
 
 
-def crop(page: int, image: Image.Image, boxes: list[dict[str, Any]]) -> PageImage:
+def crop(page: int, image: Image.Image, boxes: list[Box]) -> PageImage:
     """The part of the page around a field's boxes (`{x, y, w, h}` fractions of the page), with a margin."""
     x0 = max(0.0, min(float(b["x"]) for b in boxes) - CROP_X)
     y0 = max(0.0, min(float(b["y"]) for b in boxes) - CROP_Y)

@@ -4,10 +4,11 @@ agent names an alias outside the same set."""
 
 from __future__ import annotations
 
-from typing import Any, NotRequired, Protocol, TypedDict, cast
+from typing import NotRequired, Protocol, TypedDict, cast
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import ApiError
+from ops_service_kit.http import Json
 
 
 class ServingAlias(TypedDict):
@@ -37,7 +38,7 @@ class ModelsUnavailable(ApiError):
 
 
 class ModelAliases(Protocol):
-    async def chat_models(self) -> list[dict[str, Any]]:
+    async def chat_models(self) -> list[Json]:
         """Wire rows, `{name, kind: "chat"}` plus clearance and prices when models-service knows them."""
         ...
 
@@ -50,7 +51,7 @@ class StaticModelAliases:
     def __init__(self, names: set[str]) -> None:
         self.names = names
 
-    async def chat_models(self) -> list[dict[str, Any]]:
+    async def chat_models(self) -> list[Json]:
         return [{"name": n, "kind": "chat"} for n in sorted(self.names)]
 
 
@@ -61,7 +62,7 @@ class HttpModelAliases:
     def __init__(self, models: ServiceClient | None) -> None:
         self.models = models
 
-    async def chat_models(self) -> list[dict[str, Any]]:
+    async def chat_models(self) -> list[Json]:
         if self.models is None:
             raise ModelsUnavailable("models-service cannot be called: no service signing key")
         rows: list[ServingAlias] = []

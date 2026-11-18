@@ -14,7 +14,7 @@ leaves the others decided.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, TypeAlias
+from typing import Annotated, Any, TypeAlias, TypedDict, cast
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from ops_policy import input_hash
 from ops_policy.approval import Binding, mint_approval
 from ops_service_kit.errors import ApiError, Conflict, Forbidden, NotFound
-from ops_service_kit.http import Envelope, In, Out
+from ops_service_kit.http import Envelope, In, Json, Out
 from ops_store import isolation
 
 from ...store.review_assignments import ReviewAssignments
@@ -60,25 +60,36 @@ async def approve(rt: Rt, me: Me, thread_id: str, body: ApprovalInput) -> JSONRe
     return ok(await record_approval(rt, me, thread_id, body.step_up_token))
 
 
+class ApprovalOut(TypedDict):
+    """An approval as the route answers it (schemas.Approval): who has approved, how many must, the hash the token
+    binds, and the token once enough have."""
+
+    approvers: list[str]
+    needed: int
+    inputHash: str
+    approvalToken: str | None
+
+
 async def record_approval(
     rt: Runtime,
     approver: Principal,
     thread_id: str,
     step_up_token: str | None,
     *,
-    call: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+    call: Json | None = None,
+) -> ApprovalOut:
     """Records `approver`'s approval of the call the thread waits on; the token is set once as many distinct people as
     the operation's policy names have approved. `call` is the one a decision chose when the step offers options (a
     levy review's hold or flag); else the payload's `call`."""
     row, graph = await resolve(rt, thread_id)
     waiting = pending(await graph.aget_state(config(thread_id)))
+    # The checkpoint's value as it is: a payload or call that is not an object fails its first read, as it did.
     if call is None:
-        call = waiting[0]["payload"].get("call") if waiting else None
+        call = cast(Json | None, cast(Json, waiting[0]["payload"]).get("call")) if waiting else None
     if call is None:
         raise Conflict("This thread is not waiting on a call to approve.", code="nothing_to_approve")
-    policy = await policy_of(rt, call["tool"])
-    payload: dict[str, Any] = waiting[0]["payload"] if waiting else {}
+    policy = await policy_of(rt, cast(str, call["tool"]))
+    payload: Json = cast(Json, waiting[0]["payload"]) if waiting else {}
     # Every route that records an approval passes through the one decider check: the asker alone for a card the person
     # answers (ask_first), else a reviewer of the card's role who is not its asker unless requesterMayDecide lets them.
     await hitl_facade.check_thread_decider(rt, approver, row, payload, [call])
@@ -87,8 +98,9 @@ async def record_approval(
     digest = input_hash(call["input"])
     # Two approvers means two people: approving the same input again does not count as the second. Only approvals
     # of this exact input count: an approval of an earlier draft of the call is not one of these.
+    step, tool = cast(str, call["step"]), cast(str, call["tool"])
     found = await ReviewStore(graph_store(rt).engine).approve(
-        thread_id, call["step"], approver.email, digest, distinct=policy.approvers > 1
+        thread_id, step, approver.email, digest, distinct=policy.approvers > 1
     )
     if found is None:
         raise Forbidden("You already approved this; a second, different person has to approve it.")
@@ -96,7 +108,7 @@ async def record_approval(
     needed = policy.approvers
     token = (
         mint_approval(
-            Binding(thread_id, call["step"], call["tool"], digest, approvers),
+            Binding(thread_id, step, tool, digest, approvers),
             rt.settings.review_key.get_secret_value(),
             ttl_s=rt.settings.review_token_ttl_seconds,
         )
@@ -171,7 +183,7 @@ async def list_reviews(rt: Rt, me: Me, q: Annotated[ReviewsQuery, Query()]) -> J
     return ok(rows)
 
 
-async def _with_can_decide(rt: Runtime, me: Principal, review: dict[str, Any]) -> dict[str, Any]:
+async def _with_can_decide(rt: Runtime, me: Principal, review: Json) -> Json:
     """The review with whether the caller may decide it now: the console shows Approve and Reject only then."""
     waiting = review.get("status") in ("pending", "in_review")
     return review | {"canDecide": waiting and await hitl_facade.can_decide(rt, me, str(review["id"]))}

@@ -8,7 +8,7 @@ from __future__ import annotations
 import copy
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
@@ -22,6 +22,7 @@ from ops_agents.store.service_events import ServiceEvents
 from ops_agents.store.tenancy import tenant_scope
 from ops_engine.definition import parse
 from ops_engine.store import DefinitionStore
+from ops_service_kit.http import Json
 from ops_service_kit.ids import now_iso
 from tests.api.test_service_events import event_workflow
 
@@ -78,8 +79,8 @@ async def test_an_update_to_a_shipped_workflow_waits_for_publish_review(engine: 
         asked = await AgentRegistry(engine).requests(KIND, old["id"])
         updated = await ServiceEvents(engine).get(UPDATED, f"{old['id']}:{parse(new).digest()[:16]}")
     assert (live["version"], live["digest"]) == (1, parse(old).digest()), live
-    assert [(r["version"], r["status"], r["requested_by"]) for r in asked] == [(2, "pending", SEED)], asked
-    assert updated is not None and updated["payload"]["status"] == "pending"
+    assert [(r.version, r.status, r.requested_by) for r in asked] == [(2, "pending", SEED)], asked
+    assert updated is not None and cast(Json, updated.payload)["status"] == "pending"
 
 
 async def test_where_no_review_is_needed_the_update_goes_live(engine: AsyncEngine) -> None:
@@ -109,7 +110,7 @@ async def test_a_tenant_that_published_its_own_version_keeps_it_and_is_told(engi
         live = await store.current(old["id"]) or {}
         told = await ServiceEvents(engine).get(UPDATE_AVAILABLE, f"{old['id']}:{parse(new).digest()[:16]}")
     assert (live["version"], live["digest"]) == (version, mine.digest()), live
-    assert told is not None and told["payload"]["liveVersion"] == version
+    assert told is not None and cast(Json, told.payload)["liveVersion"] == version
 
 
 async def test_a_tenant_on_the_platform_owned_version_follows_the_seed_too(engine: AsyncEngine) -> None:
@@ -126,4 +127,4 @@ async def test_a_tenant_on_the_platform_owned_version_follows_the_seed_too(engin
     await provision(engine, tenant, new)
     with tenant_scope(tenant):
         asked = await AgentRegistry(engine).requests(KIND, old.id)
-    assert [(r["version"], r["status"]) for r in asked] == [(2, "pending")], asked
+    assert [(r.version, r.status) for r in asked] == [(2, "pending")], asked

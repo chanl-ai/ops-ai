@@ -94,7 +94,7 @@ async def test_takeover_goes_on_when_tools_service_is_down(gateway: Gateway, eng
     async with httpx.AsyncClient(base_url="http://127.0.0.1:9", timeout=1) as down:
         new = await take_over(engine, gateway.thread, fence(gateway, engine, down))
     runs = await store.runs(gateway.thread)
-    warnings = [e["event"] for r in runs if r["kind"] == "lease" for e in r["events"]]
+    warnings = [e["event"] for r in runs if r.kind == "lease" for e in r.events]
     assert warnings == ["lease.fence_not_raised"]
     # The new owner's first tool write raises the fence itself; after it the old generation is refused.
     assert (await write(gateway, new, "s1")).status_code == 200

@@ -14,7 +14,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_tools.auth.tokens import Tokens
-from ops_tools.store.connections import ConnectionStore
+from ops_tools.store.connections import ConnectionStore, NewAccount
 
 from .conftest import credentials
 
@@ -41,7 +41,7 @@ def _system(seen: list[dict[str, str]]) -> httpx.AsyncClient:
 
 async def _connection(store: ConnectionStore, tenant: str) -> str:
     now = datetime.now(UTC)
-    row = {
+    row: NewAccount = {
         "tenant_id": tenant,
         "id": "con_tok",
         "app_id": "con_tok",

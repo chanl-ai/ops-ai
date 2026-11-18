@@ -14,7 +14,7 @@ from typing import Any, ClassVar, Literal
 import sqlalchemy as sa
 
 from ops_engine.store.tables import engine_runs
-from ops_service_kit.http import Out
+from ops_service_kit.http import Json, Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_store import Guarantee
 from ops_store.rows import one, rows
@@ -140,7 +140,7 @@ class Batches(RuntimeStore):
         file_id: str,
         file_name: str,
         created_by: str,
-        rows: list[dict[str, Any]],
+        rows: list[Json],
     ) -> BatchOut:
         batch = {
             "id": new_id("batch"),

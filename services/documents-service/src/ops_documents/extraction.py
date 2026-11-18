@@ -20,7 +20,7 @@ import uuid
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, TypedDict, cast
 
 import httpx
 import regex
@@ -35,19 +35,19 @@ from ops_documents.store import ExtractionRow, ExtractionsStore
 from ops_documents.store.document_types import SINGLE
 from ops_documents.store.extractions import CorrectedEvent, NewExample, file_read
 from ops_extract import boxes, classify, page_images, prompt, result, rules, templates
-from ops_extract.checks import CLEAN_RULES, DEFAULT_FLOOR, entries, in_quote, threshold
+from ops_extract.checks import CLEAN_RULES, DEFAULT_FLOOR, in_quote, threshold
 from ops_extract.floor import FloorUnreadError, PlatformFloor
 from ops_extract.layout import layout_of, page_text
 from ops_extract.pages import Pages
-from ops_extract.shapes import Box, Check, FieldDefinition, Layout, SavedTemplate
+from ops_extract.shapes import Box, Check, DocumentKind, FieldDefinition, Layout, SavedTemplate
 from ops_files_client import FileInfo
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_ingest.reading import Reading, read
 from ops_service_kit import narrow
-from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.listing import ListParams
 from ops_service_kit.logging import get_logger
-from ops_service_kit.narrow import Malformed, a_list, an_object, required
+from ops_service_kit.narrow import Malformed, a_list, an_object, entries, required
 from ops_service_kit.settings import Settings
 from ops_store import background, isolation
 from ops_store.documents import stored
@@ -88,7 +88,7 @@ class Usage:
     input_tokens: int = 0
     output_tokens: int = 0
     # Every call that carried a page image: {step, pages, images, alias}, kept on the read.
-    image_calls: list[dict[str, Any]] = field(default_factory=list[dict[str, Any]])
+    image_calls: JsonList = field(default_factory=JsonList)
     # Why an image was not sent though the read allowed it: the alias is not cleared for images.
     image_refused: str | None = None
 
@@ -98,14 +98,14 @@ class Models(Protocol):
         self,
         system: str,
         user: str,
-        schema: dict[str, Any],
+        schema: Json,
         *,
         run: str,
         step: str,
         tenant: str,
         usage: Usage | None = None,
         images: Sequence[page_images.PageImage] = (),
-    ) -> Any: ...
+    ) -> JsonValue: ...
 
 
 class Floors(Protocol):
@@ -126,12 +126,29 @@ PATH_MODEL = "model"
 CORRECTED_EVENT = "extraction.corrected"
 
 
+class ResolvedVersion(TypedDict):
+    """A team's document type version as an extraction reads with it (`DocumentTypes.resolve`)."""
+
+    id: str
+    name: str
+    version: int
+    fields: list[Json]
+    many: bool
+    reviewBelow: float | None
+    # The templates extraction tries: every one but those flagged for a rebuild.
+    templates: list[Json]
+    allTemplates: list[Json]
+    checks: list[Json]
+    pageImages: bool
+    offerAt: int
+
+
 class TypeResolver(Protocol):
-    async def resolve(self, who: Who, type_id: str, version: int | None) -> dict[str, Any]:
+    async def resolve(self, who: Who, type_id: str, version: int | None) -> ResolvedVersion:
         """{id, name, version, fields, many, reviewBelow} of a team's document type version."""
         ...
 
-    async def list(self, who: Who) -> list[dict[str, Any]]:
+    async def list(self, who: Who) -> Sequence[DocumentKind]:
         """The team's document types: {id, name, description, latestVersion}, which classification reads."""
         ...
 
@@ -139,7 +156,7 @@ class TypeResolver(Protocol):
         """One of the team's document types' name, or None when the team has no such type."""
         ...
 
-    async def examples(self, tenant: str, team: str, type_id: str, keys: list[str]) -> list[dict[str, Any]]:
+    async def examples(self, tenant: str, team: str, type_id: str, keys: list[str]) -> list[Json]:
         """The type's recent examples for the fields a read asks: field, printed line and value."""
         ...
 
@@ -159,14 +176,14 @@ class ModelsService:
         self,
         system: str,
         user: str,
-        schema: dict[str, Any],
+        schema: Json,
         *,
         run: str,
         step: str,
         tenant: str,
         usage: Usage | None = None,
         images: Sequence[page_images.PageImage] = (),
-    ) -> Any:
+    ) -> JsonValue:
         for name in dict.fromkeys((self.alias, FALLBACK_ALIAS)):
             r = await self._post(system, user, schema, name=name, run=run, step=step, tenant=tenant, images=images)
             if images and r.status_code == 403 and "images_not_cleared" in r.text:
@@ -179,17 +196,23 @@ class ModelsService:
                 continue
             if r.status_code >= 400:
                 raise ModelRefusedError(f"models-service answered {r.status_code}: {r.text[:300]}", _error_code(r))
-            body = cast(dict[str, Any], r.json())
+            # models-service's answer and the tokens it bills: a wrong shape fails the call, as it always has.
+            body = an_object(r.json(), "models-service's answer")
             if usage is not None:
-                counted = cast(dict[str, Any], body.get("usage") or {})
-                usage.input_tokens += int(counted.get("prompt_tokens") or 0)
-                usage.output_tokens += int(counted.get("completion_tokens") or 0)
+                counted = an_object(body.get("usage") or {}, "usage")
+                usage.input_tokens += _whole(counted.get("prompt_tokens") or 0, "prompt_tokens")
+                usage.output_tokens += _whole(counted.get("completion_tokens") or 0, "completion_tokens")
                 if images:
-                    pages = sorted({i.page for i in images})
+                    pages: JsonList = [*sorted({i.page for i in images})]
                     usage.image_calls.append({"step": step, "pages": pages, "images": len(images), "alias": name})
-            message = cast(dict[str, Any], body["choices"][0]["message"])
-            calls = cast(list[dict[str, Any]], message.get("tool_calls") or [])
-            raw = calls[0]["function"]["arguments"] if calls else message.get("content")
+            message = an_object(a_list(body["choices"], "choices")[0], "choice")["message"]
+            message = an_object(message, "message")
+            calls = a_list(message.get("tool_calls") or [], "tool_calls")
+            raw = (
+                an_object(an_object(calls[0], "tool call")["function"], "function")["arguments"]
+                if calls
+                else (message.get("content"))
+            )
             try:
                 return json.loads(raw) if isinstance(raw, str) else {}
             except json.JSONDecodeError:
@@ -200,7 +223,7 @@ class ModelsService:
         self,
         system: str,
         user: str,
-        schema: dict[str, Any],
+        schema: Json,
         *,
         name: str,
         run: str,
@@ -208,7 +231,7 @@ class ModelsService:
         tenant: str,
         images: Sequence[page_images.PageImage],
     ) -> httpx.Response:
-        content: Any = [{"type": "text", "text": user}, *(i.part() for i in images)] if images else user
+        content: JsonValue = [{"type": "text", "text": user}, *(i.part() for i in images)] if images else user
         try:
             return await self.http.post(
                 "/v1/models/chat/completions",
@@ -264,7 +287,7 @@ class PlatformMasking:
             found = await self.client(tenant, team).get(f"/v1/policies/{MASKING_POLICY}")
         except (ServiceCallError, ServiceUnreachable):
             return True
-        return not team_off(cast(dict[str, Any], found or {}).get("value"), team)
+        return not team_off(an_object(found or {}, f"the {MASKING_POLICY} policy").get("value"), team)
 
 
 @dataclass
@@ -280,7 +303,7 @@ class PlatformPageImages:
         except (ServiceCallError, ServiceUnreachable) as e:
             log.warning("pageImages policy unread; no page image is sent", extra={"tenant": tenant, "error": str(e)})
             return False
-        return team_on(cast(dict[str, Any], found or {}).get("value"), team)
+        return team_on(an_object(found or {}, f"the {PAGE_IMAGES_POLICY} policy").get("value"), team)
 
 
 @dataclass
@@ -325,7 +348,7 @@ class Pictures:
         for key, found in boxed.items():
             page = found[0]["page"]
             if (image := await self._page(page)) is not None:
-                out[key] = page_images.crop(page, image, [boxes.box_json(b) for b in found if b["page"] == page])
+                out[key] = page_images.crop(page, image, [b for b in found if b["page"] == page])
         return out
 
 
@@ -340,7 +363,7 @@ def fingerprint_of(out: Json, layout: Layout) -> str:
     return templates.fingerprint(templates.Read(layout, found))
 
 
-def _recorded(out: dict[str, Any], usage: Usage) -> None:
+def _recorded(out: Json, usage: Usage) -> None:
     """Every call that carried a page image, and why one was not sent, on the read."""
     if usage.image_calls:
         out["imageCalls"] = usage.image_calls
@@ -348,11 +371,28 @@ def _recorded(out: dict[str, Any], usage: Usage) -> None:
         out["imageRefused"] = usage.image_refused
 
 
+def _whole(value: JsonValue, what: str) -> int:
+    """A count (billed tokens, a page or token limit) as `int()` reads it: "2" and 2.0 count; None, a list or an
+    object is not a number and fails the call."""
+    if not isinstance(value, int | float | str):
+        raise TypeError(f"{what} {value!r} is not a number")
+    return int(value)
+
+
+def _confidence(result: Json) -> float:
+    """A field's stored confidence as `float()` reads it: missing or empty is 0.0, and "0.9" reads; a list or an
+    object is not a number and fails the correction."""
+    value = result.get("confidence") or 0.0
+    if not isinstance(value, int | float | str):
+        raise TypeError(f"confidence {value!r} is not a number")
+    return float(value)
+
+
 def _sha(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-def _check_rules(field: dict[str, Any]) -> None:
+def _check_rules(field: Json) -> None:
     """A field's own rules are refused when saved, not when a value meets them: a pattern that does not
     compile, emptyWhen that is not a short list of phrases, or a cleanup rule that is not one of CLEAN_RULES."""
     pattern = field.get("pattern")
@@ -381,10 +421,12 @@ def _check_rules(field: dict[str, Any]) -> None:
 
 def _error_code(r: httpx.Response) -> str | None:
     try:
-        error = cast(dict[str, Any], r.json()).get("error")
+        body = r.json()
     except ValueError:
         return None
-    return str(cast(dict[str, Any], error).get("code")) if isinstance(error, dict) else None
+    # Read outside the try: an answer that is not an object fails the call, as it always has.
+    error = an_object(body, "models-service's refusal").get("error")
+    return str(error.get("code")) if isinstance(error, dict) else None
 
 
 def _key_hash(who: Who, key: str) -> str:
@@ -408,32 +450,30 @@ def review_below(request: Json) -> float | None:
     return None if request.get("reviewBelow") is None else required(request, "reviewBelow", float)
 
 
-def request_of(body: dict[str, Any]) -> dict[str, Any]:
+def request_of(body: Json) -> Json:
     """The extraction asked for, checked: fields with a key and a known type, and the options that change the answer.
     A full-text or proposed read names no fields."""
     read = body.get("read") or "fields"
     if read not in READS:
         raise InvalidRequestError(f"read is one of {', '.join(READS)}")
-    fields: Any = body.get("fields") if read == "fields" else []
+    fields = body.get("fields") if read == "fields" else []
     if not isinstance(fields, list) or (read == "fields" and not fields):
         raise InvalidRequestError("fields is a list of at least one field")
     keys: set[str] = set()
-    for f in cast(list[Any], fields):
-        if not isinstance(f, dict) or not isinstance(cast(dict[str, Any], f).get("key"), str):
+    for one in fields:
+        key = one.get("key") if isinstance(one, dict) else None
+        if not isinstance(one, dict) or not isinstance(key, str):
             raise InvalidRequestError("every field has a key")
-        one = cast(dict[str, Any], f)
         if (one.get("type") or "text") not in FIELD_TYPES:
-            raise InvalidRequestError(
-                f"field {one['key']} has type {one.get('type')!r}; types are {', '.join(FIELD_TYPES)}"
-            )
-        if one["key"] in keys:
-            raise InvalidRequestError(f"field {one['key']} is named twice")
-        keys.add(one["key"])
+            raise InvalidRequestError(f"field {key} has type {one.get('type')!r}; types are {', '.join(FIELD_TYPES)}")
+        if key in keys:
+            raise InvalidRequestError(f"field {key} is named twice")
+        keys.add(key)
         _check_rules(one)
     below = body.get("reviewBelow")
     if below is not None and (isinstance(below, bool) or not isinstance(below, int | float) or not 0 <= below <= 1):
         raise InvalidRequestError("reviewBelow is a confidence between 0 and 1")
-    request: dict[str, Any] = {
+    request: Json = {
         "fields": fields,
         "many": bool(body.get("many")),
         "ocr": bool(body.get("ocr")),
@@ -460,10 +500,10 @@ def request_of(body: dict[str, Any]) -> dict[str, Any]:
     return request
 
 
-def answer_of(row: ExtractionRow) -> dict[str, Any]:
+def answer_of(row: ExtractionRow) -> Json:
     """What a caller reads: the id and status, then the scored answer once done (or what the file had when it could
     not be read), or the error once failed."""
-    out: dict[str, Any] = {"id": row.id, "fileId": row.file_id, "status": row.status}
+    out: Json = {"id": row.id, "fileId": row.file_id, "status": row.status}
     if row.status in ("done", "unreadable") and row.result is not None:
         out |= {"outcome": row.outcome, **row.result}
     if row.status == "failed":
@@ -496,11 +536,11 @@ class Extractor:
         self,
         who: Who,
         file_id: str,
-        body: dict[str, Any],
+        body: Json,
         *,
         idempotency_key: str | None = None,
         inline: bool = False,
-    ) -> tuple[int, dict[str, Any]]:
+    ) -> tuple[int, Json]:
         """(200, the answer) when it ran now or had already finished, (202, its id and status) when it runs later.
         `inline` runs it now whatever the file's size (a document type's test, already running as a task). A request
         naming `documentTypeId` reads with that type's version (the newest when `version` is not given); one asking
@@ -517,14 +557,18 @@ class Extractor:
             if found["typeId"] is None or found["needsReview"]:
                 return 200, await self._unknown(who, file, found, body, idempotency_key)
             kept = {k: v for k, v in body.items() if k not in ("detect", "version")}
-            body = kept | {"documentTypeId": found["typeId"], "classification": found}
+            typed: Json = {"documentTypeId": found["typeId"], "classification": found}
+            body = kept | typed
         if body.get("documentTypeId"):
             if self.types is None:
                 raise InvalidRequestError("document types are not served here")
-            t = await self.types.resolve(who, str(body["documentTypeId"]), body.get("version"))
+            version = body.get("version")
+            if version is not None and (isinstance(version, bool) or not isinstance(version, int)):
+                raise InvalidRequestError("version is a whole number")
+            t = await self.types.resolve(who, str(body["documentTypeId"]), version)
             below = body.get("reviewBelow")
             body = {
-                "fields": t["fields"],
+                "fields": [*t["fields"]],
                 "many": t["many"],
                 "ocr": body.get("ocr"),
                 "reviewBelow": below if below is not None else t["reviewBelow"],
@@ -535,8 +579,8 @@ class Extractor:
                     **({"name": t["name"]} if t.get("name") else {}),
                 },
                 **({"classification": body["classification"]} if body.get("classification") else {}),
-                **({"templates": t["templates"]} if t.get("templates") else {}),
-                **({"checks": t["checks"]} if t.get("checks") else {}),
+                **({"templates": [*t["templates"]]} if t.get("templates") else {}),
+                **({"checks": [*t["checks"]]} if t.get("checks") else {}),
                 **({"pageImages": True} if t.get("pageImages") else {}),
             }
         request = request_of(body)
@@ -561,7 +605,7 @@ class Extractor:
                     "attempts": 0,
                     "key_hash": _key_hash(who, key),
                     "request_hash": request_hash,
-                    "type_id": cast(dict[str, Any], request.get("documentType") or {}).get("id"),
+                    "type_id": an_object(request.get("documentType") or {}, "documentType").get("id"),
                     "asked_by": who.actor,
                     "asked_at": self.clock(),
                 }
@@ -612,7 +656,7 @@ class Extractor:
         except Exception as e:
             log.warning("extraction_not_settled", extraction=extraction_id, error=str(e))
 
-    async def classify(self, who: Who, file: FileInfo, *, ocr: bool) -> dict[str, Any]:
+    async def classify(self, who: Who, file: FileInfo, *, ocr: bool) -> Json:
         """Which of the team's document types the file is (the model's answer over each type's name and
         description): {typeId, name, confidence, reason, needsReview, floor}; typeId null when none fits."""
         if self.types is None:
@@ -634,14 +678,13 @@ class Extractor:
         )
         if prompt.schema_errors(answer, schema):
             return classify.classification({"reason": "The model's answer named no listed type."}, types, floor)
-        return classify.classification(cast(dict[str, Any], answer), types, floor)
+        # The schema check above proves an object.
+        return classify.classification(an_object(answer, "the model's answer"), types, floor)
 
-    async def _unknown(
-        self, who: Who, file: FileInfo, found: dict[str, Any], body: dict[str, Any], idempotency_key: str | None
-    ) -> dict[str, Any]:
+    async def _unknown(self, who: Who, file: FileInfo, found: Json, body: Json, idempotency_key: str | None) -> Json:
         """A detect read whose kind is unknown or doubtful: recorded done with outcome unknown and no fields, so the
         workflow sends it to a person instead of reading it with the wrong type's fields."""
-        request: dict[str, Any] = {
+        request: Json = {
             "fields": [],
             "many": False,
             "ocr": bool(body.get("ocr")),
@@ -678,11 +721,11 @@ class Extractor:
             await self.store.finish(extraction_id, status="done", outcome="unknown", result=result, at=self.clock())
             return answer_of(await self._row(who.tenant_id, extraction_id))
 
-    async def get(self, who: Who, extraction_id: str) -> dict[str, Any] | None:
+    async def get(self, who: Who, extraction_id: str) -> Json | None:
         row = await self.store.get(extraction_id)
         if row is None or row.team != who.team:
             return None
-        corrections = [
+        corrections: JsonList = [
             {
                 "field": k.field,
                 "record": k.record,
@@ -694,7 +737,9 @@ class Extractor:
             }
             for k in await self.store.corrections(extraction_id)
         ]
-        return answer_of(row) | {"corrections": corrections}
+        out = answer_of(row)
+        out["corrections"] = corrections
+        return out
 
     async def for_file(self, who: Who, file_id: str, params: ListParams) -> ListPage:
         """One page of the team's extractions of a file it can see, newest first (the file page's Fields tab)."""
@@ -704,8 +749,8 @@ class Extractor:
         return page
 
     async def correct(
-        self, who: Who, extraction_id: str, key: str, value: Any, *, record: int | None = None
-    ) -> dict[str, Any] | None:
+        self, who: Who, extraction_id: str, key: str, value: JsonValue, *, record: int | None = None
+    ) -> Json | None:
         """A checker's value for one field of a done extraction. The answer then carries the corrected value, and the
         correction row keeps the original value and confidence, so a correction never erases what was extracted."""
         row = await self.store.get(extraction_id)
@@ -717,24 +762,24 @@ class Extractor:
         many = "records" in answer
         if many != (record is not None):
             raise InvalidRequestError("record names the record to correct, for an extraction of several records only")
+        # Each read is the stored object itself, so the changes below land in the answer that is saved.
+        records = a_list(answer["records"], "records") if many else []
         if many:
-            records = cast(list[dict[str, Any]], answer["records"])
             if record is None or record >= len(records):
                 raise InvalidRequestError(f"there is no record {record}")
-            target = records[record]
+            target = an_object(records[record], f"record {record}")
         else:
             target = answer
-        fields = cast(dict[str, dict[str, Any]], target["fields"])
+        fields = an_object(target["fields"], "fields")
         if key not in fields:
             raise InvalidRequestError(f"there is no field {key}")
-        original = fields[key]
+        original = an_object(fields[key], f"field {key}")
         fields[key] = {**original, "value": value, "corrected": True, "needsReview": False}
         # A person set the value, so it no longer waits for one: the to-check count follows the correction.
         target["needsReview"] = [k for k in a_list(target.get("needsReview") or [], "needsReview") if k != key]
         if many:
             an_object(target["values"], "values")[key] = value
-            every = cast(list[dict[str, Any]], answer["records"])
-            answer["needsReview"] = [i for i, r in enumerate(every) if r["needsReview"]]
+            answer["needsReview"] = [i for i, r in enumerate(records) if an_object(r, f"record {i}")["needsReview"]]
         await self.store.correct(
             {
                 "tenant_id": who.tenant_id,
@@ -742,7 +787,7 @@ class Extractor:
                 "field": key,
                 "record": record,
                 "original": original.get("value"),
-                "original_confidence": float(original.get("confidence") or 0.0),
+                "original_confidence": _confidence(original),
                 "corrected": value,
                 "corrected_by": who.actor,
                 "corrected_at": self.clock(),
@@ -754,26 +799,30 @@ class Extractor:
         return await self.get(who, extraction_id)
 
     def _example(
-        self, who: Who, row: ExtractionRow, key: str, original: dict[str, Any], value: Any, *, record: int | None
+        self, who: Who, row: ExtractionRow, key: str, original: Json, value: JsonValue, *, record: int | None
     ) -> NewExample | None:
         """What a correction of a typed read teaches its type: the field, the line its value was printed on
         (the read's quote for it) and the corrected value, for the read's tenant and team. A read with fields of its
         own and no type teaches nothing, and neither does a correction whose quote does not show the corrected value:
         a wrong read often cites the wrong line (a banner every document carries), and that line paired with the right
         value would teach every later document of the type to read it."""
-        doc_type = cast(dict[str, Any] | None, row.request.get("documentType"))
+        doc_type = row.request.get("documentType")
         if not doc_type:
             return None
-        citation = cast(dict[str, Any], original.get("citation") or {})
+        citation = an_object(original.get("citation") or {}, f"field {key}'s citation")
+        quote = citation.get("quote")
+        if quote and value is not None and not isinstance(quote, str):
+            # in_quote reads the quote as text: one that is not fails the correction, as it always has.
+            raise TypeError(f"field {key}'s quote {quote!r} is not text")
         unknown: FieldDefinition = {"key": key}
         asked = next((f for f in fields_of(row.request) if f["key"] == key), unknown)
-        if not in_quote(asked, value, citation.get("quote")):
+        if not in_quote(asked, value, quote if isinstance(quote, str) else None):
             return None
         return {
             "tenant_id": who.tenant_id,
             "id": f"ex_{uuid.uuid4().hex[:16]}",
             "team": row.team,
-            "type_id": str(doc_type["id"]),
+            "type_id": str(an_object(doc_type, "documentType")["id"]),
             "field": key,
             "line": citation.get("quote") or None,
             "value": value,
@@ -783,30 +832,32 @@ class Extractor:
             "created_at": self.clock(),
         }
 
-    async def _examples(self, row: ExtractionRow, fields: list[FieldDefinition]) -> list[dict[str, Any]]:
+    async def _examples(self, row: ExtractionRow, fields: list[FieldDefinition]) -> list[Json]:
         """The recent examples of the read's type for the fields it asks; none for a read with no type."""
-        doc_type = cast(dict[str, Any] | None, row.request.get("documentType"))
+        doc_type = row.request.get("documentType")
         if not doc_type or self.types is None:
             return []
         keys = [f["key"] for f in fields]
-        return await self.types.examples(row.tenant_id, row.team, str(doc_type["id"]), keys)
+        type_id = str(an_object(doc_type, "documentType")["id"])
+        return await self.types.examples(row.tenant_id, row.team, type_id, keys)
 
     async def masks(self, who: Who) -> bool:
         """Whether the caller's team sees personal data masked."""
         return True if self.masking is None else await self.masking.masks(who.tenant_id, who.team)
 
     async def _corrected_event(
-        self, who: Who, row: ExtractionRow, answer: dict[str, Any], key: str, record: int | None
+        self, who: Who, row: ExtractionRow, answer: Json, key: str, record: int | None
     ) -> CorrectedEvent | None:
         """extraction.corrected, so the file's saved read follows the correction (its event workflow re-runs Save data
         on file). Only for a read of a document type, and only the file's newest one for the team: correcting an
         older read must not put it back on the file over a newer one."""
-        doc_type = cast(dict[str, Any] | None, row.request.get("documentType"))
+        doc_type = row.request.get("documentType")
         if not doc_type:
             return None
         newest, _ = await self.store.for_file(who.team, row.file_id, ListParams(page_size=1))
         if not newest or newest[0].id != row.id:
             return None
+        doc_type = an_object(doc_type, "documentType")
         name = await self.types.name(who, str(doc_type.get("id"))) if self.types is not None else None
         payload = file_read(row.file_id, row.id, doc_type, answer, name=name) | {"field": key, "record": record}
         return {
@@ -857,12 +908,12 @@ class Extractor:
             log.warning("extraction failed", extra={"extraction": row.id, "error": str(e)})
             await self.store.finish(row.id, status="failed", at=self.clock(), error_code="failed", error=str(e))
 
-    async def _pages(self, who: Who, file: FileInfo, request: dict[str, Any]) -> Pages:
+    async def _pages(self, who: Who, file: FileInfo, request: Json) -> Pages:
         """The text the model reads, from the file's reading: titles, headings and each table cell on lines of their
         own, and each OCR'd word's confidence."""
         return page_text(layout_of(await self._reading(who, file, request)))
 
-    async def _reading(self, who: Who, file: FileInfo, request: dict[str, Any]) -> Reading:
+    async def _reading(self, who: Who, file: FileInfo, request: Json) -> Reading:
         settings = settings_of(bool(request.get("ocr")))
         if self.readings is not None:
             return await self.readings.of(who, file, settings)
@@ -907,7 +958,7 @@ class Extractor:
                 return await self._refused(row, e)
             fields = [FIELD(f) for f in entries(proposal["fields"])]
             if not fields:
-                out: dict[str, Any] = {
+                out: Json = {
                     "fileId": row.file_id, "proposal": proposal, "fields": {}, "needsReview": [], **limited,
                 }  # fmt: skip
                 _recorded(out, usage)
@@ -933,7 +984,7 @@ class Extractor:
                 )  # fmt: skip
                 if errors := prompt.schema_errors(answer, schema):
                     return await self._fail(
-                        row, "schema_error", "The answer did not match the fields asked for.", {"details": errors}
+                        row, "schema_error", "The answer did not match the fields asked for.", {"details": [*errors]}
                     )
             # With no platform-service configured the catalogue's default applies; a configured one that cannot be
             # read fails the extraction (FloorUnreadError), so a failed read never lowers the bar.
@@ -1167,9 +1218,7 @@ class Extractor:
         code, message = REFUSALS.get(e.code or "", ("model_unavailable", str(e)))
         return await self._fail(row, code, message)
 
-    async def _fail(
-        self, row: ExtractionRow, code: str, message: str, extra: dict[str, Any] | None = None
-    ) -> ExtractionRow:
+    async def _fail(self, row: ExtractionRow, code: str, message: str, extra: Json | None = None) -> ExtractionRow:
         """Settle as failed: the error saved and the row read back in one transaction."""
         async with isolation.request_transaction():
             await self.store.finish(
@@ -1183,15 +1232,15 @@ class Extractor:
         return found
 
 
-def _limited(pages: Pages, request: dict[str, Any]) -> tuple[Pages, dict[str, Any]]:
+def _limited(pages: Pages, request: Json) -> tuple[Pages, Json]:
     """The pages a read may send: the first `maxPages`, then as many as fit under `maxTokens`. What it says about them:
     `readPages` when a limit applied, and `partial` when the token ceiling left pages unread."""
     keep = sorted(pages.texts)
-    said: dict[str, Any] = {}
+    said: Json = {}
     if request.get("maxPages"):
-        keep = [n for n in keep if n <= int(request["maxPages"])]
+        keep = [n for n in keep if n <= _whole(request["maxPages"], "maxPages")]
     if request.get("maxTokens"):
-        budget, used = int(request["maxTokens"]) * CHARS_PER_TOKEN, 0
+        budget, used = _whole(request["maxTokens"], "maxTokens") * CHARS_PER_TOKEN, 0
         fits: list[int] = []
         for n in keep:
             used += len(pages.texts[n])

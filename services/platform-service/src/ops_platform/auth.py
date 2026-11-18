@@ -327,7 +327,7 @@ class Auth:
         return claims
 
     def _sign(self, claims: Claims, refresh_token: str, now: datetime) -> Issued:
-        token = mint(dict(claims), self.signer, ttl_s=self.token_ttl_s, now=now.timestamp())
+        token = mint(claims, self.signer, ttl_s=self.token_ttl_s, now=now.timestamp())
         return Issued(
             token=token,
             refresh_token=refresh_token,

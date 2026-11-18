@@ -7,13 +7,14 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Awaitable, Callable
-from typing import Any, TypedDict, cast
+from collections.abc import Awaitable, Callable, Mapping
+from typing import Any, TypedDict
 
 import httpx
 
 from ops_identity import ServiceCallError, ServiceClient, segment
-from ops_service_kit.http import PageJSON
+from ops_service_kit.http import Json, JsonValue, PageJSON
+from ops_service_kit.narrow import a_list, an_object
 from ops_service_kit.settings import Settings
 
 __all__ = ["READING", "READING_PENDING", "DocumentNotFound", "DocumentsClient", "DocumentsRefused", "reading_text"]
@@ -22,7 +23,7 @@ __all__ = ["READING", "READING_PENDING", "DocumentNotFound", "DocumentsClient", 
 class _TypesPage(TypedDict):
     """One page of `GET /v1/document-types`, the shared list contract."""
 
-    data: list[dict[str, Any]]
+    data: list[Json]
     pagination: PageJSON
 
 
@@ -33,9 +34,14 @@ READING = ("queued", "running")
 READING_PENDING = ("queued", "reading")
 
 
-def reading_text(reading: dict[str, Any]) -> str:
-    """A finished reading's text, page after page."""
-    pages = cast(list[dict[str, Any]], reading.get("pages") or [])
+def reading_text(reading: Mapping[str, JsonValue]) -> str:
+    """A finished reading's text, page after page. A reading with no pages has none; pages of another shape fail the
+    read, as iterating them did."""
+    pages = (
+        [an_object(p, "a reading's page") for p in a_list(reading["pages"], "a reading's pages")]
+        if reading.get("pages")
+        else []
+    )
     return "\n\n".join(str(p.get("text") or "") for p in pages if p.get("text"))
 
 
@@ -89,15 +95,15 @@ class DocumentsClient:
         tenant: str,
         team: str,
         file_id: str,
-        request: dict[str, Any],
+        request: Mapping[str, JsonValue],
         *,
         idempotency_key: str,
-    ) -> dict[str, Any]:
+    ) -> Json:
         """The file's extraction: finished (done, unreadable or failed) for a small file, which is read at once, or
         queued or running for a larger one, read in the background; documents-service reports `extraction.finished`
         when it ends. A repeat with the same `idempotency_key` answers the same extraction as it is now."""
         try:
-            answer: dict[str, Any] = await self._documents.request(
+            answer = await self._documents.request(
                 "POST",
                 "/v1/documents/extractions",
                 json={"fileId": file_id, **request},
@@ -127,7 +133,7 @@ class DocumentsClient:
         in the background is waited for up to `wait_s`; the answer is then the reading as it is, still `queued` or
         `reading` when it took longer, and documents-service reports `reading.finished` when it ends."""
         try:
-            answer: dict[str, Any] = await self._documents.request(
+            answer = await self._documents.request(
                 "POST",
                 "/v1/documents/readings",
                 json={"fileId": file_id, "ocr": ocr},
@@ -148,14 +154,12 @@ class DocumentsClient:
     async def document_type(self, tenant: str, team: str, type_id: str) -> dict[str, Any]:
         """The team's document type with its versions; another team's or an unknown one is DocumentNotFound."""
         try:
-            found: dict[str, Any] = await self._documents.request(
-                "GET", f"/v1/document-types/{_id(type_id)}", tenant=tenant, team=team
-            )
+            found = await self._documents.request("GET", f"/v1/document-types/{_id(type_id)}", tenant=tenant, team=team)
         except ServiceCallError as e:
             raise _refused(e) from e
         return found
 
-    async def document_types(self, tenant: str, team: str) -> list[dict[str, Any]]:
+    async def document_types(self, tenant: str, team: str) -> list[Json]:
         """Every one of the team's document types (their newest versions), for finding one by name: the list is
         paged, so each page is read until the last."""
         page = await self._types_page(tenant, team, 1)
@@ -177,27 +181,25 @@ class DocumentsClient:
     async def template_copies(self, tenant: str, team: str) -> list[dict[str, Any]]:
         """The document types the team's apps bring, each with its state for the team and the team's copy."""
         try:
-            listed: list[dict[str, Any]] = await self._documents.request(
-                "GET", "/v1/templates", tenant=tenant, team=team
-            )
+            listed = await self._documents.request("GET", "/v1/templates", tenant=tenant, team=team)
         except ServiceCallError as e:
             raise _refused(e) from e
         return listed
 
-    async def extraction(self, tenant: str, team: str, extraction_id: str) -> dict[str, Any]:
+    async def extraction(self, tenant: str, team: str, extraction_id: str) -> Json:
         """An extraction as it is now: queued, running, or finished with its answer."""
         try:
-            found: dict[str, Any] = await self._documents.request(
+            found = await self._documents.request(
                 "GET", f"/v1/documents/extractions/{_id(extraction_id)}", tenant=tenant, team=team
             )
         except ServiceCallError as e:
             raise _refused(e) from e
         return found
 
-    async def purge(self, tenant: str, team: str, file_id: str) -> dict[str, Any]:
+    async def purge(self, tenant: str, team: str, file_id: str) -> Json:
         """Removes what documents-service read from a deleted file: {extractions, samples}; needs `documents:delete`."""
         try:
-            done: dict[str, Any] = await self._documents.request(
+            done = await self._documents.request(
                 "POST", "/v1/documents/purge", json={"fileId": file_id}, tenant=tenant, team=team
             )
         except ServiceCallError as e:

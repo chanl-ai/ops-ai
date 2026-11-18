@@ -7,7 +7,6 @@ the database user the tests connect as bypasses row security."""
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 import pytest
 import sqlalchemy as sa
@@ -17,6 +16,8 @@ from ops_store import isolation
 from ops_store.schema import isolation_kind
 from ops_tools.store.connections import (
     ConnectionStore,
+    NewAccount,
+    TokenWrite,
     connect_links,
     connection_tokens,
     oauth_states,
@@ -38,7 +39,7 @@ async def _signed_in(engine: AsyncEngine, tenant: str, team: str = TEAM_A) -> tu
     """A team's account holding a person's token, a sign-in in progress and a connect link."""
     store, now = ConnectionStore(engine), datetime.now(UTC)
     con = f"con_{team}"
-    row = {
+    row: NewAccount = {
         "tenant_id": tenant,
         "id": con,
         "app_id": con,
@@ -57,7 +58,7 @@ async def _signed_in(engine: AsyncEngine, tenant: str, team: str = TEAM_A) -> tu
     with isolation.scope(tenant, team):
         assert await store.create(row, actor="t", at=now)
         await store.change(tenant, con, 1, {"settings": {"baseUrl": "https://x"}, "secrets": {}}, actor="t", at=now)
-        token: dict[str, Any] = {"access_ct": "sealed", "scopes": [], "rotations": 0, "refreshed_at": now}
+        token: TokenWrite = {"access_ct": "sealed", "scopes": [], "rotations": 0, "refreshed_at": now}
         assert await store.put_token(tenant, con, token, expected_rotations=None, person=PERSON)
         await store.add_state(
             {

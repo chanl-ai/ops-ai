@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
 from ops_identity import ServiceCallError, ServiceClient, segment
+from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.settings import Settings
 
 __all__ = [
@@ -107,7 +108,7 @@ def _raise_for(response: httpx.Response) -> None:
     if response.is_success:
         return
     try:
-        error: dict[str, Any] = response.json().get("error") or {}
+        error: Json = response.json().get("error") or {}
     except ValueError:
         error = {}
     code, message = str(error.get("code", "error")), str(error.get("message", response.text[:200]))
@@ -184,12 +185,12 @@ class FilesClient:
     async def find(self, tenant: str, team: str, search: str, *, limit: int = 10) -> list[FileInfo]:
         """The team's available files whose name matches `search`, newest first, at most `limit`."""
         try:
-            page: Any = await self._files.request(
+            page: JsonValue = await self._files.request(
                 "GET", "/v1/files", params={"search": search, "pageSize": limit}, tenant=tenant, team=team
             )
         except ServiceCallError as e:
             raise _refused(e) from e
-        rows = cast(list[dict[str, Any]], cast(dict[str, Any], page).get("data") if isinstance(page, dict) else page)
+        rows = cast(JsonList, page.get("data") if isinstance(page, dict) else page)
         return [FileInfo.model_validate(r) for r in rows or []]
 
     async def stream(self, tenant: str, team: str, file_id: str) -> AsyncIterator[bytes]:
@@ -225,7 +226,7 @@ class FilesClient:
         body = {"type": type, "refId": ref_id, "name": name, "href": href}
         return await self._json("POST", f"/v1/files/{_file(file_id)}/references", tenant, team, json=body)
 
-    async def set_data(self, tenant: str, team: str, file_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    async def set_data(self, tenant: str, team: str, file_id: str, data: Json) -> Json:
         """Records what was read from the file; needs `files:edit`. Answers the stored data."""
         try:
             detail = await self._files.request(
@@ -233,7 +234,8 @@ class FilesClient:
             )
         except ServiceCallError as e:
             raise _refused(e) from e
-        return cast(dict[str, Any], cast(dict[str, Any], detail).get("data") or {})
+        # Not narrowed, as files-service answers an object: another shape fails here or at the caller's first read.
+        return cast(Json, cast(Json, detail).get("data") or {})
 
     async def detach(self, tenant: str, team: str, file_id: str, *, type: ReferenceType, ref_id: str) -> FileInfo:
         return await self._json(

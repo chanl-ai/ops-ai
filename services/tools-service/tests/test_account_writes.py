@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ops_store import isolation
-from ops_tools.store.connections import ConnectionStore
+from ops_tools.store.connections import ConnectionStore, NewAccount
 
 TEAM = "team_platform"
 
@@ -18,7 +18,7 @@ async def test_a_write_of_settings_alone_keeps_the_teams_client_and_its_secret(
     engine: AsyncEngine, tenant: str
 ) -> None:
     store, now = ConnectionStore(engine), datetime.now(UTC)
-    row = {
+    row: NewAccount = {
         "tenant_id": tenant, "id": "ca_desk", "app_id": "plugin:desk", "team_id": TEAM, "name": "Desk",
         "auth_kind": "oauth2_auth_code", "status": "healthy", "revision": 1, "created_by": "t", "created_at": now,
         "updated_by": "t", "updated_at": now,

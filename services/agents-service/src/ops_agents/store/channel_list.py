@@ -22,9 +22,11 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_engine.store.definitions import watched_mailbox
 from ops_engine.store.tables import engine_definitions, engine_runs
+from ops_service_kit.http import JsonValue, Out
 from ops_service_kit.listing import ListParams
 from ops_store import Guarantee, copies
 from ops_store.listing import ListPage, list_page
+from ops_store.rows import rows
 from ops_store.team_scope import any_team, team_visible
 
 from .agent_registry import registry_agent_versions, registry_agents
@@ -110,9 +112,20 @@ class Listed:
     kinds: list[KindCount] = field(default_factory=list[KindCount])
 
 
-def watched_address(definition: dict[str, Any] | None) -> str | None:
+def watched_address(definition: JsonValue) -> str | None:
     """The mailbox a definition's Email received trigger names, if it has one."""
-    return watched_mailbox(cast(Any, definition or {}))
+    return watched_mailbox(definition or {})
+
+
+class LiveDefinition(Out):
+    """One live workflow version. The definition stays the JSON it was stored as, so a reader that fails on an odd one
+    fails where it did."""
+
+    workflow_id: str
+    name: str
+    version: int
+    definition: JsonValue
+    team_id: str | None
 
 
 def _int(column: sa.ColumnElement[Any]) -> sa.ColumnElement[int]:
@@ -252,14 +265,14 @@ def channels(teams: Sequence[str], *, now: datetime, retired: bool = False, agen
 class ChannelList(RuntimeStore):
     requires: ClassVar[frozenset[Guarantee]] = frozenset()
 
-    async def live_definitions(self) -> list[dict[str, Any]]:
+    async def live_definitions(self) -> list[LiveDefinition]:
         """The tenant's live workflow versions, with their definitions."""
         d = engine_definitions
         q = sa.select(d.c.workflow_id, d.c.name, d.c.version, d.c.definition, d.c.team_id).where(
             d.c.tenant_id == current_tenant(), d.c.stage == "live", d.c.archived_at.is_(None)
         )
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, LiveDefinition)
 
     async def published_version(self, agent_id: str) -> Any:
         """The agent's published version, None when it has none, NOT_FOUND when there is no such agent."""

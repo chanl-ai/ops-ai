@@ -5,7 +5,7 @@ without its reason; and a team's own workflow, built like the handler, grants ac
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import httpx
@@ -129,7 +129,7 @@ async def test_a_team_workflow_built_like_the_handler_grants_nothing(
     tool_access_request = next(w for w in EVENT_WORKFLOWS if w["id"] == "tool_access_request")
 
     client, worker = stack
-    nodes: list[dict[str, Any]] = list(tool_access_request["nodes"])
+    nodes: list[dict[str, Any]] = list(cast(list[dict[str, Any]], tool_access_request["nodes"]))
     copy: dict[str, Any] = {
         **tool_access_request,
         "id": f"wf_grants_{uuid4().hex[:6]}",

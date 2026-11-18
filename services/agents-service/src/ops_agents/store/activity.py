@@ -628,7 +628,7 @@ class Activity:
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
 
-    async def calls(self, rows: list[dict[str, Any]]) -> dict[str, Json]:
+    async def calls(self, rows: list[Json]) -> dict[str, Json]:
         """The call behind each tool-call row of a page, `{tool, input}` keyed by the row's id: a workflow step's
         journaled input and a chat tool's event data, read in one query each, so the page words them without a read
         per row. The rows were already read in the caller's scope; these reads only follow their ids."""

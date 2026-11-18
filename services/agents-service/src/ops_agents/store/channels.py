@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from ops_service_kit.errors import Conflict
+from ops_service_kit.http import Json
 from ops_store import Guarantee
 from ops_store.dialect import insert_ignore, upsert
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
@@ -149,7 +150,7 @@ class ChannelStore(RuntimeStore):
 
     # ── the message ledger ──
 
-    async def seen(self, deployment_id: str, keys: list[str]) -> dict[str, dict[str, Any]]:
+    async def seen(self, deployment_id: str, keys: list[str]) -> dict[str, Json]:
         if not keys:
             return {}
         q = channel_messages.select().where(
@@ -180,7 +181,7 @@ class ChannelStore(RuntimeStore):
                 )
             )
 
-    async def deferred(self, deployment_id: str) -> list[dict[str, Any]]:
+    async def deferred(self, deployment_id: str) -> list[Json]:
         q = (
             channel_messages.select()
             .where(
@@ -259,7 +260,7 @@ class ChannelStore(RuntimeStore):
             found: Any = (await c.execute(q)).scalar_one_or_none()
         return str(found) if found is not None else None
 
-    async def inbox(self, thread_id: str) -> list[dict[str, Any]]:
+    async def inbox(self, thread_id: str) -> list[Json]:
         q = thread_inbox.select().where(thread_inbox.c.thread_id == thread_id).order_by(thread_inbox.c.seq)
         async with self.tx() as c:
             return [dict(r) for r in (await c.execute(q)).mappings()]

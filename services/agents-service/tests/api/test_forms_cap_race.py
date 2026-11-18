@@ -57,13 +57,11 @@ async def test_a_submission_waits_for_the_form_while_another_holds_it_then_sees_
         since = datetime.now(UTC).date().isoformat()
         async with tenant_tx(engine) as held:
             f = form_links
-            await held.execute(sa.select(f.c.id).where(f.c.id == form["id"]).with_for_update())
-            waiting = asyncio.create_task(
-                links.reserve(form["id"], cap=1, since=since, event=submission(form["id"], 1))
-            )
+            await held.execute(sa.select(f.c.id).where(f.c.id == form.id).with_for_update())
+            waiting = asyncio.create_task(links.reserve(form.id, cap=1, since=since, event=submission(form.id, 1)))
             await asyncio.sleep(0.5)
             assert not waiting.done(), "a submission went ahead while another held the form"
-            first = submission(form["id"], 0)
+            first = submission(form.id, 0)
             await held.execute(
                 trigger_events.insert().values(
                     id=f"tev_{uuid4().hex[:12]}", team_id=first.team_id, workflow_id=first.workflow_id,

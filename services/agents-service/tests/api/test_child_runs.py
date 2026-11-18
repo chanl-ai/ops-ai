@@ -17,6 +17,7 @@ from ops_agents.api.child_runs import ChildRuns
 from ops_agents.api.deps import Runtime
 from ops_agents.store.base import metadata
 from ops_engine.store import metadata as engine_metadata
+from ops_service_kit.http import Json
 from ops_service_kit.settings import Settings
 from tests.conftest import SEED, FakeGraphModels, fixture_knowledge, scripted_model, sse_events
 
@@ -91,7 +92,7 @@ async def test_a_paused_child_returns_a_handle_and_shows_in_cases(stack: tuple[A
 async def test_a_retried_call_finds_the_same_child(stack: tuple[AsyncClient, Runtime]) -> None:
     client, rt = stack
     parent, _ = await agent_turn(client, "Hello")
-    email = {"sender": "maria.lopez@example.com", "subject": "Disputed charge", "body": "Charged twice for 4411."}
+    email: Json = {"sender": "maria.lopez@example.com", "subject": "Disputed charge", "body": "Charged twice for 4411."}
     runner = ChildRuns(rt)
     first = await runner.run(
         workflow="dispute_email", arguments=email, key="call-7", parent_thread_id=parent, parent_run_id="run_x"

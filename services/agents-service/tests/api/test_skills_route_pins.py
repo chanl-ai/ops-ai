@@ -140,13 +140,13 @@ async def test_no_transaction_is_open_while_another_service_answers(
     directory = tool_catalog.directory_tools
 
     async def known(
-        rt: Any, *, fresh: bool = False, listed: list[dict[str, Any]] | None = None
-    ) -> list[dict[str, Any]]:
+        rt: Any, *, fresh: bool = False, listed: tool_catalog.ToolRows | None = None
+    ) -> tool_catalog.ToolRows:
         if listed is None:  # rows from a directory the route already asked hold no outside call
             open_during.append(("tools", held[1]))
         return await tools(rt, fresh=fresh, listed=listed)
 
-    async def asked_directory(rt: Any, *, fresh: bool = False) -> list[dict[str, Any]]:
+    async def asked_directory(rt: Any, *, fresh: bool = False) -> tool_catalog.ToolRows:
         open_during.append(("tools", held[1]))
         return await directory(rt, fresh=fresh)
 

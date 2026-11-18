@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
@@ -150,10 +150,10 @@ class VersionedRecords:
             async with tenant_tx(self.engine) as c:
                 yield c, team
 
-    def record_of(self, content: dict[str, Any]) -> Json:
+    def record_of(self, content: Json) -> Json:
         return {k: content[k] for k in self.record_keys if k in content}
 
-    async def ensure_seeds(self, seeds: list[dict[str, Any]]) -> None:
+    async def ensure_seeds(self, seeds: list[Json]) -> None:
         """Each seed in the acting team at its file version, published; a seed whose file version is newer than the
         team's opens that version. The team's own types are never touched."""
         at = now_iso()
@@ -161,7 +161,7 @@ class VersionedRecords:
             q = sa.select(self.head).where(self.head.c.origin == SEED, team_visible(self.head))
             have = {r.id: r for r in await read_rows(c, q, TypeHead)}
             for s in seeds:
-                v = int(s["version"])
+                v = int(cast(int | str, s["version"]))
                 row = have.get(str(s["id"]))
                 if row is not None and row.version >= v:
                     continue
@@ -261,9 +261,7 @@ class VersionedRecords:
             raise self.not_found(type_id, n)
         return n, v.record
 
-    async def create(
-        self, type_id: str, content: dict[str, Any], *, team_id: str, by: str, copied_from: dict[str, Any] | None
-    ) -> None:
+    async def create(self, type_id: str, content: Json, *, team_id: str, by: str, copied_from: Json | None) -> None:
         at = now_iso()
         try:
             async with self._tx() as (c, team):
@@ -298,7 +296,7 @@ class VersionedRecords:
         except IntegrityError as e:
             raise Conflict(f"A {self.noun} {type_id} exists; choose another id.", code=self.taken_code) from e
 
-    async def save_draft(self, type_id: str, content: dict[str, Any], *, by: str) -> int:
+    async def save_draft(self, type_id: str, content: Json, *, by: str) -> int:
         at = now_iso()
         async with self._tx() as (c, _team):
             # Locked so two saves or publishes at once take turns instead of both reading the same version.

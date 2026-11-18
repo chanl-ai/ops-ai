@@ -30,6 +30,7 @@ from ops_agent_kernel.ports import ModelSource
 from ops_agents.graphs.common import emit
 from ops_agents.graphs.metering import CallSite, call_site
 from ops_metering import Usage
+from ops_service_kit.http import Json
 from ops_store import isolation
 
 _VOLATILE = frozenset({"timestamp", "run_id", "provider_response_id", "provider_details"})
@@ -37,7 +38,7 @@ _VOLATILE = frozenset({"timestamp", "run_id", "provider_response_id", "provider_
 
 def _stable(value: Any) -> Any:
     if isinstance(value, dict):
-        items = cast(dict[str, Any], value)
+        items = cast(Json, value)
         return {k: _stable(items[k]) for k in sorted(items) if k not in _VOLATILE}
     if isinstance(value, list):
         return [_stable(v) for v in cast(list[Any], value)]

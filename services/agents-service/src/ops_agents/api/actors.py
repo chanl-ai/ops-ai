@@ -7,10 +7,10 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
 from ops_engine import default_registry
-from ops_service_kit.http import Out
+from ops_service_kit.http import Json, Out
 
 from ..store.actor_names import ActorNames
 from .deps import Runtime
@@ -54,7 +54,7 @@ class Parsed:
     via: tuple[str, str] | None = None
 
 
-def started_by_of(run: dict[str, Any]) -> str:
+def started_by_of(run: Json) -> str:
     """A run's starter as `actors` reads it: created_by, with the event that carried the request when there is one."""
     via = run.get("started_via")
     return f"{run['created_by']} via {via}" if via else str(run["created_by"])
@@ -87,7 +87,7 @@ def parse(raw: str) -> Parsed:
     return Parsed("person", who)
 
 
-NamedActors = dict[str, dict[str, Any]]
+NamedActors = dict[str, Json]
 
 
 @dataclass(frozen=True)
@@ -128,7 +128,7 @@ async def named_actors(rt: Runtime, reads: ActorReads) -> NamedActors:
         names |= {("person", e): n for e, n in (await people.names(emails)).items()}
     out: NamedActors = {}
     for raw, p in parsed.items():
-        view: dict[str, Any] = {"kind": p.kind, "id": p.id, "name": names.get((p.kind, p.id), p.id)}
+        view: Json = {"kind": p.kind, "id": p.id, "name": names.get((p.kind, p.id), p.id)}
         if p.kind == "run":
             view["runId"] = p.id
         if p.kind == "event":

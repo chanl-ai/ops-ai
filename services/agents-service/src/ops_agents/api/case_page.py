@@ -5,6 +5,7 @@ of review views, whatever the case holds; nothing in here knows a use case."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
@@ -13,6 +14,8 @@ from urllib.parse import quote
 from ops_access import can
 from ops_engine.store import RunStore
 from ops_service_kit.errors import Forbidden
+from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.narrow import an_object, entries
 
 from ..case_fields import fields_view, specs_of
 from ..store.case_links import CaseEmail, CaseLinks, RelatedCase
@@ -20,17 +23,17 @@ from ..store.case_types import CaseTypeNotFound
 from ..store.cases import CaseRecord
 from ..store.engine import EngineTransactions
 from . import case_story
-from .actors import ActorReads, actor_reads, named_actors
+from .actors import ActorReads, NamedActors, actor_reads, named_actors
 from .ai_steps_gate import people_see_masked
 from .auth import Principal, caller_of, key_scope
-from .case_story import FeedReads, OriginReads
+from .case_story import CaseFeed, CaseOrigin, FeedReads, OriginReads
 from .case_type_seeds import seeded_case_types
 from .deps import Runtime
-from .engine_reviews import Row, ask_policies, titles_by_run, tools_of, view
+from .engine_reviews import ask_policies, titles_by_run, tools_of, view
 from .file_names import named
 from .review_sla import sla_hours
 from .review_text import operations
-from .run_story import files_in, masked_story
+from .run_story import FileRef, files_in, masked_story
 from .team_names import deciding_team
 
 # Review views read the operations their calls name, so a case reads at most this many.
@@ -41,7 +44,7 @@ def _left(due: str, now: datetime) -> int:
     return int((datetime.fromisoformat(due.replace("Z", "+00:00")) - now).total_seconds())
 
 
-def _clock(due: str, met_at: str | None, paused: str | None, now: datetime) -> dict[str, Any]:
+def _clock(due: str, met_at: str | None, paused: str | None, now: datetime) -> Json:
     if met_at:
         return {"state": "met", "dueAt": due, "leftS": None, "metAt": met_at}
     if paused:
@@ -50,7 +53,7 @@ def _clock(due: str, met_at: str | None, paused: str | None, now: datetime) -> d
     return {"state": "breached" if left < 0 else "running", "dueAt": due, "leftS": left, "metAt": None}
 
 
-def sla(row: CaseRecord, now: datetime) -> dict[str, Any]:
+def sla(row: CaseRecord, now: datetime) -> Json:
     done = row.status in ("resolved", "closed")
     return {
         "response": _clock(row.response_due_at, row.responded_at, row.paused_since, now),
@@ -67,11 +70,9 @@ def _may(me: Principal, action: str, team: str, **kw: Any) -> bool:
     return True
 
 
-async def _type_fields(
-    rt: Runtime, row: CaseRecord
-) -> tuple[dict[str, Any] | None, list[dict[str, Any]], tuple[str, str] | None]:
+async def _type_fields(rt: Runtime, row: CaseRecord) -> tuple[Json | None, list[Json], tuple[str, str] | None]:
     """The case's type, its fields in the type's order, and the type's deadline field as (key, label)."""
-    values = cast(dict[str, Any], row.fields or {})
+    values = row.fields or {}
     if not row.type_id:
         return None, fields_view(None, values, set()), None
     try:
@@ -79,10 +80,22 @@ async def _type_fields(
         n, record = await types.published(str(row.type_id), row.type_version)
     except CaseTypeNotFound:
         return None, fields_view(None, values, set()), None
-    kind = {"id": row.type_id, "version": n, "name": record.get("name") or row.type_id}
-    specs = cast(list[dict[str, Any]], record.get("fields") or [])
+    kind: Json = {"id": row.type_id, "version": n, "name": record.get("name") or row.type_id}
+    # Checked by `specs_of` below, which refuses fields that are not a list.
+    specs = record.get("fields") or []
     key = record.get("deadline")
-    label = next((str(f.get("label") or key) for f in specs if f.get("key") == key), None) if key else None
+    label = (
+        next(
+            (
+                str(field.get("label") or key)
+                for f in entries(specs)
+                if (field := an_object(f, "a case type field")).get("key") == key
+            ),
+            None,
+        )
+        if key
+        else None
+    )
     return kind, fields_view(specs_of(specs), values, set()), (str(key), label) if key and label else None
 
 
@@ -110,11 +123,11 @@ def _end_of(value: Any) -> datetime | None:
     return at if at.tzinfo else at.replace(tzinfo=UTC)
 
 
-def timer(row: CaseRecord, deadline: tuple[str, str] | None, resolution: dict[str, Any], now: datetime) -> Row:
+def timer(row: CaseRecord, deadline: tuple[str, str] | None, resolution: Json, now: datetime) -> Json:
     """The case's one timer: its type's deadline field when it holds a date, labelled as the field is; met once
     the case is resolved or closed, breached past the date, never paused (a court date does not move while the bank
     waits on the customer). Otherwise the resolution clock."""
-    due = _end_of(cast(dict[str, Any], row.fields or {}).get(deadline[0])) if deadline else None
+    due = _end_of((row.fields or {}).get(deadline[0])) if deadline else None
     if deadline is None or due is None:
         return {
             "label": "Resolution",
@@ -133,10 +146,10 @@ def timer(row: CaseRecord, deadline: tuple[str, str] | None, resolution: dict[st
     }
 
 
-def _review_steps(runs: list[Row], decisions: dict[str, list[Row]]) -> list[tuple[Row, Row | None]]:
+def _review_steps(runs: list[Json], decisions: dict[str, list[Json]]) -> list[tuple[Json, Json | None]]:
     """The Human Tasks of the case's runs a page shows: the waiting ones, then the newest decided, capped; each as the
     run and its decision (None for the one the run waits on)."""
-    out: list[tuple[Row, Row | None]] = []
+    out: list[tuple[Json, Json | None]] = []
     for run in runs:
         if run["status"] == "waiting" and run.get("waiting") and len(out) < REVIEWS_CAP:
             out.append((run, None))
@@ -148,7 +161,7 @@ def _review_steps(runs: list[Row], decisions: dict[str, list[Row]]) -> list[tupl
     return out
 
 
-async def _reviews(rt: Runtime, case_id: str, reads: CaseReads) -> list[Row]:
+async def _reviews(rt: Runtime, case_id: str, reads: CaseReads) -> list[Json]:
     """The Human Tasks of the case's runs as review views, built from what `case_reads` read."""
     return [
         await view(rt, run, decided, case_id=case_id, titles=reads.titles[str(run["id"])])
@@ -156,18 +169,18 @@ async def _reviews(rt: Runtime, case_id: str, reads: CaseReads) -> list[Row]:
     ]
 
 
-def _href(review: dict[str, Any]) -> str:
+def _href(review: Json) -> str:
     """The task's own page, its id encoded as the console's Open link encodes it."""
     return f"/reviews/{quote(str(review['id']), safe='')}"
 
 
-def _deciding(review: dict[str, Any]) -> str | None:
+def _deciding(review: Json) -> str | None:
     """The team that decides the task, by name, else id: the same team its task page and the quick view name."""
-    team = cast(dict[str, Any], review.get("decidingTeam") or {})
+    team = an_object(review.get("decidingTeam") or {}, "the review's deciding team")
     return cast(str | None, team.get("name") or team.get("id"))
 
 
-def waiting_of(reviews: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def waiting_of(reviews: list[Json]) -> list[Json]:
     return [
         {
             "taskId": r["id"],
@@ -183,23 +196,23 @@ def waiting_of(reviews: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def _called_step(review: dict[str, Any]) -> str | None:
+def _called_step(review: Json) -> str | None:
     """The engine step key (run:node:iteration:attempt) of the call an approval sent, as the decide route records it."""
-    resume = cast(dict[str, Any], review.get("resume") or {})
+    resume = an_object(review.get("resume") or {}, "the review's resume")
     for part in ("call", "approval"):
-        step = cast(dict[str, Any], resume.get(part) or {}).get("step")
+        step = an_object(resume.get(part) or {}, "the resumed call").get("step")
         if step:
             return str(step)
     return None
 
 
-async def failed_calls(rt: Runtime, runs: list[dict[str, Any]]) -> set[str]:
+async def failed_calls(rt: Runtime, runs: list[Json]) -> set[str]:
     """The step keys of the case's runs' calls that answered an error, read in one query for every run."""
     steps = await RunStore(EngineTransactions(rt.db)).steps_of([str(r["id"]) for r in runs])
     return {s.key for rows in steps.values() for s in rows if s.status == "error"}
 
 
-def actions_of(reviews: list[dict[str, Any]], failed: set[str]) -> list[dict[str, Any]]:
+def actions_of(reviews: list[Json], failed: set[str]) -> list[Json]:
     """A Human Task that would call something is a drafted action, decided on its task page. An approved
     action whose call the other side refused reads `refused`: the approval alone does not mean it was done."""
     return [
@@ -209,8 +222,8 @@ def actions_of(reviews: list[dict[str, Any]], failed: set[str]) -> list[dict[str
             "label": r.get("proposal") or r["title"],
             "kind": "reply" if r.get("reply") else "tool",
             "status": "refused" if r["status"] == "approved" and _called_step(r) in failed else r["status"],
-            "approvalsGiven": len(r.get("approvals") or []),
-            "approvalsNeeded": 2 if r["policy"]["fourEyes"] else 1,
+            "approvalsGiven": len(entries(r.get("approvals"))),
+            "approvalsNeeded": 2 if an_object(r["policy"], "the review's policy")["fourEyes"] else 1,
             "summary": r.get("consequence"),
             "href": _href(r),
         }
@@ -225,30 +238,31 @@ IN_FLIGHT = ("queued", "running", "waiting")
 
 
 def whats_left(
-    waiting: list[dict[str, Any]],
-    actions: list[dict[str, Any]],
-    runs: list[dict[str, Any]],
+    waiting: Sequence[Mapping[str, JsonValue]],
+    actions: Sequence[Mapping[str, JsonValue]],
+    runs: Sequence[Mapping[str, JsonValue]],
     row: CaseRecord,
     *,
     team_name: str,
     due: str | None,
     may_edit: bool,
-) -> Row:
+) -> Json:
     """What is left on the case: each open Human Task, who it waits on (its assignee, else the team that
     decides it) and by when (its own due time, else the case's), and each approved action the bank's system refused,
     which waits for a new decision. `resolvable` when nothing is left, no linked run is still working, the case is not
     resolved or closed, and the caller may change its status (cases.edit, the rule PATCH applies)."""
-    items: list[dict[str, Any]] = [
+    items: list[Json] = [
         {
             "kind": "task",
-            "who": cast(dict[str, Any], w.get("assignee") or {}).get("name") or w.get("group") or team_name,
+            "who": an_object(w.get("assignee") or {}, "the task's assignee").get("name") or w.get("group") or team_name,
             "what": w["title"],
             "dueAt": w.get("dueAt") or due,
             "href": w["href"],
         }
         for w in waiting
     ]
-    open_tasks = {w["taskId"] for w in waiting}
+    # A task's id is the review's string id (waiting_of).
+    open_tasks = {cast(str, w["taskId"]) for w in waiting}
     items += [
         {
             "kind": "action",
@@ -262,7 +276,7 @@ def whats_left(
     ]
     busy = any(str(r.get("status")) in IN_FLIGHT for r in runs)
     resolvable = not items and not busy and row.status in UNRESOLVED and may_edit
-    return {"items": items, "resolvable": resolvable}
+    return {"items": [*items], "resolvable": resolvable}
 
 
 @dataclass(frozen=True)
@@ -270,11 +284,11 @@ class CaseReads:
     """Everything a case page is told from the database, read in one transaction: `ask_case` then asks the other
     services what the page words it with, and `assembled` builds it."""
 
-    runs: list[Row]
-    decisions: dict[str, list[Row]]
-    titles: dict[str, Row]
-    case_type: Row | None
-    typed: list[Row]
+    runs: list[Json]
+    decisions: dict[str, list[Json]]
+    titles: dict[str, Json]
+    case_type: Json | None
+    typed: list[Json]
     deadline: tuple[str, str] | None
     emails: list[CaseEmail]
     related: list[RelatedCase]
@@ -288,14 +302,15 @@ class CaseReads:
 class CaseAsked:
     """What the other services answered: each actor's name, the masking policy and the team's name."""
 
-    who: dict[str, Row]
+    who: NamedActors
     masking: bool
     team_name: str
 
 
-def _files_of(typed: list[Row], runs: list[Row]) -> list[Row]:
+def _files_of(typed: list[Json], runs: list[Json]) -> list[FileRef]:
     """The files the page names, as `named` takes them: those of the type's file fields, then those the runs took in."""
-    files: dict[str, str | None] = {f["fileId"]: None for f in typed if f["fileId"]}
+    # A file field's `fileId` is the file's id (case_fields.fields_view).
+    files: dict[str, str | None] = {cast(str, f["fileId"]): None for f in typed if f["fileId"]}
     for r in runs:
         for f in files_in(r.get("input")):
             files[f["id"]] = files.get(f["id"]) or f["name"]
@@ -342,7 +357,9 @@ async def ask_case(rt: Runtime, row: CaseRecord, reads: CaseReads) -> CaseAsked:
     return CaseAsked(who, masking, team_name)
 
 
-async def assembled(rt: Runtime, me: Principal, row: CaseRecord, reads: CaseReads, asked: CaseAsked) -> Row:
+async def assembled(
+    rt: Runtime, me: Principal, row: CaseRecord, reads: CaseReads, asked: CaseAsked
+) -> dict[str, JsonValue | CaseOrigin | CaseFeed]:
     """The case page from `reads` and `asked`. Only the Human Task views read the database here (a connect wait's first
     run), so a caller holds a transaction for this call."""
     now = datetime.now(UTC)
@@ -350,17 +367,18 @@ async def assembled(rt: Runtime, me: Principal, row: CaseRecord, reads: CaseRead
     runs, case_type, typed, deadline = reads.runs, reads.case_type, reads.typed, reads.deadline
     reviews = await _reviews(rt, case_id, reads)
     waiting = waiting_of(reviews)
-    clock = timer(row, deadline, sla(row, now)["resolution"], now)
+    clock = timer(row, deadline, an_object(sla(row, now)["resolution"], "the resolution clock"), now)
     emails, related = reads.emails, reads.related
     opener = str(row.created_by) if str(row.created_by).startswith("run:") else ""
     first = next((r for r in runs if f"run:{r['id']}" == opener), None)
     linked = await named(rt, team, _files_of(typed, runs))
     file_names = {str(f["id"]): f["name"] for f in linked if f["name"]}
     # A file field reads as the file's name; its id stays in `fileId` for the link.
-    typed = [f | {"display": file_names.get(f["fileId"], f["display"])} if f["fileId"] else f for f in typed]
+    typed = [f | {"display": file_names.get(cast(str, f["fileId"]), f["display"])} if f["fileId"] else f for f in typed]
     who, masking, team_name = asked.who, asked.masking, asked.team_name
     drafted = actions_of(reviews, reads.failed)
-    page = {
+    # JSON, with the origin and the feed as case_story names them.
+    page: dict[str, JsonValue | CaseOrigin | CaseFeed] = {
         "caseType": case_type,
         "owner": {"email": row.assignee, "name": (who.get(row.assignee) or {}).get("name") or row.assignee}
         if row.assignee
@@ -383,10 +401,10 @@ async def assembled(rt: Runtime, me: Principal, row: CaseRecord, reads: CaseRead
         }
         if waiting
         else None,
-        "typedFields": typed,
-        "waiting": waiting,
+        "typedFields": [*typed],
+        "waiting": [*waiting],
         "waitingAllHref": f"/reviews?case={case_id}",
-        "actions": drafted,
+        "actions": [*drafted],
         "links": {
             "files": [{"fileId": f["id"], "name": f["name"], "viewerHref": f"/files?file={f['id']}"} for f in linked],
             "runs": [
@@ -444,7 +462,7 @@ async def assembled(rt: Runtime, me: Principal, row: CaseRecord, reads: CaseRead
             runs,
             row,
             team_name=team_name,
-            due=clock["dueAt"],
+            due=cast(str | None, clock["dueAt"]),
             may_edit=_may(me, "edit", team),
         ),
         "timer": clock,

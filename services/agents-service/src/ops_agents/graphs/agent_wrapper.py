@@ -7,7 +7,7 @@ no work before interrupt(), runs twice."""
 from __future__ import annotations
 
 import operator
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Annotated, Any, Literal, NotRequired, TypedDict, cast
 
@@ -34,10 +34,12 @@ from ops_agents.activities.tool_directory import CatalogTools, OperationRef
 from ops_agents.activities.tools import fill
 from ops_agents.domain.accounts import chosen_accounts
 from ops_contracts.chat import EffectiveSettings
+from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import new_id
 
 from .common import (
     GraphDeps,
+    PendingApproval,
     agent_grants,
     approval_token,
     interrupt_from_state,
@@ -53,21 +55,21 @@ from .common import (
 EARLIER_READS = 8
 
 
-def _earlier(source: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+def _earlier(source: Sequence[Mapping[str, JsonValue]]) -> tuple[list[Json], list[str]]:
     """The skills the last reply loaded and the reads of the last two replies, for a follow-up to build on."""
     replies = [m for m in source if m.get("role") == "assistant"]
-    carried = list(cast(list[dict[str, Any]], replies[-1].get("skills") or [])) if replies else []
-    reads = [str(r) for m in replies[-2:] for r in cast(list[Any], m.get("reads") or [])]
+    carried = list(cast(list[Json], replies[-1].get("skills") or [])) if replies else []
+    reads = [str(r) for m in replies[-2:] for r in cast(JsonList, m.get("reads") or [])]
     return carried, reads[-EARLIER_READS:]
 
 
-def _with_turn_skills(settings: AgentSettings, turn: dict[str, Any] | None) -> AgentSettings:
+def _with_turn_skills(settings: AgentSettings, turn: Json | None) -> AgentSettings:
     """The agent's settings with the chat's own skills first; a picked or carried part replaces the same pinned entry,
     which has no inputs filled."""
     if not turn:
         return settings
     extra: list[Skill] = []
-    for d in cast(list[dict[str, Any]], turn.get("skills") or []):
+    for d in cast(list[Json], turn.get("skills") or []):
         fields: dict[str, Any] = {**d, "guardrails": tuple(cast(list[str], d.get("guardrails") or []))}
         extra.append(Skill(**fields))
     keys = {(s.skill_id, s.part) for s in extra}
@@ -90,34 +92,34 @@ class AgentState(TypedDict):
     agent_version: NotRequired[int]
     # A test thread's agent: the newest version, draft included, as the chat route built it for this message.
     # Kept on the run, so the resume after an approval serves the same definition, whatever is live by then.
-    test_agent: NotRequired[dict[str, Any]]
+    test_agent: NotRequired[Json]
     message: str
     kb_ids: NotRequired[list[str]]
     messages: Annotated[list[dict[str, str]], operator.add]
-    pending: NotRequired[dict[str, Any] | None]
-    decision: NotRequired[dict[str, Any] | None]
+    pending: NotRequired[Json | None]
+    decision: NotRequired[Json | None]
     reply: NotRequired[str]
-    tool_results: Annotated[list[dict[str, Any]], operator.add]
+    tool_results: Annotated[list[Json], operator.add]
     # Set by a chat run: the transcript to answer from (earlier turns minus superseded ones) and who asked, which
     # the approval carries so the reviewer's requester check can refuse the asker.
     # Each assistant entry may carry the skills that turn loaded (`skills`) and lines for what it read (`reads`).
-    history: NotRequired[list[dict[str, Any]]]
+    history: NotRequired[list[Json]]
     requested_by: NotRequired[str]
     # The apps the person answered "Allow for this chat" for (module id, else server name): kept by the thread's
     # checkpoint, so later turns of this chat only stop asking before their changes.
     writes_allowed: NotRequired[list[str]]
     # Set by a chat run: the settings the override resolver allowed for this turn, and the raw overrides it
     # resolved them from, kept on the run as they were sent.
-    settings: NotRequired[dict[str, Any]]
-    thread_overrides: NotRequired[dict[str, Any]]
-    overrides: NotRequired[dict[str, Any]]
+    settings: NotRequired[Json]
+    thread_overrides: NotRequired[Json]
+    overrides: NotRequired[Json]
     # Passages of the files attached in this thread, capped by the chat route; searched before the knowledge bases.
-    attached_passages: NotRequired[list[dict[str, Any]]]
+    attached_passages: NotRequired[list[Json]]
     # Every file attached in this thread, {fileId, name, unread?}: named to the model whether or not it was read.
-    attached_files: NotRequired[list[dict[str, Any]]]
+    attached_files: NotRequired[list[Json]]
     # Set by a chat run (api/skills.py skill_turn): kernel skills beyond the pins (team skills the agent may use, a
     # picked part filled with its inputs, carried picks) and the skills this reply carries or was picked.
-    skill_turn: NotRequired[dict[str, Any]]
+    skill_turn: NotRequired[Json]
 
 
 def build(
@@ -150,21 +152,29 @@ def build(
         if aid and aid not in await deps.held_agents.tenant_owners({aid}):
             raise ValueError(f"Agent {aid} is not live, so it takes no new turns.")
 
-    async def agent(state: AgentState) -> dict[str, Any]:
+    async def agent(state: AgentState) -> Json:
         await held(state)
         a = agent_of(state)
         ports, offers = await ports_with_workflows(deps, list(a.tools), agent_id=a.id)
         source = state["history"] if "history" in state else state["messages"]
         transcript = [TranscriptMessage(m["role"], m["content"]) for m in source]  # pyright: ignore[reportArgumentType]
-        carried, reads = _earlier(cast(list[dict[str, Any]], source))
+        carried, reads = _earlier(cast(list[Json], source))
         if (turn := state.get("skill_turn")) is not None:
-            carried = list(turn.get("carried") or [])
-        replies = [m for m in cast(list[dict[str, Any]], source) if m.get("role") == "assistant"]
-        open_plan = cast(dict[str, Any] | None, replies[-1].get("plan")) if replies else None
+            carried = list(cast(list[Json], turn.get("carried") or []))
+        replies = [m for m in cast(list[Json], source) if m.get("role") == "assistant"]
+        open_plan = cast(Json | None, replies[-1].get("plan")) if replies else None
         effective = _effective(state)
         grants = _kb_grants(a, deps.model_alias, effective)
         attached = [
-            Passage(p["documentId"], p["title"], p["section"], "attached", p["text"], ATTACHMENT_KB, p.get("page"))
+            Passage(
+                cast(str, p["documentId"]),
+                cast(str, p["title"]),
+                cast(str, p["section"]),
+                "attached",
+                cast(str, p["text"]),
+                ATTACHMENT_KB,
+                cast("int | None", p.get("page")),
+            )
             for p in state.get("attached_passages") or []
         ]
         req = TurnRequest(
@@ -188,7 +198,7 @@ def build(
             all_team_knowledge=a.all_team_knowledge,
             attached=attached,
             attachments=[
-                AttachedFile(str(f["fileId"]), str(f["name"]), f.get("unread"))
+                AttachedFile(str(f["fileId"]), str(f["name"]), cast("str | None", f.get("unread")))
                 for f in state.get("attached_files") or []
             ],
             knowledge_withdrawn=bool(state.get("kb_ids")) and not _granted(state, grants) and not attached,
@@ -209,7 +219,7 @@ def build(
     async def operations() -> list[OperationRef]:
         return await (deps.tools or CatalogTools(deps.catalog)).operations()
 
-    async def allowed_now(state: AgentState, decision: dict[str, Any] | None) -> list[str]:
+    async def allowed_now(state: AgentState, decision: Json | None) -> list[str]:
         """The app the decision being resumed answered "Allow for this chat" for; none for any other answer."""
         d = decision or {}
         if d.get("decision") != "approved" or not d.get("for_chat"):
@@ -227,8 +237,9 @@ def build(
             allowed=[*(state.get("writes_allowed") or []), *(allowed or [])],
         )
 
-    async def approval(state: AgentState) -> dict[str, Any]:
-        p = state.get("pending") or {}
+    async def approval(state: AgentState) -> Json:
+        # The paused turn as the agent step checkpointed it (common.pending_approval); a key it lacks raises, as before.
+        p = cast(PendingApproval, state.get("pending") or {})
         op = next((o for o in await operations() if o.name == p["tool"]), None)
         # The person in the chat answers this one themselves (Allow, Deny, Allow for this chat): their app asks before
         # changes and no reviewer's approval holds the write.
@@ -259,7 +270,7 @@ def build(
         )
         return {"decision": decision}
 
-    async def resume(state: AgentState) -> dict[str, Any]:
+    async def resume(state: AgentState) -> Json:
         await held(state)
         a = agent_of(state, in_flight=True)
         ports, offers = await ports_with_workflows(deps, list(a.tools), agent_id=a.id)
@@ -285,7 +296,7 @@ def build(
             resume=Resume(
                 interrupt=interrupt_from_state(state.get("pending") or {}),
                 decision="approved" if approved else "rejected",
-                reason=d.get("reason"),
+                reason=cast("str | None", d.get("reason")),
                 # The review service's signed token when there is one. Without a gateway the local executor only needs
                 # to see that a decision was made, which the fallback marker says.
                 approval_token=(approval_token(d) or f"approval:{d.get('step_up_token') or 'policy'}")
@@ -318,9 +329,9 @@ def build(
     return g.compile(checkpointer=checkpointer, name=f"agent:{agent_id}" if agent_id else "agent_wrapper")
 
 
-def turn_accounts(agent: AgentDefinition, state: Mapping[str, Any]) -> dict[str, str]:
+def turn_accounts(agent: AgentDefinition, state: AgentState) -> dict[str, str]:
     """The account each app's calls use in a turn: the chat's pick (its thread's `accounts`) over the agent's own."""
-    chosen = cast(dict[str, Any], (state.get("thread_overrides") or {}).get("accounts") or {})
+    chosen = cast(dict[str, str], (state.get("thread_overrides") or {}).get("accounts") or {})
     return chosen_accounts(agent=agent.accounts, chat=chosen)
 
 

@@ -16,8 +16,9 @@ from ops_engine.compiler import NodeCall, ai_extract, files_set_data
 from ops_engine.definition import NodeInstance
 from ops_engine.node_types import default_registry
 from ops_engine.ports import EnginePorts
+from ops_service_kit.http import JsonList
 
-FIELDS: list[dict[str, Any]] = [
+FIELDS: JsonList = [
     {"key": "invoice_no", "type": "text", "required": True},
     {"key": "amount", "type": "money", "required": True},
 ]

@@ -98,7 +98,7 @@ async def lock_key(conn: AsyncConnection, key: str) -> None:
 def upsert(
     bind: Bind,
     table: sa.Table,
-    values: Mapping[str, Any],
+    values: Mapping[str, object],
     *,
     keys: Sequence[str],
     update: Sequence[str] | None = None,
@@ -119,7 +119,7 @@ def upsert(
     return done.returning(*[table.c[c] for c in returning]) if returning else done
 
 
-def insert_ignore(bind: Bind, table: sa.Table, values: Mapping[str, Any], *, keys: Sequence[str]) -> sa.Executable:
+def insert_ignore(bind: Bind, table: sa.Table, values: Mapping[str, object], *, keys: Sequence[str]) -> sa.Executable:
     """Inserts `values` unless a row with the same `keys` exists; neither an error nor an update when one does."""
     if dialect_of(bind) != "mssql":
         return upsert(bind, table, values, keys=keys, update=[])
@@ -145,7 +145,7 @@ def insert_ignore(bind: Bind, table: sa.Table, values: Mapping[str, Any], *, key
 
 def _merge(
     table: sa.Table,
-    values: Mapping[str, Any],
+    values: Mapping[str, object],
     *,
     keys: Sequence[str],
     changed: Sequence[str],

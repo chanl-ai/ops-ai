@@ -12,6 +12,7 @@ from typing import Any, cast
 
 from ops_identity import ServiceCallError, ServiceUnreachable
 from ops_service_kit.errors import ApiError
+from ops_service_kit.http import Json
 
 from .deps import Runtime
 
@@ -54,8 +55,7 @@ def shown(value: Any, *, money: bool, currency: str | None) -> str:
         return ", ".join(shown(v, money=money, currency=currency) for v in cast(list[Any], value))
     if isinstance(value, dict):
         return ", ".join(
-            f"{humanize(str(k)).lower()} {shown(v, money=False, currency=None)}"
-            for k, v in cast(dict[str, Any], value).items()
+            f"{humanize(str(k)).lower()} {shown(v, money=False, currency=None)}" for k, v in cast(Json, value).items()
         )
     return "" if value is None else str(value)
 
@@ -78,7 +78,7 @@ def object_rows(label: str, value: Any) -> list[dict[str, str]]:
         return rows
     if isinstance(value, Mapping):
         rows = []
-        for k, v in cast(Mapping[str, Any], value).items():
+        for k, v in cast(Json, value).items():
             name = f"{label} · {humanize(str(k))}"
             if _object(v):
                 rows += object_rows(name, v)
@@ -91,7 +91,7 @@ def object_rows(label: str, value: Any) -> list[dict[str, str]]:
     return [{"label": label, "value": shown_v}] if shown_v else []
 
 
-def input_rows(args: Mapping[str, Any]) -> list[dict[str, str]]:
+def input_rows(args: Mapping[str, object]) -> list[dict[str, str]]:
     """Every input the call will send, as rows: a scalar as a person reads it, a record or list of records as one
     row per field. Chat approval cards and the run page both read a call this way."""
     rows: list[dict[str, str]] = []
@@ -105,7 +105,7 @@ def input_rows(args: Mapping[str, Any]) -> list[dict[str, str]]:
 
 # Each operation the tool directory lists, by name: its input schema and description.
 # Each operation's input schema, description and title (a plugin tool's; None for others).
-Operations = dict[str, tuple[dict[str, Any], str, str | None]]
+Operations = dict[str, tuple[Json, str, str | None]]
 _UNREAD: Any = object()
 
 
@@ -152,7 +152,7 @@ async def operations(rt: Runtime) -> Operations | None:
     return found
 
 
-def _operation(rt: Runtime, tool: str, ops: Operations | None) -> tuple[dict[str, Any], str]:
+def _operation(rt: Runtime, tool: str, ops: Operations | None) -> tuple[Json, str]:
     """The operation's input schema and description from the tool directory, or the catalog's; empty when neither
     knows the tool. With the registry down the catalog's schema, or the call's own keys, word it instead of failing."""
     if ops and tool in ops:
@@ -171,12 +171,12 @@ async def tool_titles(rt: Runtime) -> dict[str, str]:
     return {name: title for name, (_, _, title) in (ops or {}).items() if title}
 
 
-def call_label(catalog: Any, call: dict[str, Any], titles: Mapping[str, str] | None = None) -> str:
+def call_label(catalog: Any, call: Mapping[str, object], titles: Mapping[str, str] | None = None) -> str:
     """The call's action in words, short ("Hold 2,140.55 on CHQ-2219", "Look up accounts"): the catalogue's approval
     action filled from the call, else the operation's name made readable. Needs no directory read, so a chat widget
     words its call as describe_call's `label` does."""
     tool = str(call.get("tool") or "")
-    args = cast(dict[str, Any], call.get("input") or {})
+    args = cast(Json, call.get("input") or {})
     values = {_norm(k): shown(v, money=False, currency=None) for k, v in args.items()}
     template = (d := catalog.tool(tool)) and d.approval
     if template:
@@ -188,28 +188,24 @@ def call_label(catalog: Any, call: dict[str, Any], titles: Mapping[str, str] | N
     return humanize(tool) if tool else "Run the step"
 
 
-async def describe_calls(rt: Runtime, calls: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+async def describe_calls(rt: Runtime, calls: Mapping[str, Mapping[str, object]]) -> dict[str, dict[str, Any]]:
     """Each call in words (describe_call), keyed as given, with the tool directory read once for all of them."""
     ops = await operations(rt) if calls else None
     return {k: await describe_call(rt, c, currency=None, money_key=None, ops=ops) for k, c in calls.items()}
 
 
 async def describe_call(
-    rt: Runtime, call: dict[str, Any], *, currency: str | None, money_key: str | None, ops: Any = _UNREAD
+    rt: Runtime, call: Mapping[str, object], *, currency: str | None, money_key: str | None, ops: Any = _UNREAD
 ) -> dict[str, Any]:
     """One call in words: `label` (the action, short), `sentence` (the action with its values), `consequence`, and
     `fields` [{label, value}]. `money_key` is the input the review reads as its amount (typed_fields), shown with the
     account's currency. `ops` is the directory already read (describe_calls); unread, it is read for this call."""
     tool = str(call.get("tool") or "")
-    args = cast(dict[str, Any], call.get("input") or {})
+    args = cast(Json, call.get("input") or {})
     ops_now = cast(Operations | None, await operations(rt) if ops is _UNREAD else ops)
     schema, description = _operation(rt, tool, ops_now)
-    props = cast(dict[str, Any], schema.get("properties") or {})
-    titles = {
-        _norm(k): str(cast(dict[str, Any], p).get("title") or humanize(k))
-        for k, p in props.items()
-        if isinstance(p, dict)
-    }
+    props = cast(Json, schema.get("properties") or {})
+    titles = {_norm(k): str(p.get("title") or humanize(k)) for k, p in props.items() if isinstance(p, dict)}
     values = {
         _norm(k): shown(v, money=money_key is not None and _norm(k) == _norm(money_key), currency=currency)
         for k, v in args.items()
@@ -248,10 +244,15 @@ async def describe_call(
         if _object(v):
             rows = object_rows(titles.get(_norm(k), humanize(k)), v)
             fields += [r for r in rows if not _MACHINE_ID.match(r["value"])]
-    return {"label": label, "sentence": sentence, "consequence": f"{said}." if said else None, "fields": fields}
+    return {
+        "label": label,
+        "sentence": sentence,
+        "consequence": f"{said}." if said else None,
+        "fields": fields,
+    }
 
 
-def question(*, options: list[str], first: dict[str, Any] | None, customer: str, title: str) -> str:
+def question(*, options: list[str], first: Mapping[str, object] | None, customer: str, title: str) -> str:
     """The one question a step asks: which option, for whom, when it offers options; otherwise whether to run its
     call; otherwise the step's own title."""
     if len(options) > 1:
@@ -275,7 +276,7 @@ def source_file(*values: Any) -> str | None:
         if isinstance(v, str) and _FILE_ID.match(v):
             return v
         if isinstance(v, dict):
-            queue.extend(cast(dict[str, Any], v).values())
+            queue.extend(cast(Json, v).values())
         elif isinstance(v, list):
             queue.extend(cast(list[Any], v))
     return None

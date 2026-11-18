@@ -5,10 +5,11 @@ tenant."""
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import cast
 
 from ops_engine.ports import CaseNotFoundError, CaseTypeNotFoundError, OpenedCase
 from ops_engine.store import RunRow, RunStore
+from ops_service_kit.http import Json
 
 from ..store.case_types import CaseTypeNotFound
 from ..store.cases import CaseNotFound, CaseStore, Priority
@@ -29,7 +30,7 @@ class RunCases:
             raise RuntimeError(f"run {run_id} has no team, so it opens and joins no cases")
         return team, run
 
-    async def open(self, run_id: str, fields: dict[str, Any], key: str) -> OpenedCase:
+    async def open(self, run_id: str, fields: Json, key: str) -> OpenedCase:
         team, run = await self._team_of(run_id)
         subject = str(fields["subject"])
         if run.mode == "test" and not subject.startswith(TEST_PREFIX):
@@ -47,10 +48,10 @@ class RunCases:
             priority=cast(Priority, fields.get("priority") or "normal"),
             by=f"run:{run_id}",
             producer_key=key,
-            customer_id=fields.get("customerId"),
-            customer_name=fields.get("customerName"),
-            assignee=fields.get("assignee"),
-            fields=cast(dict[str, Any] | None, fields.get("fields")),
+            customer_id=cast(str | None, fields.get("customerId")),
+            customer_name=cast(str | None, fields.get("customerName")),
+            assignee=cast(str | None, fields.get("assignee")),
+            fields=cast(Json | None, fields.get("fields")),
             type_id=type_id,
             type_version=type_version,
         )
@@ -64,7 +65,7 @@ class RunCases:
         run_id: str,
         case_id: str,
         note: str | None,
-        fields: dict[str, Any] | None = None,
+        fields: Json | None = None,
         *,
         status: str | None = None,
         key: str | None = None,

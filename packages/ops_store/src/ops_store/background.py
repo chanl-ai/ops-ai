@@ -34,7 +34,7 @@ from collections.abc import AsyncGenerator, Awaitable, Callable, Coroutine
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, suppress
 from dataclasses import asdict, dataclass, field, replace
 from functools import cache
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, TypedDict
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -379,7 +379,7 @@ class Heartbeat:
     last_error: str | None = None
     last_error_at: float | None = None
 
-    def as_row(self) -> dict[str, Any]:
+    def as_row(self) -> dict[str, str | float | int | None]:
         return asdict(self)
 
 
@@ -691,10 +691,28 @@ def _in_one_tx(sweep: Sweep) -> Cycle:
     return cycle
 
 
-def report(beats: list[Heartbeat], service: str, now: float, *, detail: bool = False) -> list[dict[str, Any]]:
+class ProcessReport(TypedDict):
+    """One process in a service's background health reply, as `report()` builds it."""
+
+    key: str
+    service: str
+    title: str
+    does: str
+    everySeconds: float | None
+    state: State
+    instances: int
+    lastRunAt: float | None
+    nextRunAt: float | None
+    doneHour: int
+    waiting: int | None
+    lastError: str | None
+    lastErrorAt: float | None
+
+
+def report(beats: list[Heartbeat], service: str, now: float, *, detail: bool = False) -> list[ProcessReport]:
     """One entry per listed process of `service`, with its instances' heartbeats and a state. Without `detail` an
     error is its type only, so an unauthenticated health check carries no record's data."""
-    out: list[dict[str, Any]] = []
+    out: list[ProcessReport] = []
     for p in (p for p in PROCESSES if p.service == service and (p.only_if is None or p.only_if())):
         gap = STOPPED_AFTER * max(p.every_s or 0.0, WRITE_EVERY_S)
         # An instance that stopped beating (a restarted process under a new pid) no longer counts as one running.

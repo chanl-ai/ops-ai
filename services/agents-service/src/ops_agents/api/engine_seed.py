@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 from ops_engine import default_registry
 from ops_engine.definition import parse, validate
+from ops_service_kit.http import Json
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 from ops_store import isolation
@@ -33,7 +34,7 @@ async def load_seed(rt: Runtime, path: Path) -> None:
     if not path.is_file():  # noqa: ASYNC240
         return
     store = definitions(rt)
-    raw: list[dict[str, Any]] = json.loads(path.read_text())  # noqa: ASYNC240
+    raw: list[Json] = json.loads(path.read_text())  # noqa: ASYNC240
     for item in raw:
         team = cast(str | None, item.get("teamId"))
         d = parse({k: v for k, v in item.items() if k != "teamId"})

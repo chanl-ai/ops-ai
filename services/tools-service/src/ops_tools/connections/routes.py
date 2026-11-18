@@ -10,7 +10,7 @@ transaction, so no connection is held while that party answers."""
 # No `from __future__ import annotations`: the routes' `caller` dependency is a local of accounts_router, and FastAPI
 # resolves string annotations against module globals, where it does not exist.
 
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, Response
@@ -35,7 +35,7 @@ from .schemas import (
     SignInIn,
     SignInStart,
 )
-from .service import ConnectionService
+from .service import AccountChanges, ConnectionService
 
 ACCOUNT = "/v1/apps/{app_id}/accounts/{account_id}"
 
@@ -63,7 +63,11 @@ def accounts_router(service: ConnectionService, directory: Directory) -> APIRout
     ) -> JSONResponse:
         """The account's name, sign-in, card details, sandbox flag, settings and secret parts; a secret part left out
         keeps its stored value."""
-        return ok(await service.change(who, await _of(who, app_id, account_id), body.model_dump(exclude_unset=True)))
+        return ok(
+            await service.change(
+                who, await _of(who, app_id, account_id), cast(AccountChanges, body.model_dump(exclude_unset=True))
+            )
+        )
 
     @r.delete(ACCOUNT, status_code=204, response_class=Response)
     async def delete_account(app_id: str, account_id: str, who: Annotated[Caller, Depends(caller)]) -> Response:  # pyright: ignore[reportUnusedFunction]
@@ -88,7 +92,7 @@ def accounts_router(service: ConnectionService, directory: Directory) -> APIRout
         finished = await service.finish(
             who, body.state, code=body.code, error=body.error, description=body.error_description
         )
-        return ok(SignInFinished(**finished).model_dump(by_alias=True))
+        return ok(SignInFinished.model_validate(finished).model_dump(by_alias=True))
 
     @r.post(f"{ACCOUNT}/test-credential", response_model=Envelope[SignInStart])
     async def check_credential(app_id: str, account_id: str, who: Annotated[Caller, Depends(caller)]) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]

@@ -12,10 +12,10 @@ is what the one targeted re-read asks again."""
 
 from __future__ import annotations
 
-from ops_extract.checks import REJECTED_TYPE, entries
+from ops_extract.checks import REJECTED_TYPE
 from ops_extract.shapes import Check
 from ops_service_kit.http import Json, JsonValue
-from ops_service_kit.narrow import an_object, json_object
+from ops_service_kit.narrow import an_object, entries, json_object
 
 SUM = "sum"
 BEFORE = "before"

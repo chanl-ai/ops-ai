@@ -10,7 +10,7 @@ only in `request_publish`.
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import cast
 
 from pydantic import JsonValue
 
@@ -21,12 +21,14 @@ from ops_engine.store import DefinitionRow, DefinitionStore, DefinitionVersion
 from ops_engine.store.definitions import ListColumns
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, Unprocessable
+from ops_service_kit.http import Json
 
+from ..store.agent_registry import PublishRequestRow
 from ..store.engine import EngineTransactions
 from ..store.mailboxes import MailboxStore
 from ..store.tenancy import current_team
 from .account_names import require_team_accounts, step_names
-from .agent_registry import registry, review_view
+from .agent_registry import ReviewView, registry, review_view
 from .auth import Principal, require_builder
 from .deps import Runtime
 from .email_trigger import require_binding
@@ -47,25 +49,26 @@ def definitions(rt: Runtime) -> DefinitionStore:
     return DefinitionStore(EngineTransactions(rt.db), listed)
 
 
-async def pending(rt: Runtime, workflow_id: str) -> dict[str, Any] | None:
+async def pending(rt: Runtime, workflow_id: str) -> PublishRequestRow | None:
     """The workflow's open publish request, if any."""
-    return next((r for r in await registry(rt).requests(KIND, workflow_id) if r["status"] == "pending"), None)
+    return next((r for r in await registry(rt).requests(KIND, workflow_id) if r.status == "pending"), None)
 
 
-def stage_of(version: DefinitionRow | DefinitionVersion, request: dict[str, Any] | None) -> str:
+def stage_of(version: DefinitionRow | DefinitionVersion, request: PublishRequestRow | None) -> str:
     """A version's stage as the console shows it: its stored stage, or in_review for the draft a request names."""
-    if request is not None and version.stage == "draft" and int(request["version"]) == version.version:
+    if request is not None and version.stage == "draft" and int(request.version) == version.version:
         return "in_review"
     return version.stage
 
 
-def nodes_of(definition: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
-    """A stored definition's nodes by id."""
-    raw = cast(list[dict[str, Any]], (definition or {}).get("nodes") or [])
+def nodes_of(definition: Json | None) -> dict[str, Json]:
+    """A stored definition's nodes by id. The definition is the customer's: read loose, failing as it always has on
+    a node that is not an object or names no id."""
+    raw = cast(list[Json], (definition or {}).get("nodes") or [])
     return {str(n["id"]): n for n in raw}
 
 
-def changes(old: dict[str, Any] | None, new: dict[str, Any]) -> list[str]:
+def changes(old: Json | None, new: Json) -> list[str]:
     """What a reviewer reads: steps added, removed or changed against the version that serves the workflow now."""
     if old is None:
         return ["First version"]
@@ -78,13 +81,13 @@ def changes(old: dict[str, Any] | None, new: dict[str, Any]) -> list[str]:
     return out or ["No step changed"]
 
 
-def acts_on(definition: dict[str, Any]) -> list[str]:
+def acts_on(definition: Json) -> list[str]:
     """What each step acts on, as the reviewer must read it: the operation a tool step calls and the review that
     approves it, the agent an agent step runs, the write a review approves. These fields are literals (a `$.` path is
     refused by the type's schema), so this is what the live version calls."""
     out: list[str] = []
     for nid, n in nodes_of(definition).items():
-        p = cast(dict[str, Any], n.get("parameters") or {})
+        p = cast(Json, n.get("parameters") or {})
         name = str(n.get("name") or nid)
         if n.get("type") == "ops.action.tool":
             by = f", approved by step {p['approvedBy']}" if p.get("approvedBy") else ""
@@ -107,9 +110,7 @@ def require_rights(me: Principal, row: DefinitionRow, action: str) -> None:
     )
 
 
-async def request_publish(
-    rt: Runtime, me: Principal, workflow_id: str, version: int | None, note: str
-) -> dict[str, Any]:
+async def request_publish(rt: Runtime, me: Principal, workflow_id: str, version: int | None, note: str) -> ReviewView:
     """Opens the publish request for a draft (the newest version when `version` is None) and returns it as a Review.
     Approved at once only where the publish policy says no review is needed, which makes the version live."""
     store = definitions(rt)
@@ -142,12 +143,12 @@ async def open_publish(
     by: str,
     team: str,
     note: str,
-) -> dict[str, Any]:
+) -> PublishRequestRow:
     """The publish request for a checked draft `row` over the live `current`, decided by the team's publishReview read
     now: approved and live at once where no review is needed, otherwise waiting in Reviews. A person's publish and a
     shipped system workflow's update (service_events) both open it here, so neither skips the policy."""
     nodes = len(narrow.json_list(row.definition.get("nodes")))
-    body: dict[str, Any] = {
+    body: Json = {
         "workflowId": workflow_id,
         "fromVersion": current.version if current else 0,
         "toVersion": row.version,
@@ -174,18 +175,18 @@ async def open_publish(
     return req
 
 
-async def view(rt: Runtime, req: dict[str, Any], *, name: str | None = None) -> dict[str, Any]:
+async def view(rt: Runtime, req: PublishRequestRow, *, name: str | None = None) -> ReviewView:
     """The request as the console's Review, named after the version it publishes; `name` when a list read the
     versions together (publish_reviews.all_views)."""
     if name is None:
-        row = await definitions(rt).row(str(req["subject_id"]), int(req["version"]))
-        name = row.name if row else str(req["subject_id"])
+        row = await definitions(rt).row(str(req.subject_id), int(req.version))
+        name = row.name if row else str(req.subject_id)
     return review_view(req, name=name, slug="", sla_hours=await sla_hours(rt))
 
 
-async def approve(rt: Runtime, req: dict[str, Any]) -> None:
+async def approve(rt: Runtime, req: PublishRequestRow) -> None:
     """An approved request makes its version live and supersedes the one before; a paused workflow stays paused."""
     try:
-        await definitions(rt).go_live(str(req["subject_id"]), int(req["version"]))
+        await definitions(rt).go_live(str(req.subject_id), int(req.version))
     except LookupError as e:
-        raise Conflict(f"{req['subject_id']} v{req['version']} was deleted before it was approved.") from e
+        raise Conflict(f"{req.subject_id} v{req.version} was deleted before it was approved.") from e

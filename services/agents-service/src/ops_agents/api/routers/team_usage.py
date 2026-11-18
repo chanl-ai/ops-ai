@@ -48,8 +48,8 @@ async def team_usage(rt: Rt, caller: CurrentTenantCaller, _: Tx) -> JSONResponse
     team_id = caller.team_id
     if not team_id:
         return ok({"runsInProgress": 0, "liveWorkflows": []})
-    v1 = [r for r in await registry(rt).rows() if r["team_id"] == team_id]
-    mine = {str(r["id"]) for r in v1}
+    v1 = [r for r in await registry(rt).rows() if r.team_id == team_id]
+    mine = {r.id for r in v1}
     v1_running = sum(
         1 for g, status, _ in await GraphStore(rt.db).thread_stats() if g in mine and status not in V1_ENDED
     )
@@ -57,7 +57,5 @@ async def team_usage(rt: Rt, caller: CurrentTenantCaller, _: Tx) -> JSONResponse
     v2_running = sum(n for status, n in by_status.items() if status not in TERMINAL)
     since = (datetime.now(UTC) - timedelta(days=1)).isoformat(timespec="milliseconds").replace("+00:00", "Z")
     v2 = [w for w in await engine.v2_workflow_rows(rt, since) if w["teamId"] == team_id]
-    live = sorted(
-        {str(r["name"]) for r in v1 if r["status"] == "live"} | {str(w["name"]) for w in v2 if w["status"] == "live"}
-    )
+    live = sorted({r.name for r in v1 if r.status == "live"} | {str(w["name"]) for w in v2 if w["status"] == "live"})
     return ok({"runsInProgress": v1_running + v2_running, "liveWorkflows": live})

@@ -8,10 +8,11 @@ import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, cast
+from typing import cast
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import ServiceUnavailable
+from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 
 from ..store.tenancy import current_tenant
@@ -60,7 +61,7 @@ class PlatformTeamNames:
         hit = self.cached.get(tenant)
         if hit is None or self.clock() - hit[1] >= CACHE_SECONDS or team_id not in hit[0]:
             try:
-                rows = cast(list[dict[str, Any]], await self.platform.get("/v1/team-names") or [])
+                rows = cast(list[Json], await self.platform.get("/v1/team-names") or [])
             except (ServiceCallError, ServiceUnreachable) as e:
                 log.warning("team names unread; showing the id", extra={"error": str(e)})
                 return hit[0].get(team_id) if hit else None
@@ -76,7 +77,7 @@ class PlatformTeamNames:
         hit = self.security.get(tenant)
         if hit is None or self.clock() - hit[1] >= CACHE_SECONDS:
             try:
-                found = cast(dict[str, Any], await self.platform.get("/v1/settings/workspace-teams") or {})
+                found = cast(Json, await self.platform.get("/v1/settings/workspace-teams") or {})
             except (ServiceCallError, ServiceUnreachable) as e:
                 if hit is not None:
                     return hit[0]

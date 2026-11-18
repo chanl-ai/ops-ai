@@ -30,7 +30,7 @@ from ops_tools.modules.directory import Directory
 from ops_tools.modules.seed import load
 from ops_tools.plugins.host import PluginHost
 from ops_tools.secrets import SecretResolver
-from ops_tools.store.connections import Account, ConnectionStore, app_credentials, connections
+from ops_tools.store.connections import Account, ConnectionStore, NewAccount, app_credentials, connections
 from ops_tools.store.modules import ModuleStore
 from ops_tools.store.plugin_bindings import PluginBindings
 from ops_tools.store.secrets import SecretStore
@@ -227,7 +227,7 @@ async def test_a_call_on_ops_ais_app_reads_its_secret_from_the_install_not_a_tea
     store = ConnectionStore(engine, INSTALL)
     vault = credentials()
     now = datetime.now(UTC)
-    row = {
+    row: NewAccount = {
         "tenant_id": tenant, "id": "con_desk", "app_id": APP, "team_id": TEAM, "name": "Desk",
         "auth_kind": "oauth2_auth_code", "sign_in": "team", "team_backup": False, "status": "healthy", "revision": 1,
         "created_by": "t", "created_at": now, "updated_by": "t", "updated_at": now,

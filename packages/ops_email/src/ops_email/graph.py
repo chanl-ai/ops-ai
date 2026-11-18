@@ -12,13 +12,29 @@ Not yet run against a tenant (**unverified**): tests drive these classes through
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import NotRequired, TypedDict
 from urllib.parse import quote
 
 import httpx
 
+from ops_service_kit.http import Json
+from ops_service_kit.narrow import entries
+
 from .inbound import DeltaPage, InboundAttachment, InboundMessage, normalise_message_id, synthetic_key, text_at
 from .outbound import OutboundMessage
+
+
+class _TokenReply(TypedDict):
+    """The token endpoint's client credentials answer (RFC 6749, section 5.1): the keys read here."""
+
+    access_token: str
+    expires_in: NotRequired[int | float | str]
+
+
+# A delta page (Graph `message: delta`): the changed items, then a link to the next page or, on the last, the cursor.
+_DeltaReply = TypedDict(
+    "_DeltaReply", {"value": list[Json], "@odata.nextLink": str, "@odata.deltaLink": str}, total=False
+)
 
 
 class GraphToken:
@@ -42,13 +58,13 @@ class GraphToken:
         if time.monotonic() >= self.until:
             r = await self.http.post(self.url, data=self.form)
             r.raise_for_status()
-            body: dict[str, Any] = r.json()
+            body: _TokenReply = r.json()
             self.token = str(body["access_token"])
             self.until = time.monotonic() + float(body.get("expires_in", 3600)) - 60
         return {"Authorization": f"Bearer {self.token}"}
 
 
-def message_key(item: dict[str, Any]) -> str:
+def message_key(item: Json) -> str:
     raw = text_at(item, "internetMessageId")
     if raw:
         return normalise_message_id(raw)
@@ -57,8 +73,8 @@ def message_key(item: dict[str, Any]) -> str:
     )
 
 
-def references(item: dict[str, Any]) -> list[str]:
-    raw_headers: list[Any] = list(item.get("internetMessageHeaders") or [])
+def references(item: Json) -> list[str]:
+    raw_headers = entries(item.get("internetMessageHeaders"))
     headers = {text_at(h, "name").lower(): text_at(h, "value") for h in raw_headers}
     refs: list[str] = []
     if headers.get("in-reply-to"):
@@ -70,11 +86,11 @@ def references(item: dict[str, Any]) -> list[str]:
     return refs
 
 
-def parse_item(item: dict[str, Any]) -> InboundMessage:
+def parse_item(item: Json) -> InboundMessage:
     """One Graph message (or `@removed` marker) as an `InboundMessage`."""
     if "@removed" in item:
         return InboundMessage(key=text_at(item, "id"), sender="", subject="", body="", received_at="", removed=True)
-    raw_attachments: list[Any] = list(item.get("attachments") or [])
+    raw_attachments = entries(item.get("attachments"))
     return InboundMessage(
         key=message_key(item),
         sender=text_at(item, "from", "emailAddress", "address"),
@@ -94,7 +110,7 @@ def parse_item(item: dict[str, Any]) -> InboundMessage:
 
 
 class GraphParse:
-    def parse(self, item: dict[str, Any]) -> InboundMessage:
+    def parse(self, item: Json) -> InboundMessage:
         return parse_item(item)
 
 
@@ -133,7 +149,7 @@ class GraphMailSource(GraphParse):
         headers = {**await self.token.header(), "Prefer": "odata.maxpagesize=50"}
         r = await self.http.get(url, headers=headers)
         r.raise_for_status()
-        body: dict[str, Any] = r.json()
+        body: _DeltaReply = r.json()
         return DeltaPage(list(body.get("value", [])), body.get("@odata.nextLink"), body.get("@odata.deltaLink"))
 
 
@@ -146,7 +162,7 @@ class GraphSender:
         self.sender = sender
 
     async def send(self, message: OutboundMessage) -> str:
-        mail: dict[str, Any] = {
+        mail: Json = {
             "subject": message.subject,
             "body": {"contentType": "Text", "content": message.body},
             "toRecipients": [{"emailAddress": {"address": a}} for a in message.to],

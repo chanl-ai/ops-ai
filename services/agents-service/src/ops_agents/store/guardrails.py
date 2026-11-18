@@ -8,7 +8,7 @@ Publish requests are the registry's (`registry_publish_requests`, kind `guardrai
 from __future__ import annotations
 
 import re
-from typing import ClassVar
+from typing import ClassVar, NotRequired, TypedDict, cast
 
 import sqlalchemy as sa
 from pydantic import BaseModel, JsonValue
@@ -72,6 +72,16 @@ registry_guardrail_versions = sa.Table(
     sa.Column("review_id", sa.String(64)),
     info={**TENANT_SCOPED, **team_owned_via("registry_guardrails", "guardrail_id")},
 )
+
+
+class GuardrailConfig(TypedDict):
+    """A guardrail version's rule as `api/guardrails.check_config` writes it, in stored order; `scopes` and
+    `holdUntilChecked` are left out when empty or off, so a version saved before either existed keeps its digest."""
+
+    topics: list[str]
+    message: str
+    scopes: NotRequired[dict[str, str]]
+    holdUntilChecked: NotRequired[bool]
 
 
 class GuardrailVersionRow(BaseModel):
@@ -208,7 +218,7 @@ class GuardrailRegistry(VersionedRegistry[GuardrailRow, GuardrailVersion]):
         *,
         name: str,
         kind: str,
-        config: Json,
+        config: GuardrailConfig,
         owner: str,
         team_id: str,
         by: str,
@@ -250,7 +260,7 @@ class GuardrailRegistry(VersionedRegistry[GuardrailRow, GuardrailVersion]):
                     guardrail_id=gid,
                     version=1,
                     config=config,
-                    digest=digest_of(config),
+                    digest=digest_of(cast(Json, config)),
                     note="Seeded" if published else "",
                     saved_at=at,
                     saved_by=by,
@@ -260,7 +270,7 @@ class GuardrailRegistry(VersionedRegistry[GuardrailRow, GuardrailVersion]):
             )
         return gid
 
-    async def save(self, guardrail_id: str, config: Json, *, by: str, note: str = "") -> int:
+    async def save(self, guardrail_id: str, config: GuardrailConfig, *, by: str, note: str = "") -> int:
         """Saves `config` as the next version, a draft; pins and the published pointer do not move."""
         at = now_iso()
         async with self.tx() as c:
@@ -269,14 +279,14 @@ class GuardrailRegistry(VersionedRegistry[GuardrailRow, GuardrailVersion]):
 
     @staticmethod
     async def _append(
-        c: AsyncConnection, guardrail_id: str, n: int, config: Json, *, by: str, note: str, at: str
+        c: AsyncConnection, guardrail_id: str, n: int, config: GuardrailConfig, *, by: str, note: str, at: str
     ) -> int:
         await c.execute(
             registry_guardrail_versions.insert().values(
                 guardrail_id=guardrail_id,
                 version=n,
                 config=config,
-                digest=digest_of(config),
+                digest=digest_of(cast(Json, config)),
                 note=note,
                 saved_at=at,
                 saved_by=by,
@@ -289,7 +299,7 @@ class GuardrailRegistry(VersionedRegistry[GuardrailRow, GuardrailVersion]):
         )
         return n
 
-    async def save_draft(self, guardrail_id: str, config: Json, *, by: str, note: str = "") -> int:
+    async def save_draft(self, guardrail_id: str, config: GuardrailConfig, *, by: str, note: str = "") -> int:
         """The agent store's draft rule: rewrites the newest version while it is unpublished and no publish request
         has named it; otherwise opens the next version as the draft. What a reviewer saw or what runs never changes."""
         at = now_iso()
@@ -305,7 +315,7 @@ class GuardrailRegistry(VersionedRegistry[GuardrailRow, GuardrailVersion]):
                     .where(v.c.guardrail_id == guardrail_id, v.c.version == n)
                     .values(
                         config=config,
-                        digest=digest_of(config),
+                        digest=digest_of(cast(Json, config)),
                         note=note or newest.note,
                         saved_at=at,
                         saved_by=by,

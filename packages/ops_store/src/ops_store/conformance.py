@@ -150,10 +150,10 @@ async def _race(racers: Sequence[LeasePort], key: str, prefix: str) -> list[_Win
         g = await r.try_acquire(key, f"{prefix}{i}")
         return (g, start, time.monotonic()) if g else None
 
+    async with asyncio.TaskGroup() as tg:
+        tries = [tg.create_task(one(i, r)) for i, r in enumerate(racers)]
     # In the order the winners got the key, so the generations are checked in that order, not sorted into it.
-    return sorted(
-        (w for w in await asyncio.gather(*(one(i, r) for i, r in enumerate(racers))) if w), key=lambda w: w[2]
-    )
+    return sorted((w for t in tries if (w := t.result())), key=lambda w: w[2])
 
 
 def _one_at_a_time(won: list[_Win], ttl: float) -> bool:
@@ -171,7 +171,9 @@ async def timer_claim_suite(backend: Backend, make: Callable[[], Awaitable[Timer
     _guarantees(pollers[0], backend)
     timer = f"timer-{token_hex(4)}"
     await pollers[0].arm(timer, 1)
-    claims = await asyncio.gather(*(p.claim(timer, 1) for p in pollers))
+    async with asyncio.TaskGroup() as tg:
+        tries = [tg.create_task(p.claim(timer, 1)) for p in pollers]
+    claims = [t.result() for t in tries]
     assert sum(claims) == 1, f"{sum(claims)} pollers claimed one timer"
     assert not await pollers[0].claim(timer, 1), "a claimed timer is not claimed again"
 

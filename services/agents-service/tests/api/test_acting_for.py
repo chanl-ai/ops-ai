@@ -21,6 +21,7 @@ from ops_engine.store import RunRow
 from ops_identity import ACTING_FOR_HEADER, ActingForTokens, ServiceClient, dev_service_signer
 from ops_policy import mint, verify
 from ops_service_kit.errors import Forbidden, ServiceUnavailable
+from ops_service_kit.http import Json
 from ops_store import isolation
 from tests.api import test_platform_identity
 from tests.api.test_platform_identity import PLATFORM
@@ -201,7 +202,7 @@ async def test_a_recovered_chat_run_acts_for_the_threads_person_and_one_with_no_
 async def test_a_chat_run_resumed_by_someone_else_still_acts_for_the_person_who_asked() -> None:
     # An approver's decision resumed the chat's write as the approver.
     who = people(Minted())
-    chat = {
+    chat: Json = {
         "id": "th_1",
         "team_id": "team_a",
         "graph": "agent_wrapper",

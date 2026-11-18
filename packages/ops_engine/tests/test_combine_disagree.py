@@ -4,6 +4,8 @@ field picker not knowing the port."""
 
 from __future__ import annotations
 
+from typing import Any
+
 from ops_engine.compiler import data_combine
 from ops_engine.definition import NodeInstance
 from ops_engine.node_types import default_registry
@@ -17,8 +19,8 @@ BANK_AGREES: dict[str, object] = {"debtor": "marcus bell", "balance": 1200}
 BANK_DIFFERS: dict[str, object] = {"debtor": "Marcus Bell", "balance": 950}
 
 
-def params(bank: dict[str, object], on: str | None) -> dict[str, object]:
-    p: dict[str, object] = {
+def params(bank: dict[str, object], on: str | None) -> dict[str, Any]:
+    p: dict[str, Any] = {
         "sources": [{"name": "letter", "values": LETTER}, {"name": "bank", "values": bank}],
         "fields": [{"field": "balance", "type": "money"}],
     }

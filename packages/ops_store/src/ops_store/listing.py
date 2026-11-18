@@ -33,13 +33,13 @@ from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Any, NotRequired, TypedDict, cast
+from typing import Any, Never
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection
 from sqlalchemy.sql import operators
 
-from ops_service_kit.http import PageJSON, page_window, paged
+from ops_service_kit.http import ListPage, page_window, paged
 from ops_service_kit.listing import ListParams
 
 from . import isolation
@@ -47,9 +47,10 @@ from .search import contains
 
 # On a column: a list filters or sorts on it, so it needs an index that leads with it.
 LISTED_KEY = "ops_listed"
-LISTED: dict[str, Any] = {LISTED_KEY: True}
+LISTED: dict[str, bool] = {LISTED_KEY: True}
 
-_NONE: Mapping[str, Any] = MappingProxyType({})
+# The empty default of every mapping argument below: Mapping is covariant in its values, so it is each one's type.
+_NONE: Mapping[str, Never] = MappingProxyType({})
 # A select of any number of columns.
 Rows = sa.Select[*tuple[Any, ...]]
 
@@ -63,15 +64,6 @@ class Several:
 
     key: sa.ColumnElement[Any]
     values: Rows
-
-
-class ListPage(TypedDict):
-    """The `ListResult` JSON (`ops_service_kit.http`), or `LabelledListResult` when the caller asked for labels."""
-
-    data: list[dict[str, Any]]
-    pagination: PageJSON
-    facets: dict[str, dict[str, int]]
-    labels: NotRequired[dict[str, dict[str, str]]]
 
 
 async def list_page(
@@ -149,8 +141,7 @@ async def list_page(
 
     named = {name: await _labels(conn, read, sorted(counted.get(name, {}))) for name, read in labels.items()}
     data = [dict(r) for r in rows.mappings()]
-    out = paged(data, total, page, params.page_size, facets=counted, labels=named or None)
-    return cast(ListPage, out)
+    return paged(data, total, page, params.page_size, facets=counted, labels=named or None)
 
 
 def listed_rows(

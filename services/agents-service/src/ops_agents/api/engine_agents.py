@@ -30,6 +30,7 @@ from ops_engine.ports import AgentRequest, AgentResult, PromptRequest
 from ops_identity import ServiceClient
 from ops_metering import PriceTable
 from ops_service_kit.errors import NotFound, Unprocessable
+from ops_service_kit.http import Json
 from ops_service_kit.settings import Settings
 
 from ..store.agent_registry import AgentRegistry
@@ -108,7 +109,7 @@ async def kernel_call(
     key: str,
     instructions: str,
     message: str,
-    schema: dict[str, Any],
+    schema: Json,
     model_alias: str,
     agent_id: str,
     redact_pii: bool = False,
@@ -158,10 +159,10 @@ class KernelAgents:
             row = await reg.row(request.agent_id)
         except NotFound as e:
             raise AgentUnavailableError(f"agent {request.agent_id} does not exist") from e
-        if row["published_version"] is None or row["paused"]:
+        if row.published_version is None or row.paused:
             raise AgentUnavailableError(f"agent {request.agent_id} is not published and live")
-        version = int(row["published_version"])
-        agent = definition_of(request.agent_id, version, (await reg.version(request.agent_id, version))["spec"])
+        version = int(row.published_version)
+        agent = definition_of(request.agent_id, version, (await reg.version(request.agent_id, version)).spec)
         try:
             settings = self._step_settings(agent, request)
         except Unprocessable as e:
@@ -227,7 +228,7 @@ class KernelModels:
     ports: KernelPorts
     model_alias: str
 
-    async def structured(self, system: str, user: str, schema: dict[str, Any], *, key: str) -> Any:
+    async def structured(self, system: str, user: str, schema: Json, *, key: str) -> Any:
         result = await kernel_call(
             self.ports,
             key=key,

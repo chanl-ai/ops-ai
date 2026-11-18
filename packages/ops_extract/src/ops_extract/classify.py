@@ -6,7 +6,10 @@ floor, or unknown, goes to a person rather than being read with the wrong fields
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Sequence
+
+from ops_extract.shapes import DocumentKind
+from ops_service_kit.http import Json
 
 SYSTEM = (
     "You decide which kind of document this is, choosing from the document types listed. Answer the type's id, how "
@@ -18,7 +21,7 @@ UNKNOWN = "unknown"
 MAX_CHARS = 6000
 
 
-def schema(type_ids: list[str]) -> dict[str, Any]:
+def schema(type_ids: list[str]) -> Json:
     return {
         "type": "object",
         "additionalProperties": False,
@@ -31,7 +34,7 @@ def schema(type_ids: list[str]) -> dict[str, Any]:
     }
 
 
-def prompt(types: list[dict[str, Any]], texts: dict[int, str]) -> str:
+def prompt(types: Sequence[DocumentKind], texts: dict[int, str]) -> str:
     listed = "\n".join(
         f"- {t['id']}: {t['name']}{' - ' + str(t['description']) if t.get('description') else ''}" for t in types
     )
@@ -39,11 +42,15 @@ def prompt(types: list[dict[str, Any]], texts: dict[int, str]) -> str:
     return f"Document types:\n{listed}\n\nDocument:\n{document}"
 
 
-def classification(answer: dict[str, Any], types: list[dict[str, Any]], floor: float) -> dict[str, Any]:
+def classification(answer: Json, types: Sequence[DocumentKind], floor: float) -> Json:
     """The kind, or none: `needsReview` when the model answered unknown or is less sure than the floor."""
     by_id = {str(t["id"]): t for t in types}
     type_id = str(answer.get("typeId") or UNKNOWN)
-    confidence = round(float(answer.get("confidence") or 0.0), 3)
+    said = answer.get("confidence") or 0.0
+    if not isinstance(said, int | float | str):
+        # float() refuses a list or an object, and the classification fails as it did.
+        raise TypeError(f"confidence {said!r} is not a number")
+    confidence = round(float(said), 3)
     found = by_id.get(type_id)
     return {
         "typeId": type_id if found else None,

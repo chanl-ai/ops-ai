@@ -5,11 +5,12 @@ services run the same suites on their own repositories."""
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
-from typing import Any, ClassVar
+from collections.abc import AsyncIterator, Mapping
+from typing import ClassVar
 
 import pytest
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -128,7 +129,7 @@ class Timers:
 class NoTransactionAudit(SqlAuditLog):
     """Writes the change and the entry separately: the change lands even when the entry is refused."""
 
-    async def apply(self, entity_id: str, value: str, entry: dict[str, Any] | None) -> None:
+    async def apply(self, entity_id: str, value: str, entry: Mapping[str, JsonValue] | None) -> None:
         from ops_store.reference import audit_entries, audited  # noqa: PLC0415
 
         async with self.engine.begin() as c:

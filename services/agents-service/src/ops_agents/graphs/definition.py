@@ -35,10 +35,12 @@ from ops_agent_kernel.types import Resume, TurnRequest
 from ops_agents.activities.catalog import AgentDefinition
 from ops_agents.activities.tool_directory import CatalogTools
 from ops_agents.activities.tools import fill
+from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.ids import canonical_json, new_id
 
 from .common import (
     GraphDeps,
+    PendingApproval,
     agent_grants,
     approval_token,
     emit,
@@ -99,11 +101,11 @@ class WorkflowDefinition(_Model):
 
 
 class WorkflowState(TypedDict):
-    email: dict[str, Any]
+    email: Json
     grade_overrides: NotRequired[list[float]]
     category: NotRequired[str]
     attachments: NotRequired[list[dict[str, str]]]
-    extractions: Annotated[list[dict[str, Any]], operator.add]
+    extractions: Annotated[list[Json], operator.add]
     evidence: NotRequired[str]
     draft: NotRequired[str]
     attempts: NotRequired[int]
@@ -111,7 +113,7 @@ class WorkflowState(TypedDict):
     feedback: NotRequired[str]
     compliance: NotRequired[str]
     review_id: NotRequired[str]
-    decision: NotRequired[dict[str, Any]]
+    decision: NotRequired[Json]
     sent: NotRequired[str]
     status: NotRequired[str]
     # Node visits as "<node>@v<version>": which version's graph ran each step.
@@ -119,24 +121,24 @@ class WorkflowState(TypedDict):
     # Set when the thread is routed to people (R9): why its remaining steps were skipped.
     route_reason: NotRequired[str]
     # An agent step that ended at a gated write: the call waiting for a review, then that review's decision.
-    pending: NotRequired[dict[str, Any] | None]
-    agent_decision: NotRequired[dict[str, Any] | None]
+    pending: NotRequired[Json | None]
+    agent_decision: NotRequired[Json | None]
     # Intake from a notice: the text read, the records it names and how each fared against the bank.
     text: NotRequired[str]
-    records: NotRequired[list[dict[str, Any]]]
+    records: NotRequired[list[Json]]
     record_count: NotRequired[int]
-    matches: Annotated[list[dict[str, Any]], operator.add]
-    candidates: Annotated[list[dict[str, Any]], operator.add]
-    unmatched: Annotated[list[dict[str, Any]], operator.add]
-    children: NotRequired[list[dict[str, Any]]]
+    matches: Annotated[list[Json], operator.add]
+    candidates: Annotated[list[Json], operator.add]
+    unmatched: Annotated[list[Json], operator.add]
+    children: NotRequired[list[Json]]
     # A levy case (one child per match): its record, customer and accounts, then what the decision did.
-    record: NotRequired[dict[str, Any]]
-    customer: NotRequired[dict[str, Any]]
-    accounts: NotRequired[list[dict[str, Any]]]
-    hold: NotRequired[dict[str, Any] | None]
-    note: NotRequired[dict[str, Any] | None]
+    record: NotRequired[Json]
+    customer: NotRequired[Json]
+    accounts: NotRequired[list[Json]]
+    hold: NotRequired[Json | None]
+    note: NotRequired[Json | None]
     # The last tool call's failure (e.g. the bank's 422 on a hold), shown on the case; cleared by a call that works.
-    tool_error: NotRequired[dict[str, Any] | None]
+    tool_error: NotRequired[Json | None]
 
 
 class InvalidDefinitionError(ValueError):
@@ -168,7 +170,7 @@ ROUTE_OP_LABELS: dict[str, tuple[str, tuple[str, ...]]] = {
 def route_field_types() -> dict[str, str]:
     """Each route field's type for an editor: number, boolean or text, from WorkflowState's annotations; the dotted
     email and decision fields are text."""
-    hints: dict[str, Any] = get_type_hints(WorkflowState)
+    hints = get_type_hints(WorkflowState)
     kinds: dict[Any, str] = {int: "number", float: "number", bool: "boolean"}
     return {f: kinds.get(hints.get(f), "text") for f in sorted(ROUTE_FIELDS)}
 
@@ -212,15 +214,17 @@ def _check_routes(n: NodeDef, known: set[str]) -> None:
             raise InvalidDefinitionError(f"Condition {n.id}: in takes a list of values.")
 
 
-def _field(state: Mapping[str, Any], path: str) -> Any:
+def _field(state: WorkflowState, path: str) -> Any:
     head, _, rest = path.partition(".")
-    value = state.get(head)
+    value: Any = state.get(head)
     return value.get(rest) if rest and isinstance(value, Mapping) else value  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
 
 
-def route_matches(state: Mapping[str, Any], when: Mapping[str, Any]) -> bool:
+def route_matches(state: WorkflowState, when: Mapping[str, JsonValue]) -> bool:
     """One comparison. A field with no value yet matches nothing, so the next route or the default is taken."""
-    actual, op, want = _field(state, when["field"]), when["op"], when["value"]
+    actual: Any = _field(state, cast(str, when["field"]))
+    op = cast(str, when["op"])
+    want: Any = when["value"]
     if actual is None:
         return False
     if op == "eq":
@@ -242,7 +246,7 @@ MANUAL_NODE = "manual_handling"
 BUILT_IN_NODES = frozenset({ROUTE_NODE, MANUAL_NODE})
 
 
-def _email_text(e: dict[str, Any]) -> str:
+def _email_text(e: Mapping[str, JsonValue]) -> str:
     return f"From: {e['sender']}\nSubject: {e['subject']}\n\n{e['body']}"
 
 
@@ -290,21 +294,21 @@ def option_name(option: Any) -> str:
     if isinstance(option, str):
         return option
     if isinstance(option, dict):
-        name = cast(dict[str, Any], option).get("name")
+        name = cast(Json, option).get("name")
         return str(name) if isinstance(name, str) else ""
     return ""
 
 
 def option_editable(option: Any) -> list[str]:
     if isinstance(option, dict):
-        raw: list[Any] = list(cast(dict[str, Any], option).get("editable") or [])
+        raw = list(cast(JsonList, cast(Json, option).get("editable") or []))
         return [str(x) for x in raw]
     return []
 
 
 async def option_declarations(
-    deps: GraphDeps, options: list[Any], calls: Mapping[str, Mapping[str, Any]]
-) -> list[dict[str, Any]]:
+    deps: GraphDeps, options: list[Any], calls: Mapping[str, Mapping[str, JsonValue]]
+) -> list[Json]:
     """What a reviewer decides between, and what each option lets them set: for every option its call and, for each
     `editable` input, the declaration a form renders from and the decide route validates against, taken from the
     operation's own input schema (name as the operation spells it, type, required, bounds) with the proposed call's
@@ -314,25 +318,25 @@ async def option_declarations(
         ops = {o.name: o for o in await directory.operations()}
     except Exception:
         ops = {}
-    out: list[dict[str, Any]] = []
+    out: list[Json] = []
     for option in options:
         name = option_name(option)
         call = dict(calls.get(name) or {})
-        inputs: list[dict[str, Any]] = []
+        inputs: JsonList = []
         if call:
             op = ops.get(str(call.get("tool")))
-            schema: dict[str, Any] = dict(op.input_schema) if op else {}
-            props: dict[str, Any] = dict(schema.get("properties") or {})
-            required_raw: list[Any] = list(schema.get("required") or [])
+            schema: Json = dict(op.input_schema) if op else {}
+            props: Json = dict(cast(Json, schema.get("properties") or {}))
+            required_raw = list(cast(JsonList, schema.get("required") or []))
             required = {str(r) for r in required_raw}
             by_plain = {_plain(k): k for k in props}
-            proposed: dict[str, Any] = dict(call.get("input") or {})
+            proposed: Json = dict(cast(Json, call.get("input") or {}))
             for graph_name in option_editable(option):
                 key = by_plain.get(_plain(graph_name)) or next(
                     (k for k in proposed if _plain(k) == _plain(graph_name)), graph_name
                 )
-                prop: dict[str, Any] = dict(props.get(key) or {})
-                declared: dict[str, Any] = {
+                prop: Json = dict(cast(Json, props.get(key) or {}))
+                declared: Json = {
                     "name": key,
                     "type": str(prop.get("type") or "string"),
                     "required": key in required,
@@ -346,7 +350,7 @@ async def option_declarations(
     return out
 
 
-def human_settings(cfg: dict[str, Any]) -> dict[str, Any]:
+def human_settings(cfg: Mapping[str, JsonValue]) -> Json:
     """A human step's SLA settings: its config minus `options`, which name the decisions a levy review offers."""
     return {k: v for k, v in cfg.items() if k != "options"}
 
@@ -355,7 +359,9 @@ def _norm(value: Any) -> str:
     return " ".join(str(value or "").split()).casefold()
 
 
-def record_matches(record: Mapping[str, Any], customer: Mapping[str, Any], *, min_address_chars: int) -> bool:
+def record_matches(
+    record: Mapping[str, JsonValue], customer: Mapping[str, JsonValue], *, min_address_chars: int
+) -> bool:
     """The matching rule: the name matches, and the address (one a substring of the other, at least
     `min_address_chars` long) or the whole last four of the SSN matches. A name alone is a candidate, never a case."""
     if _norm(record.get("name")) != _norm(customer.get("name")) or not _norm(record.get("name")):
@@ -372,7 +378,7 @@ def _plain(name: str) -> str:
     return name.replace("_", "").replace("-", "").casefold()
 
 
-async def arguments_for(deps: GraphDeps, tool: str, values: Mapping[str, Any]) -> dict[str, Any]:
+async def arguments_for(deps: GraphDeps, tool: str, values: Mapping[str, JsonValue]) -> Json:
     """`values` keyed the way the graph names them (customerId, accountId, amount), renamed to the operation's own
     input names (an import of `/customers/{customer_id}` takes `customer_id`), matched without case or underscores.
     A value the schema does not name is passed through, so a fixture tool keeps working."""
@@ -381,36 +387,36 @@ async def arguments_for(deps: GraphDeps, tool: str, values: Mapping[str, Any]) -
         op = next((o for o in await directory.operations() if o.name == tool), None)
     except Exception:
         op = None
-    props: dict[str, Any] = dict(op.input_schema.get("properties") or {}) if op else {}
+    props: Json = dict(op.input_schema.get("properties") or {}) if op else {}
     by_plain = {_plain(k): k for k in props}
     return {by_plain.get(_plain(k), k): v for k, v in values.items()}
 
 
-def _rows(output: Any) -> list[dict[str, Any]]:
+def _rows(output: Any) -> list[Json]:
     """Customers from a search result: the bank answers a list; the fixture lookup answers one row or `found: false`."""
     if isinstance(output, list):
-        return [cast(dict[str, Any], r) for r in cast(list[Any], output) if isinstance(r, dict)]
+        return [cast(Json, r) for r in cast(JsonList, output) if isinstance(r, dict)]
     if isinstance(output, dict):
-        row = cast(dict[str, Any], output)
+        row = cast(Json, output)
         return [row] if row.get("found", True) and any(k != "found" for k in row) else []
     return []
 
 
-def _customer_id(c: Mapping[str, Any]) -> str:
+def _customer_id(c: Mapping[str, JsonValue]) -> str:
     return str(c.get("id") or c.get("customerId") or "")
 
 
-def _account_ids(c: Mapping[str, Any]) -> list[str]:
+def _account_ids(c: Mapping[str, JsonValue]) -> list[str]:
     """The bank lists account ids; the fixture dataset, whose rows are strings, joins them with commas."""
     raw: Any = c.get("accountIds") or []
     ids: list[Any] = raw.split(",") if isinstance(raw, str) else list(cast(list[Any], raw))
     return [str(a).strip() for a in ids if str(a).strip()]
 
 
-def _failure(outcome: ToolOutcome, tool: str) -> dict[str, Any]:
+def _failure(outcome: ToolOutcome, tool: str) -> Json:
     """What a failed call tells the case: the gateway's error (code, status, side, message) or a refusal's text."""
     out = outcome.output
-    err: dict[str, Any] = cast(dict[str, Any], out.get("error") or {}) if isinstance(out, dict) else {}
+    err: Json = cast(Json, out.get("error") or {}) if isinstance(out, dict) else {}
     return {
         "tool": tool,
         "status": err.get("status"),
@@ -419,23 +425,21 @@ def _failure(outcome: ToolOutcome, tool: str) -> dict[str, Any]:
     }
 
 
-async def attachment_text(deps: GraphDeps, attachment: Mapping[str, Any]) -> str:
+async def attachment_text(deps: GraphDeps, attachment: Mapping[str, JsonValue]) -> str:
     """An attachment's text: its file's reading in documents-service when it names a file, else the text it carries."""
     if deps.files is None or not attachment.get("file_id"):
         return str(attachment.get("text") or "")
     return await deps.files.read_file(str(attachment["file_id"]))
 
 
-async def levy_calls(
-    deps: GraphDeps, state: Mapping[str, Any], review_id: str, attempt: int
-) -> dict[str, dict[str, Any]]:
+async def levy_calls(deps: GraphDeps, state: WorkflowState, review_id: str, attempt: int) -> dict[str, Json]:
     """The call each levy option makes, with the input the reviewer may complete (the hold's amount): hold = a hold
     on the customer's first account for the notice's amount, flag = a note on the customer. The step key carries the
     attempt, so a decision after a failed call is a new approval of a new call."""
-    record: Mapping[str, Any] = state.get("record") or {}
-    customer: Mapping[str, Any] = state.get("customer") or {}
-    accounts: list[Mapping[str, Any]] = list(state.get("accounts") or [])
-    first: Mapping[str, Any] = accounts[0] if accounts else {}
+    record: Json = state.get("record") or {}
+    customer: Json = state.get("customer") or {}
+    accounts: list[Json] = list(state.get("accounts") or [])
+    first: Json = accounts[0] if accounts else {}
     listed = _account_ids(customer)
     account_id = str(first.get("id") or first.get("accountId") or (listed[0] if listed else ""))
     amount = str(record.get("amount") or "").replace(",", "").replace("$", "").strip()
@@ -468,8 +472,8 @@ def compile_definition(
         tag = f"{nid}@v{d.version}"
         if n.kind == "agent":
 
-            async def agent(state: WorkflowState) -> dict[str, Any]:
-                atts = state["email"].get("attachments", [])
+            async def agent(state: WorkflowState) -> Json:
+                atts = cast(JsonList, state["email"].get("attachments", []))
                 limit = int(cfg.get("max_attachments", 20))
                 category = await deps.models.classify(_email_text(state["email"]), list(cfg["labels"]))
                 return {"category": category, "attachments": atts[:limit], "visited": [tag]}
@@ -477,15 +481,17 @@ def compile_definition(
             return agent
         if n.kind == "extract":
 
-            async def extract(task: dict[str, Any]) -> dict[str, Any]:
-                a = task["attachment"]
-                facts = await deps.models.extract(task["category"], a["name"], a["text"])
+            async def extract(task: Json) -> Json:
+                a = cast(Json, task["attachment"])
+                facts = await deps.models.extract(
+                    cast(str, task["category"]), cast(str, a["name"]), cast(str, a["text"])
+                )
                 return {"extractions": [{"name": a["name"], **facts.model_dump(exclude_none=True)}], "visited": [tag]}
 
             return extract
         if n.kind == "collect":
 
-            async def collect(state: WorkflowState) -> dict[str, Any]:
+            async def collect(state: WorkflowState) -> Json:
                 rows = sorted(state["extractions"], key=lambda x: str(x["name"]))
                 evidence = "\n".join(f"- {r['name']}: {r.get('summary', '')}" for r in rows) or "No attachments."
                 return {"evidence": evidence, "visited": [tag]}
@@ -493,7 +499,7 @@ def compile_definition(
             return collect
         if n.kind == "draft":
 
-            async def draft(state: WorkflowState) -> dict[str, Any]:
+            async def draft(state: WorkflowState) -> Json:
                 text = await deps.models.draft(
                     _email_text(state["email"]), state.get("evidence", ""), state.get("feedback")
                 )
@@ -503,7 +509,7 @@ def compile_definition(
             return draft
         if n.kind == "grade":
 
-            async def grade(state: WorkflowState) -> dict[str, Any]:
+            async def grade(state: WorkflowState) -> Json:
                 attempts = state.get("attempts", 1)
                 overrides = state.get("grade_overrides") or []
                 if attempts <= len(overrides):
@@ -521,10 +527,10 @@ def compile_definition(
             raw_options: list[Any] = list(cfg.get("options") or [])
             options: list[str] = [option_name(o) for o in raw_options]
 
-            async def human(state: WorkflowState) -> dict[str, Any]:
+            async def human(state: WorkflowState) -> Json:
                 case = canonical_json([state["email"]["sender"], state["email"]["subject"], state["email"]["body"]])
                 review_id = state.get("review_id") or f"REV-{hashlib.sha256(case.encode()).hexdigest()[:6].upper()}"
-                payload: dict[str, Any] = {
+                payload: Json = {
                     "kind": "review",
                     "node": nid,
                     "review_id": review_id,
@@ -538,11 +544,11 @@ def compile_definition(
                     attempt = len([v for v in state.get("visited", []) if v.startswith(f"{nid}@")]) + 1
                     calls = await levy_calls(deps, state, review_id, attempt)
                     payload |= {
-                        "options": await option_declarations(deps, raw_options, calls),
+                        "options": cast(JsonList, await option_declarations(deps, raw_options, calls)),
                         "record": state.get("record"),
                         "customer": state.get("customer"),
-                        "accounts": state.get("accounts"),
-                        "calls": calls,
+                        "accounts": cast("JsonList | None", state.get("accounts")),
+                        "calls": cast(Json, calls),
                         "error": state.get("tool_error"),
                     }
                 else:
@@ -554,7 +560,7 @@ def compile_definition(
             return human
         if n.kind == "tool":
 
-            async def tool(state: WorkflowState) -> dict[str, Any]:
+            async def tool(state: WorkflowState) -> Json:
                 if cfg["tool"] == "send_reply":
                     call = reply_call(state["email"], state.get("draft", ""), state.get("review_id", ""))
                     ref = await deps.replies.send(
@@ -567,8 +573,8 @@ def compile_definition(
                 # Any granted operation through the tool port. With `call`, the input and step are the ones the
                 # review's decision carries, so the approval token, bound to that input, matches what runs.
                 decision = state.get("decision") or {}
-                chosen: dict[str, Any] = cast(dict[str, Any], decision.get("call") or {}) if cfg.get("call") else {}
-                arguments: dict[str, Any] = dict(chosen.get("input") or cfg.get("input") or {})
+                chosen: Json = cast(Json, decision.get("call") or {}) if cfg.get("call") else {}
+                arguments: Json = dict(cast(Json, chosen.get("input") or cfg.get("input") or {}))
                 key = str(chosen.get("step") or f"{state.get('review_id', nid)}:{nid}")
                 # Without a gateway no token is minted; the local port accepts the policy marker (as agent_resume).
                 token = str(decision.get("approval_token") or "approval:policy") if decision else None
@@ -585,22 +591,27 @@ def compile_definition(
         if n.kind == "extract_records":
             schema = str(cfg.get("schema") or "persons")
 
-            async def extract_records(state: WorkflowState) -> dict[str, Any]:
+            async def extract_records(state: WorkflowState) -> Json:
                 email = state["email"]
                 parts = [_email_text(email)]
-                for a in email.get("attachments", []):
+                for a in cast(list[Json], email.get("attachments", [])):
                     parts.append(f"Attachment {a.get('name', '')}:\n{await attachment_text(deps, a)}")
                 text = "\n\n".join(parts)
                 records = await deps.models.extract_records(schema, text)
                 emit("records", nid, records)
-                return {"text": text, "records": records, "record_count": len(records), "visited": [tag]}
+                return {
+                    "text": text,
+                    "records": cast(JsonList, records),
+                    "record_count": len(records),
+                    "visited": [tag],
+                }
 
             return extract_records
         if n.kind == "match":
             min_chars = int(cfg.get("min_address_chars", 6))
 
-            async def match(task: dict[str, Any]) -> dict[str, Any]:
-                record: dict[str, Any] = task["record"]
+            async def match(task: Json) -> Json:
+                record = cast(Json, task["record"])
                 tools = deps.ports.tools
                 query = await arguments_for(deps, cfg["search"], {"query": record.get("name", "")})
                 found = await tools.execute(cfg["search"], query, key="", approval_token=None)
@@ -616,9 +627,9 @@ def compile_definition(
                 if not hits:
                     emit("unmatched", nid, {"record": record, "candidates": rows})
                     if rows:
-                        return {"candidates": [{"record": record, "customers": rows}], "visited": [tag]}
+                        return {"candidates": [{"record": record, "customers": cast(JsonList, rows)}], "visited": [tag]}
                     return {"unmatched": [record], "visited": [tag]}
-                out: list[dict[str, Any]] = []
+                out: JsonList = []
                 for hit in hits:
                     cid = _customer_id(hit)
                     customer = hit
@@ -626,7 +637,7 @@ def compile_definition(
                         by_id = await arguments_for(deps, cfg["customer"], {"customerId": cid})
                         got = await tools.execute(cfg["customer"], by_id, key="", approval_token=None)
                         customer = _rows(got.output)[0] if got.ok and _rows(got.output) else hit
-                    accounts: list[dict[str, Any]] = []
+                    accounts: JsonList = []
                     for aid in _account_ids(customer):
                         if cfg.get("account"):
                             by_acc = await arguments_for(deps, cfg["account"], {"accountId": aid})
@@ -639,14 +650,14 @@ def compile_definition(
             return match
         if n.kind == "open_cases":
 
-            async def open_cases(state: WorkflowState) -> dict[str, Any]:
+            async def open_cases(state: WorkflowState) -> Json:
                 if deps.workflows is None:
                     raise InvalidDefinitionError("Child cases need the workflow runner, which this process lacks.")
-                configurable: dict[str, Any] = get_config().get("configurable") or {}
+                configurable: Json = get_config().get("configurable") or {}
                 parent = str(configurable["thread_id"])
-                children: list[dict[str, Any]] = []
+                children: JsonList = []
                 for m in state.get("matches", []):
-                    record, customer = m["record"], m["customer"]
+                    record, customer = cast(Json, m["record"]), cast(Json, m["customer"])
                     cid = _customer_id(customer)
                     subject = f"Levy {record.get('case_no') or ''}: {record.get('name')} ({cid})".replace("  ", " ")
                     outcome = await deps.workflows.run(
@@ -654,7 +665,7 @@ def compile_definition(
                         arguments={},
                         key=f"levy:{parent}:{record.get('case_no') or record.get('name')}:{cid}",
                         parent_thread_id=parent,
-                        parent_run_id=configurable.get("run_id"),
+                        parent_run_id=cast("str | None", configurable.get("run_id")),
                         graph_input={
                             "email": {**state["email"], "subject": subject},
                             "record": record,
@@ -663,9 +674,7 @@ def compile_definition(
                         },
                         meta={"startedBy": "workflow", "subject": subject, "customerId": cid},
                     )
-                    output: dict[str, Any] = (
-                        cast(dict[str, Any], outcome.output) if isinstance(outcome.output, dict) else {}
-                    )
+                    output: Json = cast(Json, outcome.output) if isinstance(outcome.output, dict) else {}
                     children.append(
                         {
                             "threadId": output.get("threadId"),
@@ -686,14 +695,14 @@ def compile_definition(
             return open_cases
         if n.kind == "pass":
 
-            async def passed(state: WorkflowState) -> dict[str, Any]:
+            async def passed(state: WorkflowState) -> Json:
                 return {"visited": [tag]}
 
             return passed
         if n.kind == "agent_turn":
             pinned = AgentDefinition.model_validate(cfg["agent"])
 
-            async def agent_turn(state: WorkflowState) -> dict[str, Any]:
+            async def agent_turn(state: WorkflowState) -> Json:
                 # The case so far is the turn's input: the email, then what the previous agent step wrote.
                 earlier = state.get("draft")
                 text = _email_text(state["email"]) + (f"\n\nPrevious step:\n{earlier}" if earlier else "")
@@ -714,12 +723,12 @@ def compile_definition(
             return agent_turn
         if n.kind == "end":
 
-            async def end(state: WorkflowState) -> dict[str, Any]:
+            async def end(state: WorkflowState) -> Json:
                 return {"status": state.get("status") or str(cfg.get("status", "done")), "visited": [tag]}
 
             return end
 
-        async def condition(state: WorkflowState) -> dict[str, Any]:
+        async def condition(state: WorkflowState) -> Json:
             return {"visited": [tag]}
 
         return condition
@@ -728,8 +737,9 @@ def compile_definition(
         """The review for a gated write an agent step asked for: the same payload as the agent wrapper's approval, so
         Reviews, decide, the approval token and the gateway treat it like any other."""
 
-        async def approval(state: WorkflowState) -> dict[str, Any]:
-            p = state.get("pending") or {}
+        async def approval(state: WorkflowState) -> Json:
+            # The paused turn as the agent step checkpointed it (common.pending_approval); a missing key raises.
+            p = cast(PendingApproval, state.get("pending") or {})
             definition = deps.catalog.tool(p["tool"])
             tpl = definition.approval if definition else None
             values = {k: str(v) for k, v in p["input"].items()}
@@ -756,7 +766,7 @@ def compile_definition(
         return approval
 
     def agent_resume(nid: str, pinned: AgentDefinition) -> Any:
-        async def resume(state: WorkflowState) -> dict[str, Any]:
+        async def resume(state: WorkflowState) -> Json:
             dec = state.get("agent_decision") or {}
             approved = dec.get("decision") == "approved"
             req = TurnRequest(
@@ -769,7 +779,7 @@ def compile_definition(
                 resume=Resume(
                     interrupt=interrupt_from_state(state.get("pending") or {}),
                     decision="approved" if approved else "rejected",
-                    reason=dec.get("reason"),
+                    reason=cast("str | None", dec.get("reason")),
                     approval_token=(approval_token(dec) or "approval:policy") if approved else None,
                 ),
             )
@@ -817,11 +827,11 @@ def compile_definition(
 
                 g.add_conditional_edges(n.id, gate, [ok, retry])
             elif cfg["rule"] == "route":
-                routes: list[tuple[dict[str, Any], str]] = [(r["when"], r["to"]) for r in cfg["routes"]]
+                routes: list[tuple[Json, str]] = [(r["when"], r["to"]) for r in cfg["routes"]]
                 fallback: str = cfg["default"]
 
                 def routed(
-                    state: WorkflowState, routes: list[tuple[dict[str, Any], str]] = routes, fallback: str = fallback
+                    state: WorkflowState, routes: list[tuple[Json, str]] = routes, fallback: str = fallback
                 ) -> str:
                     return next((to for when, to in routes if route_matches(state, when)), fallback)
 
@@ -888,10 +898,10 @@ def compile_definition(
             for t in targets:
                 g.add_edge(n.id, t)
 
-    async def route_to_people(state: WorkflowState) -> dict[str, Any]:
+    async def route_to_people(state: WorkflowState) -> Json:
         return {}
 
-    async def manual_handling(state: WorkflowState) -> dict[str, Any]:
+    async def manual_handling(state: WorkflowState) -> Json:
         decision = interrupt(
             {
                 "kind": "manual",

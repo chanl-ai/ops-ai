@@ -13,16 +13,18 @@ reaches the module."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import cast
 
 from fastapi import Request
 
 from ops_access import can
 from ops_identity import Principal as Caller
 from ops_service_kit.errors import Forbidden, ServiceUnavailable, Unauthorized, ValidationFailed
+from ops_service_kit.http import Json, JsonList
 from ops_service_kit.ids import now_iso
 
-from .agent_registry import registry, review_view
+from ..store.agent_registry import PublishRequestRow
+from .agent_registry import ReviewView, registry, review_view
 from .auth import Principal, caller_of
 from .deps import Runtime
 from .review_sla import sla_hours
@@ -44,12 +46,12 @@ async def tools_service(request: Request, header: str | None, tenant_id: str) ->
     return svc
 
 
-def _body(input_body: dict[str, Any], *, team: str, saved_by: str) -> dict[str, Any]:
+def _body(input_body: Json, *, team: str, saved_by: str) -> Json:
     return {
         "moduleId": input_body["subjectId"],
         "moduleName": input_body["moduleName"],
         "moduleVersion": input_body["moduleVersion"],
-        "changes": list(input_body.get("changes") or []),
+        "changes": list(cast(JsonList, input_body.get("changes") or [])),
         # What the version changes since the published one, as tools-service sent it at open; kept as asked.
         **({"diff": input_body["diff"]} if input_body.get("diff") else {}),
         "security": bool(input_body.get("security", True)),
@@ -58,7 +60,7 @@ def _body(input_body: dict[str, Any], *, team: str, saved_by: str) -> dict[str, 
     }
 
 
-async def open_review(rt: Runtime, me: Principal, input_body: dict[str, Any]) -> dict[str, Any]:
+async def open_review(rt: Runtime, me: Principal, input_body: Json) -> PublishRequestRow:
     """`me` is the person who asked, from their delegated credentials; the team is theirs, never the body's."""
     named = input_body.get("teamId")
     if named and named != me.team_id:
@@ -79,7 +81,7 @@ async def open_review(rt: Runtime, me: Principal, input_body: dict[str, Any]) ->
     )
 
 
-async def open_for(rt: Runtime, svc: Caller, input_body: dict[str, Any]) -> dict[str, Any]:
+async def open_for(rt: Runtime, svc: Caller, input_body: Json) -> PublishRequestRow:
     """A review a service opens with its own token for a person not on the call: tools-service's seed. Only a
     service holding `tools:publish`, which only tools-service's scope cap allows (Settings.service_scopes), and only a
     tool module of the team its token is scoped to. Who asked is the body's `requestedBy`, recorded as the requester
@@ -109,50 +111,55 @@ async def open_for(rt: Runtime, svc: Caller, input_body: dict[str, Any]) -> dict
     )
 
 
-async def team(rt: Runtime, req: dict[str, Any]) -> str | None:
+async def team(rt: Runtime, req: PublishRequestRow) -> str | None:
     """The workspace's Security team decides a security change; the module's team decides any other."""
-    body = req["body"]
+    # The review body is read key by key into the reply, as stored.
+    body = req.model_dump()["body"]
     return await security_team(rt) if body.get("security", True) else (body.get("teamId") or None)
 
 
-async def view(rt: Runtime, req: dict[str, Any]) -> dict[str, Any]:
-    if req["body"].get("applyPending"):
+async def view(rt: Runtime, req: PublishRequestRow) -> ReviewView:
+    if req.body.get("applyPending"):
         req = await _apply(rt, req)
-    body = req["body"]
+    # The review body is read key by key into the reply, as stored.
+    body = req.model_dump()["body"]
     v = review_view(req, name=body["moduleName"], slug="", sla_hours=await sla_hours(rt))
     v.pop("publish", None)
     decided_by = "Security" if body.get("security", True) else body.get("teamId", "")
     policy = {**v["policy"], "id": "gp_tool_module_review", "name": "Tool module review", "reviewers": decided_by}
     reasoning = [str(c.get("detail") or c.get("kind") or "") for c in body["changes"]]
-    return {
-        **v,
-        "title": f"Publish {body['moduleName']} v{body['moduleVersion']}",
-        "workflowId": "",
-        "actionTool": "publish_tool_module",
-        "policy": policy,
-        "reasoning": reasoning,
-        "toolModule": {
-            "moduleId": body["moduleId"],
-            "version": body["moduleVersion"],
-            "applyPending": bool(body.get("applyPending")),
-            **({"diff": body["diff"]} if body.get("diff") else {}),
+    return cast(
+        ReviewView,
+        {
+            **v,
+            "title": f"Publish {body['moduleName']} v{body['moduleVersion']}",
+            "workflowId": "",
+            "actionTool": "publish_tool_module",
+            "policy": policy,
+            "reasoning": reasoning,
+            "toolModule": {
+                "moduleId": body["moduleId"],
+                "version": body["moduleVersion"],
+                "applyPending": bool(body.get("applyPending")),
+                **({"diff": body["diff"]} if body.get("diff") else {}),
+            },
         },
-    }
+    )
 
 
-async def apply(rt: Runtime, req: dict[str, Any]) -> None:
+async def apply(rt: Runtime, req: PublishRequestRow) -> None:
     """Called once the request is decided: tells tools-service, or marks the request to try again."""
-    await _apply(rt, await registry(rt).request(str(req["id"])))
+    await _apply(rt, await registry(rt).request(str(req.id)))
 
 
-async def _apply(rt: Runtime, req: dict[str, Any]) -> dict[str, Any]:
-    body = dict(req["body"])
+async def _apply(rt: Runtime, req: PublishRequestRow) -> PublishRequestRow:
+    body = dict(req.body)
     decision = {
-        "requestId": req["id"],
+        "requestId": req.id,
         "version": body["moduleVersion"],
-        "decision": req["status"],
-        "reason": req.get("decision_reason"),
-        "by": req.get("decided_by"),
+        "decision": req.status,
+        "reason": req.decision_reason,
+        "by": req.decided_by,
     }
     try:
         if rt.tool_reviews is None:
@@ -162,5 +169,5 @@ async def _apply(rt: Runtime, req: dict[str, Any]) -> dict[str, Any]:
         body["appliedAt"] = now_iso()
     except Exception:
         body["applyPending"] = True
-    await registry(rt).set_body(str(req["id"]), body)
-    return {**req, "body": body}
+    await registry(rt).set_body(str(req.id), body)
+    return req.model_copy(update={"body": body})

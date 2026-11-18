@@ -24,16 +24,18 @@ import re
 from itertools import pairwise
 from typing import Any, cast
 
+from ops_service_kit.http import Json, JsonList, JsonValue
+
 SHAPES = ("rows", "series", "record", "metric")
 MAX_ROWS = 200
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}")
 
 
-def _flat(value: Any) -> bool:
+def _flat(value: object) -> bool:
     return value is None or isinstance(value, str | int | float | bool)
 
 
-def _number(value: Any) -> bool:
+def _number(value: object) -> bool:
     return isinstance(value, int | float) and not isinstance(value, bool)
 
 
@@ -46,42 +48,42 @@ def _singular(key: str) -> str:
     return key
 
 
-def _cell(key: str, value: Any) -> Any:
+def _cell(key: str, value: JsonValue) -> JsonValue:
     """`value` as one cell: flat as it is; a list of scalars joined; a list of objects or a nested object as a count
     naming its key, so the column says what it holds without unfolding it."""
     if _flat(value):
         return value
     if isinstance(value, list):
-        items = cast(list[Any], value)
+        items = cast(JsonList, value)
         if all(_flat(v) for v in items):
             return ", ".join("" if v is None else str(v) for v in items)
         n = len(items)
         return f"{n} {_singular(key) if n == 1 else key}"
     if isinstance(value, dict):
-        n = len(cast(dict[str, Any], value))
+        n = len(cast(Json, value))
         return f"1 {_singular(key)}" if n else f"0 {key}"
     return str(value)
 
 
-def _flatten(row: dict[str, Any]) -> dict[str, Any]:
+def _flatten(row: Json) -> Json:
     return {k: _cell(k, v) for k, v in row.items()}
 
 
-def _object_columns(rows: list[dict[str, Any]]) -> set[str]:
+def _object_columns(rows: list[Json]) -> set[str]:
     """Keys holding an object in every row: per-row metadata such as Salesforce's `attributes`, which a table would
     draw as "1 attribute" in each row."""
     keys = set(rows[0]) if rows else set[str]()
     return {k for k in keys if all(isinstance(r.get(k), dict) for r in rows)}
 
 
-def _rows(data: Any) -> list[dict[str, Any]] | None:
+def _rows(data: object) -> list[Json] | None:
     if not isinstance(data, list) or not data:
         return None
-    raw: list[dict[str, Any]] = []
-    for r in cast(list[Any], data):
+    raw: list[Json] = []
+    for r in cast(JsonList, data):
         if not isinstance(r, dict):
             return None
-        row = cast(dict[str, Any], r)
+        row = cast(Json, r)
         if not row:
             return None
         raw.append(row)
@@ -104,21 +106,21 @@ def _plural(word: str) -> str:
     return word + "s"
 
 
-def _kind_of(rows: Any) -> str | None:
+def _kind_of(rows: object) -> str | None:
     """The rows' own type, when every row's metadata object names the same one (`attributes.type` in Salesforce's
     records): "Account" titles the table "Accounts"."""
     if not isinstance(rows, list) or not rows:
         return None
-    raw = [cast(dict[str, Any], r) for r in cast(list[Any], rows) if isinstance(r, dict)]
+    raw = [cast(Json, r) for r in cast(JsonList, rows) if isinstance(r, dict)]
     types: set[str] = set()
     for k in _object_columns(raw):
-        found = {str(cast(dict[str, Any], r[k]).get("type") or "") for r in raw}
+        found = {str(cast(Json, r[k]).get("type") or "") for r in raw}
         if len(found) == 1 and (t := found.pop()):
             types.add(t)
     return _plural(types.pop()) if len(types) == 1 else None
 
 
-def _title(key: str | None, rows: Any, fallback: str | None) -> str | None:
+def _title(key: str | None, rows: object, fallback: str | None) -> str | None:
     """A table's title: its rows' own type, else the list's key when it names them (`transactions`), else the tool's
     title, never a generic container key such as `records`."""
     if (kind := _kind_of(rows)) is not None:
@@ -128,7 +130,7 @@ def _title(key: str | None, rows: Any, fallback: str | None) -> str | None:
     return fallback
 
 
-def _series(rows: list[dict[str, Any]]) -> tuple[dict[str, Any], str] | None:
+def _series(rows: list[Json]) -> tuple[Json, str] | None:
     if len(rows) < 2:
         return None
     keys = list(rows[0])
@@ -138,27 +140,28 @@ def _series(rows: list[dict[str, Any]]) -> tuple[dict[str, Any], str] | None:
     others = [k for k in keys if k not in numeric]
     if len(others) == 1:
         x = others[0]
-        if not all(isinstance(r[x], str) and DATE.match(r[x]) for r in rows):
+        if not all(isinstance(v := r[x], str) and DATE.match(v) for r in rows):
             return None
     elif not others and numeric:
         # Every column numeric: the first is the x axis when it is an ordinal (integers strictly increasing).
         x = keys[0]
         values = [r[x] for r in rows]
-        if not all(isinstance(v, int) for v in values) or any(b <= a for a, b in pairwise(values)):
+        ordinals = [v for v in values if isinstance(v, int)]
+        if len(ordinals) != len(values) or any(b <= a for a, b in pairwise(ordinals)):
             return None
         numeric = [k for k in numeric if k != x]
     else:
         return None
     if not numeric:
         return None
-    data = {"x": [r[x] for r in rows], "series": [{"name": k, "y": [r[k] for r in rows]} for k in numeric]}
+    data: Json = {"x": [r[x] for r in rows], "series": [{"name": k, "y": [r[k] for r in rows]} for k in numeric]}
     return data, x
 
 
-def _metric(data: Any) -> dict[str, Any] | None:
+def _metric(data: object) -> Json | None:
     if not isinstance(data, dict):
         return None
-    d = cast(dict[str, Any], data)
+    d = cast(Json, data)
     if not (_number(d.get("value")) and isinstance(d.get("label"), str)):
         return None
     if set(d) - {"value", "label", "unit", "delta"}:
@@ -170,19 +173,19 @@ def _metric(data: Any) -> dict[str, Any] | None:
     return d
 
 
-def _record(data: Any) -> dict[str, Any] | None:
+def _record(data: object) -> Json | None:
     if not isinstance(data, dict) or not data:
         return None
-    return _flatten(cast(dict[str, Any], data))
+    return _flatten(cast(Json, data))
 
 
-def _as(shape: str, data: Any) -> tuple[Any, dict[str, Any]] | None:
+def _as(shape: str, data: object) -> tuple[object, Json] | None:
     """`data` as `shape`, with its hint, or None when it does not fit."""
     if shape == "rows":
         rows = _rows(data)
         if rows is None:
             return None
-        return rows, ({"truncatedFrom": len(cast(list[Any], data))} if len(cast(list[Any], data)) > len(rows) else {})
+        return rows, ({"truncatedFrom": len(cast(JsonList, data))} if len(cast(JsonList, data)) > len(rows) else {})
     if shape == "series":
         rows = _rows(data)
         found = _series(rows) if rows is not None else None
@@ -196,7 +199,7 @@ def _as(shape: str, data: Any) -> tuple[Any, dict[str, Any]] | None:
     return None
 
 
-def _objects(items: list[Any]) -> bool:
+def _objects(items: JsonList) -> bool:
     return bool(items) and all(isinstance(r, dict) for r in items)
 
 
@@ -205,34 +208,34 @@ def _objects(items: list[Any]) -> bool:
 PAGING_KEY = re.compile(r"next|cursor|token|page|url|link", re.IGNORECASE)
 
 
-def _paging(key: str, value: Any) -> bool:
+def _paging(key: str, value: JsonValue) -> bool:
     """Whether a value beside a list is the envelope's own: a count, a done flag, null, or a paging link."""
     if value is None or isinstance(value, bool | int | float):
         return True
     return isinstance(value, str) and bool(PAGING_KEY.search(key))
 
 
-def _listed(output: Any) -> tuple[str, list[Any]] | None:
+def _listed(output: object) -> tuple[str, JsonList] | None:
     """(key, list) when `output` is one list in an envelope: its only key, or its only list of objects beside a count,
     a done flag or a next-page link (Salesforce's {totalSize, done, nextRecordsUrl, records})."""
     if not isinstance(output, dict):
         return None
-    o = cast(dict[str, Any], output)
+    o = cast(Json, output)
     if len(o) == 1:
         ((key, value),) = o.items()
-        return (key, cast(list[Any], value)) if isinstance(value, list) else None
-    lists = [k for k, v in o.items() if isinstance(v, list) and _objects(cast(list[Any], v))]
+        return (key, cast(JsonList, value)) if isinstance(value, list) else None
+    lists = [k for k, v in o.items() if isinstance(v, list) and _objects(cast(JsonList, v))]
     if len(lists) == 1 and all(_paging(k, v) for k, v in o.items() if k != lists[0]):
-        return lists[0], cast(list[Any], o[lists[0]])
+        return lists[0], cast(JsonList, o[lists[0]])
     return None
 
 
 def shape_part(
-    output: Any, *, part_id: str, declared: str | None = None, title: str | None = None
+    output: object, *, part_id: str, declared: str | None = None, title: str | None = None
 ) -> dict[str, Any] | None:
     """The widget part for a tool's `output`, or None when it stays a plain tool card. `title` is the tool's own (a
     plugin tool's), which a table falls back to when its rows and key name nothing."""
-    data: Any = output
+    data: object = output
     key: str | None = None
     found = _listed(output)
     if found is not None:

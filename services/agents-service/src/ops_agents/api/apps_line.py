@@ -13,11 +13,12 @@ from __future__ import annotations
 
 import time
 from collections.abc import Mapping
-from typing import Any, cast
+from typing import cast
 
 from langgraph.config import get_config
 
 from ops_agent_kernel.types import PromptFragment
+from ops_service_kit.http import Json, JsonList
 from ops_service_kit.logging import get_logger
 
 from ..activities.tool_directory import ToolsUnavailable
@@ -37,7 +38,7 @@ MAX_CHARS = 400
 HEAD = "Apps for this conversation, from the team's settings:"
 
 
-def describe(card: dict[str, Any]) -> str | None:
+def describe(card: Json) -> str | None:
     """One app as the model reads it, or None for one it should not hear of: a built-in (its tools are offered as
     they are) or a plugin the install does not load. An app whose account this chat or its agent chose names it, so
     the model says which org it acted in; it cannot switch accounts, the person does with Change in the composer."""
@@ -49,7 +50,7 @@ def describe(card: dict[str, Any]) -> str | None:
     return f"{line} · uses {uses}{where}"
 
 
-def _describe(card: dict[str, Any]) -> str | None:
+def _describe(card: Json) -> str | None:
     kind, state, name = card.get("kind"), card.get("appState"), str(card.get("name") or "")
     if not name or kind == "builtin" or card.get("appGroup") == "gone":
         return None
@@ -71,20 +72,18 @@ def _describe(card: dict[str, Any]) -> str | None:
     return f"{name}: on · " + ("you are signed in" if person else "signed in with the team account")
 
 
-def left_out(
-    cards: list[dict[str, Any]], held: list[str], module_of: Mapping[str, str | None], off: set[str]
-) -> list[dict[str, Any]]:
+def left_out(cards: list[Json], held: list[str], module_of: Mapping[str, str | None], off: set[str]) -> list[Json]:
     """The cards with `leftOut` on each app this chat left out: every tool the agent holds of it is in the chat's
     toolsOff (the composer's connector picker). One tool switched off in the settings panel leaves the app in."""
-    out: list[dict[str, Any]] = []
+    out: list[Json] = []
     for c in cards:
-        modules = set(cast(list[Any], c.get("moduleIds") or []))
+        modules = set(cast(JsonList, c.get("moduleIds") or []))
         tools = {t for t in held if module_of.get(t) in modules}
         out.append({**c, "leftOut": True} if tools and tools <= off else c)
     return out
 
 
-def render(cards: list[dict[str, Any]]) -> str | None:
+def render(cards: list[Json]) -> str | None:
     """The line for these cards, within MAX_CHARS; None when the team has no app to name."""
     lines = [d for c in cards if (d := describe(c)) is not None]
     if not lines:
@@ -105,7 +104,7 @@ class AppsLine:
 
     def __init__(self, rt: Runtime) -> None:
         self.rt = rt
-        self._kept: dict[tuple[str, str], tuple[float, list[dict[str, Any]]]] = {}
+        self._kept: dict[tuple[str, str], tuple[float, list[Json]]] = {}
 
     def forget(self, team_id: str) -> None:
         """Drops the team's kept lines, so the next turn reads the apps again (an app was just turned on)."""
@@ -138,14 +137,14 @@ class AppsLine:
         text = render(await self._this_chat(agent_id, cards))
         return PromptFragment(text, False) if text else None
 
-    async def _this_chat(self, agent_id: str, cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async def _this_chat(self, agent_id: str, cards: list[Json]) -> list[Json]:
         """The cards as this chat has them: an app the person left out of it reads so (left_out)."""
         try:
             thread_id = str((get_config().get("configurable") or {}).get("thread_id") or "")
         except RuntimeError:
             return cards
         thread = await graph_store(self.rt).thread(thread_id) if thread_id else None
-        overrides = cast(dict[str, Any], (thread or {}).get("overrides") or {})
+        overrides = cast(Json, (thread or {}).get("overrides") or {})
         off = set(cast(list[str], overrides.get("toolsOff") or []))
         agent = await live_agent(self.rt, agent_id)
         if agent is not None:
@@ -159,11 +158,11 @@ class AppsLine:
             return cards
         return left_out(cards, list(agent.tools), {o.name: o.module_id for o in ops}, off)
 
-    async def _uses(self, cards: list[dict[str, Any]], chosen: dict[str, str], team: str) -> list[dict[str, Any]]:
+    async def _uses(self, cards: list[Json], chosen: dict[str, str], team: str) -> list[Json]:
         """The cards with the account each chosen app uses, and what it points at, from tools-service's own list."""
         if not chosen or self.rt.app_states is None:
             return cards
-        out: list[dict[str, Any]] = []
+        out: list[Json] = []
         for c in cards:
             name = chosen.get(str(c.get("id")))
             if not name:
@@ -185,7 +184,7 @@ class AppsLine:
         cards = await self.cards(team, email, now)
         return render(cards) if cards is not None else None
 
-    async def cards(self, team: str, email: str, now: float | None = None) -> list[dict[str, Any]] | None:
+    async def cards(self, team: str, email: str, now: float | None = None) -> list[Json] | None:
         at = time.monotonic() if now is None else now
         kept = self._kept.get((team, email))
         if kept is not None and at - kept[0] < KEEP_S:
@@ -205,7 +204,7 @@ class AppsLine:
         if agent is None or turn is None:
             return {}
         cards = await self.cards(*turn) or []
-        by_module = {str(m): c for c in cards for m in cast(list[Any], c.get("moduleIds") or [])}
+        by_module = {str(m): c for c in cards for m in cast(JsonList, c.get("moduleIds") or [])}
         try:
             ops = await self.rt.directory().operations()
         except ToolsUnavailable:

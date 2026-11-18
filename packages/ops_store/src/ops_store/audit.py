@@ -10,9 +10,10 @@ once platform-service answers, at least once, and platform-service keeps one row
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from collections.abc import Mapping
 
 import sqlalchemy as sa
+from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from .outbox import add
@@ -36,7 +37,7 @@ async def record(
     target_kind: str,
     target_id: str,
     summary: str,
-    detail: dict[str, Any],
+    detail: Mapping[str, JsonValue],
     request_id: str | None = None,
 ) -> str:
     """Writes the entry on the caller's connection, so it commits with the change it records; returns its id.

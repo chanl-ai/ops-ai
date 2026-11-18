@@ -7,7 +7,7 @@ against them; `ops_service_kit.contract` closes that gap in each service's tests
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from typing import Any, Literal, TypedDict, cast
+from typing import Any, Generic, Literal, NotRequired, TypedDict, cast
 
 from fastapi import FastAPI, Request
 from fastapi.dependencies.models import Dependant
@@ -20,6 +20,7 @@ from pydantic.alias_generators import to_camel
 from starlette.exceptions import HTTPException
 from starlette.middleware import Middleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+from typing_extensions import TypeVar
 
 from .errors import ApiError, TooManyRequests
 from .ids import new_id
@@ -207,7 +208,19 @@ def options_window(cursor: str | None, limit: int) -> tuple[int, int]:
     return offset, limit + 1
 
 
-def options_page(rows: list[dict[str, Any]], offset: int, limit: int) -> dict[str, Any]:
+# A page's row: a caller whose rows have a named shape (a TypedDict, a model's dump) gets the page back typed with
+# them, with no copy; a bare `ListPage` or `OptionsJSON` holds the dict of each row's columns.
+R = TypeVar("R", default=dict[str, Any])
+
+
+class OptionsJSON(TypedDict, Generic[R]):
+    """The `OptionsPage` JSON, as `options_page()` builds it."""
+
+    data: list[R]
+    nextCursor: str | None
+
+
+def options_page(rows: list[R], offset: int, limit: int) -> OptionsJSON[R]:
     """The OptionsPage JSON for rows read with `options_window` (up to limit + 1 of them)."""
     more = len(rows) > limit
     return {"data": rows[:limit], "nextCursor": str(offset + limit) if more else None}
@@ -245,19 +258,30 @@ def pagination(total: int, page: int, page_size: int) -> PageJSON:
     }
 
 
+class ListPage(TypedDict, Generic[R]):
+    """The `ListResult` JSON, or `LabelledListResult` when the caller asked for labels."""
+
+    data: list[R]
+    pagination: PageJSON
+    facets: dict[str, dict[str, int]]
+    labels: NotRequired[dict[str, dict[str, str]]]
+
+
 def paged(
-    rows: list[dict[str, Any]],
+    rows: list[R],
     total: int,
     page: int,
     page_size: int,
     *,
     facets: dict[str, dict[str, int]] | None = None,
     labels: dict[str, dict[str, str]] | None = None,
-) -> dict[str, Any]:
+) -> ListPage[R]:
     """The ListResult JSON for one page the store already limited to `page_size` rows; with `labels`, the
     LabelledListResult JSON."""
-    out = {"data": rows, "pagination": pagination(total, page, page_size), "facets": facets or {}}
-    return out if labels is None else out | {"labels": labels}
+    out: ListPage[R] = {"data": rows, "pagination": pagination(total, page, page_size), "facets": facets or {}}
+    if labels is not None:
+        out["labels"] = labels
+    return out
 
 
 def ok(data: Any, status: int = 200) -> JSONResponse:

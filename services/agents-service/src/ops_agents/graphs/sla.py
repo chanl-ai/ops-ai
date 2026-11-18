@@ -17,6 +17,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from ops_service_kit.http import Json
+
 _UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
 _DURATION = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*([smhd])\s*$")
 
@@ -43,7 +45,7 @@ class HumanSettings(BaseModel):
     max_wait_days: float | None = Field(default=None, alias="maxWaitDays")
 
 
-def sla_block(s: HumanSettings, *, group: str, round_: int, escalated: bool) -> dict[str, Any]:
+def sla_block(s: HumanSettings, *, group: str, round_: int, escalated: bool) -> Json:
     """What the interrupt tells the timer writer. An escalated review has no breach or warning, only its max wait."""
     return {
         "group": group,
@@ -58,12 +60,10 @@ def sla_block(s: HumanSettings, *, group: str, round_: int, escalated: bool) -> 
     }
 
 
-def review_loop(
-    payload: dict[str, Any], s: HumanSettings, raise_interrupt: Callable[[dict[str, Any]], Any]
-) -> dict[str, Any]:
+def review_loop(payload: Json, s: HumanSettings, raise_interrupt: Callable[[Json], Any]) -> Json:
     group, round_, escalated = s.group, 0, False
     while True:
-        decision: dict[str, Any] = raise_interrupt(
+        decision: Json = raise_interrupt(
             {**payload, "sla": sla_block(s, group=group, round_=round_, escalated=escalated)}
         )
         if decision.get("decision") != "timeout":

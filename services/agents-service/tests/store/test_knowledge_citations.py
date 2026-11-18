@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from ops_agents.store.agent_registry import AgentRegistry
 from ops_agents.store.knowledge_citations import KnowledgeCitations
 from ops_agents.store.tenancy import OWNER
+from ops_service_kit.http import Json
 from ops_store import isolation
 from ops_store.team_scope import acting_as
 
@@ -35,11 +36,16 @@ async def test_a_team_reads_only_its_own_agents_citing_the_bases_asked(engine: A
         ("b", "team_b", ["kb_x"]),
     ):
         with isolation.scope(tenant, team), acting_as(team):
-            spec = {"name": f"Agent {key}", "collections": collections}
+            # A whole spec (a role too): the agent is published, and the catalogue serves it to later tests.
+            spec: Json = {"name": f"Agent {key}", "role": "Answers questions", "collections": [*collections]}
             made[key] = await reg.create(spec, by="maya@x.example", team_id=team, published=True)
     with isolation.scope(tenant, "team_a"), acting_as("team_a"):
         # A newer draft that drops the base: the agent still serves version 1, which cites it.
-        await reg.save(made["served"], {"name": "Agent served", "collections": []}, by="maya@x.example")
+        await reg.save(
+            made["served"],
+            {"name": "Agent served", "role": "Answers questions", "collections": []},
+            by="maya@x.example",
+        )
     store = KnowledgeCitations(engine)
     # The tenant-wide scope opens every team's rows to the policy, so the query's own predicates are what stand.
     with isolation.tenant_wide(OWNER, tenant_id=tenant), acting_as("team_a"):

@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 from decimal import Decimal
-from typing import Annotated, Any, Literal, TypeAlias, cast
+from typing import Annotated, Any, Literal, TypeAlias
 
 from fastapi import APIRouter, Depends
 from fastapi.encoders import jsonable_encoder
@@ -31,9 +31,10 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
-from ops_service_kit.http import Envelope, In, ListResult
+from ops_service_kit.http import Envelope, In, Json, ListResult
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListQuery
+from ops_service_kit.narrow import an_object, json_object
 from ops_store import isolation
 
 from ...store.leases import LeaseHeldError
@@ -139,15 +140,15 @@ _definition = definition
 _thread = resolve
 
 
-def with_children(values: dict[str, Any], meta: dict[str, Any]) -> dict[str, Any]:
+def with_children(values: Json, meta: Json) -> Json:
     """The state with each child case's current outcome (hitl_facade.children_view): a child finishing after the
     parent's run ended writes its outcome back to the checkpoint when the parent's lease is free, and to the meta
     always, so the meta is read over the values here."""
     children = hitl_facade.children_view(values, meta)
-    return {**values, "children": children} if children is not None else values
+    return {**values, "children": [*children]} if children is not None else values
 
 
-def _thread_view(row: dict[str, Any]) -> dict[str, Any]:
+def _thread_view(row: Json) -> Json:
     return {
         "threadId": row["id"],
         "graph": row["graph"],
@@ -202,10 +203,10 @@ async def create_thread(rt: Rt, me: Me, _: Tx, body: ThreadInput) -> JSONRespons
             raise ValidationFailed(f"Unknown graph {body.graph}. Graphs: {', '.join(names)}.")
         # A key's pin outranks the workflow's own pointer.
         wanted = key_pin or body.version or pinned
-        chosen = next((v for v in versions if v["version"] == wanted), None) if wanted else versions[-1]
+        chosen = next((v for v in versions if v.version == wanted), None) if wanted else versions[-1]
         if chosen is None:
             raise NotFound(f"{body.graph} version {body.version}")
-        version, digest = chosen["version"], chosen["digest"]
+        version, digest = chosen.version, chosen.digest
     if body.external_key is None:
         await store.create_thread(
             thread_id, body.graph, owned(body.metadata, me), me.team_id, now_iso(), version=version, digest=digest
@@ -218,7 +219,7 @@ async def create_thread(rt: Rt, me: Me, _: Tx, body: ThreadInput) -> JSONRespons
         )
 
     # Find-or-create by external key, one transaction. A paused deployment returns an existing case but opens none.
-    default_budget: dict[str, Any] | None = None
+    default_budget: Json | None = None
     if body.deployment_id is not None:
         assert rt.channels is not None
         deployment = await rt.channels.deployment(body.deployment_id)
@@ -231,8 +232,8 @@ async def create_thread(rt: Rt, me: Me, _: Tx, body: ThreadInput) -> JSONRespons
                 raise Conflict(
                     f"Deployment {body.deployment_id} is paused; it opens no new cases.", code="deployment_paused"
                 )
-            return ok({"threadId": existing["id"], "graph": existing["graph"], "created": False})
-    row, created = await store.find_or_create_thread(
+            return ok({"threadId": existing.id, "graph": existing.graph, "created": False})
+    row, created = await store.open_thread(
         thread_id,
         body.graph,
         owned(body.metadata, me),
@@ -245,9 +246,9 @@ async def create_thread(rt: Rt, me: Me, _: Tx, body: ThreadInput) -> JSONRespons
         digest=digest,
     )
     if created:
-        await _set_budget(rt, row["id"], body.budget, default_budget)
-        await _agent_budget(rt, row["id"], body.graph)
-    data = {"threadId": row["id"], "graph": row["graph"], "version": row["version"], "created": created}
+        await _set_budget(rt, row.id, body.budget, default_budget)
+        await _agent_budget(rt, row.id, body.graph)
+    data = {"threadId": row.id, "graph": row.graph, "version": row.version, "created": created}
     return ok(data, status=201 if created else 200)
 
 
@@ -270,19 +271,19 @@ async def list_threads(rt: Rt, me: Me, _: Tx, q: ListQuery, graph: str | None = 
     return ok({**listed, "data": [_thread_view(dict(r)) for r in listed["data"]]})
 
 
-async def _worded_failure(rt: Runtime, values: dict[str, Any]) -> dict[str, Any]:
+async def _worded_failure(rt: Runtime, values: Json) -> Json:
     """A refused call's `tool_error` with `action`, the call in words (describe_call's label), so no page words a tool
     itself."""
-    raw = values.get("tool_error")
-    failure = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
+    failure = json_object(values.get("tool_error"))
     if not failure.get("tool"):
         return values
     # The input the refused call carried, when a decision chose it.
-    decision = cast(dict[str, Any], values.get("decision") or {})
-    call = cast(dict[str, Any], decision.get("call") or {})
+    decision = an_object(values.get("decision") or {}, "the step's decision")
+    call = an_object(decision.get("call") or {}, "the decided call")
     given = call.get("input") if call.get("tool") == failure["tool"] else None
     told = await describe_call(rt, {"tool": failure["tool"], "input": given or {}}, currency=None, money_key=None)
-    return values | {"tool_error": failure | {"action": str(told["label"])}}
+    worded: Json = failure | {"action": str(told["label"])}
+    return {**values, "tool_error": worded}
 
 
 @router.get("/{thread_id}/state", response_model=Envelope[ThreadState])
@@ -321,7 +322,7 @@ async def thread_state(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     )
 
 
-def _frame(event: dict[str, Any]) -> dict[str, str]:
+def _frame(event: Json) -> dict[str, str]:
     return {"data": json.dumps(jsonable_encoder(event), ensure_ascii=False)}
 
 
@@ -338,9 +339,9 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
 
     existing = await store.run(run_id)
     if existing is not None:
-        if existing["thread_id"] != thread_id or existing["status"] == "running":
+        if existing.thread_id != thread_id or existing.status == "running":
             raise Conflict("That run id is already in use.", code="run_active")
-        replay: list[dict[str, Any]] = existing["events"]
+        replay = existing.events
 
         async def replayed() -> AsyncIterator[dict[str, str]]:
             for e in replay:
@@ -362,14 +363,14 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
             )
         # A spent budget follows the chat's rules on every thread: owner or admin, caps only up from spent. A chat
         # answers on its budget route; any other thread here, through the same checks (chat_budget.run_api_answer).
-        budget_pause = isinstance(payload, dict) and cast(dict[str, Any], payload).get("kind") == "budget_exhausted"
-        if budget_pause and cast(dict[str, Any], row["meta"] or {}).get("chat"):
+        budget_pause = json_object(waiting[0]["payload"]).get("kind") == "budget_exhausted"
+        if budget_pause and an_object(row["meta"] or {}, "thread meta").get("chat"):
             raise Conflict(
                 "A spent budget is answered with POST /chat/threads/{threadId}/budget.", code="resume_via_budget"
             )
         answered = (
             await run_api_answer(
-                rt, me, row, cast(dict[str, Any], payload), body.resume.model_dump(mode="json", exclude_none=True)
+                rt, me, row, json_object(waiting[0]["payload"]), body.resume.model_dump(mode="json", exclude_none=True)
             )
             if budget_pause
             else None
@@ -400,7 +401,7 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
         # JSON mode: a budget's Decimal cap travels as a string through the checkpointed resume value.
         resume = answered or body.resume.model_dump(mode="json", exclude_none=True)
         graph_input: Any = Command(resume=resume)
-        journal_input: dict[str, Any] = {"resume": resume}
+        journal_input: Json = {"resume": resume}
     else:
         if waiting:
             raise Conflict("This thread is waiting for a decision; resume it instead.", code="run_waiting")
@@ -454,19 +455,27 @@ async def thread_runs(rt: Rt, me: Me, _: Tx, thread_id: str) -> JSONResponse:
     return ok(
         [
             {
-                "runId": r["id"],
-                "kind": r["kind"],
-                "status": r["status"],
-                "createdAt": r["created_at"],
-                "finishedAt": r["finished_at"],
-                "nodes": [e["node"] for e in r["events"] if e.get("event") == "node_start"],
-                "owner": next((e["data"].get("owner") for e in r["events"] if e.get("event") == "run_start"), None),
+                "runId": r.id,
+                "kind": r.kind,
+                "status": r.status,
+                "createdAt": r.created_at,
+                "finishedAt": r.finished_at,
+                "nodes": [e["node"] for e in r.events if e.get("event") == "node_start"],
+                "owner": next(
+                    (an_object(e["data"], "run data").get("owner") for e in r.events if e.get("event") == "run_start"),
+                    None,
+                ),
                 "generation": next(
-                    (e["data"].get("generation") for e in r["events"] if e.get("event") == "run_start"), None
+                    (
+                        an_object(e["data"], "run data").get("generation")
+                        for e in r.events
+                        if e.get("event") == "run_start"
+                    ),
+                    None,
                 ),
                 # Set by the sweeper for a run whose process died: owner, nodes it was running, generation.
-                "crashed": next((e["data"] for e in r["events"] if e.get("event") == "crashed"), None),
-                "cost": totals_view(by_run[r["id"]]) if r["id"] in by_run else None,
+                "crashed": next((e["data"] for e in r.events if e.get("event") == "crashed"), None),
+                "cost": totals_view(by_run[r.id]) if r.id in by_run else None,
             }
             for r in rows
         ]
@@ -518,7 +527,7 @@ async def list_versions(rt: Rt, _: Tx, name: str) -> JSONResponse:
     """The graph's stored versions, oldest first."""
     return ok(
         [
-            {"name": v["name"], "version": v["version"], "digest": v["digest"], "createdAt": v["created_at"]}
+            {"name": v.name, "version": v.version, "digest": v.digest, "createdAt": v.created_at}
             for v in await _store(rt).versions(name)
         ]
     )
@@ -538,13 +547,13 @@ async def publish_version(rt: Rt, me: Me, name: str, body: PublishInput) -> JSON
         require_builder(
             me,
             area="workflows",
-            team_id=held["team_id"],
+            team_id=held.team_id,
             action="publish",
             what=f"workflow {name}",
         )
         latest = await _store(rt).versions(name)
-        live = latest[-1]["definition"] if latest else None
-        decision = await decide(rt, area="workflows", team_id=held["team_id"], old=live, new=body.definition)
+        live = latest[-1].definition if latest else None
+        decision = await decide(rt, area="workflows", team_id=held.team_id, old=live, new=body.definition)
         if decision.review_required:
             raise Conflict(
                 f"{name} is a registry workflow; ask to publish it at /v1/workflows/{name}/publish-requests.",
@@ -595,7 +604,7 @@ SERVER_META = frozenset(
 )
 
 
-def owned(metadata: dict[str, Any] | None, me: Principal) -> dict[str, Any]:
+def owned(metadata: Json | None, me: Principal) -> Json:
     """The caller's metadata without the keys the server owns, plus the starter the server records."""
     kept = {k: v for k, v in (metadata or {}).items() if k not in SERVER_META}
     # `startedBy` is `key:<id>` for a key, which the Channels list counts its traffic by.
@@ -609,7 +618,7 @@ async def _agent_budget(rt: Runtime, thread_id: str, graph: str) -> None:
         await cap_at_agent(rt, thread_id, agent)
 
 
-async def _set_budget(rt: Runtime, thread_id: str, given: BudgetInput | None, default: dict[str, Any] | None) -> None:
+async def _set_budget(rt: Runtime, thread_id: str, given: BudgetInput | None, default: Json | None) -> None:
     if rt.usage is None:
         return
     raw = given.model_dump(exclude_none=True) if given is not None else default

@@ -5,10 +5,9 @@ the default: a failed read must never lower the bar a field has to clear."""
 
 from __future__ import annotations
 
-from typing import Any, cast
-
 from ops_extract.checks import DEFAULT_FLOOR
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_service_kit.narrow import an_object
 
 POLICY = "extractionFloor"
 
@@ -27,7 +26,8 @@ class PlatformFloor:
         if self.platform is None:
             raise FloorUnreadError(f"The {POLICY} policy could not be read: no service signing key")
         try:
-            value: Any = cast(dict[str, Any], await self.platform.get(f"/v1/policies/{POLICY}") or {}).get("value")
+            found = await self.platform.get(f"/v1/policies/{POLICY}")
+            value = an_object(found or {}, f"the {POLICY} policy").get("value")
         except (ServiceCallError, ServiceUnreachable) as e:
             raise FloorUnreadError(f"The {POLICY} policy could not be read: {e}") from e
         if value is None:

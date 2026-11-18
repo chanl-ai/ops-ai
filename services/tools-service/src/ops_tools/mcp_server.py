@@ -34,7 +34,7 @@ from ops_access import can
 from ops_agent_kernel.ports import ToolOutcome
 from ops_identity import ActingForTokens, Auth, Principal, ServiceClient, service_signer
 from ops_service_kit.errors import ApiError, NotFound, ServiceUnavailable, Unauthorized
-from ops_service_kit.http import error_body
+from ops_service_kit.http import Json, error_body
 from ops_service_kit.ids import new_id
 from ops_service_kit.settings import Settings
 from ops_store import isolation
@@ -43,7 +43,7 @@ from .environments import TEST
 from .gateway_calls import MCP, WRITES, Allowed, CallRequest, GatewayCalls, Outcome, Run
 from .mcp_tools import PLATFORM, PlatformTools
 from .modules.directory import Directory, Sees, Team
-from .registry import Resolved, ToolRegistry, platform_operation
+from .registry import GrantableTool, Resolved, ToolRegistry, platform_operation
 from .store.mcp_links import McpLink, McpLinks
 
 # `/mcp/<team>` is the team's whole address; `/mcp/<team>/<link>` one of its MCP links (store/mcp_links.py).
@@ -196,7 +196,7 @@ class McpAdapter:
         return types.ListToolsResult(tools=[*self.platform.tools(), *tools])
 
     async def _platform_call(
-        self, ctx: Any, name: str, args: dict[str, Any], run: Run, *, resolved: Resolved | None = None
+        self, ctx: Any, name: str, args: Json, run: Run, *, resolved: Resolved | None = None
     ) -> Outcome:
         """One platform operation as a gateway call for the caller: logged on the MCP channel, rate limited, and a write
         held as the team's rule for MCP writes says."""
@@ -216,22 +216,22 @@ class McpAdapter:
         none when they may read no skills."""
         who = _caller(ctx)
 
-        async def run(_args: dict[str, Any]) -> ToolOutcome:
+        async def run(_args: Json) -> ToolOutcome:
             return await self.platform.prompts(who=who.principal, team=who.team.id)
 
         out = await self._platform_call(ctx, "prompts/list", {}, run)
         output: Any = out.output if isinstance(out, Allowed) and out.ok else {}
-        found = cast(list[Any], cast(dict[str, Any], output).get("prompts") or [])
+        found = cast(list[Any], cast(Json, output).get("prompts") or [])
         return types.ListPromptsResult(prompts=[types.Prompt.model_validate(p) for p in found])
 
     async def _get_prompt(self, ctx: Any, params: Any) -> types.GetPromptResult:
         who = _caller(ctx)
         args = {str(k): str(v) for k, v in dict(params.arguments or {}).items()}
 
-        async def run(_args: dict[str, Any]) -> ToolOutcome:
+        async def run(_args: Json) -> ToolOutcome:
             return await self.platform.prompt(str(params.name), args, who=who.principal, team=who.team.id)
 
-        out = await self._platform_call(ctx, "prompts/get", {"name": str(params.name), "arguments": args}, run)
+        out = await self._platform_call(ctx, "prompts/get", {"name": str(params.name), "arguments": {**args}}, run)
         if isinstance(out, Allowed) and out.ok:
             return types.GetPromptResult.model_validate(out.output)
         # The protocol has no error result for a prompt, so a refusal or a missing skill is its error message; any
@@ -258,14 +258,14 @@ class McpAdapter:
                 workflow_id = name.removeprefix(WORKFLOW_PREFIX)
                 args = dict(params.arguments or {})
 
-                async def start(given: dict[str, Any]) -> ToolOutcome:
+                async def start(given: Json) -> ToolOutcome:
                     return await self.platform.start_workflow(workflow_id, given, who=who.principal, team=who.team.id)
 
                 return _tool_result(await self._platform_call(ctx, name, args, start, resolved=WORKFLOW_RUN))
         if who.link is None and self.platform.offers(name):
             args = dict(params.arguments or {})
 
-            async def run(given: dict[str, Any]) -> ToolOutcome:
+            async def run(given: Json) -> ToolOutcome:
                 return await self.platform.run(name, given, who=who.principal, team=who.team.id)
 
             return _tool_result(await self._platform_call(ctx, name, args, run))
@@ -300,7 +300,7 @@ def _key_reaches(principal: Principal, link: McpLink | None) -> None:
         raise Unauthorized("This key opens only the MCP link it was made for.", code="key_target")
 
 
-def _link_tools(link: McpLink, rows: list[dict[str, Any]], *, workflows: bool) -> list[types.Tool]:
+def _link_tools(link: McpLink, rows: list[GrantableTool], *, workflows: bool) -> list[types.Tool]:
     """The link's picked tools that the team may still run, in the order picked, and its picked workflows when the
     caller may start them (`workflows`). A tool the team can no longer run (its module unpublished or drifted) is left
     out, as the gateway would refuse it; a workflow is left out for a caller agents-service would refuse."""
@@ -349,8 +349,8 @@ def _said(outcome: Outcome) -> str:
     """What a refused or failed call tells the assistant: its code and reason."""
     if isinstance(outcome, Allowed):
         output: Any = outcome.output
-        err: Any = cast(dict[str, Any], output).get("error") if isinstance(output, dict) else None
-        e = cast(dict[str, Any], err) if isinstance(err, dict) else {}
+        err: Any = cast(Json, output).get("error") if isinstance(output, dict) else None
+        e = cast(Json, err) if isinstance(err, dict) else {}
         return f"{e.get('code') or 'error'}: {e.get('message') or 'the call failed'}"
     return f"{outcome.code}: {'; '.join(outcome.reasons)}"
 
@@ -413,17 +413,17 @@ def _caller(ctx: Any) -> McpCaller:
 def _client_name(ctx: Any) -> str | None:
     """The assistant's own name: the 2026 protocol stamps clientInfo on every request; an older client sent it only in
     its initialize, which a stateless server does not keep, so its User-Agent stands in."""
-    meta = cast(dict[str, Any], ctx.meta or {})
+    meta = cast(Json, ctx.meta or {})
     info = meta.get(_CLIENT_INFO)
-    if isinstance(info, dict) and (name := cast(dict[str, Any], info).get("name")):
+    if isinstance(info, dict) and (name := cast(Json, info).get("name")):
         return str(name)[:120]
     agent = ctx.request.headers.get("user-agent") if ctx.request is not None else None
     return str(agent)[:120] if agent else None
 
 
-def _structured(output: Any) -> dict[str, Any]:
+def _structured(output: Any) -> Json:
     """structuredContent must be an object; a list or a scalar answer is wrapped."""
-    return dict(cast(dict[str, Any], output)) if isinstance(output, dict) else {"result": output}
+    return dict(cast(Json, output)) if isinstance(output, dict) else {"result": output}
 
 
 async def _refuse(send: Send, e: ApiError, metadata_url: str | None = None) -> None:

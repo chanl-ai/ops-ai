@@ -45,7 +45,7 @@ async def run_frames(
             return
         # Ends when the run has, not at the first terminal type: the paused node's own end event follows `waiting`.
         run = await store.run(run_id)
-        if not batch and (run is None or run["status"] != "running"):
+        if not batch and (run is None or run.status != "running"):
             return
         await asyncio.sleep(POLL_SECONDS)
 
@@ -87,7 +87,7 @@ async def reattach(
     store = graph_store(rt)
     thread = await store.thread(thread_id)
     run = await store.run(run_id)
-    if thread is None or not may_read_thread(thread, me) or run is None or run["thread_id"] != thread_id:
+    if thread is None or not may_read_thread(thread, me) or run is None or run.thread_id != thread_id:
         raise NotFound("Run")
     return EventSourceResponse(run_frames(rt, thread_id, run_id, after, follow=follow), sep="\n", ping=15)
 

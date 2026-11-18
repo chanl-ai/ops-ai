@@ -11,6 +11,7 @@ from contextvars import ContextVar
 from typing import Any, Protocol, cast
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
+from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 
 from ..store.tenancy import current_tenant
@@ -60,7 +61,7 @@ class PlatformReviewSla:
         if self.platform is None:
             return DEFAULT_HOURS
         try:
-            value: Any = cast(dict[str, Any], await self.platform.get(f"/v1/policies/{POLICY}") or {}).get("value")
+            value: Any = cast(Json, await self.platform.get(f"/v1/policies/{POLICY}") or {}).get("value")
         except (ServiceCallError, ServiceUnreachable) as e:
             log.warning("review deadline policy unread; using the default", extra={"error": str(e)})
             return DEFAULT_HOURS

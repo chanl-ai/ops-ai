@@ -11,6 +11,7 @@ import pytest
 
 from ops_agents.api import engine_reviews
 from ops_service_kit.errors import ValidationFailed
+from ops_service_kit.http import JsonList
 
 RUN: dict[str, Any] = {"id": "wfrun_1", "workflow_id": "w", "updated_at": "now", "waiting": None}
 # Named, so the view reads no definition.
@@ -47,7 +48,7 @@ LEVY_DRAFT: dict[str, Any] = {
         {"id": "SAV-4410", "currency": "CAD", "balance": 18250.0},
     ],
 }
-LEVY_CALLS: list[dict[str, Any]] = [
+LEVY_CALLS: list[engine_reviews.ProposedCall] = [
     {"tool": "place_hold", "input": {"account_id": "CHQ-2219", "amount": 3250.0, "reason": "NS-2026-GN-01187"}},
     {"tool": "add_customer_note", "input": {"customer_id": "CUS-1001", "text": "Levy notice received."}},
 ]
@@ -66,13 +67,13 @@ def test_a_review_with_no_customer_or_amount_leaves_them_empty_and_shows_a_text_
     assert typed == {"customer": "", "amount": None, "currency": None, "proposal": text}
 
 
-PAUSED: dict[str, Any] = {
+PAUSED: engine_reviews.ReviewPayload = {
     "editable": {"path": "$.nodes.read.out.records", "value": [{"values": {"name": "A", "amount": 1.0}}]}
 }
 
 
 def test_a_correction_keeps_to_the_reads_fields() -> None:
-    fixed = [{"values": {"name": "A", "amount": 2.0}}]
+    fixed: JsonList = [{"values": {"name": "A", "amount": 2.0}}]
     assert engine_reviews.correction(PAUSED, {"edited": fixed, "amount": 5}) == (fixed, {"amount": 5})
     assert engine_reviews.correction(PAUSED, None)[0] is engine_reviews.NOTHING
     with pytest.raises(ValidationFailed, match="ssn"):

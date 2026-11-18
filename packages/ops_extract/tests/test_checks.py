@@ -43,13 +43,13 @@ def test_a_quote_found_only_after_folding_counts_for_less() -> None:
 
 
 def test_money_and_dates_in_other_formats_are_normalised_and_bad_ones_rejected() -> None:
-    assert normalise(dict(AMOUNT), "$1,234.50") == (1234.5, 0.9)
-    assert normalise(dict(AMOUNT), 1234.5) == (1234.5, 1.0)
-    assert normalise(dict(AMOUNT), "1.234,50 €") == (1234.5, 0.9)
-    assert normalise(dict(AMOUNT), "twelve") == (None, 0.0)
-    assert normalise(dict(DUE), "30 Nov 2026") == ("2026-11-30", 0.9)
-    assert normalise(dict(DUE), "2026-11-30") == ("2026-11-30", 1.0)
-    assert normalise(dict(DUE), "31 Nov 2026") == (None, 0.0)
+    assert normalise(AMOUNT, "$1,234.50") == (1234.5, 0.9)
+    assert normalise(AMOUNT, 1234.5) == (1234.5, 1.0)
+    assert normalise(AMOUNT, "1.234,50 €") == (1234.5, 0.9)
+    assert normalise(AMOUNT, "twelve") == (None, 0.0)
+    assert normalise(DUE, "30 Nov 2026") == ("2026-11-30", 0.9)
+    assert normalise(DUE, "2026-11-30") == ("2026-11-30", 1.0)
+    assert normalise(DUE, "31 Nov 2026") == (None, 0.0)
     bad = scored(DUE, {"value": "someday", "quote": "Due 30 Nov 2026", "page": 2})
     assert bad["confidence"] == 0 and bad["needsReview"]
 

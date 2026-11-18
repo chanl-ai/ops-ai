@@ -230,9 +230,7 @@ def secrets_router(
         """The team's auth configs, id to name, so a client secret names the config it is changed on."""
         if credentials is None:
             return {}
-        return {
-            str(c["id"]): str(c.get("name") or c["id"]) for c in await credentials.team_credentials(tenant_id, owner)
-        }
+        return {c.id: c.name or c.id for c in await credentials.team_credentials(tenant_id, owner)}
 
     async def _one(who: Person, owner: str, name: str) -> dict[str, Any]:
         configs = await _configs(who.tenant_id, owner)

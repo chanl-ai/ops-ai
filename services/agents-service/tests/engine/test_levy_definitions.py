@@ -260,7 +260,8 @@ async def test_a_notice_started_from_the_form_ends_with_its_cases_and_the_reply_
 async def test_a_form_notice_with_a_mailbox_and_no_subject_waits_for_the_reply_with_the_forms_subject() -> None:
     """A form start with a mailbox and no subject failed at the acknowledgement, which had no subject to reply
     with. The start form gives the subject a default, and the reply check skips a run that still has none."""
-    schema = cast(dict[str, Any], (trigger_node(SEED["mail_document"]) or {})["parameters"]["inputSchema"])
+    trigger: dict[str, Any] = trigger_node(SEED["mail_document"]) or {}
+    schema = cast(dict[str, Any], trigger["parameters"]["inputSchema"])
     sent = {"fileId": "fil_1", "from": "registry@court.test", "mailbox": "levies@harborpine.test"}
     given, missing = form_values(schema, sent)
     [paused], _, _, _, _, _ = await _notice("md3", given)

@@ -19,6 +19,7 @@ from urllib.parse import quote, urlsplit
 import httpx
 from jinja2 import StrictUndefined
 from jinja2.sandbox import SandboxedEnvironment
+from pydantic import JsonValue
 
 from . import paging
 from .context import Context, Response
@@ -105,9 +106,9 @@ def call(plugin: Plugin, tool: str, args: Mapping[str, Any], settings: Mapping[s
     given = paging.with_defaults(t, args)
     # The cursor is the next page's state as tools-service keeps it, here unsealed: the test reads it back as given.
     cursor = given.pop("cursor", None) if req.paging is not None else None
-    state: dict[str, Any] | None = json.loads(cursor) if cursor else None
+    state: dict[str, JsonValue] | None = json.loads(cursor) if cursor else None
     if state is not None:
-        given = dict(state.get("args") or {})
+        given = dict(cast(dict[str, JsonValue], state.get("args") or {}))
     sent = paging.arguments(t, given, state)
     method, body = req.method, None
     params: dict[str, Any] | None = None
@@ -142,23 +143,23 @@ def call(plugin: Plugin, tool: str, args: Mapping[str, Any], settings: Mapping[s
     return paging.with_next(out, json.dumps({**found, "args": given})) if found else out
 
 
-def _items(page: Any) -> list[dict[str, Any]] | None:
+def _items(page: Any) -> list[dict[str, JsonValue]] | None:
     if not isinstance(page, dict):
         return None
-    rows = cast(dict[str, Any], page).get("items")
+    rows = cast(dict[str, JsonValue], page).get("items")
     if not isinstance(rows, list):
         return None
-    return [cast(dict[str, Any], r) for r in cast(list[Any], rows) if isinstance(r, dict)]
+    return [cast(dict[str, JsonValue], r) for r in cast(list[Any], rows) if isinstance(r, dict)]
 
 
 def _list_all(
     plugin: Plugin, tool: str, args: Mapping[str, Any], settings: Mapping[str, Any], fake: Fake
-) -> tuple[list[dict[str, Any]], dict[str, Any], list[str]]:
+) -> tuple[list[dict[str, JsonValue]], dict[str, JsonValue], list[str]]:
     """Every item a listing or changes tool gives, page by page, its last page, and what is wrong with its pages."""
-    out: list[dict[str, Any]] = []
+    out: list[dict[str, JsonValue]] = []
     problems: list[str] = []
-    cursor: str | None = None
-    last: dict[str, Any] = {}
+    cursor: JsonValue = None
+    last: dict[str, JsonValue] = {}
     for _ in range(100):
         page = call(plugin, tool, {**args, **({"cursor": cursor} if cursor else {})}, settings, fake)
         rows = _items(page)
@@ -169,7 +170,7 @@ def _list_all(
             if not {"id", "updated_at"} <= set(r):
                 problems.append(f"{tool} gave an item without id and updated_at: {sorted(r)}")
         out += rows
-        last = cast(dict[str, Any], page)
+        last = cast(dict[str, JsonValue], page)
         cursor = last.get("next_cursor")
         if not cursor:
             break
@@ -194,7 +195,7 @@ def knowledge_contract(
     found = next((s for s in plugin.manifest.knowledge_sources if s.name == source), None)
     if found is None:
         return [f"{plugin.manifest.id} offers no knowledge source {source}"]
-    given: dict[str, Any] = {"source": dict(values)} if values is not None else {}
+    given: dict[str, JsonValue] = {"source": dict(values)} if values is not None else {}
     items, last, problems = _list_all(plugin, found.list, given, settings, fake)
     if not items:
         return [*problems, f"{found.list} listed nothing to check"]
@@ -203,7 +204,7 @@ def knowledge_contract(
     if not isinstance(got, dict) or "content" not in got:
         problems.append(f"{found.get} gave no content for {first['id']}")
     else:
-        fetched = cast(dict[str, Any], got)
+        fetched = cast(dict[str, JsonValue], got)
         if not fetched.get("mime"):
             problems.append(f"{found.get} gave no mime for {first['id']}")
         allowed = fetched.get("allowed")
@@ -213,7 +214,7 @@ def knowledge_contract(
         get_tool = plugin.manifest.tool(found.get)
         if tag and get_tool is not None and "tag" in get_tool.input:
             again = call(plugin, found.get, {**given, "id": first["id"], "tag": tag}, settings, fake)
-            if not (isinstance(again, dict) and cast(dict[str, Any], again).get("unchanged") is True):
+            if not (isinstance(again, dict) and cast(dict[str, JsonValue], again).get("unchanged") is True):
                 problems.append(f"{found.get} fetched {first['id']} again though its tag {tag} still matches")
     changed = change()
     if found.changes is not None:
@@ -230,7 +231,11 @@ def knowledge_contract(
     gone = delete()
     if found.deleted is not None:
         answer = call(plugin, found.deleted, {**given, "since": str(first.get("updated_at") or "")}, settings, fake)
-        listed = cast(list[Any], cast(dict[str, Any], answer).get("ids") or []) if isinstance(answer, dict) else []
+        listed = (
+            cast(list[JsonValue], cast(dict[str, JsonValue], answer).get("ids") or [])
+            if isinstance(answer, dict)
+            else []
+        )
         ids = {str(i) for i in listed}
         if gone not in ids:
             problems.append(f"{found.deleted} did not report {gone} as deleted")

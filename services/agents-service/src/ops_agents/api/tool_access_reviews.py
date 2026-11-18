@@ -4,9 +4,10 @@ listed and decided as its run; `publish_reviews` lists none and refuses a decisi
 
 from __future__ import annotations
 
-from typing import Any
+from typing import cast
 
-from .agent_registry import review_view
+from ..store.agent_registry import PublishRequestRow
+from .agent_registry import ReviewView, review_view
 from .deps import Runtime
 from .review_sla import sla_hours
 
@@ -14,25 +15,29 @@ KIND = "tool_access"
 ENVIRONMENTS = {"production": "Production", "test": "Test"}
 
 
-def team(req: dict[str, Any]) -> str | None:
+def team(req: PublishRequestRow) -> str | None:
     """The team whose reviewers decide it: the module's team, or the one an operation names as its approver."""
-    return str(req["body"].get("deciderTeam") or "") or None
+    return str(req.body.get("deciderTeam") or "") or None
 
 
-async def view(rt: Runtime, req: dict[str, Any]) -> dict[str, Any]:
+async def view(rt: Runtime, req: PublishRequestRow) -> ReviewView:
     # A decision whose apply never reached tools-service left the request open there; the cut-over asks it again as
     # its run (review_copy), so nothing here retries it.
-    body = req["body"]
+    # The review body is read key by key into the reply, as stored.
+    body = req.model_dump()["body"]
     v = review_view(req, name=body["workflowName"], slug="", sla_hours=await sla_hours(rt))
     v.pop("publish", None)
     policy = {**v["policy"], "id": "gp_tool_access", "name": "Tool access", "reviewers": body["deciderTeam"]}
     environment = ENVIRONMENTS.get(str(body["environment"]), str(body["environment"]))
-    return {
-        **v,
-        "title": f"Let {body['workflowName']} use {body['moduleName']}?",
-        "workflowId": body["workflowId"],
-        "actionTool": "grant_tool_access",
-        "policy": policy,
-        "proposal": f"{environment}: {', '.join(body['operations'])} until {str(body['expiresAt'])[:10]}",
-        "reasoning": [str(body["justification"])] if body.get("justification") else [],
-    }
+    return cast(
+        ReviewView,
+        {
+            **v,
+            "title": f"Let {body['workflowName']} use {body['moduleName']}?",
+            "workflowId": body["workflowId"],
+            "actionTool": "grant_tool_access",
+            "policy": policy,
+            "proposal": f"{environment}: {', '.join(body['operations'])} until {str(body['expiresAt'])[:10]}",
+            "reasoning": [str(body["justification"])] if body.get("justification") else [],
+        },
+    )

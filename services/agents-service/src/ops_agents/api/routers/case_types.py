@@ -10,7 +10,7 @@ service's database only."""
 from __future__ import annotations
 
 import re
-from typing import Annotated, Any, TypeAlias, cast
+from typing import Annotated, TypeAlias, cast
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -19,7 +19,7 @@ from pydantic import Field
 from ops_access import can
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Unprocessable
-from ops_service_kit.http import Envelope, In, ListResult
+from ops_service_kit.http import Envelope, In, Json, ListResult
 from ops_service_kit.listing import ListQuery
 
 from ...case_fields import specs_of
@@ -85,11 +85,11 @@ class CaseTypeDetail(CaseTypeView):
     versions: list[CaseTypeVersionView]
 
 
-def _checked(content: dict[str, Any]) -> dict[str, Any]:
+def _checked(content: Json) -> Json:
     specs_of(content.get("fields") or [])
     deadline = content.get("deadline")
     if deadline is not None:
-        fields = cast(list[dict[str, Any]], content.get("fields") or [])
+        fields = cast(list[Json], content.get("fields") or [])
         dates = {str(f.get("key")) for f in fields if f.get("type") == "date"}
         if deadline not in dates:
             raise Unprocessable(
@@ -119,8 +119,8 @@ async def create_type(rt: Runtime, me: Principal, body: TypeIn) -> None:
     if not ID.match(body.id):
         raise Unprocessable("id: lowercase letters, digits and underscores, starting with a letter.", code="invalid_id")
     store = await case_type_store(rt, store_team(me))
-    base: dict[str, Any] = {}
-    copied: dict[str, Any] | None = None
+    base: Json = {}
+    copied: Json | None = None
     if body.copy_of is not None:
         n, base = await store.published(body.copy_of.id, body.copy_of.version)
         copied = {"id": body.copy_of.id, "version": n}

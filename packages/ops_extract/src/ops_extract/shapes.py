@@ -107,6 +107,14 @@ class Template(TypedDict):
     pages: list[TemplatePage]
 
 
+class DocumentKind(TypedDict):
+    """A team's document type as classification is shown it."""
+
+    id: str
+    name: str
+    description: str | None
+
+
 class FieldDefinition(TypedDict):
     """A field a document type version (or an extraction request) asks for. `request_of` proves the key is text when
     it is saved. Its rules (`pattern`, `emptyWhen`, `keyField`, `clean`) are checked when saved too, but a type saved

@@ -291,5 +291,7 @@ async def test_a_started_task_that_failed_still_shows_it_after_a_later_task_succ
         r for r in background.report(await beats.read(), "documents", time.time()) if r["key"] == "document_reading"
     ]
     assert (row["state"], row["lastError"], row["doneHour"], row["instances"]) == ("running", "RuntimeError", 2, 1)
-    later = background.report(await beats.read(), "documents", row["lastErrorAt"] + background.FAILURE_SHOWN_S + 1)
+    error_at = row["lastErrorAt"]
+    assert error_at is not None
+    later = background.report(await beats.read(), "documents", error_at + background.FAILURE_SHOWN_S + 1)
     assert [(r["lastError"], r["lastErrorAt"]) for r in later if r["key"] == "document_reading"] == [(None, None)]

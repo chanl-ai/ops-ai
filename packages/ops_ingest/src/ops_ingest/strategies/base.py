@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from typing import cast
+from typing import TypedDict, cast
 
 from ops_ingest.model_client import ModelClient
 from ops_ingest.models import IngestSettings, IngestStrategy, Paragraph, Section
@@ -64,7 +64,17 @@ def section_text(section: Section, *, include_tables: bool) -> str:
     return "\n".join(parts)
 
 
-def json_object(text: str) -> dict[str, object] | None:
+class ModelReply(TypedDict, total=False):
+    """The JSON a splitting prompt asks the model for; each value is checked where it is read, as the model may
+    return any JSON."""
+
+    groups: object
+    questions: object
+    pairs: object
+    summary: object
+
+
+def json_object(text: str) -> ModelReply | None:
     """The first JSON object in a model reply, tolerating prose or code fences around it; `None` if there is none."""
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if match is None:
@@ -73,7 +83,7 @@ def json_object(text: str) -> dict[str, object] | None:
         data: object = json.loads(match.group(0))
     except ValueError:
         return None
-    return cast(dict[str, object], data) if isinstance(data, dict) else None
+    return cast(ModelReply, data) if isinstance(data, dict) else None
 
 
 def json_list(value: object) -> list[object] | None:

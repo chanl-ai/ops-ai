@@ -16,6 +16,8 @@ from pydantic_ai import Agent
 from pydantic_ai.models import Model
 from pydantic_ai.output import StructuredDict
 
+from ops_service_kit.http import Json
+
 from .aliases import preferred
 from .ports import ModelSource
 from .types import Guardrail
@@ -46,7 +48,7 @@ def model_for(source: ModelSource | None, turn_model: Model) -> Model:
     return preferred(source, GUARD_ALIAS, turn_model)
 
 
-def _schema(topics: list[str]) -> dict[str, Any]:
+def _schema(topics: list[str]) -> Json:
     return {
         "type": "object",
         "properties": {"topic": {"type": "string", "enum": [*topics, NONE]}, "reason": {"type": "string"}},

@@ -11,10 +11,11 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 
 from ops_identity import ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import ServiceUnavailable
+from ops_service_kit.http import Json
 
 
 @dataclass(frozen=True)
@@ -29,7 +30,7 @@ class WorkflowDirectory(Protocol):
     async def all(self, tenant_id: str) -> dict[str, WorkflowRef]: ...
 
 
-def _refs(rows: Iterable[dict[str, Any]]) -> dict[str, WorkflowRef]:
+def _refs(rows: Iterable[Json]) -> dict[str, WorkflowRef]:
     return {
         str(r["id"]): WorkflowRef(
             str(r["id"]), str(r["name"]), str(r.get("teamId") or ""), str(r.get("status", "live"))
@@ -65,7 +66,7 @@ class AgentsWorkflows:
 class StaticWorkflows:
     """A fixed list, for tests and for a tools-service run without agents-service configured."""
 
-    def __init__(self, rows: Iterable[dict[str, Any]] = ()) -> None:
+    def __init__(self, rows: Iterable[Json] = ()) -> None:
         self.rows = _refs(rows)
 
     async def all(self, tenant_id: str) -> dict[str, WorkflowRef]:

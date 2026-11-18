@@ -1,5 +1,4 @@
-# 4 boundaries crossed without a model in packages/ops_agent_kernel (scripts/check_typed_boundaries.py). A row may only fall.
-1 dict-any packages/ops_agent_kernel/src/ops_agent_kernel/guard.py
+# 3 boundaries crossed without a model in packages/ops_agent_kernel (scripts/check_typed_boundaries.py). A row may only fall.
 1 dict-any packages/ops_agent_kernel/src/ops_agent_kernel/pii.py
 1 dict-any packages/ops_agent_kernel/src/ops_agent_kernel/ports.py
 1 dict-any packages/ops_agent_kernel/src/ops_agent_kernel/search.py

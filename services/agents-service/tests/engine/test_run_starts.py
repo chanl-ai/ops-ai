@@ -33,6 +33,7 @@ from ops_engine.store import DefinitionRow, DefinitionStore, RunStore
 from ops_files_client import FilesClient
 from ops_identity import ServiceClient, dev_service_signer
 from ops_service_kit.errors import Unprocessable
+from ops_service_kit.http import Json
 from tests.engine.test_email_trigger import MAILBOX, NOTICE, PDF, TEAM, FakeFiles, connect, mail
 from tests.engine.test_worker import CountingTools, drain, worker
 
@@ -140,7 +141,7 @@ async def by_mailbox(engine: AsyncEngine, tenant: str, row: DefinitionRow, files
 
 async def by_test_email(engine: AsyncEngine, tenant: str, row: DefinitionRow, files: Files, ids: list[str]) -> str:
     rt: Any = SimpleNamespace(db=engine, start_files=files_client(files))
-    values = {
+    values: Json = {
         "from": NOTICE["from"]["emailAddress"]["address"],
         "subject": NOTICE["subject"],
         "body": NOTICE["body"]["content"],
@@ -182,7 +183,8 @@ async def test_a_test_email_runs_with_the_input_and_steps_a_mailbox_email_gets(
     with tenant_scope(tenant):
         a, b = await runs.get(mailed), await runs.get(sent)
     assert a is not None and b is not None
-    assert set(a["input"]) == set(b["input"]) == set(EMAIL["required"]), (a["input"], b["input"])
+    required: list[str] = cast(list[str], EMAIL["required"])
+    assert set(a["input"]) == set(b["input"]) == set(required), (a["input"], b["input"])
     assert shape(a["input"]) == shape(b["input"]), (shape(a["input"]), shape(b["input"]))
     [attachment] = b["input"]["attachments"]
     assert attachment["size"] == len(PDF) and attachment["mime"] == "application/pdf"

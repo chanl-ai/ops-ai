@@ -93,8 +93,9 @@ async def test_classify_leaves_by_the_category_or_by_otherwise_when_unsure(answe
     )
     assert step["port"] == port and step["out"]["confidence"] == answer["confidence"], step
     [req] = prompts.requests
+    asked: dict[str, Any] = req.output_schema
     # The step's settings reach the model: its categories in the schema and the instructions, its alias, its text.
-    assert req.output_schema["properties"]["category"]["enum"] == ["fraud", "billing", "none"]
+    assert asked["properties"]["category"]["enum"] == ["fraud", "billing", "none"]
     assert "fraud: The customer reports a payment" in req.instructions
     assert (req.model_alias, req.message) == ("bank-reasoning", "I never paid Acme 900 dollars")
 
@@ -117,7 +118,7 @@ async def test_extract_from_text_asks_for_the_document_types_fields() -> None:
     step_def = {"id": "ai", "type": "ops.ai.extractText", "typeVersion": 1, "parameters": params}
     step = await run(flow(step_def, ["ok", "error"]), ports(prompts, types), "e-1", "Levy of 3,250.00")
     assert types.asked == [("levy_notice", 3)]
-    schema = prompts.requests[0].output_schema
+    schema: dict[str, Any] = prompts.requests[0].output_schema
     assert (schema["required"], schema["properties"]["amount"]["type"]) == (["amount", "case_no"], ["number", "null"])
     assert step["out"] == {"amount": 3250.0, "case_no": None}
 

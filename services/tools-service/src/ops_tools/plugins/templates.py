@@ -18,7 +18,7 @@ knowledge bases), so its row says only whether it can be added now."""
 
 import hashlib
 import json
-from typing import Annotated, Any, Literal, Protocol, cast
+from typing import Annotated, Literal, Protocol, cast
 
 import yaml
 from fastapi import APIRouter, Depends, Query
@@ -32,7 +32,7 @@ from ops_identity.fastapi import Tx
 from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.manifest import KnowledgeSource, Template
 from ops_service_kit.errors import NotFound, ServiceUnavailable, ValidationFailed
-from ops_service_kit.http import Envelope, JsonValue, Out, ok
+from ops_service_kit.http import Envelope, Json, JsonValue, Out, ok
 
 from ..callers import tools_reader
 from ..modules.routes import ERRORS
@@ -78,20 +78,20 @@ class PluginTemplate(Out):
     off: str | None = None
 
 
-def body_of(plugin: Plugin, template: Template) -> dict[str, Any]:
+def body_of(plugin: Plugin, template: Template) -> Json:
     """The template's body, read only from inside the plugin's folder."""
     root = plugin.root.resolve()
     path = (root / template.path).resolve()
     if root not in path.parents:
         raise TemplateOutside(f"{plugin.manifest.id} template {template.id}: {template.path} is outside the plugin")
-    return cast(dict[str, Any], yaml.safe_load(path.read_text()) or {})
+    return cast(Json, yaml.safe_load(path.read_text()) or {})
 
 
-def digest_of(body: dict[str, Any]) -> str:
+def digest_of(body: Json) -> str:
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def view_of(plugin: Plugin, template: Template) -> dict[str, Any]:
+def view_of(plugin: Plugin, template: Template) -> Json:
     m = plugin.manifest
     body = body_of(plugin, template)
     return PluginTemplate(
@@ -111,14 +111,14 @@ def view_of(plugin: Plugin, template: Template) -> dict[str, Any]:
     ).model_dump(by_alias=True)
 
 
-def summary_of(body: dict[str, Any]) -> str | None:
+def summary_of(body: Json) -> str | None:
     for key in ("description", "use_when", "useWhen", "role"):
         if isinstance(v := body.get(key), str) and v.strip():
             return v.strip()
     return None
 
 
-def source_view(plugin: Plugin, source: KnowledgeSource) -> dict[str, Any]:
+def source_view(plugin: Plugin, source: KnowledgeSource) -> Json:
     """A knowledge source as a resource: kb-service makes it, in a knowledge base the team picks, syncing through the
     two tools named here. Its body is the source's definition, so its digest moves when the plugin changes it."""
     m = plugin.manifest
@@ -200,9 +200,9 @@ class Copies(Protocol):
     """The template lists of the services that keep copies, as the caller's team sees them, and the knowledge
     sources the team made from a plugin."""
 
-    async def of(self, tenant_id: str, team_id: str, source: str) -> list[dict[str, Any]]: ...
+    async def of(self, tenant_id: str, team_id: str, source: str) -> list[Json]: ...
 
-    async def sources(self, tenant_id: str, team_id: str, plugin: str) -> list[dict[str, Any]]: ...
+    async def sources(self, tenant_id: str, team_id: str, plugin: str) -> list[Json]: ...
 
 
 class ServiceCopies:
@@ -212,7 +212,7 @@ class ServiceCopies:
     def __init__(self, agents: ServiceClient, documents: ServiceClient, kb: ServiceClient | None = None) -> None:
         self.agents, self.documents, self.kb = agents, documents, kb
 
-    async def sources(self, tenant_id: str, team_id: str, plugin: str) -> list[dict[str, Any]]:
+    async def sources(self, tenant_id: str, team_id: str, plugin: str) -> list[Json]:
         """kb-service's `GET /v1/sources/from-plugin` as the caller's team; none while this service has no address for
         kb-service, which then lists no knowledge source as added."""
         if self.kb is None:
@@ -226,17 +226,17 @@ class ServiceCopies:
                 "kb-service did not answer with the team's knowledge sources. Try again shortly.",
                 code="resources_unavailable",
             ) from e
-        return cast(list[dict[str, Any]], found)
+        return cast(list[Json], found)
 
-    async def of(self, tenant_id: str, team_id: str, source: str) -> list[dict[str, Any]]:
-        out: list[dict[str, Any]] = []
+    async def of(self, tenant_id: str, team_id: str, source: str) -> list[Json]:
+        out: list[Json] = []
         for name, client, params in (
             ("agents-service", self.agents, {"source": source}),
             ("documents-service", self.documents, None),
         ):
             try:
                 rows = cast(
-                    list[dict[str, Any]],
+                    list[Json],
                     await client.get("/v1/templates", params=params, tenant=tenant_id, team=team_id),
                 )
             except (ServiceCallError, ServiceUnreachable) as e:
@@ -286,7 +286,7 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
             raise ServiceUnavailable("This service has no address for the services that keep copies.")
         m = plugin.manifest
         summaries = {(t.kind, t.id): summary_of(body_of(plugin, t)) for t in m.templates}
-        out: list[dict[str, Any]] = []
+        out: list[Json] = []
         # Both services are asked before the first read, so no transaction is held while either answers.
         held_copies = await copies.of(who.tenant_id, who.team_id, app_id)
         made = await copies.sources(who.tenant_id, who.team_id, m.id) if m.knowledge_sources else []
@@ -296,7 +296,7 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
             may = row.get("state") != "removed_upstream" and access.may(who, cell["area"], cell["action"])
             # Its app is off for the team and the copy needs the app's tools (agents-service decides which).
             blocked = cast(str | None, row.get("off"))
-            gone = cast(dict[str, Any], row.get("removeCell") or {})
+            gone = cast(Json, row.get("removeCell") or {})
             removes = bool(row.get("copy") and gone) and access.may(
                 who, str(gone.get("area")), str(gone.get("action")), owner=gone.get("owner")
             )
@@ -372,7 +372,7 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
         team, may read it; a call naming no team is refused, since templates are listed per team."""
         if not who.team_id:
             raise ValidationFailed("Templates are listed for one team; this call names none.", code="team_required")
-        out: list[dict[str, Any]] = []
+        out: list[Json] = []
         for plugin in host.plugins.values():
             m = plugin.manifest
             if not (m.templates or m.knowledge_sources):

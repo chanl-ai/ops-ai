@@ -9,7 +9,7 @@ flag server. Services read a flag through `Settings.feature_flags`, and the cons
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TypedDict
 
 # The names, as a type, so the platform answer's schema and the console's generated types carry them; a test keeps
 # this and FLAGS equal.
@@ -57,6 +57,14 @@ def check(names: list[str]) -> None:
         raise ValueError(f"unknown flag {', '.join(unknown)} in OPS_FLAGS; known flags: {', '.join(sorted(NAMES))}")
 
 
+class FlagState(TypedDict):
+    """One flag as platform-service answers it."""
+
+    name: str
+    description: str
+    on: bool
+
+
 @dataclass(frozen=True)
 class Flags:
     """The install's resolved flags: the names the install config turns on."""
@@ -69,6 +77,6 @@ class Flags:
             raise KeyError(f"no flag named {name!r}")
         return name in self.turned_on
 
-    def resolved(self) -> list[dict[str, object]]:
+    def resolved(self) -> list[FlagState]:
         """Every flag in registry order with whether it is on, for platform-service's answer."""
-        return [{"name": f.name, "description": f.description, "on": f.name in self.turned_on} for f in FLAGS]
+        return [FlagState(name=f.name, description=f.description, on=f.name in self.turned_on) for f in FLAGS]

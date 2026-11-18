@@ -45,7 +45,7 @@ async def _form(e: AsyncEngine, team: str, slug: str) -> str:
         created_by="p@x.example",
         title=slug,
     )
-    return str(row["id"])
+    return row.id
 
 
 async def _ids(e: AsyncEngine, **params: Any) -> list[str]:

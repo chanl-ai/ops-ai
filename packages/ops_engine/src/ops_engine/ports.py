@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
 from ops_agent_kernel.ports import KnowledgePort
+from ops_service_kit.http import Json
 
 Access = Literal["read", "write", "unknown"]
 
@@ -45,7 +46,7 @@ class ToolPort(Protocol):
     async def call(
         self,
         operation: str,
-        input: dict[str, Any],
+        input: Json,
         key: str,
         generation: int | None,
         token: str | None,
@@ -58,7 +59,7 @@ class ToolPort(Protocol):
         """The operation's access class in the registry; "unknown" when it is not registered."""
         ...
 
-    async def mint(self, run_id: str, call: dict[str, Any], approval: dict[str, Any]) -> str | None:
+    async def mint(self, run_id: str, call: Json, approval: Json) -> str | None:
         """An approval token for `call` from the approvals a review recorded (`approval`: step, tool, inputHash,
         approvers), made only for the call that is about to be sent; None when those approvals no longer stand."""
         ...
@@ -70,21 +71,19 @@ class ToolPort(Protocol):
 
 
 class ExpressionPort(Protocol):
-    async def evaluate(
-        self, expressions: dict[str, str], values: dict[str, Any]
-    ) -> tuple[dict[str, Any] | None, str | None]:
+    async def evaluate(self, expressions: dict[str, str], values: Json) -> tuple[Json | None, str | None]:
         """Each formula's value by name and None, or None and why one failed: the tool gateway's sandbox evaluates
         them (POST /v1/expressions/evaluate). Raises when the gateway gives no answer, so the step is retried."""
         ...
 
 
 class ReviewPort(Protocol):
-    async def open(self, run_id: str, node_id: str, iteration: int, payload: dict[str, Any]) -> str:
+    async def open(self, run_id: str, node_id: str, iteration: int, payload: Json) -> str:
         """Opens the review for this step, or finds the one already open (upsert on run, node, iteration); returns its
         id. The decision arrives later as a resume of the run."""
         ...
 
-    async def own_decision(self, run_id: str, node_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+    async def own_decision(self, run_id: str, node_id: str, payload: Json) -> Json | None:
         """The decision of a step that approves a write when the person who started the run may approve it themselves
         (roles decide approvals): {decision, by, call, approval}, recorded as theirs. None to pause
         for a person as before."""
@@ -105,7 +104,7 @@ class AgentRequest:
     message: str
     # Derived from run, node and iteration (run:node:iteration), so the turn's tool keys repeat on a re-run.
     turn_id: str
-    output_schema: dict[str, Any] | None = None
+    output_schema: Json | None = None
     # The step's own settings: a model alias the agent allows, and a tool-call cap below the agent's.
     model_alias: str | None = None
     max_tool_calls: int | None = None
@@ -137,7 +136,7 @@ class PromptRequest:
     message: str
     # run:node:iteration, as an agent step's, so a re-run repeats the call's ledger key.
     turn_id: str
-    output_schema: dict[str, Any]
+    output_schema: Json
     model_alias: str | None = None
     # The run the step is in, so the host applies the run's team settings (masking personal data).
     run_id: str | None = None
@@ -151,7 +150,7 @@ class PromptPort(Protocol):
 
 
 class FileDataPort(Protocol):
-    async def set_data(self, run_id: str, file_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    async def set_data(self, run_id: str, file_id: str, data: Json) -> Json:
         """Records on the file what was read from it, as the run's team: files-service's
         PUT /v1/files/{id}/data. Another team's file is not found; files-service down is raised, so the wrapper
         retries."""
@@ -159,7 +158,7 @@ class FileDataPort(Protocol):
 
 
 class DocumentsPort(Protocol):
-    async def extract(self, run_id: str, file_id: str, request: dict[str, Any], *, key: str) -> dict[str, Any]:
+    async def extract(self, run_id: str, file_id: str, request: Json, *, key: str) -> Json:
         """documents-service's extraction of the file, as the run's team, finished: `{status, outcome,
         ...}` with status done, unreadable or failed and, once done, the scored answer. `request` is {fields, many,
         ocr, reviewBelow}; `key` (run:node:iteration) is the Idempotency-Key, so a retried step reads the same
@@ -167,13 +166,13 @@ class DocumentsPort(Protocol):
         retries."""
         ...
 
-    async def purge(self, run_id: str, file_id: str) -> dict[str, Any]:
+    async def purge(self, run_id: str, file_id: str) -> Json:
         """Removes what documents-service read from a deleted file, as the run's team: {extractions, samples}."""
         ...
 
 
 class DocumentTypesPort(Protocol):
-    async def fields(self, run_id: str, type_id: str, version: int | None) -> list[dict[str, Any]]:
+    async def fields(self, run_id: str, type_id: str, version: int | None) -> list[Json]:
         """A document type's fields at a version (the newest when None), as the run's team reads them from
         documents-service: what Extract from text asks for when a step names a type."""
         ...
@@ -202,12 +201,12 @@ class RunRefusedError(Exception):
 
 
 class RunPort(Protocol):
-    async def start(self, parent_run_id: str, workflow: str, input: dict[str, Any], key: str) -> StartedRun:
+    async def start(self, parent_run_id: str, workflow: str, input: Json, key: str) -> StartedRun:
         """Starts `workflow` as a child of `parent_run_id`, in the parent's team and mode, once for `key`. Raises
         RunRefusedError when the host refuses it."""
         ...
 
-    async def children(self, parent_run_id: str, key_prefix: str, *, outputs: bool = False) -> list[dict[str, Any]]:
+    async def children(self, parent_run_id: str, key_prefix: str, *, outputs: bool = False) -> list[Json]:
         """The children `parent_run_id` started under keys beginning `key_prefix` (`<run>:<node>:<iteration>:`), in one
         read: `{index, runId, status, outcome, output}` each, ordered by the item index the key ends with;
         `output` is None unless `outputs`."""
@@ -232,7 +231,7 @@ class CaseTypeNotFoundError(Exception):
 class CasePort(Protocol):
     """The host's cases: a case opens in the run's team, and a run joins one of that team's cases."""
 
-    async def open(self, run_id: str, fields: dict[str, Any], key: str) -> OpenedCase:
+    async def open(self, run_id: str, fields: Json, key: str) -> OpenedCase:
         """Opens a case in the run's team with `fields` (subject, priority, customerId, customerName, assignee,
         `caseType`, and `fields`, the case's own values by name), once for `key`; the run is its first timeline entry.
         A named case type's newest published version is pinned on the case; raises CaseTypeNotFoundError for one that
@@ -244,7 +243,7 @@ class CasePort(Protocol):
         run_id: str,
         case_id: str,
         note: str | None,
-        fields: dict[str, Any] | None = None,
+        fields: Json | None = None,
         *,
         status: str | None = None,
         key: str | None = None,

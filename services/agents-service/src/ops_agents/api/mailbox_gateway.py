@@ -7,7 +7,7 @@ of Graph items."""
 
 from __future__ import annotations
 
-from typing import Any, TypeGuard
+from typing import TypeGuard, cast
 
 import httpx
 
@@ -23,6 +23,7 @@ from ops_email import (
 from ops_email.graph import parse_item as graph_item
 from ops_email.imap import parse_item
 from ops_identity import ServiceCallError, ServiceClient
+from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 
@@ -39,7 +40,7 @@ class GatewayMailSource:
         self.mailbox = mailbox
         self.folder = folder
 
-    async def _post(self, path: str, body: dict[str, Any], timeout: float = 60) -> dict[str, Any]:  # noqa: ASYNC109
+    async def _post(self, path: str, body: Json, timeout: float = 60) -> Json:  # noqa: ASYNC109
         payload = {"connection": connection(self.mailbox), "folder": self.folder, **body}
         try:
             data = await self.mail.post(f"/v1/mailboxes/{path}", payload, team=self.mailbox.team_id, timeout=timeout)
@@ -57,7 +58,11 @@ class GatewayMailSource:
             if isinstance(e.__cause__, ServiceCallError) and e.__cause__.code == "cursor_refused":
                 raise CursorRefusedError(str(e)) from e.__cause__
             raise
-        return DeltaPage(list(d["items"]), d.get("nextLink"), d.get("deltaLink"))
+        return DeltaPage(
+            list(cast(list[Json], d["items"])),
+            cast(str | None, d.get("nextLink")),
+            cast(str | None, d.get("deltaLink")),
+        )
 
     async def cursor_now(self) -> str:
         return str((await self._post("read", {"cursor": None, "now": True}))["deltaLink"])
@@ -66,11 +71,11 @@ class GatewayMailSource:
         d = await self._post("wait", {"cursor": link, "seconds": seconds}, timeout=seconds + 60)
         return bool(d["changed"])
 
-    def parse(self, item: dict[str, Any]) -> InboundMessage:
+    def parse(self, item: Json) -> InboundMessage:
         """tools-service hands on an IMAP message as its raw bytes and a Graph one as Graph's JSON."""
         return graph_item(item) if self.mailbox.provider == "graph" else parse_item(item)
 
-    async def test(self) -> dict[str, Any]:
+    async def test(self) -> Json:
         """tools-service's connection test: sign-in, then the newest message read without marking it read."""
         return await self._post("test", {})
 
@@ -95,10 +100,10 @@ def mailbox_client(settings: Settings, http: httpx.AsyncClient) -> ServiceClient
     )
 
 
-def connection(m: MailboxRow) -> dict[str, Any]:
+def connection(m: MailboxRow) -> Json:
     """What tools-service needs to sign in to the mailbox; the password goes by its secret's name only. The Microsoft
     365 fields go only with a Microsoft 365 mailbox, so a tools-service that predates them still reads every other."""
-    sign_in: dict[str, Any] = {
+    sign_in: Json = {
         "address": m.address,
         "provider": m.provider,
         "host": m.imap_host,

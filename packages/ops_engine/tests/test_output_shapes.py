@@ -255,7 +255,7 @@ async def test_a_join_declares_each_branch_it_writes() -> None:
     g = build_fork(d, tools, journal, saver)
     await g.ainvoke({"input": {"route": True}}, config("s2"), durability="sync")
     out = (await g.aget_state(config("s2"))).values[channel("j")]["out"]
-    shape = (await shapes(parse(d), REGISTRY, Lookups()))["j"]["out"]
+    shape: dict[str, Any] = (await shapes(parse(d), REGISTRY, Lookups()))["j"]["out"]
     assert mismatches(shape, out) == [] and set(shape["required"]) == {"b", "e"}
 
 
@@ -269,7 +269,7 @@ async def test_every_registered_type_has_a_case_and_a_shape() -> None:
 
 async def test_shapes_read_the_document_type_and_the_operation_they_name() -> None:
     extract = await declared(node("ops.ai.extract", file="f", documentType={"id": "levy"}))
-    any_port = next(iter(extract.values()))
+    any_port: dict[str, Any] = next(iter(extract.values()))
     assert set(any_port["properties"]["fields"]["properties"]) == {"debtor", "amount"}
     tool = await declared(node("ops.action.tool", operation="get_customer", input={}))
     unknown = await declared(node("ops.action.tool", operation="nobody_knows", input={}))
@@ -323,7 +323,7 @@ async def test_wait_for_offers_its_answer_schema_fields_and_the_time_limits_fact
     """A Decide step after Wait for picks `$.nodes.<step>.out.<field>` from the step's answer schema; with none
     any field reads, and the Timeout way always carries what it waited for."""
     schema = {"type": "object", "properties": {"approved": {"type": "boolean"}}}
-    typed = await declared(node("ops.flow.waitFor", timeoutSeconds=5, outputSchema=schema))
+    typed: dict[str, dict[str, Any]] = await declared(node("ops.flow.waitFor", timeoutSeconds=5, outputSchema=schema))
     untyped = await declared(node("ops.flow.waitFor", timeoutSeconds=5))
     assert typed["ok"] == schema and is_open(untyped["ok"])
     assert set(typed["timeout"]["required"]) == {"waitedFor", "key", "seconds"}

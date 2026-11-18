@@ -18,13 +18,13 @@ import hashlib
 import secrets
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
 from urllib.parse import urlencode
 
 import httpx
 from pydantic import JsonValue, SecretStr
 
 from ops_service_kit.errors import NotFound, ServiceUnavailable, Unauthorized, ValidationFailed
+from ops_service_kit.http import Json
 from ops_service_kit.logging import get_logger
 from ops_service_kit.public_address import PublicFetch
 from ops_signin import (
@@ -36,6 +36,7 @@ from ops_signin import (
     SignInRefused,
     VerifiedIdentity,
 )
+from ops_signin.oidc import Discovery
 from ops_signin.saml import sp_metadata
 from ops_store.documents import Reader, StoredShapeError
 
@@ -144,17 +145,17 @@ class Sso:
     sp_certificate: str | None = None
     # Guards every fetch of a URL an admin typed (metadata, OIDC discovery and keys); None only for dev's local fake.
     fetch: PublicFetch | None = None
-    _metadata: dict[str, dict[str, Any]] = field(default_factory=dict[str, dict[str, Any]])
+    _metadata: dict[str, Discovery] = field(default_factory=dict[str, Discovery])
 
     # ── Discovery ──
 
-    async def options(self, email: str) -> dict[str, Any]:
+    async def options(self, email: str) -> Json:
         """What the email's domain signs in with. It reads the domain only, never whether an account exists, so the
         answer is the same for every address on a domain."""
         hit = await self.store.domain(email.rpartition("@")[2])
         if hit is None:
             return {"password": True, "sso": None}
-        sso = {"kind": hit.kind, "label": hit.label} if hit.enabled and hit.kind in SSO_METHODS else None
+        sso: Json | None = {"kind": hit.kind, "label": hit.label} if hit.enabled and hit.kind in SSO_METHODS else None
         return {"password": await self.store.password_allowed(hit.tenant_id), "sso": sso}
 
     # ── The round trip ──

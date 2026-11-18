@@ -11,10 +11,10 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 
-from ops_extract.checks import entries, fold
+from ops_extract.checks import fold
 from ops_extract.shapes import Box, Layout, LayoutWord, Located, Rect
 from ops_service_kit.http import Json, JsonValue
-from ops_service_kit.narrow import Malformed, an_object
+from ops_service_kit.narrow import Malformed, an_object, entries
 
 # Words whose tops differ by less than this share of a word's height are on one line, so they share a box.
 SAME_LINE = 0.5

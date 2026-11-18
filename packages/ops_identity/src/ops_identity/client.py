@@ -19,7 +19,7 @@ connection broke.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, cast
 from urllib.parse import quote
@@ -28,6 +28,8 @@ import httpx
 
 from ops_policy import Ed25519Signer
 from ops_service_kit.errors import ApiError, ServiceUnavailable
+from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.narrow import json_object
 from ops_service_kit.request_timing import current, current_request_id
 from ops_service_kit.settings import Settings
 
@@ -38,9 +40,7 @@ from .service_keys import service_signer
 class ServiceCallError(ApiError):
     """The callee answered with an error: its status and code, kept so the caller can pass them on."""
 
-    def __init__(
-        self, status: int, message: str, *, code: str | None = None, details: dict[str, Any] | None = None
-    ) -> None:
+    def __init__(self, status: int, message: str, *, code: str | None = None, details: Json | None = None) -> None:
         super().__init__(message, code=code, details=details)
         self.status = status
 
@@ -175,17 +175,18 @@ class ServiceClient:
         method: str,
         path: str,
         *,
-        body: dict[str, Any] | None = None,
+        body: Mapping[str, JsonValue] | None = None,
         cursor_field: str = "cursor",
         next_field: str = "nextLink",
         items_field: str = "items",
         **kw: Any,
-    ) -> AsyncIterator[dict[str, Any]]:
+    ) -> AsyncIterator[Json]:
         """Each page of a cursor list, the first without a cursor, then each `next_field` until a page has none."""
         cursor: str | None = None
         while True:
             payload = {**(body or {}), **({cursor_field: cursor} if cursor else {})}
-            page = cast(dict[str, Any], await self.request(method, path, json=payload, **kw))
+            # Not narrowed: a page of another shape fails at `page.get` after it is yielded, as callers expect.
+            page: Json = await self.request(method, path, json=payload, **kw)
             yield page
             following = page.get(next_field)
             if not following or not page.get(items_field, True):
@@ -204,14 +205,16 @@ def _data(audience: str, r: httpx.Response) -> Any:
                 r.status_code, f"{audience} answered {r.status_code} with a body that is not JSON", code="bad_response"
             ) from None
         body = None
-    envelope: dict[str, Any] = cast(dict[str, Any], body) if isinstance(body, dict) else {}
+    envelope = json_object(body)
     if r.is_success:
         return envelope.get("data", body)
-    error: dict[str, Any] = cast(dict[str, Any], envelope.get("error") or {})
+    # Not narrowed: an `error` of another shape fails here as an AttributeError, which callers that catch ValueError
+    # around a call (an unknown tool's policy, a file not ready) must not take for an answer.
+    error = cast(Json, envelope.get("error") or {})
     raise ServiceCallError(
         r.status_code,
         # An error that is not the envelope (a proxy's page) keeps the start of its body, so the reason survives.
         str(error.get("message") or f"{audience} answered {r.status_code}: {r.text[:200]}".rstrip(": ")),
         code=str(error["code"]) if error.get("code") else None,
-        details=cast(dict[str, Any], error.get("details")) if isinstance(error.get("details"), dict) else None,
+        details=json_object(error.get("details")) if isinstance(error.get("details"), dict) else None,
     )

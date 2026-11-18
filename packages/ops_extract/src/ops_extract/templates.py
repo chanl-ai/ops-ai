@@ -17,7 +17,6 @@ import hashlib
 from dataclasses import dataclass, field
 
 from ops_extract.boxes import runs, tokens, union
-from ops_extract.checks import entries
 from ops_extract.shapes import (
     Box,
     Layout,
@@ -31,7 +30,7 @@ from ops_extract.shapes import (
     TemplatePage,
 )
 from ops_service_kit.http import Json, JsonValue
-from ops_service_kit.narrow import Malformed, a_list, an_object, json_object
+from ops_service_kit.narrow import Malformed, a_list, an_object, entries, json_object
 
 # How far a found anchor may sit from the box the template expects, as a fraction of the page, and the share of a
 # page's anchors that must be found besides every required one.

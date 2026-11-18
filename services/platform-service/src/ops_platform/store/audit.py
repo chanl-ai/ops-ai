@@ -224,7 +224,7 @@ class TeamNameAudit(TenantDb):
             )
         return cls(db, tenant_id)
 
-    async def apply(self, entity_id: str, value: str, entry: dict[str, JsonValue] | None) -> None:
+    async def apply(self, entity_id: str, value: str, entry: Mapping[str, JsonValue] | None) -> None:
         async with self.tenant_tx(self.tenant_id) as c:
             updated = await c.execute(
                 teams.update().where(teams.c.id == entity_id).values(name=value, name_key=value.lower())

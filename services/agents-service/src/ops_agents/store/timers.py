@@ -209,7 +209,7 @@ class TimerStore(RuntimeStore):
 
     async def close(self, row: Any, generation: int | None, how: Close, *, owner: str | None = None) -> bool:
         """Marks an open timer cancelled, failed or fired, fenced by `generation`. False when it was not open."""
-        values: dict[str, Any] = {f"{how}_at": db_now()}
+        values: dict[str, db_now | str] = {f"{how}_at": db_now()}
         if owner is not None:
             values["owner"] = owner
         async with self._fenced_tx() as c:

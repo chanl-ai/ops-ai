@@ -7,7 +7,10 @@ whatever exception types the implementation uses inside.
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from collections.abc import Mapping
+from typing import Protocol
+
+from pydantic import JsonValue
 
 from .guarantees import Repository
 
@@ -40,7 +43,7 @@ class TimerClaimPort(Repository, Protocol):
 class AuditPort(Repository, Protocol):
     """A change and its audit entry land together or not at all."""
 
-    async def apply(self, entity_id: str, value: str, entry: dict[str, Any] | None) -> None:
+    async def apply(self, entity_id: str, value: str, entry: Mapping[str, JsonValue] | None) -> None:
         """Sets the value and records the entry in one unit; an entry the store refuses (None) fails both."""
         ...
 

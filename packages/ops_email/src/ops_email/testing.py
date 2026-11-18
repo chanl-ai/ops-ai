@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from ops_service_kit.http import Json
+
 from .graph import GraphParse
 from .inbound import DeltaPage
 
@@ -18,7 +20,7 @@ class FakeMailSource(GraphParse):
     `page:<start>:<end>` names the slice still to serve in this sync. `fail_once_at` raises on the first request for
     that page start, as a connection lost mid-poll."""
 
-    def __init__(self, items: list[dict[str, Any]], *, page_size: int = 20, fail_once_at: int | None = None) -> None:
+    def __init__(self, items: list[Json], *, page_size: int = 20, fail_once_at: int | None = None) -> None:
         self.items = list(items)
         self.page_size = page_size
         self.fail_once_at = fail_once_at
@@ -27,7 +29,7 @@ class FakeMailSource(GraphParse):
     async def cursor_now(self) -> str:
         return f"delta:{len(self.items)}"
 
-    def arrive(self, *items: dict[str, Any]) -> None:
+    def arrive(self, *items: Json) -> None:
         self.items.extend(items)
 
     async def delta(self, link: str | None) -> DeltaPage:
@@ -59,11 +61,11 @@ class FileMailSource(FakeMailSource):
         self.folder = folder
 
     def reload(self) -> None:
-        items: list[dict[str, Any]] = []
+        items: list[Json] = []
         paths = list(self.folder.glob("*.json")) if self.folder.is_dir() else []
         for path in sorted(paths, key=lambda f: (f.stat().st_mtime_ns, f.name)):
             loaded: Any = json.loads(path.read_text())
-            found: list[dict[str, Any]] = list(loaded) if isinstance(loaded, list) else [loaded]  # pyright: ignore[reportUnknownArgumentType]
+            found: list[Json] = list(loaded) if isinstance(loaded, list) else [loaded]  # pyright: ignore[reportUnknownArgumentType]
             items.extend(found)
         self.items = items
 

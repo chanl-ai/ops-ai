@@ -1,3 +1,2 @@
-# 11 boundaries crossed without a model in packages/contracts (scripts/check_typed_boundaries.py). A row may only fall.
-10 dict-any packages/contracts/src/ops_contracts/chat.py
-1 dict-any packages/contracts/src/ops_contracts/field_values.py
+# 1 boundaries crossed without a model in packages/contracts (scripts/check_typed_boundaries.py). A row may only fall.
+1 dict-any packages/contracts/src/ops_contracts/chat.py

@@ -5,25 +5,30 @@ from __future__ import annotations
 
 import hashlib
 import re
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import sqlalchemy as sa
 from pydantic import BaseModel, Field, JsonValue, TypeAdapter
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound
+from ops_service_kit.http import Json, JsonList, Out
 from ops_service_kit.ids import canonical_json, new_id, now_iso
 from ops_service_kit.listing import ListParams
 from ops_store import Guarantee, isolation
 from ops_store.dialect import json_text
 from ops_store.listing import LISTED, ListPage, list_page
+from ops_store.rows import one
+from ops_store.rows import rows as read_rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED, team_owned_via
 from ops_store.team_scope import any_team, team_visible
 
 from .base import metadata
 from .graphs import graph_threads, mine
-from .tenancy import OWNER, SERVE_PUBLISHED, UNIQUE_KEY, RuntimeStore, current_tenant
+from .tenancy import OWNER, SERVE_PUBLISHED, UNIQUE_KEY, current_tenant
+from .versioned import VersionedRegistry
 
 registry_agents = sa.Table(
     "registry_agents",
@@ -161,7 +166,7 @@ def _word(word: str) -> sa.ColumnClause[str]:
     return sa.literal_column(f"'{word}'", sa.String())
 
 
-def digest_of(spec: dict[str, Any]) -> str:
+def digest_of(spec: Json) -> str:
     return hashlib.sha256(canonical_json(spec).encode()).hexdigest()
 
 
@@ -169,7 +174,7 @@ def slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "agent"
 
 
-def changes_between(old: dict[str, Any] | None, new: dict[str, Any]) -> list[str]:
+def changes_between(old: Json | None, new: Json) -> list[str]:
     if old is None:
         return ["Created"]
     labels = {
@@ -183,11 +188,12 @@ def changes_between(old: dict[str, Any] | None, new: dict[str, Any]) -> list[str
     }
     out = [f"Changed {labels.get(k, k)}" for k in SPEC_FIELDS if old.get(k) != new.get(k)]
     # A guardrail switched off or on names itself, so the review says what stopped (or started) being checked.
-    pins: list[dict[str, Any]] = new.get("guardrailPins") or []
-    held: list[dict[str, Any]] = old.get("guardrailPins") or []
-    was = {p["guardrailId"]: p for p in held}
+    # A pin without an id, or a list of something else, raises as indexing it did.
+    pins = [narrow.an_object(p, "guardrail pin") for p in narrow.a_list(new.get("guardrailPins") or [], "pins")]
+    held = [narrow.an_object(p, "guardrail pin") for p in narrow.a_list(old.get("guardrailPins") or [], "pins")]
+    was = {narrow.required(p, "guardrailId", str): p for p in held}
     for p in pins:
-        before = was.get(p["guardrailId"])
+        before = was.get(narrow.required(p, "guardrailId", str))
         if before is not None and before.get("enabled", True) != p.get("enabled", True):
             state = "on" if p.get("enabled", True) else "off"
             out.append(f"Switched {p['name']} v{p['version']} {state}")
@@ -248,10 +254,71 @@ async def publish_requested(c: AsyncConnection, kind: str, subject_id: str, vers
     return (await c.execute(q)).first() is not None
 
 
-class AgentRegistry(RuntimeStore):
+class AgentRow(Out):
+    """An agent's row: its slug, owning team, newest and served version, and the template that made it."""
+
+    tenant_id: str
+    id: str
+    slug: str
+    team_id: str
+    version: int
+    published_version: int | None
+    paused: bool
+    created_at: str
+    updated_at: str
+    template_id: str | None
+    protection: str | None
+
+
+class AgentVersionRow(Out):
+    """One saved version of an agent; `spec` is the agent's stored document."""
+
+    tenant_id: str
+    agent_id: str
+    version: int
+    spec: Json
+    digest: str
+    note: str
+    changes: JsonList
+    saved_at: str
+    saved_by: str
+    published_at: str | None
+    published_by: str | None
+    review_id: str | None
+
+
+class PublishRequestRow(Out):
+    """A publish request: what it publishes (`kind`, `subject_id`, `version`), where it stands, and the review's body,
+    a document each kind's review writes."""
+
+    tenant_id: str
+    id: str
+    kind: str
+    subject_id: str
+    version: int
+    status: str
+    note: str
+    requested_by: str
+    created_at: str
+    decided_at: str | None
+    decided_by: str | None
+    decision_reason: str | None
+    body: Json
+    team_id: str
+
+
+class AgentRegistry(VersionedRegistry[AgentRow, AgentVersionRow]):
     # A slug and a version number are unique keys (CAS); a save writes its version row and moves the agent in one
     # transaction, as does a publish (TRANSACTION). Only one publish request per subject may be pending (CAS).
     requires: ClassVar[frozenset[Guarantee]] = frozenset({Guarantee.CAS, Guarantee.TRANSACTION})
+    head = registry_agents
+    history = registry_agent_versions
+    subject = "agent_id"
+    noun = "Agent"
+    # Every read names the caller's tenant as well as the row policies do, for SQLite.
+    in_tenant = True
+    head_row = AgentRow
+    version_row = AgentVersionRow
 
     async def set_template(self, agent_id: str, *, template_id: str | None, protection: str | None) -> None:
         """Sets what the provisioning service owns on the row; a None leaves that column as it is."""
@@ -259,16 +326,6 @@ class AgentRegistry(RuntimeStore):
         if values:
             async with self.tx() as c:
                 await c.execute(registry_agents.update().where(registry_agents.c.id == agent_id).values(**values))
-
-    async def rows(self) -> list[dict[str, Any]]:
-        """The acting team's agents of the caller's tenant (every team's with no acting team: a loop or the seed)."""
-        q = (
-            sa.select(registry_agents)
-            .where(registry_agents.c.tenant_id == current_tenant(), team_visible(registry_agents))
-            .order_by(registry_agents.c.id)
-        )
-        async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
 
     async def published_pointers(self) -> list[tuple[str, str, int | None, bool]]:
         """Every tenant's agents as (tenant, id, published version, paused), read past the tenant at start: the system
@@ -317,22 +374,6 @@ class AgentRegistry(RuntimeStore):
             async with self.tx() as c:
                 found = (await c.execute(q)).all()
         return {str(i): str(team or "") for i, team in found if str(i) in ids}
-
-    async def row(self, agent_id: str, c: AsyncConnection | None = None, *, lock: bool = False) -> dict[str, Any]:
-        """The agent, when the acting team owns it; another team's agent is NotFound, so its routes answer 404."""
-        q = sa.select(registry_agents).where(
-            mine(registry_agents), registry_agents.c.id == agent_id, team_visible(registry_agents)
-        )
-        if lock:
-            q = q.with_for_update()
-        if c is None:
-            async with self.tx() as conn:
-                r = (await conn.execute(q)).mappings().first()
-        else:
-            r = (await c.execute(q)).mappings().first()
-        if r is None:
-            raise NotFound(f"Agent {agent_id}")
-        return dict(r)
 
     async def page(self, params: ListParams, *, since: str) -> ListPage:
         """One page of the acting team's agents, each row with its newest version's spec and `tasks_24h`, the threads
@@ -385,31 +426,13 @@ class AgentRegistry(RuntimeStore):
                 facets={"availability": availability, "teamId": a.c.team_id},
             )
 
-    async def versions(self, agent_id: str) -> list[dict[str, Any]]:
-        q = (
-            sa.select(registry_agent_versions)
-            .where(
-                mine(registry_agent_versions),
-                registry_agent_versions.c.agent_id == agent_id,
-                team_visible(registry_agent_versions),
-            )
-            .order_by(registry_agent_versions.c.version.desc())
-        )
-        async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
-
-    async def version(self, agent_id: str, version: int) -> dict[str, Any]:
-        q = sa.select(registry_agent_versions).where(
-            mine(registry_agent_versions),
-            registry_agent_versions.c.agent_id == agent_id,
-            registry_agent_versions.c.version == version,
-            team_visible(registry_agent_versions),
-        )
-        async with self.tx() as c:
-            r = (await c.execute(q)).mappings().first()
-        if r is None:
-            raise NotFound(f"Agent {agent_id} version {version}")
-        return dict(r)
+    async def version(self, record_id: str, version: int, c: AsyncConnection | None = None) -> AgentVersionRow:
+        """A saved version of an agent the acting team owns; NotFound when there is none (the other registries answer
+        None)."""
+        found = await super().version(record_id, version, c)
+        if found is None:
+            raise NotFound(f"Agent {record_id} version {version}")
+        return found
 
     async def named_versions(self, keys: set[tuple[str, int]]) -> dict[tuple[str, int], tuple[str, str]]:
         """Each (agent, version) of `keys` the acting team sees, as that version's name and the agent's slug, in one
@@ -427,7 +450,7 @@ class AgentRegistry(RuntimeStore):
             rows = (await c.execute(q)).mappings().all()
         return {(str(r["agent_id"]), int(r["version"])): (str(r["spec"]["name"]), str(r["slug"])) for r in rows}
 
-    async def published_spec(self, agent_id: str, version: int) -> dict[str, Any] | None:
+    async def published_spec(self, agent_id: str, version: int) -> Json | None:
         """A version's spec when it was published at some point, so a deployment pinned to it keeps serving it after a
         newer version goes live; None for a draft or an unknown version. Chat and widgets read pins here."""
         q = sa.select(registry_agent_versions.c.spec, registry_agent_versions.c.published_at).where(
@@ -439,14 +462,14 @@ class AgentRegistry(RuntimeStore):
             r = (await c.execute(q)).first()
         return dict(r[0]) if r is not None and r[1] is not None else None
 
-    async def requests(self, kind: str, subject_id: str) -> list[dict[str, Any]]:
+    async def requests(self, kind: str, subject_id: str) -> list[PublishRequestRow]:
         q = (
             sa.select(publish_requests)
             .where(_mine(), publish_requests.c.kind == kind, publish_requests.c.subject_id == subject_id)
             .order_by(publish_requests.c.created_at.desc())
         )
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await read_rows(c, q, PublishRequestRow)
 
     async def _unique_slug(self, c: AsyncConnection, name: str) -> str:
         base = slugify(name)
@@ -463,9 +486,7 @@ class AgentRegistry(RuntimeStore):
             slug, n = f"{base}-{n}", n + 1
         return slug
 
-    async def create_if_absent(
-        self, spec: dict[str, Any], *, by: str, team_id: str, agent_id: str, version: int = 1
-    ) -> bool:
+    async def create_if_absent(self, spec: Json, *, by: str, team_id: str, agent_id: str, version: int = 1) -> bool:
         """`create` for an agent whose id is fixed (a team's Ops Assistant, a seed agent): False when a row of that id,
         in any tenant, or one racing it for the same slug, is already there, so two first chats at once leave one
         agent and a seed id another tenant holds does not stop the start."""
@@ -480,7 +501,7 @@ class AgentRegistry(RuntimeStore):
 
     async def create(
         self,
-        spec: dict[str, Any],
+        spec: Json,
         *,
         by: str,
         team_id: str,
@@ -507,7 +528,7 @@ class AgentRegistry(RuntimeStore):
         c = conn
         aid = agent_id or new_id("ag")
         at = now_iso()
-        slug = await self._unique_slug(c, spec["name"])
+        slug = await self._unique_slug(c, narrow.required(spec, "name", str))
         await c.execute(
             registry_agents.insert().values(
                 id=aid,
@@ -539,7 +560,7 @@ class AgentRegistry(RuntimeStore):
         await hold_pins(c, aid, team_id, spec.get("skillPins"))
         return aid
 
-    async def save(self, agent_id: str, spec: dict[str, Any], *, by: str, note: str = "") -> int:
+    async def save(self, agent_id: str, spec: Json, *, by: str, note: str = "") -> int:
         """Saves `spec` as the agent's one draft: it rewrites the newest version while that version is
         unpublished and no publish request has named it; otherwise it opens the next version as the draft, so neither
         what runs nor what a reviewer saw ever changes. The published pointer does not move."""
@@ -549,23 +570,19 @@ class AgentRegistry(RuntimeStore):
             # Locked so two saves at once (two tabs, or autosave racing a slow save) take turns: unlocked, both read the
             # same newest version, both open the next one, and the second fails on the version key.
             row = await self.row(agent_id, c, lock=True)
-            n = int(row["version"])
-            newest = (
-                (await c.execute(sa.select(v).where(v.c.agent_id == agent_id, v.c.version == n, team_visible(v))))
-                .mappings()
-                .one()
-            )
+            n = row.version
+            newest = await self.newest(c, agent_id, n)
             asked = await publish_requested(c, "agent", agent_id, n)
-            if newest["published_at"] is None and not asked:
+            if newest.published_at is None and not asked:
                 # The draft keeps every change made to it, so its history entry reads as one change set.
-                changes = list(dict.fromkeys([*newest["changes"], *changes_between(newest["spec"], spec)]))
+                changes = list(dict.fromkeys([*newest.changes, *changes_between(newest.spec, spec)]))
                 await c.execute(
                     v.update()
                     .where(v.c.agent_id == agent_id, v.c.version == n)
                     .values(
                         spec=spec,
                         digest=digest_of(spec),
-                        note=note or newest["note"],
+                        note=note or newest.note,
                         changes=changes,
                         saved_at=at,
                         saved_by=by,
@@ -580,7 +597,7 @@ class AgentRegistry(RuntimeStore):
                         spec=spec,
                         digest=digest_of(spec),
                         note=note,
-                        changes=changes_between(newest["spec"], spec),
+                        changes=changes_between(newest.spec, spec),
                         saved_at=at,
                         saved_by=by,
                     )
@@ -588,10 +605,10 @@ class AgentRegistry(RuntimeStore):
             await c.execute(
                 registry_agents.update().where(registry_agents.c.id == agent_id).values(version=n, updated_at=at)
             )
-            await hold_pins(c, agent_id, str(row["team_id"]), spec.get("skillPins"))
+            await hold_pins(c, agent_id, row.team_id, spec.get("skillPins"))
         return n
 
-    async def publish(self, agent_id: str, version: int, *, by: str, review_id: str) -> None:
+    async def publish(self, agent_id: str, version: int, *, by: str | None, review_id: str) -> None:
         at = now_iso()
         async with self.tx() as c:
             await c.execute(
@@ -635,10 +652,10 @@ class AgentRegistry(RuntimeStore):
         *,
         note: str,
         by: str,
-        body: dict[str, Any],
+        body: Json,
         approved: bool,
         replaces_older: bool = False,
-    ) -> dict[str, Any]:
+    ) -> PublishRequestRow:
         """Records a publish request; 409 when one is already pending for the subject. With `replaces_older`, a pending
         request for an older version is returned to its author instead: only the newest draft may publish, so
         the older one could only ever put a version live that lacks what was saved since."""
@@ -671,10 +688,10 @@ class AgentRegistry(RuntimeStore):
         *,
         note: str,
         by: str,
-        body: dict[str, Any],
+        body: Json,
         approved: bool,
         replaces_older: bool,
-    ) -> dict[str, Any]:
+    ) -> PublishRequestRow:
         at = now_iso()
         prefix = REQUEST_PREFIXES.get(kind, "WFP")
         pending = (
@@ -721,38 +738,28 @@ class AgentRegistry(RuntimeStore):
             "decision_reason": None,
             "body": body,
         }
-        await c.execute(publish_requests.insert().values(**row))
-        return row
+        made = await one(c, publish_requests.insert().values(**row).returning(publish_requests), PublishRequestRow)
+        assert made is not None  # an insert that succeeds returns its row
+        return made
 
-    async def all_requests(self) -> list[dict[str, Any]]:
+    async def all_requests(self) -> list[PublishRequestRow]:
         q = sa.select(publish_requests).where(_mine()).order_by(publish_requests.c.created_at.desc())
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await read_rows(c, q, PublishRequestRow)
 
-    async def request(self, request_id: str) -> dict[str, Any]:
+    async def request(self, request_id: str) -> PublishRequestRow:
         q = sa.select(publish_requests).where(_mine(), publish_requests.c.id == request_id)
         async with self.tx() as c:
-            r = (await c.execute(q)).mappings().first()
+            r = await one(c, q, PublishRequestRow)
         if r is None:
             raise NotFound(f"Publish request {request_id}")
-        return dict(r)
+        return r
 
-    async def set_body(self, request_id: str, body: dict[str, Any]) -> None:
+    async def set_body(self, request_id: str, body: Json) -> None:
         async with self.tx() as c:
             await c.execute(
                 publish_requests.update().where(_mine(), publish_requests.c.id == request_id).values(body=body)
             )
-
-    async def import_request(self, row: dict[str, Any]) -> bool:
-        """Stores a request copied from another store under the id it was given; False when it is already here, so a
-        copy can run again."""
-        async with self.tx() as c:
-            if (
-                await c.execute(sa.select(publish_requests.c.id).where(_mine(), publish_requests.c.id == row["id"]))
-            ).first():
-                return False
-            await c.execute(publish_requests.insert().values(**row))
-            return True
 
     async def decide_request(self, request_id: str, status: str, by: str, reason: str | None) -> bool:
         """Records the decision on a pending request; False when another decision got there first."""

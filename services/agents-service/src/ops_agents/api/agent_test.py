@@ -12,8 +12,10 @@ from ops_agents.activities.tool_directory import grants_for
 from ops_agents.activities.tools import fill
 from ops_agents.graphs.common import needs_step_up
 from ops_service_kit.errors import ApiError, ServiceUnavailable
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
 
+from ..store.agent_registry import AgentRow
 from .agent_registry import definition_of, registry
 from .deps import Runtime
 
@@ -31,12 +33,12 @@ def model_refusal(result: TurnResult) -> ApiError | None:
     return error
 
 
-def _held(rt: Runtime, grant: ToolGrant) -> dict[str, Any]:
+def _held(rt: Runtime, grant: ToolGrant) -> Json:
     """A tool the tested agent holds: whether a call pauses for a review (the kernel gates every grant that is not
     read-only or a workflow) and, from its approval template, at which gate and for whom."""
     tool = rt.catalog.tool(grant.name)
     tpl = tool.approval if tool else None
-    out: dict[str, Any] = {"name": grant.name, "access": grant.access, "pauses": grant.gated}
+    out: Json = {"name": grant.name, "access": grant.access, "pauses": grant.gated}
     if grant.gated:
         out |= {"gate": tpl.gate if tpl else "Approval", "reviewers": tpl.reviewers if tpl else "a reviewer"}
     return out
@@ -47,14 +49,14 @@ async def one_test_turn(
     agent_id: str,
     message: str,
     *,
-    row: dict[str, Any],
+    row: AgentRow,
     collections: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     """The same one-turn harness POST /v1/agents/{id}/test uses. Eval-runs call this per case."""
     if rt.ports is None:
         raise ServiceUnavailable(rt.model_error or "No model is configured.", code="model_unavailable")
     reg = registry(rt)
-    defn = definition_of(agent_id, int(row["version"]), (await reg.version(agent_id, int(row["version"])))["spec"])
+    defn = definition_of(agent_id, row.version, (await reg.version(agent_id, row.version)).spec)
     req = TurnRequest(
         turn_id=new_id("turn"),
         run_id=new_id("run"),

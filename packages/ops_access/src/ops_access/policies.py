@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from ops_identity import Principal
+from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.narrow import json_object
 
 
 @dataclass(frozen=True)
@@ -288,6 +290,8 @@ def check_value(key: str, value: Any) -> Any:
     policy = BY_KEY.get(key)
     if policy is None:
         raise ValueError(f"{key} is not a policy")
+    # Read before any check narrows `value`; used only once `value` is known to be an object.
+    held = json_object(value)
     if policy.kind == "bool" and isinstance(value, bool):
         return value
     if (
@@ -310,7 +314,6 @@ def check_value(key: str, value: Any) -> Any:
     if policy.kind == "choice" and isinstance(value, str) and value in {c[0] for c in policy.choices}:
         return value
     if policy.kind == "app_changes" and isinstance(value, dict):
-        held = cast(dict[str, Any], value)
         answer = held.get("answer", "person")
         role = held.get("reviewerRole")
         if (
@@ -331,9 +334,9 @@ def check_value(key: str, value: Any) -> Any:
                 **({"makersAsk": held["makersAsk"]} if "makersAsk" in held else {}),
             }
     if policy.kind == "app_changes_by_app" and isinstance(value, dict):
-        out: dict[str, Any] = {}
+        out: Json = {}
         for app, raw in cast(dict[Any, Any], value).items():
-            entry: dict[str, Any] = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
+            entry = json_object(raw)
             role = entry.get("reviewerRole")
             if not (isinstance(app, str) and entry.get("answer") in ANSWERS):
                 break
@@ -367,30 +370,30 @@ def policy(p: Principal, key: str) -> Any:
     return p.policies.get(key, BY_KEY[key].default)
 
 
-def team_on(values: Any, team: str | None) -> bool:
+def team_on(values: object, team: str | None) -> bool:
     """Whether `team` turned a per-team switch on (toolWritesNeedApproval, aiSteps, taskAssist, checkBeforeSend,
     pageImages), from the value GET /v1/policies/{key} returns (read live on each call); off for a team that set
     nothing."""
-    return team is not None and isinstance(values, dict) and cast(dict[str, Any], values).get(team) is True
+    return team is not None and json_object(values).get(team) is True
 
 
-def team_off(values: Any, team: str | None) -> bool:
+def team_off(values: object, team: str | None) -> bool:
     """Whether `team` turned a per-team switch that is on by default off (aiStepsMaskPersonalData): only an explicit
     false counts, so a team that set nothing keeps the protection."""
-    return team is not None and isinstance(values, dict) and cast(dict[str, Any], values).get(team) is False
+    return team is not None and json_object(values).get(team) is False
 
 
-def team_writes_need_approval(values: dict[str, Any], team: str | None) -> bool:
+def team_writes_need_approval(values: object, team: str | None) -> bool:
     """Whether `team` set toolWritesNeedApproval on."""
     return team_on(values, team)
 
 
-def team_names(values: Any, team: str | None) -> list[str]:
+def team_names(values: object, team: str | None) -> list[str]:
     """The names `team` listed in a per-team list policy (appWritesNeedApproval), from the value GET /v1/policies/{key}
     returns; none for a team that set nothing."""
-    if team is None or not isinstance(values, dict):
+    if team is None:
         return []
-    listed: object = cast(dict[str, Any], values).get(team)
+    listed: object = json_object(values).get(team)
     return [str(n) for n in cast(list[Any], listed)] if isinstance(listed, list) else []
 
 
@@ -405,11 +408,10 @@ def publish_mode(modes: dict[str, Any], team: str, area: str) -> str:
 ANSWERS = ("none", "person", "reviewer")
 
 
-def _level(value: Any) -> tuple[str | None, str | None]:
-    """The (answer, reviewerRole) one level of the chain holds; answer None when the level says nothing."""
-    if not isinstance(value, dict):
-        return None, None
-    held = cast(dict[str, Any], value)
+def _level(value: object) -> tuple[str | None, JsonValue]:
+    """The (answer, reviewerRole) one level of the chain holds; answer None when the level says nothing (as a level
+    that is not an object says nothing)."""
+    held = json_object(value)
     answer = held.get("answer")
     if held.get("ask") is False:
         answer = "none"
@@ -455,18 +457,11 @@ def effective_answer(*, tool: dict[str, Any], app: Any, team: Any, channel: str,
         answer = "reviewer"
     # A test run of a write on a live account pauses for the person's yes unless the team turned `testRunsAsk` off
     # (on unless saved off); chats and workflows keep the answer above.
-    if (
-        answer == "none"
-        and channel == "test"
-        and not test_account
-        and (cast(dict[str, Any], team).get("testRunsAsk", True) if isinstance(team, dict) else True)
-    ):
+    if answer == "none" and channel == "test" and not test_account and json_object(team).get("testRunsAsk", True):
         answer, role, source = "person", None, "test-run"
     if answer == "none":
         return {"waits": False, "answer": "none", "reviewerRole": None, "source": source}
-    if test_account and (
-        cast(dict[str, Any], team).get("testAccountsNeverAsk", True) if isinstance(team, dict) else True
-    ):
+    if test_account and json_object(team).get("testAccountsNeverAsk", True):
         return {"waits": False, "answer": "none", "reviewerRole": None, "source": "test-account"}
     return {"waits": True, "answer": answer, "reviewerRole": None if answer == "person" else role, "source": source}
 

@@ -18,6 +18,7 @@ from urllib.parse import quote, urlsplit
 import httpx
 
 from ops_email import DeltaPage, GraphMailSource, GraphToken
+from ops_service_kit.http import Json
 
 from .egress import TENANT_EXTENSION, no_cookie_jar
 
@@ -86,7 +87,7 @@ def roles(header: dict[str, str]) -> list[str] | None:
         payload = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4)))
     except (ValueError, json.JSONDecodeError):
         return None
-    found = cast(dict[str, Any], payload).get("roles") if isinstance(payload, dict) else None
+    found = cast(Json, payload).get("roles") if isinstance(payload, dict) else None
     return [str(r) for r in cast(list[Any], found)] if isinstance(found, list) else []
 
 
@@ -171,13 +172,13 @@ class GraphReader(GraphMailSource):
         params = {"$top": "1", "$select": "from,subject,receivedDateTime", "$orderby": "receivedDateTime desc"}
         r = await self.http.get(path, params=params, headers=await self.token.header())
         r.raise_for_status()
-        body = cast(dict[str, Any], r.json())
-        items = cast(list[dict[str, Any]], body.get("value") or [])
+        body = cast(Json, r.json())
+        items = cast(list[Json], body.get("value") or [])
         if not items:
             return None
         newest = items[0]
-        origin = cast(dict[str, Any], newest.get("from") or {})
-        sender = cast(dict[str, Any], origin.get("emailAddress") or {})
+        origin = cast(Json, newest.get("from") or {})
+        sender = cast(Json, origin.get("emailAddress") or {})
         return {
             "from": str(sender.get("address") or ""),
             "subject": str(newest.get("subject") or ""),

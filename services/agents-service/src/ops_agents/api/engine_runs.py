@@ -20,6 +20,7 @@ from ops_engine.store import (
     RunStore,
 )
 from ops_service_kit.errors import ApiError, Conflict, NotFound
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id
 
 
@@ -127,7 +128,7 @@ class WorkflowStarts:
     def __init__(self, runs: RunStore, definitions: DefinitionStore) -> None:
         self.runs, self.definitions = runs, definitions
 
-    async def start(self, parent_run_id: str, workflow: str, input: dict[str, Any], key: str) -> StartedRun:
+    async def start(self, parent_run_id: str, workflow: str, input: Json, key: str) -> StartedRun:
         run_key = child_run_key(key)
         # A retried or re-run step finds its child even if the workflow has been paused since.
         if (found := await self.runs.by_key(workflow, run_key)) is not None:
@@ -162,7 +163,7 @@ class WorkflowStarts:
             raise RunRefusedError(str(e), e.code or "refused") from e
         return StartedRun(run.id, created)
 
-    async def children(self, parent_run_id: str, key_prefix: str, *, outputs: bool = False) -> list[dict[str, Any]]:
+    async def children(self, parent_run_id: str, key_prefix: str, *, outputs: bool = False) -> list[Json]:
         """The children a step started, read on the parent index; their run keys carry the `child:` prefix
         child_run_key gives them. A key hashed for being over 194 characters would not match; run id, step id and
         iteration stay far under that."""
