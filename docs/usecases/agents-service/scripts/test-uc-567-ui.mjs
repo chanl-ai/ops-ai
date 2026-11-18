@@ -8,7 +8,7 @@ import { join } from 'node:path';
 
 import { PLATFORM_PORT, AGENTS_PORT, ROOT, TOOLS_PORT, check, chromium, evidenceDir, finish, withUiStack } from '@ops-ai/usecase-runner/harness';
 
-const SHOTS = evidenceDir('561', 'uc');
+const SHOTS = evidenceDir('567', 'uc');
 mkdirSync(SHOTS, { recursive: true });
 
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;

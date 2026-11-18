@@ -42,7 +42,7 @@ import { AGENTS_PORT, DOCUMENTS_PORT, FILES_PORT, PLATFORM_PORT, ROOT, check, ch
 // The console's own pinned qrcode, to draw the QR code a shared link should show.
 const QRCode = createRequire(new URL('../../../../apps/console/package.json', import.meta.url))('qrcode');
 
-const SHOTS = evidenceDir('535', 'uc');
+const SHOTS = evidenceDir('568', 'uc');
 mkdirSync(SHOTS, { recursive: true });
 const agents = `http://127.0.0.1:${AGENTS_PORT}`;
 const files = `http://127.0.0.1:${FILES_PORT}`;

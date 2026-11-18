@@ -141,7 +141,7 @@ await withUiStack(
         await newcomer.getByTestId('access-invite-locked').hover();
         const why = await newcomer.getByRole('tooltip').first().innerText().catch(() => '');
         // The card's screen evidence: a viewer's Access page with the locked Invite and its reason.
-        mkdirSync(evidenceDir('311', 'screens'), { recursive: true });
+        mkdirSync(evidenceDir('023', 'screens'), { recursive: true });
         // At the review widths, each with the reason open beside the button.
         for (const width of [1280, 400]) {
           await newcomer.setViewportSize({ width, height: 800 });
@@ -150,7 +150,7 @@ await withUiStack(
           await newcomer.getByTestId('access-invite-locked').hover();
           await newcomer.getByRole('tooltip').first().waitFor({ timeout: 10_000 }).catch(() => undefined);
           await newcomer.waitForTimeout(300);
-          await newcomer.screenshot({ path: join(evidenceDir('311', 'screens'), `invite-locked-${width}.png`) });
+          await newcomer.screenshot({ path: join(evidenceDir('023', 'screens'), `invite-locked-${width}.png`) });
         }
         await newcomer.setViewportSize({ width: 1440, height: 1000 });
         check('4b a viewer sees Invite locked with why: it needs Manage on Access', /Manage on Access/.test(why), { why });

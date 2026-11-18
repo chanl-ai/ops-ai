@@ -40,10 +40,10 @@ const OURS = [
   { after: 'person_get_record', result: 'CONNECTION_NOT_LINKED', text: 'I could not read it: Person desk needs your own account. Connect it from the card above and I will go ahead.' },
   { after: 'person_get_record', result: '"as": ?"(?P<who>[^"]+)"', text: 'Harbor ticket 1042 is open; Person desk answered to {who}.' },
 ];
-const RULES = '.logs/usecase/uc588-model';
+const RULES = evidenceDir('588', 'model');
 const demo = JSON.parse(readFileSync(join(ROOT, 'services/models-service/seed/demo-fake-openai/script.json'), 'utf8'));
-mkdirSync(join(ROOT, RULES), { recursive: true });
-writeFileSync(join(ROOT, RULES, 'script.json'), JSON.stringify({ ...demo, rules: [...OURS, ...demo.rules] }));
+mkdirSync(RULES, { recursive: true });
+writeFileSync(join(RULES, 'script.json'), JSON.stringify({ ...demo, rules: [...OURS, ...demo.rules] }));
 
 /** The fake system, started from its script; resolves with what it printed and stops when the walk ends. */
 async function startFake() {

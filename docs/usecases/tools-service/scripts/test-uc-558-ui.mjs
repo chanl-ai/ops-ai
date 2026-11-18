@@ -29,10 +29,10 @@ const OURS = [
   {"after": "uc558_update_case", "result": "has not connected their own", "text": "I did not change the case: Salesforce needs your own account for that. Connect it from the card above and I will go ahead."},
   {"after": "uc558_update_case", "text": "The case is now Awaiting documents, changed with your Salesforce account."},
 ];
-const RULES = '.logs/usecase/uc558-model';
+const RULES = evidenceDir('558', 'model');
 const demo = JSON.parse(readFileSync(join(ROOT, 'services/models-service/seed/demo-fake-openai/script.json'), 'utf8'));
-mkdirSync(join(ROOT, RULES), { recursive: true });
-writeFileSync(join(ROOT, RULES, 'script.json'), JSON.stringify({ ...demo, rules: [...OURS, ...demo.rules] }));
+mkdirSync(RULES, { recursive: true });
+writeFileSync(join(RULES, 'script.json'), JSON.stringify({ ...demo, rules: [...OURS, ...demo.rules] }));
 
 /** The fake Salesforce, started from its script; resolves with what it printed and stops when the walk ends. */
 async function startSalesforce() {

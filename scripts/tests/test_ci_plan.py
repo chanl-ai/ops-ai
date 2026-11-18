@@ -18,13 +18,13 @@ ROOT = Path(__file__).resolve().parents[2]
 CLEAN_MAKE_ENV = {k: v for k, v in os.environ.items() if k not in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL")}
 
 
-def plan(tmp_path: Path, *changed: str) -> dict[str, str]:
+def plan(tmp_path: Path, *changed: str, ref: str = "") -> dict[str, str]:
     listed = tmp_path / "changed.txt"
     listed.write_text("\n".join(changed) + "\n", encoding="utf-8")
     out = subprocess.run(
         ["bash", "scripts/ci-plan.sh", str(listed)],
         cwd=ROOT,
-        env=CLEAN_MAKE_ENV,
+        env={**CLEAN_MAKE_ENV, "GITHUB_REF": ref},
         capture_output=True,
         text=True,
         check=True,
@@ -66,6 +66,14 @@ def test_a_service_change_runs_that_service_and_no_repo_job(tmp_path: Path) -> N
     p = plan(tmp_path, "services/kb-service/src/ops_kb/app.py")
     assert (p["full"], p["repo_pool"]) == ("false", ""), p
     assert json.loads(p["service_jobs"]) == [{"service": "kb-service", "part": "verify"}], p
+
+
+def test_a_release_or_hotfix_branch_runs_every_job_whatever_changed(tmp_path: Path) -> None:
+    for ref in ("refs/heads/release/1.2.0", "refs/heads/hotfix/1.2.1"):
+        p = plan(tmp_path, "docs/deploy/release.md", ref=ref)
+        assert (p["full"], p["release"], p["console"], p["docs"]) == ("true", "true", "true", "true"), p
+        assert {j["service"] for j in json.loads(p["service_jobs"])} >= {"agents-service", "kb-service"}, p
+    assert plan(tmp_path, "docs/deploy/release.md", ref="refs/heads/develop")["release"] == "false"
 
 
 def _ci_ok() -> tuple[dict[str, Any], set[str]]:

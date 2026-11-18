@@ -1,12 +1,13 @@
-# Checks on GitHub-hosted runners only, since a fork's pull request runs its own code. A push to develop that passes
-# ci-ok is then deployed to staging (job `staging`, which calls deploy-staging.yml).
+# Checks on GitHub-hosted runners only, since a fork's pull request runs its own code. A push to develop, a release/* or
+# a hotfix/* branch that passes ci-ok is then deployed to staging (job `staging`, which calls deploy-staging.yml).
 name: ci
 
 on:
   pull_request:
-  # develop and main run the same checks after a merge; the staging job at the end deploys develop.
+  # develop and main run the same checks after a merge; the staging job at the end deploys develop, and a release or
+  # hotfix branch (docs/deploy/release.md) so the release is tested on staging.
   push:
-    branches: [develop, main]
+    branches: [develop, main, "release/**", "hotfix/**"]
 
 permissions:
   contents: read
@@ -26,8 +27,9 @@ env:
   OPS_SMTP_HOST: 127.0.0.1
   OPS_GREENMAIL_HOST: 127.0.0.1
   OPS_MAILPIT_HOST: 127.0.0.1
-  # What the changed-files plan compares against: the pull request's base, or the branch tip before a push.
-  BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+  # What the changed-files plan compares against: the pull request's base, or the branch tip before a push. A branch's
+  # first push has no tip before it (an all-zero sha), so the whole difference from main is checked.
+  BASE_SHA: ${{ github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || 'origin/main' }}
 
 jobs:
   plan:
@@ -35,6 +37,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       full: ${{ steps.plan.outputs.full }}
+      release: ${{ steps.plan.outputs.release }}
       services: ${{ steps.plan.outputs.services }}
       packages: ${{ steps.plan.outputs.packages }}
       console: ${{ steps.plan.outputs.console }}
@@ -55,7 +58,7 @@ jobs:
   checks:
     # The one list of checks (make/checks.mk), the same one `make verify`, verify-changed.sh and pre-commit run.
     needs: plan
-    if: needs.plan.outputs.full != 'true'
+    if: needs.plan.outputs.full != 'true' || needs.plan.outputs.release == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -74,6 +77,9 @@ jobs:
           # The SDK drift check, the changelog check and the console's standards run on node; the script tests drive
           # the commit hooks, which run pnpm.
           node: "true"
+          # The script tests start tools-service (scripts/tests/test_page_stack.py), which loads its review key into
+          # OPA at start and exits when none answers; with OPS_INFRA=external that is the side container infra starts.
+          infra: ${{ needs.plan.outputs.scripts }}
       - name: Lint and format the changed Python
         run: |
           base=$(git merge-base "$BASE_SHA" HEAD)
@@ -236,17 +242,7 @@ jobs:
           echo "OPS_MSSQL_SERVER=127.0.0.1,1433" >> "$GITHUB_ENV"
           docker run -d --name ops-mssql -e ACCEPT_EULA=Y -e MSSQL_PID=Developer -e MSSQL_SA_PASSWORD="$pw" \
             -p 127.0.0.1:1433:1433 mcr.microsoft.com/mssql/server:2025-latest@sha256:21cba63f9e5f93ae72d211e50bceca8f047a6233da18ed5ecb497152f97eca7b
-          # The ODBC driver the store opens its connections with (ODBC Driver 18 for SQL Server), from Microsoft's
-          # repository. The runner image already lists that repository (microsoft-prod.gpg); a second entry for the
-          # same source with another key file makes apt refuse to read its sources (exit 100), so ours is added only
-          # when the image lacks one.
-          if ! grep -rqs "packages.microsoft.com/ubuntu/24.04/prod" /etc/apt/sources.list /etc/apt/sources.list.d; then
-            curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor --yes -o /usr/share/keyrings/microsoft.gpg
-            echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/ubuntu/24.04/prod noble main" \
-              | sudo tee /etc/apt/sources.list.d/mssql-release.list >/dev/null
-          fi
-          sudo apt-get update -q
-          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc
+          scripts/install-sql-server-driver.sh
           odbcinst -q -d | grep -q "ODBC Driver 18 for SQL Server" || { odbcinst -q -d; echo "::error::ODBC Driver 18 is not registered"; exit 1; }
           for _ in $(seq 60); do docker logs ops-mssql 2>&1 | grep -q "ready for client" && break; sleep 2; done
           docker logs ops-mssql 2>&1 | grep -q "ready for client" || { docker logs ops-mssql | tail -20; exit 1; }
@@ -296,9 +292,10 @@ jobs:
 
   release-proof:
     # A pull request into main is a release: the upgrade from the last tag's schema on a seeded database, and a fresh
-    # install through ./install.sh on the released images. Needs the whole history and its tags.
+    # install through ./install.sh on the released images. A push to a release or hotfix branch runs it too. Needs the
+    # whole history and its tags.
     needs: plan
-    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    if: (github.event_name == 'pull_request' && github.base_ref == 'main') || needs.plan.outputs.release == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -383,14 +380,14 @@ jobs:
           echo "every check that ran passed"
 
   staging:
-    # Every merge to develop goes to staging once ci-ok passed for that commit, so the owner tests the real combination.
-    # Pull requests and pushes to main never reach this job. deploy-staging.yml holds the deploy, the pin rules
-    # (an open release PR or STAGING_HOLD skip it with a notice), the checks, the rollback and the summary.
+    # Every merge to develop, and every push to a release or hotfix branch, goes to staging once ci-ok passed for that
+    # commit, so the owner tests the real combination. Pull requests and pushes to main never reach this job.
+    # deploy-staging.yml holds the deploy, the freeze rules (a release or hotfix branch on origin, or STAGING_HOLD, skips
+    # a develop deploy with a notice), the checks, the rollback and the summary.
     needs: ci-ok
-    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/develop' && needs.ci-ok.result == 'success' }}
+    if: ${{ !cancelled() && github.event_name == 'push' && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/heads/hotfix/')) && needs.ci-ok.result == 'success' }}
     permissions:
       contents: read
-      pull-requests: read # to see an open release PR
     uses: ./.github/workflows/deploy-staging.yml
     with:
       ref: ${{ github.sha }}

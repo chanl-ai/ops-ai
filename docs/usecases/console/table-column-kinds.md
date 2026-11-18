@@ -7,7 +7,7 @@ never wrapped. A column now says what it holds (an id, a date, a status, a name,
 and the shared data table sizes it: ids, dates and statuses on one line at their own width; a name takes the free
 space and trims to one line with the whole value on hover; a description wraps to two lines then trims; numbers and
 money sit on one line, right-aligned; a cell that draws nothing shows a dash. On a phone the select box and the name
-stay pinned while the other columns scroll. Before and after screenshots: `docs/console/proposed/table-columns/`.
+stay pinned while the other columns scroll. Before and after screenshots: `.logs/usecases/<id>/`.
 
 ## Preconditions
 

@@ -41,6 +41,9 @@ runs:
     - name: Tools the deploy runs (psql for grants, uv for the DDL, Chromium for the click walk)
       shell: bash
       run: |
+        # setup-flyctl puts only `flyctl` on the path; the deploy scripts call `fly`, as on a laptop.
+        command -v fly >/dev/null || sudo ln -s "$(command -v flyctl)" /usr/local/bin/fly
+        fly version
         sudo apt-get update -q && sudo apt-get install -yq postgresql-client netcat-openbsd >/dev/null
         uv sync --frozen --quiet
         pnpm install --frozen-lockfile
