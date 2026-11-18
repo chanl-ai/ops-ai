@@ -417,7 +417,7 @@ def route_skipped(runs: list[dict[str, Any]]) -> list[str]:
 async def journal(a: Adapter, tid: str) -> list[dict[str, Any]]:
     store = a.rt.graph_store
     assert store is not None
-    return await store.runs(tid)
+    return [r.model_dump() for r in await store.runs(tid)]
 
 
 async def test_routing_a_waiting_thread_to_people_raises_the_manual_step(adapter: Adapter) -> None:

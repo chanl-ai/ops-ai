@@ -23,6 +23,7 @@ from typing import Any
 from pydantic import JsonValue
 
 from ops_agents.graphs.definition import InvalidDefinitionError, NodeKind, WorkflowDefinition, validate
+from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
@@ -31,6 +32,7 @@ from ..store.agent_registry import PublishRequestRow
 from ..store.graphs import GraphStore
 from ..store.workflow_list import PendingPublish
 from ..store.workflow_registry import (
+    RegistryWorkflowRow,
     WorkflowRegistry,
 )
 from .agent_registry import SEED_TEAM, definition_of
@@ -329,7 +331,7 @@ async def agent_pins(rt: Runtime) -> dict[str, PinnedAgent | None]:
     return out
 
 
-async def held(rt: Runtime, name: str) -> dict[str, Any] | None:
+async def held(rt: Runtime, name: str) -> RegistryWorkflowRow | None:
     """The registry workflow `name` when the acting team holds it; None when no team does. Another team's answers 404,
     never None: None means "a graph the registry does not hold", which the callers treat as open to the acting team."""
     row = await registry(rt).find(name)
@@ -344,13 +346,13 @@ async def thread_pin(rt: Runtime, graph: str) -> int | None:
     row = await held(rt, graph)
     if row is None:
         return None
-    if row["status"] == "deleted":
+    if row.status == "deleted":
         raise NotFound(f"Workflow {graph}")
-    if row["status"] == "paused":
+    if row.status == "paused":
         raise Conflict(f"Workflow {graph} is paused; it starts no new threads.", code="workflow_paused")
-    if row["published_version"] is None:
+    if row.published_version is None:
         raise ValidationFailed(f"Workflow {graph} has no published version yet.", code="not_published")
-    return int(row["published_version"])
+    return row.published_version
 
 
 async def move_pointer(rt: Runtime, workflow_id: str, version: int) -> None:
@@ -368,7 +370,7 @@ async def publish(
     reg = registry(rt)
     previous = await reg.versions(workflow_id)
     version = await rt.graph_store.publish(workflow_id, d.model_dump(mode="json"), d.digest(), now_iso())
-    changes = ["First version"] if not previous else _graph_changes(previous[0]["graph"], graph)
+    changes = ["First version"] if not previous else _graph_changes(previous[0].graph, graph)
     await reg.add_version(
         {
             "workflow_id": workflow_id,
@@ -410,15 +412,15 @@ async def load(rt: Runtime, seed_dir: Path | None) -> None:
             continue
         versions = await rt.graph_store.versions(name)
         latest = versions[-1]
-        d = WorkflowDefinition.model_validate(latest["definition"])
+        d = WorkflowDefinition.model_validate(latest.definition)
         await reg.create(
             _row(name, name.replace("_", " ").capitalize(), "Seeded definition", "Email", at, status="live")
-            | {"published_version": latest["version"]}
+            | {"published_version": latest.version}
         )
         await reg.add_version(
             {
                 "workflow_id": name,
-                "version": latest["version"],
+                "version": latest.version,
                 "graph": render_definition(d),
                 "note": "Seeded",
                 "changes": ["First version"],
@@ -452,14 +454,14 @@ async def follow_seed(rt: Runtime, seeded: dict[str, int]) -> None:
     reg = registry(rt)
     for name, version in seeded.items():
         row = await reg.find(name)
-        if row is None or row["status"] == "deleted" or row["published_version"] in (None, version):
+        if row is None or row.status == "deleted" or row.published_version in (None, version):
             continue
-        current = next((v for v in await reg.versions(name) if v["version"] == row["published_version"]), None)
-        if current is not None and current["published_by"] != "seed":
-            log.info("seed_not_followed", workflow=name, published_version=row["published_version"], seed=version)
+        current = next((v for v in await reg.versions(name) if v.version == row.published_version), None)
+        if current is not None and current.published_by != "seed":
+            log.info("seed_not_followed", workflow=name, published_version=row.published_version, seed=version)
             continue
-        stored = next(v for v in await rt.graph_store.versions(name) if v["version"] == version)
-        d = WorkflowDefinition.model_validate(stored["definition"])
+        stored = next(v for v in await rt.graph_store.versions(name) if v.version == version)
+        d = WorkflowDefinition.model_validate(stored.definition)
         graph = render_definition(d)
         if rt.settings.environment != "dev":
             await _seed_for_review(rt, row, version, d, graph)
@@ -483,18 +485,18 @@ SEED_REQUESTER = "seed"
 
 
 async def _seed_for_review(
-    rt: Runtime, row: dict[str, Any], version: int, d: WorkflowDefinition, graph: dict[str, Any]
+    rt: Runtime, row: RegistryWorkflowRow, version: int, d: WorkflowDefinition, graph: dict[str, Any]
 ) -> None:
     """A changed seed outside dev: the draft and one publish request for its version, as a person's save and publish
     would leave them. A version that already has a request, pending or decided, is not asked again on each restart,
     so a rejected seed change stays rejected."""
-    name = str(row["id"])
+    name = row.id
     if any(int(r.version) == version for r in await agent_registry(rt).requests("workflow", name)):
         return
     note = "The seed's definition changed"
     info: dict[str, Any] = {
         "workflowId": name,
-        "fromVersion": row["published_version"] or 0,
+        "fromVersion": row.published_version or 0,
         "toVersion": version,
         "note": note,
         "requestedBy": SEED_REQUESTER,
@@ -516,11 +518,11 @@ async def _seed_for_review(
         return
     # The request carries its own definition, so review works either way; the draft shows the seed's change only
     # when nobody else's draft is there to lose.
-    if row.get("draft") is None or row.get("draft_saved_by") == SEED_REQUESTER:
+    if row.draft is None or row.draft_saved_by == SEED_REQUESTER:
         await registry(rt).update(name, draft=graph, draft_saved_at=now_iso(), draft_saved_by=SEED_REQUESTER)
     else:
-        log.info("seed_draft_kept", workflow=name, seed=version, draft_saved_by=row.get("draft_saved_by"))
-    log.info("seed_waiting_for_review", workflow=name, seed=version, published_version=row["published_version"])
+        log.info("seed_draft_kept", workflow=name, seed=version, draft_saved_by=row.draft_saved_by)
+    log.info("seed_waiting_for_review", workflow=name, seed=version, published_version=row.published_version)
 
 
 def _row(wid: str, name: str, description: str, trigger: str, at: str, *, status: str = "draft") -> dict[str, Any]:
@@ -641,7 +643,8 @@ async def run_rows(
     store = rt.graph_store
     kinds: dict[int, dict[str, str]] = {}
     for v in await store.versions(workflow_id):
-        kinds[int(v["version"])] = {n["id"]: n["kind"] for n in v["definition"]["nodes"]}
+        nodes = [narrow.an_object(n, "workflow node") for n in narrow.a_list(v.definition["nodes"], "nodes")]
+        kinds[v.version] = {narrow.required(n, "id", str): narrow.required(n, "kind", str) for n in nodes}
     threads, total, counted = await store.thread_page(
         workflow_id, RUN_STATUS, "running", wanted, offset=offset, limit=limit
     )

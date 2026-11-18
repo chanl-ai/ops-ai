@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 from ops_access import can
 from ops_identity import CurrentTenantCaller
 from ops_identity.fastapi import Tx
+from ops_service_kit import narrow
 from ops_service_kit.http import Envelope, Out
 
 from ...store.pin_users import PinUsers
@@ -74,13 +75,14 @@ async def tool_uses(rt: Runtime, team_id: str | None, tools: list[str]) -> dict[
                         add(t, {"kind": "workflow", "id": str(use["workflowId"]), "name": str(use["workflowName"])})
     if rt.graph_store is not None:
         for w in await workflow_registry(rt).rows():
-            if w.get("team_id") != team_id or w["status"] == "deleted" or w["published_version"] is None:
+            if w.team_id != team_id or w.status == "deleted" or w.published_version is None:
                 continue
-            v = await rt.graph_store.version(w["id"], int(w["published_version"]))
-            for node in list(dict((v or {}).get("definition") or {}).get("nodes") or []):
-                tool = str(dict(node.get("config") or {}).get("tool") or "")
+            v = await rt.graph_store.version(w.id, w.published_version)
+            for item in narrow.entries((v.definition if v else {}).get("nodes")):
+                node = narrow.an_object(item, "workflow node")
+                tool = str(narrow.an_object(node.get("config") or {}, "node config").get("tool") or "")
                 if node.get("kind") == "tool" and tool in wanted:
-                    add(tool, {"kind": "workflow", "id": str(w["id"]), "name": str(w["name"])})
+                    add(tool, {"kind": "workflow", "id": w.id, "name": w.name})
     # A v2 workflow (the runner's) calls a tool from a tool node; its newest version counts, draft or live, so turning
     # an app off warns about a workflow before its next publish breaks, not after.
     for d in await team_workflows(rt):

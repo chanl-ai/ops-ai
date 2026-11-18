@@ -12,10 +12,12 @@ from typing import Any, ClassVar
 import sqlalchemy as sa
 from pydantic import BaseModel, JsonValue
 
+from ops_service_kit import narrow
+from ops_service_kit.http import Json, Out
 from ops_store import Guarantee
 from ops_store.dialect import insert_ignore, locked
 from ops_store.listing import LISTED
-from ops_store.rows import rows
+from ops_store.rows import one, rows
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import any_team, team_visible
 
@@ -135,6 +137,42 @@ class StoredVersion(BaseModel):
     definition: dict[str, JsonValue]
 
 
+class VersionRow(Out):
+    """A `graph_versions` row, every column: one stored version of a definition-built workflow."""
+
+    tenant_id: str
+    name: str
+    version: int
+    digest: str
+    definition: Json
+    created_at: str
+
+
+class RunRow(Out):
+    """A `graph_runs` row, every column. `input` is what the run was started with (a message, a resume value)."""
+
+    id: str
+    thread_id: str
+    kind: str
+    status: str
+    events: list[Json]
+    input: JsonValue
+    created_at: str
+    finished_at: str | None
+    tenant_id: str
+    team_id: str
+
+
+class RunSummary(Out):
+    """A run without its events: its kind, status, input and finish."""
+
+    thread_id: str
+    kind: str
+    status: str
+    input: JsonValue
+    finished_at: str | None
+
+
 class RunJournal(BaseModel):
     """One run's kind and streamed events, by its thread."""
 
@@ -162,7 +200,7 @@ class GraphStore(RuntimeStore):
         self,
         thread_id: str,
         graph: str,
-        meta: dict[str, Any],
+        meta: Json,
         team_id: str,
         now: str,
         *,
@@ -206,7 +244,7 @@ class GraphStore(RuntimeStore):
         self,
         thread_id: str,
         graph: str,
-        meta: dict[str, Any],
+        meta: Json,
         team_id: str,
         now: str,
         *,
@@ -260,22 +298,21 @@ class GraphStore(RuntimeStore):
                 .values(version=version, digest=digest, updated_at=now)
             )
 
-    async def versions(self, name: str) -> list[dict[str, Any]]:
+    async def versions(self, name: str) -> list[VersionRow]:
         q = (
-            graph_versions.select()
+            sa.select(graph_versions)
             .where(mine(graph_versions), graph_versions.c.name == name)
             .order_by(graph_versions.c.version)
         )
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, VersionRow)
 
-    async def version(self, name: str, version: int) -> dict[str, Any] | None:
-        q = graph_versions.select().where(
+    async def version(self, name: str, version: int) -> VersionRow | None:
+        q = sa.select(graph_versions).where(
             mine(graph_versions), graph_versions.c.name == name, graph_versions.c.version == version
         )
         async with self.tx() as c:
-            row = (await c.execute(q)).mappings().first()
-        return dict(row) if row else None
+            return await one(c, q, VersionRow)
 
     async def threads_named(self, thread_ids: Sequence[str]) -> list[ThreadRow]:
         """The named threads the caller may see, in one statement; `thread_ids` is bounded by the caller (a batch of
@@ -304,7 +341,7 @@ class GraphStore(RuntimeStore):
             found = await rows(c, q, StoredVersion)
         return {(r.name, r.version): r for r in found if (r.name, r.version) in pairs}
 
-    async def publish(self, name: str, definition: dict[str, Any], digest: str, now: str) -> int:
+    async def publish(self, name: str, definition: Json, digest: str, now: str) -> int:
         """Stores the next version of a workflow; a definition already stored under its digest returns that version."""
         async with self.tx() as c:
             same = (
@@ -413,27 +450,19 @@ class GraphStore(RuntimeStore):
                 graph_threads.update().where(graph_threads.c.id == thread_id).values(status=status, updated_at=now)
             )
 
-    async def run(self, run_id: str) -> dict[str, Any] | None:
+    async def run(self, run_id: str) -> RunRow | None:
+        q = sa.select(graph_runs).where(graph_runs.c.id == run_id, mine(graph_runs), team_visible(graph_runs))
         async with self.tx() as c:
-            row = (
-                (
-                    await c.execute(
-                        graph_runs.select().where(graph_runs.c.id == run_id, mine(graph_runs), team_visible(graph_runs))
-                    )
-                )
-                .mappings()
-                .first()
-            )
-        return dict(row) if row else None
+            return await one(c, q, RunRow)
 
-    async def runs(self, thread_id: str) -> list[dict[str, Any]]:
+    async def runs(self, thread_id: str) -> list[RunRow]:
         q = (
-            graph_runs.select()
+            sa.select(graph_runs)
             .where(graph_runs.c.thread_id == thread_id, mine(graph_runs), team_visible(graph_runs))
             .order_by(graph_runs.c.created_at, graph_runs.c.id)
         )
         async with self.tx() as c:
-            return [dict(r) for r in (await c.execute(q)).mappings()]
+            return await rows(c, q, RunRow)
 
     async def mark_crashed(
         self,
@@ -501,7 +530,7 @@ class GraphStore(RuntimeStore):
             return True
 
     async def finish_run(
-        self, run_id: str, status: str, events: list[dict[str, Any]], now: str, *, generation: int | None = None
+        self, run_id: str, status: str, events: list[Json], now: str, *, generation: int | None = None
     ) -> None:
         """Records how a run ended. A run that lost its thread (the sweeper marked it crashed, or its lease generation
         is no longer current) keeps the status and crash record the new owner wrote: its own events are appended under
@@ -540,7 +569,7 @@ class GraphStore(RuntimeStore):
             ).scalar_one_or_none()
         return dict(meta or {})
 
-    async def set_overrides(self, thread_id: str, overrides: dict[str, Any] | None, *, updated_at: str) -> None:
+    async def set_overrides(self, thread_id: str, overrides: Json | None, *, updated_at: str) -> None:
         """Replaces the thread's overrides; the caller has checked them against the agent's limits."""
         async with self.tx() as c:
             await c.execute(
@@ -573,7 +602,7 @@ class GraphStore(RuntimeStore):
         return {str(d): (int(n or 0), last) for d, team, n, last in rows if teams.get(str(d)) == team}
 
     async def merge_meta(
-        self, thread_id: str, patch: dict[str, Any], *, updated_at: str | None = None, lock: bool = False
+        self, thread_id: str, patch: Json, *, updated_at: str | None = None, lock: bool = False
     ) -> None:
         """Merges `patch` into the thread's meta. `lock` takes the row lock for the read and write, so two locked
         patches do not lose one another; it waits on any transaction that holds the row, so a caller inside one
@@ -582,12 +611,16 @@ class GraphStore(RuntimeStore):
             q = sa.select(graph_threads.c.meta).where(graph_threads.c.id == thread_id, team_visible(graph_threads))
             if lock:
                 q = locked(q, graph_threads)
-            meta: Any = (await c.execute(q)).scalar_one_or_none()
-            values: dict[str, Any] = {"meta": {**(meta or {}), **patch}}
-            values["owner"] = _owner(values["meta"].get("ownerEmail"))
+            meta: object = (await c.execute(q)).scalar_one_or_none()
+            merged: Json = {**narrow.an_object(meta or {}, "thread meta"), **patch}
+            update = (
+                graph_threads.update()
+                .where(graph_threads.c.id == thread_id)
+                .values(meta=merged, owner=_owner(merged.get("ownerEmail")))
+            )
             if updated_at is not None:
-                values["updated_at"] = updated_at
-            await c.execute(graph_threads.update().where(graph_threads.c.id == thread_id).values(**values))
+                update = update.values(updated_at=updated_at)
+            await c.execute(update)
 
     async def thread_ids(self, graph: str, version: int, statuses: tuple[str, ...]) -> list[str]:
         q = sa.select(graph_threads.c.id).where(
@@ -610,7 +643,7 @@ class GraphStore(RuntimeStore):
         async with self.tx() as c:
             return {str(r[0]): int(r[1]) for r in await c.execute(q)}
 
-    async def run_summaries(self, only: str | None = None) -> dict[str, list[dict[str, Any]]]:
+    async def run_summaries(self, only: str | None = None) -> dict[str, list[RunSummary]]:
         """Every run's kind, status, input and finish, without its events, by thread, oldest first."""
         q = (
             sa.select(
@@ -625,13 +658,13 @@ class GraphStore(RuntimeStore):
         )
         if only is not None:
             q = q.where(graph_runs.c.thread_id == only)
-        out: dict[str, list[dict[str, Any]]] = {}
+        out: dict[str, list[RunSummary]] = {}
         async with self.tx() as c:
-            for r in (await c.execute(q)).mappings():
-                out.setdefault(str(r["thread_id"]), []).append(dict(r))
+            for r in await rows(c, q, RunSummary):
+                out.setdefault(r.thread_id, []).append(r)
         return out
 
-    async def agent_threads_since(self, since: str) -> list[tuple[str, dict[str, Any]]]:
+    async def agent_threads_since(self, since: str) -> list[tuple[str, Json]]:
         """(graph, meta) of every agent_wrapper and agent:<id> thread created at or after `since`."""
         q = sa.select(graph_threads.c.graph, graph_threads.c.meta).where(
             sa.or_(graph_threads.c.graph == "agent_wrapper", graph_threads.c.graph.like("agent:%")),
@@ -640,7 +673,7 @@ class GraphStore(RuntimeStore):
             team_visible(graph_threads),
         )
         async with self.tx() as c:
-            return [(str(g), dict(m or {})) for g, m in await c.execute(q)]
+            return [(str(g), dict(narrow.an_object(m or {}, "thread meta"))) for g, m in await c.execute(q)]
 
     async def thread_stats(self) -> list[tuple[str, str, str]]:
         """(graph, status, created at) of every thread."""

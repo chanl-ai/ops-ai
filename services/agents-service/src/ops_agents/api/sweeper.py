@@ -17,6 +17,7 @@ from langgraph.types import Command
 from ops_engine.store import RUN_PREFIX, reconciler
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
+from ops_service_kit.narrow import an_object
 from ops_store import background, isolation
 from ops_store.background import HeartbeatStore
 
@@ -55,8 +56,8 @@ async def recover(
     )
     graph_input: Any = None
     if not snapshot.created_at:
-        dead = await store.run(dead_run_id) or {}
-        journal: dict[str, Any] = dead.get("input") or {}
+        dead = await store.run(dead_run_id)
+        journal = an_object((dead.input if dead else None) or {}, "the dead run's input")
         graph_input = Command(resume=journal["resume"]) if "resume" in journal else journal.get("input")
     if not await store.start_run(
         run_id, thread_id, "recovery", now_iso(), {"recovers": dead_run_id}, generation=generation

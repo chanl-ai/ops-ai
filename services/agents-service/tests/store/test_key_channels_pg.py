@@ -19,6 +19,7 @@ from ops_agents.store.channel_list import ChannelList
 from ops_agents.store.graphs import GraphStore
 from ops_agents.store.mailboxes import MailboxRow, MailboxStore
 from ops_agents.store.tenancy import current_tenant, tenant_scope
+from ops_service_kit.http import Json
 from ops_service_kit.listing import ListParams
 
 
@@ -76,7 +77,7 @@ async def test_a_keys_threads_count_in_its_tenant_only(engine: AsyncEngine) -> N
     ours, theirs = f"t-{uuid4().hex[:6]}", f"t-{uuid4().hex[:6]}"
     for tenant in (ours, ours, theirs):
         with tenant_scope(tenant):
-            meta = {"ownerEmail": "case-system@harborpine.example", "startedBy": f"key:{kid}"}
+            meta: Json = {"ownerEmail": "case-system@harborpine.example", "startedBy": f"key:{kid}"}
             await GraphStore(engine).create_thread(f"gth_{uuid4().hex[:10]}", "agent:ag_x", meta, "team_ops", at)
     await resync(engine, {ours: [summary(kid)]})
     with tenant_scope(ours):

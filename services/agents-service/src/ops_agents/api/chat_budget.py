@@ -126,13 +126,11 @@ async def answer(rt: Runtime, me: Principal, thread_id: str, body: BudgetAnswer)
         await leases.release(thread_id, run_id)
         raise
     # Logged on the run that paused, where the card is drawn, once this answer holds the lease and its run started.
-    runs = [
-        r for r in await store.runs(thread_id) if r["kind"] in ("input", "resume", "recovery") and r["id"] != run_id
-    ]
+    runs = [r for r in await store.runs(thread_id) if r.kind in ("input", "resume", "recovery") and r.id != run_id]
     await EventLog(store.engine).append(
         thread_id=thread_id,
         team_id=row["team_id"],
-        run_id=runs[-1]["id"] if runs else None,
+        run_id=runs[-1].id if runs else None,
         type_="budget.answered",
         data={"action": body.action, "by": me.email or me.name, "budget": _caps(new)},
     )

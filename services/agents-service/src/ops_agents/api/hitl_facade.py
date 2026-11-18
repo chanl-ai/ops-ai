@@ -21,7 +21,9 @@ from pydantic import JsonValue
 
 from ops_access import can
 from ops_agents.graphs.definition import WorkflowDefinition, option_declarations, option_name
+from ops_service_kit import narrow
 from ops_service_kit.errors import ApiError, Conflict, NotFound, ValidationFailed
+from ops_service_kit.http import Json
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 from ops_store import isolation
@@ -368,21 +370,20 @@ async def summary_rows(rt: Runtime, now: datetime, only: str | None = None) -> l
     due = await _open_sla_due(rt, sorted(paused))
     rows: list[dict[str, Any]] = []
     for t in threads:
-        work = [r for r in runs.get(t["id"], []) if r["kind"] != "sla"]
+        work = [r for r in runs.get(t["id"], []) if r.kind != "sla"]
         last = work[-1] if work else None
         waiting = t["id"] in paused and t["status"] != "busy"
-        failed = t["status"] == "error" or (last is not None and last["status"] == "error")
+        failed = t["status"] == "error" or (last is not None and last.status == "error")
         state = "running" if t["status"] == "busy" else "waiting" if waiting else "failed" if failed else "done"
-        started, finished = _parse(t["created_at"]), _parse(last["finished_at"] if last else None)
+        started, finished = _parse(t["created_at"]), _parse(last.finished_at if last else None)
         end = now if state in ("running", "waiting") or finished is None else finished
         # The email in the thread's state is the one the latest input run brought.
-        email: dict[str, Any] = {}
+        email: Json = {}
         for r in reversed(work):
-            journal: dict[str, Any] = r["input"] or {}
-            given: dict[str, Any] = journal.get("input") or {}
-            found_email: dict[str, Any] | None = given.get("email")
+            given = narrow.an_object(narrow.an_object(r.input or {}, "a run's input").get("input") or {}, "its input")
+            found_email = given.get("email")
             if found_email:
-                email = found_email
+                email = narrow.an_object(found_email, "the run's email")
                 break
         sla_due = due.get(t["id"]) if waiting else None
         rows.append(

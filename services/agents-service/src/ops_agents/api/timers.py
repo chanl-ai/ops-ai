@@ -27,6 +27,7 @@ from langgraph.types import Command
 
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
+from ops_service_kit.narrow import an_object
 from ops_store import background
 from ops_store.background import HeartbeatStore
 
@@ -109,7 +110,7 @@ async def sla_view(rt: Runtime, thread_id: str) -> dict[str, Any] | None:
     if not timer_store.enabled:
         return None
     rows = await timer_store.rows(thread_id)
-    events = [e for r in await graph_store(rt).runs(thread_id) if r["kind"] == "sla" for e in r["events"]]
+    events = [e for r in await graph_store(rt).runs(thread_id) if r.kind == "sla" for e in r.events]
 
     def at(v: Any) -> str | None:
         return v.isoformat() if v is not None else None
@@ -373,10 +374,9 @@ async def fire(rt: Runtime, thread_id: str, timer_id: str, *, after_accept: Hook
 async def _last_error(rt: Runtime, thread_id: str) -> str | None:
     """The error the last failed timer run ended with, so the person handling the set-aside timer sees why."""
     for r in reversed(await graph_store(rt).runs(thread_id)):
-        if r["kind"] == "timer" and r["status"] == "error":
-            events: list[dict[str, Any]] = r["events"]
-            errors = [e for e in events if e.get("event") == "error"]
-            last: dict[str, Any] = (errors[-1].get("data") or {}) if errors else {}
+        if r.kind == "timer" and r.status == "error":
+            errors = [e for e in r.events if e.get("event") == "error"]
+            last = an_object(errors[-1].get("data") or {}, "the error event's data") if errors else {}
             return str(last.get("message")) if errors else None
     return None
 

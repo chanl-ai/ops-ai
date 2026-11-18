@@ -8,7 +8,7 @@ import base64
 import json
 import re
 from dataclasses import replace
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from httpx import AsyncClient
@@ -45,7 +45,7 @@ async def test_overrides_and_attachments_reach_the_run_input_unchanged(stack: tu
     tid = res.json()["data"]["id"]
     await send(client, tid, {"content": QUESTION, "overrides": turn_overrides, "attachments": [file]})
     run = (await graph_store(rt).runs(tid))[0]
-    given: dict[str, Any] = run["input"]["input"]
+    given: dict[str, Any] = cast(dict[str, Any], run.input)["input"]
     assert given["thread_overrides"] == thread_overrides
     assert given["overrides"] == turn_overrides
     assert given["thread_attachments"] == [file] and given["attachments"] == [file]
@@ -58,7 +58,7 @@ async def test_a_message_without_overrides_adds_none(stack: tuple[AsyncClient, R
     client, rt = stack
     thread = await new_thread(client)
     await send(client, thread["id"], {"content": QUESTION})
-    given = (await graph_store(rt).runs(thread["id"]))[0]["input"]["input"]
+    given = cast(dict[str, Any], (await graph_store(rt).runs(thread["id"]))[0].input)["input"]
     assert not {"overrides", "thread_overrides", "thread_attachments"} & set(given)
     assert given["settings"]["sources"] == {"model": "agent", "knowledgeBaseIds": "started"}
 

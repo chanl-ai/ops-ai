@@ -42,7 +42,7 @@ async def _graph_runs(e: AsyncEngine, tag: str) -> list[str]:
     await store.create_thread(f"th_{tag}", f"g_{tag}", {}, TEAM, AT)
     for i in IDS:
         await store.start_run(f"gr_{tag}_{i}", f"th_{tag}", "invoke", AT)
-    listed = [r["id"] for r in await store.runs(f"th_{tag}")]
+    listed = [r.id for r in await store.runs(f"th_{tag}")]
     summaries = await store.run_summaries(f"th_{tag}")
     assert len(summaries[f"th_{tag}"]) == len(IDS)
     return listed

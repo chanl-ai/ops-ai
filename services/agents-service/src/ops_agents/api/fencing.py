@@ -9,6 +9,7 @@ owner's first tool write raises the fence anyway, and the window stays open only
 from __future__ import annotations
 
 from ops_agents.activities.gateway import GatewayClient
+from ops_service_kit.http import Json
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.logging import get_logger
 
@@ -31,7 +32,7 @@ class ToolsFence:
 
     async def _warn(self, thread_id: str, generation: int, reason: str) -> None:
         run_id = new_id("run")
-        event = {
+        event: Json = {
             "event": "lease.fence_not_raised",
             "runId": run_id,
             "seq": 0,

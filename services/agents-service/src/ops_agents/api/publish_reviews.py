@@ -102,7 +102,7 @@ async def view(
         named = None if names is None else names.get((subject, int(req.version)), subject)
         return await engine_lifecycle.view(rt, req, name=named)
     row = await workflow_registry(rt).find(req.subject_id)
-    return review_view(req, name=row["name"] if row else req.subject_id, slug="", sla_hours=await sla_hours(rt))
+    return review_view(req, name=row.name if row else req.subject_id, slug="", sla_hours=await sla_hours(rt))
 
 
 async def get(rt: Runtime, request_id: str) -> dict[str, Any]:

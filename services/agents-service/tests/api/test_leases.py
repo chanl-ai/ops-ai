@@ -11,7 +11,7 @@ import json
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI
@@ -159,11 +159,14 @@ async def test_sweeper_continues_a_thread_whose_process_died_mid_node(procs: tup
     assert len(recovered) == 1
     snap = await b.rt.graphs["complex_workflow"].aget_state(config(tid))
     assert snap.next == ("human",)
-    assert (await store.run("run_killed") or {})["status"] == "crashed"
-    assert (await store.run(recovered[0]) or {})["status"] == "interrupted"
+    killed, recovery = await store.run("run_killed"), await store.run(recovered[0])
+    assert killed is not None and killed.status == "crashed"
+    assert recovery is not None and recovery.status == "interrupted"
     assert b.models.extracted and await b.rt.leases.held(tid) is None  # pyright: ignore[reportOptionalMemberAccess]
     # The recovery took a new generation, and the crashed run's journal names its owner and the nodes it was running.
     assert await b.rt.leases.generation_of(tid, recovered[0]) == 2  # pyright: ignore[reportOptionalMemberAccess]
-    crashed = next(e["data"] for e in (await store.run("run_killed") or {})["events"] if e["event"] == "crashed")
+    killed = await store.run("run_killed")
+    assert killed is not None
+    crashed = cast(dict[str, Any], next(e["data"] for e in killed.events if e["event"] == "crashed"))
     assert crashed["owner"] == a.rt.leases.owner and crashed["generation"] == 1  # pyright: ignore[reportOptionalMemberAccess]
     assert crashed["running"] and set(crashed["running"]) <= {"extract"}

@@ -108,5 +108,5 @@ async def test_same_process_retaking_its_thread_refuses_its_old_generation(engin
         await store.set_thread_status(thread, "idle", now_iso(), generation=old)
     await store.finish_run(run_old, "done", [{"event": "end"}], now_iso(), generation=old)
     row = await store.run(run_old)
-    assert row is not None and row["status"] == "running"  # the stale finish did not overwrite the record
-    assert row["events"][-1]["event"] == "stale_owner_finished"
+    assert row is not None and row.status == "running"  # the stale finish did not overwrite the record
+    assert row.events[-1]["event"] == "stale_owner_finished"

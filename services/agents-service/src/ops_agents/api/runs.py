@@ -78,7 +78,7 @@ async def definition(rt: Runtime, name: str, version: int) -> WorkflowDefinition
     stored = await graph_store(rt).version(name, version)
     if stored is None:
         raise NotFound(f"{name} version {version}")
-    return WorkflowDefinition.model_validate(stored["definition"])
+    return WorkflowDefinition.model_validate(stored.definition)
 
 
 async def resolve(rt: Runtime, thread_id: str) -> tuple[dict[str, Any], Any]:

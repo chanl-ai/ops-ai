@@ -182,7 +182,8 @@ async def test_a_test_email_runs_with_the_input_and_steps_a_mailbox_email_gets(
     with tenant_scope(tenant):
         a, b = await runs.get(mailed), await runs.get(sent)
     assert a is not None and b is not None
-    assert set(a["input"]) == set(b["input"]) == set(EMAIL["required"]), (a["input"], b["input"])
+    required: list[str] = cast(list[str], EMAIL["required"])
+    assert set(a["input"]) == set(b["input"]) == set(required), (a["input"], b["input"])
     assert shape(a["input"]) == shape(b["input"]), (shape(a["input"]), shape(b["input"]))
     [attachment] = b["input"]["attachments"]
     assert attachment["size"] == len(PDF) and attachment["mime"] == "application/pdf"

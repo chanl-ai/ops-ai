@@ -164,7 +164,8 @@ async def published_workflows(rt: Runtime) -> list[dict[str, Any]]:
     """The registry workflows a new thread can start on (live, published, not paused or deleted), with the name and
     description they are found by."""
     rows = await registry(rt).rows()
-    return [r for r in rows if r["status"] not in ("paused", "deleted") and r["published_version"] is not None]
+    # As dicts with the columns' names: the tool catalogue's and the skills' readers, and their test stand-ins.
+    return [r.model_dump() for r in rows if r.status not in ("paused", "deleted") and r.published_version is not None]
 
 
 # How long a turn waits for a v2 workflow it started to end or pause; past it the turn gets the run's handle.
@@ -283,7 +284,7 @@ class ChildRuns:
         except ApiError:
             return None
         stored = await graph_store(self.rt).version(workflow, version) if version is not None else None
-        return (version, stored["digest"]) if version is not None and stored else None
+        return (version, stored.digest) if version is not None and stored else None
 
     async def offers(self, granted: list[str]) -> list[ToolGrant]:
         out: list[ToolGrant] = []
@@ -432,6 +433,6 @@ class ChildRuns:
             # Decided in Cases and Reviews like any workflow review; the parent does not wait for it.
             return ToolOutcome(ok=True, output=base | {"status": "waiting_review", "reviewId": thread_id})
         runs = await graph_store(self.rt).runs(thread_id)
-        if runs and runs[-1]["status"] == "error":
+        if runs and runs[-1].status == "error":
             return ToolOutcome(ok=False, output=base | {"status": "failed"})
         return ToolOutcome(ok=True, output=base | {"status": "finished", "outcome": values.get("status")})

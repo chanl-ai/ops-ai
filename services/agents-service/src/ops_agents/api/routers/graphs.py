@@ -31,9 +31,10 @@ from ops_service_kit.errors import (
     Unprocessable,
     ValidationFailed,
 )
-from ops_service_kit.http import Envelope, In, ListResult
+from ops_service_kit.http import Envelope, In, Json, ListResult
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListQuery
+from ops_service_kit.narrow import an_object
 from ops_store import isolation
 
 from ...store.leases import LeaseHeldError
@@ -202,10 +203,10 @@ async def create_thread(rt: Rt, me: Me, _: Tx, body: ThreadInput) -> JSONRespons
             raise ValidationFailed(f"Unknown graph {body.graph}. Graphs: {', '.join(names)}.")
         # A key's pin outranks the workflow's own pointer.
         wanted = key_pin or body.version or pinned
-        chosen = next((v for v in versions if v["version"] == wanted), None) if wanted else versions[-1]
+        chosen = next((v for v in versions if v.version == wanted), None) if wanted else versions[-1]
         if chosen is None:
             raise NotFound(f"{body.graph} version {body.version}")
-        version, digest = chosen["version"], chosen["digest"]
+        version, digest = chosen.version, chosen.digest
     if body.external_key is None:
         await store.create_thread(
             thread_id, body.graph, owned(body.metadata, me), me.team_id, now_iso(), version=version, digest=digest
@@ -321,7 +322,7 @@ async def thread_state(rt: Rt, me: Me, thread_id: str) -> JSONResponse:
     )
 
 
-def _frame(event: dict[str, Any]) -> dict[str, str]:
+def _frame(event: Json) -> dict[str, str]:
     return {"data": json.dumps(jsonable_encoder(event), ensure_ascii=False)}
 
 
@@ -338,9 +339,9 @@ async def stream_run(rt: Rt, me: Me, thread_id: str, body: RunInput) -> EventSou
 
     existing = await store.run(run_id)
     if existing is not None:
-        if existing["thread_id"] != thread_id or existing["status"] == "running":
+        if existing.thread_id != thread_id or existing.status == "running":
             raise Conflict("That run id is already in use.", code="run_active")
-        replay: list[dict[str, Any]] = existing["events"]
+        replay = existing.events
 
         async def replayed() -> AsyncIterator[dict[str, str]]:
             for e in replay:
@@ -454,19 +455,27 @@ async def thread_runs(rt: Rt, me: Me, _: Tx, thread_id: str) -> JSONResponse:
     return ok(
         [
             {
-                "runId": r["id"],
-                "kind": r["kind"],
-                "status": r["status"],
-                "createdAt": r["created_at"],
-                "finishedAt": r["finished_at"],
-                "nodes": [e["node"] for e in r["events"] if e.get("event") == "node_start"],
-                "owner": next((e["data"].get("owner") for e in r["events"] if e.get("event") == "run_start"), None),
+                "runId": r.id,
+                "kind": r.kind,
+                "status": r.status,
+                "createdAt": r.created_at,
+                "finishedAt": r.finished_at,
+                "nodes": [e["node"] for e in r.events if e.get("event") == "node_start"],
+                "owner": next(
+                    (an_object(e["data"], "run data").get("owner") for e in r.events if e.get("event") == "run_start"),
+                    None,
+                ),
                 "generation": next(
-                    (e["data"].get("generation") for e in r["events"] if e.get("event") == "run_start"), None
+                    (
+                        an_object(e["data"], "run data").get("generation")
+                        for e in r.events
+                        if e.get("event") == "run_start"
+                    ),
+                    None,
                 ),
                 # Set by the sweeper for a run whose process died: owner, nodes it was running, generation.
-                "crashed": next((e["data"] for e in r["events"] if e.get("event") == "crashed"), None),
-                "cost": totals_view(by_run[r["id"]]) if r["id"] in by_run else None,
+                "crashed": next((e["data"] for e in r.events if e.get("event") == "crashed"), None),
+                "cost": totals_view(by_run[r.id]) if r.id in by_run else None,
             }
             for r in rows
         ]
@@ -518,7 +527,7 @@ async def list_versions(rt: Rt, _: Tx, name: str) -> JSONResponse:
     """The graph's stored versions, oldest first."""
     return ok(
         [
-            {"name": v["name"], "version": v["version"], "digest": v["digest"], "createdAt": v["created_at"]}
+            {"name": v.name, "version": v.version, "digest": v.digest, "createdAt": v.created_at}
             for v in await _store(rt).versions(name)
         ]
     )
@@ -538,13 +547,13 @@ async def publish_version(rt: Rt, me: Me, name: str, body: PublishInput) -> JSON
         require_builder(
             me,
             area="workflows",
-            team_id=held["team_id"],
+            team_id=held.team_id,
             action="publish",
             what=f"workflow {name}",
         )
         latest = await _store(rt).versions(name)
-        live = latest[-1]["definition"] if latest else None
-        decision = await decide(rt, area="workflows", team_id=held["team_id"], old=live, new=body.definition)
+        live = latest[-1].definition if latest else None
+        decision = await decide(rt, area="workflows", team_id=held.team_id, old=live, new=body.definition)
         if decision.review_required:
             raise Conflict(
                 f"{name} is a registry workflow; ask to publish it at /v1/workflows/{name}/publish-requests.",

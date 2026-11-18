@@ -25,7 +25,7 @@ from ops_engine.ports import AgentRequest, PromptRequest
 from ops_service_kit.http import Json
 from tests.conftest import SEED, structured
 
-SCHEMA = {"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}
+SCHEMA: dict[str, Any] = {"type": "object", "properties": {"summary": {"type": "string"}}, "required": ["summary"]}
 
 
 class NoTools:

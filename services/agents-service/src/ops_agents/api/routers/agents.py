@@ -294,18 +294,18 @@ async def used_in_all(rt: Runtime) -> dict[str, list[WorkflowUse]]:
 
     assert rt.graph_store is not None
     for w in await workflow_registry(rt).rows():
-        if w["status"] == "deleted":
+        if w.status == "deleted":
             continue
-        status = "paused" if w["status"] == "paused" else "live" if w["published_version"] is not None else "draft"
-        if w["published_version"] is not None:
-            v = await rt.graph_store.version(w["id"], int(w["published_version"]))
-            for a in _agent_nodes(cast(dict[str, Any], v["definition"]) if v else {}):
-                add(str(a["id"]), w["id"], w["name"], int(a["version"]), status)
-        graph = cast(dict[str, Any], w.get("draft") or {})
+        status = "paused" if w.status == "paused" else "live" if w.published_version is not None else "draft"
+        if w.published_version is not None:
+            v = await rt.graph_store.version(w.id, w.published_version)
+            for a in _agent_nodes(cast(dict[str, Any], v.definition) if v else {}):
+                add(str(a["id"]), w.id, w.name, int(a["version"]), status)
+        graph = cast(dict[str, Any], w.draft or {})
         for node in cast(list[dict[str, Any]], graph.get("nodes") or []):
             data = cast(dict[str, Any], node.get("data") or {})
             if (slug := data.get("agentSlug")) and (row := by_slug.get(str(slug))):
-                add(row.id, w["id"], w["name"], published.get(row.id), "draft" if status == "draft" else status)
+                add(row.id, w.id, w.name, published.get(row.id), "draft" if status == "draft" else status)
     for d in await engine_workflows(rt):
         definition = cast(dict[str, Any], d["definition"] or {})
         for node in cast(list[dict[str, Any]], definition.get("nodes") or []):

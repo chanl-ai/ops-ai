@@ -6,10 +6,11 @@ version; a paused or deleted workflow still starts threads; the test run stops a
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from httpx import AsyncClient
 
+from ops_agents.api.deps import Runtime
 from ops_agents.graphs.definition import WorkflowDefinition
 
 from ..conftest import sse_events
@@ -160,9 +161,11 @@ async def test_compiled_agent_step_pins_the_published_version(client: AsyncClien
 
 
 async def _definition(client: AsyncClient, name: str, version: int) -> dict[str, Any]:
-    rt = client._transport.app.state.runtime  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
-    row = await rt.graph_store.version(name, version)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
-    return row["definition"]  # pyright: ignore[reportUnknownVariableType]
+    rt = cast(Runtime, client._transport.app.state.runtime)  # type: ignore[attr-defined]  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType]
+    assert rt.graph_store is not None
+    row = await rt.graph_store.version(name, version)
+    assert row is not None
+    return row.definition
 
 
 async def test_a_restart_keeps_published_and_deleted_workflows_as_they_were(tmp_path: Path) -> None:

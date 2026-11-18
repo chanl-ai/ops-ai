@@ -59,6 +59,7 @@ from ops_service_kit.ids import now_iso
 from ..store.chat_list import ChatListQuery, unsummarised_rows
 from ..store.chat_search import index_thread, indexed_ids, matching_threads
 from ..store.events import EventLog, EventOut
+from ..store.graphs import RunRow
 from ..store.reviews import DecisionOut, ReviewStore
 from ..store.tenancy import current_team
 from ..store.thread_list import ThreadReader
@@ -400,7 +401,7 @@ async def messages_of(
 async def _thread_messages(
     rt: Runtime, thread_id: str, events: list[EventOut], *, audit: bool = False
 ) -> list[ChatMessage]:
-    runs = [r for r in await graph_store(rt).runs(thread_id) if r["kind"] in ("input", "resume", "recovery")]
+    runs = [r for r in await graph_store(rt).runs(thread_id) if r.kind in ("input", "resume", "recovery")]
     decisions = await decisions_of(rt, thread_id) if runs else {}
     approvals = await approvals_of(rt, thread_id) if runs else {}
     titles = await tool_titles(rt) if runs else {}
@@ -419,21 +420,21 @@ async def _thread_messages(
             per_run.setdefault(e.run_id, []).append(e)
     messages: list[ChatMessage] = []
     for run in runs:
-        given = _d(_d(run["input"]).get("input"))
-        if run["kind"] == "input" and given.get("user_message_id"):
+        given = _d(_d(run.input).get("input"))
+        if run.kind == "input" and given.get("user_message_id"):
             messages.append(
                 ChatMessage.model_validate(
                     {
                         "id": given["user_message_id"],
                         "role": "user",
                         "content": str(given.get("message") or ""),
-                        "at": run["created_at"],
+                        "at": run.created_at,
                         "attachments": given.get("attachments") or None,
                     }
                 )
             )
-        reply = ChatMessage(id=assistant_id(run["id"]), role="assistant", content="", at=run["created_at"])
-        if run["kind"] == "input" and given.get("settings"):
+        reply = ChatMessage(id=assistant_id(run.id), role="assistant", content="", at=run.created_at)
+        if run.kind == "input" and given.get("settings"):
             reply.settings = EffectiveSettings.model_validate(given["settings"])
         if given.get("agent_id"):
             # Who answered, so a reload after a handover still credits the agent that wrote each reply.
@@ -448,20 +449,13 @@ async def _thread_messages(
             titles=titles,
             think_alias=rt.settings.think_harder_alias,
         )
-        for e in per_run.get(run["id"], []):
+        for e in per_run.get(run.id, []):
             builder.apply(e.type, e.data, e.at)
-        if not builder.ended and run["status"] != "running":
+        if not builder.ended and run.status != "running":
             reply.stopped = True  # the client left mid-reply, or the process died before the run ended
-        if (
-            reply.content
-            or reply.tool_calls
-            or reply.widgets
-            or reply.error
-            or reply.budget
-            or run["status"] == "running"
-        ):
+        if reply.content or reply.tool_calls or reply.widgets or reply.error or reply.budget or run.status == "running":
             messages.append(reply)
-        for e in finished_children.get(run["id"], []):
+        for e in finished_children.get(run.id, []):
             d = _d(e.data)
             name = str(d.get("workflow") or "").replace("_", " ")
             outcome = f": {d['outcome']}" if d.get("outcome") else ""
@@ -474,19 +468,19 @@ async def _thread_messages(
     return [m for m in messages if m.id not in superseded]
 
 
-async def _with_usage(rt: Runtime, thread_id: str, runs: list[dict[str, Any]], messages: list[ChatMessage]) -> None:
+async def _with_usage(rt: Runtime, thread_id: str, runs: list[RunRow], messages: list[ChatMessage]) -> None:
     """Each reply's model calls, tokens, cost and seconds, from one grouped read of the thread's model call
     records and the run's own start and finish."""
     if rt.usage is None or not runs:
         return
     totals = await rt.usage.totals_by_run(thread_id)
-    by_reply = {assistant_id(r["id"]): r for r in runs}
+    by_reply = {assistant_id(r.id): r for r in runs}
     for m in messages:
         run = by_reply.get(m.id)
-        spent = totals.get(run["id"]) if run is not None else None
+        spent = totals.get(run.id) if run is not None else None
         if run is None or spent is None or not spent.calls:
             continue
-        started, finished = run.get("created_at"), run.get("finished_at")
+        started, finished = run.created_at, run.finished_at
         seconds = (
             round((datetime.fromisoformat(finished) - datetime.fromisoformat(started)).total_seconds(), 1)
             if started and finished

@@ -443,7 +443,7 @@ async def test_a_review_whose_options_cannot_be_declared_is_listed_with_the_reas
     assert stack.rt.graph_store is not None
     stored = await stack.rt.graph_store.version("levy-case", 1)
     assert stored is not None
-    edited = dict(stored["definition"])
+    edited: dict[str, Any] = dict(stored.definition)
     edited["nodes"] = [
         {**n, "config": {"options": [{"name": "flag"}]}} if n["id"] == "review" else n for n in edited["nodes"]
     ]

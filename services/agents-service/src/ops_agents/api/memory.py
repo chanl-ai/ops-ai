@@ -562,7 +562,7 @@ class MemoryReads:
         run = await store.run(run_id) if run_id else None
         if thread is None or run is None:
             return None
-        given = an_object(an_object(run.get("input") or {}, "the run's input").get("input") or {}, "the turn's input")
+        given = an_object(an_object(run.input or {}, "the run's input").get("input") or {}, "the turn's input")
         # chat_threads reads this module to fill a reply's remembered items, so this import waits until a turn runs.
         from .chat_threads import assistant_id  # noqa: PLC0415
 

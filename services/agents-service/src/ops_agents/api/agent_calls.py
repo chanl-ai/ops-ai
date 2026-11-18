@@ -151,7 +151,7 @@ class AgentCalls:
         if pending(snap):
             return ToolOutcome(ok=True, output=base | {"status": "waiting_review"})
         runs = await store.runs(thread_id)
-        if runs and runs[-1]["status"] == "error":
+        if runs and runs[-1].status == "error":
             return ToolOutcome(ok=False, output=base | {"status": "failed"})
         values = cast(dict[str, Any], snap.values or {})
         return ToolOutcome(ok=True, output=base | {"status": "answered", "answer": values.get("reply")})

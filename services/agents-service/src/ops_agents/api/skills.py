@@ -313,7 +313,7 @@ async def workflows_pinning_each(rt: Runtime, field: str, key: str) -> dict[str,
         return out
     for row in await published_workflows(rt):
         d = await rt.graph_store.version(row["id"], int(row["published_version"]))
-        definition: dict[str, Any] = dict((d or {}).get("definition") or {})
+        definition: dict[str, Any] = dict(d.definition if d else {})
         nodes: list[dict[str, Any]] = list(definition.get("nodes") or [])
         for n in nodes:
             config: dict[str, Any] = dict(n.get("config") or {})
