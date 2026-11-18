@@ -40,6 +40,7 @@ from ...store.template_copies import TemplateCopies
 from ..account_names import require_team_accounts
 from ..agent_registry import (
     GUARDRAILS,
+    AgentSpec,
     a_day_ago,
     agent_review_body,
     agent_view,
@@ -491,7 +492,7 @@ async def update_agent(rt: Rt, me: Cl, agent_id: str, body: AgentPatch) -> JSONR
     if body.guardrails is not None:
         spec["guardrails"] = body.guardrails.model_dump(by_alias=True)
     if body.tool_ids is not None or body.collections is not None:
-        check_pins_hold(spec)
+        check_pins_hold(cast(AgentSpec, spec))
     if body.guardrail_pins is not None:
         wanted = [p.model_dump(by_alias=True) for p in body.guardrail_pins]
         spec["guardrailPins"] = await resolve_pins(rt, wanted, list(spec.get("guardrailPins") or []))

@@ -13,7 +13,7 @@ reaches the module."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from fastapi import Request
 
@@ -23,7 +23,7 @@ from ops_service_kit.errors import Forbidden, ServiceUnavailable, Unauthorized, 
 from ops_service_kit.ids import now_iso
 
 from ..store.agent_registry import PublishRequestRow
-from .agent_registry import registry, review_view
+from .agent_registry import ReviewView, registry, review_view
 from .auth import Principal, caller_of
 from .deps import Runtime
 from .review_sla import sla_hours
@@ -117,7 +117,7 @@ async def team(rt: Runtime, req: PublishRequestRow) -> str | None:
     return await security_team(rt) if body.get("security", True) else (body.get("teamId") or None)
 
 
-async def view(rt: Runtime, req: PublishRequestRow) -> dict[str, Any]:
+async def view(rt: Runtime, req: PublishRequestRow) -> ReviewView:
     if req.body.get("applyPending"):
         req = await _apply(rt, req)
     # The review body is read key by key into the reply, as stored.
@@ -127,20 +127,23 @@ async def view(rt: Runtime, req: PublishRequestRow) -> dict[str, Any]:
     decided_by = "Security" if body.get("security", True) else body.get("teamId", "")
     policy = {**v["policy"], "id": "gp_tool_module_review", "name": "Tool module review", "reviewers": decided_by}
     reasoning = [str(c.get("detail") or c.get("kind") or "") for c in body["changes"]]
-    return {
-        **v,
-        "title": f"Publish {body['moduleName']} v{body['moduleVersion']}",
-        "workflowId": "",
-        "actionTool": "publish_tool_module",
-        "policy": policy,
-        "reasoning": reasoning,
-        "toolModule": {
-            "moduleId": body["moduleId"],
-            "version": body["moduleVersion"],
-            "applyPending": bool(body.get("applyPending")),
-            **({"diff": body["diff"]} if body.get("diff") else {}),
+    return cast(
+        ReviewView,
+        {
+            **v,
+            "title": f"Publish {body['moduleName']} v{body['moduleVersion']}",
+            "workflowId": "",
+            "actionTool": "publish_tool_module",
+            "policy": policy,
+            "reasoning": reasoning,
+            "toolModule": {
+                "moduleId": body["moduleId"],
+                "version": body["moduleVersion"],
+                "applyPending": bool(body.get("applyPending")),
+                **({"diff": body["diff"]} if body.get("diff") else {}),
+            },
         },
-    }
+    )
 
 
 async def apply(rt: Runtime, req: PublishRequestRow) -> None:

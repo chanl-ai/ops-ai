@@ -22,13 +22,13 @@ from pydantic import Field
 from ops_access import can
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, ServiceUnavailable
-from ops_service_kit.http import Envelope, In, Json, Out
+from ops_service_kit.http import Envelope, In, Json, JsonList, Out
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 
 from ...store.team_defaults import TeamDefaults
 from ...store.template_copies import TemplateCopies, TemplateCopyRow
-from ..agent_registry import agent_review_body, go_live, live_agent, registry
+from ..agent_registry import AgentSpec, agent_review_body, go_live, live_agent, registry
 from ..auth import Principal, caller_in, caller_of
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -118,7 +118,8 @@ async def give_app_tools(rt: Runtime, me: Principal, module_ids: list[str]) -> A
     for skill_id, name, version, renewed in await _skill_copies(rt, me, team, shipped):
         if skill_id in holds and not renewed:
             continue
-        spec["skillPins"] = [*await pin(rt, spec, skill_id, version, by=me.email, at=now_iso())]
+        pins = await pin(rt, cast(AgentSpec, spec), skill_id, version, by=me.email, at=now_iso())
+        spec["skillPins"] = cast(JsonList, [*pins])
         pinned.append(name)
     note = f"Given the read tools of {', '.join(module_ids)} when the app was turned on"
     n = await reg.save(agent.id, spec, by=me.email, note=note)

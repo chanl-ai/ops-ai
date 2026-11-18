@@ -29,8 +29,8 @@ from ops_store import isolation
 from ...store.skill_list import View, menu_versions, newest_specs, offered_by, skills_page
 from ...store.skills import SkillRow
 from ...store.template_copies import TemplateCopies
+from ..agent_registry import AgentSpec, require_owner_or_admin
 from ..agent_registry import registry as agent_registry
-from ..agent_registry import require_owner_or_admin
 from ..auth import Principal, caller_in, caller_of, principal, reader_of, require_builder
 from ..deps import Runtime, runtime
 from ..envelope import ok
@@ -40,6 +40,7 @@ from ..skills import (
     LIMITS,
     agent_skills,
     check_content,
+    content_of,
     detail,
     list_row,
     missing_for,
@@ -180,7 +181,7 @@ async def list_skills(
     if spec is not None:
         contents = await menu_versions(rt.db, [x["id"] for x in body["data"]])
         for x in body["data"]:
-            needs = missing_for(contents.get(x["id"], {}), spec)
+            needs = missing_for(content_of(contents.get(x["id"], {})), cast(AgentSpec, spec))
             x["locked"], x["needs"] = bool(needs), needs
     return ok({**body, "viewCounts": counts})
 
@@ -390,7 +391,7 @@ async def agent_skill_options(  # noqa: PLR0917 - FastAPI reads each query param
     for r in rows:
         v = await reg.version(r.id, r.published_version or r.version)
         content = v.content if v is not None else {}
-        missing = missing_for(content, spec)
+        missing = missing_for(content_of(content), cast(AgentSpec, spec))
         hint = f"v{r.published_version} · {content.get('useWhen', '')}"
         reason = f"Needs {', '.join(missing)}; grant them on this agent first." if missing else None
         opts.append({"id": r.id, "label": content.get("name", r.slug), "hint": hint, "disabled": reason})
@@ -410,7 +411,8 @@ async def attach_skill(rt: Rt, me: Me, _: Tx, agent_id: str, skill_id: str, body
         if found is None or found.published_version is None:
             raise NotFound(f"Published skill {skill_id}")
         version = found.published_version
-    spec["skillPins"] = [*await pin(rt, spec, skill_id, version, by=me.email, at=now_iso())]
+    pins = await pin(rt, cast(AgentSpec, spec), skill_id, version, by=me.email, at=now_iso())
+    spec["skillPins"] = cast(JsonList, [*pins])
     await reg.save(agent_id, spec, by=me.email, note=f"Attached {skill_id} v{version}")
     return ok(await agent_skills(rt, agent_id))
 

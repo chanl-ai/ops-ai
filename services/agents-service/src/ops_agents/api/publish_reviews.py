@@ -5,7 +5,7 @@ returning needs a reason."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from ops_agents.graphs.definition import WorkflowDefinition
 from ops_agents.store.agent_registry import PublishRequestRow, registry_agents
@@ -16,7 +16,7 @@ from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
 from ops_store import isolation
 
 from . import deployment_reviews, egress_host_reviews, engine_lifecycle, tool_access_reviews, tool_module_reviews
-from .agent_registry import go_live, registry, review_view
+from .agent_registry import ReviewView, go_live, registry, review_view
 from .auth import Principal, require_not_own, require_reviews_decide, review_teams
 from .deps import Runtime
 from .guardrails import guardrails
@@ -44,7 +44,7 @@ async def view(
     *,
     names: dict[tuple[str, int], str] | None = None,
     agents: dict[tuple[str, int], tuple[str, str]] | None = None,
-) -> dict[str, Any]:
+) -> ReviewView:
     """`names`: the workflow versions' names, and `agents` each agent version's name and slug (named_versions), read
     together by a list so a request reads none of its own."""
     if req.kind == deployment_reviews.KIND:
@@ -61,13 +61,16 @@ async def view(
         )
         v.pop("publish", None)
         policy = {**v["policy"], "id": "gp_widget_publish", "name": "Widget publish"}
-        return {
-            **v,
-            "workflowId": "",
-            "actionTool": "publish_widget",
-            "policy": policy,
-            "reasoning": req.body["changes"],
-        }
+        return cast(
+            ReviewView,
+            {
+                **v,
+                "workflowId": "",
+                "actionTool": "publish_widget",
+                "policy": policy,
+                "reasoning": req.body["changes"],
+            },
+        )
     if req.kind == "skill":
         row = await skills(rt).row(req.subject_id)
         v = review_view(
@@ -75,13 +78,16 @@ async def view(
         )
         v.pop("publish", None)
         policy = {**v["policy"], "id": "gp_skill_publish", "name": "Skill publish"}
-        return {
-            **v,
-            "workflowId": "",
-            "actionTool": "publish_skill",
-            "policy": policy,
-            "reasoning": req.body["changes"],
-        }
+        return cast(
+            ReviewView,
+            {
+                **v,
+                "workflowId": "",
+                "actionTool": "publish_skill",
+                "policy": policy,
+                "reasoning": req.body["changes"],
+            },
+        )
     if req.kind == "guardrail":
         row = await guardrails(rt).row(req.subject_id)
         # A guardrail publish shows as a publish request; the topics it would block are its reasoning.
@@ -89,7 +95,10 @@ async def view(
         v.pop("publish", None)
         topics = narrow.an_object(req.body["config"], "the guardrail's config")["topics"]
         policy = {**v["policy"], "id": "gp_guardrail_publish", "name": "Guardrail publish"}
-        return {**v, "workflowId": "", "actionTool": "publish_guardrail", "policy": policy, "reasoning": topics}
+        return cast(
+            ReviewView,
+            {**v, "workflowId": "", "actionTool": "publish_guardrail", "policy": policy, "reasoning": topics},
+        )
     if req.kind == "agent":
         key = (str(req.subject_id), int(req.version))
         found = agents if agents is not None else await registry(rt).named_versions({key})
@@ -114,7 +123,8 @@ async def get(rt: Runtime, request_id: str) -> dict[str, Any]:
             raise NotFound(f"Publish request {request_id}")
     await sla_hours(rt)
     async with isolation.request_transaction():
-        return await view(rt, req)
+        # A dict, as the Reviews facade answers every kind of review (hitl_facade).
+        return dict(await view(rt, req))
 
 
 async def in_acting_team(rt: Runtime, req: PublishRequestRow, *, asked_from: bool = False) -> bool:
@@ -153,11 +163,11 @@ async def _owners(
     return out
 
 
-async def all_views(rt: Runtime) -> list[dict[str, Any]]:
+async def all_views(rt: Runtime) -> list[ReviewView]:
     """The acting team's publish requests (`in_acting_team`), pending and decided, for the Reviews list. A tool
     access request still pending is not one: it runs as its system workflow now, and listing both would show it
     twice."""
-    out: list[dict[str, Any]] = []
+    out: list[ReviewView] = []
     capped = await ReviewSources(rt.db).publish_requests(rt.settings.review_list_rows_per_source)
     requests = capped
     pinned = {(str(r.subject_id), int(r.version)) for r in requests if r.kind == engine_lifecycle.KIND}
@@ -274,7 +284,7 @@ async def decide(
             await egress_host_reviews.apply(rt, req)
         elif decision == "approved":
             await _publish(rt, req, approver.email)
-        return await view(rt, await reg.request(request_id))
+        return dict(await view(rt, await reg.request(request_id)))
 
 
 async def _publish(rt: Runtime, req: PublishRequestRow, by: str) -> None:

@@ -8,7 +8,7 @@ request and applied when it is approved; the deployment keeps serving as it was 
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from ops_service_kit import narrow
 from ops_service_kit.errors import NotFound
@@ -17,7 +17,7 @@ from ops_service_kit.ids import now_iso
 
 from ..store.agent_registry import PublishRequestRow
 from ..store.widget_deployments import WidgetDeployments
-from .agent_registry import registry, review_view
+from .agent_registry import ReviewView, registry, review_view
 from .deps import Runtime
 from .publish_policy import decide
 from .review_sla import sla_hours
@@ -106,18 +106,21 @@ async def team(rt: Runtime, req: PublishRequestRow) -> str | None:
     return str(row["team_id"]) if row is not None else None
 
 
-async def view(rt: Runtime, req: PublishRequestRow) -> dict[str, Any]:
+async def view(rt: Runtime, req: PublishRequestRow) -> ReviewView:
     v = review_view(req, name=narrow.required(req.body, "deploymentName", str), slug="", sla_hours=await sla_hours(rt))
     v.pop("publish", None)
     policy = {**v["policy"], "id": "gp_deployment_change", "name": "Widget deployment change"}
-    return {
-        **v,
-        "title": f"Change {req.body['deploymentName']}",
-        "workflowId": "",
-        "actionTool": "change_deployment",
-        "policy": policy,
-        "reasoning": req.body["words"],
-    }
+    return cast(
+        ReviewView,
+        {
+            **v,
+            "title": f"Change {req.body['deploymentName']}",
+            "workflowId": "",
+            "actionTool": "change_deployment",
+            "policy": policy,
+            "reasoning": req.body["words"],
+        },
+    )
 
 
 async def apply(rt: Runtime, req: PublishRequestRow) -> None:

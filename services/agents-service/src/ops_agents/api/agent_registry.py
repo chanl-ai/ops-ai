@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal, Required, TypedDict, cast
+from typing import Any, Literal, NotRequired, Required, TypedDict, cast
 
 from ops_access import can
 from ops_agent_kernel.layout import required_tools
@@ -82,6 +82,27 @@ class WidgetPin(TypedDict, total=False):
     tree: JsonValue
 
 
+class SkillPin(TypedDict):
+    """A spec's `skillPins` entry: what an agent version keeps of a pinned skill version (`skills.snapshot`), so the
+    runtime serves it with no lookup. `refusal` and `parts` only when the skill version has them."""
+
+    skillId: str
+    version: int
+    name: str
+    slug: str
+    useWhen: str
+    loading: str
+    instructions: str
+    guardrails: list[str]
+    refusal: NotRequired[str]
+    toolIds: list[str]
+    knowledgeBases: list[str]
+    tokens: int
+    parts: NotRequired[list[Json]]
+    attachedBy: str
+    attachedAt: str
+
+
 class AgentSpec(TypedDict, total=False):
     """An agent version's stored `spec`, as this module reads it. A view of the stored document (cast, never
     rebuilt), so a version saved before a key existed reads exactly as it did."""
@@ -99,7 +120,7 @@ class AgentSpec(TypedDict, total=False):
     suggestions: list[str]
     guardrails: AgentCaps
     guardrailPins: list[GuardrailPin]
-    skillPins: list[Json]
+    skillPins: list[SkillPin]
     widgetPins: list[WidgetPin]
     widgets: AgentWidgets
     memory: AgentMemory
@@ -560,14 +581,66 @@ def _sla_minutes(req: PublishRequestRow, now: datetime, hours: float) -> int | N
     return int((asked + timedelta(hours=hours) - now).total_seconds() // 60)
 
 
+class ReviewPolicy(TypedDict):
+    id: str
+    name: str
+    condition: str
+    reviewers: str
+    sla: str
+    onTimeout: str
+    fourEyes: bool
+
+
+class ReviewView(TypedDict):
+    """A publish request as the console's Review, in reply order. A kind's view (publish_reviews.view) overrides some
+    keys, drops `publish` and adds its own section (`egressHost`, `toolModule`) at the end."""
+
+    id: str
+    title: str
+    customer: str
+    workflowId: str
+    workflowName: str
+    agentSlug: str
+    agentName: str | None
+    kind: str
+    risk: JsonValue
+    confidence: int
+    proposal: str
+    actionTool: str
+    currency: str
+    policy: ReviewPolicy
+    slaMinutes: int | None
+    approvals: list[str]
+    decidedBy: NotRequired[str]
+    status: str
+    createdAt: str
+    decidedAt: NotRequired[str]
+    reasoning: JsonValue
+    evidence: list[JsonValue]
+    agentPublish: NotRequired[Json]
+    publish: NotRequired[Json]
+    decisionReason: NotRequired[str]
+    egressHost: NotRequired[Json]
+    toolModule: NotRequired[Json]
+
+
 def review_view(
     req: PublishRequestRow, *, name: str, slug: str, sla_hours: float, now: datetime | None = None
-) -> dict[str, Any]:
+) -> ReviewView:
     """A publish request as the console's Review, kind `agent_publish` or `publish_request`. `sla_hours` is the
     tenant's review deadline (`review_sla.sla_hours`). A decided one says who decided it, when and why."""
     agent = req.kind == "agent"
     body = req.body
-    return {
+    policy: ReviewPolicy = {
+        "id": "gp_agent_publish" if agent else "gp_workflow_publish",
+        "name": "Agent publish" if agent else "Workflow publish",
+        "condition": "every version before it serves",
+        "reviewers": "publishers",
+        "sla": "1 business day",
+        "onTimeout": "Stays pending; the requester is notified",
+        "fourEyes": False,
+    }
+    view = {
         "id": req.id,
         "title": f"Publish {name} v{req.version}",
         "customer": f"Requested by {requester(str(req.requested_by))}",
@@ -581,15 +654,7 @@ def review_view(
         "proposal": req.note,
         "actionTool": "publish_agent" if agent else "publish_workflow",
         "currency": "CAD",
-        "policy": {
-            "id": "gp_agent_publish" if agent else "gp_workflow_publish",
-            "name": "Agent publish" if agent else "Workflow publish",
-            "condition": "every version before it serves",
-            "reviewers": "publishers",
-            "sla": "1 business day",
-            "onTimeout": "Stays pending; the requester is notified",
-            "fourEyes": False,
-        },
+        "policy": policy,
         "slaMinutes": _sla_minutes(req, now or datetime.now(UTC), sla_hours),
         "approvals": [req.decided_by] if req.decided_by else [],
         **({"decidedBy": req.decided_by} if req.decided_by else {}),
@@ -601,6 +666,7 @@ def review_view(
         **({"agentPublish": body} if agent else {"publish": {k: v for k, v in body.items() if k not in STORED_ONLY}}),
         **({"decisionReason": req.decision_reason} if req.decision_reason else {}),
     }
+    return cast(ReviewView, view)
 
 
 def require_newest_draft(row: AgentRow, version: int) -> None:

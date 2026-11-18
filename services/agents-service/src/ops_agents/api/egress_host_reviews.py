@@ -9,7 +9,7 @@ the same one, and an attempt after a refusal returns the refusal instead of aski
 
 from __future__ import annotations
 
-from typing import Any
+from typing import cast
 
 from ops_access import can
 from ops_service_kit import narrow
@@ -18,7 +18,7 @@ from ops_service_kit.http import Json
 from ops_service_kit.ids import now_iso
 
 from ..store.agent_registry import PublishRequestRow
-from .agent_registry import registry, review_view
+from .agent_registry import ReviewView, registry, review_view
 from .auth import Principal, caller_of
 from .deps import Runtime
 from .review_sla import sla_hours
@@ -49,29 +49,32 @@ async def team(rt: Runtime) -> str | None:
     return await security_team(rt)
 
 
-async def view(rt: Runtime, req: PublishRequestRow) -> dict[str, Any]:
+async def view(rt: Runtime, req: PublishRequestRow) -> ReviewView:
     if req.body.get("applyPending"):
         req = await _apply(rt, req)
     body = req.body
     v = review_view(req, name=narrow.required(body, "app", str), slug="", sla_hours=await sla_hours(rt))
     v.pop("publish", None)
     policy = {**v["policy"], "id": "gp_egress_host", "name": "New host", "reviewers": "Security"}
-    return {
-        **v,
-        "kind": KIND,
-        "title": f"Let {body['app']} call {body['host']}?",
-        "workflowId": "",
-        "actionTool": "allow_egress_host",
-        "policy": policy,
-        "reasoning": [f"{body['requestedBy']} set {body['app']}'s address on {body['host']}, which is not listed."],
-        "egressHost": {
-            "host": body["host"],
-            "app": body["app"],
-            "requestedBy": body["requestedBy"],
-            "teamId": body["teamId"],
-            "applyPending": bool(body.get("applyPending")),
+    return cast(
+        ReviewView,
+        {
+            **v,
+            "kind": KIND,
+            "title": f"Let {body['app']} call {body['host']}?",
+            "workflowId": "",
+            "actionTool": "allow_egress_host",
+            "policy": policy,
+            "reasoning": [f"{body['requestedBy']} set {body['app']}'s address on {body['host']}, which is not listed."],
+            "egressHost": {
+                "host": body["host"],
+                "app": body["app"],
+                "requestedBy": body["requestedBy"],
+                "teamId": body["teamId"],
+                "applyPending": bool(body.get("applyPending")),
+            },
         },
-    }
+    )
 
 
 async def apply(rt: Runtime, req: PublishRequestRow) -> None:
