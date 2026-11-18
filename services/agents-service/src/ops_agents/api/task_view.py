@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import cast
 
 from ops_engine.store import RunStep, RunStore
-from ops_service_kit.http import Json, JsonValue
+from ops_service_kit.http import Json, JsonList, JsonValue
 from ops_service_kit.narrow import a_list, an_object, json_list, json_object
 from ops_store.team_scope import acting_team
 
@@ -120,7 +120,9 @@ async def typed_task(
         call = data.get("call")
         if region["region"] == "write_preview" and isinstance(call, dict) and call.get("tool"):
             told = await describe_call(rt, call, currency=None, money_key=None)
-            region["data"] = data | {"fields": told["fields"], "sentence": told["sentence"]}
+            # Each row copied as JSON: the same label and value.
+            fields: JsonList = [dict[str, JsonValue](f) for f in told["fields"]]
+            region["data"] = {**data, "fields": fields, "sentence": told["sentence"]}
     # Task assist, when the team had it on as the step paused: after the question, before the evidence.
     if helped := task_assist.region(
         task_assist.settled(await reads.assist(step), datetime.now(UTC)),
