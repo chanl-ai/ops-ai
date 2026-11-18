@@ -13,11 +13,13 @@ from typing import Any, ClassVar, Literal
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from ops_service_kit.http import Out
 from ops_service_kit.ids import new_id, now_iso
 from ops_service_kit.listing import ListParams
 from ops_store import Guarantee
 from ops_store.dialect import locked
 from ops_store.listing import ListPage, list_page
+from ops_store.rows import one
 from ops_store.schema import TEAM_OWNED, TENANT_SCOPED
 from ops_store.team_scope import team_visible
 
@@ -60,6 +62,28 @@ def source_of(form_id: str) -> str:
     return f"form:{form_id}"
 
 
+class FormLinkRow(Out):
+    """One hosted form, every column of `form_links`. `mode` stays a plain string: a row whose mode is neither
+    reaches the link checks and is refused there, as it was before."""
+
+    id: str
+    tenant_id: str
+    team_id: str
+    workflow_id: str
+    slug: str
+    mode: str
+    title: str
+    description: str
+    after_text: str
+    token_hash: str
+    expires_at: str
+    daily_cap: int
+    paused: bool
+    created_by: str
+    created_at: str
+    rotated_at: str | None
+
+
 class FormLinks:
     """Every read names the tenant as well as the team: a link's token names its tenant, and a database without row
     policies (SQLite) would otherwise open another tenant's form with the same id."""
@@ -83,7 +107,7 @@ class FormLinks:
         description: str = "",
         after_text: str = "",
         token_hash: str = "",
-    ) -> dict[str, Any]:
+    ) -> FormLinkRow:
         row = {
             "id": new_id("form"),
             "team_id": team_id,
@@ -101,36 +125,20 @@ class FormLinks:
         }
         async with tenant_tx(self.engine) as c:
             await c.execute(form_links.insert().values(**row))
-        return {**row, "tenant_id": current_tenant(), "paused": False, "rotated_at": None}
+        return FormLinkRow.model_validate({**row, "tenant_id": current_tenant(), "paused": False, "rotated_at": None})
 
-    async def get(self, form_id: str) -> dict[str, Any] | None:
+    async def get(self, form_id: str) -> FormLinkRow | None:
         f = form_links
+        q = sa.select(f).where(f.c.tenant_id == current_tenant(), team_visible(f), f.c.id == form_id).limit(1)
         async with tenant_tx(self.engine) as c:
-            found = (
-                (
-                    await c.execute(
-                        sa.select(f).where(f.c.tenant_id == current_tenant(), team_visible(f), f.c.id == form_id)
-                    )
-                )
-                .mappings()
-                .first()
-            )
-        return dict(found) if found is not None else None
+            return await one(c, q, FormLinkRow)
 
-    async def by_slug(self, slug: str) -> dict[str, Any] | None:
+    async def by_slug(self, slug: str) -> FormLinkRow | None:
         """The form at `slug` among the acting team's forms (a members-only page, read as a signed-in person)."""
         f = form_links
+        q = sa.select(f).where(f.c.tenant_id == current_tenant(), team_visible(f), f.c.slug == slug).limit(1)
         async with tenant_tx(self.engine) as c:
-            found = (
-                (
-                    await c.execute(
-                        sa.select(f).where(f.c.tenant_id == current_tenant(), team_visible(f), f.c.slug == slug)
-                    )
-                )
-                .mappings()
-                .first()
-            )
-        return dict(found) if found is not None else None
+            return await one(c, q, FormLinkRow)
 
     async def page(self, workflow_id: str, params: ListParams) -> ListPage:
         """One page of the workflow's forms in the acting team, newest first, then by id; `search` matches the title
@@ -140,7 +148,7 @@ class FormLinks:
         async with tenant_tx(self.engine) as c:
             return await list_page(c, q, params, search=[f.c.title, f.c.slug], default_sort=f.c.created_at.desc())
 
-    async def update(self, form_id: str, **values: Any) -> dict[str, Any] | None:
+    async def update(self, form_id: str, **values: Any) -> FormLinkRow | None:
         f = form_links
         async with tenant_tx(self.engine) as c:
             await c.execute(
@@ -197,7 +205,7 @@ class FormLinks:
         """Names the run a reserved submission started, or turns it into `start_failed`, which the cap does not
         count, when the start raised after the place was taken."""
         t = trigger_events
-        values: dict[str, Any] = {"run_id": run_id}
+        values: dict[str, str | None] = {"run_id": run_id}
         if failed is not None:
             values |= {"outcome": "start_failed", "detail": json.dumps({"reason": failed})}
         async with tenant_tx(self.engine) as c:

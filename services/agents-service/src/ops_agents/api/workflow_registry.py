@@ -15,16 +15,19 @@ through the canvas.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 from pydantic import JsonValue
 
 from ops_agents.graphs.definition import InvalidDefinitionError, NodeKind, WorkflowDefinition, validate
 from ops_service_kit import narrow
 from ops_service_kit.errors import Conflict, NotFound, ValidationFailed
+from ops_service_kit.http import Json
+from ops_service_kit.http import JsonValue as AnyJson
 from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 
@@ -44,14 +47,35 @@ log = get_logger("ops_agents.workflow_registry")
 PASSTHROUGH_EDGE_KEYS = ("pass", "fail", "approved", "rejected", "default")
 
 
-def condition_targets(config: dict[str, Any]) -> list[tuple[str, str]]:
-    """(handle, target) for each route a condition's config names: its fixed keys, then a route rule's routes."""
+def condition_targets(config: Json) -> list[tuple[str, str]]:
+    """(handle, target) for each route a condition's config names: its fixed keys, then a route rule's routes. A
+    route that is not an object, or routes that are a number, raise as they did."""
     out = [(k, str(config[k])) for k in PASSTHROUGH_EDGE_KEYS if k in config]
-    routes: list[dict[str, Any]] = config.get("routes") or []
+    routes = [narrow.an_object(r, "route") for r in narrow.entries(config.get("routes"))]
     return out + [(f"route{i}", str(r["to"])) for i, r in enumerate(routes)]
 
 
 # ── compile ──
+
+
+class CheckOutcomeJSON(TypedDict):
+    """A compile check's `draft` outcome in a validation result, in reply order."""
+
+    passed: bool
+    paused: bool
+    toolsCalled: list[str]
+    reply: str
+    failure: NotRequired[str]
+
+
+class CheckResultJSON(TypedDict):
+    """One compile check as a validation run's result, in reply order."""
+
+    caseId: str
+    caseName: str
+    draft: CheckOutcomeJSON
+    live: None
+    regression: bool
 
 
 @dataclass(frozen=True)
@@ -61,8 +85,8 @@ class Check:
     passed: bool
     failure: str | None = None
 
-    def result(self) -> dict[str, Any]:
-        outcome: dict[str, Any] = {"passed": self.passed, "paused": False, "toolsCalled": [], "reply": ""}
+    def result(self) -> CheckResultJSON:
+        outcome: CheckOutcomeJSON = {"passed": self.passed, "paused": False, "toolsCalled": [], "reply": ""}
         if self.failure:
             outcome["failure"] = self.failure
         return {"caseId": self.id, "caseName": self.name, "draft": outcome, "live": None, "regression": False}
@@ -73,7 +97,7 @@ class PinnedAgent:
     id: str
     slug: str
     version: int
-    spec: dict[str, Any]
+    spec: Json
 
 
 @dataclass(frozen=True)
@@ -568,27 +592,35 @@ async def counts_24h(rt: Runtime) -> tuple[dict[str, int], dict[str, int]]:
     return runs, waiting
 
 
-def _shape(graph: dict[str, Any]) -> tuple[list[str], int, int]:
-    nodes: list[dict[str, Any]] = graph.get("nodes", [])
-    datas: list[dict[str, Any]] = [n.get("data") or {} for n in nodes]
-    slugs = sorted({str(d["agentSlug"]) for d in datas if d.get("agentSlug")})
+def _shape(graph: Json) -> tuple[list[AnyJson], int, int]:
+    """The agents, steps and gates a graph draws. Nodes are iterated as they always were (an empty string is no nodes);
+    a node, its data or its definition that is not an object raises, as reading it did, and so do nodes that cannot
+    be iterated."""
+    raw = graph.get("nodes", [])
+    if not isinstance(raw, list | dict | str):
+        raise narrow.Malformed("nodes is not a list")
+    nodes = [narrow.an_object(n, "workflow node") for n in narrow.entries(raw)]
+    datas = [narrow.an_object(n.get("data") or {}, "node data") for n in nodes]
+    slugs: list[AnyJson] = [*sorted({str(d["agentSlug"]) for d in datas if d.get("agentSlug")})]
     steps = sum(1 for n in nodes if n.get("type") not in ("trigger", "end"))
-    defs: list[dict[str, Any]] = [d.get("definition") or {} for d in datas]
+    defs = [narrow.an_object(d.get("definition") or {}, "node definition") for d in datas]
     kinds = [str(x.get("kind")) for x in defs]
     gates = sum(1 for n, k in zip(nodes, kinds, strict=True) if n.get("type") == "review" or k == "human")
     return slugs, steps, gates
 
 
 def workflow_view(
-    row: dict[str, Any],
-    live: dict[str, Any] | None,
+    row: Mapping[str, AnyJson],
+    live: Mapping[str, AnyJson] | None,
     pending: PublishRequestRow | PendingPublish | None,
     runs: int,
     waiting: int,
-) -> dict[str, Any]:
-    graph: dict[str, Any] = (live or {}).get("graph") or row["draft"] or {"nodes": [], "edges": []}
+) -> Json:
+    """`schemas.Workflow` for a v1 workflow: `row` is a registry row's columns and `live` its live version's, as the
+    routes dump them. A graph that is not an object raises, as reading it did."""
+    graph = narrow.an_object((live or {}).get("graph") or row["draft"] or {"nodes": [], "edges": []}, "workflow graph")
     slugs, steps, gates = _shape(graph)
-    return {
+    out: Json = {
         "id": row["id"],
         "name": row["name"],
         "description": row["description"],
@@ -605,21 +637,15 @@ def workflow_view(
         "status": row["status"],
         "version": row["published_version"] or 0,
         "updatedAt": row["updated_at"],
-        **(
-            {
-                "pendingPublish": {
-                    "reviewId": pending.id,
-                    "toVersion": pending.version,
-                    "requestedBy": pending.requested_by,
-                }
-            }
-            if pending
-            else {}
-        ),
-        "deploymentCount": 0,
-        "kind": "standard",
-        "engine": "v1",
     }
+    if pending:
+        out["pendingPublish"] = {
+            "reviewId": pending.id,
+            "toVersion": pending.version,
+            "requestedBy": pending.requested_by,
+        }
+    out |= {"deploymentCount": 0, "kind": "standard", "engine": "v1"}
+    return out
 
 
 RUN_STATUS = {"done": "completed", "interrupted": "waiting_review", "error": "failed", "lease_lost": "failed"}

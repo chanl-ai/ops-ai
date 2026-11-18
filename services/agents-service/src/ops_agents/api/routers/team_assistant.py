@@ -27,7 +27,7 @@ from ops_service_kit.ids import now_iso
 from ops_service_kit.logging import get_logger
 
 from ...store.team_defaults import TeamDefaults
-from ...store.template_copies import TemplateCopies
+from ...store.template_copies import TemplateCopies, TemplateCopyRow
 from ..agent_registry import agent_review_body, go_live, live_agent, registry
 from ..auth import Principal, caller_in, caller_of
 from ..deps import Runtime, runtime
@@ -152,7 +152,7 @@ async def _unpinned(rt: Runtime, shipped: list[dict[str, Any]], holds: set[str])
     out: list[dict[str, Any]] = []
     for t in shipped:
         held = await copies.live(str(t["source"]), str(t["id"]))
-        if held is None or str(held["record_id"]) not in holds or await _stale(rt, held, t):
+        if held is None or held.record_id not in holds or await _stale(rt, held, t):
             out.append(t)
     return out
 
@@ -163,14 +163,14 @@ async def _newest_digest(rt: Runtime, skill_id: str) -> tuple[int, str | None]:
     return row.version, (found.digest if found else None)
 
 
-async def _stale(rt: Runtime, held: dict[str, Any], t: dict[str, Any]) -> bool:
+async def _stale(rt: Runtime, held: TemplateCopyRow, t: dict[str, Any]) -> bool:
     """Whether the team's copy was made from a template body the app has since changed, and the team has not edited
     the copy since, so taking the app's text overwrites nothing of theirs. A copy made with no record digest counts as
     edited once it has a version past its first."""
-    if not t.get("digest") or held.get("digest") == t.get("digest"):
+    if not t.get("digest") or held.digest == t.get("digest"):
         return False
-    version, newest = await _newest_digest(rt, str(held["record_id"]))
-    kept = held.get("record_digest")
+    version, newest = await _newest_digest(rt, held.record_id)
+    kept = held.record_digest
     return newest == kept if kept else version == 1
 
 
@@ -187,7 +187,7 @@ async def _skill_copies(
         source, tid, version = str(t["source"]), str(t["id"]), int(t["version"])
         held = await copies.live(source, tid)
         if held is not None:
-            sid = str(held["record_id"])
+            sid = held.record_id
             row = await skills(rt).row(sid)
             now = (await skills(rt).versions(sid))[0].content
             # A skill row holds no name of its own; the newest version's content names it.
@@ -201,7 +201,7 @@ async def _skill_copies(
             n = await skills(rt).save_draft(sid, content, by=me.email, note=note)
             await skills(rt).publish(sid, n, by=me.email, review_id="app_turn_on")
             await copies.updated(
-                str(held["id"]), version=version, digest=cast(str | None, t.get("digest")),
+                held.id, version=version, digest=cast(str | None, t.get("digest")),
                 record_digest=(await _newest_digest(rt, sid))[1], base=template_routes.copy_base("skill", content),
             )  # fmt: skip
             out.append((sid, name, n, True))

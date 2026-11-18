@@ -23,7 +23,7 @@ import hmac
 import re
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, Literal, TypeAlias, cast
+from typing import Annotated, Any, Literal, NotRequired, TypeAlias, TypedDict, cast
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
@@ -34,6 +34,7 @@ from ops_engine.node_types import start_form
 from ops_engine.store import DefinitionRow, DefinitionStore, RunStore
 from ops_files_client import FilesClient, FilesRefused
 from ops_identity.fastapi import Tx
+from ops_service_kit import narrow
 from ops_service_kit.client_address import client_address
 from ops_service_kit.errors import (
     Conflict,
@@ -44,12 +45,12 @@ from ops_service_kit.errors import (
     Unauthorized,
     Unprocessable,
 )
-from ops_service_kit.http import Envelope, In, JsonValue, ListResult, Out
+from ops_service_kit.http import Envelope, In, Json, JsonValue, ListResult, Out
 from ops_service_kit.listing import ListQuery
 from ops_store import isolation
 
 from ...store.engine import EngineTransactions
-from ...store.form_links import FormLinks, source_of
+from ...store.form_links import FormLinkRow, FormLinks, source_of
 from ...store.tenancy import current_tenant
 from ...store.trigger_events import TriggerEvent, TriggerEvents
 from ..auth import Principal, principal, require_builder, started_by
@@ -138,6 +139,47 @@ class UploadedFile(Out):
     name: str
 
 
+class FormViewJSON(TypedDict):
+    """`FormView` as `_view` builds it, in reply order; `token` only when the link was just made."""
+
+    id: str
+    workflowId: str
+    slug: str
+    mode: str
+    title: str
+    description: str
+    afterText: str
+    expiresAt: str
+    dailyCap: int
+    paused: bool
+    url: str
+    canEdit: bool
+    token: NotRequired[str]
+
+
+class FormFieldsJSON(TypedDict, total=False):
+    """`FormFields`: the start form's keys a person may see, those it has."""
+
+    schema: JsonValue
+    takesFiles: JsonValue
+
+
+class PublicFormJSON(TypedDict):
+    """`PublicForm` as `_public` builds it, in reply order."""
+
+    title: str
+    description: str
+    form: FormFieldsJSON
+    afterText: str
+
+
+class ReceivedJSON(TypedDict):
+    """`Received`; `runId` on a members-only submission."""
+
+    received: bool
+    runId: NotRequired[str]
+
+
 def _links(rt: Runtime) -> FormLinks:
     return FormLinks(rt.db)
 
@@ -165,28 +207,35 @@ def _may_edit(me: Principal, team_id: str, form_id: str) -> bool:
     return True
 
 
-def _view(row: dict[str, Any], me: Principal, token: str | None = None) -> dict[str, Any]:
-    out = {
-        "id": row["id"],
-        "workflowId": row["workflow_id"],
-        "slug": row["slug"],
-        "mode": row["mode"],
-        "title": row["title"],
-        "description": row["description"],
-        "afterText": row["after_text"],
-        "expiresAt": row["expires_at"],
-        "dailyCap": row["daily_cap"],
-        "paused": bool(row["paused"]),
-        "url": f"/f/{row['slug']}" + (f"?t={token}" if token else ""),
-        "canEdit": _may_edit(me, str(row["team_id"]), str(row["id"])),
+def _view(row: FormLinkRow, me: Principal, token: str | None = None) -> FormViewJSON:
+    out: FormViewJSON = {
+        "id": row.id,
+        "workflowId": row.workflow_id,
+        "slug": row.slug,
+        "mode": row.mode,
+        "title": row.title,
+        "description": row.description,
+        "afterText": row.after_text,
+        "expiresAt": row.expires_at,
+        "dailyCap": row.daily_cap,
+        "paused": row.paused,
+        "url": f"/f/{row.slug}" + (f"?t={token}" if token else ""),
+        "canEdit": _may_edit(me, row.team_id, row.id),
     }
-    return out | ({"token": token} if token else {})
+    if token:
+        out["token"] = token
+    return out
 
 
-def _inputs(stored: DefinitionRow) -> dict[str, Any]:
-    """The live version's start form, when its trigger declares inputs a person can fill."""
+def _inputs(stored: DefinitionRow) -> Json:
+    """The live version's start form, when its trigger declares inputs a person can fill. A schema that is not an
+    object raises, as it did."""
     form = start_form(stored.definition, default_registry())
-    if form is None or form.get("kind") != "form" or not cast(dict[str, Any], form["schema"]).get("properties"):
+    if (
+        form is None
+        or form.get("kind") != "form"
+        or not narrow.an_object(form["schema"], "start form schema").get("properties")
+    ):
         raise Conflict(
             "This workflow's Request trigger has no input form. Add the fields people fill in to the trigger first.",
             code="form_needs_inputs",
@@ -221,8 +270,8 @@ async def create_form(rt: Rt, me: Me, _: Tx, workflow_id: str, body: FormIn) -> 
         description=body.description,
         after_text=body.after_text,
     )
-    token, hashed = _token(current_tenant(), me.team_id, str(row["id"]))
-    row = await links.update(str(row["id"]), token_hash=hashed) or row
+    token, hashed = _token(current_tenant(), me.team_id, row.id)
+    row = await links.update(row.id, token_hash=hashed) or row
     return ok(_view(row, me, token if body.mode == "link" else None), 201)
 
 
@@ -231,14 +280,14 @@ async def workflow_forms(rt: Rt, me: Me, _: Tx, workflow_id: str, q: ListQuery) 
     """The workflow's forms in the caller's team on the shared list contract: newest first, then by id; `search`
     matches the title and slug, `ids` names forms."""
     listed = await _links(rt).page(workflow_id, q)
-    return ok({**listed, "data": [_view(r, me) for r in listed["data"]]})
+    return ok({**listed, "data": [_view(FormLinkRow.model_validate(r), me) for r in listed["data"]]})
 
 
-async def _own(rt: Runtime, me: Principal, form_id: str) -> dict[str, Any]:
+async def _own(rt: Runtime, me: Principal, form_id: str) -> FormLinkRow:
     row = await _links(rt).get(form_id)
     if row is None:
         raise NotFound(f"Form {form_id}")
-    require_builder(me, area="workflows", team_id=str(row["team_id"]), action="edit", what=f"form {form_id}")
+    require_builder(me, area="workflows", team_id=row.team_id, action="edit", what=f"form {form_id}")
     return row
 
 
@@ -246,7 +295,7 @@ async def _own(rt: Runtime, me: Principal, form_id: str) -> dict[str, Any]:
 async def rotate_form(rt: Rt, me: Me, _: Tx, form_id: str) -> JSONResponse:
     """A new link for the form; the old one stops working at once."""
     row = await _own(rt, me, form_id)
-    token, hashed = _token(current_tenant(), str(row["team_id"]), form_id)
+    token, hashed = _token(current_tenant(), row.team_id, form_id)
     now = datetime.now(UTC).isoformat()
     row = await _links(rt).update(form_id, token_hash=hashed, rotated_at=now) or row
     return ok(_view(row, me, token))
@@ -261,10 +310,6 @@ async def update_form(rt: Rt, me: Me, _: Tx, form_id: str, body: FormPatch) -> J
     return ok(_view(row, me))
 
 
-# A stored row or form document, as the stores and `_inputs` hand them over.
-Row = dict[str, Any]
-
-
 def _opened(token: str, slug: str) -> tuple[str, str, str, str]:
     """The tenant, team, form and secret a link's token names; 401 when it is not one of ours."""
     m = TOKEN.match(token or "")
@@ -273,7 +318,7 @@ def _opened(token: str, slug: str) -> tuple[str, str, str, str]:
     return m["tenant"], m["team"], m["form"], m["secret"]
 
 
-async def _linked(rt: Runtime, slug: str, token: str) -> Row:
+async def _linked(rt: Runtime, slug: str, token: str) -> FormLinkRow:
     """The form a link opens, inside the tenant and team its token names: 404 for a token made for another form, 401
     for an expired, rotated or paused one."""
     tenant, team, form_id, secret = _opened(token, slug)
@@ -281,20 +326,24 @@ async def _linked(rt: Runtime, slug: str, token: str) -> Row:
     return await _link_row(rt, slug, form_id, secret)
 
 
-async def _link_row(rt: Runtime, slug: str, form_id: str, secret: str) -> Row:
+async def _link_row(rt: Runtime, slug: str, form_id: str, secret: str) -> FormLinkRow:
     row = await _links(rt).get(form_id)
-    if row is None or row["slug"] != slug:
+    if row is None or row.slug != slug:
         raise NotFound("Form")
-    fresh = hmac.compare_digest(_hash(secret), str(row["token_hash"]))
-    if not fresh or row["mode"] != "link" or row["paused"] or str(row["expires_at"]) <= datetime.now(UTC).isoformat():
+    fresh = hmac.compare_digest(_hash(secret), row.token_hash)
+    if not fresh or row.mode != "link" or row.paused or row.expires_at <= datetime.now(UTC).isoformat():
         raise Unauthorized(EXPIRED, code="form_link_expired")
     return row
 
 
-def _public(row: Row, form: Row) -> Row:
+def _public(row: FormLinkRow, form: Json) -> PublicFormJSON:
     """What a person sees before sign-in: the form's title, description and fields, and what is said after."""
-    shown = {k: form[k] for k in ("schema", "takesFiles") if k in form}
-    return {"title": row["title"], "description": row["description"], "form": shown, "afterText": row["after_text"]}
+    shown: FormFieldsJSON = {}
+    if "schema" in form:
+        shown["schema"] = form["schema"]
+    if "takesFiles" in form:
+        shown["takesFiles"] = form["takesFiles"]
+    return {"title": row.title, "description": row.description, "form": shown, "afterText": row.after_text}
 
 
 @router.get("/v1/forms/public/{slug}", response_model=Envelope[PublicForm])
@@ -303,19 +352,19 @@ async def public_form(rt: Rt, slug: str, t: Annotated[str, Query()] = "") -> JSO
     isolation.enter(tenant, team, kind=FORM)
     async with isolation.request_transaction():  # the link and the live version are one read
         row = await _link_row(rt, slug, form_id, secret)
-        stored = await live_version(_store(rt), str(row["workflow_id"]), None, team=str(row["team_id"]))
+        stored = await live_version(_store(rt), row.workflow_id, None, team=row.team_id)
     return ok(_public(row, _inputs(stored)))
 
 
-async def _record(rt: Runtime, row: dict[str, Any], outcome: str, sender: str, detail: dict[str, Any]) -> None:
+async def _record(rt: Runtime, row: FormLinkRow, outcome: str, sender: str, detail: Json) -> None:
     await TriggerEvents(rt.db).add(
         TriggerEvent(
-            team_id=str(row["team_id"]),
-            workflow_id=str(row["workflow_id"]),
-            source=source_of(str(row["id"])),
-            event_key=f"form:{row['id']}:{secrets.token_hex(8)}",
+            team_id=row.team_id,
+            workflow_id=row.workflow_id,
+            source=source_of(row.id),
+            event_key=f"form:{row.id}:{secrets.token_hex(8)}",
             sender=sender,
-            subject=str(row["title"]),
+            subject=row.title,
             received_at=datetime.now(UTC).isoformat(),
             outcome=outcome,  # pyright: ignore[reportArgumentType]
             detail=detail,
@@ -324,29 +373,29 @@ async def _record(rt: Runtime, row: dict[str, Any], outcome: str, sender: str, d
 
 
 async def _submit(
-    rt: Runtime, row: dict[str, Any], values: dict[str, Any], *, sender: str, created_by: str, via: str | None
-) -> dict[str, Any]:
+    rt: Runtime, row: FormLinkRow, values: Json, *, sender: str, created_by: str, via: str | None
+) -> ReceivedJSON:
     """Starts the form's run on the live version in the form's team, once its place under the daily cap is taken."""
-    stored = await live_version(_store(rt), str(row["workflow_id"]), None, team=str(row["team_id"]))
+    stored = await live_version(_store(rt), row.workflow_id, None, team=row.team_id)
     values = filled(_inputs(stored), values)
     links = _links(rt)
     reserved = await links.reserve(
-        str(row["id"]),
-        cap=int(row["daily_cap"]),
+        row.id,
+        cap=row.daily_cap,
         since=datetime.now(UTC).date().isoformat(),
         event=TriggerEvent(
-            team_id=str(row["team_id"]),
-            workflow_id=str(row["workflow_id"]),
-            source=source_of(str(row["id"])),
-            event_key=f"form:{row['id']}:{secrets.token_hex(8)}",
+            team_id=row.team_id,
+            workflow_id=row.workflow_id,
+            source=source_of(row.id),
+            event_key=f"form:{row.id}:{secrets.token_hex(8)}",
             sender=sender,
-            subject=str(row["title"]),
+            subject=row.title,
             received_at=datetime.now(UTC).isoformat(),
             outcome="started",
         ),
     )
     if reserved is None:
-        await _record(rt, row, "daily_cap", sender, {"dailyCap": row["daily_cap"]})
+        await _record(rt, row, "daily_cap", sender, {"dailyCap": row.daily_cap})
         raise TooManyRequests(
             "This form has taken as many requests as it can today. Please try again tomorrow.", code="daily_cap"
         )
@@ -354,10 +403,10 @@ async def _submit(
         run, _ = await start_run(
             RunStore(EngineTransactions(rt.db)),
             stored,
-            team_id=str(row["team_id"]),
+            team_id=row.team_id,
             mode="live",
             input=values,
-            run_key=f"form:{row['id']}:{reserved}",
+            run_key=f"form:{row.id}:{reserved}",
             created_by=created_by,
             started_via=via,
         )
@@ -374,14 +423,14 @@ async def submit_public(
 ) -> JSONResponse:
     row = await _linked(rt, slug, t)
     address = client_address(request, rt.settings.forms_trusted_proxies)
-    if limits.hit(f"form:{row['id']}:{address}", PER_MINUTE) is not None:
+    if limits.hit(f"form:{row.id}:{address}", PER_MINUTE) is not None:
         await _record(
             rt, row, "rate_limited", address, {"message": "More than 10 submissions in a minute from one address."}
         )
         raise TooManyRequests(
             "Too many submissions from this address. Try again in a minute.", code="form_rate_limited"
         )
-    await _submit(rt, row, body.values, sender=address, created_by=FORM_TRIGGER + str(row["id"]), via=None)
+    await _submit(rt, row, body.values, sender=address, created_by=FORM_TRIGGER + row.id, via=None)
     return ok({"received": True}, 202)
 
 
@@ -399,19 +448,19 @@ async def upload_public(
     try:
         stored = await files.write(
             current_tenant(),
-            str(row["team_id"]),
+            row.team_id,
             data,
             name=name[:200],
             mime=request.headers.get("content-type") or "application/octet-stream",
             purpose="case_attachment",
-            uploaded_by=FORM_TRIGGER + str(row["id"]),
+            uploaded_by=FORM_TRIGGER + row.id,
         )
     except FilesRefused as e:
         raise Unprocessable(str(e), code="file_refused") from e
     return ok({"fileId": stored.file.id, "name": stored.file.name}, 201)
 
 
-async def _member_form(rt: Runtime, me: Principal, slug: str) -> Row:
+async def _member_form(rt: Runtime, me: Principal, slug: str) -> FormLinkRow:
     """The members-only form at `slug` in one of the person's own teams; anyone else is refused, the same way whether
     the form is another team's or does not exist."""
     return (await _member_form_in(rt, me, slug, with_version=False))[0]
@@ -419,18 +468,16 @@ async def _member_form(rt: Runtime, me: Principal, slug: str) -> Row:
 
 async def _member_form_in(
     rt: Runtime, me: Principal, slug: str, *, with_version: bool
-) -> tuple[Row, DefinitionRow | None]:
+) -> tuple[FormLinkRow, DefinitionRow | None]:
     """The form and, when asked, its live version: read in one transaction in the team that has the form. Each team is
     entered before its transaction opens, so a team that has none ends its own."""
     for team in dict.fromkeys((me.team_id, *me.team_ids)):
         isolation.enter(current_tenant(), team, kind=FORM)
         async with isolation.request_transaction():
             row = await _links(rt).by_slug(slug)
-            if row is not None and row["mode"] == "members" and not row["paused"]:
+            if row is not None and row.mode == "members" and not row.paused:
                 stored = (
-                    await live_version(_store(rt), str(row["workflow_id"]), None, team=str(row["team_id"]))
-                    if with_version
-                    else None
+                    await live_version(_store(rt), row.workflow_id, None, team=row.team_id) if with_version else None
                 )
                 return row, stored
     raise Forbidden("Only members of the team that shares this form can send it.", code="form_members_only")

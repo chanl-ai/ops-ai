@@ -13,7 +13,7 @@ save of the copy, so a team saving over its draft cannot move it."""
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, Literal
+from typing import ClassVar, Literal
 
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError, NoResultFound
@@ -98,13 +98,12 @@ class TemplateCopyRow(Out):
 class TemplateCopies(RuntimeStore):
     requires: ClassVar[frozenset[Guarantee]] = frozenset()
 
-    async def live(self, source: str, template_id: str) -> dict[str, Any] | None:
+    async def live(self, source: str, template_id: str) -> TemplateCopyRow | None:
         """The acting team's live copy of this template, at whatever version it last took, if it has one."""
         t = template_copies
-        q = sa.select(t).where(t.c.source == source, t.c.template_id == template_id, LIVE, team_visible(t))
+        q = sa.select(t).where(t.c.source == source, t.c.template_id == template_id, LIVE, team_visible(t)).limit(1)
         async with self.tx() as c:
-            found = (await c.execute(q)).mappings().first()
-        return dict(found) if found is not None else None
+            return await one(c, q, TemplateCopyRow)
 
     async def of_team(self) -> list[TemplateCopyRow]:
         """Every live copy the acting team holds, for the template list's `installed`."""
@@ -150,7 +149,7 @@ class TemplateCopies(RuntimeStore):
             first = await self.live(source, template_id)
             if first is None:
                 raise
-            return TemplateCopyRow.model_validate(first), False
+            return first, False
         return TemplateCopyRow.model_validate(
             {**row, "tenant_id": current_tenant(), "removed_at": None, "detached_at": None, "detached_by": None}
         ), True
