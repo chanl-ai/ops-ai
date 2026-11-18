@@ -22,6 +22,7 @@ from ops_identity import ActingForPerson
 from ops_plugin_sdk import Plugin
 from ops_plugin_sdk.loader import GROUP, Loaded
 from ops_plugin_sdk.manifest import SIGN_IN_KINDS
+from ops_service_kit.http import Json
 from ops_service_kit.settings import PLUGIN_ENTRY_POINTS, Settings
 from ops_tools.auth.kinds import BY_ID
 from ops_tools.egress import EgressDenied, EgressPolicy
@@ -213,7 +214,7 @@ async def test_a_source_sync_reaches_its_own_site_only_once_the_account_lists_it
     ex = plugin_executor(engine, store, seen)
     policy = Listed()
     ex.http.policy = policy  # type: ignore[assignment]
-    args = {"source": {"start": "https://help.northbank.test"}}
+    args: Json = {"source": {"start": "https://help.northbank.test"}}
 
     async def sync() -> Any:
         return await ex.run(

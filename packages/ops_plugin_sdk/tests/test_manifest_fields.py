@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import JsonValue
 from test_validate import plugin, problems
 
 from ops_plugin_sdk import NeedsReconnect
@@ -172,7 +173,11 @@ def test_a_whole_object_body_still_validates(tmp_path: Path) -> None:
 
 
 # Slack answers 200 with `ok: false` and a code at `error`; GraphQL answers 200 with a list at `errors`.
-RULE = {"path": "error", "app": "Desk", "sign_in_errors": [{"error": "invalid_auth", "say": "Connect {app} again."}]}
+RULE: dict[str, JsonValue] = {
+    "path": "error",
+    "app": "Desk",
+    "sign_in_errors": [{"error": "invalid_auth", "say": "Connect {app} again."}],
+}
 
 
 def test_an_error_when_path_that_does_not_parse_is_refused(tmp_path: Path) -> None:

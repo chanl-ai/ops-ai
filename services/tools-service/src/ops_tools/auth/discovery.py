@@ -17,6 +17,8 @@ from urllib.parse import urlsplit
 
 import httpx
 
+from ops_service_kit.http import Json
+
 from ..egress import EgressDenied, EgressPolicy, for_tenant
 from .tokens import AuthFailed
 
@@ -59,7 +61,7 @@ class Discovery:
         self.http = http
         self.policy = policy
 
-    async def _get(self, tenant_id: str, url: str) -> dict[str, Any]:
+    async def _get(self, tenant_id: str, url: str) -> Json:
         try:
             await self.policy.check_url(tenant_id, url)
             res = await self.http.get(url, timeout=TIMEOUT_S, extensions=for_tenant(tenant_id))
@@ -75,7 +77,7 @@ class Discovery:
             raise AuthFailed(
                 "SIGN_IN_NOT_FOUND", f"{urlsplit(url).hostname} has no sign-in metadata at {urlsplit(url).path}."
             )
-        return cast(dict[str, Any], body)
+        return cast(Json, body)
 
     async def find(self, tenant_id: str, server_url: str) -> SignIn | None:
         """The server's sign-in, or None when it answers without asking for one."""
@@ -140,7 +142,7 @@ class Discovery:
         except httpx.HTTPError as e:
             raise AuthFailed("SIGN_IN_NOT_FOUND", f"{urlsplit(registration_url).hostname} could not be reached.") from e
         answer: Any = res.json() if res.headers.get("content-type", "").startswith("application/json") else {}
-        client_id = cast(dict[str, Any], answer).get("client_id") if isinstance(answer, dict) else None
+        client_id = cast(Json, answer).get("client_id") if isinstance(answer, dict) else None
         if res.status_code >= 400 or not isinstance(client_id, str) or not client_id:
             raise AuthFailed("SIGN_IN_NOT_FOUND", "The server refused to register a client; give a registered one.")
         return client_id

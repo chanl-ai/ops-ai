@@ -7,6 +7,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, cast
 
+from pydantic import JsonValue
+
 from .errors import NeedsReconnect, PluginError, Refused
 from .manifest import Manifest, SignInError
 from .paging import at
@@ -14,7 +16,7 @@ from .paging import at
 MAX_WORDS = 300
 
 
-def error_rule(manifest: Manifest) -> dict[str, Any] | None:
+def error_rule(manifest: Manifest) -> dict[str, JsonValue] | None:
     """What an executor needs to read the plugin's answers, as plain data carried on the call's operation."""
     if manifest.error_when is None:
         return None
@@ -30,14 +32,14 @@ def _words(found: Any) -> str | None:
     if isinstance(found, list):
         found = cast(list[Any], found)[0] if found else None
     if isinstance(found, dict):
-        item = cast(dict[str, Any], found)
+        item = cast(dict[str, JsonValue], found)
         found = item.get("message") or item.get("code") or item.get("error")
     if found is None or found is False or found == "":
         return None
     return "an error" if found is True else str(found)[:MAX_WORDS]
 
 
-def answer_error(answer: Any, rule: Mapping[str, Any] | None) -> PluginError | None:
+def answer_error(answer: Any, rule: Mapping[str, JsonValue] | None) -> PluginError | None:
     """The failure an answer reports at the rule's path, or None for a success. A code the plugin lists among its
     `sign_in_errors` asks for the account to connect again, in the plugin's own words."""
     if not rule:
@@ -46,7 +48,7 @@ def answer_error(answer: Any, rule: Mapping[str, Any] | None) -> PluginError | N
     if code is None:
         return None
     app = str(rule.get("app") or "The system")
-    for entry in cast(list[dict[str, Any]], rule.get("sign_in_errors") or []):
+    for entry in cast(list[dict[str, JsonValue]], rule.get("sign_in_errors") or []):
         known = SignInError.model_validate(entry)
         if known.matches(code, None):
             return NeedsReconnect((known.say or f"{app} asks for the account to connect again.").replace("{app}", app))

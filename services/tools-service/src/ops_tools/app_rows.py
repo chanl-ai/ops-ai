@@ -9,7 +9,8 @@ from ops_service_kit.http import Json, JsonValue
 from .app_states import AppGroup
 from .connections.service import AccountView
 from .modules.executions import CallRowJson
-from .plugins.host import IdentityRow, SignInValueRow
+from .plugins.host import SignInValueRow
+from .store.modules import IdentityRow
 
 # An app credential's status, from the last Test with my account (connections.service check_credential).
 CredentialStatus = Literal["working", "not_tested", "failing"]

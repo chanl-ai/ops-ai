@@ -44,6 +44,7 @@ from ops_plugin_sdk.formats import InputRefused
 from ops_plugin_sdk.knowledge import source_hosts as knowledge_source_hosts
 from ops_plugin_sdk.knowledge import source_of
 from ops_plugin_sdk.manifest import Tool
+from ops_service_kit.http import Json
 
 from ..auth import AuthFailed, Prepared
 from ..egress import EgressDenied, for_tenant
@@ -64,7 +65,7 @@ MAX_RESPONSE_BYTES = 25 * 1024 * 1024
 
 
 def _failure(code: str, message: str, status: int | None = None, side: str | None = None) -> ToolOutcome:
-    error: dict[str, Any] = {"code": code, "message": message}
+    error: Json = {"code": code, "message": message}
     if status is not None:
         error["status"] = status
     if side is not None:
@@ -92,14 +93,14 @@ class PluginExecutor:
         self.http = http
         self.cursor_key = cursor_key
 
-    def _seal(self, module: Mapping[str, Any], tool: str) -> CursorSeal:
+    def _seal(self, module: Module, tool: str) -> CursorSeal:
         return CursorSeal(self.cursor_key, str(module["tenant_id"]), str(module.get("connection_id") or ""), tool)
 
     async def run(
         self,
         module: Module,
         op: Operation,
-        args: dict[str, Any],
+        args: Json,
         *,
         actor: str,
         environment: str,
@@ -119,7 +120,7 @@ class PluginExecutor:
         values = args.get("source")
         sites: list[str] = []
         if source is not None and isinstance(values, dict):
-            sites = knowledge_source_hosts(source, cast(dict[str, Any], values))
+            sites = knowledge_source_hosts(source, cast(Json, values))
         # The team's version of the tool, so a query or paged tool runs as the team's version declared it.
         tool = self.host.tool_for(module, plugin, name)
         if tool is not None and tool.request is not None:
@@ -145,7 +146,7 @@ class PluginExecutor:
         *,
         module: Module,
         op: Operation,
-        args: dict[str, Any],
+        args: Json,
         prepared: Prepared | None,
         sites: Sequence[str] = (),
     ) -> ToolOutcome:
@@ -156,7 +157,7 @@ class PluginExecutor:
         allowed = list(module.get("egress_hosts") or [])
         reachable = {*allowed, *sites}
         plugin_headers = {h["key"]: h["value"] for h in cast(list[dict[str, str]], op.get("headers") or [])}
-        rule = cast(dict[str, Any] | None, op.get("error_when"))
+        rule = op.get("error_when")
         loop = asyncio.get_running_loop()
         policy = self.http.policy
         client = self.http.client
@@ -251,7 +252,7 @@ class PluginExecutor:
         except Exception as e:  # the plugin's own bug: reported as its failure, never as the gateway's
             return _failure("PLUGIN_FAILED", f"{plugin.manifest.id} {name} failed: {type(e).__name__}: {e}")
         if seal is not None and isinstance(output, dict):
-            page = cast(dict[str, Any], output)
+            page = cast(Json, output)
             if page.get("next_cursor"):
                 output = {**page, "next_cursor": seal.close(str(page["next_cursor"]))}
         return ToolOutcome(True, output)
@@ -261,7 +262,7 @@ class PluginExecutor:
         tool: Tool,
         module: Module,
         op: Operation,
-        args: dict[str, Any],
+        args: Json,
         *,
         actor: str,
         environment: str,
@@ -273,16 +274,16 @@ class PluginExecutor:
         paging = req.paging
         seal = self._seal(module, op["name"])
         given = dict(args)
-        state: dict[str, Any] | None = None
+        state: Json | None = None
         # A paged tool's cursor is the platform's, sealed here, even where the manifest declares it as an input.
         cursor = given.pop("cursor", None) if paging is not None else None
         if cursor:
             try:
-                state = cast(dict[str, Any], json.loads(seal.open(str(cursor))))
+                state = cast(Json, json.loads(seal.open(str(cursor))))
             except (CursorRefused, ValueError) as e:
                 return _failure("INVALID_INPUT", str(e), 422, OURS)
             # Every page after the first reads the query the first page was asked with, whatever this call says.
-            given = dict(state.get("args") or {})
+            given = dict(cast(Json, state.get("args") or {}))
         # A first page needs the tool's required inputs; a next page reads them from its cursor.
         missing = [n for n, f in tool.input.items() if f.required and n != "cursor" and given.get(n) in (None, "")]
         if state is None and missing:
@@ -301,7 +302,7 @@ class PluginExecutor:
             call = {**op, "method": "GET", "path": followed[1], "body": None}
             sent = {}
         asked = dict(sent)
-        found: dict[str, Any] = {}
+        found: Json = {}
 
         def on_answer(answer: Any, headers: Mapping[str, str]) -> Any:
             shown, nxt = paged.next_page(paging, answer, asked, headers)

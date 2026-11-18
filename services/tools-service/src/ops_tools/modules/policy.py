@@ -12,6 +12,7 @@ from typing import Any, Literal, cast
 from ops_access import BY_KEY, Access, effective_answer, publish_mode, team_on
 from ops_identity import ActingForPerson, Principal, ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_service_kit.errors import Forbidden
+from ops_service_kit.http import Json
 
 from ..store.modules import Module, ModuleColumns, Operation
 
@@ -36,7 +37,7 @@ class PublishPolicy:
     async def mode(self, tenant_id: str, team_id: str) -> ToolsMode:
         try:
             data = await self.platform.get("/v1/policies/publishReview", tenant=tenant_id)
-            modes: dict[str, Any] = dict(data.get("value") or {})
+            modes: Json = dict(data.get("value") or {})
             mode = publish_mode(modes, team_id, "tools")
             if mode not in MODES:
                 raise ValueError(mode)
@@ -56,7 +57,7 @@ class WriteApprovals:
         reads publishReview. Without `platform` the settings cannot be read, which is answered as a failed read."""
         self.platform = platform
 
-    async def levels(self, tenant_id: str, team_id: str | None) -> tuple[Any, dict[str, Any]]:
+    async def levels(self, tenant_id: str, team_id: str | None) -> tuple[Any, Json]:
         """(team level, per-app levels) for `team_id`. The team level is None when the policy cannot be read: the
         gateway then refuses the write (approval_rules_unavailable) and `effective_answer` shows it as waiting."""
         if self.platform is None:
@@ -90,7 +91,7 @@ class WriteApprovals:
         approvers: int = 1,
         channel: str = "chat",
         test_account: bool = False,
-        levels: tuple[Any, dict[str, Any]] | None = None,
+        levels: tuple[Any, Json] | None = None,
         tool: str | None = None,
         draft: bool = False,
     ) -> dict[str, Any]:
@@ -107,14 +108,14 @@ class WriteApprovals:
         mode = setting if isinstance(setting, str) else None
         # A new workspace turns makers' asks off (appChanges makersAsk false): a wait the manifest or seed declared
         # stops being the tool's answer, so the app and team decide; an answer a person set on a tool still holds.
-        if isinstance(team, dict) and cast(dict[str, Any], team).get("makersAsk") is False and maker_asks(module, tool):
+        if isinstance(team, dict) and cast(Json, team).get("makersAsk") is False and maker_asks(module, tool):
             mode = None
         admin: Any = by_app.get(tool_key(tool)) if tool else None
         if isinstance(admin, dict):
-            held = cast(dict[str, Any], admin)
+            held = cast(Json, admin)
             if held.get("answer") in ("none", "person", "reviewer"):
-                mode, reviewer_role = str(held["answer"]), held.get("reviewerRole") or reviewer_role
-        own: dict[str, Any] = {
+                mode, reviewer_role = str(held["answer"]), cast(str | None, held.get("reviewerRole")) or reviewer_role
+        own: Json = {
             "access": access,
             "approvalMode": mode,
             "reviewerRole": reviewer_role,
@@ -243,7 +244,7 @@ class CheckBeforeSend:
 
 
 class RequesterMayDecide:
-    def __init__(self, platform: ServiceClient | None, *, dev: dict[str, Any] | None = None) -> None:
+    def __init__(self, platform: ServiceClient | None, *, dev: Json | None = None) -> None:
         """The tenant's `requesterMayDecide`, read live from platform-service, for decisions this service
         applies on a workflow's behalf (a tool access request), where the deciding person's token is not here.
         With no platform-service (dev sign-in) it is the dev policies (OPS_DEV_POLICIES) at their open default, the

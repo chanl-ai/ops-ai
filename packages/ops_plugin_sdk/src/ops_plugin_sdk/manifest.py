@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError, field_validator, model_validator
 
 SCHEMA = "ops-ai/plugin@2"
 SDK_MAJOR = "1"
@@ -421,7 +421,7 @@ class Manifest(Strict):
         one (`kinds: [none]`), so nothing asks for an account, and reaches no host."""
         if not isinstance(raw, dict):
             return raw
-        given = cast(dict[str, Any], raw)
+        given = cast(dict[str, JsonValue], raw)
         if not given.get("templates"):
             return given
         return {"connection": {"kinds": ["none"], "sign_in": ["team"]}, "endpoint": "", **given}

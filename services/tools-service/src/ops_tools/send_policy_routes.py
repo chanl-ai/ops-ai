@@ -13,7 +13,7 @@ from pydantic import Field
 from ops_access import can
 from ops_identity.fastapi import Tx
 from ops_service_kit.errors import Forbidden
-from ops_service_kit.http import Envelope, In, Out, ok
+from ops_service_kit.http import Envelope, In, Json, Out, ok
 
 from .callers import caller_in
 from .modules.directory import Directory
@@ -33,7 +33,7 @@ class SendPolicyView(Out):
     saved_at: str
 
 
-def _view(row: SendPolicy | None) -> dict[str, Any] | None:
+def _view(row: SendPolicy | None) -> Json | None:
     if row is None:
         return None
     return SendPolicyView(**row.model_dump()).model_dump(by_alias=True)
