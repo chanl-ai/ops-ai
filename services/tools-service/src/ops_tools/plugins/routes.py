@@ -8,7 +8,7 @@ so turning it on again needs nothing more."""
 
 # No `from __future__ import annotations`: FastAPI resolves the `Depends(caller)` annotations at import.
 
-from typing import Annotated, Any, Literal, Protocol
+from typing import Annotated, Any, Literal, Protocol, TypedDict
 from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, Depends
@@ -21,7 +21,7 @@ from ops_plugin_sdk.knowledge import source_hosts
 from ops_plugin_sdk.manifest import Setting
 from ops_plugin_sdk.versions import declarations, diff, digest, tools_of
 from ops_service_kit.errors import Conflict, NotFound, ServiceUnavailable, Unprocessable, ValidationFailed
-from ops_service_kit.http import Envelope, In, JsonValue, Out, ok
+from ops_service_kit.http import Envelope, In, Json, JsonValue, Out, ok
 
 from ..auth.kinds import Kind, kind_of
 from ..callers import caller_in
@@ -57,6 +57,12 @@ from .host import (
 
 # The OAuth app's own fields: an app credential's, made under Credentials, never typed into an account.
 CLIENT_FIELDS = ("clientId", "clientSecret")
+
+
+class ClientChange(TypedDict, total=False):
+    """The OAuth client an account moves to: the team's app credential it picks."""
+
+    credential_id: str | None
 
 
 class TeamPluginIn(In):
@@ -190,7 +196,7 @@ class KnowledgeSourceView(Out):
     connection_status: str | None
 
 
-def _split(plugin: Plugin, given: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+def _split(plugin: Plugin, given: Json) -> tuple[Json, Json]:
     """A save's settings as the team's and the account's own (the sign-in address): the team's stay on the
     binding, the account's go on the account, kept there once."""
     own = per_account(plugin.manifest)
@@ -232,13 +238,13 @@ class PluginAccounts:
         if who.principal is not None:
             connection_rights(who.principal, "manage", what="the team's apps")
 
-    def _team_settings(self, plugin: Plugin, held: dict[str, Any], given: dict[str, Any]) -> dict[str, Any]:
+    def _team_settings(self, plugin: Plugin, held: Json, given: Json) -> Json:
         """The binding's settings after a save: the team's only; an account's own are the account's, so a copy
         left from before (a removed account's instance) never reaches a call."""
         mine = per_account(plugin.manifest)
         return {k: v for k, v in held.items() if k != "environments" and k not in mine} | given
 
-    def _checked_settings(self, plugin: Plugin, given: dict[str, Any]) -> None:
+    def _checked_settings(self, plugin: Plugin, given: Json) -> None:
         m = plugin.manifest
         locked = self.host.locked_settings(m.id)
         for k, value in given.items():
@@ -307,7 +313,7 @@ class PluginAccounts:
         if body.enabled and not accountless and not (before and before.connection_id) and body.credential_id is None:
             await self._fix_first_place(who, plugin, own)
 
-    async def _fix_first_place(self, who: Caller, plugin: Plugin, own: dict[str, Any]) -> None:
+    async def _fix_first_place(self, who: Caller, plugin: Plugin, own: Json) -> None:
         """The first turn-on on Ops AI's app: where it signs in (the plugin's `asked: config` values the window asked)
         is kept on Ops AI's auth config for the team as a default, so the next account's window offers it and a second
         org can sign in at its own address. A value the team already set on that config, and its mode, are kept: a team
@@ -456,8 +462,8 @@ class PluginAccounts:
         self,
         who: Caller,
         plugin: Plugin,
-        settings: dict[str, Any],
-        own: dict[str, Any],
+        settings: Json,
+        own: Json,
         body: TeamPluginIn,
         *,
         account_name: str | None = None,
@@ -522,10 +528,10 @@ class PluginAccounts:
         who: Caller,
         plugin: Plugin,
         connection_id: str,
-        settings: dict[str, Any],
+        settings: Json,
         body: TeamPluginIn,
         *,
-        own: dict[str, Any],
+        own: Json,
     ) -> None:
         """The plugin's account's sign-in settings: the system's address (the endpoint's origin, or the sign-in host's
         until the token names the instance), the health check as Test connection's path, how an API key is sent, the
@@ -544,9 +550,7 @@ class PluginAccounts:
             plugin_settings=mine,
         )
 
-    async def own_place(
-        self, who: Caller, src: Account, given: dict[str, Any]
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
+    async def own_place(self, who: Caller, src: Account, given: Json) -> tuple[Json, Json]:
         """A person's second account of their own on the app of account `src`, signing in where `given` says (the
         app's per-account settings, such as a company server's address): its sign-in settings and its own plugin
         settings, rendered as the team's turn-on renders an account's, with the same auth config as `src`. What
@@ -578,11 +582,11 @@ class PluginAccounts:
         who: Caller,
         plugin: Plugin,
         conn: Account | None,
-        settings: dict[str, Any],
+        settings: Json,
         body: TeamPluginIn,
         *,
-        own: dict[str, Any],
-    ) -> tuple[dict[str, Any], dict[str, str], dict[str, Any], str | None, dict[str, Any]]:
+        own: Json,
+    ) -> tuple[Json, dict[str, str], ClientChange, str | None, Json]:
         """What `keys` writes on account `conn` (None for one not made yet): its sign-in settings, its secret parts,
         its own app credential when it changes, Ops AI's app's client id when it signs in with that, and its own plugin
         settings."""
@@ -610,10 +614,10 @@ class PluginAccounts:
             mine |= fixed
         merged = self.host.settings(plugin, settings, {**mine, **fixed})
         before = conn.settings if conn else {}
-        keys: dict[str, Any] = dict(before)
+        keys: Json = dict(before)
         endpoint = render(m.endpoint, merged)
         platform_id: str | None = None
-        client: dict[str, Any] = {}
+        client: ClientChange = {}
         # The OAuth client is the account's credential (credential_id) or Ops AI's app (platform_app), never a setting.
         keys.pop("clientId", None)
         if kind.holds_token:
@@ -669,9 +673,7 @@ class PluginAccounts:
         keys |= plain
         return keys, secret, client, platform_id, mine
 
-    async def config_values(
-        self, who: Caller, plugin: Plugin, cred: AppCredentialRow | None
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
+    async def config_values(self, who: Caller, plugin: Plugin, cred: AppCredentialRow | None) -> tuple[Json, Json]:
         """An auth config's (fixed, default) values: the team's app credential's, or with none the team's on Ops AI's
         app, which its binding of the plugin holds."""
         if cred is not None:
@@ -717,7 +719,7 @@ class PluginAccounts:
         settings = self._team_settings(plugin, dict(b.settings) if b else {}, {})
         await self.keys(who, plugin, connection_id, settings, TeamPluginIn(enabled=True), own={})
 
-    def team_values(self, plugin: Plugin, b: PluginBinding | None, own: dict[str, Any]) -> dict[str, Any]:
+    def team_values(self, plugin: Plugin, b: PluginBinding | None, own: Json) -> Json:
         """The team's settings of the plugin as a person may read them: a secret field never, even as its reference."""
         return readable(plugin.manifest, self.host.settings(plugin, dict(b.settings) if b else {}, own))[0]
 
@@ -735,7 +737,7 @@ def plugins_router(
     host = accounts.host
     r = APIRouter(tags=["apps"], responses=ERRORS)
 
-    def _installed(plugin: Plugin) -> tuple[dict[str, Any], str]:
+    def _installed(plugin: Plugin) -> tuple[Json, str]:
         decl = declarations(plugin.manifest, plugin.root)
         return decl, digest(decl)
 
@@ -756,7 +758,7 @@ def plugins_router(
             raise NotFound(f"{plugin.manifest.title} is not turned on for this team.")
         return plugin, b
 
-    def _review(plugin: Plugin, b: PluginBinding | None) -> dict[str, Any]:
+    def _review(plugin: Plugin, b: PluginBinding | None) -> Json:
         m = plugin.manifest
         installed, now = _installed(plugin)
         team = (b.declarations if b else None) or installed
@@ -850,7 +852,7 @@ def plugins_router(
     async def knowledge_sources(who: Annotated[Caller, Depends(caller)], _: Tx) -> JSONResponse:  # pyright: ignore[reportUnusedFunction]
         """The knowledge sources a team can create from its plugins that are on, with the account each would read
         through: kb-service lists them and syncs by calling the two tools named here."""
-        out: list[dict[str, Any]] = []
+        out: list[Json] = []
         for plugin in host.plugins.values():
             m = plugin.manifest
             if await host.off_reason(who.tenant_id, who.team.id, plugin) is not None:

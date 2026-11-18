@@ -409,13 +409,21 @@ class Reachability(TypedDict):
     checkedAt: str
 
 
+class IdentityRow(TypedDict):
+    """One thing that tells an account apart from the app's others (the keys of `IdentityEntry`)."""
+
+    label: str
+    value: str
+    shown: str
+
+
 class AccountOption(TypedDict):
     """One account of an app a person holds, as its sign-in named them."""
 
     connectionId: str
     name: str
     account: str | None
-    identity: list[dict[str, str]]
+    identity: list[IdentityRow]
 
 
 class AccountChoice(TypedDict):

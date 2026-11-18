@@ -14,7 +14,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, TypedDict, cast
+from typing import Any, Literal, TypedDict, cast
 from urllib.parse import urlencode, urlsplit
 
 import httpx
@@ -28,11 +28,12 @@ from ops_plugin_sdk.paging import at
 from ops_plugin_sdk.paging import headers as request_headers
 from ops_plugin_sdk.versions import declarations, digest, tools_of
 from ops_plugin_sdk.versions import headers_of as declared_headers
+from ops_service_kit.http import Json, JsonValue
 from ops_service_kit.logging import get_logger
 from ops_service_kit.settings import Settings
 
 from ..auth.tokens import SIGNED_IN_AS, person_named
-from ..connections.records import account_for, choice_needed, default_sign_in
+from ..connections.records import PackageCheckRow, PluginAccountView, account_for, choice_needed, default_sign_in
 from ..egress import EgressDenied, EgressPolicy, for_tenant
 from ..environments import LIVE
 from ..modules.seed import blank
@@ -42,6 +43,7 @@ from ..store.modules import (
     AccountOption,
     Aggregate,
     Header,
+    IdentityRow,
     Module,
     ModuleColumns,
     ModuleStore,
@@ -78,7 +80,7 @@ class SignInRefused(ValueError):
         self.code = code
 
 
-def settle_at_sign_in(held: Mapping[str, Any], read: Mapping[str, Any], *, own: bool) -> dict[str, Any]:
+def settle_at_sign_in(held: Mapping[str, JsonValue], read: Mapping[str, JsonValue], *, own: bool) -> Json:
     """Whose sign-in may set a setting filled at sign-in (the instance, the site): the team's own sign-in sets or
     replaces it; a person's own sets it only when the account holds none, and one that reads a different value is
     refused, so one person cannot point the team's calls at another tenant. The one place this rule lives, so the
@@ -127,18 +129,30 @@ def shown_value(setting: Setting, value: object) -> str:
     return (urlsplit(text).hostname or text) if "://" in text else text
 
 
-def sign_in_values(manifest: Manifest, held: Mapping[str, Any]) -> list[dict[str, Any]]:
+class SignInValueRow(TypedDict):
+    """One value an account's sign-in holds (the keys of `SignInValue`)."""
+
+    name: str
+    label: str
+    kind: Literal["place", "found"]
+    value: str
+    shown: str
+
+
+def sign_in_values(manifest: Manifest, held: Mapping[str, JsonValue]) -> list[SignInValueRow]:
     """Where an account signs in (`place`: a setting each account keeps with choices or a typed host, such as
     Salesforce's sign-in address) and what its sign-in found (`found`: its org's address), from the account's settings
     `held`, in the manifest's order. A secret is never among them."""
     found = filled_at_sign_in(manifest)
     own = per_account(manifest)
-    out: list[dict[str, Any]] = []
+    out: list[SignInValueRow] = []
     for k, s in manifest.settings.items():
         value = held.get(k)
         if s.secret or value in (None, ""):
             continue
-        kind = "found" if k in found else "place" if k in own and (s.choices or s.other) else None
+        kind: Literal["place", "found"] | None = (
+            "found" if k in found else "place" if k in own and (s.choices or s.other) else None
+        )
         if kind is not None:
             out.append(
                 {"name": k, "label": s.title or k, "kind": kind, "value": str(value), "shown": shown_value(s, value)}
@@ -149,18 +163,18 @@ def sign_in_values(manifest: Manifest, held: Mapping[str, Any]) -> list[dict[str
 SIGNED_IN = "Signed in as"
 
 
-def _entry(label: str, value: object, shown: str) -> dict[str, str]:
+def _entry(label: str, value: object, shown: str) -> IdentityRow:
     return {"label": label, "value": str(value), "shown": shown}
 
 
 def account_identity(
-    manifest: Manifest | None, held: Mapping[str, Any], signed_in_as: str | None, base: str = ""
-) -> list[dict[str, str]]:
+    manifest: Manifest | None, held: Mapping[str, JsonValue], signed_in_as: str | None, base: str = ""
+) -> list[IdentityRow]:
     """What tells one account of an app from its others, shown under its name on every screen: the settings the
     plugin's `connection.identity` names, in its order; with none declared, what the sign-in filled, then where the
     account signs in (its sign-in address, as its host); a custom app's address host (`base`); and last who signed in.
     Built on sign_in_values, so the place and the found value have one source. A secret is never among them."""
-    out: list[dict[str, str]] = []
+    out: list[IdentityRow] = []
     if manifest is not None:
         own = per_account(manifest)
         # A per-account address left at the plugin's default (GitHub's github.com) still tells the account apart.
@@ -174,8 +188,8 @@ def account_identity(
                     out.append(_entry(setting.title or name, value, shown_value(setting, value)))
         else:
             listed = sign_in_values(manifest, values)
-            out += [{k: v[k] for k in ("label", "value", "shown")} for v in listed if v["kind"] == "found"]
-            out += [{k: v[k] for k in ("label", "value", "shown")} for v in listed if v["kind"] == "place"]
+            out += [_entry(v["label"], v["value"], v["shown"]) for v in listed if v["kind"] == "found"]
+            out += [_entry(v["label"], v["value"], v["shown"]) for v in listed if v["kind"] == "place"]
             if not out:
                 for name in sorted(own):
                     setting, value = manifest.settings[name], values.get(name)
@@ -189,13 +203,13 @@ def account_identity(
     return [e for e in out if not (e["shown"] in seen or seen.add(e["shown"]))]
 
 
-def same_place(identity: Sequence[Mapping[str, str]]) -> tuple[str, ...]:
+def same_place(identity: Sequence[IdentityRow]) -> tuple[str, ...]:
     """The part of an identity that says where an account points (who signed in left out): two accounts with the same
     non-empty one point at the same org."""
     return tuple(e["shown"] for e in identity if e["label"] != SIGNED_IN)
 
 
-def points_at(identity: Sequence[Mapping[str, str]]) -> str | None:
+def points_at(identity: Sequence[IdentityRow]) -> str | None:
     """Where an account points, as shown, with who signed in left out; None when it names no place. Text a model reads
     uses this, never the identity, so a person's email stays out of it."""
     place = same_place(identity)
@@ -218,12 +232,12 @@ def missing_objects(conn: Account | None, package_id: str) -> list[str]:
     package is installed there, and when the account was never checked for it: an account signed in before the
     package was installed keeps working until its next Test says otherwise."""
     health = (conn.health if conn else None) or {}
-    packages = cast(dict[str, Any], health.get("packages") or {})
-    missing = cast(list[Any], cast(dict[str, Any], packages.get(package_id) or {}).get("missing") or [])
+    packages = cast(Json, health.get("packages") or {})
+    missing = cast(list[Any], cast(Json, packages.get(package_id) or {}).get("missing") or [])
     return [str(n) for n in missing]
 
 
-def own_and_registration(conn: Account | None) -> dict[str, Any]:
+def own_and_registration(conn: Account | None) -> Json:
     """An account's own plugin settings with its app credential's over them (store.connections joins those in as
     `credential_settings`): what PluginHost.settings takes as the account's layer."""
     if conn is None:
@@ -232,7 +246,7 @@ def own_and_registration(conn: Account | None) -> dict[str, Any]:
     return {**dict(conn.plugin_settings or {}), **held}
 
 
-def readable(manifest: Manifest, settings: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, bool]]:
+def readable(manifest: Manifest, settings: Mapping[str, JsonValue]) -> tuple[Json, dict[str, bool]]:
     """Settings as a person may read them: each plain value, and for a secret one only whether it is set, never even
     its reference."""
     secret = {k for k, s in manifest.settings.items() if s.secret}
@@ -240,7 +254,7 @@ def readable(manifest: Manifest, settings: Mapping[str, Any]) -> tuple[dict[str,
     return plain, {k: settings.get(k) not in (None, "") for k in sorted(secret)}
 
 
-def hosts_of(manifest: Manifest, settings: Mapping[str, Any]) -> list[str]:
+def hosts_of(manifest: Manifest, settings: Mapping[str, JsonValue]) -> list[str]:
     """The plugin's egress hosts rendered with the settings; one whose setting is unset is left out."""
     return [urlsplit(h).hostname or h for h in (render(e, settings) for e in manifest.egress) if h]
 
@@ -255,7 +269,7 @@ def plugin_id_of(module: ModuleColumns) -> str | None:
     return slot.removeprefix(TEMPLATE_PREFIX) if slot.startswith(TEMPLATE_PREFIX) else None
 
 
-def render(text: str, settings: Mapping[str, Any]) -> str | None:
+def render(text: str, settings: Mapping[str, JsonValue]) -> str | None:
     """`{name}` from the settings; None while one is unset (an instance not yet read from the token)."""
     missing = [n for n in PLACE.findall(text) if settings.get(n) in (None, "")]
     if missing:
@@ -269,7 +283,7 @@ def header_settings(headers: Mapping[str, str], tools: Iterable[Tool]) -> set[st
     return {n for t in texts for n in PLACE.findall(t)}
 
 
-def headers_of(headers: Mapping[str, str], tool: Tool, settings: Mapping[str, Any]) -> list[Header]:
+def headers_of(headers: Mapping[str, str], tool: Tool, settings: Mapping[str, JsonValue]) -> list[Header]:
     """A call's headers as a module operation holds them (`{key, value}`): the plugin's, then the tool's over them,
     rendered from the call's settings. A header whose setting is unset is left out. The kit's own rule, so `opsai plugin
     test` sends the same headers."""
@@ -534,7 +548,7 @@ class PluginHost:
     store: ModuleStore
     bindings: PluginBindings
     # The settings the install fixes for every team, per plugin (plugin_locked in the install config).
-    locked: Mapping[str, Mapping[str, Any]] = field(default_factory=dict[str, Mapping[str, Any]])
+    locked: Mapping[str, Mapping[str, JsonValue]] = field(default_factory=dict[str, Mapping[str, JsonValue]])
     loaded: list[Loaded] = field(default_factory=list[Loaded])
     # Where each account's own plugin settings are kept: on the account itself.
     connections: ConnectionStore | None = None
@@ -554,7 +568,7 @@ class PluginHost:
         cls,
         store: ModuleStore,
         bindings: PluginBindings,
-        locked: Mapping[str, Mapping[str, Any]],
+        locked: Mapping[str, Mapping[str, JsonValue]],
         folders: Sequence[str] = (),
         connections: ConnectionStore | None = None,
         *,
@@ -704,13 +718,13 @@ class PluginHost:
         except StaleModuleError:
             return
 
-    def tool_for(self, module: Mapping[str, Any], plugin: Plugin, name: str) -> Tool | None:
+    def tool_for(self, module: Module, plugin: Plugin, name: str) -> Tool | None:
         """The tool as this call runs it: the team's version's when the call carries one, else the installed
         manifest's. A Python tool's function is the installed package's either way."""
         tools = cast(dict[str, Tool] | None, module.get("plugin_tools"))
         return tools.get(name) if tools is not None else plugin.manifest.tool(name)
 
-    async def own_settings(self, tenant_id: str, connection_id: str | None) -> dict[str, Any]:
+    async def own_settings(self, tenant_id: str, connection_id: str | None) -> Json:
         """The account's own plugin settings (its sign-in address, the instance its token named) and the settings of
         the app credential it signs in with (its registration's), the credential's winning."""
         if self.connections is None or not connection_id:
@@ -719,15 +733,15 @@ class PluginHost:
         return own_and_registration(conn)
 
     def settings(
-        self, plugin: Plugin, team_settings: Mapping[str, Any], own_values: Mapping[str, Any] | None = None
-    ) -> dict[str, Any]:
+        self, plugin: Plugin, team_settings: Mapping[str, JsonValue], own_values: Mapping[str, JsonValue] | None = None
+    ) -> Json:
         """The four layers merged: the manifest's defaults, the team's settings, the account's own, then the platform
         admin's locked values over all, so a locked field reads the same in every team whatever the team saved. The
         settings the sign-in addresses use and those read from the token are the account's own, `own_values`:
         a sandbox signs in at its own address and reaches its own instance."""
         m = plugin.manifest
         own = per_account(m)
-        merged: dict[str, Any] = {k: s.default for k, s in m.settings.items() if s.default is not None}
+        merged: Json = {k: s.default for k, s in m.settings.items() if s.default is not None}
         merged |= {k: v for k, v in team_settings.items() if k in m.settings and k not in own}
         # The account's own, and the registration's its app credential holds (own_and_registration).
         mine = own | set(m.config_settings)
@@ -735,7 +749,7 @@ class PluginHost:
         merged |= self.locked_settings(m.id)
         return merged
 
-    async def account_settings(self, tenant_id: str, connection_id: str) -> dict[str, Any]:
+    async def account_settings(self, tenant_id: str, connection_id: str) -> PluginAccountView:
         """The plugin's settings on an app's account, merged as a call there reads them, as a person may read them
         (`readable`): what the account's Settings shows and edits. Empty for an account no plugin serves."""
         b = await self.binding_of(tenant_id, connection_id)
@@ -769,7 +783,7 @@ class PluginHost:
         """The installed version's digest, which a team's binding is compared with for an update."""
         return digest(declarations(plugin.manifest, plugin.root))
 
-    def locked_settings(self, plugin_id: str) -> dict[str, Any]:
+    def locked_settings(self, plugin_id: str) -> Json:
         """The settings the install fixes for every team of the plugin; a team's own value never replaces one."""
         return dict(self.locked.get(plugin_id) or {})
 
@@ -1013,7 +1027,7 @@ class PluginHost:
             connection_id = picked.id if picked else connection_id
         return Chosen(connection_id)
 
-    async def package_checks(self, tenant_id: str, connection_id: str) -> list[dict[str, Any]]:
+    async def package_checks(self, tenant_id: str, connection_id: str) -> list[PackageCheckRow]:
         """What Test connection reads on an account to learn which package apps are installed there: for each loaded
         package that runs on the account's app and requires objects, the path of each object's check rendered with
         the account's settings. Empty for an account no plugin serves, or one whose settings leave a path unset."""
@@ -1022,7 +1036,7 @@ class PluginHost:
         if b is None or host is None:
             return []
         settings = self.settings(host, dict(b.settings), await self.own_settings(tenant_id, connection_id))
-        out: list[dict[str, Any]] = []
+        out: list[PackageCheckRow] = []
         for p in self.plugins.values():
             c = p.manifest.connection
             if c.runs_on != host.manifest.id or not c.requires or c.requires_check is None:
@@ -1182,7 +1196,7 @@ class PluginHost:
         }
 
     async def _look_up(
-        self, tenant_id: str, m: Manifest, lookup: AfterSignIn, settings: Mapping[str, Any], token: str
+        self, tenant_id: str, m: Manifest, lookup: AfterSignIn, settings: Mapping[str, JsonValue], token: str
     ) -> tuple[str, str | None]:
         """One GET with the token just issued, to an https address on one of the plugin's egress hosts, through the
         tenant's egress policy, following no redirect; the value at `lookup.read`, checked as `from_token` checks an
@@ -1288,9 +1302,9 @@ class PluginHost:
         self,
         tenant_id: str,
         connection_id: str,
-        answer: dict[str, Any],
+        answer: Json,
         own: bool = False,
-    ) -> dict[str, Any] | None:
+    ) -> Json | None:
         """At sign-in on a plugin's connection: each setting the plugin reads from the token (instance_url) is taken
         from the answer, refused unless it is an https host under the plugin's token hosts; then the lookup after
         sign-in, if the plugin has one, fills its setting. `own` is a person's own sign-in, which may not
@@ -1302,7 +1316,7 @@ class PluginHost:
         if b is None or plugin is None:
             return None
         m = plugin.manifest
-        read: dict[str, Any] = {}
+        read: Json = {}
         for setting, field_name in m.connection.from_token.items():
             value = str(answer.get(field_name) or "").rstrip("/")
             parts = urlsplit(value)
@@ -1329,7 +1343,7 @@ class PluginHost:
         merged = self.settings(plugin, dict(b.settings), values)
         endpoint = render(m.endpoint, merged)
         check = m.connection.health_check
-        said = {SIGNED_IN_AS: named} if named else {}
+        said: Json = {SIGNED_IN_AS: named} if named else {}
         if endpoint is None or check is None:
             return said or None
         origin = urlsplit(endpoint)

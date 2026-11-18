@@ -19,7 +19,7 @@ import secrets as random
 import time
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any, NoReturn, NotRequired, Required, TypedDict
+from typing import Any, Literal, NoReturn, NotRequired, Required, TypedDict
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
 import httpx
@@ -69,7 +69,7 @@ from ..store.connections import (
 from ..store.modules import ModuleRef
 from ..store.secrets import SecretMeta
 from .account_events import connected_event
-from .records import status_of
+from .records import PackageCheckRow, PluginAccountView, status_of
 
 # Where the identity provider sends the browser back: a console page, which hands the code and state to
 # `complete_sign_in` under the person's own token.
@@ -90,7 +90,7 @@ OwnPlace = Callable[[Caller, Account, Json], Awaitable[tuple[Json, Json]]]
 # tenant, account, who signed in -> after a finished sign-in: the account's app is turned on for its team.
 OnSignedIn = Callable[[str, str, str], Awaitable[None]]
 # tenant, account -> the plugin's settings on it as a person may read them.
-PluginSettings = Callable[[str, str], Awaitable[Json]]
+PluginSettings = Callable[[str, str], Awaitable[PluginAccountView]]
 # tenant, account, the system's error code and description -> what the plugin behind the account says of that refusal,
 # or None for an account no plugin serves or a code its plugin does not name.
 SignInErrors = Callable[[str, str, str, str | None], Awaitable[SignInError | None]]
@@ -142,6 +142,164 @@ class AccountKeys(TypedDict):
     certificate: NotRequired[Json | None]
 
 
+class UseView(TypedDict):
+    """A module using an account."""
+
+    id: str
+    name: str
+
+
+class PersonSignInView(TypedDict):
+    """One person's own sign-in on an account, as a read shows it."""
+
+    personId: str
+    account: str | None
+    since: str | None
+    expiresAt: str | None
+    scopes: JsonValue
+
+
+class ActivityView(TypedDict):
+    """One entry of an account's activity."""
+
+    action: str
+    actor: str | None
+    at: str | None
+    detail: JsonValue
+
+
+class AccountBrief(TypedDict):
+    """An account's own fields in a read."""
+
+    id: str
+    appId: str
+    name: str
+    authKind: str
+    kindLabel: str
+    sandbox: bool
+    status: str
+    statusDetail: str | None
+    teamId: str
+    usedBy: list[UseView]
+    revision: int
+    updatedAt: str | None
+    mayManage: bool
+    signIn: str
+    teamBackup: bool
+    health: Json | None
+    category: str | None
+    description: str | None
+    docsUrl: str | None
+    accountName: str | None
+
+
+class AccountView(AccountBrief, AccountKeys, PluginAccountView):
+    """One account as a read answers it (the keys of `AccountDetail`), in the order they are written: the account's own
+    fields, its settings and secrets, the plugin's settings where a plugin serves it, then the sign-in address, the
+    people signed in and the activity. `_alreadyConnectedAs` is set only on a sign-in that landed on an account the
+    person had already linked."""
+
+    redirectUri: str | None
+    people: list[PersonSignInView]
+    activity: list[ActivityView]
+    _alreadyConnectedAs: NotRequired[str]
+
+
+class MyAccountRow(TypedDict):
+    """One of the caller's own sign-ins (the keys of `MyAccount`)."""
+
+    connectionId: str
+    appId: str
+    app: str
+    logo: str | None
+    connection: str
+    connectionStatus: str
+    sandbox: bool
+    method: str
+    authKind: str
+    personFields: list[str]
+    connected: bool
+    docsUrl: str | None
+    account: str | None
+    scopes: JsonValue
+    since: str | None
+    expiresAt: str | None
+    test: JsonValue
+    refused: bool
+    refusedAt: str | None
+    refusedReason: str | None
+    authConfig: str | None
+    state: Literal["not_connected", "expired", "connected"]
+
+
+class CheckHealth(TypedDict):
+    """The outcome of a Test with my account (the keys of `CheckedCredential`)."""
+
+    status: Literal["ok", "failed"]
+    account: str | None
+    message: NotRequired[str]
+    at: str | None
+    by: str
+
+
+class CredentialCheckView(TypedDict):
+    health: CheckHealth
+
+
+class FinishedSignIn(TypedDict):
+    """A finished sign-in as the return page is told (the keys of `SignInFinished`)."""
+
+    appId: str
+    accountId: str
+    check: bool
+    health: NotRequired[CheckHealth]
+    account: NotRequired[AccountView]
+    alreadyConnectedAs: NotRequired[str]
+
+
+class NewAccountBody(TypedDict, total=False):
+    """The fields `create` reads: a new account's name and kind, and the app it joins (`plugin_id` or `app_id`)."""
+
+    name: Required[str]
+    auth_kind: Required[str]
+    app_id: str | None
+    plugin_id: str | None
+    sandbox: bool | None
+    account_name: str | None
+    sign_in: str | None
+    category: str | None
+    description: str | None
+    docs_url: str | None
+
+
+class McpAppBody(TypedDict, total=False):
+    """The fields `connect_mcp` reads from the new-app request."""
+
+    server_url: Required[str]
+    name: str | None
+    app_id: str | None
+    sandbox: bool | None
+    client_id: str | None
+    client_secret: str | None
+
+
+class AccountChanges(TypedDict, total=False):
+    """What a change to an account sets: the keys of the patch request that were sent, with the revision it was read
+    at and, from a plugin's turn-on, the settings and secret parts."""
+
+    revision: Required[int]
+    name: str | None
+    sign_in: str | None
+    team_backup: bool | None
+    sandbox: bool | None
+    category: str | None
+    description: str | None
+    docs_url: str | None
+    credential_id: str | None
+    settings: dict[str, JsonValue] | None
+    secret_values: dict[str, str]
+
+
 class SignInLink(TypedDict):
     """Where to send the person's browser to sign in, and the account it signs in to."""
 
@@ -165,7 +323,7 @@ class _Details(TypedDict):
     docs_url: str | None
 
 
-def _details(i: dict[str, Any]) -> _Details:
+def _details(i: NewAccountBody | AccountChanges) -> _Details:
     """A connection's card details as given, blanks stored as none."""
     return {
         "category": (str(i.get("category") or "").strip() or None),
@@ -228,10 +386,6 @@ def mcp_error(res: httpx.Response) -> str | None:
     if error is not None:
         return str(error)
     return None if "result" in answer else "its answer had no result"
-
-
-# Set on a finished sign-in's account when the system named an identity already linked on that account of the app.
-ALREADY = "_alreadyConnectedAs"
 
 
 def _names(conn: Account | None) -> dict[str, str]:
@@ -331,7 +485,7 @@ class ConnectionService:
         self.sign_in_scopes: Callable[[str, str], Awaitable[list[str] | None]] | None = None
         # The package apps that run on an account's app and the path that checks each of their objects
         # (PluginHost.package_checks); a passing Test reads them. Set once the plugin host is up.
-        self.package_checks: Callable[[str, str], Awaitable[list[Json]]] | None = None
+        self.package_checks: Callable[[str, str], Awaitable[list[PackageCheckRow]]] | None = None
         # The team's workflows and agents that name an account of an app (ToolUsers.accounts, agents-service); a
         # delete is refused while any do. Set with the app routes (Apps).
         self.account_users: Callable[[str, str, str, str], Awaitable[Json]] | None = None
@@ -423,9 +577,10 @@ class ConnectionService:
                 out["certificate"] = None
         return out
 
-    async def _view(self, who: Caller, conn: Account, *, detail: bool) -> dict[str, Any]:
+    async def _view(self, who: Caller, conn: Account) -> AccountView:
         kind = BY_ID.get(str(conn.auth_kind), BY_ID["none"])
-        out: dict[str, Any] = {
+        may_manage = who.principal is None or self.access.may(who.principal, "connections", "manage")
+        brief: AccountBrief = {
             "id": conn.id,
             "appId": conn.app_id,
             "name": conn.name,
@@ -435,10 +590,10 @@ class ConnectionService:
             "status": status_of(conn, self.clock()),
             "statusDetail": conn.status_detail,
             "teamId": conn.team_id,
-            "usedBy": [u.model_dump() for u in conn.used_by or []],
+            "usedBy": [{"id": u.id, "name": u.name} for u in conn.used_by or []],
             "revision": conn.revision,
             "updatedAt": _iso(conn.updated_at),
-            "mayManage": who.principal is None or self.access.may(who.principal, "connections", "manage"),
+            "mayManage": may_manage,
             "signIn": conn.sign_in or "team",
             "teamBackup": bool(conn.team_backup),
             "health": conn.health,
@@ -447,16 +602,17 @@ class ConnectionService:
             "docsUrl": conn.docs_url,
             "accountName": conn.account_name,
         }
-        if not detail:
-            return out
         meta = await self._secret_meta(who.tenant_id, str(conn.team_id), list(_names(conn).values()))
         team = await self.store.token(who.tenant_id, str(conn.id), SHARED)
-        out |= self._keys(kind, conn, meta, team)
-        if self.plugin_settings is not None and plugin_of(conn.app_id):
-            out |= await self.plugin_settings(who.tenant_id, str(conn.id))
-        out["redirectUri"] = self._redirect() if kind.signs_in and self.console_url else None
+        keys = self._keys(kind, conn, meta, team)
+        plugin_view: PluginAccountView = (
+            await self.plugin_settings(who.tenant_id, str(conn.id))
+            if self.plugin_settings is not None and plugin_of(conn.app_id)
+            else {}
+        )
+        redirect_uri = self._redirect() if kind.signs_in and self.console_url else None
         mine = own_key(who)
-        out["people"] = [
+        people: list[PersonSignInView] = [
             {
                 "personId": p.person_id,
                 "account": p.account,
@@ -465,20 +621,20 @@ class ConnectionService:
                 "scopes": p.scopes or [],
             }
             for p in await self.store.people(who.tenant_id, str(conn.id))
-            if out["mayManage"] or p.person_id == mine
+            if may_manage or p.person_id == mine
         ]
-        out["activity"] = [
+        activity: list[ActivityView] = [
             {"action": a.action, "actor": a.actor, "at": _iso(a.at), "detail": a.detail}
             for a in await self.store.audit(who.tenant_id, str(conn.id))
         ]
-        return out
+        return {**brief, **keys, **plugin_view, "redirectUri": redirect_uri, "people": people, "activity": activity}
 
     def kinds(self) -> dict[str, Any]:
         return views() | {"redirectUri": self._redirect() if self.console_url else None}
 
-    async def detail(self, who: Caller, connection_id: str) -> dict[str, Any]:
+    async def detail(self, who: Caller, connection_id: str) -> AccountView:
         self._can(who, "view")
-        return await self._view(who, await self._get(who, connection_id), detail=True)
+        return await self._view(who, await self._get(who, connection_id))
 
     async def team_rows(self, who: Caller, app_ids: Sequence[str] | None = None) -> list[Account]:
         """The caller's team's accounts as stored, with the modules that use them, for the Apps grid to join;
@@ -496,7 +652,7 @@ class ConnectionService:
 
     # ── Changes ───────────────────────────────────────────────────────────
 
-    async def create(self, who: Caller, i: dict[str, Any]) -> dict[str, Any]:
+    async def create(self, who: Caller, i: NewAccountBody) -> AccountView:
         """A new account. `plugin_id` makes it an account of that plugin's app; `app_id` another account (a sandbox)
         of a custom app the team has; neither, a custom app of its own, whose first account it is."""
         self._can(who, "manage")
@@ -544,8 +700,8 @@ class ConnectionService:
         return await self.detail(who, connection_id)
 
     async def change(
-        self, who: Caller, connection_id: str, i: dict[str, Any], *, plugin_settings: Json | None = None
-    ) -> dict[str, Any]:
+        self, who: Caller, connection_id: str, i: AccountChanges, *, plugin_settings: Json | None = None
+    ) -> AccountView:
         """The account's name, sign-in, card details, sandbox flag, and its settings and secret parts. A secret part
         sent replaces the stored one; one left out keeps it. Settings merge the same way: one sent replaces the stored
         one, an empty one removes it, one left out keeps it, so setting the team's own client id alone keeps the
@@ -554,21 +710,21 @@ class ConnectionService:
         self._can(who, "manage")
         conn = await self._get(who, connection_id)
         values: AccountColumns = {}
-        if i.get("name") is not None:
-            if not i["name"].strip():
+        if (name := i.get("name")) is not None:
+            if not name.strip():
                 raise ValidationFailed("Name the connection.")
-            values["name"] = i["name"].strip()
+            values["name"] = name.strip()
             if conn.account_name is not None:
                 # The name steps, agents and chats pick the account by is the one renamed, so no second name drifts
                 # from it; another account of the app holding it refuses the rename (AccountNameTaken).
                 values["account_name"] = values["name"]
-        if i.get("sign_in") is not None:
-            self._sign_in_fits(kind_of(str(conn.auth_kind)), str(i["sign_in"]))
-            values["sign_in"] = i["sign_in"]
-        if i.get("team_backup") is not None:
-            values["team_backup"] = bool(i["team_backup"])
-        if i.get("sandbox") is not None:
-            values["sandbox"] = bool(i["sandbox"])
+        if (sign_in := i.get("sign_in")) is not None:
+            self._sign_in_fits(kind_of(str(conn.auth_kind)), str(sign_in))
+            values["sign_in"] = sign_in
+        if (team_backup := i.get("team_backup")) is not None:
+            values["team_backup"] = bool(team_backup)
+        if (sandbox := i.get("sandbox")) is not None:
+            values["sandbox"] = bool(sandbox)
         details = _details(i)
         if "category" in i:
             values["category"] = details["category"]
@@ -795,7 +951,7 @@ class ConnectionService:
         for name in names.values():
             await self.secrets.delete(who.tenant_id, str(conn.team_id), name, actor=who.name, at=self.clock())
 
-    async def connect_mcp(self, who: Caller, i: dict[str, Any]) -> dict[str, Any]:
+    async def connect_mcp(self, who: Caller, i: McpAppBody) -> AccountView:
         """A connection for an MCP server, its sign-in found from the server: `oauth2_auth_code` with the
         server as `resource`. The bank's registered client when given; else one registered
         with the server when its metadata offers registration; else refused naming what is missing."""
@@ -836,7 +992,7 @@ class ConnectionService:
                 "sandbox": i.get("sandbox"),
             },
         )
-        settings = {
+        settings: dict[str, JsonValue] = {
             # The server's own address, path included: an MCP module's calls go to it, and its sign-in is
             # sent only to its origin.
             "baseUrl": url.rstrip("/"),
@@ -846,7 +1002,7 @@ class ConnectionService:
             "resource": found.resource,
             **({"scopes": found.scopes} if found.scopes else {}),
         }
-        body = {
+        body: AccountChanges = {
             "revision": made["revision"],
             "settings": settings,
             "secret_values": {"clientSecret": secret} if secret else {},
@@ -989,21 +1145,29 @@ class ConnectionService:
         hosts = await self.tokens.hosts(who.tenant_id, str(conn.id))
         return await self.tokens.post(who.tenant_id, str(settings["tokenUrl"]), form, settings, proof, hosts=hosts)
 
-    async def check_credential(self, who: Caller, connection_id: str, state: str, code: str) -> dict[str, Any]:
+    async def check_credential(self, who: Caller, connection_id: str, state: str, code: str) -> CredentialCheckView:
         """Finishes an admin's Test with my account: the code is exchanged through the account's app, and
         the answer says whether it worked and as whom. No token is kept and the team account is not touched, so a
         check never changes what calls sign in with. A refused exchange is a failed check, answered 200."""
         taken, conn = await self._taken(who, connection_id, state, check=True)
+        status: Literal["ok", "failed"]
+        message: str | None = None
         try:
             answer = await self._code_answer(who, taken, conn, code)
-            health = {"status": "ok", "account": account_of(answer)}
+            status, account = "ok", account_of(answer)
         except AuthFailed as e:
-            health = {"status": "failed", "account": None, "message": str(e)}
-        detail = {"status": health["status"], "account": health["account"]}
+            status, account, message = "failed", None, str(e)
+        detail = {"status": status, "account": account}
         await self.store.note(who.tenant_id, connection_id, self._event(who, "credential_checked", detail))
-        return {"health": {**health, "at": _iso(self.clock()), "by": who.name}}
+        if message is None:
+            return {"health": {"status": status, "account": account, "at": _iso(self.clock()), "by": who.name}}
+        return {
+            "health": {
+                "status": status, "account": account, "message": message, "at": _iso(self.clock()), "by": who.name,
+            }
+        }  # fmt: skip
 
-    async def complete_sign_in(self, who: Caller, connection_id: str, state: str, code: str) -> dict[str, Any]:
+    async def complete_sign_in(self, who: Caller, connection_id: str, state: str, code: str) -> AccountView:
         """Exchanges the code the console was handed. A person's own sign-in needs OWN, the team's
         connections.manage (`_taken`)."""
         taken, conn = await self._taken(who, connection_id, state, check=False)
@@ -1046,7 +1210,7 @@ class ConnectionService:
             await self._drop_if_unused(who, connection_id)
             detail = {"account": identity, "already": True, **({"own": True} if token_for != SHARED else {})}
             await self.store.note(who.tenant_id, same, self._event(who, "signed_in", detail))
-            return {**await self.detail(who, same), ALREADY: str(identity)}
+            return {**await self.detail(who, same), "_alreadyConnectedAs": str(identity)}
         if token_for != SHARED:
             await self.store.name_person(who.tenant_id, connection_id, token_for, who.name)
         if token_for == SHARED:
@@ -1111,7 +1275,7 @@ class ConnectionService:
 
     async def finish(
         self, who: Caller, state: str, *, code: str | None, error: str | None, description: str | None
-    ) -> dict[str, Any]:
+    ) -> FinishedSignIn:
         """The return page's one call: the sign-in its state was sent out for, finished from the state alone, so a
         window with no record of it (another tab, a fresh browser) finishes it too. A sign-in finishes as signed in,
         a Test with my account as its check; a refusal answers 422 sign_in_refused as `refuse_sign_in` says. An
@@ -1123,7 +1287,7 @@ class ConnectionService:
             )
         connection_id = found.connection_id
         conn = await self._get(who, connection_id)
-        out: dict[str, Any] = {
+        out: FinishedSignIn = {
             "appId": str(conn.app_id),
             "accountId": connection_id,
             "check": found.token_for == CHECK,
@@ -1135,21 +1299,24 @@ class ConnectionService:
                 await self.credentials.delete(
                     taken.verifier_ct, context=verifier_context(who.tenant_id, taken.state_hash)
                 )
-                return out | {
-                    "health": {"status": "failed", "message": message, "at": _iso(self.clock()), "by": who.name}
-                }
-            return out | await self.check_credential(who, connection_id, state, code)
+                return {
+                    **out,
+                    "health": {
+                        "status": "failed", "account": None, "message": message, "at": _iso(self.clock()),
+                        "by": who.name,
+                    },
+                }  # fmt: skip
+            return {**out, **await self.check_credential(who, connection_id, state, code)}
         if code is None:
             await self.refuse_sign_in(who, connection_id, state, str(error), description)
         assert code is not None
         account = await self.complete_sign_in(who, connection_id, state, code)
         # A sign-in as an identity already linked lands on that account: the answer names it and who it is.
-        already = account.pop(ALREADY, None)
-        return out | {
-            "accountId": str(account["id"]),
-            "account": account,
-            **({"alreadyConnectedAs": already} if already else {}),
-        }
+        already = account.pop("_alreadyConnectedAs", None)
+        landed: FinishedSignIn = {**out, "accountId": str(account["id"]), "account": account}
+        if already:
+            landed["alreadyConnectedAs"] = already
+        return landed
 
     async def refuse_sign_in(
         self, who: Caller, connection_id: str, state: str, error: str, description: str | None
@@ -1359,7 +1526,7 @@ class ConnectionService:
         )
         return {p: found[n] for p, n in names.items() if n in found}
 
-    async def mine(self, who: Caller, *, every: bool = False) -> list[dict[str, Any]]:
+    async def mine(self, who: Caller, *, every: bool = False) -> list[MyAccountRow]:
         """The caller's own sign-ins on their team's connections: Your connections, each with how the person
         signs in and never a value. `every`: also each account of the team a person signs in to that the
         caller has not connected yet, so the page offers its key form or sign-in."""
@@ -1371,7 +1538,7 @@ class ConnectionService:
             rows = await self.store.connectable(who.tenant_id, who.team.id, mine, kinds)
         else:
             rows = await self.store.mine(who.tenant_id, who.team.id, mine)
-        out: list[dict[str, Any]] = []
+        out: list[MyAccountRow] = []
         apps: dict[str, tuple[str, str | None]] = {}
         for r in rows:
             kind = kind_of(r.auth_kind)
@@ -1509,7 +1676,7 @@ class ConnectionService:
             raise Conflict("Try again; that account id was just taken.")
         return await self.start_sign_in(who, new, "self")
 
-    async def give_own(self, who: Caller, connection_id: str, given: dict[str, str]) -> dict[str, Any]:
+    async def give_own(self, who: Caller, connection_id: str, given: dict[str, str]) -> MyAccountRow:
         """A person's own key, password or token, sealed in their own row: only on a connection each person
         signs in to, with a kind that takes them, every person field given and no other."""
         self._can(who, OWN)
@@ -1582,7 +1749,7 @@ class ConnectionService:
             hint=found.email or None,
         )
 
-    async def test(self, who: Caller, connection_id: str, account: str | None = None) -> dict[str, Any]:
+    async def test(self, who: Caller, connection_id: str, account: str | None = None) -> AccountView:
         """Test connection: reads the account's `testPath` signed in as a call would be, with the caller's
         own sign-in (OWN) on a connection each person signs in to, else the team's (connections.manage), and stores
         the result on the connection. Only the team's sign-in decides the connection's status: one person's missing
@@ -1724,7 +1891,7 @@ class ConnectionService:
         for package in await self.package_checks(tenant_id, connection_id):
             missing: list[str] = []
             try:
-                for name, path in an_object(package["paths"], "a package check's paths").items():
+                for name, path in package["paths"].items():
                     url = base.rstrip("/") + str(path)
                     await self.egress.check_url(tenant_id, url, hosts)
                     res = await self._probe(url, prepared, tenant_id, hosts)
@@ -1760,7 +1927,7 @@ class ConnectionService:
             extensions=for_tenant(tenant_id, prepared.certificate if prepared else None, hosts or ()),
         )
 
-    async def pin_default(self, who: Caller, connection_id: str) -> dict[str, Any]:
+    async def pin_default(self, who: Caller, connection_id: str) -> AccountView:
         """Makes the caller's own sign-in on this account their default among the app's accounts: a call
         naming no account uses it. Refused on an account they have not signed in to."""
         conn = await self._get(who, connection_id)
@@ -1770,7 +1937,7 @@ class ConnectionService:
             raise ValidationFailed(f"Sign in to {conn.name} first.", code="not_signed_in")
         return await self.detail(who, connection_id)
 
-    async def sign_out(self, who: Caller, connection_id: str) -> dict[str, Any]:
+    async def sign_out(self, who: Caller, connection_id: str) -> AccountView:
         await self._signs_in(who, connection_id)
         forgotten = await self.store.forget_token(who.tenant_id, connection_id)
         await self.tokens.drop(who.tenant_id, forgotten)

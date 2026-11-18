@@ -19,6 +19,24 @@ from ops_service_kit.narrow import an_object
 from ..environments import LIVE
 from ..store.connections import Account, NewAccount, OwnSignIn, TokenRow
 
+
+class PluginAccountView(TypedDict, total=False):
+    """An app account's plugin settings in a read: as a person may read them, and for a secret one only whether it is
+    set. Left out for an account no plugin serves."""
+
+    pluginSettings: Json
+    pluginSecrets: dict[str, bool]
+
+
+class PackageCheckRow(TypedDict):
+    """What a test reads to learn whether a package app is installed on an account: the package, and the path that
+    checks each object it requires."""
+
+    id: str
+    title: str
+    paths: dict[str, str | None]
+
+
 # A consent this close to its end shows as expiring.
 EXPIRING = timedelta(days=30)
 
