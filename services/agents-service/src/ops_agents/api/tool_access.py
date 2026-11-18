@@ -15,8 +15,8 @@ from typing import cast
 
 from ops_identity import ServiceCallError, ServiceUnreachable
 from ops_service_kit.errors import ApiError
-from ops_service_kit.http import Json
 
+from ..activities.gateway import ToolApproval
 from .deps import Runtime
 from .review_sla import review_hours_asked_once
 from .team_names import team_names_asked_once
@@ -80,7 +80,7 @@ async def _policy_of(rt: Runtime, tool: str) -> WritePolicy:
         access = str(data["access"])
         # tools-service's policy as it answers it: an approval that is not an object fails at its first read, and a
         # count it sends as "2" or 2.0 reads as 2, as before it was named.
-        approval: Json = data.get("approval") or {}
+        approval: ToolApproval = data.get("approval") or {}
         approvers = int(cast(float | str, approval.get("approvers") or 1))
         return WritePolicy(access=access, approvers=approvers, step_up=bool(approval.get("stepUp")) or approvers > 1)
     access = await access_of(rt, tool)

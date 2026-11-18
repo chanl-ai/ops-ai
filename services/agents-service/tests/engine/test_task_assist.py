@@ -146,7 +146,8 @@ async def _paused(
 
 async def _regions(rt: Any, tenant: str, run_id: str) -> dict[str, Any]:
     with tenant_scope(tenant):
-        return {r["region"]: r["data"] for r in (await engine_reviews.get(rt, run_id))["task"]["regions"]}
+        review: Any = await engine_reviews.get(rt, run_id)
+        return {r["region"]: r["data"] for r in review["task"]["regions"]}
 
 
 async def test_with_assist_on_one_call_writes_help_every_read_shows(engine: AsyncEngine) -> None:

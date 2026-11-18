@@ -5,7 +5,7 @@ returning needs a reason."""
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import cast
 
 from ops_agents.graphs.definition import WorkflowDefinition
 from ops_agents.store.agent_registry import PublishRequestRow, registry_agents
@@ -114,7 +114,7 @@ async def view(
     return review_view(req, name=row.name if row else req.subject_id, slug="", sla_hours=await sla_hours(rt))
 
 
-async def get(rt: Runtime, request_id: str) -> dict[str, Any]:
+async def get(rt: Runtime, request_id: str) -> ReviewView:
     """The request and the check that the acting team may open it come first, so a request of another team is not found
     before any other service is asked; the deadline policy is then read with nothing open and the view built."""
     async with isolation.request_transaction():
@@ -123,8 +123,8 @@ async def get(rt: Runtime, request_id: str) -> dict[str, Any]:
             raise NotFound(f"Publish request {request_id}")
     await sla_hours(rt)
     async with isolation.request_transaction():
-        # A dict, as the Reviews facade answers every kind of review (hitl_facade).
-        return dict(await view(rt, req))
+        # A copy, as the Reviews facade answers every kind of review (hitl_facade).
+        return (await view(rt, req)).copy()
 
 
 async def in_acting_team(rt: Runtime, req: PublishRequestRow, *, asked_from: bool = False) -> bool:
@@ -253,7 +253,7 @@ async def decide(
     *,
     decision: str,
     reason: str | None,
-) -> dict[str, Any]:
+) -> ReviewView:
     """Decides a publish request as `approver`, from the teams where they hold reviews.decide (any team for dev)."""
     reg = registry(rt)
     req = await reg.request(request_id)
@@ -284,7 +284,7 @@ async def decide(
             await egress_host_reviews.apply(rt, req)
         elif decision == "approved":
             await _publish(rt, req, approver.email)
-        return dict(await view(rt, await reg.request(request_id)))
+        return (await view(rt, await reg.request(request_id))).copy()
 
 
 async def _publish(rt: Runtime, req: PublishRequestRow, by: str) -> None:

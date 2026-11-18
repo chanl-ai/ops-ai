@@ -401,7 +401,7 @@ class OpsReads:
         rows = await hitl_facade.list_reviews(
             self.rt, view=view, filters={}, search=None, page_no=1, size=50, me=names, teams=reader_teams(person)
         )
-        counts = cast(dict[str, int], rows["viewCounts"])
+        counts = rows["viewCounts"]
         data = cast(list[Json], rows["data"])
         mine, open_ = counts.get("mine", 0), counts.get("open", 0)
         if which == "mine":

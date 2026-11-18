@@ -33,7 +33,7 @@ async def test_a_page_of_one_builds_one_review(stack: Stack, monkeypatch: pytest
     built: list[str] = []
     real = engine_reviews.view
 
-    async def counted(*a: Any, **k: Any) -> dict[str, Any]:
+    async def counted(*a: Any, **k: Any) -> engine_reviews.EngineReview:
         built.append(str(a[1]["id"]))
         return await real(*a, **k)
 
