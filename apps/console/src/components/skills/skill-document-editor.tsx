@@ -2,16 +2,16 @@
 
 import * as React from 'react';
 
-import { InstructionDocument, referencesIn, type DocumentValue, type StepValue } from '@/components/shared/instruction-document';
+import { InstructionDocument, referencesIn, type DocumentValue, type InstructionDocumentHandle, type StepValue } from '@/components/shared/instruction-document';
 import { useReferenceLabels, useReferenceSearch } from '@/hooks/references-queries';
 import type { PublishBlocker } from '@/lib/types/references';
+
+import { NOTES, placeProblems } from './skill-problems';
 
 export interface SkillDocument {
   instructions: string;
   steps: StepValue[];
 }
-
-const NOTES = 'instructions';
 
 const toValue = (doc: SkillDocument): DocumentValue => ({
   blocks: [
@@ -36,20 +36,24 @@ export function SkillDocumentEditor({
   onChange,
   readOnly,
   problems,
+  controls,
 }: {
   skillId: string;
   name: string;
   value: SkillDocument;
   onChange: (next: SkillDocument) => void;
   readOnly?: boolean;
-  /** The publish check's problems; one on a step is shown under that step. */
+  /** The publish check's problems and a refused save's; one on a step is shown under that step. */
   problems?: PublishBlocker[];
+  /** Moves the caret to a step, for a problem's "Go to step" link. */
+  controls?: React.Ref<InstructionDocumentHandle>;
 }) {
   const context = React.useMemo(() => ({ forSkill: skillId }), [skillId]);
   const document = React.useMemo(() => toValue(value), [value]);
   const ids = React.useMemo(() => referencesIn(document).map((r) => `${r.kind}:${r.id}`), [document]);
   const labels = useReferenceLabels(context, ids);
   const search = useReferenceSearch(context);
+  const invalid = React.useMemo(() => placeProblems(problems ?? []), [problems]);
   return (
     <div data-testid="skill-document">
       <InstructionDocument
@@ -59,6 +63,8 @@ export function SkillDocumentEditor({
         searchReferences={search}
         resolved={labels.data}
         missing={problems}
+        invalid={invalid}
+        controls={controls}
         readOnly={readOnly}
         footer="add-step"
         hint="Type @ to add a tool, knowledge or skill"
