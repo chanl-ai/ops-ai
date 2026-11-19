@@ -153,7 +153,7 @@ export const SITE = [
         icon: 'shield-check',
         open: true,
         entries: [
-          { page: 'security.md', title: 'Security', icon: 'shield' },
+          { page: 'security/README.md', title: 'Security', icon: 'shield' },
           { page: 'security/tenancy-and-isolation.md', icon: 'building-2' },
           { page: 'security/identity-and-sign-in.md', icon: 'key-round' },
           { page: 'security/access-approvals-and-audit.md', icon: 'user-check' },
@@ -170,7 +170,7 @@ export const SITE = [
     description: 'HTTP API, SDKs, CLI, MCP and changes',
     public: true,
     groups: [
-      { group: 'Start here', icon: 'flag', open: true, entries: [{ page: 'reference.md', title: 'Reference', icon: 'braces' }, { page: 'reference/http-api.md', icon: 'globe' }, { page: 'reference/cli.md', title: 'The opsai command line', icon: 'square-terminal' }, { page: 'reference/mcp.md', title: 'MCP', icon: 'plug' }] },
+      { group: 'Start here', icon: 'flag', open: true, entries: [{ page: 'reference/README.md', title: 'Reference', icon: 'braces' }, { page: 'reference/http-api.md', icon: 'globe' }, { page: 'reference/cli.md', title: 'The opsai command line', icon: 'square-terminal' }, { page: 'reference/mcp.md', title: 'MCP', icon: 'plug' }] },
       { group: 'Plugins', icon: 'puzzle', entries: [{ page: 'guide/plugins.md', title: 'Plugin manifest reference', icon: 'puzzle' }] },
       {
         group: 'HTTP API',

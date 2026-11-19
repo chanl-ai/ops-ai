@@ -155,4 +155,4 @@ The host page never receives message text: the conversation stays inside the ifr
 <!-- site: cards -->
 - **[Chat and channels](../guide/ops-assistant.md)**: what the chat does once it is open.
 - **[Agents](../guide/agents.md)**: publish the agent the widget serves.
-- **[Security](../security.md)**: sign-in, isolation and audit for a security review.
+- **[Security](../security/README.md)**: sign-in, isolation and audit for a security review.

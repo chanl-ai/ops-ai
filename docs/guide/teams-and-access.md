@@ -64,5 +64,5 @@ opsai people invite a.osei@example.com --role viewer
 
 <!-- site: cards -->
 - **[Human tasks and approvals](human-tasks.md)**: who decides, and when a person must.
-- **[Security](../security.md)**: sign-in, isolation and audit for a security review.
+- **[Security](../security/README.md)**: sign-in, isolation and audit for a security review.
 - **[Tools and apps](apps.md)**: whose account a tool uses when it runs.

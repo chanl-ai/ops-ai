@@ -21,15 +21,15 @@ says otherwise.
 <!-- site: cards -->
 | Topic | What it answers |
 |---|---|
-| [Tenancy and isolation](security/tenancy-and-isolation.md) | How teams and organisations are kept apart, in the services and in the database |
-| [Identity and sign-in](security/identity-and-sign-in.md) | OIDC and SAML single sign-on, group rules, passwords, sessions and step-up |
-| [Access, approvals and audit](security/access-approvals-and-audit.md) | Roles, which writes wait for a person, and what is recorded |
-| [Data handling and masking](security/data-handling-and-masking.md) | What people see masked, where data is stored and how long it is kept |
-| [Model calls](security/model-calls.md) | Which model sees what, under which key, budget and clearance |
-| [Egress and connections](security/egress-and-connections.md) | Where a tool call may go, and how it signs in to your systems |
+| [Tenancy and isolation](tenancy-and-isolation.md) | How teams and organisations are kept apart, in the services and in the database |
+| [Identity and sign-in](identity-and-sign-in.md) | OIDC and SAML single sign-on, group rules, passwords, sessions and step-up |
+| [Access, approvals and audit](access-approvals-and-audit.md) | Roles, which writes wait for a person, and what is recorded |
+| [Data handling and masking](data-handling-and-masking.md) | What people see masked, where data is stored and how long it is kept |
+| [Model calls](model-calls.md) | Which model sees what, under which key, budget and clearance |
+| [Egress and connections](egress-and-connections.md) | Where a tool call may go, and how it signs in to your systems |
 
 ## Next
 
 <!-- site: cards -->
-- **[What's built today](guide/whats-built-today.md)**: What is built and what is planned in this release.
-- **[Security scanning](deploy/security-scanning.md)**: The checks each release passes and how to verify a signed release.
+- **[What's built today](../guide/whats-built-today.md)**: What is built and what is planned in this release.
+- **[Security scanning](../deploy/security-scanning.md)**: The checks each release passes and how to verify a signed release.

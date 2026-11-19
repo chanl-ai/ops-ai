@@ -144,4 +144,4 @@ the approach is re-examined. The implementation plan defines the measurement.
 <!-- site: cards -->
 - **[Quickstart](../guide/quickstart.md)**: run Ops AI on one machine and run a first workflow.
 - **[How work flows](../guide/how-work-flows.md)**: the reference flow as it runs today.
-- **[Security](../security.md)**: the governance answers for a reviewer.
+- **[Security](../security/README.md)**: the governance answers for a reviewer.

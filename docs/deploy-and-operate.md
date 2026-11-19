@@ -30,4 +30,4 @@ file store, and you choose when to upgrade. A hosted service is planned.
 
 <!-- site: cards -->
 - **[What runs](guide/system-components.md)**: Each container, what it stores and what it calls.
-- **[Security](security.md)**: How teams, data and model calls are kept under control, for a security review.
+- **[Security](security/README.md)**: How teams, data and model calls are kept under control, for a security review.

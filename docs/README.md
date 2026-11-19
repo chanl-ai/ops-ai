@@ -12,8 +12,8 @@ These documents design an operational AI platform for banks and describe the con
 |---|---|---|
 | Welcome | `welcome.md` | The site's first page: what Ops AI is for and where a developer starts |
 | Deploy and operate | `deploy-and-operate.md` | The operator's tab: choose a deployment, install, the database, upgrade, back up and monitor |
-| Security | `security.md` | The security reviewer's tab: isolation, sign-in, approvals and audit, data handling, model calls |
-| Reference | `reference.md` | The HTTP API, the SDKs, the CLI and MCP, and the changelog |
+| Security | `security/README.md` | The security reviewer's tab: isolation, sign-in, approvals and audit, data handling, model calls |
+| Reference | `reference/README.md` | The HTTP API, the SDKs, the CLI and MCP, and the changelog |
 | Contributing | `contributing.md` | How Ops AI is built: architecture, standards, services, packages, the use-case catalogue, designs, agent skills, releases |
 | Background | `background/problem-statement.md` | Why bank AI workflows stall and what the platform needs |
 | Architecture | `architecture/README.md` | The system as built: services, runtime, human in the loop, identity, data, operations, and the decision records in `architecture/decisions/` |

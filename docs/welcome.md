@@ -36,4 +36,4 @@ cannot answer, so the pilot stays a pilot, or the team builds approvals, version
 Isolation, sign-in, approvals and audit, data handling and model calls are answered in one place for a reviewer.
 
 <!-- site: cards -->
-- **[Security](security.md)**: how Ops AI keeps teams, data and model calls under control, with the limits stated.
+- **[Security](security/README.md)**: how Ops AI keeps teams, data and model calls under control, with the limits stated.
