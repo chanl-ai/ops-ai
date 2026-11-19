@@ -1,17 +1,20 @@
-# Deployment options
+# Choose a deployment
 
 Status: current. Compose and Kubernetes layouts are proven by the release's install proofs; sizing is a starting point
 to measure against.
 
-The same images run in every layout. What changes is how they are started, how secrets reach them and where the bytes
-of files are kept. PostgreSQL is always yours, outside the containers.
+Pick how Ops AI runs before you install it: on one machine or a cluster, with or without internet access, and one
+organisation per install. The same images run in every layout; what changes is how they start, how secrets reach them
+and where file bytes are kept. PostgreSQL is always yours, outside the containers.
 
-| Option | Shape | Status |
+| Option | Use it when | Status |
 |---|---|---|
-| One machine with Docker Compose | `./install.sh` from a clone: every container on one Linux machine, one published port behind your TLS terminator, images pulled from `ghcr.io/chanl-ai/ops-ai` or loaded from the offline image file. A second machine with the same install is a standby you restore a backup onto | Built: proven on one machine by the install script's proof |
-| Kubernetes | Kustomize: a base with one folder per service and an overlay per environment, applied with `kubectl apply -k`. A migrate Job, one Secret per service, a network policy, an outside PostgreSQL | Built: proven on a local kind cluster; not yet on a managed cloud cluster |
+| [The install script](../deploy/install.md) | One Linux machine with Docker. The script installs, checks, upgrades, backs up and restores. A second machine with the same install is a standby you restore a backup onto | Built: proven on one machine |
+| [Docker Compose by hand](../deploy/compose.md) | One machine, where you run each step yourself | Built: proven on one machine |
+| [Kubernetes](../deploy/kubernetes.md) | Your platform team runs a cluster. Plain Kustomize: a base and an overlay per environment | Built: proven on a local kind cluster, not yet on a managed cloud cluster |
+| [Release package](../deploy/release-package.md) | The machines have no internet access | Built: proven on a machine holding only the package |
 | A Helm chart | | Planned: the Kustomize overlays carry the same choices |
-| One VM with no container runtime | The services as host processes under systemd, with native PostgreSQL | Planned |
+| One VM with no container runtime | | Planned |
 
 ## Single-tenant and multi-tenant
 
@@ -46,13 +49,13 @@ flowchart TB
 | Direction | From | To | Port | Why |
 |---|---|---|---|---|
 | Inbound | Your TLS terminator or load balancer | The proxy | `OPS_PUBLIC_PORT` (8890 by default), plain HTTP inside your network | The console and the APIs, all on one origin |
-| Outbound | The services | PostgreSQL | 5432, TLS where the server requires it | All data |
-| Outbound | models | Your model endpoint | 443 | Model calls |
-| Outbound | tools | Your systems | 443, hosts on the allow-list only | Tool calls |
-| Outbound | worker and tools | Your mail server or mail API | 993 for IMAP, 587 or 465 for SMTP, 443 for Microsoft Graph or Gmail | Team mailboxes and replies |
-| Outbound | platform | Your identity provider | 443 | Single sign-on, key discovery |
-| Outbound | platform | Your DNS resolvers | 53 | Proving an email domain for single sign-on |
-| Outbound | files | S3 or Azure Blob, when configured | 443 | File bytes |
+| Outbound | Ops AI | PostgreSQL | 5432, TLS where the server requires it | All data |
+| Outbound | Ops AI | Your model endpoint | 443 | Model calls |
+| Outbound | Ops AI | Your systems | 443, hosts on the allow-list only | Tool calls |
+| Outbound | Ops AI | Your mail server or mail API | 993 for IMAP, 587 or 465 for SMTP, 443 for Microsoft Graph or Gmail | Team mailboxes and replies |
+| Outbound | Ops AI | Your identity provider | 443 | Single sign-on, key discovery |
+| Outbound | Ops AI | Your DNS resolvers | 53 | Proving an email domain for single sign-on |
+| Outbound | Ops AI | S3 or Azure Blob, when configured | 443 | File bytes |
 | Outbound | the host | `ghcr.io` (or your own registry), unless images are loaded from the offline image file | 443 | Install and upgrade only |
 
 Nothing else needs to leave your network. Put TLS in front of the proxy: the containers speak plain HTTP to each other
@@ -69,4 +72,4 @@ on the private network.
 | File storage | The size of the documents and attachments you keep, for as long as their retention class says | Move to S3 or Azure Blob for large volumes and WORM retention |
 
 Load figures for many concurrent runs are still to be measured and published; size against a pilot of your own
-workload and watch the work queue and database load ([Operate](operate.md#what-to-watch)).
+workload and watch the work queue and database load ([What to watch](../deploy/monitoring.md#what-to-watch)).

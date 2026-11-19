@@ -5,12 +5,9 @@ Status: current.
 <!-- The steps below are included from docs/deploy/install.md, the install script's guide, when the page and
 INSTALL.md are built; edit them there. -->
 
-One script installs Ops AI on a machine with Docker from a clone of the repository, asks a few questions, checks the
-result, and later upgrades, backs up, restores and reports on the same install ([Operate](operate.md)). It pulls the
-published images by default; a release's offline image file, or a build from source, serves a machine with no
-registry access.
-
-The published images are at `ghcr.io/chanl-ai/ops-ai`.
+Install Ops AI for a team on your own infrastructure. On one machine, the install script does every step and checks the
+result; on a cluster, or when you run each step yourself, the same images start from Compose or Kubernetes files.
+Version 1.0.0 is the current release, and its images are published at `ghcr.io/chanl-ai/ops-ai`.
 
 > [!NOTE]
 > To try Ops AI on a laptop rather than install it for a team, use the [Quickstart](quickstart.md): it runs from a
@@ -27,30 +24,16 @@ The published images are at `ghcr.io/chanl-ai/ops-ai`.
 | The first admin | A name and email address for the person who signs in first and invites everyone else | |
 | Sign-in and outbound hosts | Your identity provider's OIDC or SAML details, and the hosts Ops AI will call, for the Security admin to set after the install | [Security and governance](security-and-governance.md) |
 
-## Install in three steps
-
-<!-- site: steps -->
-1. **Clone and run the script** on the host. The preflight names anything missing and stops; Python is not needed.
-
-   ```bash
-   git clone https://github.com/chanl-ai/ops-ai.git
-   cd ops-ai
-   ./install.sh
-   ```
-
-2. **Answer its questions**: the port, the public URL, the organisation, the first admin, the database and the model.
-   Each has a default and a flag, and an answers file with `--yes` runs it unattended.
-3. **Sign in** at the URL it prints, as the first admin. `./install.sh status` checks the install at any time
-   ([Operate](operate.md#status-and-health)).
-
 <!-- guide: include from "## Install" until "## Appendix: by hand" -->
-Every question, flag and step the script runs, and its other commands, are in [Install Ops AI with install.sh](../deploy/install.md).
+The commands, the questions the script asks and its other commands are in [Install with the script](../deploy/install.md).
 
-## By hand
+## Other ways to install
 
-Every step the script runs can also be run by hand: the Compose files and settings in
-[Ops AI on Docker Compose](../deploy/compose.md), the DBA's scripts in
-[The database](../deploy/database.md), and a Kubernetes install in [Ops AI on Kubernetes](../deploy/kubernetes.md).
+| Way | Use it when |
+|---|---|
+| [Docker Compose by hand](../deploy/compose.md) | You run each step yourself on one machine |
+| [Kubernetes](../deploy/kubernetes.md) | Your platform team runs a cluster |
+| [Release package](../deploy/release-package.md) | The machines have no internet access |
 
 ## The command line on its own
 

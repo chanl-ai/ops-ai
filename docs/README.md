@@ -197,6 +197,9 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `deploy/release.md` | Releasing with gitflow: `release/X.Y.Z` cut from develop, tested on staging, merged into main with a merge commit, tagged and merged back; hotfixes; what each push or tag starts; the checks after; the branch protection to set |
 | `deploy/release-package.md` | The release package a client team installs from: `make release-package`, what it holds, the proof from the tarball alone, the facts that shape it and what pushing the images would need |
 | `deploy/security-scanning.md` | Every security scan (CodeQL, Scorecard, the dependency check, the release image scan), the SBOM, signatures and build provenance on each release, the settings the owner switches on, and how to verify a release |
+| `deploy/upgrade.md` | Upgrade an install to a new release with the script or by hand, how the schema check behaves, and roll back |
+| `deploy/backup-and-restore.md` | Back up and restore the database, the stored files and the keys, with the script or by hand |
+| `deploy/monitoring.md` | Check an install's health, read its logs, what to watch and how it scales |
 | `deploy/install-guide.md` | Generated from `guide/install.md` and `guide/operate.md` and shipped in the release package as INSTALL.md: install with install.sh, then status, logs, upgrade, back up, restore and scaling |
 | `deploy/install.md` | `./install.sh` from a clone: what it asks, what it does, the other commands (upgrade, backup, restore, status, logs, uninstall), what is proven, and the by-hand appendix |
 | `deploy/client-install-guide.html` | The client architecture and install guide as one shareable page, generated from `guide/` by `scripts/docs/build_guide.mjs` |

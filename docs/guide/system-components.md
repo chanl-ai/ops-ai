@@ -1,4 +1,4 @@
-# System components
+# What runs
 
 Status: current. Checked against the release's Compose file, images and services.
 
@@ -11,14 +11,14 @@ workloads.
 ```mermaid
 flowchart TB
   B["Browsers"]:::outside --> LB["Your TLS terminator or load balancer"]:::outside
-  LB --> P["proxy · 8080, published as OPS_PUBLIC_PORT"]
+  LB --> P["proxy: the one published port"]
   subgraph NET["Private network: only the proxy publishes a port"]
     direction TB
-    P --> C["console<br/>3016"] & PL["platform<br/>8710"] & AG["agents<br/>8700"] & TO["tools<br/>8720"] & KB["kb<br/>8740"] & FI["files<br/>8750"] & DO["documents<br/>8760"]
+    P --> C["console"] & PL["platform"] & AG["agents"] & TO["tools"] & KB["kb"] & FI["files"] & DO["documents"]
     W["worker"]
-    AG & W --> MO["models<br/>8730"]
-    TO --> OPA["opa<br/>8181"]
-    TO --> RU["runner<br/>8770"]
+    AG & W --> MO["models"]
+    TO --> OPA["opa"]
+    TO --> RU["runner"]
     AG ~~~ W
   end
   NET --> PG[("PostgreSQL<br/>one login per service")]:::store
@@ -28,27 +28,27 @@ flowchart TB
   PL --> IDP["Your identity<br/>provider"]:::outside
 ```
 
-*One machine with Docker Compose. The proxy is the only container that publishes a port; the worker, models-service
-the code runner and the policy engine are never reached from a browser. Every service checks sign-in tokens itself against
-platform-service's public keys, and each has its own database login.*
+*One machine with Docker Compose. The proxy is the only container that publishes a port; the worker, the
+models gateway, the code runner and the policy engine are never reached from a browser. Every service checks sign-in
+tokens itself against the platform service's public keys, and each has its own database login.*
 
 ## The containers
 
-| Container | What it does | Port | What it stores | What it calls |
-|---|---|---|---|---|
-| proxy | The one entry point: the console at `/`, each browser-facing API at `/api/<service>/` | 8080 inside, published as `OPS_PUBLIC_PORT` (8890 by default) | Nothing | console, platform, agents, tools, kb, files, documents |
-| console | The web console people use | 3016 | Nothing | The APIs, from the browser through the proxy |
-| platform | Sign-in and sessions, tenants, teams, members, roles, API keys, team policies, the audit log. The only issuer of sign-in tokens | 8710; 8711 for API key checks, private | Tenants, teams, users, members, roles, sessions, API keys, sign-in providers and domains, password hashes, audit entries | Your identity provider (OIDC or SAML); your mail server for invites and password resets |
-| agents | Agents, workflows and their versions, chat, runs, reviews and human tasks, cases, channels (mailboxes, the API, chat widgets), service events | 8700 | Definitions and versions, threads, runs, workflow steps, saved run state, reviews and decisions, cases, mailboxes, budgets, agent memories | tools, models, kb, files, documents, platform |
-| worker | Runs workflow steps from the work queue, resumes runs after a decision, fires timers, reads team mailboxes | none | Same database as agents | Same as agents |
-| tools | The data gateway: tool modules and their operations, connections, the approval check, the outbound allow-list, stored credentials, the call log, an MCP endpoint for AI assistants | 8720 | Tool modules and versions, connections and their tokens, credentials (encrypted), allow-list, call log | Your systems (only hosts on the allow-list); opa; runner, for code tools; models, for the optional check before sending; platform, for team policies |
-| runner | Runs a code tool's Python function in a WebAssembly sandbox with a memory cap, a time limit, no network, no files and no secrets. The function reaches other systems only by calling a tool back through tools | 8770, private | Nothing | tools, and only tools calls it |
-| models | The AI gateway: aliases, model keys, budgets, rate limits, the call log | 8730, private | Provider connections, aliases and their versions, model keys and spend, a metadata-only call log | Your model endpoint; tools, to read the provider's key from the credential store |
-| kb | Knowledge bases: sources, ingestion, search with page and section citations | 8740 | Sources, items and versions, searchable chunks | files, agents |
-| files | File bytes: upload, download, type judged from the bytes, malware scan hook, retention class, legal hold | 8750 | File records, versions, references, holds, storage settings; the bytes on its volume or in S3 or Azure Blob | agents, to report events such as a deleted file |
-| documents | Reading documents: layout, classify, extract fields with the place on the page each came from, corrections | 8760 | Document types and versions, samples, extractions, corrections, page layouts. Never the bytes | files, models, platform, agents |
-| opa | Open Policy Agent with the gateway's policy built in | 8181, private | Nothing; tools loads the approval key into it at start | Nothing |
-| migrate | One-shot job: applies every service's schema in order, then creates the first tenant, its Security team and the first admin | none | Nothing | PostgreSQL |
+| Container | What it does | What it stores | What it calls |
+|---|---|---|---|
+| proxy | The one entry point: the console at `/`, each browser-facing API at `/api/<service>/` | Nothing | console, platform, agents, tools, kb, files, documents |
+| console | The web console people use | Nothing | The APIs, from the browser through the proxy |
+| platform | Sign-in and sessions, tenants, teams, members, roles, API keys, team policies, the audit log. The only issuer of sign-in tokens | Tenants, teams, users, members, roles, sessions, API keys, sign-in providers and domains, password hashes, audit entries | Your identity provider (OIDC or SAML); your mail server for invites and password resets |
+| agents | Agents, workflows and their versions, chat, runs, reviews and human tasks, cases, channels (mailboxes, the API, chat widgets), service events | Definitions and versions, threads, runs, workflow steps, saved run state, reviews and decisions, cases, mailboxes, budgets, agent memories | tools, models, kb, files, documents, platform |
+| worker | Runs workflow steps from the work queue, resumes runs after a decision, fires timers, reads team mailboxes | Same database as agents | Same as agents |
+| tools | The data gateway: tool modules and their operations, connections, the approval check, the outbound allow-list, stored credentials, the call log, an MCP endpoint for AI assistants | Tool modules and versions, connections and their tokens, credentials (encrypted), allow-list, call log | Your systems (only hosts on the allow-list); opa; runner, for code tools; models, for the optional check before sending; platform, for team policies |
+| runner | Runs a code tool's Python function in a WebAssembly sandbox with a memory cap, a time limit, no network, no files and no secrets. The function reaches other systems only by calling a tool back through tools | Nothing | tools, and only tools calls it |
+| models | The AI gateway: aliases, model keys, budgets, rate limits, the call log | Provider connections, aliases and their versions, model keys and spend, a metadata-only call log | Your model endpoint; tools, to read the provider's key from the credential store |
+| kb | Knowledge bases: sources, ingestion, search with page and section citations | Sources, items and versions, searchable chunks | files, agents |
+| files | File bytes: upload, download, type judged from the bytes, malware scan hook, retention class, legal hold | File records, versions, references, holds, storage settings; the bytes on its volume or in S3 or Azure Blob | agents, to report events such as a deleted file |
+| documents | Reading documents: layout, classify, extract fields with the place on the page each came from, corrections | Document types and versions, samples, extractions, corrections, page layouts. Never the bytes | files, models, platform, agents |
+| opa | Open Policy Agent with the gateway's policy built in | Nothing; tools loads the approval key into it at start | Nothing |
+| migrate | One-shot job: applies every service's schema in order, then creates the first tenant, its Security team and the first admin | Nothing | PostgreSQL |
 
 Every image runs as a non-root user (uid 10001). The Python images share one base layer of about 626 MB; the
 console image is about 440 MB.

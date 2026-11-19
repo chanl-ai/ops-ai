@@ -1,289 +1,104 @@
-# The database: install, upgrade and verify from reviewed scripts
+# Database
 
-Status: current for PostgreSQL, proven on a throwaway server. For SQL Server and Azure SQL the scripts are generated
-and reviewed, and not yet applied to a server ([SQL Server](#sql-server-and-azure-sql)).
+Status: current for PostgreSQL, proven on a throwaway server. SQL Server 2025 and Azure SQL are partial: see
+[SQL Server and Azure SQL](#sql-server-and-azure-sql).
 
-<!-- PostgreSQL proof: deploy/database/proof.sh. SQL Server: DIALECT=mssql. -->
+Set up and change Ops AI's database the way a bank's DBA works: from reviewed SQL scripts, in your own change window,
+without running Ops AI's code against production. Every script is generated from the release and never edited by hand,
+and each service runs on its own login that cannot change the schema.
 
-A bank's DBA applies every schema change in their own change window and never runs Ops AI's code against
-production. Each service's migration chain stays the source, and every script below is generated from those chains
-and never edited by hand.
+## Choose who applies the schema
 
-The chains are in `deploy/images/chains`, one Alembic chain per service, and `deploy/database/schema.py` generates the
-scripts.
+| Mode | Who applies it | Use it when |
+|---|---|---|
+| Automatic | The install's schema job, with a superuser login you give it | A trial, or a database Ops AI owns |
+| DBA | Your DBA, from the release's scripts | Production: the services never hold a login that may change the schema |
 
-## Who runs what
+The [install script](install.md) asks which (`--db-mode auto` or `--db-mode dba`). In DBA mode it writes the scripts
+to `./dba/` and prints the commands below. A [release package](release-package.md) carries the same scripts under
+`db/postgres/`.
 
-| Step | Runs it | Connects as | Script |
-|---|---|---|---|
-| Roles, once per server and again when a release adds one | DBA | a superuser | `roles.sql`, `upgrade-roles.sql` |
-| Create the database | DBA | a superuser | `CREATE DATABASE <name> OWNER ops_migrator;` |
-| Create pgvector in it (knowledge search by meaning) | DBA | a superuser; on Azure Database for PostgreSQL the server admin, with `vector` in `azure.extensions` | `CREATE EXTENSION IF NOT EXISTS vector;` in the new database. An upgrade carries it in `upgrade-roles.sql` |
-| Fresh install | DBA | `ops_migrator` | `bundle.sql`, then `grants.sql` |
-| Upgrade | DBA | `ops_migrator` | `upgrade.sql`, then the new release's `grants.sql` |
-| Run the services | the platform team | one login per service, `ops_<service>_runtime` | none: each refuses to start on a schema behind it |
-| Check | DBA or platform team | any login that reads the schema | `make db-drift` |
+## Install on PostgreSQL
 
-| Role | Rights |
-|---|---|
-| `ops_migrator` | Owns every table, index, policy and sequence; not a superuser, cannot create roles or databases. May switch to the roles below |
-| `ops_<service>_runtime` (agents, tools, models, kb, platform, files, documents) | Logs in; SELECT, INSERT, UPDATE, DELETE on its own service's tables, its sequences, SELECT on its version table. No DDL: `CREATE TABLE` and `DROP TABLE` are refused (proof check 3). Not a superuser and no BYPASSRLS, so row-level security applies, and the tables that carry tenant policies are FORCEd |
-| `ops_runtime_tenant`, `ops_runtime_system`, `ops_platform_tenant`, `ops_platform_lookup` | No login. The services switch to them per transaction (`SET LOCAL ROLE`); each runtime role is a member of the ones its own tables grant to. `ops_runtime_system` bypasses RLS and is used only by agents-service's sweeper, timer and inbox loops |
+You need PostgreSQL 15 or newer, or Azure Database for PostgreSQL Flexible Server 16 or newer, with the `vector`
+extension offered.
 
-## Day one: a fresh install
-
-```
-make db-ddl SERVER=postgresql://postgres:<pw>@<throwaway host>:5432/postgres REF=<release tag> OUT=dist/db/<tag>/baseline
-```
-
-`SERVER` is a throwaway server the tool may create and drop scratch databases on, and where the chains' roles get
-made: never production. `REF` is exported with `git archive`, so uncommitted files never reach a script.
-
-| File | What it holds |
-|---|---|
-| `roles.sql` | Every role above, each guarded so it can run again; set each login's password afterwards (`ALTER ROLE ... PASSWORD`) |
-| `01-agents.sql` ... `07-documents.sql` | The objects each service's chain creates, for review. Apply the bundle, not these |
-| `bundle.sql` | The whole schema in the server's dependency order: tables, constraints, indexes, row-level security and policies, grants to the no-login roles, and the rows a fresh migration writes (each chain's version row) |
-| `grants.sql` | Each runtime role's rights, its membership of the no-login roles its tables grant to (granted only where it is missing, so a role a later migration added reaches a login roles.sql made before it), and CREATE on the public schema revoked from everyone but its owner (some server templates grant it to all; Fly's PostgreSQL 18 did); every statement can run again |
-| `manifest.json` | The commit, dialect, each chain's head revision, version table, runtime role and tables, and every file's sha256 |
-| `SHA256SUMS` | `shasum -a 256 -c SHA256SUMS` checks the files arrived unchanged |
-
-The DBA then runs, with their own tools:
-
-```
-psql -v ON_ERROR_STOP=1 "postgresql://<superuser>@<host>/postgres" -f roles.sql
-psql "postgresql://<superuser>@<host>/postgres" -c "CREATE DATABASE ops OWNER ops_migrator"
-psql "postgresql://<superuser>@<host>/ops" -c "CREATE EXTENSION IF NOT EXISTS vector"
+```bash
+shasum -a 256 -c SHA256SUMS
+psql -v ON_ERROR_STOP=1 "postgresql://<admin>@<host>/postgres" -f roles.sql
+psql "postgresql://<admin>@<host>/postgres" -c "CREATE DATABASE ops OWNER ops_migrator"
+psql "postgresql://<admin>@<host>/ops" -c "CREATE EXTENSION IF NOT EXISTS vector"
 psql -v ON_ERROR_STOP=1 "postgresql://ops_migrator@<host>/ops" -f bundle.sql
 psql -v ON_ERROR_STOP=1 "postgresql://ops_migrator@<host>/ops" -f grants.sql
 ```
 
-and gives each service its own login in its DSN: `OPS_DATABASE_URL_<SERVICE>` in `deploy/compose/app.env.example`.
-The baseline applied this way equals what the chains build: proof check 1 compares the two and finds no difference.
-
-## Day 20: an upgrade
-
-```
-make db-upgrade-sql FROM=<running release> TO=<new release> OUT=dist/db/<new>/upgrade-from-<running>
-```
+Then set each login's password (`ALTER ROLE ... PASSWORD`) and give each service its own login in its database
+setting, `OPS_DATABASE_URL_<SERVICE>`. On Azure the server admin is not a superuser: run `GRANT ops_migrator TO
+<admin>` first, and add `vector` to the server's `azure.extensions`.
 
 | File | What it holds |
 |---|---|
-| `upgrade-roles.sql` | Statements only a superuser may run (a new role), guarded; run first |
-| `upgrade.sql` | One step per revision, chains in migrate order. Each step names its chain and revisions and its sha256, checks the version row it starts from (and raises before any DDL when the database is elsewhere), runs in its own transaction, and records its new version row. A step that fills a large table commits each batch itself, so that fill runs between the step's transactions; if such a step stops partway, the version row still names the revision before it, and the step is run again from its start, which its revision must allow |
-| `downgrade.sql` | The reverse steps where the revision has a downgrade; a step without one says to restore a backup |
-| `SHA256SUMS` | As above |
+| `roles.sql` | Every role below, each guarded so it can run again |
+| `bundle.sql` | The whole schema in dependency order: tables, constraints, indexes, row-level security and its policies |
+| `grants.sql` | Each service login's rights; run it after every install and upgrade |
+| One file per service | The same objects split by service, for review. Apply the bundle, not these |
+| `manifest.json`, `SHA256SUMS` | The release, each service's schema version, and every file's checksum |
 
-`make db-upgrade-sql` writes no `grants.sql`. Get the new release's from `make db-ddl REF=<new release> SERVER=<throwaway server's admin URL>`, which writes it with the rest of the baseline to `dist/db/<new release>/baseline/grants.sql` (or to `OUT`; on SQL Server, `DIALECT=mssql` needs no `SERVER`). After `upgrade.sql`, run that `grants.sql`, so new tables reach their runtime role. Proof check 2 applies
-an older baseline, seeded with rows in every table a later step fills (`deploy/database/proof_seed.sql`), plus the
-upgrade, and compares it with the newer schema; check 2a checks the values each fill wrote; check 2b runs the upgrade
-again and the first guard refuses it; check 2c runs `downgrade.sql` and then `upgrade.sql` and finds every seeded row
-filled the same way; check 5 starts agents-service on the older schema and it refuses. From 874530fa every check
-passes. Agents 0119 makes the two side tables of 0104 (`model_call_records_unattributed`, `thread_budgets_unattributed`)
-on a database that ran the earlier form of 0104, which made none. The skill pins' drop and rebuild (agents 0113, before
-874530fa) is checked by `services/agents-service/tests/store/test_runtime_tables_migration.py`. Thirteen revisions cannot render as SQL (`ONLINE_ONLY` in `deploy/database/schema.py`): eight
-applied before offline rendering was a rule (agents 0031, 0036, 0042; tools 0001, 0020; platform 0006, 0013, 0017),
-and five that fill rows with values worked out in Python (tools 0071 and 0076, platform 0033 and 0034, agents 0115).
-An upgrade across one is refused by name. `deploy/database/tests/test_offline.py`, run by `make verify`, keeps every
-other revision renderable and these thirteen refused.
+## The logins
 
-### From the last release, v2026-11-11.3
-
-The offline scripts cannot upgrade a v2026-11-11.3 database: the range crosses tools 0076, platform 0033 and 0034 and
-agents 0115, so `make db-upgrade-sql FROM=v2026-11-11.3` and `make db-scripts-proof FROM=v2026-11-11.3` stop with
-exit 2 naming them. The supported paths:
-
-| Database | Path |
+| Role | Rights |
 |---|---|
-| PostgreSQL | Stop the services, then run the new release's migrate image (`deploy/images/migrate.sh`, online Alembic, every chain to its head), then that release's `grants.sql`. The scripts apply only from a release whose heads are at or after agents 0115 (commit 874530fa, which `make db-scripts-proof` starts from) |
-| SQL Server | No v2026-11-11.3 SQL Server install exists: no SQL Server baseline before 2026-11-16 installs (Msg 1785 on `signin_grants`' two cascade paths). Install the new release's baseline (`make db-ddl DIALECT=mssql REF=<release>`); upgrades start from that release |
+| `ops_migrator` | Owns every table, index and policy. Not a superuser; cannot create roles or databases |
+| `ops_<service>_runtime`, one per service | Logs in; reads and writes its own service's tables only. Cannot create or drop a table. Row-level security applies to it |
+| `ops_runtime_tenant`, `ops_runtime_system` and two platform roles | No login. The services switch to them inside a transaction; only the background loops use `ops_runtime_system`, which reads across tenants |
 
-Making the offline path work from v2026-11-11.3 would need: tools 0076's JSON policy reshape and platform 0033 and
-0034's provider settings rewritten as set-based SQL per dialect; agents 0115's list columns (description, trigger
-label, startable, takes files) computed without the node type registry, or split so the offline script adds them
-nullable and a one-off online command fills them before a later step makes them NOT NULL; and then a proof run with
-`FROM=v2026-11-11.3`. For SQL Server it is not possible: no install of that release exists to upgrade.
+## Upgrade
 
-### An index on a large live table
+An upgrade comes as `upgrade-roles.sql`, `upgrade.sql` and `downgrade.sql` from the running release to the new one. In
+DBA mode, `./install.sh upgrade` writes them to `./dba/upgrade-<from>-to-<to>/` and waits for you.
 
-`CREATE INDEX` holds writes on its table until it is built, and `upgrade.sql` runs each step in a transaction, where
-`CREATE INDEX CONCURRENTLY` cannot run. The index steps that may meet a large table create the index only when it is
-missing (agents 0071: the work queue, live workflow versions, thread lists and event polls, runs by workflow
-and checkpoints by run). On a table over about a million rows, build the index by hand first, outside a transaction,
-with the name and columns the revision gives, for example
-`CREATE INDEX CONCURRENTLY ix_engine_runs_workflow_created ON engine_runs (tenant_id, workflow_id, created_at)`;
-the upgrade then finds it and goes on.
-
-### agents 0106: rows with no one tenant
-
-Outside dev, agents 0106 stops before it changes a row when a registry or deployment row has no one tenant to take.
-Before the upgrade, list them on PostgreSQL with `make -C services/agents-service registry-tenant-preflight` (exit 1
-names each). On SQL Server that command cannot read every tenant and exits 2; the online upgrade (`make migrate`)
-prints the same list when it stops. For each line:
-
-| Line | Step |
-|---|---|
-| `no tenant: team <team> holds ...` (a team with a registry row but no thread, run, case or other row with a tenant yet) | Name its tenant for the upgrade: `OPS_REGISTRY_TEAM_TENANTS="<team>=<tenant>" make migrate` |
-| `no tenant: deployment <id> has no team and no thread` | The same variable, `deployment:<id>=<tenant>`; several pairs are separated by commas |
-| `two tenants: ...` | Remove or move the record or team so one tenant other than `local` holds it, then run again |
-
-Set the same variable when running the preflight, so it checks what the upgrade will do, and when rendering an
-offline `upgrade.sql`, which writes the pairs into its statements. The seed's records (team
-`team_ops`, saved by `seed`) stay in `local` and never appear here.
-
-### A revision that moves rows: stop the service first
-
-Some revisions move or total rows that the running release still writes. Stop that service, run the upgrade, then
-start the new release. Pods of the old release left running would write rows the step does not see, and after it
-they are refused.
-
-| Revision | Stop | Why |
-|---|---|---|
-| models 0012 | models-service | It locks `model_call_log` against writes for the step, totals each key's spend per day and run from it, moves the calls that name no tenant to `model_calls_untenanted`, and then forces the tenant policy on the log. An old pod's insert names no tenant setting, so the policy refuses it and its completion answers 500 until the pod is replaced |
-| tools 0082 | agents-service | It deletes each write fence no logged call names, since its tenant is unknown. Safe only when no worker holding a lease from before the upgrade is still running: every lease taken after the restart carries a higher generation than any fence |
-| agents 0108 | agents-service | It changes the primary keys of the workflow, widget, deployment and channel tables to lead with the tenant and copies a workflow into each tenant whose threads run it. An old pod upserts deployments, channel messages and cursors on the keys this step drops, so its statements fail until it is replaced, and a version it writes under a parent of another tenant is refused by the new foreign key |
-
-## Verify: drift
-
-```
-make db-drift DATABASE=<live database URL> SERVER=<throwaway server URL>
+```bash
+psql -v ON_ERROR_STOP=1 "postgresql://<admin>@<host>/ops" -f upgrade-roles.sql
+psql -v ON_ERROR_STOP=1 "postgresql://ops_migrator@<host>/ops" -f upgrade.sql
+psql -v ON_ERROR_STOP=1 "postgresql://ops_migrator@<host>/ops" -f grants.sql     # the new release's
 ```
 
-It reads the live database's version rows, migrates a scratch database to exactly those revisions, and lists every
-object that is missing, extra or different, then exits 1 when there is any. Proof check 4 adds an index by hand and
-drift names it (`extra INDEX ix_by_hand`), then goes green once it is dropped. Grants to the runtime roles and the
-migrator are left out: an install adds them, a migration never does.
+Each step checks the version it starts from and stops before any change when the database is elsewhere. Stop the
+services before you run it, and start only the new release after it: some steps move rows the old release still
+writes. [Upgrade](upgrade.md) has the whole sequence and the roll back.
 
-## Start check
+## Check a running database
 
-Each service (the worker included) reads its chain's head from its own migrations and refuses to start unless the
-database records it (`packages/ops_store/src/ops_store/schema_version.py`):
+Every service reads the schema version at start and refuses to run on one it does not match:
 
-```
+```text
 SchemaBehindError: models-service: the database's schema is behind: it records models_0005, this build needs models_0006. Apply the upgrade first.
 ```
 
-A database that records none of the build's revisions (not installed, or a newer release's schema under an older
-image) is refused too.
+To list every object that is missing, extra or changed against what the release expects, run the drift check from a
+clone at the release tag; it needs a throwaway PostgreSQL server it may create scratch databases on.
 
-## Roll back
-
-Migrations do not roll back on their own. Either run `downgrade.sql` (as the migrator, where every step has a
-downgrade) and deploy the older images, or restore the database backup taken before the upgrade. A service of the
-older release refuses to start on the newer schema, so the two cannot be mixed by accident.
-
-## Releases
-
-Release tags do not exist yet, so `FROM`, `TO` and `REF` take any git ref. `make db-release SERVER=<url> TAG=<tag>
-FROM=<previous tag>` writes `dist/db/<tag>/baseline/` and `dist/db/<tag>/upgrade-from-<previous>/`; attach both to the
-tag's release (`gh release upload <tag> dist/db/<tag>/**/*`). Tagging and uploading are done by hand; no CI job does
-it yet.
-
-## Proof
-
+```bash
+make db-drift DATABASE=<live database URL> SERVER=<throwaway server URL>
 ```
-sh deploy/database/proof.sh [FROM]          # FROM defaults to c60afb6c; a throwaway PostgreSQL 17 of its own
-```
-
-| Check | What it shows |
-|---|---|
-| 1 | The HEAD baseline on an empty database equals the schema Alembic builds |
-| 2, 2b | FROM's baseline plus the upgrade equals HEAD; running the upgrade again is refused before any DDL |
-| 3, 3b, 3c, 3d | A runtime role reads and writes its tables, is refused CREATE TABLE and DROP TABLE, cannot read another service's tables, and may write a table its code declares that another chain created |
-| 4, 4b, 4c | Drift is green on a clean install, red on a hand-made index, green again once it is dropped |
-| 5 | models-service at HEAD refuses to start on FROM's schema |
-
-`deploy/compose/proof.sh` installs the same baseline on a throwaway server and runs the whole compose stack with each
-service on its own login (walk 13 of 13); Fly staging runs the
-same way (`docs/deploy/fly.md`).
 
 ## SQL Server and Azure SQL
 
-SQL Server 2025 or later, and Azure SQL Database (ADR-0017). The same targets take `DIALECT=mssql` and need no
-`SERVER`: the baseline is compiled from each service's store models with SQLAlchemy's SQL Server dialect
-(`deploy/database/mssql.py`), because 53 of the 150 PostgreSQL migrations hold SQL that SQL Server cannot run.
-`test_model_parity.py` holds the models equal to what the migrations build on PostgreSQL. Every file is a sqlcmd
-script: run each with `sqlcmd -b`, which stops at the first error.
+SQL Server 2025 and Azure SQL Database are partial. Continuous integration runs the store, service kit and identity
+suites, and each service's store tests, on SQL Server 2025 beside PostgreSQL on every change. A full install of Ops AI
+on SQL Server is not yet proven; install on PostgreSQL for now. What is ready and what is still to come is in
+[Azure SQL](../guide/azure-sql.md).
 
-```
-make db-ddl DIALECT=mssql REF=<release tag> OUT=dist/db/<tag>/baseline
-```
+The SQL Server scripts are `sqlcmd` scripts; run each with `-b`, which stops at the first error.
 
-| File | What it holds |
-|---|---|
-| `roles.sql` | In master, as a server administrator: one SQL login per service plus `ops_migrator`, each password a sqlcmd variable (`-v ops_migrator_password=...`); the database with collation `Latin1_General_100_BIN2_UTF8` and `READ_COMMITTED_SNAPSHOT ON`, owned by `ops_migrator` |
-| `01-agents.sql` ... `07-documents.sql` | Each chain's tables, indexes, keys and defaults, its security policies, and its version table stamped at the chain's head. For review |
-| `bundle.sql` | As `ops_migrator` in the database: refuses a database with another collation, without READ_COMMITTED_SNAPSHOT or below compatibility level 160, then every chain's file |
-| `grants.sql` | As `ops_migrator`: a database user per service login, with SELECT, INSERT, UPDATE and DELETE on its own tables (less on a table where PostgreSQL's tenant role holds less, `mssql.RUNTIME_GRANTS`: an append-only log such as `audit_entries`, a row never deleted; the narrowed grant revokes the rest first, so an upgraded database loses it too) and SELECT on its version table, and nothing else; then the user `ops_runtime_system` (no login) with exactly the grants PostgreSQL's role of that name has, and IMPERSONATE on it for `ops_agents_runtime` alone (below); SELECT on platform's lookup functions for `ops_platform_runtime`; run again after every upgrade |
-| `manifest.json`, `SHA256SUMS` | As for PostgreSQL, with each chain's SQL Server baseline revision and anything left out |
-
-```
-sqlcmd -b -d master -i roles.sql -v database=ops ops_migrator_password=... ops_agents_runtime_password=... (one per service)
+```bash
+sqlcmd -b -d master -i roles.sql -v database=ops ops_migrator_password=<...> ops_agents_runtime_password=<...>
 sqlcmd -b -U ops_migrator -d ops -i bundle.sql
 sqlcmd -b -U ops_migrator -d ops -i grants.sql
 ```
 
-| Difference from PostgreSQL | SQL Server form |
-|---|---|
-| Forced row-level security on each tenant-scoped table, one generated policy each (`{t}_tenant`, or `{t}_isolation` for a team-owned table) | A security policy per table (`ops_security.<table>_tenant` or `_isolation`) binding a FILTER predicate and BLOCK predicates AFTER INSERT and AFTER UPDATE, generated with the PostgreSQL policy from the table's markings by `ops_store.schema.security_ddl`. The predicates read `SESSION_CONTEXT(N'tenant_id')`, and for a team-owned table `team_id` and `scope`, which `ops_store.isolation.isolated_tx` sets and clears per transaction: a team transaction reads its team's rows and the null-team rows and writes only its team's; a tenant-wide one (a named `tenant_wide` reason) reads and writes every team of its tenant. agents-service and platform-service go through it. Platform's twelve pre-tenant lookups are table-valued functions there that run `WITH EXECUTE AS` `ops_platform_system`, a user without a login that nobody may impersonate and that holds no table grant; the platform predicates pass it, and the runtime user holds SELECT on the functions only (platform 0042, `LOOKUP_USERS` in `mssql.py`); the checkpointer still sets the tenant with PostgreSQL-only statements of its own, so on SQL Server it sees no rows until its conversion card. The agents predicates also pass every tenant for `USER_NAME() = N'ops_runtime_system'`, a user without a login that `ops_store.isolation.system_tx` (with a named reason) enters with `EXECUTE AS USER` and reverts; only `ops_agents_runtime` holds IMPERSONATE on it, and no session value a login sets for itself opens another tenant's rows. A row predicate cannot limit columns, so what that user reads and updates is held by its grants, as PostgreSQL's BYPASSRLS role `ops_runtime_system` is: SELECT on graph_threads, graph_runs, thread_events, review_decisions, review_approvals and engine_definitions, SELECT and UPDATE on engine_work, SELECT on `agent_memories (tenant_id)` only, nothing on mailboxes (`SYSTEM_READS` in `mssql.py`, held equal to the migrated PostgreSQL grants by `test_model_parity.py`) |
-| A unique key over a nullable column admits any number of NULL rows | A filtered unique index `WHERE <column> IS NOT NULL`, which admits the same rows |
-| A partial index | A filtered index from its `mssql_where` twin; a partial index without one is refused by name |
-| `text`, JSON, `timestamptz`, `boolean`, serial keys | `VARCHAR(max)` (UTF-8 under the collation), `NVARCHAR(max)`, `DATETIMEOFFSET`, `BIT`, `IDENTITY` |
-| Unnamed keys | Named as PostgreSQL names them (`<table>_pkey`, `<table>_<columns>_key`, `<table>_<columns>_fkey`), so a later migration names the same object on both |
+## Limits
 
-Upgrades: `make db-upgrade-sql DIALECT=mssql FROM=<running release> TO=<new release>` writes `upgrade.sql` and
-`downgrade.sql` from Alembic's offline SQL for SQL Server, one guarded step per revision (`THROW` when the version row
-is elsewhere, `SET XACT_ABORT ON`), then run the new `grants.sql`. A step's statements that SQL Server refuses inside a
-transaction (the full-text catalog and index) run after its `COMMIT`, in their own batch. A range that starts before a
-chain's pin (`BASELINE` in `mssql.py`) is refused by name, as is a step whose offline SQL holds PostgreSQL-only SQL.
-SQL Server upgrades start from the first release whose bundle installs: no SQL Server
-install of an earlier release exists, so the pins move to that release's heads when it is cut. Until a migration lands
-after it there is nothing to upgrade. `deploy/database/mssql_live.py drift` compares an installed database with the
-models; `make uc-sql-server` installs the bundle on the SQL Server test machine and runs it (uc-565).
-
-| Not on SQL Server yet | Owner |
-|---|---|
-| kb's full-text column `kb_chunks.tsv` and its GIN index (left out, listed in the kb file and the manifest) | kb's full-text card |
-| A live check that agents' column grant to `ops_runtime_system` holds on a server (`isolated_tables`, `EXECUTE AS USER` and the append-only audit grant run live in platform-service's SQL Server tests: `test_rls.py`, `test_migrations.py`, `test_lookup_exposure.py`) | a run on a SQL Server test machine |
-| An upgrade applied to a SQL Server install (uc-565 S2) | the first migration after the first installable release |
-
-`deploy/database/tests/test_mssql_ddl.py` compiles the models and compares every file with the reviewed golden files
-in `deploy/database/golden/mssql/`; a model change fails it naming the chain's file. Review the new DDL, then
-`make db-ddl-golden`.
-
-### SQL Server tests from a Mac
-
-No SQL Server 2022 or later image runs on Apple silicon, and the local Azure SQL Edge (`deploy/database/mssql_local.sh`)
-is engine 15, which the golden schema (compatibility level 160) refuses, so every service-level SQL Server test is
-refused there. A shared SQL Server runs on Fly instead: the image and edition CI's `store-mssql` job pins (2025,
-Developer), one shared-cpu-2x machine with 4 GB and a 5 GB volume in ewr, no service and no IP, reached only through
-`fly proxy`. Use it to see a SQL Server failure before pushing; CI's `store-mssql` job stays the gate.
-
-| Task | Command |
-|---|---|
-| Create on first use, else start; waits until it answers | `make mssql-remote-up` |
-| One member's tests (the client container, PostgreSQL from `make db-up`) | `make mssql-remote-test PKG=services/kb-service T="tests/test_kb_isolation.py"` |
-| The proxy alone, for your own client; prints the port | `make mssql-remote-proxy` |
-| State of the machine and the proxy | `make mssql-remote-status` |
-| Drop databases a killed run left (older than `HOURS`, default 2; `HOURS=0` drops live runs' too) | `make mssql-remote-sweep` |
-| Stop the proxy and the machine; refuses while test databases exist (`FORCE=1` stops anyway) | `make mssql-remote-down` |
-
-Settings come from the staging config file (`deploy/fly/staging.env.example`): the app is `<STG_APP_PREFIX>-test-mssql`
-and creating it needs `STG_FLY_ORG`. The SA password is the app's `MSSQL_SA_PASSWORD` secret, kept in
-`<config dir>/test-mssql-sa.txt` (mode 600); `up` generates both on first use. Several builders can share it: each test
-makes its own randomly named database and drops it. A member whose tests start their own OPA (tools-service) gets one
-started on the host for the run. Fly cannot stop an idle machine that has no service, so run `make mssql-remote-down`
-when done. Each statement crosses the proxy (about 60 ms a round trip), so runs are slow:
-one test file about 1.5 minutes (10 seconds on the local Edge server), `packages/ops_store` about 11 minutes, kb-service's `store-mssql` list about 12, tools-service's about 20. Timing
-assertions do not hold there: tools-service's `test_statement_budget.py` fails its 2-second open-transaction budget on
-latency alone, and needs `OPS_TEST_HANG_SECONDS=2400` to finish at all. Cost: about 21 USD a month if left running (about 3 cents an hour), about 1 USD a month stopped (the
-volume and the stopped image).
-
-## Facts that shape it
-
-| Fact | Consequence |
-|---|---|
-| Eight applied revisions read rows or inspect tables, and an applied migration is never edited | The baseline is a dump of a database the chains just migrated, not their offline SQL |
-| A constraint built through SQLAlchemy and the same constraint restored from a dump deparse differently | Every comparison restores both sides once before comparing |
-| pg_dump refuses a server newer than itself | The dialect uses a local pg_dump of the server's version or newer, else the matching `postgres` image |
-| Roles are server-wide | Generate and prove on a throwaway server, never the shared dev cluster |
+- Upgrades by DBA script start at 1.0.0. A database from a dated release before 1.0.0 is upgraded by the schema job.
+- The drift check runs from a source clone; a packaged command is planned. On SQL Server it is planned.
+- Signing in to the database with Microsoft Entra ID or a managed identity is planned; the scripts use SQL logins.
