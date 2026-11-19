@@ -192,7 +192,7 @@ even when the person asks about something else in between. In the reply's `skill
 skill that runs step by step.
 
 A skill starts at step 1 however it is started: a person picks it for a reply, as above, or the agent decides the
-request matches its use-when line.
+request matches its use-when line and calls `load_skill` or `switch_skill`.
 
 | Field | What it does |
 |---|---|
@@ -246,10 +246,11 @@ ran this one.
 
 ## How the agent moves through the steps
 
-The agent that holds a step-by-step skill gets three built-in tools.
+The agent that holds a step-by-step skill starts it and moves through it with four built-in tools.
 
 | Tool | What it does |
 |---|---|
+| `load_skill` | Starts a skill by its slug at its first step. This is the tool the agent already uses to load a skill without steps, so a skill with steps is never loaded as text |
 | `switch_skill` | Starts a skill by its slug, with its inputs. A skill that is already running ends first, so one skill runs at a time. A skill with a required input that is missing does not start, and the agent asks the person for it |
 | `step_done` | Says the current step is done. It is refused while the step's tool has not run, and for a step whose rule is checked on the tool's result |
 | `exit` | Ends the running skill with one of its exits and its results |

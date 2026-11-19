@@ -358,8 +358,7 @@ request = ops.agents.publish(agent["id"], note="First version")
 print(request["status"])
 ```
 
-In TypeScript `apply` creates the agent and does not send the brief, so the brief is saved with the update operation by
-its API name.
+TypeScript takes the same fields as an object.
 
 ```ts
 import { readFileSync } from 'node:fs';
@@ -368,12 +367,7 @@ import { OpsAI } from '@chanl-ai/ops-ai';
 
 const ops = new OpsAI();
 
-const file = parse(readFileSync('accounts-desk.yaml', 'utf8'));
-const created = await ops.agents.apply(file);
-const agent = await ops.raw.agents.agents_update_agent({
-  path: { agent_id: created.id },
-  body: { brief: file.brief, patterns: file.patterns },
-});
+const agent = await ops.agents.apply(parse(readFileSync('accounts-desk.yaml', 'utf8')));
 console.log(agent.promptMode);
 
 const check = await ops.agents.publishCheck(agent.id);
