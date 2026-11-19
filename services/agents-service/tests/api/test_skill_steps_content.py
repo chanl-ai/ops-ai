@@ -16,6 +16,7 @@ from httpx import AsyncClient
 from ops_agents.activities.catalog import load_catalog
 from ops_agents.activities.tool_directory import CatalogTools
 from ops_agents.api.agent_registry import definition_of
+from ops_agents.app import skill_content
 from tests.conftest import SEED
 
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
@@ -105,7 +106,12 @@ async def test_a_save_keeps_the_steps_and_refuses_a_mistyped_rule_or_a_skill_tha
             "steps_always_on": {"loading": "always", "useWhen": ""},
             "unknown_reference": {"steps": _step(2, use={"kind": "skill", "id": "sk_missing"})},
             "sub_skill_depth": {"steps": _step(2, use={"kind": "skill", "id": nested})},
+            # A rule on a result needs the one tool the result comes from: none named, or two in the text.
+            "check_needs_tool": {"steps": _step(1, use=None, do="Look up the customer and the charge.")},
         }
+        two = "Use @tool:lookup_customer or @tool:request_document."
+        error = _error(await c.put(url, json={"steps": _step(1, use=None, do=two), "baseVersion": 1}))
+        assert (error["code"], error["details"]["step"]) == ("check_needs_tool", 1), error
         for code, change in cannot_run.items():
             error = _error(await c.put(url, json={**change, "baseVersion": 1}))
             assert error["code"] == code, (code, error)
@@ -150,6 +156,24 @@ async def test_an_attached_skill_runs_with_its_steps_and_a_pin_saved_before_step
     (plain,) = load_catalog(SEED).settings_for(old, "m").skills
     loaded: Any = plain
     assert loaded.instructions == pin["instructions"] and loaded.program is None
+
+
+async def test_a_step_that_names_its_tool_inside_its_text_runs_that_tool(tmp_path: Path) -> None:
+    """A builder writes "Look up the customer with @tool:lookup_customer" with nothing in front of the step. Read as
+    a step with no tool, its rule runs on no result and the write of the step after it is never kept back."""
+    async with _app(str(tmp_path / "db.sqlite")) as c:
+        steps = [
+            {"do": "Look up the customer with @tool:lookup_customer.", "check": {"text": "result.amount <= 500"}},
+            {"do": "Ask for the receipt with @tool:request_document and wait."},
+            {"do": "Tell the person what happens next."},
+        ]
+        body = {**REFUND, "toolIds": ["lookup_customer", "request_document"], "steps": steps}
+        content = _ok(await c.post("/v1/skills", json=body), 201)["content"]
+        assert "use" not in content["steps"][0], "the text is stored as the builder wrote it"
+        program = skill_content.program_of(content)
+        assert program is not None
+        assert [s.use and s.use.id for s in program.steps] == ["lookup_customer", "request_document", None]
+        assert program.targets() == {"lookup_customer", "request_document"}
 
 
 async def test_a_step_naming_a_tool_the_team_no_longer_offers_blocks_the_publish_and_says_which_step(

@@ -67,14 +67,17 @@ def prompt(skills: list[Skill]) -> str:
             "answering, then follow what it returns.\n" + "\n".join(index)
         )
     started = [
-        f"- {s.slug}: {s.use_when}" + (f" Not when: {s.program.not_when}" if s.program.not_when else "")
+        f"- {s.slug}: {s.use_when}"
+        + (f" Not when: {s.program.not_when}" if s.program.not_when else "")
+        + (f" Its steps call: {', '.join(sorted(tools))}." if (tools := s.program.targets()) else "")
         for s in skills
         if s.program is not None
     ]
     if started:
         parts.append(
             "## Skills you can start\n\nThese run one step at a time. When a request matches one, call switch_skill "
-            "with its slug before answering; you are then given its current step.\n" + "\n".join(started)
+            "with its slug before answering and before calling any tool its steps call; you are then given its "
+            "current step.\n" + "\n".join(started)
         )
     return "\n\n".join(parts)
 

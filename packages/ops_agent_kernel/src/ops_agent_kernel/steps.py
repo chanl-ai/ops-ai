@@ -70,6 +70,7 @@ __all__ = [
     "start",
     "step_done",
     "target",
+    "wired",
     "withheld",
 ]
 
@@ -84,10 +85,22 @@ class StepProblem:
     message: str
 
 
+def wired(program: SkillProgram) -> SkillProgram:
+    """`program` with the tool of each step that names none in front: a step whose text mentions exactly one tool,
+    agent or workflow runs it. A builder who writes "Look up the account with @tool:get_account" means that tool, and
+    a step with no tool has its check run on no result and keeps no later tool back."""
+    steps: list[SkillStep] = []
+    for s in program.steps:
+        named = [r for r in Ref.found_in(s.do) if r.tool_name is not None] if s.use is None else []
+        steps.append(s.model_copy(update={"use": named[0]}) if len(named) == 1 else s)
+    return program.model_copy(update={"steps": steps})
+
+
 def problems(program: SkillProgram, *, has_parts: bool = False, always_on: bool = False) -> list[StepProblem]:
     """What stops `program` from running, by its own shape. Whether a skill a step runs exists, and whether skills
     run each other in a circle, needs the team's skills and is checked by the caller."""
     found: list[StepProblem] = []
+    program = wired(program)
     count = len(program.steps)
     if not count:
         if program.returns or program.exit or program.success:
@@ -108,7 +121,16 @@ def problems(program: SkillProgram, *, has_parts: bool = False, always_on: bool 
             )
         if step.check is not None:
             try:
-                expr.kind_of(step.check.text)
+                rule = expr.kind_of(step.check.text) == "rule"
+                if rule and step.use is None and expr.reads_result(step.check.text):
+                    found.append(
+                        StepProblem(
+                            "check_needs_tool",
+                            n,
+                            f"Step {n}'s check reads a result, and the step names no single tool to get it from. "
+                            "Start the step with @ and the tool it runs.",
+                        )
+                    )
             except expr.CheckError as e:
                 found.append(
                     StepProblem("bad_check", n, f"Step {n}'s check reads as a rule but is not a valid one. {e}")
@@ -561,7 +583,12 @@ def said(before: SkillRunState, after: SkillRunState) -> str:
             )
         res = f.results.get(str(f.step))
         if res is not None and res.passed is None and step.check is not None:
-            return f"Now confirm: {step.check.text} Call step_done once it holds."
+            # The judge reads the result as the tool gave it: what the model is shown may be a shaped summary.
+            got = f" The tool returned {json.dumps(res.value)}." if res.value is not None else ""
+            return (
+                f"Now confirm: {step.check.text}{got} Call step_done only if that holds for this result; if it "
+                "does not, say so and do not go on."
+            )
         rule = step.if_not or IfNot()
         left = max(rule.retries - f.attempts.get(str(f.step), 0), 0) if rule.action == "retry" else 0
         return (

@@ -50,7 +50,7 @@ with a read and a write on a mock bank, published for the team, and platform sig
 | 3 | The brief mentions a tool the agent lacks; James asks what blocks the publish, tries to publish, then adds the tool twice | The check lists `missing_reference` for that tool at `brief.howToAnswer`; the publish is refused, 422 `cannot_publish`; the first insert adds the tool and the second adds nothing and saves no version |
 | 4 | James saves and publishes a one-step skill and a three-step skill that runs it, then adds the three-step skill to the agent | The first step's check is marked `rule`; the insert adds the skill, the skill it runs and the write tool it names |
 | 5 | James asks to publish and Maya approves | The check is clear, the agent is live and `uses` counts 2 tools and 2 skills |
-| 6 | James chats: starts the skill, makes the read, asks an unrelated question, confirms the caller, asks for the freeze | The replies' `skillRun` reads step 1, step 2 inside the second skill, the same again, step 3, and step 3 while the write waits for a person; the bank has received no freeze |
+| 6 | James chats: starts the skill, makes the read, asks an unrelated question, confirms the caller, asks for the freeze | The replies' `skillRun` reads step 1, step 2 inside the second skill, the same again, step 3, and step 3 while the write waits for a person; the bank has received no freeze. A second skill, with each tool named inside its step's sentence, ends as blocked on an account that owes money and goes on to step 2 on one that does not; the write its test chat waits on is listed in Human Tasks |
 | 7 | The SDK creates and publishes the two skills | The stored steps run a tool, a skill and a tool, and the first check is a rule |
 | 8 | The SDK applies an agent definition with a brief, asks the publish check, adds the tool and the skill, publishes | One problem before, none after, and the agent is live |
 | 9 | `opsai skills apply` and `publish`, `opsai agents apply`, `publish-check`, `add-reference`, `publish` | The same result from files, with the publish waiting for review or live |
@@ -74,3 +74,8 @@ Step 6. The third reply calls no tool, and the fourth still finds the skill insi
 between replies every reply starts with no skill running: with `carried_run` left out of the turn, step 6 failed with
 the trail `(1, False), (None, None), (None, None), (None, False), (None, False)`, 13 of 14 checks passed. Step 3 is the
 second: it pairs the refused publish with the publish that goes through once the tool is added.
+
+Step 6 also runs a skill whose steps name their tools inside the sentence, as the console writes them, on the agent
+page's test chat. With the stored steps read without the tool each sentence names, the read on an account that owes
+money left the skill on step 1 and the next reply asked for the write: 17 of 19 checks passed. The account with money
+going on to step 2 is the paired check, so the skill does not end as blocked for any other reason.

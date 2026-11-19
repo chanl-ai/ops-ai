@@ -46,6 +46,26 @@ def freeze_skill(run: int, layer: str, read: str, write: str, confirm_id: str) -
     }
 
 
+def hold_skill(run: int, layer: str, read: str, write: str) -> dict[str, Any]:
+    """Two steps as a builder types them in the console, each tool named inside its sentence and nothing in front of
+    the step: a read whose rule ends the skill as blocked on an account that owes money, then the write."""
+    return {
+        "name": f"Hold on a balance {layer} {run}",
+        "ownerTeam": "team_ops",
+        "useWhen": "The caller asks for a hold to be placed on an account.",
+        "instructions": "",
+        "steps": [
+            {
+                "do": f"Look up the account with @tool:{read} and read its balance.",
+                "check": {"text": "result.balance > 0"},
+                "ifNot": {"action": "exit", "exit": "blocked"},
+            },
+            {"do": f"Place a hold on the account with @tool:{write} for the reason given."},
+        ],
+        "exit": {"blocked": "The account has nothing to hold."},
+    }
+
+
 def brief(read: str) -> dict[str, Any]:
     return {
         "purpose": "Reads and freezes accounts for callers.",

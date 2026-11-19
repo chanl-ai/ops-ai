@@ -128,6 +128,9 @@ export function StepView({ node, editor, getPos, updateAttributes }: ReactNodeVi
   );
 }
 
+// A sentence that states a comparison: a model can pass it on a value that fails it, and a rule cannot.
+const COMPARES = /\b(above|below|over|under|at least|at most|more than|less than|greater|fewer|exceeds?|equals?|positive|negative|non-?zero|between|no more than|no less than)\b|[<>=]/i;
+
 /** A step's check. The save decides whether it is a rule the service runs or a sentence the model judges. */
 export function CheckView({ node, updateAttributes }: ReactNodeViewProps) {
   const by = node.attrs.by as 'rule' | 'model' | null;
@@ -149,6 +152,11 @@ export function CheckView({ node, updateAttributes }: ReactNodeViewProps) {
         <span contentEditable={false} className="text-xs text-muted-foreground select-none">
           {by === 'rule' ? 'Checked by a rule' : 'Judged by the model'}
         </span>
+      )}
+      {by === 'model' && COMPARES.test(text) && (
+        <p contentEditable={false} className="basis-full text-xs text-warning-text select-none" data-testid="check-rule-hint">
+          This compares a value, and the model may judge it wrong. Write it as a rule the service checks, such as result.balance &gt; 0.
+        </p>
       )}
     </NodeViewWrapper>
   );

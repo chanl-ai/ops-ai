@@ -238,6 +238,11 @@ def inputs_read(text: str) -> set[str]:
     return {*named, EVERY_INPUT} if whole else set(named)
 
 
+def reads_result(text: str) -> bool:
+    """Whether a rule reads the step's result. Raises `CheckError` for a text outside the grammar."""
+    return any(isinstance(n, ast.Name) and n.id == "result" for n in ast.walk(_rule(text)))
+
+
 def _is_inputs(node: ast.AST) -> bool:
     return isinstance(node, ast.Name) and node.id == "inputs"
 

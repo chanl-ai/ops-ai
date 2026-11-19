@@ -9,7 +9,7 @@ import json
 import time
 from typing import Any
 
-from brief_steps import brief, confirm_skill, freeze_skill
+from brief_steps import brief, confirm_skill, freeze_skill, hold_skill
 from main_chains import ACCOUNT, bank_stack, holds, publish_bank_module
 from usecase_harness import check, data, finish, sse
 
@@ -95,6 +95,10 @@ with bank_stack() as s:
         and got == sorted([("skill", freeze["id"]), ("skill", confirm["id"]), ("tool", write)]),
         (checks, got),
     )
+    # A second skill, written the way the console writes one: each step's tool is named inside its sentence.
+    hold = made(s.api.post("/v1/skills", json=hold_skill(RUN, "api", read, write), headers=me))
+    made(s.api.post(f"/v1/skills/{hold['id']}/publish-requests", json={"note": "use case"}, headers=me))
+    made(s.api.post(f"/v1/agents/{aid}/references", json={"kind": "skill", "id": hold["id"]}, headers=me))
     now = data(s.api.get(f"/v1/agents/{aid}", headers=me))
     clear = data(s.api.get(f"/v1/agents/{aid}/publish-check", params={"version": now["version"]}, headers=me))
     sent = s.api.post(f"/v1/agents/{aid}/publish-requests", json={"version": now["version"]}, headers=me)
@@ -111,7 +115,7 @@ with bank_stack() as s:
         clear == {"canRequest": True, "problems": []}
         and sent.status_code == 201
         and live["publishedVersion"] == now["version"]
-        and live["uses"] == {"tools": 2, "knowledgeBases": 0, "skills": 2, "agents": 0, "workflows": 0},
+        and live["uses"] == {"tools": 2, "knowledgeBases": 0, "skills": 3, "agents": 0, "workflows": 0},
         (clear, sent.status_code, sent.text[:200], live.get("uses")),
     )
 
@@ -201,5 +205,45 @@ with bank_stack() as s:
         "6 a rejected write ends the skill as failed",
         waits.get("step") == 3 and refused.get("running") is None and ends[-1:] == ["failed"] and len(holds(s.bank)) == 1,
         (waits.get("step"), refused.get("running"), ends, len(holds(s.bank))),
+    )
+
+    # A skill whose steps name their tools inside the sentence, on the agent page's test chat. On an account that
+    # owes money the rule ends the skill as blocked in the reply that read it, and the write stays out of reach in
+    # the reply after; on an account with money the same read goes on to step 2.
+    def test_chat() -> str:
+        return str(data(s.api.post("/chat/threads", json={"agentId": aid, "kbIds": [], "test": True}, headers=me))["id"])
+
+    owing = json.dumps({"accountId": "VISA-5521"})
+    hold_slug = json.dumps({"slug": hold["slug"]})
+    thread = test_chat()
+    on_one = say(f"call switch_skill {hold_slug}")
+    say(f"call {read} {owing}")
+    blocked_run = last_reply().get("skillRun") or {}
+    ends = [h.get("ended") for h in blocked_run.get("history") or []]
+    after = s.api.post(
+        f"/chat/threads/{thread}/messages", json={"content": f"call {write} {owing}"}, headers={**me, **STREAM}, timeout=120
+    )
+    reached = [r for r in s.bank.received if r["method"] == "POST" and r["path"] == "/v1/accounts/VISA-5521/holds"]
+    asked = [e for e in sse(after.text) if e.get("type") == "widget" and e["widget"].get("kind") == "approval"]
+    check(
+        "6 a rule on an account that owes money ends the skill as blocked, and the write is not asked for after it",
+        on_one.get("step") == 1 and blocked_run.get("running") is None and ends[-1:] == ["blocked"] and not reached and not asked,
+        (on_one.get("step"), blocked_run.get("running"), ends, len(reached), len(asked)),
+    )
+    thread = test_chat()
+    say(f"call switch_skill {hold_slug}")
+    funded = say(f"call {read} {account}")
+    check("6 the same read on an account with money goes on to step 2", funded.get("step") == 2, funded)
+
+    # The write that test chat then waits on is a task a reviewer can find and open.
+    say(f"call {write} {account}")
+    approver = s.who["approver"]
+    listed = s.api.get("/reviews", headers=approver)
+    opened = s.api.get(f"/reviews/{thread}", headers=approver)
+    routes = [s.api.get(path, headers=approver).status_code for path in ("/v1/tasks", "/v1/publish-requests")]
+    check(
+        "6 the write a test chat waits on is listed in Human Tasks and opens for a reviewer",
+        listed.status_code == 200 and thread in listed.text and opened.status_code == 200,
+        (listed.status_code, thread in listed.text, opened.status_code, routes),
     )
 finish()

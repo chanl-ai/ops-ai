@@ -84,10 +84,11 @@ def runs_of(content: Json) -> frozenset[str]:
 
 
 def program_of(content: Json) -> SkillProgram | None:
-    """A stored version's program; None for a skill without steps. Stored content was checked when it was saved."""
+    """A stored version's program, each step with the tool it runs (`steps.wired`); None for a skill without steps.
+    Stored content was checked when it was saved."""
     if not content.get("steps"):
         return None
-    return SkillProgram.model_validate({k: content[k] for k in KEYS if k in content})
+    return steps.wired(SkillProgram.model_validate({k: content[k] for k in KEYS if k in content}))
 
 
 def _refused(problem: steps.StepProblem) -> ValidationFailed:
