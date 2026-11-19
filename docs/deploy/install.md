@@ -111,8 +111,8 @@ When the machine reaches only your own registry, mirror the images there and poi
 
 | Setting | What it moves | Default |
 |---|---|---|
-| `OPS_IMAGE_REGISTRY` | Where the Ops AI images are pulled from | `ghcr.io/chanl-ai/ops-ai` |
-| `OPS_BASE_IMAGE_PREFIX` | A registry prefix ending in `/` for third-party images, such as PostgreSQL and the policy engine | Docker Hub |
+| `OPS_IMAGE_REGISTRY`, in the shell that runs the script | Where the Ops AI images are pulled from | `ghcr.io/chanl-ai/ops-ai` |
+| `OPS_BASE_IMAGE_PREFIX`, in `ops-ai.env` | A registry prefix ending in `/` for third-party images, such as PostgreSQL and the policy engine | Docker Hub |
 
 A machine with no registry at all uses `--offline` with a release package's image file.
 

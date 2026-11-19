@@ -6,7 +6,7 @@ after its restore.
 An Ops AI install keeps its state in three places: the database, the stored files and knowledge bytes, and the settings
 file with its keys. A backup needs all three, and a restore needs the same secrets key the backup was made with.
 
-## With the script
+## Back up and restore with the script
 
 ```bash
 ./install.sh backup
@@ -25,7 +25,7 @@ its tenant policies.
 > A backup holds `ops-ai.env` and its keys. Keep it as safe as the database: `OPS_SECRETS_KEY` unlocks every stored
 > credential, and without it a restored install cannot call your systems.
 
-## By hand
+## Back up and restore by hand
 
 Back up the database as the server admin, with your usual PostgreSQL tools or, on Azure, automated backups and
 point-in-time restore. A dump as the schema owner stops with a row-level security error, because the tenant policies

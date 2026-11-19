@@ -133,8 +133,8 @@ When the machine reaches only your own registry, mirror the images there and poi
 
 | Setting | What it moves | Default |
 |---|---|---|
-| `OPS_IMAGE_REGISTRY` | Where the Ops AI images are pulled from | `ghcr.io/chanl-ai/ops-ai` |
-| `OPS_BASE_IMAGE_PREFIX` | A registry prefix ending in `/` for third-party images, such as PostgreSQL and the policy engine | Docker Hub |
+| `OPS_IMAGE_REGISTRY`, in the shell that runs the script | Where the Ops AI images are pulled from | `ghcr.io/chanl-ai/ops-ai` |
+| `OPS_BASE_IMAGE_PREFIX`, in `ops-ai.env` | A registry prefix ending in `/` for third-party images, such as PostgreSQL and the policy engine | Docker Hub |
 
 A machine with no registry at all uses `--offline` with a release package's image file.
 
@@ -262,7 +262,7 @@ Migrations do not roll back on their own. Either restore the backup taken before
 release's `downgrade.sql` where every step has one; then start the previous images. The script does this for you when
 its check fails.
 
-### With the script
+### Back up and restore with the script
 
 ```bash
 ./install.sh backup
@@ -281,7 +281,7 @@ its tenant policies.
 > A backup holds `ops-ai.env` and its keys. Keep it as safe as the database: `OPS_SECRETS_KEY` unlocks every stored
 > credential, and without it a restored install cannot call your systems.
 
-### By hand
+### Back up and restore by hand
 
 Back up the database as the server admin, with your usual PostgreSQL tools or, on Azure, automated backups and
 point-in-time restore. A dump as the schema owner stops with a row-level security error, because the tenant policies

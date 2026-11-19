@@ -12,7 +12,7 @@ Check health, read logs, know what to watch and how to scale: [Monitor](../deplo
 <!-- guide: include from "## Upgrade with the script" until "## Limits" -->
 Move to a new release and roll back: [Upgrade](../deploy/upgrade.md).
 
-<!-- guide: include from "## With the script" until "## Limits" -->
+<!-- guide: include from "## Back up and restore with the script" until "## Limits" -->
 Back up the database, the stored files and the keys, and restore them: [Back up and restore](../deploy/backup-and-restore.md).
 
 ## Rotate keys

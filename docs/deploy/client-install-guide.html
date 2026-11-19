@@ -1258,8 +1258,8 @@ offered; the built-in database has it.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Setting</th><th>What it moves</th><th>Default</th></tr></thead>
 <tbody>
-<tr><td><code>OPS_IMAGE_REGISTRY</code></td><td>Where the Ops AI images are pulled from</td><td><code>ghcr.io/chanl-ai/ops-ai</code></td></tr>
-<tr><td><code>OPS_BASE_IMAGE_PREFIX</code></td><td>A registry prefix ending in <code>/</code> for third-party images, such as PostgreSQL and the policy engine</td><td>Docker Hub</td></tr>
+<tr><td><code>OPS_IMAGE_REGISTRY</code>, in the shell that runs the script</td><td>Where the Ops AI images are pulled from</td><td><code>ghcr.io/chanl-ai/ops-ai</code></td></tr>
+<tr><td><code>OPS_BASE_IMAGE_PREFIX</code>, in <code>ops-ai.env</code></td><td>A registry prefix ending in <code>/</code> for third-party images, such as PostgreSQL and the policy engine</td><td>Docker Hub</td></tr>
 </tbody></table></div>
 <p>A machine with no registry at all uses <code>--offline</code> with a release package&#39;s image file.</p>
 <h3 id="install-limits">Limits</h3>
@@ -1468,7 +1468,7 @@ only the new release after it.</li>
 <p>Migrations do not roll back on their own. Either restore the backup taken before the upgrade, or have your DBA run the
 release&#39;s <code>downgrade.sql</code> where every step has one; then start the previous images. The script does this for you when
 its check fails.</p>
-<h3 id="operate-with-the-script">With the script</h3>
+<h3 id="operate-back-up-and-restore-with-the-script">Back up and restore with the script</h3>
 <div class="cmd"><pre><code>./install.sh backup
 ./install.sh restore backups/&lt;file&gt;.tar.gz</code></pre></div>
 <p>A backup is one archive in <code>./backups/</code>, readable only by its owner, holding a dump of the database, the files and
@@ -1480,7 +1480,7 @@ its tenant policies.</p>
 <div class="note info"><p>A backup holds <code>ops-ai.env</code> and its keys. Keep it as safe as the database: <code>OPS_SECRETS_KEY</code> unlocks every stored
 credential, and without it a restored install cannot call your systems.</p>
 </div>
-<h3 id="operate-by-hand">By hand</h3>
+<h3 id="operate-back-up-and-restore-by-hand">Back up and restore by hand</h3>
 <p>Back up the database as the server admin, with your usual PostgreSQL tools or, on Azure, automated backups and
 point-in-time restore. A dump as the schema owner stops with a row-level security error, because the tenant policies
 apply to the owner too.</p>
