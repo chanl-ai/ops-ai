@@ -22,7 +22,7 @@ export function phaseLabel(t: LiveTurn, kbNames: string[]) {
   return 'Thinking…';
 }
 
-const HOW: Record<string, string> = { picked: 'picked by you', carried: 'carried from the reply before', loaded: 'loaded for this question', always: 'always on' };
+const HOW: Record<string, string> = { picked: 'picked by you', carried: 'carried from the reply before', loaded: 'loaded for this question', started: 'started for this question', always: 'always on' };
 
 /** Which skills a reply used and how each came in; always-on skills are left to the reply's details. */
 export function UsedSkills({ skills }: { skills: NonNullable<ChatMessage['skills']> }) {
@@ -36,7 +36,7 @@ export function UsedSkills({ skills }: { skills: NonNullable<ChatMessage['skills
           <span className="truncate">
             Used skill <span className="font-medium text-foreground">{s.name}</span>
             {s.part ? ` · ${s.part.replace(/-/g, ' ')}` : ''} v{s.version}
-            {s.how ? `, ${HOW[s.how]}` : ''}
+            {s.how && HOW[s.how] ? `, ${HOW[s.how]}` : ''}
             {s.inputs && Object.keys(s.inputs).length ? ` · ${Object.entries(s.inputs).map(([k, v]) => `${k}: ${v}`).join(' · ')}` : ''}
           </span>
         </li>
