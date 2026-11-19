@@ -282,6 +282,8 @@ export interface SkillPublishCheck {
 
 export interface SkillDetail extends Skill {
   content: SkillContent;
+  /** With `version`, the copy a draft save names as its base (`baseOf`). */
+  digest: string;
   /** Newest first. */
   versions: SkillVersion[];
   tests: SkillTestCase[];
@@ -343,8 +345,9 @@ export interface SkillDraftPatch {
   /** Lines that say the skill went well. */
   success?: string[];
   note?: string;
-  /** The version the edit was made against; a newer one returns 409. */
+  /** The copy the edit was made on (`baseOf` the skill as read); a save from an older copy returns 409 `stale_base`. */
   baseVersion: number;
+  baseDigest: string;
 }
 
 // ── Generation ──────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Bot, CircleAlert, FlaskConical, Info, Lock, MoreHorizontal, Pause, Play, RefreshCw, Rocket, Send, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, Bot, CircleAlert, FlaskConical, Info, Lock, MoreHorizontal, Pause, Play, RefreshCw, Rocket, Send, Star, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 
 import {
@@ -47,6 +47,7 @@ import { TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTabParam } from '@/hooks/use-tab-param';
 import { EvalsTab } from './_parts/evals-tab';
 import { useInstructionsAssist } from './_parts/instructions-assist';
+import { useAgentAutosave } from './_parts/use-agent-autosave';
 import { WidgetEmbeds } from '@/components/deployments/widget-embed';
 import { PageLayout } from '@/components/page-layout';
 import { PageTabPanel, PageTabs } from '@/components/shared/page-tabs';
@@ -75,6 +76,7 @@ import {
   useModelAliases,
   useRequestAgentPublish,
   useRestoreAgent,
+  useChangeAgentTools,
   useGrantableTools,
   useUpdateAgent,
 } from '@/hooks/queries';
@@ -130,6 +132,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   const versions = useAgentVersions(agent.id);
   const runs = useAgentRuns(agent.id);
   const update = useUpdateAgent(agent.id);
+  const changeTools = useChangeAgentTools(agent.id);
   const setPaused = useAgentPaused(agent.id);
   const restore = useRestoreAgent(agent.id);
   const requestPublish = useRequestAgentPublish(agent.id);
@@ -160,7 +163,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
       return next as unknown as AgentDraft;
     });
   }, [saved]);
-  const set =<K extends keyof AgentDraft>(k: K, v: AgentDraft[K]) => setDraft((d) => followLimits({ ...d, [k]: v }));
+  const set =<K extends keyof AgentDraft>(k: K, v: AgentDraft[K]) => setDraft((d) => followLimits({ ...d, [k]: v }, agent.toolIds));
   // The prompt is a brief unless the builder switched to plain text. A legacy agent (no brief) shows its job line as
   // Purpose and its instructions as How to answer, and stays as it is until a brief field is edited.
   const mode: PromptMode = agent.promptMode === 'full' ? 'full' : 'brief';
@@ -188,10 +191,6 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
     onAttachAlways: () => (setUsesOpen(true), setAttach('always')),
   });
 
-  // The one draft saves itself: a second after the last valid change, with no dialog and no note per save.
-  const [saveError, setSaveError] = React.useState<string | null>(null);
-  // The draft a save failed on: autosave does not send it again until it changes or Retry is pressed.
-  const [failedDraft, setFailedDraft] = React.useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   // The right panel's tab; Test in the header opens it and brings it into view on a narrow screen.
@@ -235,44 +234,21 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
   const defaultId = useDefaultAgent().data?.agentId;
   const [makeDefaultOpen, setMakeDefaultOpen] = React.useState(false);
   const liveUse = agent.usedIn.filter((u) => u.status === 'live');
-  const patchOf = (d: AgentDraft) => {
-    const patch: Record<string, unknown> = Object.fromEntries(Object.entries(d).filter(([k, v]) => !sameValue(saved[k as keyof AgentDraft], v)));
-    // The API pins by id and version; the name and tools a pin carries are what the API returned for display.
-    // A new pin carries version 0 until saved; the service then pins the published version.
-    // Sent only once the builder has edited a brief field: opening a legacy agent or saving a model change never converts it.
-    if (briefDirty && briefEdit) patch.brief = briefEdit;
-    if (mode === 'brief') (delete patch.instructions, delete patch.role);
-    if (patch.widgetPins) patch.widgetPins = d.widgetPins.map((p) => ({ widgetId: p.widgetId, version: p.version || undefined }));
-    return patch;
-  };
-  const saveNow = () => {
-    const sent = JSON.stringify(draft);
-    const patch = patchOf(draft);
-    const sentBrief = patch.brief as AgentBrief | undefined;
-    update.mutate(patch, {
-      onSuccess: (result) => {
-        // The saved brief is the service's reading of what was sent; edits made while it was in flight stay.
-        if (sentBrief) setBriefEdit((b) => (b && sameValue(b, sentBrief) ? null : b));
-        setSaveError(null);
-        setFailedDraft(null);
-        // agents-service drops a stale grant on save. Without dropping it here too the draft never matches the saved
-        // agent, so the page stays "Saving your changes first" and Request publish stays disabled.
-        const sentIds = (patch.toolIds as string[] | undefined) ?? [];
-        const dropped = sentIds.filter((t) => !result.toolIds.includes(t));
-        if (dropped.length) setDraft((d) => ({ ...d, toolIds: d.toolIds.filter((t) => !dropped.includes(t)) }));
-      },
-      onError: (e) => (setSaveError(e.message), setFailedDraft(sent)),
-    });
-  };
-  React.useEffect(() => {
-    if (!editable || !dirty || !valid || update.isPending || failedDraft === JSON.stringify(draft)) return;
-    const t = setTimeout(() => saveNow(), 1000);
-    return () => clearTimeout(t);
-    // Saves on a change to the draft or once the last save has settled; patchOf reads `saved`, which moves with them.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, saved, valid, editable, update.isPending, failedDraft, briefEdit]);
+  const { saveNow, saveError, stale, reload, reading } = useAgentAutosave({
+    agent,
+    update,
+    draft,
+    saved,
+    brief: briefDirty ? briefEdit : null,
+    mode,
+    ready: editable && dirty && valid,
+    onBriefSaved: (sent) => setBriefEdit((b) => (b && sameValue(b, sent) ? null : b)),
+  });
+  // A grant or a removal is its own save on the stored list, never part of the draft the page autosaves.
+  const setTools = (change: { add?: string[]; remove?: string[] }) =>
+    changeTools.mutate(change, { onError: (e) => toast.error('Couldn’t change the tools', { description: e.message }) });
   const switchMode = (to: PromptMode) =>
-    update.mutate(to === 'full' ? { promptMode: 'full', instructions: agent.instructions } : { promptMode: 'brief' }, {
+    update.mutate(to === 'full' ? { promptMode: 'full', instructions: agent.instructions, base: agent } : { promptMode: 'brief', base: agent }, {
       onSuccess: () => (setModeAsked(null), toast.success(to === 'full' ? 'Editing as plain text' : 'Back to the brief', { description: to === 'full' ? 'Your brief stays saved; only Never is still used from it.' : 'The next version uses the prompt written from the brief.' })),
       onError: (e) => (setModeAsked(null), toast.error('Couldn’t switch', { description: e.message })),
     });
@@ -424,6 +400,18 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                   </AlertDescription>
                 </Alert>
               )}
+              {stale && (
+                <Alert data-testid="agent-stale-base">
+                  <Users />
+                  <AlertTitle>Someone else saved this agent</AlertTitle>
+                  <AlertDescription>
+                    <p>{stale} Your unsaved changes are kept on this page and nothing more is saved until you reload. Reloading shows their version with your changes on top, and saves them.</p>
+                    <Button variant="outline" size="sm" onClick={() => void reload()} disabled={reading} data-testid="agent-stale-reload">
+                      <RefreshCw className="size-3.5" /> Reload
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
               {saveError && !update.isPending && (
                 <Alert data-testid="agent-save-failed">
                   <CircleAlert />
@@ -443,7 +431,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                   <span className="truncate">{draft.model || 'No model'}</span>
                 </Button>
                 <span role="status" data-testid="agent-save-status" className={saveError ? 'text-xs text-destructive-text' : 'text-xs text-muted-foreground'}>
-                  {!canBuild ? `v${agent.version}` : update.isPending ? 'Saving…' : saveError ? `Not saved: ${saveError}` : dirty ? (valid ? 'Saving soon…' : 'Fix the highlighted fields to save') : update.isSuccess ? `Draft v${agent.version} saved` : `v${agent.version}`}
+                  {!canBuild ? `v${agent.version}` : update.isPending ? 'Saving…' : stale ? 'Not saved: someone else saved first' : saveError ? `Not saved: ${saveError}` : dirty ? (valid ? 'Saving soon…' : 'Fix the highlighted fields to save') : update.isSuccess ? `Draft v${agent.version} saved` : `v${agent.version}`}
                 </span>
               </div>
               <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
@@ -479,7 +467,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
               </div>
               <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
               <IdentitySection draft={draft} set={set} teamId={agent.teamId} models={modelAliases.data ?? []} errors={errors} channels={agent.controls.channels} agentId={agent.id} showJob={mode === 'full'} showModel={false} />
-              <WidgetsSection draft={draft} set={set} />
+              <WidgetsSection draft={draft} set={set} toolIds={agent.toolIds} />
               </BuilderFieldset>
               <AgentModelLimitsSection
                 model={draft.model}
@@ -494,12 +482,12 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
                 <MemorySection draft={draft} set={set} />
                 <SkillMenuSection draft={draft} set={set} attached={skills.data?.pins.length ?? 0} />
                 <GuardrailsSection draft={draft} set={set} shown={agent.controls.guardrails} />
-                <LimitsSection draft={draft} set={set} models={modelAliases.data ?? []} tools={tools.data ?? []} />
+                <LimitsSection draft={draft} set={set} models={modelAliases.data ?? []} tools={tools.data ?? []} toolIds={agent.toolIds} />
                 </BuilderFieldset>
               </AgentModelLimitsSection>
               <AgentUsesSheet open={usesOpen} onOpenChange={setUsesOpen} uses={agent.uses}>
                 <BuilderFieldset canEdit={locked ? false : agent.canEdit}>
-                  <ToolsSection draft={draft} set={set} stale={agent.staleToolIds} />
+                  <ToolsSection draft={draft} set={set} toolIds={agent.toolIds} onChange={setTools} stale={agent.staleToolIds} />
                   <KnowledgeSection draft={draft} set={set} />
                   <AgentSkillsSection
                     agentName={agent.name}
@@ -560,7 +548,7 @@ function AgentSettingsPage({ agent }: { agent: Agent }) {
               <AgentTestPanel
                 agentId={agent.id}
                 agentName={agent.name}
-                held={(tools.data ?? []).filter((t) => draft.toolIds.includes(t.id)).map((t) => ({ name: t.name, approval: t.requiresApproval ? (t.approval ?? 'a review') : null }))}
+                held={(tools.data ?? []).filter((t) => agent.toolIds.includes(t.id)).map((t) => ({ name: t.name, approval: t.requiresApproval ? (t.approval ?? 'a review') : null }))}
                 tab={testTab}
                 onTabChange={setTestTab}
                 threadId={testThreadId}

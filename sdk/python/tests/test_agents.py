@@ -74,9 +74,13 @@ def test_apply_updates_an_existing_agent_by_name() -> None:
     def handler(r: httpx.Request) -> httpx.Response:
         if r.url.path.endswith("/v1/agents") and r.method == "GET":
             return ok([{"id": "ag_2", "name": "Policy advisor"}])
+        # A list row names no copy, so the agent is read before it is saved.
+        if r.url.path.endswith("/v1/agents/ag_2") and r.method == "GET":
+            return ok({"id": "ag_2", "name": "Policy advisor", "version": 2, "digest": "d2"})
         if r.url.path.endswith("/v1/agents/ag_2") and r.method == "PATCH":
             body = json.loads(r.content)
             assert body["collections"] == ["kb_1"]
+            assert (body["baseVersion"], body["baseDigest"]) == (2, "d2")
             return ok({"id": "ag_2", "name": "Policy advisor", "collections": ["kb_1"]})
         return httpx.Response(404, json={"success": False, "error": {"code": "not_found", "message": r.url.path}})
 

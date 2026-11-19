@@ -330,7 +330,10 @@ export interface paths {
         head?: never;
         /**
          * Update Agent
-         * @description Saves the patched spec as a new draft version; what is live does not change until it is published.
+         * @description Saves the patched spec as the agent's draft; what is live does not change until it is published.
+         *
+         *     409 `stale_base` when `baseVersion` and `baseDigest` are not the newest copy (its details name who saved it and
+         *     when): read the agent again and repeat the change.
          */
         patch: operations["agents_update_agent"];
         trace?: never;
@@ -2300,10 +2303,10 @@ export interface paths {
         get?: never;
         /**
          * Save Skill Draft
-         * @description Edits the newest draft, or opens the next version on top of the published one. 409 when `baseVersion` is
-         *     not the newest version, or the skill is deprecated or in review. The checks run again in the transaction that
-         *     writes, after the tools are checked against tools-service with nothing open, so a save landing in between answers
-         *     `stale_base`.
+         * @description Edits the newest draft, or opens the next version on top of the published one. 409 `stale_base` when
+         *     `baseVersion` and `baseDigest` are not the newest copy (its details name who saved it and when); 409 too when the
+         *     skill is deprecated or in review. The checks run again in the transaction that writes, after the tools are checked
+         *     against tools-service with nothing open, so a save landing in between answers `stale_base`.
          */
         put: operations["agents_save_skill_draft"];
         post?: never;
@@ -3768,6 +3771,8 @@ export interface components {
             /** Collections */
             collections: string[];
             controls: components["schemas"]["AgentControls"];
+            /** Digest */
+            digest?: string | null;
             /** Guardrailpins */
             guardrailPins: components["schemas"]["GuardrailPin"][];
             guardrails: components["schemas"]["Guardrails-Output"];
@@ -3904,6 +3909,10 @@ export interface components {
             } | null;
             /** Allteamknowledgebases */
             allTeamKnowledgeBases?: boolean | null;
+            /** Basedigest */
+            baseDigest: string;
+            /** Baseversion */
+            baseVersion: number;
             brief?: components["schemas"]["Brief"] | null;
             /** Channels */
             channels?: ("voice" | "chat" | "email" | "api")[] | null;
@@ -9872,6 +9881,8 @@ export interface components {
         SkillDetail: {
             activity: components["schemas"]["SkillActivity"];
             content: components["schemas"]["SkillContent"];
+            /** Digest */
+            digest: string;
             /** Draftversion */
             draftVersion: number | null;
             /** Id */
@@ -9943,6 +9954,8 @@ export interface components {
         };
         /** SkillDraftPatch */
         SkillDraftPatch: {
+            /** Basedigest */
+            baseDigest: string;
             /** Baseversion */
             baseVersion: number;
             /** Exit */

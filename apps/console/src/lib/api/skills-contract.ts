@@ -35,7 +35,7 @@ import type {
 export interface SkillsApi {
   get(id: string): Promise<SkillDetail>;
   create(input: SkillCreateInput): Promise<Skill>;
-  /** Edits the newest draft, or opens one on top of the published version. 409 when `baseVersion` is stale. */
+  /** Edits the newest draft, or opens one on top of the published version. 409 `stale_base` when the base is not the newest copy. */
   saveDraft(id: string, patch: SkillDraftPatch): Promise<SkillDetail>;
   /** Copies a version into a new draft; nothing is published. */
   restore(id: string, version: number): Promise<SkillDetail>;

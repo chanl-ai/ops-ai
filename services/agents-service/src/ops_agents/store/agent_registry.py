@@ -174,6 +174,22 @@ def digest_of(spec: Json) -> str:
     return hashlib.sha256(canonical_json(spec).encode()).hexdigest()
 
 
+def refuse_stale(base: tuple[int, str], version: int, digest: str, *, saved_by: str, saved_at: str) -> None:
+    """Refuses a save built on `base` (the version and digest it read) once the newest version is no longer that one.
+    A draft is rewritten in place under one version number, so the digest is what tells two copies of it apart. The
+    details name who saved the newest copy and when, for a page to say so.
+
+    Raises:
+        Conflict: `stale_base`.
+    """
+    if base != (version, digest):
+        raise Conflict(
+            "The draft was saved after it was read; reload and try again.",
+            code="stale_base",
+            details={"version": version, "savedBy": saved_by, "savedAt": saved_at},
+        )
+
+
 def slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "agent"
 
@@ -624,8 +640,8 @@ class AgentRegistry(VersionedRegistry[AgentRow, AgentVersionRow]):
             row = await self.row(agent_id, c, lock=True)
             n = row.version
             newest = await self.newest(c, agent_id, n)
-            if base is not None and base != (n, digest_of(newest.spec)):
-                raise Conflict("The draft was saved after it was read; reload and try again.", code="stale_base")
+            if base is not None:
+                refuse_stale(base, n, digest_of(newest.spec), saved_by=newest.saved_by, saved_at=newest.saved_at)
             asked = await publish_requested(c, "agent", agent_id, n)
             if newest.published_at is None and not asked:
                 # The draft keeps every change made to it, so its history entry reads as one change set.

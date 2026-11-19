@@ -43,7 +43,7 @@ export function useInstructionsAssist({
   const [genOpen, setGenOpen] = React.useState(false);
   const [templateOpen, setTemplateOpen] = React.useState(false);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-  const granted = tools.filter((t) => draft.toolIds.includes(t.id)).map((t) => t.name);
+  const granted = tools.filter((t) => agent.toolIds.includes(t.id)).map((t) => t.name);
   const next = agent.version + 1;
 
   const toolbar = (

@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from ops_agents.store.agent_registry import AgentRegistry
 from ops_agents.store.tenancy import tenant_scope
 
+from ..saves import save_agent
 from .test_agent_registry import _app, _ok  # pyright: ignore[reportPrivateUsage]
 from .test_skills import BRANCH, HARDSHIP, _published  # pyright: ignore[reportPrivateUsage]
 
@@ -25,7 +26,7 @@ async def _versions(c: AsyncClient, aid: str) -> dict[int, dict[str, Any]]:
 
 
 async def _role(c: AsyncClient, aid: str, role: str) -> dict[str, Any]:
-    return _ok(await c.patch(f"/v1/agents/{aid}", json={"role": role}))
+    return _ok(await save_agent(c, aid, {"role": role}))
 
 
 async def test_saves_rewrite_one_draft_and_history_lists_it_once(tmp_path: Path) -> None:
@@ -88,3 +89,25 @@ async def test_two_saves_at_once_after_publish_leave_one_draft(database_url: str
             assert [v.version for v in await reg.versions(aid)] == [2, 1]
     finally:
         await engine.dispose()
+
+
+async def test_an_agent_save_made_from_an_old_copy_or_naming_no_copy_is_refused(tmp_path: Path) -> None:
+    async with _app(str(tmp_path / "db.sqlite")) as c:
+        aid = _ok(await c.post("/v1/agents", json={"name": "Typed", "role": "first"}), 201)["id"]
+        opened = _ok(await c.get(f"/v1/agents/{aid}"))
+        base = {"baseVersion": opened["version"], "baseDigest": opened["digest"]}
+        # The builder's @ insert lands after the page read the agent and before its autosave is sent.
+        granted = _ok(await c.post(f"/v1/agents/{aid}/references", json={"kind": "tool", "id": "lookup_customer"}))
+        assert [g["id"] for g in granted["added"]] == ["lookup_customer"], granted
+
+        late = await c.patch(f"/v1/agents/{aid}", json={"role": "typed meanwhile", **base})
+        assert (late.status_code, late.json()["error"]["code"]) == (409, "stale_base"), late.text
+        assert set(late.json()["error"]["details"]) >= {"savedBy", "savedAt"}, late.text
+        kept = _ok(await c.get(f"/v1/agents/{aid}"))
+        assert (kept["toolIds"], kept["role"]) == (["lookup_customer"], "first"), kept
+
+        unnamed = await c.patch(f"/v1/agents/{aid}", json={"role": "names no copy"})
+        assert unnamed.status_code == 400 and "baseVersion" in unnamed.text, unnamed.text
+        again = {"baseVersion": kept["version"], "baseDigest": kept["digest"]}
+        saved = _ok(await c.patch(f"/v1/agents/{aid}", json={"role": "typed meanwhile", **again}))
+        assert (saved["toolIds"], saved["role"]) == (["lookup_customer"], "typed meanwhile"), saved

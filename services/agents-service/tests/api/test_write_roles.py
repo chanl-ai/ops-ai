@@ -33,6 +33,7 @@ from tests.engine.test_lifecycle_rights import (
     stack,  # noqa: F401  # pyright: ignore[reportUnusedImport] - a fixture
     unowned_live,
 )
+from tests.saves import save_skill_draft
 
 from .test_widget_registry import LIMIT_CARD
 
@@ -129,7 +130,7 @@ STEPS: list[Step] = [
     (
         "PUT",
         "save a skill draft",
-        lambda k: (f"/v1/skills/{k['skill']}/draft", {"note": "x", "baseVersion": 1}),
+        lambda k: (f"/v1/skills/{k['skill']}/draft", {"note": "x"}),
         200,
         N,
     ),
@@ -257,6 +258,14 @@ async def _send(c: AsyncClient, method: str, path: str, body: Any, headers: dict
     return await c.request(method, path, json=body, headers=headers)
 
 
+async def _based(c: AsyncClient, what: str, path: str, body: Any) -> Any:
+    """The two saves that name the copy they were made from get it read as the owning builder, right before the send."""
+    if what not in ("save a skill draft", "edit an agent"):
+        return body
+    opened = _data(await c.get(path.removesuffix("/draft"), headers=BUILDER))
+    return {**body, "baseVersion": opened["version"], "baseDigest": opened["digest"]}
+
+
 async def _remember(c: AsyncClient, what: str, made: Response, kept: dict[str, Any]) -> None:
     """Keeps the ids and the draft graph the later steps write to."""
     if what == "create a skill":
@@ -280,6 +289,7 @@ async def _walk(c: AsyncClient, refused: dict[str, str], expect: Expect, *, crea
     for step in STEPS:
         method, what, target, status, other = step
         path, body = target(kept)
+        body = await _based(c, what, path, body)
         made: Response | None = None
         if creates or other != OWN:
             r = await _send(c, method, path, body, refused)
@@ -343,7 +353,7 @@ async def test_a_skill_is_deleted_by_any_builder_of_its_team_and_not_by_a_viewer
     assert made.status_code == 201, made.text
     sid = _data(made)["id"]
     # Another builder of the team saves the unpublished draft, which rewrites version 1's saver.
-    saved = await c.put(f"/v1/skills/{sid}/draft", json={"note": "x", "baseVersion": 1}, headers=SECOND_BUILDER)
+    saved = await save_skill_draft(c, sid, {"note": "x"}, headers=SECOND_BUILDER)
     assert saved.status_code == 200, saved.text
     # Builders delete any of the team's skills since D59; a viewer deletes only skills they created.
     refused = await c.delete(f"/v1/skills/{sid}", headers=VIEWER)

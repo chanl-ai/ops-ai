@@ -165,6 +165,7 @@
           "tools": [],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": 1,
         "id": "<sk>",
         "inputs": [
@@ -368,6 +369,7 @@
           "tools": [],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": null,
         "id": "<sk>",
         "inputs": [
@@ -568,6 +570,7 @@
           "tools": [],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": 1,
         "id": "<sk>",
         "inputs": [
@@ -679,7 +682,12 @@
     "body": {
       "error": {
         "code": "stale_base",
-        "message": "v1 was saved after v9; reload and edit again.",
+        "details": {
+          "savedAt": "<timeZ>",
+          "savedBy": "usr_b@harborpine.example",
+          "version": 1
+        },
+        "message": "The draft was saved after it was read; reload and try again.",
         "requestId": "<req>",
         "status": 409
       },
@@ -1714,6 +1722,7 @@
           "tools": [],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": null,
         "id": "<sk>",
         "inputs": [
@@ -1884,6 +1893,7 @@
           "tools": [],
           "useWhen": "The customer says they cannot make a payment because of job loss, illness or another hardship."
         },
+        "digest": "<hex>",
         "draftVersion": 1,
         "id": "<sk>",
         "inputs": [

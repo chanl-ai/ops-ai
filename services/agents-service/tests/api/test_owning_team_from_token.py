@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from httpx import AsyncClient
 
+from ..saves import save_agent
+
 CARDS = {"X-Team-Id": "team_cards"}
 
 
@@ -15,7 +17,7 @@ async def test_an_agent_is_owned_by_the_callers_team_and_a_body_cannot_name_anot
     assert named.status_code == 400, named.text
     made = (await client.post("/v1/agents", json={"name": "Carded", "role": "r"}, headers=CARDS)).json()["data"]
     assert made["teamId"] == "team_cards" and "owner" not in made, made
-    moved = await client.patch(f"/v1/agents/{made['id']}", json={"owner": "Operations"}, headers=CARDS)
+    moved = await save_agent(client, made["id"], {"owner": "Operations"}, headers=CARDS)
     assert moved.status_code == 400, moved.text
 
 

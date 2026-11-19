@@ -2551,6 +2551,8 @@ class AgentLimits(TypedDict, closed=True):
 class AgentPatch(TypedDict, closed=True):
     accounts: NotRequired[dict[str, str] | None]
     allTeamKnowledgeBases: NotRequired[bool | None]
+    baseDigest: str
+    baseVersion: int
     brief: NotRequired[Brief | None]
     channels: NotRequired[list[Literal["voice", "chat", "email", "api"]] | None]
     collections: NotRequired[list[str] | None]
@@ -3842,6 +3844,7 @@ class Agent(TypedDict, closed=True):
     channels: list[str]
     collections: list[str]
     controls: AgentControls
+    digest: NotRequired[str | None]
     guardrailPins: list[GuardrailPin]
     guardrails: GuardrailsOutput
     id: str
@@ -4257,6 +4260,7 @@ class SkillCreateInput(TypedDict, closed=True):
 
 
 class SkillDraftPatch(TypedDict, closed=True):
+    baseDigest: str
     baseVersion: int
     exit: NotRequired[dict[str, str] | None]
     guardrails: NotRequired[list[str] | None]
@@ -4437,6 +4441,7 @@ class RunStory(TypedDict, closed=True):
 class SkillDetail(TypedDict, closed=True):
     activity: SkillActivity
     content: SkillContent
+    digest: str
     draftVersion: int | None
     id: str
     inputs: NotRequired[list[SkillInputField]]
