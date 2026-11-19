@@ -2105,7 +2105,7 @@ export interface components {
             copy?: components["schemas"]["CopyRef"] | null;
             /** Id */
             id: string;
-            installed?: components["schemas"]["ResourceInstalled"] | null;
+            installed?: components["schemas"]["Installed"] | null;
             /**
              * Kind
              * @enum {string}
@@ -3743,6 +3743,23 @@ export interface components {
             /** Removed */
             removed: string[];
         };
+        /**
+         * Installed
+         * @description The live copies a team holds of one template. A copy never changes by itself.
+         */
+        Installed: {
+            /**
+             * Changed
+             * @default false
+             */
+            changed: boolean;
+            /** Copies */
+            copies: number;
+            /** Neweravailable */
+            newerAvailable: boolean;
+            /** Version */
+            version: number | null;
+        };
         /** InvalidField */
         InvalidField: {
             /** Field */
@@ -4960,20 +4977,6 @@ export interface components {
             /** Name */
             name: string;
         };
-        /** ResourceInstalled */
-        ResourceInstalled: {
-            /**
-             * Changed
-             * @default false
-             */
-            changed: boolean;
-            /** Copies */
-            copies: number;
-            /** Neweravailable */
-            newerAvailable: boolean;
-            /** Version */
-            version: number | null;
-        };
         /**
          * ReviewDecisionIn
          * @description A decision made in Reviews, sent by agents-service.
@@ -5567,14 +5570,17 @@ export interface components {
             /** Signin */
             signIn?: string | null;
         };
-        /** TemplateRequires */
+        /**
+         * TemplateRequires
+         * @description What a copy of a template needs before it can run.
+         */
         TemplateRequires: {
             /** Bind */
             bind: {
                 [key: string]: string;
             }[];
             /** Resources */
-            resources?: string[];
+            resources: string[];
             /** Tools */
             tools: string[];
         };

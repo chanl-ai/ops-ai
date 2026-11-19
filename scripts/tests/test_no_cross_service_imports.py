@@ -188,7 +188,8 @@ def _described(schema: dict[str, Any]) -> tuple[str, list[str], object]:
 def shape_differences(services: Path, shapes: list[type[ServiceShape]]) -> tuple[set[str], set[str]]:
     """(findings, `<service>: <shape>` for each document that carries a shape as the contract describes it). A
     finding is a document whose component of a shape's name differs from the contract, or whose component of another
-    name holds every field the shape needs: the same shape declared a second time."""
+    name shares most fields with the shape (more than half of the shape's and more than half of its own): the same
+    shape declared a second time, whether or not it has kept up with the contract's fields."""
     found: set[str] = set()
     carried: set[str] = set()
     for path in sorted(services.glob("*/openapi.json")):
@@ -197,17 +198,16 @@ def shape_differences(services: Path, shapes: list[type[ServiceShape]]) -> tuple
         for shape in shapes:
             name = shape.__name__
             contract = shape.model_json_schema(mode="serialization", by_alias=True)
-            needed: set[str] = set(shape.model_json_schema(mode="validation", by_alias=True).get("required", []))
+            named: set[str] = set(contract["properties"])
             for component, schema in components.items():
                 fields: set[str] = set(schema.get("properties", {}))
                 if component == name:
                     if _described(schema) == _described(contract):
                         carried.add(f"{service}: {name}")
                     else:
-                        named: set[str] = set(contract["properties"])
                         apart = sorted(fields ^ named) or ["the same fields, typed differently"]
                         found.add(f"{service}: {name} differs from ops_contracts ({', '.join(apart)})")
-                elif needed and needed <= fields:
+                elif 2 * len(fields & named) > max(len(named), len(fields)):
                     found.add(f"{service}: {component} declares ops_contracts' {name} again")
     return found, carried
 
@@ -215,12 +215,15 @@ def shape_differences(services: Path, shapes: list[type[ServiceShape]]) -> tuple
 def test_the_scan_finds_a_shape_two_services_describe_differently(tmp_path: Path) -> None:
     (shape,) = [s for s in service_shapes() if s.__name__ == "CopyRef"]
     sent = shape.model_json_schema(mode="serialization", by_alias=True)
-    # The reader's own copy of the shape, one field behind the sender's, and the sender's under its own name.
+    # The reader's own copy of the shape, one field behind the sender's; the same under the reader's own name, missing
+    # a field the shape needs as well; and a shape that only shares two common field names, which is not a finding.
     behind = {**sent, "properties": {k: v for k, v in sent["properties"].items() if k != "detachedAt"}}
+    partial = {**sent, "properties": {k: v for k, v in sent["properties"].items() if k != "recordId"}}
+    other = {"properties": {"id": {"type": "string"}, "version": {"type": "integer"}, "name": {"type": "string"}}}
     for service, components in (
         ("agents-service", {"CopyRef": sent}),
         ("tools-service", {"CopyRef": behind}),
-        ("documents-service", {"TeamCopy": sent}),
+        ("documents-service", {"TeamCopy": partial, "Draft": other}),
     ):
         (tmp_path / service).mkdir()
         (tmp_path / service / "openapi.json").write_text(json.dumps({"components": {"schemas": components}}))

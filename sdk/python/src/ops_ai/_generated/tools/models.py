@@ -414,6 +414,13 @@ class InputChanges(TypedDict, closed=True):
     removed: list[str]
 
 
+class Installed(TypedDict, closed=True):
+    changed: bool
+    copies: int
+    newerAvailable: bool
+    version: int | None
+
+
 class InvalidField(TypedDict, closed=True):
     field: str
     message: str
@@ -765,13 +772,6 @@ class RenameIn(TypedDict, closed=True):
     name: str
 
 
-class ResourceInstalled(TypedDict, closed=True):
-    changed: NotRequired[bool]
-    copies: int
-    newerAvailable: bool
-    version: int | None
-
-
 class ReviewDecisionIn(TypedDict, closed=True):
     by: NotRequired[str | None]
     decision: Literal["approved", "rejected", "returned"]
@@ -986,7 +986,7 @@ class TeamPluginIn(TypedDict, closed=True):
 
 class TemplateRequires(TypedDict, closed=True):
     bind: list[dict[str, str]]
-    resources: NotRequired[list[str]]
+    resources: list[str]
     tools: list[str]
 
 
@@ -1317,7 +1317,7 @@ class AppResource(TypedDict, closed=True):
     canRemove: NotRequired[bool]
     copy: NotRequired[CopyRef | None]
     id: str
-    installed: NotRequired[ResourceInstalled | None]
+    installed: NotRequired[Installed | None]
     kind: Literal[
         "agent",
         "skill",

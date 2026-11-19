@@ -27,7 +27,7 @@ from pydantic import Field
 
 from ops_access import Access, reader_of
 from ops_access.check import granted_by
-from ops_contracts.templates import CopyRef, ResourceKind
+from ops_contracts.templates import CopyRef, Installed, ResourceKind, TemplateRequires
 from ops_identity import Principal, ServiceCallError, ServiceClient, ServiceUnreachable
 from ops_identity.fastapi import Tx
 from ops_plugin_sdk import Plugin
@@ -50,15 +50,6 @@ class PluginRef(Out):
     id: str
     title: str
     version: str
-
-
-class TemplateRequires(Out):
-    # The operations the team's plugin module serves, `<plugin short name>_<tool>`.
-    tools: list[str]
-    # What the person names at install: `{"knowledge_base": "<what it is>"}` or `{"model_alias": "<capability>"}`.
-    bind: list[dict[str, str]]
-    # The plugin's other resources a copy cannot run without, each `<source>:<template id>` as the copy route names it.
-    resources: list[str] = Field(default_factory=list[str])
 
 
 class PluginTemplate(Out):
@@ -155,13 +146,6 @@ SERVICES: dict[str, str] = {
 KNOWLEDGE_CELL = {"area": "knowledge", "action": "edit"}
 
 
-class ResourceInstalled(Out):
-    copies: int
-    version: int | None
-    newer_available: bool
-    changed: bool = False
-
-
 class AppResource(Out):
     source: str
     plugin: PluginRef
@@ -173,7 +157,7 @@ class AppResource(Out):
     summary: str | None = None
     requires: TemplateRequires
     # The copies the team holds; None for a knowledge source, which has no single copy.
-    installed: ResourceInstalled | None = None
+    installed: Installed | None = None
     # available, added, update_available, removed_upstream (the team holds a copy the app no longer ships), or
     # needs_sign_in (a knowledge source of an app whose team account is not signed in: its syncs run as that account).
     state: State
@@ -340,7 +324,9 @@ def plugin_templates_router(host: PluginHost, copies: Copies | None = None) -> A
                             "summary": f"Keeps {s.title} pages in a knowledge base you pick, synced as they change.",
                             "state": state,
                             "copy": copy,
-                            "installed": {"copies": len(mine), "version": 1 if mine else None, "newerAvailable": False},
+                            "installed": Installed(
+                                copies=len(mine), version=1 if mine else None, newer_available=False
+                            ),
                             "canRemove": bool(mine) and removes,
                             "canAdd": may and state == "available" and off is None,
                             "reason": off

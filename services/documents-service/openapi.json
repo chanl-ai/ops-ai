@@ -2345,6 +2345,7 @@
       },
       "Installed": {
         "additionalProperties": false,
+        "description": "The live copies a team holds of one template. A copy never changes by itself.",
         "properties": {
           "changed": {
             "default": false,
@@ -3521,6 +3522,7 @@
       },
       "TemplateRequires": {
         "additionalProperties": false,
+        "description": "What a copy of a template needs before it can run.",
         "properties": {
           "bind": {
             "items": {

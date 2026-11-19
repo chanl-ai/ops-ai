@@ -25,7 +25,7 @@ from fastapi.responses import JSONResponse
 from pydantic import Field, ValidationError
 
 from ops_contracts.field_values import DEFAULT_DATE_ORDER
-from ops_contracts.templates import CopyRef
+from ops_contracts.templates import CopyRef, Installed, TemplateRequires
 from ops_documents.document_types import DocumentTypes
 from ops_documents.extraction import request_of
 from ops_documents.files import Who
@@ -61,22 +61,6 @@ class TemplatePlugin(Out):
     id: str
     title: str
     version: str
-
-
-class TemplateRequires(Reply):
-    tools: list[str]
-    bind: list[dict[str, str]]
-    resources: list[str] = Field(default_factory=list[str])
-
-
-class Installed(Reply):
-    # Live copies the team holds of this template, the newest version among them, and whether the source ships a
-    # newer one. A copy never changes by itself; updating one is a later card.
-    copies: int
-    version: int | None
-    newer_available: bool
-    # The newest live copy was made from a body other than the template's current one (its digest differs).
-    changed: bool = False
 
 
 class AddCell(Out):

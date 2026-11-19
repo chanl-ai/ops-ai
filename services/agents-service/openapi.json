@@ -11232,6 +11232,7 @@
       },
       "Installed": {
         "additionalProperties": false,
+        "description": "The live copies a team holds of one template. A copy never changes by itself.",
         "properties": {
           "changed": {
             "default": false,
@@ -11261,7 +11262,8 @@
         "required": [
           "copies",
           "version",
-          "newerAvailable"
+          "newerAvailable",
+          "changed"
         ],
         "title": "Installed",
         "type": "object"
@@ -20342,6 +20344,7 @@
       },
       "TemplateRequires": {
         "additionalProperties": false,
+        "description": "What a copy of a template needs before it can run.",
         "properties": {
           "bind": {
             "items": {
@@ -20370,7 +20373,8 @@
         },
         "required": [
           "tools",
-          "bind"
+          "bind",
+          "resources"
         ],
         "title": "TemplateRequires",
         "type": "object"

@@ -30,7 +30,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import Field, ValidationError
 
-from ops_contracts.templates import CopyRef
+from ops_contracts.templates import CopyRef, Installed, TemplateRequires
 from ops_documents_client import DocumentsClient, DocumentsRefused
 from ops_identity import ServiceCallError, ServiceUnreachable
 from ops_identity.fastapi import ActingPerson, Tx
@@ -147,23 +147,6 @@ class TemplatePlugin(Out):
     id: str
     title: str
     version: str
-
-
-class TemplateRequires(Out):
-    tools: list[str]
-    bind: list[dict[str, str]]
-    # The plugin's other resources a copy cannot run without, each `<source>:<template id>`.
-    resources: list[str] = Field(default_factory=list[str])
-
-
-class Installed(Out):
-    # Live copies the team holds of this template, the newest version among them, and whether the source ships a
-    # newer one. A copy never changes by itself.
-    copies: int
-    version: int | None
-    newer_available: bool
-    # The newest live copy was made from a body other than the template's current one (its digest differs).
-    changed: bool = False
 
 
 class AddCell(Out):

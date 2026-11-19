@@ -1423,7 +1423,10 @@ export interface components {
                 [key: string]: string;
             }[];
         };
-        /** Installed */
+        /**
+         * Installed
+         * @description The live copies a team holds of one template. A copy never changes by itself.
+         */
         Installed: {
             /**
              * Changed
@@ -1849,7 +1852,10 @@ export interface components {
             /** Version */
             version: string;
         };
-        /** TemplateRequires */
+        /**
+         * TemplateRequires
+         * @description What a copy of a template needs before it can run.
+         */
         TemplateRequires: {
             /** Bind */
             bind: {

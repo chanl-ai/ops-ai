@@ -1960,7 +1960,7 @@
           "installed": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ResourceInstalled"
+                "$ref": "#/components/schemas/Installed"
               },
               {
                 "type": "null"
@@ -6204,6 +6204,44 @@
         "title": "InputChanges",
         "type": "object"
       },
+      "Installed": {
+        "additionalProperties": false,
+        "description": "The live copies a team holds of one template. A copy never changes by itself.",
+        "properties": {
+          "changed": {
+            "default": false,
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "copies": {
+            "title": "Copies",
+            "type": "integer"
+          },
+          "newerAvailable": {
+            "title": "Neweravailable",
+            "type": "boolean"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "copies",
+          "version",
+          "newerAvailable",
+          "changed"
+        ],
+        "title": "Installed",
+        "type": "object"
+      },
       "InvalidField": {
         "additionalProperties": false,
         "properties": {
@@ -10116,42 +10154,6 @@
         "title": "RenameIn",
         "type": "object"
       },
-      "ResourceInstalled": {
-        "additionalProperties": false,
-        "properties": {
-          "changed": {
-            "default": false,
-            "title": "Changed",
-            "type": "boolean"
-          },
-          "copies": {
-            "title": "Copies",
-            "type": "integer"
-          },
-          "newerAvailable": {
-            "title": "Neweravailable",
-            "type": "boolean"
-          },
-          "version": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Version"
-          }
-        },
-        "required": [
-          "copies",
-          "version",
-          "newerAvailable"
-        ],
-        "title": "ResourceInstalled",
-        "type": "object"
-      },
       "ReviewDecisionIn": {
         "additionalProperties": false,
         "description": "A decision made in Reviews, sent by agents-service.",
@@ -12073,6 +12075,7 @@
       },
       "TemplateRequires": {
         "additionalProperties": false,
+        "description": "What a copy of a template needs before it can run.",
         "properties": {
           "bind": {
             "items": {
@@ -12101,7 +12104,8 @@
         },
         "required": [
           "tools",
-          "bind"
+          "bind",
+          "resources"
         ],
         "title": "TemplateRequires",
         "type": "object"

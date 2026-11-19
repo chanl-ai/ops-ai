@@ -921,7 +921,7 @@ class Installation(TypedDict, closed=True):
 
 
 class Installed(TypedDict, closed=True):
-    changed: NotRequired[bool]
+    changed: bool
     copies: int
     newerAvailable: bool
     version: int | None
@@ -1959,7 +1959,7 @@ class TemplatePlugin(TypedDict, closed=True):
 
 class TemplateRequires(TypedDict, closed=True):
     bind: list[dict[str, str]]
-    resources: NotRequired[list[str]]
+    resources: list[str]
     tools: list[str]
 
 

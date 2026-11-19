@@ -5,8 +5,8 @@ Status: current.
 `ops_contracts`: hand-written Pydantic models shared across the language boundary and between services. `chat.py`
 mirrors `apps/console/src/lib/types/chat.ts` (camelCase on the wire, unknown fields refused); `field_values.py` holds
 the field value types a document type and a case type share, with each type's canonical form and how much a value had
-to change to reach it; `templates.py` holds the shapes services send each other (`ServiceShape`: `CopyRef`, a team's
-copy of a template), which the sender builds and the reader reads. Package rules and test commands: [../CLAUDE.md](../CLAUDE.md); repo-wide rules:
+to change to reach it; `templates.py` holds the shapes services send each other (`ServiceShape`: `TemplateRequires`,
+`Installed` and `CopyRef`, a team's copy of a template), which the sender builds and the reader reads. Package rules and test commands: [../CLAUDE.md](../CLAUDE.md); repo-wide rules:
 [../../CLAUDE.md](../../CLAUDE.md#folder-guides).
 
 | Item | Detail |
