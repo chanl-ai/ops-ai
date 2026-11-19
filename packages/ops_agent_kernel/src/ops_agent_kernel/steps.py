@@ -386,7 +386,10 @@ def _failed(run: SkillRunState, skills: Sequence[Skill], told: list[str]) -> Non
 #    from them. A skill ended because its step's tool is held takes no hold.
 # 4. It ends when the holder passes the same step, or when the agent no longer has that version of the holder
 #    (dropped where a turn starts, in the kernel).
-# 5. A step takes no hold while its skill has one standing from that step or an earlier one.
+# 5. A step takes no hold while its skill has one standing from that step or an earlier one. Accepted limit: in a
+#    skill whose "if not" jumps forward to a step with a check of its own, that later check can fail under the
+#    earlier hold, and once the earlier step passes nothing holds the later step's write. Taking the later hold as
+#    well would let two skills lock each other for good.
 # 6. A tool that answers with an error, a skill a step could not start, and an exit the model calls take none.
 #
 # A thread cannot lock for good: a check can only fail when its tool was free, and a hold never covers that tool,
@@ -503,13 +506,17 @@ def _sub_ended(
 ) -> None:
     """A sub-skill ended: the step that started it gets its exit and results as that step's result, and the step's
     own check runs on them. A sub-skill that failed is a failed attempt of the step, and takes no hold here: a
-    check of its own that failed took one where it failed."""
+    check of its own that failed took one where it failed. So is one that left by any exit but done while a check
+    of its own is still failed: an exit does not carry the step past a check that did not pass, and the step's own
+    "if not" decides."""
     r = run.running
     assert r is not None
     r.sub = None
+    inside = f"{r.step}."
+    unpassed = any(h.skill_id == r.skill_id and h.step.startswith(inside) for h in run.holds)
     value: dict[str, JsonValue] = {"exit": name, **returns}
     check = _step(r).check
-    if name == "failed":
+    if name == "failed" or (unpassed and name != "done"):
         r.results[str(r.step)] = _kept(value, False)
         _failed(run, skills, told)
         return

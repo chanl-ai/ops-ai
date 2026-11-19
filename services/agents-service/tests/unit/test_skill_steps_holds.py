@@ -82,6 +82,8 @@ LOOK_NOTE_PAY: Call = ("switch_skill", {"slug": "look-note-pay"})
 RUNS_LOOK: Call = ("switch_skill", {"slug": "runs-look"})
 CONFIRM_NO: Call = ("switch_skill", {"slug": "confirm-then-pay", "inputs": {"ok": "no"}})
 RUNS_SORRY: Call = ("switch_skill", {"slug": "runs-sorry"})
+RUNS_LOOK_PAY: Call = ("switch_skill", {"slug": "runs-look-then-pay"})
+LOOK_THEN_NOTE: Call = ("switch_skill", {"slug": "look-then-note-pay"})
 GIVE_UP: Call = ("exit", {"name": "failed"})
 DONE: Call = ("step_done", {})
 PLACE: Call = ("place_hold", {})
@@ -188,6 +190,21 @@ def book(if_not: dict[str, Any], version: int = 1) -> list[Skill]:
                 {"do": "Note it.", "use": {"kind": "tool", "id": "add_note"}},
             ),
         ),
+        stepped(
+            "sk_look_or_escalate",
+            1,
+            "Look or escalate",
+            "look-or-escalate",
+            program({**looked, "ifNot": {"action": "retry", "retries": 1}}, exit={"escalate": "Hand it to a person."}),
+        ),
+        stepped(
+            "sk_runs_look_pay",
+            1,
+            "Runs look then pay",
+            "runs-look-then-pay",
+            program({"do": "Look.", "use": {"kind": "skill", "id": "sk_look_or_escalate"}, "ifNot": once}, paid),
+        ),
+        stepped("sk_look_then_note", 1, "Look then note pay", "look-then-note-pay", program(looked, noted, paid)),
     ]
 
 
@@ -355,8 +372,35 @@ THREADS = [
         [],
         "refund_charge is held because confirm-then-pay failed its check; start confirm-then-pay again.",
     ),
+    Thread(
+        "a skill a step runs fails its check with a retry left, then leaves through an exit it lists",
+        [[RUNS_LOOK_PAY, look("CH-1"), ("exit", {"name": "escalate"}), refund("CH-1")], [refund("CH-1")]],
+        ["lookup_charge"],
+    ),
+    Thread(
+        "two failures in two runs: passing the earlier step leaves the later hold",
+        [
+            [LOOK_THEN_NOTE, look("CH-2"), note("CH-1")],
+            [LOOK_THEN_NOTE, look("CH-1")],
+            [LOOK_THEN_NOTE, look("CH-2")],
+            [PAY, refund("CH-2")],
+        ],
+        ["lookup_charge", "add_note", "lookup_charge", "lookup_charge"],
+        "refund_charge is held because look-then-note-pay failed its check; start look-then-note-pay again.",
+    ),
+    Thread(
+        "a forward jump does not lock: once the holder passes its first step, the other skill runs",
+        [
+            [LOOK_NOTE_PAY, look("CH-1"), note("CH-1")],
+            [NOTE_PAY, note("CH-2")],
+            [LOOK_NOTE_PAY, look("CH-2")],
+            [NOTE_PAY, note("CH-2"), refund("CH-2")],
+        ],
+        ["lookup_charge", "add_note", "lookup_charge", "add_note", "refund_charge"],
+        "add_note is held because look-note-pay failed its check; start look-note-pay again.",
+    ),
     # Rule 5: a step takes no hold while its skill has one standing from an earlier step. Once the earlier step
-    # passes, nothing is left of the later step's failure.
+    # passes, nothing is left of the later step's failure: an accepted limit, the price of never locking.
     Thread(
         "a later step fails while an earlier hold stands",
         [[LOOK_NOTE_PAY, look("CH-1"), note("CH-1")], [LOOK_NOTE_PAY, look("CH-2")], [PAY, refund("CH-2")]],
