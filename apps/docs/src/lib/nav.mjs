@@ -56,6 +56,9 @@ export const SITE = [
         entries: [
           { page: 'guide/use-cases/card-disputes.md', title: 'Card disputes', icon: 'credit-card' },
           { page: 'guide/use-cases/chat-and-human-tasks.md', title: 'Start the day from chat', icon: 'message-square' },
+          { page: 'guide/use-cases/answer-from-documents.md', title: 'Answer from your documents', icon: 'library' },
+          { page: 'guide/use-cases/approve-a-write.md', title: 'Hold a write for approval', icon: 'hand' },
+          { page: 'guide/use-cases/connect-an-app.md', title: 'Connect an app to an agent', icon: 'plug-zap' },
           { page: 'guide/build-with-ops-ai.md', icon: 'blocks' },
           { page: 'guide/build-your-first-tool.md', icon: 'wrench' },
         ],
@@ -65,8 +68,16 @@ export const SITE = [
         icon: 'plug',
         open: true,
         entries: [
-          { page: 'guide/plugins-install.md', icon: 'package-plus' },
-          { page: 'guide/plugins.md', icon: 'puzzle' },
+          { page: 'guide/integrations/overview.md', title: 'Integrations', icon: 'plug' },
+          { page: 'guide/integrations/salesforce.md', title: 'Salesforce', icon: 'cloud' },
+          { page: 'guide/integrations/github.md', title: 'GitHub', icon: 'github' },
+          { page: 'guide/integrations/sharepoint.md', title: 'SharePoint and OneDrive', icon: 'folder-open' },
+          { page: 'guide/integrations/confluence.md', title: 'Confluence', icon: 'book-open-text' },
+          { page: 'guide/integrations/website.md', title: 'Website', icon: 'globe' },
+          { page: 'guide/integrations/sign-in-oauth.md', title: 'Sign in with OAuth', icon: 'log-in' },
+          { page: 'guide/integrations/sign-in-keys.md', title: 'Sign in with a key or password', icon: 'key-round' },
+          { page: 'guide/integrations/sign-in-certificates.md', title: 'Sign in with a certificate', icon: 'file-badge' },
+          { page: 'guide/integrations/build-a-plugin.md', title: 'Build a plugin', icon: 'package-plus' },
         ],
       },
     ],
@@ -115,6 +126,7 @@ export const SITE = [
         open: true,
         entries: [
           { page: 'guide/operate.md', title: 'Upgrade, back up and monitor', icon: 'activity' },
+          { page: 'guide/plugins-install.md', title: 'Install and pin plugins', icon: 'package-plus' },
           { page: 'deploy/security-scanning.md', title: 'Security scanning', icon: 'scan-search' },
           { page: 'guide/support.md', icon: 'life-buoy' },
         ],
@@ -147,6 +159,7 @@ export const SITE = [
     public: true,
     groups: [
       { group: 'Start here', icon: 'flag', open: true, entries: [{ page: 'reference.md', title: 'Reference', icon: 'braces' }] },
+      { group: 'Plugins', icon: 'puzzle', entries: [{ page: 'guide/plugins.md', title: 'Plugin manifest reference', icon: 'puzzle' }] },
       {
         group: 'HTTP API',
         icon: 'globe',
