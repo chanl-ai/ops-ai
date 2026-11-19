@@ -32,6 +32,11 @@ class AddCell(TypedDict, closed=True):
     area: str
 
 
+class AddReference(TypedDict, closed=True):
+    id: str
+    kind: Literal["tool", "knowledge", "skill", "agent", "workflow"]
+
+
 class AgentControls(TypedDict, closed=True):
     channels: list[Literal["voice", "chat", "email", "api"]]
     evals: bool
@@ -87,6 +92,14 @@ class AgentSkillPin(TypedDict, closed=True):
     upgradeAvailable: bool
     upgradeBlocked: NotRequired[str | None]
     useWhen: str
+
+
+class AgentUses(TypedDict, closed=True):
+    agents: NotRequired[int]
+    knowledgeBases: NotRequired[int]
+    skills: NotRequired[int]
+    tools: NotRequired[int]
+    workflows: NotRequired[int]
 
 
 class AgentUsing(TypedDict, closed=True):
@@ -251,6 +264,28 @@ class BoundWorkflow(TypedDict, closed=True):
     id: str
     name: str
     version: int
+
+
+NeverItem: TypeAlias = str
+
+
+Succes: TypeAlias = str
+
+
+class Brief(TypedDict, closed=True):
+    goal: NotRequired[str]
+    howToAnswer: NotRequired[str]
+    never: NotRequired[list[NeverItem]]
+    purpose: str
+    success: NotRequired[list[Succes]]
+
+
+class BriefView(TypedDict, closed=True):
+    goal: NotRequired[str]
+    howToAnswer: NotRequired[str]
+    never: NotRequired[list[str]]
+    purpose: str
+    success: NotRequired[list[str]]
 
 
 class BudgetCaps(TypedDict, closed=True):
@@ -1207,6 +1242,16 @@ class Pagination(TypedDict, closed=True):
     totalPages: int
 
 
+class Patterns(TypedDict, closed=True):
+    parallelReads: NotRequired[bool]
+    thinking: NotRequired[Literal["default", "low", "medium", "high"]]
+
+
+class PatternsView(TypedDict, closed=True):
+    parallelReads: NotRequired[bool]
+    thinking: NotRequired[Literal["default", "low", "medium", "high"]]
+
+
 class PauseInput(TypedDict, closed=True):
     paused: bool
 
@@ -1654,9 +1699,6 @@ class SkillCitation(TypedDict, closed=True):
     kind: Literal["document", "case", "run", "chat", "template", "description"]
     label: str
     section: str
-
-
-Succes: TypeAlias = str
 
 
 class SkillInput(TypedDict, closed=True):
@@ -2507,6 +2549,7 @@ class AgentLimits(TypedDict, closed=True):
 class AgentPatch(TypedDict, closed=True):
     accounts: NotRequired[dict[str, str] | None]
     allTeamKnowledgeBases: NotRequired[bool | None]
+    brief: NotRequired[Brief | None]
     channels: NotRequired[list[Literal["voice", "chat", "email", "api"]] | None]
     collections: NotRequired[list[str] | None]
     guardrailPins: NotRequired[list[GuardrailPinInput] | None]
@@ -2517,6 +2560,8 @@ class AgentPatch(TypedDict, closed=True):
     model: NotRequired[str | None]
     name: NotRequired[str | None]
     note: NotRequired[str | None]
+    patterns: NotRequired[Patterns | None]
+    promptMode: NotRequired[Literal["brief", "full"] | None]
     protection: NotRequired[Literal["system", "managed"] | None]
     role: NotRequired[str | None]
     skillMenu: NotRequired[Literal["team", "attached", "off"] | None]
@@ -2524,6 +2569,11 @@ class AgentPatch(TypedDict, closed=True):
     toolIds: NotRequired[list[str] | None]
     widgetPins: NotRequired[list[WidgetPinInput] | None]
     widgets: NotRequired[WidgetSettings | None]
+
+
+class AgentPublishCheck(TypedDict, closed=True):
+    canRequest: bool
+    problems: NotRequired[list[PublishBlocker]]
 
 
 class AgentPublishRequest(TypedDict, closed=True):
@@ -2847,6 +2897,11 @@ class EngineRunStep(TypedDict, closed=True):
     output: JsonValue
     port: str | None
     status: str
+
+
+class EnvelopeAgentPublishCheck(TypedDict, closed=True):
+    data: AgentPublishCheck
+    success: Literal[True]
 
 
 class EnvelopeAgentSkills(TypedDict, closed=True):
@@ -3433,6 +3488,11 @@ class ReadRecord(TypedDict, closed=True):
     values: dict[str, JsonValue]
 
 
+class ReferenceAdded(TypedDict, closed=True):
+    added: list[ReferenceItem]
+    agentVersion: int
+
+
 class ReferenceGroup(TypedDict, closed=True):
     items: list[ReferenceItem]
     kind: Literal["tool", "knowledge", "skill", "agent", "workflow"]
@@ -3773,6 +3833,7 @@ class Agent(TypedDict, closed=True):
     allTeamKnowledgeBases: NotRequired[bool]
     autoResolvedRate: float
     availability: Literal["published", "not_published", "paused"]
+    brief: NotRequired[BriefView | None]
     canDelete: NotRequired[bool | None]
     canEdit: NotRequired[bool | None]
     canPublish: NotRequired[bool | None]
@@ -3787,7 +3848,9 @@ class Agent(TypedDict, closed=True):
     memory: NotRequired[MemorySettings]
     model: str
     name: str
+    patterns: NotRequired[PatternsView]
     paused: bool
+    promptMode: NotRequired[Literal["brief", "full"] | None]
     protection: NotRequired[Literal["system", "managed"] | None]
     publishedVersion: int | None
     role: str
@@ -3801,6 +3864,7 @@ class Agent(TypedDict, closed=True):
     toolIds: list[str]
     updatedAt: str
     usedIn: list[UsedIn]
+    uses: NotRequired[AgentUses]
     version: int
     widgetPins: NotRequired[list[WidgetPin]]
     widgets: NotRequired[WidgetSettings]
@@ -4008,6 +4072,11 @@ class EnvelopePublicForm(TypedDict, closed=True):
 
 class EnvelopePublishReview(TypedDict, closed=True):
     data: PublishReview
+    success: Literal[True]
+
+
+class EnvelopeReferenceAdded(TypedDict, closed=True):
+    data: ReferenceAdded
     success: Literal[True]
 
 

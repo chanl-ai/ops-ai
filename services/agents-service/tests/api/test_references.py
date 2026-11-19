@@ -20,7 +20,7 @@ RECALL: dict[str, Any] = {
     "instructions": "Confirm the wire, then ask the payments desk to recall it.",
     "ownerTeam": "Retail",
 }
-LATER = pytest.param("insert", marks=pytest.mark.skip(reason="waits on the rename PRs"))
+LATER = "insert"
 
 
 async def _skill(c: AsyncClient, name: str, who: dict[str, str], *, publish: bool = True) -> str:
