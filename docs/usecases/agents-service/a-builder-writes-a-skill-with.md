@@ -30,8 +30,9 @@ with a read and a write on a mock bank, published for the team, and platform sig
 | S1 | A builder saves something else on an agent written before the brief, and its prompt stays as it was | api | 1 | 1 |
 | S2 | A builder writes a brief, and the agent cannot publish until what the brief mentions is added | api | 2, 3, 4, 5 | 3 |
 | S3 | A person chats, and each reply goes on from the step the last one reached | api | 6 | 6 |
-| S4 | A developer does the same through the Python SDK and through `opsai` | sdk, cli | 7, 8, 9 | 8 |
-| S5 | A builder types `@` on the agent page, adds a tool, and the test chat shows the step | ui | 10 and up | the ui script's `@` insert check |
+| S4 | A developer does the same through the Python SDK | sdk | 7, 8 | 8 |
+| S5 | A developer does the same from files through `opsai` | cli | 9 | 9 |
+| S6 | A builder types `@` on the agent page, adds a tool, and the test chat shows the step | ui | 10, 12, 13, 17 | 13 |
 
 ## Preconditions
 
@@ -53,7 +54,10 @@ with a read and a write on a mock bank, published for the team, and platform sig
 | 7 | The SDK creates and publishes the two skills | The stored steps run a tool, a skill and a tool, and the first check is a rule |
 | 8 | The SDK applies an agent definition with a brief, asks the publish check, adds the tool and the skill, publishes | One problem before, none after, and the agent is live |
 | 9 | `opsai skills apply` and `publish`, `opsai agents apply`, `publish-check`, `add-reference`, `publish` | The same result from files, with the publish waiting for review or live |
-| 10 and up | On the agent page James types `@`, picks a tool the agent lacks, and opens the test chat | The page says what the insert adds, the save lands, and the test chat shows the skill and its step |
+| 10 | James opens the three-step skill in the console | The page draws the three steps as one document |
+| 12 | On the agent page James types `@` in the brief | The menu lists a tool the agent lacks and says what picking it adds |
+| 13 | James picks the tool | The tool is added to the agent and the brief saves |
+| 17 | James opens the test chat | The panel shows the skill and the step it is on |
 
 ## Acceptance layers
 
