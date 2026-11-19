@@ -16,8 +16,11 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator, m
 from pydantic.alias_generators import to_camel
 
 RefKind = Literal["tool", "knowledge", "skill", "agent", "workflow"]
-# A reference as it is written inside text: `@tool:lookup_customer`.
-REF_TOKEN = re.compile(r"@(tool|knowledge|skill|agent|workflow):([A-Za-z0-9][A-Za-z0-9_.-]{0,127})")
+# An id ends in a letter, digit or underscore, so the full stop after "with @tool:open_dispute." is text.
+REF_ID = r"[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9_])?"
+# A reference as it is written inside text: `@tool:lookup_customer`. It does not start after a letter, digit,
+# underscore or `@` (an email address is not one). The console's editor reads text by the same rule.
+REF_TOKEN = re.compile(rf"(?<![\w@])@(tool|knowledge|skill|agent|workflow):({REF_ID})")
 EXIT_NAME = r"^[a-z][a-z0-9_]{0,31}$"
 # Every skill with steps can end as one of these without declaring it.
 BUILT_IN_EXITS = ("done", "failed")
@@ -40,7 +43,7 @@ class Ref(RunModel):
     agent or a workflow is named by its bare id; a grant stores them as `agent:<id>` and `workflow:<id>`."""
 
     kind: RefKind
-    id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+    id: str = Field(pattern=rf"^{REF_ID}$")
 
     @property
     def token(self) -> str:

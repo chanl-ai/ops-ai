@@ -15020,7 +15020,7 @@
         "description": "Something a text or a step names: a tool, a knowledge base, a skill, an agent or a workflow, by its id. An\nagent or a workflow is named by its bare id; a grant stores them as `agent:<id>` and `workflow:<id>`.",
         "properties": {
           "id": {
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9_])?$",
             "title": "Id",
             "type": "string"
           },
@@ -15076,7 +15076,7 @@
         "additionalProperties": false,
         "properties": {
           "id": {
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9_])?$",
             "title": "Id",
             "type": "string"
           },
