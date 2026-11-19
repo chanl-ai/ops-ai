@@ -113,7 +113,8 @@ await withUiStack(
       await page.waitForTimeout(800);
       await page.getByTestId('skill-document').getByRole('group', { name: 'Step 3' }).click();
       await page.keyboard.press('End');
-      await page.keyboard.type(' Then thank them.');
+      // One insert, as a paste is: the check is about what Reload keeps, not about key-by-key typing.
+      await page.keyboard.insertText(' Then thank them.');
       await made(`/v1/skills/${skill.id}/publish-requests`, { note: 'use case' });
       await made(`/v1/skills/${skill.id}/draft`, { name: `Card dispute renamed ${RUN}`, baseVersion: 1 }, 'PUT');
       await page.getByTestId('save-skill-draft').click();
