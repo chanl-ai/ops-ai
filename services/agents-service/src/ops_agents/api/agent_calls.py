@@ -178,7 +178,10 @@ class AgentCalls:
         path: list[JsonValue] = [*chain.path]
         base: Json = {"agent": callee.id, "agentName": callee.name, "path": path}
         usage = self.rt.usage
-        if usage is not None and await usage.exhausted(parent_thread_id) is not None:
+        # A call whose specialist already has a thread is a replay or a resume: it reads that thread's outcome and
+        # starts no turn, so the budget does not hold it back.
+        begun = await store.thread_by_key(f"tool:{key}") is not None
+        if not begun and usage is not None and await usage.exhausted(parent_thread_id) is not None:
             # The specialist would spend from the asking thread's budget, which is spent: it runs no turn, and the
             # asking agent goes on with what it has. Checked here only, so a specialist resumed after an approval
             # still finishes the call a person approved.

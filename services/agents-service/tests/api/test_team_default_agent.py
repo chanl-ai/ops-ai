@@ -272,6 +272,21 @@ async def test_a_specialist_spends_the_callers_budget_and_stops_when_it_is_spent
         spent = (await rt.usage.totals(thread)).calls
         # The caller's two model calls and the specialist's one, counted once, on the caller's thread.
         assert (first["status"], spent) == ("answered", 3), (first, spent)
+        # The same call replayed once the budget is spent returns the answer its specialist already gave.
+        assert rt.graph_store is not None
+        asked = await rt.graph_store.thread_row(first["threadId"])
+        assert asked is not None and asked.external_key is not None
+        with acting_for(viewer()):
+            again = (
+                await AgentCalls(rt).run(
+                    agent="ag_dispute",
+                    arguments={"question": "x"},
+                    key=asked.external_key.removeprefix("tool:"),
+                    parent_thread_id=thread,
+                    parent_run_id=None,
+                )
+            ).output
+        assert (again["status"], again.get("threadId")) == ("answered", first["threadId"]), again
         # A second agent asked once the chain's budget is spent runs no turn; the caller is told and goes on.
         with acting_for(viewer()):
             second = (
