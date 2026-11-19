@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { buttonVariants } from '@/components/ui/button';
 import { useLeaveGuard } from '@/hooks/use-leave-guard';
+import { cn } from '@/lib/utils';
 
 /**
  * Holds a person on a page while it has text a save has not stored. A link to another console page opens a dialog
@@ -46,9 +47,9 @@ export function LeaveGuard({ unsaved, failed }: { unsaved: boolean; failed?: boo
           <AlertDialogDescription>{failed ? 'Your last change couldn’t be saved. Leaving now loses it.' : 'Your changes are not saved. Leaving now loses them.'}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel data-testid="leave-guard-keep">Keep editing</AlertDialogCancel>
           <AlertDialogAction
-            className={buttonVariants({ variant: 'destructive' })}
+            // The action's own style sets a light text colour the outline style does not replace.
+            className={cn(buttonVariants({ variant: 'outline' }), 'text-foreground')}
             data-testid="leave-guard-discard"
             onClick={() => {
               if (to !== null) router.push(to);
@@ -56,6 +57,10 @@ export function LeaveGuard({ unsaved, failed }: { unsaved: boolean; failed?: boo
           >
             Discard changes
           </AlertDialogAction>
+          {/* The dialog opens with this button in focus, so Enter stays on the page. */}
+          <AlertDialogCancel className={buttonVariants()} data-testid="leave-guard-keep">
+            Keep editing
+          </AlertDialogCancel>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
