@@ -30,6 +30,7 @@ Each page opens with the problem it solves and says what is built. Images sit be
 
 | Path | Topic |
 |---|---|
+| `design/README.md` | Index of design proposals and research |
 | `design/workflows/workflows-and-agents.md` | Agents and workflows as two ways of running work on shared services: stories, entities, state machines, the run, review and trigger APIs, the Node SDK, capability packs, portability, scale, security and the slice plan |
 | `design/workflows/workflow-nodes.md` | Node types and instances, typed ports, the catalogue, files owning reading, the court order notice as a worked example, and the runner options weighed |
 | `design/workflows/canvas.md` | The workflow canvas mock the editor is built to: step list, step sheets, checks, shortcuts, themes and phone width |
@@ -76,7 +77,7 @@ names it or a folder it takes whole, and a page it does not place fails the site
 
 | Reader | Read in this order |
 |---|---|
-| Engineer | `background/problem-statement.md` → `architecture/README.md` → `architecture/service-map.md` → the topic spec for the area you work on → `plan/implementation-plan.md` |
+| Engineer | `background/problem-statement.md` → `architecture/README.md` → `architecture/service-map.md` → the topic spec for the area you work on → `contributing.md` |
 | Architect | `background/problem-statement.md` → `architecture/enterprise-architecture.md` → `architecture/platform-choices.md` (the current choice per area; `architecture/decisions/` keeps the options behind each) → [tool system design](design/tools/tool-system.md) → `architecture/service-map.md` |
 | Risk reviewer | `background/problem-statement.md` → `architecture/enterprise-architecture.md` → `architecture/delivery.md` (what is proven, open questions) → [ADR-0012 Assurance: governance and testing as one system](architecture/decisions/assurance.md) → ADR-0005 |
 
@@ -138,18 +139,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `architecture/standards/security.md` | Standards: security (`SC1` to `SC6`): two gateways, audit in the same transaction, write-only secrets, dependencies, nothing committed that identifies a customer |
 | `architecture/standards/testing.md` | Standards: tests (`TS1` to `TS8`): failure modes first, a budget per change, seen failing once, public seams, use cases per layer |
 | `architecture/standards/delivery.md` | Standards: delivery, deploy and upgrade (`DL1` to `DL9`): branch and pull request, one gate, a separate reviewer, staging on every merge, proven upgrades |
-| `architecture/migration/README.md` | The migration to the standards: goal, phases, sizes and calendar, what is replaced and kept, the rules every lane follows, how to verify |
-| `architecture/migration/components.md` | Phase 0: the eight shared components, their files, target interfaces, three builder tracks, checks and branches |
-| `architecture/migration/pilot.md` | Phase 1: documents, files, models and runner on every component; the coverage gap measured and published |
 | `architecture/migration/api-changes.md` | Every API change the migration makes, per service, with what a caller must change; read by the console and SDK steps |
-| `architecture/migration/baseline-rises.md` | Every exception list (baseline) that holds more rows on the migration branch than on develop, with counts; the work list for bringing them down |
-| `architecture/migration/lane-platform.md` | Phase 2: platform-service's store and request layers replaced wholesale; the page shell as one call |
-| `architecture/migration/lane-kb.md` | Phase 2: kb-service's four lists in SQL, typed rows, the `kb.changed` event |
-| `architecture/migration/lane-tools.md` | Phase 2: tools-service's sixteen tables policed, hand filters onto `team_visible()`, the catalogue events |
-| `architecture/migration/lane-agents.md` | Phase 2: agents-service's 43 store files on the base, 21 tables policed, lists and labels in SQL from local copies |
-| `architecture/migration/agents-registry-tenancy.md` | The agents registry, graph version and channel tables: where each row's tenant comes from, key changes, the two migrations |
-| `architecture/migration/lane-console.md` | Phase 3: the console's data layer onto the list contract and the fields the lanes return |
-| `architecture/migration/test-pruning.md` | Where the service test suites spend time, parallel runs, and every test deleted as redundant with its surviving cover |
 | `architecture/definitions-and-versions.md` | Draft to publish, pointers, the pin per thread, what happens without it, migrate |
 | `architecture/durability-failure-and-audit.md` | Leases, sweeper, fencing, re-execution, idempotency, side-effect classes, journal, checkpoint growth and pruning |
 | `architecture/data.md` | How data is stored: the store rules, the generated inventory of every repository and its tables, the databases and their isolation, the checkpointer, retention and growth |
@@ -182,10 +172,8 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `architecture/decisions/fencing-and-timers.md` | Fencing the thread by lease generation; timers as a port with a fire endpoint; Temporal tests before a Temporal adapter |
 | `architecture/decisions/database-support.md` | ADR-0017, decided: PostgreSQL and SQL Server 2025 (Azure SQL first in intent), MySQL dropped, and the rule every change follows |
 | `architecture/decisions/template-copy-updates.md` | ADR-0018, proposed: a team's copy of a template takes updates field by field against a stored base, never rewriting a published version |
-| `plan/implementation-plan.md` | Phases, teams, workstreams, stop condition |
 | `console/chat.md` | Chat: the AI Elements blocks behind chat-blocks.tsx, untrusted replies, widget shapes and the registry, x-ops-shape, adding data not components |
 | `console/agents-and-workflows.md` | User guide: what an agent is made of, chatting, agents as workflow steps, workflows as tools, when to use which |
-| `plan/banker-demo.md` | Banker demo stage scripts: the court order notice from the fake mailbox to a held account, and the two agents answering from seeded knowledge bases; before-the-room checks, model switch, failure tables |
 | `deploy/fly.md` | Ops AI on Fly: one app per image in your Fly org, the shared Postgres, creating, deploying, connecting the model, logs, rolling back and the monthly cost |
 | `deploy/database.md` | The database for a DBA: roles and who runs what, the baseline for a fresh install, guarded upgrades between releases, drift, the start check, roll back and the proof |
 | `deploy/kubernetes.md` | Ops AI on Kubernetes: the Kustomize base per service and overlays, probes, per-service Secrets, the migrate Job, an outside PostgreSQL, install, upgrade and the kind proof |
@@ -243,15 +231,12 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `console/page-plan.md` | Console pages and the rules every page follows |
 | `console/standards.md` | Console UI standard: tokens, layout primitives, compose-from-shadcn, designed states, responsive, one-screen create, and the review checks |
 | `console/ui-qa.md` | UI QA pass: one section at a time in a browser, checking what works, how easy it is and how it looks, with a findings table |
-| `console/channels-preview.md` | The channels design mock at /preview/channels: the gallery, every connection, connect a mailbox as a page and a dialog, the trigger sheet that picks it, and the server routes the real build needs |
 | `console/approved/channels/README.md` | The approved Channels screens, at 1280 and 400 px, which the real pages are built to |
 | `console/approved/human-tasks/README.md` | The approved Human Tasks queue and task screens (layout A), at 1280 and 400 px, which /reviews is built to |
 | `console/proposed/files/README.md` | The file page and Extract screens, at 1280 and 400 px, waiting for approval |
-| `console/proposed/reuse-c266/README.md` | Start run, run and case pages before and after a change, side by side |
 | `console/proposed/tasks/README.md` | The Human Task page beside wireframes A and B of the v2 design, at 1280 and 400 px, waiting for approval |
 | `console/proposed/table-columns/README.md` | The shared data table's columns sized by kind, before beside after for Workflows, Runs, Files and Members at 1280 and 400 px |
 | `console/proposed/run-status/README.md` | Run status from where a run ended and from the runs it started: failed and waiting runs before beside after, and the End step's Counts as, at 1280 and 400 px |
-| `console/settings-tree.md` | The settings tree design mock at /preview/settings: the pages, the patterns, the dialogs with their mother pages, and the field kit |
 | `console/strategy.md` | Console strategy: thin UI over a generated SDK, per-page audit with verdicts, the agentic core slice, chat on the thread calls, what to stop |
 | `console/tools-design.md` | Design of the tool module screens |
 | `console/embedding-the-chat.md` | How a bank embeds the chat: widget deployment, the bank's session endpoint, the script tag, events, errors, security properties and a local test (built and planned parts marked) |
@@ -506,6 +491,7 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `usecases/tools-service/an-app-that-fails-says-why.md` | uc-617: An app that fails says why: an expired account, a run waiting for a person's account, an unknown host |
 | `usecases/tools-service/turning-an-app-off-names-its.md` | uc-618: Turning an app off names its users, a leaver loses their accounts, and Replace rotates a key |
 | `usecases/agents-service/a-new-team-s-assistant-answers.md` | uc-619: A new team's assistant answers from its knowledge and files |
+| `packages/README.md` | Index of the shared libraries that have a page |
 | `packages/usecase-runner/overview.md` | Use case runner: modules, verdict, exit codes, tests |
 | `architecture/dependencies.md` | Every third-party Python package in the lock, and each service's, with version, licence, native code and network behaviour (generated by `make sbom`, checked by `make verify`) |
 | `diagrams/README.md` | The architecture diagrams: one YAML data file each, the SVG exported from it for GitHub, and the data format the docs site draws them from |
@@ -560,9 +546,6 @@ Start at `architecture/README.md`; it gives the map, one request end to end and 
 | `guide/whats-new.md` | What's new: every change a person would notice, newest first, built from the changelog |
 | `guide/use-cases/card-disputes.md` | Use case: card disputes, from the request to the approved credit, with SDK code |
 | `guide/use-cases/chat-and-human-tasks.md` | Use case: start the day from the chat home and decide Human Tasks, with SDK code |
-| `plan/implementation-plan.md` |
-| `plan/ai-gateway-console.md` | AI gateway console feature: prior art, placement under Govern, pages, contract, open questions (plan only) |
-| `plan/agent-completions-through-models-service.md` | Agent turns on their own alias through models-service: what exists, what changes, uc-028, decisions, slices (research note) |
 
 File names are topics. Specs keep their number (01–17; 05 and 06 unused) and decision records their ADR id in the
 title, so cross-references such as "spec 03 5.2" or "ADR-0005" still resolve.
