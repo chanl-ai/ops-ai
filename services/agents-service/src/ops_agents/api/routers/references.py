@@ -26,6 +26,7 @@ from ...activities.tool_directory import ToolsUnavailable
 from ...app import references
 from ...app.references import Candidate, Context, SkillNeeds
 from ...app.skill_content import runs_of
+from ...store.agent_registry import digest_of
 from ..agent_registry import AgentSpec
 from ..agent_registry import registry as agent_registry
 from ..auth import Principal, caller_of, principal
@@ -211,7 +212,7 @@ async def add_reference(rt: Rt, me: Me, agent_id: str, body: AddReference) -> JS
 
     403 `forbidden` without agents: edit in the agent's team or the view right of the reference's area; 422
     `unknown_reference` for something the team does not offer; 422 `not_published` for a skill, agent or workflow
-    that is not live."""
+    that is not live; 409 `stale_base` when the draft was saved while this ran (read the agent again and repeat)."""
     async with isolation.request_transaction():
         row = await changeable(rt, me, agent_id, "edit")
         team = row.team_id or me.team_id or None
@@ -219,6 +220,9 @@ async def add_reference(rt: Rt, me: Me, agent_id: str, body: AddReference) -> JS
         can(caller_of(me), area, "view", team=team, what=f"the team's {area}", code="forbidden")
         reg = agent_registry(rt)
         spec: Json = dict((await reg.version(agent_id, row.version)).spec)
+        # What the grant is added to. A brief autosave landing before the save below would be written over, so the
+        # save names this and is refused (409 `stale_base`) when the draft has moved on.
+        base = (row.version, digest_of(spec))
         held = _held(spec)
         needs: dict[str, SkillNeeds] = {}
         versions: dict[str, int] = {}
@@ -259,7 +263,7 @@ async def add_reference(rt: Rt, me: Me, agent_id: str, body: AddReference) -> JS
                 raise Unprocessable(str(exc), code="unknown_reference") from exc
             spec["skillPins"] = cast(JsonList, [*pins])
         label = labels.get((body.kind, body.id), body.id)
-        version = await reg.save(agent_id, spec, by=me.email, note=f"Added {label}")
+        version = await reg.save(agent_id, spec, by=me.email, note=f"Added {label}", base=base)
     log.info("agent_reference_added", agent=agent_id, kind=body.kind, id=body.id, by=me.email)
     added = [references.granted(Candidate(k, i, labels.get((k, i), i))) for k, i in adding]
     return ok({"added": added, "agentVersion": version})

@@ -46,7 +46,9 @@ export function useReferenceLabels(context: ReferenceContext, ids: string[]) {
 export function useAddReference(agentId: string) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (ref: Ref) => api.references.add(agentId, ref),
+    // The brief saves itself, so its save can land while the grant is being added; the service then refuses the grant
+    // (409 stale_base) and reads the newer draft on the next call, which is made once.
+    mutationFn: (ref: Ref) => api.references.add(agentId, ref).catch((e: { code?: string }) => (e.code === 'stale_base' ? api.references.add(agentId, ref) : Promise.reject(e))),
     onSuccess: () => Promise.all([client.invalidateQueries({ queryKey: ['agent'] }), client.invalidateQueries({ queryKey: ['agents'] }), client.invalidateQueries({ queryKey: REFERENCES })]),
   });
 }

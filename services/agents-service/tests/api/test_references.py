@@ -8,6 +8,7 @@ from typing import Any, cast
 import pytest
 from httpx import AsyncClient
 
+from ops_agents.api.routers import references as route
 from tests.api.test_widget_embed import BUILDER, OUTSIDER, VIEWER
 from tests.api.test_widget_route_pins import client  # pyright: ignore[reportPrivateUsage]
 
@@ -41,7 +42,9 @@ def _listed(r: Any) -> dict[str, str]:
 
 
 @pytest.mark.parametrize("half", ["search", LATER])
-async def test_references_stay_inside_the_team_and_an_insert_grants_once(client: AsyncClient, half: str) -> None:
+async def test_references_stay_inside_the_team_and_an_insert_grants_once(
+    client: AsyncClient, half: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     c = client
     ours = await _skill(c, "Wire recall steps", BUILDER)
     draft = await _skill(c, "Wire recall follow-up", BUILDER, publish=False)
@@ -86,3 +89,19 @@ async def test_references_stay_inside_the_team_and_an_insert_grants_once(client:
     assert (unpublished.status_code, unpublished.json()["error"]["code"]) == (422, "not_published"), unpublished.text
     viewer = await c.post(url, json={"kind": "tool", "id": "lookup_account"}, headers=VIEWER)
     assert viewer.status_code == 403, viewer.text
+
+    # A save that lands while the insert asks another service is not written over: the insert is refused.
+    emptied = await c.patch(f"/v1/agents/{AGENT}", json={"collections": []}, headers=BUILDER)
+    assert emptied.status_code == 200, emptied.text
+    asks = getattr(route, "check_knowledge")  # noqa: B009  imported there under this name, not exported
+
+    async def saved_meanwhile(*args: Any, **more: Any) -> Any:
+        renamed = await c.patch(f"/v1/agents/{AGENT}", json={"name": "Renamed meanwhile"}, headers=BUILDER)
+        assert renamed.status_code == 200, renamed.text
+        return await asks(*args, **more)
+
+    monkeypatch.setattr(route, "check_knowledge", saved_meanwhile)
+    raced = await c.post(url, json={"kind": "knowledge", "id": "kb_people"}, headers=BUILDER)
+    assert (raced.status_code, raced.json().get("error", {}).get("code")) == (409, "stale_base"), raced.text
+    kept = (await c.get(f"/v1/agents/{AGENT}", headers=BUILDER)).json()["data"]
+    assert kept["name"] == "Renamed meanwhile" and "kb_people" not in kept["collections"], kept

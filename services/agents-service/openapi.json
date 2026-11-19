@@ -31188,7 +31188,7 @@
     },
     "/v1/agents/{agent_id}/references": {
       "post": {
-        "description": "Grants the agent what its brief mentions, as one new draft version: a tool, an agent or a workflow joins its\ntools, a knowledge base its knowledge, a skill its skills. A skill brings the tools and knowledge bases it names\nand the skills its steps run. `added` lists everything granted; repeating the call answers `added: []` and saves\nnothing.\n\n403 `forbidden` without agents: edit in the agent's team or the view right of the reference's area; 422\n`unknown_reference` for something the team does not offer; 422 `not_published` for a skill, agent or workflow\nthat is not live.",
+        "description": "Grants the agent what its brief mentions, as one new draft version: a tool, an agent or a workflow joins its\ntools, a knowledge base its knowledge, a skill its skills. A skill brings the tools and knowledge bases it names\nand the skills its steps run. `added` lists everything granted; repeating the call answers `added: []` and saves\nnothing.\n\n403 `forbidden` without agents: edit in the agent's team or the view right of the reference's area; 422\n`unknown_reference` for something the team does not offer; 422 `not_published` for a skill, agent or workflow\nthat is not live; 409 `stale_base` when the draft was saved while this ran (read the agent again and repeat).",
         "operationId": "agents_add_reference",
         "parameters": [
           {

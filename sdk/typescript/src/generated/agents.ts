@@ -524,7 +524,7 @@ export interface paths {
          *
          *     403 `forbidden` without agents: edit in the agent's team or the view right of the reference's area; 422
          *     `unknown_reference` for something the team does not offer; 422 `not_published` for a skill, agent or workflow
-         *     that is not live.
+         *     that is not live; 409 `stale_base` when the draft was saved while this ran (read the agent again and repeat).
          */
         post: operations["agents_add_reference"];
         delete?: never;
